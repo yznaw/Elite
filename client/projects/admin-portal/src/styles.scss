@@ -1,0 +1,36 @@
+/* ============================================================
+   admin-portal — Global Styles
+   ============================================================
+   INSTRUCTIONS: Paste your admin styles.css content below.
+   ============================================================ */
+
+/* ── Paste your global admin CSS here ───────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Admin design tokens — adjust to match your admin brand */
+  --color-primary: #2563eb;
+  --color-danger:  #dc2626;
+  --color-bg:      #f8fafc;
+  --color-surface: #ffffff;
+  --color-text:    #0f172a;
+  --color-muted:   #64748b;
+  --sidebar-width: 260px;
+  --font-base:     'Inter', system-ui, sans-serif;
+  --radius:        6px;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: var(--font-base);
+  background: var(--color-bg);
+  color: var(--color-text);
+}

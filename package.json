@@ -1,0 +1,16 @@
+{
+  "name": "elite",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Elite — full-stack monorepo (Node/Express + Angular)",
+  "scripts": {
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run start",
+    "admin": "cd client && npm run start:admin",
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\" \"npm run admin\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

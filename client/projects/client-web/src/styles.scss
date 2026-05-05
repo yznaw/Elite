@@ -1,0 +1,35 @@
+/* ============================================================
+   client-web — Global Styles
+   ============================================================
+   INSTRUCTIONS: Paste your styles.css content below this block.
+   Any variables, resets, or global rules go here.
+   ============================================================ */
+
+/* ── Paste your global CSS here ──────────────────────────────── */
+
+/* Example reset (replace or extend as needed) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Design tokens — update these to match your brand */
+  --color-primary: #0057ff;
+  --color-secondary: #ff6b00;
+  --color-bg: #ffffff;
+  --color-text: #1a1a2e;
+  --font-base: 'Inter', system-ui, sans-serif;
+  --radius: 8px;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: var(--font-base);
+  background: var(--color-bg);
+  color: var(--color-text);
+}

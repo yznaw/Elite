@@ -1,0 +1,122 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+
+    "client-web": {
+      "projectType": "application",
+      "schematics": {
+        "@schematics/angular:component": { "style": "scss" },
+        "@schematics/angular:application": { "strict": true }
+      },
+      "root": "projects/client-web",
+      "sourceRoot": "projects/client-web/src",
+      "prefix": "cw",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:application",
+          "options": {
+            "outputPath": "dist/client-web",
+            "index": "projects/client-web/src/index.html",
+            "browser": "projects/client-web/src/main.ts",
+            "polyfills": ["zone.js"],
+            "tsConfig": "projects/client-web/tsconfig.app.json",
+            "assets": [
+              "projects/client-web/src/favicon.ico",
+              "projects/client-web/src/assets"
+            ],
+            "styles": ["projects/client-web/src/styles.scss"],
+            "scripts": []
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                { "type": "initial", "maximumWarning": "500kb", "maximumError": "1mb" },
+                { "type": "anyComponentStyle", "maximumWarning": "2kb", "maximumError": "4kb" }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular-devkit/build-angular:dev-server",
+          "configurations": {
+            "production": { "buildTarget": "client-web:build:production" },
+            "development": { "buildTarget": "client-web:build:development" }
+          },
+          "defaultConfiguration": "development",
+          "options": { "port": 4200 }
+        },
+        "extract-i18n": {
+          "builder": "@angular-devkit/build-angular:extract-i18n",
+          "options": { "buildTarget": "client-web:build" }
+        }
+      }
+    },
+
+    "admin-portal": {
+      "projectType": "application",
+      "schematics": {
+        "@schematics/angular:component": { "style": "scss" },
+        "@schematics/angular:application": { "strict": true }
+      },
+      "root": "projects/admin-portal",
+      "sourceRoot": "projects/admin-portal/src",
+      "prefix": "ap",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:application",
+          "options": {
+            "outputPath": "dist/admin-portal",
+            "index": "projects/admin-portal/src/index.html",
+            "browser": "projects/admin-portal/src/main.ts",
+            "polyfills": ["zone.js"],
+            "tsConfig": "projects/admin-portal/tsconfig.app.json",
+            "assets": [
+              "projects/admin-portal/src/favicon.ico",
+              "projects/admin-portal/src/assets"
+            ],
+            "styles": ["projects/admin-portal/src/styles.scss"],
+            "scripts": []
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                { "type": "initial", "maximumWarning": "500kb", "maximumError": "1mb" },
+                { "type": "anyComponentStyle", "maximumWarning": "2kb", "maximumError": "4kb" }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular-devkit/build-angular:dev-server",
+          "configurations": {
+            "production": { "buildTarget": "admin-portal:build:production" },
+            "development": { "buildTarget": "admin-portal:build:development" }
+          },
+          "defaultConfiguration": "development",
+          "options": { "port": 4300 }
+        },
+        "extract-i18n": {
+          "builder": "@angular-devkit/build-angular:extract-i18n",
+          "options": { "buildTarget": "admin-portal:build" }
+        }
+      }
+    }
+
+  }
+}
