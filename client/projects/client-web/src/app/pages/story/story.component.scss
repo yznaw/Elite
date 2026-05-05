@@ -1,0 +1,7 @@
+:host { display: block; }
+
+@media (min-width: 768px) {
+  .story-row { grid-template-columns: 1fr 1fr !important; align-items: center; }
+  .story-row-right > div:first-child { order: 2; }
+  .story-row-right > div:last-child  { order: 1; }
+}

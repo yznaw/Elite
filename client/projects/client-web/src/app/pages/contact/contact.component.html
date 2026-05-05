@@ -1,0 +1,105 @@
+@if (submitted()) {
+  <div style="padding-top: 80px; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 80px 24px;">
+    <div class="anim-fade-up" style="text-align: center; max-width: 440px;">
+      <div style="font-family: var(--ff-serif); font-size: 18px; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 24px; font-style: italic;">
+        Message Received
+      </div>
+      <h2 class="serif" style="font-size: 42px; font-weight: 300; color: var(--cream); margin-bottom: 16px;">
+        A Client Advisor<br />Will Be in Touch
+      </h2>
+      <p style="font-family: var(--ff-sans); font-size: 13px; color: var(--muted); line-height: 1.8;">
+        We respond to all inquiries within 2 business hours. For urgent matters, call our Doha atelier directly.
+      </p>
+      <div style="margin-top: 32px; padding: 20px; border: 1px solid var(--border); display: inline-block;">
+        <div style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px;">Direct Line</div>
+        <div style="font-family: var(--ff-serif); font-size: 20px; color: var(--gold);">+966 11 XXX XXXX</div>
+      </div>
+    </div>
+  </div>
+} @else {
+  <div style="padding-top: 80px; min-height: 100vh;">
+    <div class="anim-fade-up" style="padding: 56px 24px 48px; text-align: center; max-width: 600px; margin: 0 auto;">
+      <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.35em; color: var(--gold); text-transform: uppercase; margin-bottom: 14px;">
+        Personal Service
+      </div>
+      <h1 class="serif" style="font-size: clamp(36px, 7vw, 64px); font-weight: 300; color: var(--cream); line-height: 1; margin-bottom: 16px;">
+        Speak with a<br /><em style="color: var(--gold);">Client Advisor</em>
+      </h1>
+      <p style="font-family: var(--ff-sans); font-size: 13px; color: var(--muted); line-height: 1.8;">
+        Every inquiry is handled personally by a dedicated advisor. Whether you seek a bespoke commission, sizing counsel, or a question about our craft — we are at your service.
+      </p>
+    </div>
+
+    <div class="contact-grid" style="max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; display: grid; grid-template-columns: 1fr; gap: 40px;">
+      <!-- Form -->
+      <div class="glass" style="padding: 40px 32px;">
+        <form (ngSubmit)="onSubmit()" #f="ngForm">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="float-wrap">
+              <input class="float-input" type="text" [ngModel]="form().name" (ngModelChange)="set('name', $event)" name="name" placeholder=" " />
+              <label class="float-label">Full Name</label>
+            </div>
+            <div class="float-wrap">
+              <input class="float-input" type="email" [ngModel]="form().email" (ngModelChange)="set('email', $event)" name="email" placeholder=" " />
+              <label class="float-label">Email Address</label>
+            </div>
+            <div class="float-wrap">
+              <input class="float-input" type="tel" [ngModel]="form().phone" (ngModelChange)="set('phone', $event)" name="phone" placeholder=" " />
+              <label class="float-label">Phone Number</label>
+            </div>
+            <div class="float-wrap">
+              <select class="float-input" [ngModel]="form().subject" (ngModelChange)="set('subject', $event)" name="subject"
+                style="padding-top: 20px; padding-bottom: 8px; cursor: pointer;">
+                <option value=""> </option>
+                @for (s of subjects; track s) { <option [value]="s">{{ s }}</option> }
+              </select>
+              <label class="float-label" [style.top]="form().subject ? '6px' : ''" [style.font-size]="form().subject ? '9px' : ''" [style.color]="form().subject ? 'var(--gold)' : ''">
+                Subject
+              </label>
+            </div>
+          </div>
+
+          <div class="float-wrap" style="margin-bottom: 24px;">
+            <textarea class="float-input" rows="5"
+              [ngModel]="form().message" (ngModelChange)="set('message', $event)" name="message"
+              placeholder=" "
+              style="resize: vertical; min-height: 120px;"></textarea>
+            <label class="float-label">Your Message</label>
+          </div>
+
+          <button type="submit" class="btn-gold" style="width: 100%; padding: 16px; font-size: 11px; letter-spacing: 0.2em;">
+            Send Message
+          </button>
+        </form>
+      </div>
+
+      <!-- Info -->
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        @for (block of infoBlocks; track block.title) {
+          <div style="padding: 28px 24px; border: 1px solid var(--border2); transition: border-color 0.3s;">
+            <div style="display: flex; align-items: flex-start; gap: 16px;">
+              <span style="color: var(--gold); font-size: 16px; margin-top: 2px; flex-shrink: 0;">{{ block.icon }}</span>
+              <div>
+                <div style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px;">
+                  {{ block.title }}
+                </div>
+                @for (l of block.lines; track l) {
+                  <div style="font-family: var(--ff-sans); font-size: 12px; color: var(--cream-dim); line-height: 1.7;">{{ l }}</div>
+                }
+              </div>
+            </div>
+          </div>
+        }
+
+        <div style="padding: 24px; background: linear-gradient(135deg, var(--card) 0%, var(--card2) 100%); border: 1px solid var(--border); margin-top: 0;">
+          <p class="serif" style="font-size: 16px; font-style: italic; color: var(--cream); line-height: 1.6; margin-bottom: 10px;">
+            "No inquiry is too small. No request is unreasonable. You are our guest."
+          </p>
+          <p style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase;">
+            The Elite Promise
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+}

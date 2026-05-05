@@ -1,0 +1,153 @@
+<div>
+  <!-- ── HERO ── -->
+  <section class="hero">
+    <div class="hero-ring hero-ring--lg"></div>
+    <div class="hero-ring hero-ring--sm"></div>
+
+    <div class="anim-fade-up" style="animation-delay: 0.2s; text-align: center; margin-bottom: 32px; z-index: 2;">
+      <div style="display: inline-flex; align-items: center; gap: 10px;">
+        <div style="width: 32px; height: 1px; background: var(--gold-dim);"></div>
+        <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.35em; color: var(--gold); text-transform: uppercase;">
+          Est. 1962 · Doha
+        </span>
+        <div style="width: 32px; height: 1px; background: var(--gold-dim);"></div>
+      </div>
+    </div>
+
+    <h1 class="anim-fade-up serif"
+      style="animation-delay: 0.35s; z-index: 2; text-align: center; font-size: clamp(48px, 10vw, 96px); font-weight: 300; line-height: 0.95; letter-spacing: -0.01em; color: var(--cream); margin-bottom: 8px;">
+      Where Heritage<br />
+      <em style="color: var(--gold); font-style: italic;">Meets Sole</em>
+    </h1>
+
+    <p class="anim-fade-up"
+      style="animation-delay: 0.5s; z-index: 2; text-align: center; font-family: var(--ff-sans); font-size: 13px; font-weight: 300; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 64px; max-width: 320px;">
+      Hand-crafted Arabic leather shoes for those who command presence
+    </p>
+
+    <div class="anim-fade-up viewer"
+      style="animation-delay: 0.6s; position: relative; width: min(560px, 92vw); z-index: 2;">
+      <div class="viewer-glow"></div>
+
+      <div style="border: 1px solid var(--border); background: transparent; overflow: hidden; position: relative;">
+        <iframe
+          title="Yellow Leather Loafers"
+          frameBorder="0"
+          allowFullScreen
+          allow="autoplay; fullscreen; xr-spatial-tracking"
+          [src]="sketchfabSrc"
+          style="width: 100%; height: 420px; display: block; border: none;"
+        ></iframe>
+        <div class="corner corner--tl"></div>
+        <div class="corner corner--tr"></div>
+        <div class="corner corner--bl"></div>
+        <div class="corner corner--br"></div>
+      </div>
+
+      <div style="text-align: center; margin-top: 12px;">
+        <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase;">
+          Drag · Rotate · Explore
+        </span>
+      </div>
+    </div>
+
+    @if (metaVisible()) {
+      <div class="anim-fade-up"
+        style="animation-delay: 1s; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 28px; padding: 0 20px; z-index: 2;">
+        @for (c of metaCards; track c.id) {
+          <div class="glass tag-chip" style="font-size: 9px;">
+            <span style="margin-right: 5px;">{{ c.icon }}</span>
+            {{ c.label }}
+          </div>
+        }
+      </div>
+    }
+
+    <div class="anim-fade-up" style="animation-delay: 1.1s; display: flex; gap: 12px; margin-top: 36px; z-index: 2;">
+      <button class="btn-gold" (click)="goTo('/collection')" style="padding: 14px 32px;">Explore Collection</button>
+      <button class="btn-outline" (click)="goTo('/story')" style="padding: 14px 28px;">Our Story</button>
+    </div>
+
+    <div style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+      <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase;">Scroll</span>
+      <div style="width: 1px; height: 32px; background: linear-gradient(to bottom, var(--gold), transparent);"></div>
+    </div>
+  </section>
+
+  <!-- ── FEATURED ── -->
+  <section style="padding: 80px 24px; max-width: 1200px; margin: 0 auto;">
+    <div style="text-align: center; margin-bottom: 56px;">
+      <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; margin-bottom: 12px;">
+        Curated Selection
+      </div>
+      <h2 class="serif" style="font-size: clamp(32px, 6vw, 54px); font-weight: 300; color: var(--cream); line-height: 1.1;">
+        Icons of Craft
+      </h2>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2px;">
+      @for (p of featured; track p.id; let i = $index) {
+        <div (click)="goToProduct(p)" class="product-card anim-fade-up"
+          style="position: relative; overflow: hidden;"
+          [style.animation-delay]="(i * 0.12) + 's'">
+          <div style="overflow: hidden; position: relative; padding-bottom: 120%;">
+            <div class="img-placeholder card-img" style="position: absolute; inset: 0;">
+              <img [src]="p.image" [alt]="p.name"
+                style="width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.95; transition: transform 0.6s cubic-bezier(0.22,1,0.36,1);"
+                (error)="onImgError($event)" />
+              <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,4,0.7) 0%, transparent 50%);"></div>
+            </div>
+
+            @if (p.tag) {
+              <div style="position: absolute; top: 16px; left: 16px;">
+                <span class="tag-chip">{{ p.tag }}</span>
+              </div>
+            }
+
+            <div class="card-overlay"
+              style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(7,6,4,0.5);">
+              <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold); padding: 10px 20px;">
+                View Details
+              </span>
+            </div>
+          </div>
+
+          <div style="padding: 20px 4px 8px;">
+            <div style="font-family: var(--ff-serif); font-size: 20px; color: var(--cream); margin-bottom: 3px;">{{ p.name }}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase;">{{ p.leather }}</span>
+              <span style="font-family: var(--ff-sans); font-size: 13px; color: var(--gold);">SAR {{ p.price.toLocaleString() }}</span>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div style="text-align: center; margin-top: 48px;">
+      <button class="btn-outline" (click)="goTo('/collection')" style="padding: 14px 40px;">View Full Collection</button>
+    </div>
+  </section>
+
+  <!-- ── CRAFT BANNER ── -->
+  <section style="margin: 0 24px 80px; padding: 60px 40px; background: linear-gradient(135deg, var(--card) 0%, var(--card2) 100%); border: 1px solid var(--border); position: relative; overflow: hidden;">
+    <div style="position: absolute; top: -40px; right: -40px; width: 200px; height: 200px; border-radius: 50%; border: 1px solid rgba(201,169,110,0.08);"></div>
+    <div style="position: absolute; bottom: -60px; left: -20px; width: 150px; height: 150px; border-radius: 50%; border: 1px solid rgba(201,169,110,0.06);"></div>
+    <div style="position: relative; z-index: 1;">
+      <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; margin-bottom: 16px;">
+        The Promise
+      </div>
+      <h3 class="serif" style="font-size: clamp(28px, 5vw, 48px); font-weight: 300; color: var(--cream); line-height: 1.15; max-width: 600px; margin-bottom: 24px;">
+        "Every pair is numbered.<br />
+        <em style="color: var(--gold);">Every stitch, intentional."</em>
+      </h3>
+      <div style="display: flex; gap: 40px; flex-wrap: wrap;">
+        @for (s of stats; track s.label) {
+          <div>
+            <div class="serif" style="font-size: 32px; color: var(--gold); font-weight: 300;">{{ s.value }}</div>
+            <div style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-top: 2px;">{{ s.label }}</div>
+          </div>
+        }
+      </div>
+    </div>
+  </section>
+</div>

@@ -1,0 +1,10 @@
+:host { display: block; }
+
+@media (min-width: 900px) {
+  .pdp-grid { grid-template-columns: 1fr 1fr !important; align-items: start; }
+  #sticky-atc { display: none !important; }
+}
+
+@media (max-width: 899px) {
+  #sticky-atc { display: block !important; }
+}

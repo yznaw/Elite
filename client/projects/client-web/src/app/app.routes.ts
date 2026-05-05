@@ -3,14 +3,42 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   {
     path: '',
-    // Lazy-load the home page feature module
-    // Replace with your actual page component or lazy-loaded route
+    pathMatch: 'full',
     loadComponent: () =>
       import('./pages/home/home.component').then((m) => m.HomeComponent),
   },
   {
-    // Catch-all — redirect unknown paths to home
-    path: '**',
-    redirectTo: '',
+    path: 'collection',
+    loadComponent: () =>
+      import('./pages/collection/collection.component').then(
+        (m) => m.CollectionComponent,
+      ),
   },
+  {
+    path: 'product/:id',
+    loadComponent: () =>
+      import('./pages/product/product.component').then(
+        (m) => m.ProductComponent,
+      ),
+  },
+  {
+    path: 'checkout',
+    loadComponent: () =>
+      import('./pages/checkout/checkout.component').then(
+        (m) => m.CheckoutComponent,
+      ),
+  },
+  {
+    path: 'story',
+    loadComponent: () =>
+      import('./pages/story/story.component').then((m) => m.StoryComponent),
+  },
+  {
+    path: 'contact',
+    loadComponent: () =>
+      import('./pages/contact/contact.component').then(
+        (m) => m.ContactComponent,
+      ),
+  },
+  { path: '**', redirectTo: '' },
 ];

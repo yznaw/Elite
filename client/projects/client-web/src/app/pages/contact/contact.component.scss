@@ -1,0 +1,8 @@
+:host { display: block; }
+
+@media (min-width: 900px) {
+  .contact-grid {
+    grid-template-columns: 1fr 380px !important;
+    align-items: start;
+  }
+}

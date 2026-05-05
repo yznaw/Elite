@@ -1,0 +1,5 @@
+:host { display: block; }
+
+@media (min-width: 900px) {
+  .checkout-grid { grid-template-columns: 1fr 420px !important; }
+}

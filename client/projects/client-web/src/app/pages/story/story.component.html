@@ -1,0 +1,84 @@
+<div style="padding-top: 80px; min-height: 100vh;">
+  <!-- Hero -->
+  <div style="position: relative; height: 55vh; min-height: 380px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #f0ead8 0%, #e8dfc8 100%);">
+    <div style="position: absolute; inset: 0;">
+      <img [src]="heroImage" alt="Artisan workshop"
+        style="width: 100%; height: 100%; object-fit: cover; opacity: 0.18;"
+        (error)="onImgError($event)" />
+    </div>
+    <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 40%, var(--bg) 100%);"></div>
+    <div class="anim-fade-up" style="position: relative; z-index: 1; text-align: center; padding: 0 24px;">
+      <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.35em; color: var(--gold); text-transform: uppercase; margin-bottom: 16px;">
+        Est. 1962 · Doha, Kingdom of Qatar
+      </div>
+      <h1 class="serif" style="font-size: clamp(40px, 8vw, 80px); font-weight: 300; color: var(--cream); line-height: 1; margin-bottom: 16px;">
+        The Craft of<br /><em style="color: var(--gold);">Silence & Precision</em>
+      </h1>
+      <p style="font-family: var(--ff-sans); font-size: 13px; color: var(--muted); max-width: 500px; margin: 0 auto; line-height: 1.8;">
+        Six decades of Arabic leather artisanship. Twelve master craftsmen. One unbroken promise.
+      </p>
+    </div>
+  </div>
+
+  <!-- Chapters -->
+  <div style="max-width: 1100px; margin: 0 auto; padding: 64px 24px 80px;">
+    @for (ch of chapters; track ch.year; let i = $index) {
+      <div class="story-row anim-fade-up" [class.story-row-right]="ch.align === 'right'"
+        [style.animation-delay]="(i * 0.12) + 's'"
+        style="display: grid; grid-template-columns: 1fr; gap: 32px; margin-bottom: 80px;">
+        <div class="editorial-img" style="position: relative; padding-bottom: 56%; overflow: hidden;">
+          <div class="img-placeholder" style="position: absolute; inset: 0;">
+            <img [src]="ch.image" [alt]="ch.title"
+              style="width: 100%; height: 100%; object-fit: cover; opacity: 0.9; transition: transform 0.8s cubic-bezier(0.22,1,0.36,1);"
+              (error)="onImgError($event)" />
+            <div style="position: absolute; inset: 0; background: linear-gradient(135deg, rgba(201,169,110,0.06) 0%, transparent 60%);"></div>
+          </div>
+          <div style="position: absolute; bottom: 20px; left: 20px; font-family: var(--ff-serif); font-size: 48px; font-weight: 300; color: rgba(201,169,110,0.35); line-height: 1; pointer-events: none;">
+            {{ ch.year }}
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; justify-content: center; padding: 8px 0;">
+          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; margin-bottom: 14px;">
+            {{ ch.year }}
+          </div>
+          <h2 class="serif" style="font-size: clamp(26px, 5vw, 42px); font-weight: 300; color: var(--cream); line-height: 1.1; margin-bottom: 18px;">
+            {{ ch.title }}
+          </h2>
+          <p style="font-family: var(--ff-sans); font-size: 13px; line-height: 1.9; color: var(--cream-dim); max-width: 480px;">
+            {{ ch.body }}
+          </p>
+        </div>
+      </div>
+    }
+
+    <!-- Pull quote -->
+    <div style="border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 56px 24px; text-align: center; margin: 20px 0 60px;">
+      <p class="serif" style="font-size: clamp(22px, 4vw, 36px); font-weight: 300; font-style: italic; color: var(--cream); line-height: 1.4; max-width: 700px; margin: 0 auto;">
+        "A shoe is not a product.<br />
+        <span style="color: var(--gold);">It is the autobiography of a craftsman."</span>
+      </p>
+      <p style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; margin-top: 20px;">
+        — Khalid Al-Rashidi, Founder
+      </p>
+    </div>
+
+    <!-- Masters -->
+    <div style="text-align: center; margin-bottom: 40px;">
+      <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; margin-bottom: 12px;">The Atelier</div>
+      <h3 class="serif" style="font-size: clamp(28px, 5vw, 48px); font-weight: 300; color: var(--cream);">Twelve Masters</h3>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px;">
+      @for (m of masters; track m.role) {
+        <div style="padding: 24px 20px; border: 1px solid var(--border2); text-align: center;">
+          <div style="width: 48px; height: 48px; border-radius: 50%; background: var(--card2); border: 1px solid var(--border); margin: 0 auto 14px; display: flex; align-items: center; justify-content: center;">
+            <span style="color: var(--gold); font-size: 16px;">◆</span>
+          </div>
+          <div style="font-family: var(--ff-serif); font-size: 16px; color: var(--cream); margin-bottom: 4px;">{{ m.role }}</div>
+          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase;">{{ m.experience }} experience</div>
+        </div>
+      }
+    </div>
+  </div>
+</div>
