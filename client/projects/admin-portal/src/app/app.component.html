@@ -1,17 +1,12 @@
-<!--
-  ================================================================
-  admin-portal — app.component.html
-  ================================================================
-  INSTRUCTIONS:
-    1. Replace this comment block with your app.component.html content.
-    2. The <router-outlet> renders the active admin page.
-       Keep it unless you manage routing differently.
-    3. Typical admin shell: sidebar + topbar + <router-outlet>
-  ================================================================
--->
+<div class="app">
+  <ap-sidebar/>
+  <div class="main">
+    <ap-topbar/>
+    <div class="scroll-area">
+      <router-outlet/>
+    </div>
+  </div>
+</div>
 
-<!-- ── Paste your admin shell HTML here (sidebar, topbar, etc.) ── -->
-
-<router-outlet />
-
-<!-- ── Paste any admin-level overlay or modal HTML here ──────────── -->
+<ap-toast/>
+<ap-confirm-dialog/>
