@@ -9,6 +9,7 @@ import { EmptyStateComponent } from '../../shared/empty-state/empty-state.compon
 import { OrderModalComponent } from './order-modal.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
+import { I18nService } from '../../services/i18n.service';
 import { ORDERS } from '../../data/mock';
 import { Order, QAR } from '../../models';
 
@@ -21,58 +22,64 @@ import { Order, QAR } from '../../models';
       <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
         <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
           <ap-icon name="search" [size]="14"/>
-          <input class="inp with-icon" placeholder="Search by order ID or customer…" [ngModel]="search()" (ngModelChange)="search.set($event)"/>
+          <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event)"/>
         </div>
         <select class="inp" style="width:auto;" [ngModel]="paymentFilter()" (ngModelChange)="paymentFilter.set($event)">
-          <option value="all">All Payment</option><option value="paid">Paid</option><option value="pending">Pending</option>
-          <option value="refunded">Refunded</option><option value="failed">Failed</option>
+          <option value="all">{{ t('orders.allPayment') }}</option>
+          <option value="paid">{{ t('pill.paid') }}</option>
+          <option value="pending">{{ t('pill.pending') }}</option>
+          <option value="refunded">{{ t('pill.refunded') }}</option>
+          <option value="failed">{{ t('pill.failed') }}</option>
         </select>
         <select class="inp" style="width:auto;" [ngModel]="fulfillmentFilter()" (ngModelChange)="fulfillmentFilter.set($event)">
-          <option value="all">All Fulfillment</option><option value="awaiting">Awaiting</option><option value="processing">Processing</option>
-          <option value="shipped">Shipped</option><option value="delivered">Delivered</option><option value="returned">Returned</option>
+          <option value="all">{{ t('orders.allFulfillment') }}</option>
+          <option value="awaiting">{{ t('pill.awaiting') }}</option>
+          <option value="processing">{{ t('pill.processing') }}</option>
+          <option value="shipped">{{ t('pill.shipped') }}</option>
+          <option value="delivered">{{ t('pill.delivered') }}</option>
+          <option value="returned">{{ t('pill.returned') }}</option>
         </select>
         <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()">
           @if (exporting()) {
-            <ap-spinner/> Exporting…
+            <ap-spinner/> {{ t('common.exporting') }}
           } @else {
-            Export CSV
+            {{ t('common.exportCsv') }}
           }
         </button>
       </div>
 
       <div class="card">
         @if (filtered().length === 0) {
-          <ap-empty-state icon="orders" title="No orders match these filters"
-            sub="Try clearing the search or filters above to see all orders.">
-            <button class="btn btn-outline btn-sm" (click)="clearFilters()">Clear filters</button>
+          <ap-empty-state icon="orders" [title]="t('orders.empty.title')" [sub]="t('orders.empty.sub')">
+            <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
           </ap-empty-state>
         } @else {
           <ap-sortable-table [columns]="columns" [rows]="filtered()" [rowClick]="openOrder">
             <ng-template apCellTpl="id" let-r>
-              <span class="strong" style="color:var(--green);">{{ r.id }}</span>
+              <span class="strong mono" style="color:var(--green);">{{ r.id }}</span>
             </ng-template>
             <ng-template apCellTpl="itemsCount" let-r>
               <span class="muted">{{ r.itemsCount }}</span>
             </ng-template>
             <ng-template apCellTpl="total" let-r>
-              <span class="strong">{{ QAR(r.total) }}</span>
+              <span class="strong mono">{{ QAR(r.total) }}</span>
             </ng-template>
             <ng-template apCellTpl="payment" let-r>
-              <ap-pill [kind]="paymentPill(r.payment).kind">{{ paymentPill(r.payment).label }}</ap-pill>
+              <ap-pill [kind]="paymentPill(r.payment).kind">{{ t(paymentPill(r.payment).labelKey) }}</ap-pill>
             </ng-template>
             <ng-template apCellTpl="fulfillment" let-r>
-              <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ fulfillmentPill(r.fulfillment).label }}</ap-pill>
+              <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
             </ng-template>
             <ng-template apCellTpl="actions" let-r>
               <div class="row gap-sm" style="justify-content:flex-end;">
-                <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openOrder(r)">View</button>
+                <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openOrder(r)">{{ t('common.view') }}</button>
                 @if (r.fulfillment === 'awaiting' || r.fulfillment === 'processing') {
                   <button class="btn btn-outline btn-sm" [disabled]="fulfillingId() === r.id"
                     (click)="$event.stopPropagation(); markFulfilled(r)">
                     @if (fulfillingId() === r.id) {
-                      <ap-spinner [size]="12"/> Working…
+                      <ap-spinner [size]="12"/> {{ t('common.working') }}
                     } @else {
-                      Mark Fulfilled
+                      {{ t('orders.markFulfilled') }}
                     }
                   </button>
                 }
@@ -90,6 +97,9 @@ import { Order, QAR } from '../../models';
 })
 export class OrdersComponent {
   private readonly toast = inject(ToastService);
+  private readonly i18n = inject(I18nService);
+
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
   readonly active = signal<Order | null>(null);
@@ -117,14 +127,14 @@ export class OrdersComponent {
   readonly fulfillmentPill = fulfillmentPillKind;
 
   readonly columns: TableColumn<Order>[] = [
-    { key: 'id', label: 'Order ID' },
-    { key: 'date', label: 'Date' },
-    { key: 'customer', label: 'Customer' },
-    { key: 'itemsCount', label: 'Items', align: 'center' },
-    { key: 'total', label: 'Total', align: 'right' },
-    { key: 'payment', label: 'Payment' },
-    { key: 'fulfillment', label: 'Fulfillment' },
-    { key: 'actions', label: '', noSort: true, align: 'right' },
+    { key: 'id',          label: 'Order ID',    labelKey: 'orders.col.id' },
+    { key: 'date',        label: 'Date',        labelKey: 'orders.col.date' },
+    { key: 'customer',    label: 'Customer',    labelKey: 'orders.col.customer' },
+    { key: 'itemsCount',  label: 'Items',       labelKey: 'orders.col.items', align: 'center' },
+    { key: 'total',       label: 'Total',       labelKey: 'orders.col.total', align: 'right' },
+    { key: 'payment',     label: 'Payment',     labelKey: 'orders.col.payment' },
+    { key: 'fulfillment', label: 'Fulfillment', labelKey: 'orders.col.fulfillment' },
+    { key: 'actions',     label: '',            noSort: true, align: 'right' },
   ];
 
   openOrder = (o: Order): void => { this.active.set(o); };

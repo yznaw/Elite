@@ -1,18 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 
 <head>
   <meta charset="utf-8" />
   <title>Elite Collection · Admin Portal</title>
   <base href="/" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="description" content="Elite Collection admin portal — catalog, orders, sync, and analytics." />
+  <meta name="theme-color" content="#024638" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600;700&family=Tajawal:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap"
     rel="stylesheet" />
+  <script>
+    // Set dir/lang before Angular boots so first paint is correct.
+    try {
+      var saved = localStorage.getItem('elite-admin:locale');
+      if (saved === 'ar') {
+        document.documentElement.setAttribute('lang', 'ar');
+        document.documentElement.setAttribute('dir', 'rtl');
+      }
+    } catch (e) {}
+  </script>
 </head>
 
 <body>

@@ -1,13 +1,16 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterLink, RouterLinkActive, NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { IconComponent, IconName } from '../icons/icon.component';
 import { AvatarComponent } from '../avatar/avatar.component';
+import { I18nService } from '../../services/i18n.service';
+import { SidebarToggleService } from '../sidebar-toggle.service';
 
 interface NavLink {
   path: string;
-  label: string;
-  sub: string;
+  labelKey: string;
+  subKey: string;
   icon: IconName;
   exact?: boolean;
 }
@@ -17,13 +20,17 @@ interface NavLink {
   standalone: true,
   imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent],
   template: `
-    <aside class="sidebar">
+    @if (toggle.open()) {
+      <div class="sidebar-backdrop" (click)="toggle.close()" aria-hidden="true"></div>
+    }
+
+    <aside class="sidebar sidebar-host" [class.open]="toggle.open()">
       <div class="sidebar-brand">
-        <div class="brand-mark">ELITE</div>
-        <div class="brand-sub">Admin Portal</div>
+        <div class="brand-mark">{{ t('brand.name') }}</div>
+        <div class="brand-sub">{{ t('brand.tagline') }}</div>
       </div>
 
-      <div class="nav-section-label"><span class="label-text">Workspace</span></div>
+      <div class="nav-section-label"><span class="label-text">{{ t('nav.section.workspace') }}</span></div>
 
       <div class="col gap-sm" style="position:relative;z-index:1;">
         @for (n of links; track n.path) {
@@ -32,11 +39,12 @@ interface NavLink {
             routerLinkActive="active"
             [routerLinkActiveOptions]="{ exact: !!n.exact }"
             class="nav-item"
+            (click)="toggle.close()"
           >
             <ap-icon [name]="n.icon" [size]="18"/>
             <div>
-              <span>{{ n.label }}</span>
-              <div class="label-sub">{{ n.sub }}</div>
+              <span>{{ t(n.labelKey) }}</span>
+              <div class="label-sub">{{ t(n.subKey) }}</div>
             </div>
           </a>
         }
@@ -59,7 +67,7 @@ interface NavLink {
       color: #fff;
       display: flex; flex-direction: column;
       padding: 28px 16px 20px;
-      border-right: 1px solid rgba(0, 0, 0, 0.1);
+      border-inline-end: 1px solid rgba(0, 0, 0, 0.1);
       position: relative;
       overflow: hidden;
       height: 100vh;
@@ -71,7 +79,8 @@ interface NavLink {
       pointer-events: none;
     }
     .sidebar-brand {
-      padding: 0 12px 28px;
+      padding-block: 0 28px;
+      padding-inline: 12px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       margin-bottom: 18px;
       position: relative; z-index: 1;
@@ -81,16 +90,20 @@ interface NavLink {
       font-size: 24px; font-weight: 500;
       color: var(--gold); letter-spacing: 0.18em;
     }
+    html[dir='rtl'] .brand-mark { letter-spacing: 0.05em; }
     .brand-sub {
       font-size: 9px; letter-spacing: 0.32em;
       color: rgba(255, 255, 255, 0.55);
       text-transform: uppercase; margin-top: 2px;
     }
+    html[dir='rtl'] .brand-sub { letter-spacing: 0; }
     .nav-section-label {
       font-size: 9px; letter-spacing: 0.18em;
       color: rgba(255, 255, 255, 0.4);
       text-transform: uppercase;
-      padding: 0 12px 8px; margin-top: 6px;
+      padding-inline: 12px;
+      padding-block: 0 8px;
+      margin-top: 6px;
       position: relative; z-index: 1;
     }
     .nav-item {
@@ -99,7 +112,7 @@ interface NavLink {
       color: rgba(255, 255, 255, 0.78);
       font-size: 13px; font-weight: 500;
       cursor: pointer; border: none; background: none;
-      text-align: left; width: 100%;
+      text-align: start; width: 100%;
       border-radius: 8px;
       transition: all 0.18s ease;
       position: relative; z-index: 1;
@@ -110,11 +123,17 @@ interface NavLink {
       background: linear-gradient(90deg, var(--gold-3), transparent);
       color: var(--gold);
     }
+    html[dir='rtl'] .nav-item.active {
+      background: linear-gradient(-90deg, var(--gold-3), transparent);
+    }
     .nav-item.active::before {
-      content: ''; position: absolute; left: -16px; top: 50%;
+      content: ''; position: absolute;
+      inset-inline-start: -16px;
+      top: 50%;
       transform: translateY(-50%);
       width: 3px; height: 24px; background: var(--gold);
-      border-radius: 0 2px 2px 0;
+      border-start-end-radius: 2px;
+      border-end-end-radius: 2px;
     }
     .nav-item ap-icon { flex-shrink: 0; }
     .label-sub {
@@ -123,35 +142,55 @@ interface NavLink {
       text-transform: uppercase; letter-spacing: 0.08em;
       margin-top: 1px;
     }
+    html[dir='rtl'] .label-sub { letter-spacing: 0; }
     .nav-item.active .label-sub { color: rgba(197, 165, 114, 0.6); }
 
     .sidebar-footer {
       margin-top: auto;
-      padding: 16px 12px 0;
+      padding-block: 16px 0;
+      padding-inline: 12px;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
       position: relative; z-index: 1;
     }
     .sidebar-user { display: flex; gap: 10px; align-items: center; }
 
-    @media (max-width: 880px) {
-      .sidebar { padding: 18px 8px; }
-      :host ::ng-deep .nav-item span:not(.label-sub),
-      .brand-sub, .nav-section-label, .sidebar-user > div:not(.avatar), .label-text {
+    /* Compact-rail behavior at desktop tablet (icon-only) */
+    @media (min-width: 1025px) and (max-width: 1180px) {
+      .sidebar { padding: 22px 8px 14px; }
+      .sidebar-brand { padding: 0 8px 22px; }
+      .nav-item span:not(.label-sub),
+      .label-sub,
+      .brand-sub,
+      .nav-section-label,
+      .sidebar-user > div:not(.avatar) {
         display: none;
       }
+      .nav-item { justify-content: center; }
     }
   `],
 })
 export class SidebarComponent {
+  private readonly i18n = inject(I18nService);
+  readonly toggle = inject(SidebarToggleService);
+
+  readonly t = (k: string): string => this.i18n.t(k);
+
   readonly links: NavLink[] = [
-    { path: '/dashboard', label: 'Dashboard', sub: 'Overview', icon: 'dash' },
-    { path: '/catalog', label: 'Catalog', sub: 'Products', icon: 'catalog' },
-    { path: '/media', label: 'Media', sub: 'Library & Linking', icon: 'media' },
-    { path: '/storefront', label: 'Storefront', sub: 'Section Control', icon: 'store' },
-    { path: '/orders', label: 'Orders', sub: 'Fulfillment', icon: 'orders' },
-    { path: '/customers', label: 'Customers', sub: 'CRM', icon: 'users' },
-    { path: '/analytics', label: 'Analytics', sub: 'Insights', icon: 'chart' },
-    { path: '/sync', label: 'Sync Logs', sub: 'System Health', icon: 'sync' },
-    { path: '/settings', label: 'Settings', sub: 'Access & Config', icon: 'settings' },
+    { path: '/dashboard',  labelKey: 'nav.dashboard',  subKey: 'nav.dashboard.sub',  icon: 'dash' },
+    { path: '/catalog',    labelKey: 'nav.catalog',    subKey: 'nav.catalog.sub',    icon: 'catalog' },
+    { path: '/media',      labelKey: 'nav.media',      subKey: 'nav.media.sub',      icon: 'media' },
+    { path: '/storefront', labelKey: 'nav.storefront', subKey: 'nav.storefront.sub', icon: 'store' },
+    { path: '/orders',     labelKey: 'nav.orders',     subKey: 'nav.orders.sub',     icon: 'orders' },
+    { path: '/customers',  labelKey: 'nav.customers',  subKey: 'nav.customers.sub',  icon: 'users' },
+    { path: '/analytics',  labelKey: 'nav.analytics',  subKey: 'nav.analytics.sub',  icon: 'chart' },
+    { path: '/sync',       labelKey: 'nav.sync',       subKey: 'nav.sync.sub',       icon: 'sync' },
+    { path: '/settings',   labelKey: 'nav.settings',   subKey: 'nav.settings.sub',   icon: 'settings' },
   ];
+
+  constructor(router: Router) {
+    // Close the mobile drawer on every successful navigation
+    router.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe(() => this.toggle.close());
+  }
 }

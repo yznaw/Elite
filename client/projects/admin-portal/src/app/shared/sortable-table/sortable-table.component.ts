@@ -1,12 +1,15 @@
 import {
   Component, ContentChildren, Directive, Input, QueryList,
-  TemplateRef, computed, signal,
+  TemplateRef, computed, inject, signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { I18nService } from '../../services/i18n.service';
 
 export interface TableColumn<T = any> {
   key: string;
   label: string;
+  /** Optional i18n key — if set, the header label is rendered via `t(labelKey)`. */
+  labelKey?: string;
   sort?: (row: T) => string | number;
   noSort?: boolean;
   align?: 'left' | 'right' | 'center';
@@ -28,6 +31,7 @@ export class CellTplDirective {
   standalone: true,
   imports: [CommonModule],
   template: `
+    <div class="tbl-scroll">
     <table class="tbl">
       <thead>
         <tr>
@@ -38,7 +42,7 @@ export class CellTplDirective {
               [style.text-align]="c.align || 'left'"
               [style.cursor]="c.noSort ? 'default' : 'pointer'"
             >
-              {{ c.label }}
+              {{ c.labelKey ? t(c.labelKey) : c.label }}
               @if (!c.noSort) {
                 <span class="sort-i">{{ sortBy() === c.key ? (dir() === 'asc' ? '▲' : '▼') : '↕' }}</span>
               }
@@ -62,9 +66,13 @@ export class CellTplDirective {
         }
       </tbody>
     </table>
+    </div>
   `,
 })
 export class SortableTableComponent {
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
+
   @Input({ required: true }) columns: TableColumn<any>[] = [];
   @Input({ required: true }) set rows(v: Row[]) { this._rows.set(v); }
   @Input() defaultSort?: string;

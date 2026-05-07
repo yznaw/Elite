@@ -1,10 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { KpiComponent } from '../../shared/kpi/kpi.component';
 import { LineChartComponent } from '../../shared/charts/line-chart.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { fulfillmentPillKind } from '../../shared/pill/status-pill';
+import { I18nService } from '../../services/i18n.service';
 import { ORDERS, PRODUCTS, REVENUE_30D } from '../../data/mock';
 import { Order, Product, QAR } from '../../models';
 
@@ -27,7 +28,7 @@ import { Order, Product, QAR } from '../../models';
         <ap-kpi label="Top 3D Views" value="1,532" delta="Nike Air Max 90" [deltaUp]="true" icon="cube" [sparkData]="[920,1080,1140,1280,1310,1420,1532]"/>
       </div>
 
-      <div class="grid-2 mb-24" style="grid-template-columns: 1.6fr 1fr;">
+      <div class="dashboard-charts mb-24">
         <div class="card">
           <div class="card-header">
             <div>
@@ -79,7 +80,7 @@ import { Order, Product, QAR } from '../../models';
           <ng-template apCellTpl="product" let-r>{{ productSummary(r) }}</ng-template>
           <ng-template apCellTpl="size" let-r>{{ sizeSummary(r) }}</ng-template>
           <ng-template apCellTpl="fulfillment" let-r>
-            <ap-pill [kind]="fulfillment(r.fulfillment).kind">{{ fulfillment(r.fulfillment).label }}</ap-pill>
+            <ap-pill [kind]="fulfillment(r.fulfillment).kind">{{ t(fulfillment(r.fulfillment).labelKey) }}</ap-pill>
           </ng-template>
           <ng-template apCellTpl="total" let-r><span class="strong">{{ QAR(r.total) }}</span></ng-template>
         </ap-sortable-table>
@@ -88,6 +89,9 @@ import { Order, Product, QAR } from '../../models';
   `,
 })
 export class DashboardComponent {
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
+
   readonly QAR = QAR;
   readonly rev30 = REVENUE_30D as unknown as Array<Record<string, unknown>>;
   readonly recentOrders = ORDERS.slice(0, 5);

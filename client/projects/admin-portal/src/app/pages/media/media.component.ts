@@ -6,6 +6,7 @@ import { MediaCardComponent } from './media-card.component';
 import { MediaDetailDrawerComponent } from './media-detail-drawer.component';
 import { AutoLinkModalComponent, LinkPair } from './auto-link-modal.component';
 import { ToastService } from '../../services/toast.service';
+import { I18nService } from '../../services/i18n.service';
 import { MEDIA_INIT } from '../../data/mock';
 import { fmtBytes, MediaFile } from '../../models';
 
@@ -19,24 +20,23 @@ type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
     <div class="page-fade">
       <div class="grid-4 mb-24">
         <div class="stat-card">
-          <div class="lbl">Total Files</div>
+          <div class="lbl">{{ t('media.totalFiles') }}</div>
           <div class="v">{{ counts().all }}</div>
-          <div class="muted small mt-8">{{ counts().image }} images · {{ counts().glb }} 3D models</div>
+          <div class="muted small mt-8">{{ counts().image }} {{ t('media.filter.images') }} · {{ counts().glb }} {{ t('media.filter.3d') }}</div>
         </div>
         <div class="stat-card">
-          <div class="lbl">Linked</div>
+          <div class="lbl">{{ t('media.linkedCount') }}</div>
           <div class="v" style="color:var(--success);">{{ counts().all - counts().unlinked }}</div>
-          <div class="muted small mt-8">{{ linkedPercent() }}% of library</div>
+          <div class="muted small mt-8">{{ linkedPercent() }}%</div>
         </div>
         <div class="stat-card">
-          <div class="lbl">Unlinked</div>
+          <div class="lbl">{{ t('media.unlinkedCount') }}</div>
           <div class="v" style="color:var(--warning);">{{ counts().unlinked }}</div>
-          <div class="muted small mt-8">Needs assignment</div>
         </div>
         <div class="stat-card">
-          <div class="lbl">Storage Used</div>
-          <div class="v">{{ totalSize() }}</div>
-          <div class="muted small mt-8">of 50 GB plan</div>
+          <div class="lbl">{{ t('media.storage') }}</div>
+          <div class="v mono">{{ totalSize() }}</div>
+          <div class="muted small mt-8">/ 50 GB</div>
         </div>
       </div>
 
@@ -48,19 +48,19 @@ type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
                (drop)="onDrop($event)">
             <div class="drop-zone-icon"><ap-icon name="upload" [size]="18"/></div>
             <div class="strong" style="font-family:var(--ff-disp);font-size:20px;color:var(--green);margin-bottom:4px;">
-              Drop files to upload
+              {{ t('media.dropFiles') }}
             </div>
             <div class="muted small mb-16">
-              Images (JPG, PNG, WebP) and 3D models (.glb, .gltf) up to 50 MB each.<br/>
-              Files matching your SKU pattern will be auto-linked on upload.
+              {{ t('media.dropFiles.sub') }}<br/>
+              {{ t('media.dropFiles.autoLink') }}
             </div>
-            <div class="row gap-sm" style="justify-content:center;">
-              <button class="btn btn-primary"><ap-icon name="upload" [size]="14"/> Browse Files</button>
+            <div class="row gap-sm" style="justify-content:center;flex-wrap:wrap;">
+              <button class="btn btn-primary"><ap-icon name="upload" [size]="14"/> {{ t('media.browse') }}</button>
               <button class="btn btn-gold" [disabled]="counts().unlinked === 0" (click)="autoLinking.set(true)">
                 <ap-icon name="wand" [size]="14"/>
-                Auto-Link by SKU
+                {{ t('media.autoLink') }}
                 @if (counts().unlinked > 0) {
-                  <span style="padding:2px 8px;background:rgba(15,35,86,0.15);border-radius:999px;font-size:10px;">{{ counts().unlinked }}</span>
+                  <span style="padding:2px 8px;background:rgba(2,70,56,0.15);border-radius:999px;font-size:10px;">{{ counts().unlinked }}</span>
                 }
               </button>
             </div>
@@ -71,27 +71,25 @@ type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
       <div class="row gap-sm mb-16" style="justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div class="row gap-sm" style="flex-wrap:wrap;">
           <button class="chip" [class.active]="filter() === 'all'" (click)="filter.set('all')">
-            All <span class="chip-count">{{ counts().all }}</span>
+            {{ t('media.filter.all') }} <span class="chip-count">{{ counts().all }}</span>
           </button>
           <button class="chip" [class.active]="filter() === 'image'" (click)="filter.set('image')">
-            Images <span class="chip-count">{{ counts().image }}</span>
+            {{ t('media.filter.images') }} <span class="chip-count">{{ counts().image }}</span>
           </button>
           <button class="chip" [class.active]="filter() === 'glb'" (click)="filter.set('glb')">
-            3D Models <span class="chip-count">{{ counts().glb }}</span>
+            {{ t('media.filter.3d') }} <span class="chip-count">{{ counts().glb }}</span>
           </button>
           <button class="chip" [class.active]="filter() === 'unlinked'" (click)="filter.set('unlinked')"
                   [style.background]="filter() === 'unlinked' ? 'var(--warning)' : ''" [style.border-color]="filter() === 'unlinked' ? 'var(--warning)' : ''">
-            Unlinked <span class="chip-count">{{ counts().unlinked }}</span>
+            {{ t('media.filter.unlinked') }} <span class="chip-count">{{ counts().unlinked }}</span>
           </button>
         </div>
-        <div class="muted small">Click any file to view details, link, or replace</div>
       </div>
 
       @if (filtered().length === 0) {
         <div class="card">
-          <ap-empty-state icon="media" title="No files in this view"
-            sub="Try a different filter, or drop new files in the upload area above. Files matching your SKU pattern auto-link on upload.">
-            <button class="btn btn-outline btn-sm" (click)="filter.set('all')">Clear filter</button>
+          <ap-empty-state icon="media" [title]="t('media.empty.title')" [sub]="t('media.empty.sub')">
+            <button class="btn btn-outline btn-sm" (click)="filter.set('all')">{{ t('common.clearFilter') }}</button>
           </ap-empty-state>
         </div>
       } @else {
@@ -119,6 +117,9 @@ type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
 })
 export class MediaComponent {
   private readonly toast = inject(ToastService);
+  private readonly i18n = inject(I18nService);
+
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly media = signal<MediaFile[]>(MEDIA_INIT);
   readonly filter = signal<FilterKey>('all');

@@ -1,6 +1,7 @@
 import { Component, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ConfirmService } from '../../services/confirm.service';
+import { I18nService } from '../../services/i18n.service';
 import { IconComponent } from '../icons/icon.component';
 
 @Component({
@@ -22,17 +23,17 @@ import { IconComponent } from '../icons/icon.component';
             </div>
             <div>
               <div id="confirm-title" class="card-title">{{ r.options.title }}</div>
-              <div class="card-sub">Confirm action</div>
+              <div class="card-sub">{{ t('confirm.action') }}</div>
             </div>
           </div>
-          <button class="x-btn" (click)="cancel()" aria-label="Close"><ap-icon name="x" [size]="14"/></button>
+          <button class="x-btn" (click)="cancel()" [attr.aria-label]="t('common.close')"><ap-icon name="x" [size]="14"/></button>
         </div>
         <div class="modal-body">
           <p style="line-height:1.65;color:var(--ink-2);">{{ r.options.message }}</p>
         </div>
         <div class="drawer-foot">
           <button class="btn btn-ghost" (click)="cancel()" [disabled]="svc.busy()">
-            {{ r.options.cancelLabel }}
+            {{ cancelLabel(r.options.cancelLabel) }}
           </button>
           <button
             class="btn"
@@ -45,9 +46,9 @@ import { IconComponent } from '../icons/icon.component';
             [style.border-color]="r.options.variant === 'danger' ? 'var(--danger)' : null"
           >
             @if (svc.busy()) {
-              <span class="spinner"><ap-icon name="spinner" [size]="12"/></span> Working…
+              <span class="spinner"><ap-icon name="spinner" [size]="12"/></span> {{ t('common.working') }}
             } @else {
-              {{ r.options.confirmLabel }}
+              {{ confirmLabel(r.options.confirmLabel) }}
             }
           </button>
         </div>
@@ -57,6 +58,19 @@ import { IconComponent } from '../icons/icon.component';
 })
 export class ConfirmDialogComponent {
   readonly svc = inject(ConfirmService);
+  private readonly i18n = inject(I18nService);
+
+  readonly t = (k: string): string => this.i18n.t(k);
+
+  /** Translate the default labels; pass-through anything custom. */
+  cancelLabel(label: string | undefined): string {
+    if (!label || label === 'Cancel') return this.t('common.cancel');
+    return label;
+  }
+  confirmLabel(label: string | undefined): string {
+    if (!label || label === 'Confirm') return this.t('common.confirm');
+    return label;
+  }
 
   confirm(): void { this.svc.resolve(true); }
   cancel(): void { this.svc.resolve(false); }

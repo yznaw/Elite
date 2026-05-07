@@ -31,6 +31,9 @@ export class ConfirmService {
    */
   ask(options: ConfirmOptions): Promise<boolean> {
     return new Promise((resolve) => {
+      // Defaults are i18n-friendly placeholders; the dialog itself
+      // also falls back to translated common.confirm / common.cancel
+      // when these come back as the literal string 'Confirm'/'Cancel'.
       this._request.set({
         options: { variant: 'info', confirmLabel: 'Confirm', cancelLabel: 'Cancel', ...options },
         resolve,
