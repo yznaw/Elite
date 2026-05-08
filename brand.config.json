@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "White-label brand configuration — single source of truth. See docs/06-white-label-guide.md for full instructions.",
+
+  "brand": {
+    "name": "Elite",
+    "displayName": "ELITE",
+    "tagline": "Arabic Leather Artisans",
+    "established": "Est. 1962 · Doha",
+    "establishedFull": "Est. 1962 · Doha, Kingdom of Qatar",
+    "copyright": "© 2026 Elite Collection. All rights reserved.",
+    "cities": "Doha · Dubai · Doha",
+    "contact": {
+      "email": "advisors@elitecollection.sa",
+      "phone": "+966 11 XXX XXXX",
+      "address": {
+        "line1": "Al-Dirah Quarter, Doha",
+        "line2": "Kingdom of Qatar"
+      }
+    },
+    "social": {
+      "instagram": "",
+      "twitter": "",
+      "facebook": ""
+    }
+  },
+
+  "theme": {
+    "clientWeb": {
+      "colors": {
+        "bg": "#faf8f4",
+        "surface": "#f4f0e8",
+        "card": "#eee9df",
+        "card2": "#e6dfd3",
+        "gold": "#b8924a",
+        "goldDim": "#9a7535",
+        "goldGlow": "rgba(184, 146, 74, 0.12)",
+        "cream": "#1a1208",
+        "creamDim": "#3d3120",
+        "muted": "#8a7a62",
+        "border": "rgba(0, 0, 0, 0.10)",
+        "border2": "rgba(0, 0, 0, 0.06)"
+      },
+      "fonts": {
+        "serif": "'Cormorant Garamond', Georgia, serif",
+        "sans": "'DM Sans', system-ui, sans-serif"
+      },
+      "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap"
+    },
+    "adminPortal": {
+      "colors": {
+        "green": "#024638",
+        "green2": "#036350",
+        "green3": "#012b23",
+        "green4": "#048269",
+        "gold": "#c5a572",
+        "gold2": "#d6bc91",
+        "gold3": "rgba(197, 165, 114, 0.14)",
+        "gold4": "rgba(197, 165, 114, 0.32)",
+        "bg": "#f5f6fa",
+        "bg2": "#eceef5",
+        "surface": "#ffffff",
+        "ink": "#1a1f36",
+        "ink2": "#3d4159",
+        "muted": "#6b7088",
+        "muted2": "#9ca0b3"
+      },
+      "fonts": {
+        "ui": "'Montserrat', system-ui, sans-serif",
+        "display": "'Cormorant Garamond', Georgia, serif",
+        "mono": "'SF Mono', Menlo, Monaco, Consolas, monospace"
+      },
+      "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600;700&family=Tajawal:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap"
+    }
+  },
+
+  "features": {
+    "pages": {
+      "home": true,
+      "collection": true,
+      "product": true,
+      "checkout": true,
+      "story": true,
+      "contact": true
+    },
+    "admin": {
+      "dashboard": true,
+      "catalog": true,
+      "media": true,
+      "storefrontEditor": true,
+      "orders": true,
+      "customers": true,
+      "analytics": true,
+      "sync": true,
+      "settings": true
+    },
+    "i18n": {
+      "supportedLocales": ["en", "ar"],
+      "defaultLocale": "en",
+      "rtlLocales": ["ar"]
+    },
+    "currency": {
+      "code": "QAR",
+      "symbol": "QAR",
+      "locale": "en-QA"
+    }
+  },
+
+  "seo": {
+    "clientWeb": {
+      "title": "Elite Collection — Arabic Leather Artisans",
+      "description": "Elite Collection — handcrafted Arabic leather shoes from Doha since 1962.",
+      "themeColor": "#b8924a"
+    },
+    "adminPortal": {
+      "title": "Elite Collection · Admin Portal",
+      "description": "Elite Collection admin portal — catalog, orders, sync, and analytics.",
+      "themeColor": "#024638"
+    }
+  },
+
+  "assets": {
+    "logo": "assets/logo.svg",
+    "favicon": "favicon.ico",
+    "ogImage": "assets/og-image.jpg"
+  },
+
+  "deployment": {
+    "storefrontDomain": "https://website.com",
+    "adminDomain": "https://admin.website.com",
+    "apiDomain": "https://website.com/api"
+  }
+}
