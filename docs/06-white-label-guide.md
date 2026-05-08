@@ -28,7 +28,7 @@ This codebase is designed to be **resold to multiple clients** under different b
 | 6 | Update admin i18n strings | `admin-portal/src/app/i18n/strings.ts` | 20 min |
 | 7 | Replace product data | `client-web/services/products.service.ts` + `admin-portal/data/mock.ts` | 15 min |
 | 8 | Replace assets (logo, favicon, OG image) | `src/assets/`, `src/favicon.ico` | 5 min |
-| 9 | Update Google Fonts | `index.html` in both apps | 5 min |
+| 9 | Replace fonts (if different typeface needed) | `src/assets/fonts/`, `styles.scss` @font-face | 10 min |
 | 10 | Update env & deploy | `server/.env`, hosting config | 15 min |
 
 **Total: ~2 hours for a basic rebrand**
@@ -99,7 +99,7 @@ This is the **single source of truth** for all brand-specific values:
 Open `client/projects/client-web/src/styles.scss` and change the `:root` block:
 
 ```scss
-// BEFORE (Elite — cream & gold)
+// BEFORE (Elite — cream & gold, Thmanyah fonts)
 :root {
   --bg:        #faf8f4;
   --surface:   #f4f0e8;
@@ -107,15 +107,17 @@ Open `client/projects/client-web/src/styles.scss` and change the `:root` block:
   --gold-dim:  #9a7535;
   --cream:     #1a1208;
   --muted:     #8a7a62;
-  --ff-serif:  'Cormorant Garamond', Georgia, serif;
-  --ff-sans:   'DM Sans', system-ui, sans-serif;
+  --ff-serif:  'Thmanyah Serif Display', Georgia, serif;
+  --ff-sans:   'Thmanyah Sans', system-ui, sans-serif;
 }
 
-// AFTER (ACME — white & navy)
+// AFTER (ACME — white & navy, custom fonts)
+// If keeping Thmanyah: just change the colors, fonts stay the same.
+// If using a different typeface: update @font-face at top of file too.
 :root {
   --bg:        #fafaf8;
   --surface:   #f0f0ed;
-  --gold:      #8B6914;           // ← your accent color
+  --gold:      #8B6914;
   --gold-dim:  #6b5010;
   --cream:     #1a1a2e;
   --muted:     #6b6b7b;
@@ -148,6 +150,8 @@ Open `client/projects/admin-portal/src/styles.scss` and change the `:root` block
   --green-3: #0f2040;    // ← Darker variant
   --gold:    #D4A537;     // ← Accent color
   --gold-2:  #E8C060;     // ← Lighter accent
+  --ff-ui:   'Thmanyah Sans', system-ui, sans-serif;   // Keep or change
+  --ff-disp: 'Thmanyah Serif Display', Georgia, serif; // Keep or change
 }
 ```
 
@@ -275,19 +279,20 @@ In `admin-portal/src/app/data/mock.ts`, replace all mock data arrays with client
 
 ---
 
-### Step 9: Update Google Fonts
+### Step 9: Replace Fonts (If Needed)
 
-In both `index.html` files, update the Google Fonts `<link>`:
+The project uses the **Thmanyah** font family, self-hosted from `assets/fonts/thmanyah/`. If the new client wants a different typeface:
 
-```html
-<!-- BEFORE (Elite — Cormorant Garamond + DM Sans) -->
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+1. Add the new font files (woff2) to `assets/fonts/` in both apps
+2. Update the `@font-face` declarations at the top of both `styles.scss` files
+3. Update the CSS custom properties:
+   ```scss
+   --ff-serif: 'Your Serif Font', Georgia, serif;
+   --ff-sans:  'Your Sans Font', system-ui, sans-serif;
+   ```
+4. Optionally load Google Fonts by adding `<link>` tags back to both `index.html` files
 
-<!-- AFTER (ACME — Playfair Display + Inter) -->
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
-```
-
-Make sure the font names match what you set in the CSS `:root` variables.
+If the client is fine with Thmanyah (which natively supports Arabic + Latin), **skip this step entirely** — just change the colors.
 
 ---
 
@@ -371,7 +376,7 @@ Use this checklist when onboarding a new client:
 - [ ] Customer/order mock data replaced or API connected
 - [ ] Logo replaced (both apps)
 - [ ] Favicon replaced (both apps)
-- [ ] Google Fonts updated (both `index.html` files)
+- [ ] Fonts: kept Thmanyah or replaced with client's typeface (both apps)
 - [ ] `<title>` and `<meta>` tags updated (both apps)
 - [ ] `.env` updated with production domains
 - [ ] Currency helper updated

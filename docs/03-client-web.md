@@ -203,8 +203,8 @@ All visual tokens are defined in `styles.scss` under `:root`:
   --border:    rgba(0,0,0,0.10);
 
   // Typography
-  --ff-serif:  'Cormorant Garamond', Georgia, serif;    // Headings
-  --ff-sans:   'DM Sans', system-ui, sans-serif;        // Body text
+  --ff-serif:  'Thmanyah Serif Display', Georgia, serif;  // Headings
+  --ff-sans:   'Thmanyah Sans', system-ui, sans-serif;    // Body text
 }
 ```
 
@@ -232,9 +232,15 @@ All visual tokens are defined in `styles.scss` under `:root`:
 
 ### Fonts
 
-Loaded via Google Fonts in `index.html`:
-- **Cormorant Garamond** (serif) — Headings, hero text, editorial
-- **DM Sans** (sans-serif) — Body text, UI labels, buttons
+Self-hosted from `assets/fonts/thmanyah/` (woff2 format). The Thmanyah font family is a bilingual Arabic+Latin typeface with three sub-families:
+
+| Family | CSS Variable | Weights | Used For |
+|---|---|---|---|
+| **Thmanyah Sans** | `--ff-sans` | 300, 400, 500, 700, 900 | Body text, UI labels, buttons |
+| **Thmanyah Serif Display** | `--ff-serif` | 300, 400, 500, 700, 900 | Headings, hero text, editorial |
+| **Thmanyah Serif Text** | (available) | 300, 400, 500, 700, 900 | Long-form body text (optional use) |
+
+All `@font-face` declarations are at the top of `styles.scss`. No external font loading (Google Fonts) is needed.
 
 ### Animations
 

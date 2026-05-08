@@ -4,6 +4,27 @@
    page reuses the same vocabulary (.card, .btn, .pill, .tbl, etc.).
    ============================================================ */
 
+/* ── Thmanyah Sans ─────────────────────────────────────────── */
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
+/* ── Thmanyah Serif Display ────────────────────────────────── */
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
+/* ── Thmanyah Serif Text ───────────────────────────────────── */
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
 *,
 *::before,
 *::after {
@@ -60,8 +81,8 @@
   --shadow-lg: 0 16px 48px rgba(2, 70, 56, 0.12), 0 4px 12px rgba(2, 70, 56, 0.06);
 
   /* Typography */
-  --ff-ui: 'Montserrat', system-ui, sans-serif;
-  --ff-disp: 'Cormorant Garamond', Georgia, serif;
+  --ff-ui: 'Thmanyah Sans', system-ui, sans-serif;
+  --ff-disp: 'Thmanyah Serif Display', Georgia, serif;
   --ff-mono: 'SF Mono', Menlo, Monaco, Consolas, monospace;
 }
 
@@ -2276,14 +2297,14 @@ html[dir='rtl'] button,
 html[dir='rtl'] input,
 html[dir='rtl'] select,
 html[dir='rtl'] textarea {
-  font-family: 'Tajawal', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--ff-ui);
 }
 
 html[dir='rtl'] .serif,
 html[dir='rtl'] .card-title,
 html[dir='rtl'] .kpi-value,
 html[dir='rtl'] .stat-card .v {
-  font-family: 'Amiri', 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--ff-disp);
 }
 
 /* Card / section internals: mirror padding when RTL */

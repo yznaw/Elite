@@ -42,10 +42,11 @@
         "border2": "rgba(0, 0, 0, 0.06)"
       },
       "fonts": {
-        "serif": "'Cormorant Garamond', Georgia, serif",
-        "sans": "'DM Sans', system-ui, sans-serif"
+        "serif": "'Thmanyah Serif Display', Georgia, serif",
+        "sans": "'Thmanyah Sans', system-ui, sans-serif",
+        "serifText": "'Thmanyah Serif Text', Georgia, serif"
       },
-      "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap"
+      "fontsSource": "self-hosted from assets/fonts/thmanyah/ (woff2)"
     },
     "adminPortal": {
       "colors": {
@@ -66,11 +67,11 @@
         "muted2": "#9ca0b3"
       },
       "fonts": {
-        "ui": "'Montserrat', system-ui, sans-serif",
-        "display": "'Cormorant Garamond', Georgia, serif",
+        "ui": "'Thmanyah Sans', system-ui, sans-serif",
+        "display": "'Thmanyah Serif Display', Georgia, serif",
         "mono": "'SF Mono', Menlo, Monaco, Consolas, monospace"
       },
-      "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600;700&family=Tajawal:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap"
+      "fontsSource": "self-hosted from assets/fonts/thmanyah/ (woff2)"
     }
   },
 

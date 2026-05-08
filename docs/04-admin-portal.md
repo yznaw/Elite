@@ -262,9 +262,11 @@ export const fmtBytes = (n: number): string => { /* formats B/KB/MB */ };
 
 ### Typography
 
-- **UI Font:** `'Montserrat'` — Navigation, labels, buttons
-- **Display Font:** `'Cormorant Garamond'` — KPI values, card titles
+- **UI Font:** `'Thmanyah Sans'` — Navigation, labels, buttons
+- **Display Font:** `'Thmanyah Serif Display'` — KPI values, card titles
 - **Mono Font:** `'SF Mono', Menlo` — Code, IDs, timestamps
+
+All fonts are self-hosted from `assets/fonts/thmanyah/` (woff2). The Thmanyah family natively supports both Latin and Arabic, so no separate Arabic font is needed.
 
 ### Component Library (CSS Classes)
 

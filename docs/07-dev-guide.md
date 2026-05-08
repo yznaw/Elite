@@ -143,6 +143,7 @@ feature-name/
 - **Component-scoped styles** in `.component.scss` — layout, component-specific rules
 - **Utility classes** in `styles.scss` — reusable patterns (`.card`, `.btn`, `.pill`, etc.)
 - **No Tailwind** — Pure CSS with custom properties
+- **Self-hosted fonts** — Thmanyah font family (woff2) in `assets/fonts/thmanyah/`, loaded via `@font-face` in `styles.scss`
 - **BEM not required** — Simple class names are fine for this scale
 
 ### TypeScript
@@ -235,8 +236,8 @@ Elite/
 │   ├── tsconfig.json                          ← TS config + @shared/* alias
 │   └── projects/
 │       ├── client-web/src/
-│       │   ├── index.html                     ← HTML shell + Google Fonts
-│       │   ├── styles.scss                    ← DESIGN TOKENS + global CSS
+│       │   ├── index.html                     ← HTML shell
+│       │   ├── styles.scss                    ← @FONT-FACE + DESIGN TOKENS + global CSS
 │       │   └── app/
 │       │       ├── app.routes.ts              ← Page routes
 │       │       ├── i18n/strings.ts            ← EN/AR translations (600 lines)
@@ -250,8 +251,8 @@ Elite/
 │       │       └── shared/                    ← nav, footer, cart-drawer
 │       │
 │       └── admin-portal/src/
-│           ├── index.html                     ← HTML shell + Google Fonts
-│           ├── styles.scss                    ← DESIGN TOKENS (2700 lines)
+│           ├── index.html                     ← HTML shell
+│           ├── styles.scss                    ← @FONT-FACE + DESIGN TOKENS (2700+ lines)
 │           └── app/
 │               ├── app.routes.ts              ← 9 admin routes
 │               ├── i18n/strings.ts            ← EN/AR translations (1200 lines)

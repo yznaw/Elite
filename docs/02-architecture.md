@@ -240,7 +240,10 @@ All page components are lazy-loaded via `loadComponent()` in the route definitio
 ### 4. CSS Custom Properties for Theming
 All colors, fonts, and spacing tokens are defined as CSS custom properties (variables) in `:root`. This makes white-label rebranding possible by editing a single block of CSS variables.
 
-### 5. i18n via Dictionary Object
+### 5. Self-Hosted Typography (Thmanyah Font Family)
+Instead of relying on Google Fonts CDN, all fonts are self-hosted as woff2 files in `assets/fonts/thmanyah/` and loaded via `@font-face` declarations in `styles.scss`. The Thmanyah family natively supports Arabic + Latin, eliminating the need for a separate Arabic font. This improves load performance and removes external dependencies.
+
+### 6. i18n via Dictionary Object
 Instead of Angular's built-in i18n (which requires separate builds per language), both apps use a **runtime dictionary** approach — a single TypeScript file with all strings in both EN and AR. Language can be switched at runtime without reload.
 
 ---
