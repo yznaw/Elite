@@ -163,6 +163,26 @@ The admin portal has its own i18n dictionary with **640+ keys** covering all adm
 | `sync.*` | Sync engine (80+ keys for feed, sources, queue) |
 | `settings.*` | Settings page |
 | `dash.*` | Dashboard KPIs and charts |
+| `orderModal.*` | Order detail modal |
+| `customerDrawer.*` | Customer detail drawer |
+
+### Translation Strategy: Transcreation
+
+Unlike standard auto-translation, the Arabic localization for the Elite platform follows a **Transcreation** (Creative Copywriting) approach. This ensures the tone remains premium, professional, and culturally relevant for luxury e-commerce.
+
+**Key Principles:**
+- **Luxury Terminology:** Using high-end terms (e.g., `المعروضات` for Catalog, `التشكيلات` for Collections, `القطعة` for Product).
+- **Direct Tone:** Avoiding literal translations of English idioms.
+- **Common Dictionary:** All shared terms (Save, Discard, Cancel, etc.) are centralized under the `common.*` prefix to ensure 100% consistency across all pages.
+
+### Current Translation Progress
+
+- [x] **Sidebar Navigation** (transcreated)
+- [x] **Dashboard Page** (transcreated)
+- [/] **Product Catalog** (in progress)
+- [ ] **Storefront Editor**
+- [ ] **Order Management**
+- [ ] **Customer CRM**
 
 ---
 

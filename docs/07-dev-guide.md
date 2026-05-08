@@ -166,8 +166,11 @@ feature-name/
    ```
 3. Add the same key to the `AR` object:
    ```typescript
-   'your.new.key': 'نص عربي',
+   'your.new.key': 'نص عربي ملائم',
    ```
+
+> [!TIP]
+> **Transcreation over Translation:** When adding Arabic strings, avoid literal translations. Use "Transcreation" to maintain a premium tone. For example, use `القطعة` (The Piece) instead of `المنتج` (The Product) where appropriate for luxury items. Always check the `common.*` keys first to reuse existing approved terminology.
 4. Use in component:
    ```typescript
    readonly t = inject(I18nService).t;
