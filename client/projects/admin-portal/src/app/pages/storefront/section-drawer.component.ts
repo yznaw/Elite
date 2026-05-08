@@ -10,7 +10,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { PRODUCTS } from '../../data/mock';
+import { PRODUCTS, COLLECTIONS } from '../../data/mock';
 import { StorefrontBlock } from '../../models';
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -20,15 +20,7 @@ interface FormShape extends StorefrontBlock {
   productIds: string[];
 }
 
-const COLLECTIONS = [
-  { id: 'all',         labelKey: 'storefront.collection.all',     fallback: 'All products' },
-  { id: 'oxford',      labelKey: 'storefront.collection.oxford',  fallback: 'Oxford' },
-  { id: 'derby',       labelKey: 'storefront.collection.derby',   fallback: 'Derby' },
-  { id: 'loafer',      labelKey: 'storefront.collection.loafer',  fallback: 'Loafer' },
-  { id: 'boot',        labelKey: 'storefront.collection.boot',    fallback: 'Boot' },
-  { id: 'sneaker',     labelKey: 'storefront.collection.sneaker', fallback: 'Sneaker' },
-  { id: 'sale',        labelKey: 'storefront.collection.sale',    fallback: 'Sale items' },
-];
+
 
 @Component({
   selector: 'ap-section-drawer',
@@ -59,6 +51,29 @@ const COLLECTIONS = [
         <button class="x-btn" (click)="handleClose()" [attr.aria-label]="t('common.close')">
           <ap-icon name="x" [size]="14"/>
         </button>
+      </div>
+      
+
+      <div class="save-bar-top" [class.dirty]="dirty()" [class.shake]="shakeSaveBar()">
+        <div class="row gap-sm" style="min-width:0;flex:1;">
+          <span class="save-badge" style="background:transparent;border-color:transparent;color:#fff;">
+            {{ t('product.unsaved.title') }}
+          </span>
+        </div>
+        <div class="row gap-sm" style="flex-shrink:0;">
+          <button class="btn btn-ghost btn-sm" (click)="discard()" [disabled]="saveState() === 'saving'">
+            {{ t('common.discard') }}
+          </button>
+          <button class="btn btn-primary btn-sm" (click)="save()" [disabled]="saveState() === 'saving'">
+            @if (saveState() === 'saving') {
+              <ap-spinner/> {{ t('common.saving') }}
+            } @else if (saveState() === 'saved') {
+              <ap-icon name="check" [size]="12"/> {{ t('common.save') }}d
+            } @else {
+              {{ t('common.saveChanges') }}
+            }
+          </button>
+        </div>
       </div>
 
       <div class="drawer-body">
@@ -182,8 +197,9 @@ const COLLECTIONS = [
               </div>
               <label class="lbl">{{ t('storefront.field.collection') }}</label>
               <select class="inp" [ngModel]="form().collectionId || 'all'" (ngModelChange)="set('collectionId', $event)">
+                <option value="all">{{ t('catalog.allCollections') }}</option>
                 @for (c of collections; track c.id) {
-                  <option [value]="c.id">{{ t(c.labelKey) || c.fallback }}</option>
+                  <option [value]="c.id">{{ c.title }}</option>
                 }
               </select>
             </div>
@@ -211,9 +227,10 @@ const COLLECTIONS = [
                 </div>
               </div>
               <label class="lbl">{{ t('storefront.field.collection') }}</label>
-              <select class="inp" [ngModel]="form().collectionId || 'sale'" (ngModelChange)="set('collectionId', $event)">
+              <select class="inp" [ngModel]="form().collectionId || 'all'" (ngModelChange)="set('collectionId', $event)">
+                <option value="all">{{ t('catalog.allCollections') }}</option>
                 @for (c of collections; track c.id) {
-                  <option [value]="c.id">{{ t(c.labelKey) || c.fallback }}</option>
+                  <option [value]="c.id">{{ c.title }}</option>
                 }
               </select>
             </div>
@@ -249,55 +266,9 @@ const COLLECTIONS = [
           </button>
         </div>
       </div>
-
-      <!-- Sticky save bar -->
-      <div class="drawer-foot save-bar" [class.dirty]="dirty()">
-        <div class="row gap-sm" style="min-width:0;flex:1;">
-          <span class="save-badge" [class]="'save-badge ' + saveState()">
-            @if (saveState() === 'saving') { <ap-spinner [size]="10"/> }
-            @if (saveState() === 'saved')  { <ap-icon name="check" [size]="10"/> }
-            {{ saveLabel() }}
-          </span>
-        </div>
-        <div class="row gap-sm" style="flex-shrink:0;">
-          <button class="btn btn-ghost" (click)="discard()" [disabled]="!dirty() || saveState() === 'saving'">
-            {{ t('common.discard') }}
-          </button>
-          <button class="btn btn-primary" (click)="save()" [disabled]="!dirty() || saveState() === 'saving'">
-            @if (saveState() === 'saving') {
-              <ap-spinner/> {{ t('common.saving') }}
-            } @else if (saveState() === 'saved') {
-              <ap-icon name="check" [size]="12"/> {{ t('common.save') }}d
-            } @else {
-              {{ t('common.saveChanges') }}
-            }
-          </button>
-        </div>
-      </div>
     </div>
 
-    <!-- Unsaved-changes confirm modal -->
-    @if (confirmCloseOpen()) {
-      <div class="overlay" (click)="confirmCloseOpen.set(false)" style="z-index:220;"></div>
-      <div class="modal" style="z-index:230;width:min(440px,92vw);">
-        <div class="modal-head">
-          <div>
-            <div class="card-title">{{ t('product.unsaved.title') }}</div>
-            <div class="card-sub">{{ t('storefront.unsaved.sub') }}</div>
-          </div>
-          <button class="x-btn" (click)="confirmCloseOpen.set(false)"><ap-icon name="x" [size]="14"/></button>
-        </div>
-        <div class="modal-body">
-          <p style="line-height:1.6;margin-bottom:8px;">
-            {{ t('storefront.unsaved.body') }} <span class="strong">{{ form().title }}</span>.
-          </p>
-        </div>
-        <div class="drawer-foot">
-          <button class="btn btn-danger" (click)="closeAndDiscard()">{{ t('storefront.unsaved.discardClose') }}</button>
-          <button class="btn btn-primary" (click)="confirmCloseOpen.set(false); save(true)">{{ t('product.unsaved.saveClose') }}</button>
-        </div>
-      </div>
-    }
+
   `,
   styles: [`
     .drawer-wide { width: min(640px, 100vw); }
@@ -434,14 +405,14 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly allProducts = PRODUCTS;
-  readonly collections = COLLECTIONS;
+  readonly collections = COLLECTIONS.filter(c => !c.hidden);
 
   private _currentBlockId = '';
   private initial!: FormShape;
 
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly saveState = signal<SaveState>('idle');
-  readonly confirmCloseOpen = signal(false);
+  readonly shakeSaveBar = signal(false);
 
   readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
 
@@ -527,14 +498,6 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
-    const ok = await this.confirm.ask({
-      title: this.t('product.discardConfirm.title'),
-      message: this.t('storefront.discardConfirm.message'),
-      confirmLabel: this.t('product.discardConfirm.confirm'),
-      cancelLabel: this.t('product.discardConfirm.cancel'),
-      variant: 'danger',
-    });
-    if (!ok) return;
     this.form.set({ ...this.initial });
     this.saveState.set('idle');
     this.toast.info(this.t('product.toast.discarded.title'), this.t('product.toast.discarded.sub'));
@@ -553,13 +516,16 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
     this.deletedBlock.emit({ ...f });
   }
 
-  handleClose(): void {
-    if (this.dirty()) { this.confirmCloseOpen.set(true); return; }
-    this.closed.emit();
+  triggerShake(): void {
+    this.shakeSaveBar.set(false);
+    setTimeout(() => this.shakeSaveBar.set(true), 10);
   }
 
-  closeAndDiscard(): void {
-    this.confirmCloseOpen.set(false);
+  handleClose(): void {
+    if (this.dirty()) { 
+      this.triggerShake(); 
+      return; 
+    }
     this.closed.emit();
   }
 

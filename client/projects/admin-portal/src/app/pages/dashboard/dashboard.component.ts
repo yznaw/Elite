@@ -57,7 +57,7 @@ import { Order, Product, QAR } from '../../models';
                 <div class="heat-thumb"><img [src]="p.image" [alt]="p.name" (error)="onImgError($event)"/></div>
                 <div class="heat-info">
                   <div class="heat-title">{{ p.name }}</div>
-                  <div class="heat-meta">{{ p.brand }} · {{ p.category }}</div>
+                  <div class="heat-meta">{{ p.brand }} · {{ p.sku }}</div>
                 </div>
                 <div class="heat-bar"><div class="heat-bar-fill" [style.width.%]="(p.views3d / maxViews) * 100"></div></div>
                 <div class="heat-count">{{ p.views3d }}</div>

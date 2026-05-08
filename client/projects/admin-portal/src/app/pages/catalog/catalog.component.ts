@@ -7,7 +7,7 @@ import { EmptyStateComponent } from '../../shared/empty-state/empty-state.compon
 import { ProductDrawerComponent } from './product-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
-import { PRODUCTS } from '../../data/mock';
+import { PRODUCTS, COLLECTIONS } from '../../data/mock';
 import { Product, QAR } from '../../models';
 
 @Component({
@@ -22,13 +22,14 @@ import { Product, QAR } from '../../models';
             <ap-icon name="search" [size]="14"/>
             <input class="inp with-icon" [placeholder]="t('catalog.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event)"/>
           </div>
-          <select class="inp" style="width:auto;" [ngModel]="cat()" (ngModelChange)="cat.set($event)">
-            @for (c of cats; track c) {
-              <option [value]="c">{{ c === 'All' ? t('catalog.allCategories') : c }}</option>
+          <select class="inp" style="width:auto;" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event)">
+            <option value="All">{{ t('catalog.allCollections') }}</option>
+            @for (c of collections; track c.id) {
+              <option [value]="c.id">{{ c.title }}</option>
             }
           </select>
           <select class="inp" style="width:auto;" [ngModel]="v3d()" (ngModelChange)="v3d.set($event)">
-            <option value="All">{{ t('catalog.allCategories') }}</option>
+            <option value="All">{{ t('catalog.allCollections') }}</option>
             <option value="Linked">{{ t('catalog.linked') }}</option>
             <option value="Missing">{{ t('catalog.missing') }}</option>
           </select>
@@ -96,7 +97,7 @@ export class CatalogComponent {
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
-  readonly cats = ['All', ...Array.from(new Set(PRODUCTS.map((p) => p.category)))];
+  readonly collections = COLLECTIONS.filter(c => !c.hidden);
   readonly viewOptions = ['All', 'Linked', 'Missing'];
 
   /** Live, mutable product list — supports delete + undo. */
@@ -105,7 +106,7 @@ export class CatalogComponent {
   readonly products = computed(() => this._products());
 
   readonly search = signal('');
-  readonly cat = signal('All');
+  readonly collectionId = signal('All');
   readonly v3d = signal('All');
 
   /** ID-based — drawer navigation just updates this. */
@@ -113,10 +114,13 @@ export class CatalogComponent {
 
   readonly filtered = computed(() => {
     const s = this.search().toLowerCase();
-    const c = this.cat();
+    const colId = this.collectionId();
     const v = this.v3d();
     return this._products().filter((p) => {
-      if (c !== 'All' && p.category !== c) return false;
+      if (colId !== 'All') {
+        const col = COLLECTIONS.find(c => c.id === colId);
+        if (col && !col.productIds.includes(p.id)) return false;
+      }
       if (v !== 'All') {
         if (v === 'Linked' && !p.has3d) return false;
         if (v === 'Missing' && p.has3d) return false;
@@ -130,7 +134,7 @@ export class CatalogComponent {
 
   clearFilters(): void {
     this.search.set('');
-    this.cat.set('All');
+    this.collectionId.set('All');
     this.v3d.set('All');
   }
 

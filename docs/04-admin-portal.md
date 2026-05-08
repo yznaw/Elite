@@ -41,7 +41,8 @@ All pages are lazy-loaded:
 | Route | Component | Description |
 |---|---|---|
 | `/dashboard` | `DashboardComponent` | KPIs, revenue chart, 3D heatmap, recent orders |
-| `/catalog` | `CatalogComponent` | Product grid/list, search, filter, inline editor with draft auto-save |
+| `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, inline editor with top save bar and draft auto-save |
+| `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover images |
 | `/media` | `MediaComponent` | Upload zone, file grid, auto-link by SKU, detail drawer |
 | `/storefront` | `StorefrontComponent` | Section editor with drag & drop, draft → publish, preview |
 | `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, order detail drawer |
@@ -207,7 +208,7 @@ All models are defined in `app/models/index.ts`:
 
 | Interface | Key Fields | Used By |
 |---|---|---|
-| `Product` | id, name, sku, brand, category, price, stock, has3d, hidden | Catalog, Dashboard |
+| `Product` | id, name, sku, brand, price, stock, has3d, hidden, collectionIds[] | Catalog, Dashboard |
 | `MediaFile` | id, name, kind (image/glb), size, linkedTo, preview | Media Library |
 | `Order` | id, date, customer, total, payment, fulfillment, items[] | Orders |
 | `Customer` | id, name, email, orders, ltv, sizePref, notes | Customers |
@@ -285,6 +286,7 @@ All fonts are self-hosted from `assets/fonts/thmanyah/` (woff2). The Thmanyah fa
 | `.toggle` / `.toggle.on` | Toggle switch |
 | `.tabs` / `.tab` / `.tab.active` | Tab navigation |
 | `.chip` / `.chip.active` | Filter chips |
+| `.save-bar-top` / `.save-bar-top.shake` | Sticky top save banner with shake animation |
 | `.overlay` / `.drawer` | Drawer/modal overlays |
 
 ---

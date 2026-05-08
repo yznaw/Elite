@@ -10,11 +10,11 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { MEDIA_INIT } from '../../data/mock';
+import { MEDIA_INIT, COLLECTIONS } from '../../data/mock';
 import { ME, Product } from '../../models';
 
 interface FormShape {
-  name: string; sku: string; brand: string; category: string;
+  name: string; sku: string; brand: string; collectionIds: string[];
   price: number; stock: number; hidden: boolean;
   enDesc: string; arDesc: string;
   metaTitle: string; metaDesc: string; slug: string;
@@ -84,6 +84,28 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
           <span class="head-divider" aria-hidden="true"></span>
           <button class="head-icon-btn" (click)="handleClose()" [attr.aria-label]="t('common.close')">
             <ap-icon name="x" [size]="14"/>
+          </button>
+        </div>
+      </div>
+
+      <div class="save-bar-top" [class.dirty]="dirty()" [class.shake]="shakeSaveBar()">
+        <div class="row gap-sm" style="min-width:0;flex:1;">
+          <span class="save-badge" style="background:transparent;border-color:transparent;color:#fff;">
+            {{ t('product.unsaved.title') }}
+          </span>
+        </div>
+        <div class="row gap-sm" style="flex-shrink:0;">
+          <button class="btn btn-ghost btn-sm" (click)="discard()" [disabled]="saveState() === 'saving'">
+            {{ t('common.discard') }}
+          </button>
+          <button class="btn btn-primary btn-sm" (click)="save()" [disabled]="saveState() === 'saving'">
+            @if (saveState() === 'saving') {
+              <ap-spinner/> {{ t('common.saving') }}
+            } @else if (saveState() === 'saved') {
+              <ap-icon name="check" [size]="12"/> {{ t('common.save') }}d
+            } @else {
+              {{ t('common.saveChanges') }}
+            }
           </button>
         </div>
       </div>
@@ -158,12 +180,22 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
             </div>
           </div>
 
+          <div class="mb-16">
+            <label class="lbl">{{ t('nav.collections') }}</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              @for (c of collections; track c.id) {
+                <label class="row gap-sm" style="align-items:center;background:var(--bg-2);padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--border-2);transition:0.12s;" [style.border-color]="form().collectionIds.includes(c.id) ? 'var(--gold)' : ''" [style.background]="form().collectionIds.includes(c.id) ? 'var(--gold-3)' : ''">
+                  <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;"/>
+                  <span class="small">{{ c.title }}</span>
+                </label>
+              }
+            </div>
+          </div>
+
           <div class="grid-2 mb-16">
             <div>
-              <label class="lbl">{{ t('product.field.category') }}</label>
-              <select class="inp" [ngModel]="form().category" (ngModelChange)="set('category', $event)">
-                @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
-              </select>
+              <label class="lbl">{{ t('product.field.price') }}</label>
+              <input class="inp mono" type="number" min="0" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
             </div>
             <div>
               <label class="lbl">{{ t('product.field.stock') }}</label>
@@ -174,11 +206,6 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
                 <div class="muted small mt-8" style="color:var(--warning);">{{ t('product.field.stock.low') }}</div>
               }
             </div>
-          </div>
-
-          <div>
-            <label class="lbl">{{ t('product.field.price') }}</label>
-            <input class="inp mono" type="number" min="0" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
           </div>
         </div>
 
@@ -308,62 +335,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
           </button>
         </div>
       </div>
-
-      <!-- Sticky save bar — prominent when dirty -->
-      <div class="drawer-foot save-bar" [class.dirty]="dirty()">
-        <div class="row gap-sm" style="min-width:0;flex:1;">
-          <span class="save-badge" [class]="'save-badge ' + saveState()">
-            @if (saveState() === 'saving') { <ap-spinner [size]="10"/> }
-            @if (saveState() === 'saved')  { <ap-icon name="check" [size]="10"/> }
-            {{ saveLabel() }}
-          </span>
-          @if (dirty()) {
-            <span class="muted small save-bar-hint">
-              <ap-icon name="check" [size]="10"/> {{ t('product.draftAutoSaved') }}
-            </span>
-          }
-        </div>
-        <div class="row gap-sm" style="flex-shrink:0;">
-          <button class="btn btn-ghost" (click)="discard()" [disabled]="!dirty() || saveState() === 'saving'">
-            {{ t('common.discard') }}
-          </button>
-          <button class="btn btn-primary" (click)="save()" [disabled]="!dirty() || saveState() === 'saving'">
-            @if (saveState() === 'saving') {
-              <ap-spinner/> {{ t('common.saving') }}
-            } @else if (saveState() === 'saved') {
-              <ap-icon name="check" [size]="12"/> {{ t('common.save') }}d
-            } @else {
-              {{ t('common.saveChanges') }}
-            }
-          </button>
-        </div>
-      </div>
     </div>
-
-    <!-- Unsaved-changes confirm modal (legacy — now handled by ConfirmService) -->
-    @if (confirmCloseOpen()) {
-      <div class="overlay" (click)="confirmCloseOpen.set(false)" style="z-index:220;"></div>
-      <div class="modal" style="z-index:230;width:min(440px,92vw);">
-        <div class="modal-head">
-          <div>
-            <div class="card-title">{{ t('product.unsaved.title') }}</div>
-            <div class="card-sub">{{ t('product.unsaved.draftKept') }}</div>
-          </div>
-          <button class="x-btn" (click)="confirmCloseOpen.set(false)"><ap-icon name="x" [size]="14"/></button>
-        </div>
-        <div class="modal-body">
-          <p style="line-height:1.6;margin-bottom:16px;">
-            {{ t('product.unsaved.body1') }} <span class="strong">{{ form().name }}</span>. {{ t('product.unsaved.body2') }}
-          </p>
-          <div class="muted small">{{ t('product.unsaved.body3') }}</div>
-        </div>
-        <div class="drawer-foot">
-          <button class="btn btn-danger" (click)="closeAndDiscardDraft()">{{ t('product.unsaved.discardClose') }}</button>
-          <button class="btn btn-outline" (click)="closeAndKeepDraft()">{{ t('product.unsaved.keepClose') }}</button>
-          <button class="btn btn-primary" (click)="confirmCloseOpen.set(false); save()">{{ t('product.unsaved.saveClose') }}</button>
-        </div>
-      </div>
-    }
   `,
   styles: [`
     /* Wider drawer for the editor — full screen on phones */
@@ -440,34 +412,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
       flex-wrap: wrap;
     }
 
-    /* Save bar — promote visually when dirty */
-    .save-bar {
-      justify-content: space-between !important;
-      flex-wrap: wrap;
-      gap: 10px !important;
-      transition: background 0.2s, border-color 0.2s;
-      position: sticky;
-      bottom: 0;
-    }
-    .save-bar.dirty {
-      background: linear-gradient(0deg, rgba(197, 165, 114, 0.10), var(--bg)) !important;
-      border-top-color: var(--gold-4) !important;
-      box-shadow: 0 -4px 14px rgba(2, 70, 56, 0.04);
-    }
-    .save-bar-hint {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 10px;
-    }
 
-    /* Pulsing dirty marker on the drawer when there are unsaved changes */
-    .product-drawer.is-dirty .product-head {
-      box-shadow: inset 4px 0 0 var(--gold);
-    }
-    html[dir='rtl'] .product-drawer.is-dirty .product-head {
-      box-shadow: inset -4px 0 0 var(--gold);
-    }
 
     @media (max-width: 720px) {
       .nav-pos { padding: 0 4px; min-width: 28px; font-size: 10px; }
@@ -512,15 +457,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly t = (k: string): string => this.i18n.t(k);
 
-  readonly categories = ['Oxford', 'Derby', 'Loafer', 'Boot', 'Sneaker', 'Mule'];
+  readonly collections = COLLECTIONS.filter(c => !c.hidden);
 
   /** Initial form snapshot — re-set whenever `currentId` changes. */
   private initial!: FormShape;
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly draftRestoredAt = signal<string | null>(null);
   readonly saveState = signal<SaveState>('idle');
+  readonly shakeSaveBar = signal(false);
   readonly lastSavedAt = signal<string | null>(null);
-  readonly confirmCloseOpen = signal(false);
   readonly syncing = signal(false);
   readonly deleting = signal(false);
   readonly lastManual = signal({ when: '2026-04-29 09:42', by: 'Mona Al-Sayed', initials: 'MS' });
@@ -593,7 +538,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   private makeEmptyForm(): FormShape {
     return {
-      name: '', sku: '', brand: '', category: '',
+      name: '', sku: '', brand: '', collectionIds: [],
       price: 0, stock: 0, hidden: false,
       enDesc: '', arDesc: '',
       metaTitle: '', metaDesc: '', slug: '',
@@ -605,7 +550,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       name: p.name,
       sku: p.sku,
       brand: p.brand,
-      category: p.category,
+      collectionIds: COLLECTIONS.filter(c => c.productIds.includes(p.id)).map(c => c.id),
       price: p.price,
       stock: p.stock,
       hidden: p.hidden,
@@ -650,6 +595,11 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.set(k, !this.form()[k] as never);
   }
 
+  toggleCollection(id: string): void {
+    const ids = this.form().collectionIds;
+    this.set('collectionIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  }
+
   private scheduleAutoSave(): void {
     if (!this.dirty()) {
       try { localStorage.removeItem(this.draftKey); } catch {}
@@ -679,6 +629,18 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       try { localStorage.removeItem(this.draftKey); } catch {}
       this.draftRestoredAt.set(null);
       this.initial = { ...this.form() };
+      
+      // Update the actual mock collections for the sake of the prototype
+      this.collections.forEach(c => {
+        const wasInCol = c.productIds.includes(this.product.id);
+        const shouldBeInCol = this.form().collectionIds.includes(c.id);
+        if (shouldBeInCol && !wasInCol) {
+          c.productIds.push(this.product.id);
+        } else if (!shouldBeInCol && wasInCol) {
+          c.productIds = c.productIds.filter(id => id !== this.product.id);
+        }
+      });
+      
       this.toast.success(this.t('product.toast.saved.title'), `${this.form().name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
       this.feedbackTimer = window.setTimeout(() => this.saveState.set('idle'), 1800);
@@ -687,14 +649,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
-    const ok = await this.confirm.ask({
-      title: this.t('product.discardConfirm.title'),
-      message: this.t('product.discardConfirm.message'),
-      confirmLabel: this.t('product.discardConfirm.confirm'),
-      cancelLabel: this.t('product.discardConfirm.cancel'),
-      variant: 'danger',
-    });
-    if (!ok) return;
     this.form.set({ ...this.initial });
     try { localStorage.removeItem(this.draftKey); } catch {}
     this.draftRestoredAt.set(null);
@@ -737,16 +691,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (newIdx < 0 || newIdx >= list.length) return;
 
     if (this.dirty()) {
-      const ok = await this.confirm.ask({
-        title: this.t('product.navAway.title'),
-        message: this.t('product.navAway.message'),
-        confirmLabel: this.t('product.navAway.confirm'),
-        cancelLabel: this.t('product.navAway.cancel'),
-        variant: 'warning',
-      });
-      if (!ok) return;
+      this.triggerShake();
+      return;
     }
     this.currentIdChange.emit(list[newIdx].id);
+  }
+
+  triggerShake(): void {
+    this.shakeSaveBar.set(false);
+    setTimeout(() => this.shakeSaveBar.set(true), 10);
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -754,18 +707,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // ────────────────────────────────────────────────────────────────────
 
   handleClose(): void {
-    if (this.dirty()) { this.confirmCloseOpen.set(true); return; }
-    this.closed.emit();
-  }
-
-  closeAndKeepDraft(): void {
-    this.confirmCloseOpen.set(false);
-    this.closed.emit();
-  }
-
-  closeAndDiscardDraft(): void {
-    try { localStorage.removeItem(this.draftKey); } catch {}
-    this.confirmCloseOpen.set(false);
+    if (this.dirty()) { 
+      this.triggerShake(); 
+      return; 
+    }
     this.closed.emit();
   }
 

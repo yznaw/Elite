@@ -3,13 +3,21 @@ export interface Product {
   name: string;
   sku: string;
   brand: string;
-  category: string;
   price: number;
   stock: number;
   has3d: boolean;
   views3d: number;
   hidden: boolean;
   image: string;
+}
+
+export interface Collection {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  productIds: string[];
+  hidden: boolean;
 }
 
 export interface MediaFile {
