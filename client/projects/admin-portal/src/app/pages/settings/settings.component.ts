@@ -8,6 +8,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
+import { I18nService } from '../../services/i18n.service';
 import { INTEGRATIONS, TEAM } from '../../data/mock';
 import { TeamMember } from '../../models';
 
@@ -20,21 +21,21 @@ type Tab = 'general' | 'team' | 'integrations';
   template: `
     <div class="page-fade">
       <div class="tabs">
-        @for (t of tabs; track t.key) {
-          <button class="tab" [class.active]="tab() === t.key" (click)="tab.set(t.key)">{{ t.label }}</button>
+        @for (tt of tabs; track tt.key) {
+          <button class="tab" [class.active]="tab() === tt.key" (click)="tab.set(tt.key)">{{ t(tt.labelKey) }}</button>
         }
       </div>
 
       @if (tab() === 'general') {
         <div class="card card-pad" style="max-width:680px;">
-          <div class="card-title mb-16">Store Information</div>
+          <div class="card-title mb-16">{{ t('settings.storeInfo') }}</div>
           <div class="grid-2">
             <div>
-              <label class="lbl">Store Name</label>
+              <label class="lbl">{{ t('settings.storeName') }}</label>
               <input class="inp" value="Elite Collection"/>
             </div>
             <div>
-              <label class="lbl">Currency</label>
+              <label class="lbl">{{ t('settings.currency') }}</label>
               <select class="inp">
                 <option>QAR — Qatari Riyal</option>
                 <option>SAR — Saudi Riyal</option>
@@ -43,7 +44,7 @@ type Tab = 'general' | 'team' | 'integrations';
               </select>
             </div>
             <div>
-              <label class="lbl">Timezone</label>
+              <label class="lbl">{{ t('settings.timezone') }}</label>
               <select class="inp">
                 <option>Asia/Qatar (GMT+3)</option>
                 <option>Asia/Riyadh (GMT+3)</option>
@@ -52,7 +53,7 @@ type Tab = 'general' | 'team' | 'integrations';
               </select>
             </div>
             <div>
-              <label class="lbl">Default Language</label>
+              <label class="lbl">{{ t('settings.language') }}</label>
               <select class="inp">
                 <option value="en">English</option>
                 <option value="ar">العربية</option>
@@ -61,22 +62,22 @@ type Tab = 'general' | 'team' | 'integrations';
           </div>
 
           <div class="mt-24">
-            <label class="lbl">Logo</label>
-            <div style="padding:18px;border:1px dashed var(--border);border-radius:10px;background:var(--bg);display:flex;gap:14px;align-items:center;">
+            <label class="lbl">{{ t('settings.logo') }}</label>
+            <div style="padding:18px;border:1px dashed var(--border);border-radius:10px;background:var(--bg);display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
               <div class="avatar lg" style="border-radius:8px;background:var(--green);color:var(--gold);font-family:var(--ff-disp);font-size:18px;">EC</div>
-              <div class="grow">
-                <div class="strong">elite-logo.svg</div>
-                <div class="muted small">SVG · 4 KB · uploaded 2024-06-01</div>
+              <div class="grow" style="min-width:0;">
+                <div class="strong mono">elite-logo.svg</div>
+                <div class="muted small">SVG · 4 KB</div>
               </div>
-              <button class="btn btn-outline btn-sm"><ap-icon name="upload" [size]="12"/> Replace</button>
+              <button class="btn btn-outline btn-sm"><ap-icon name="upload" [size]="12"/> {{ t('common.edit') }}</button>
             </div>
           </div>
 
           <div class="row gap-sm mt-24" style="justify-content:flex-end;">
-            <button class="btn btn-ghost" [disabled]="savingGeneral()">Discard</button>
+            <button class="btn btn-ghost" [disabled]="savingGeneral()">{{ t('common.discard') }}</button>
             <button class="btn btn-primary" [disabled]="savingGeneral()" (click)="saveGeneral()">
-              @if (savingGeneral()) { <ap-spinner [size]="12"/> Saving… }
-              @else { Save Changes }
+              @if (savingGeneral()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+              @else { {{ t('common.saveChanges') }} }
             </button>
           </div>
         </div>
@@ -85,26 +86,26 @@ type Tab = 'general' | 'team' | 'integrations';
       @if (tab() === 'team') {
         <div class="col gap-lg">
           <div class="card card-pad">
-            <div class="card-title mb-16">Invite Team Member</div>
+            <div class="card-title mb-16">{{ t('settings.invite') }}</div>
             <div class="grid-2 mb-16">
               <div>
-                <label class="lbl">Full Name</label>
+                <label class="lbl">{{ t('settings.fullName') }}</label>
                 <input class="inp" placeholder="Yusuf Hamad" [ngModel]="invite().name" (ngModelChange)="setInvite('name', $event)"/>
               </div>
               <div>
-                <label class="lbl">Email</label>
+                <label class="lbl">{{ t('settings.email') }}</label>
                 <input class="inp" placeholder="name@elitecollection.qa" [ngModel]="invite().email" (ngModelChange)="setInvite('email', $event)"/>
               </div>
             </div>
-            <div class="row gap-sm">
+            <div class="row gap-sm" style="flex-wrap:wrap;">
               <select class="inp" style="width:auto;" [ngModel]="invite().role" (ngModelChange)="setInvite('role', $event)">
                 <option>Admin</option>
                 <option>Manager</option>
                 <option>Viewer</option>
               </select>
               <button class="btn btn-gold" [disabled]="inviting() || !canInvite()" (click)="inviteMember()">
-                @if (inviting()) { <ap-spinner [size]="12"/> Sending… }
-                @else { Send Invitation }
+                @if (inviting()) { <ap-spinner [size]="12"/> {{ t('settings.sending') }} }
+                @else { {{ t('settings.sendInvitation') }} }
               </button>
             </div>
           </div>
@@ -134,7 +135,7 @@ type Tab = 'general' | 'team' | 'integrations';
                 </select>
               </ng-template>
               <ng-template apCellTpl="actions" let-r>
-                <button class="btn btn-danger btn-sm" (click)="removeMember(r.id)"><ap-icon name="trash" [size]="12"/> Remove</button>
+                <button class="btn btn-danger btn-sm" (click)="removeMember(r.id)"><ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}</button>
               </ng-template>
             </ap-sortable-table>
           </div>
@@ -147,7 +148,7 @@ type Tab = 'general' | 'team' | 'integrations';
             <div class="card card-pad">
               <div class="row" style="justify-content:space-between;margin-bottom:8px;">
                 <div class="strong" style="font-size:15px;color:var(--green);">{{ itg.name }}</div>
-                <ap-pill [kind]="itg.connected ? 'green' : 'grey'">{{ itg.connected ? 'Connected' : 'Disconnected' }}</ap-pill>
+                <ap-pill [kind]="itg.connected ? 'green' : 'grey'">{{ itg.connected ? t('common.connected') : t('common.disconnected') }}</ap-pill>
               </div>
               <div class="muted small mb-16">{{ itg.desc }}</div>
               <div class="muted small mb-16 mono" style="padding:8px 10px;background:var(--bg);border-radius:6px;font-size:11px;">
@@ -155,7 +156,7 @@ type Tab = 'general' | 'team' | 'integrations';
               </div>
               @if (itg.id === 'cp') {
                 <label class="lbl">CSV URL</label>
-                <input class="inp mb-8" value="https://cp-pos.elitecollection.qa/api/inventory.csv"/>
+                <input class="inp mb-8 mono" value="https://cp-pos.elitecollection.qa/api/inventory.csv"/>
                 <label class="lbl">Schedule</label>
                 <select class="inp mb-16">
                   <option>Every hour</option>
@@ -170,7 +171,7 @@ type Tab = 'general' | 'team' | 'integrations';
               } @else {
                 <button class="btn" [class.btn-outline]="itg.connected" [class.btn-gold]="!itg.connected"
                   style="width:100%;" (click)="toggleIntegration(itg.id)">
-                  {{ itg.connected ? 'Manage' : 'Connect' }}
+                  {{ itg.connected ? t('common.manage') : t('common.connect') }}
                 </button>
               }
             </div>
@@ -183,11 +184,14 @@ type Tab = 'general' | 'team' | 'integrations';
 export class SettingsComponent {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly i18n = inject(I18nService);
 
-  readonly tabs: { key: Tab; label: string }[] = [
-    { key: 'general', label: 'General' },
-    { key: 'team', label: 'Team Members' },
-    { key: 'integrations', label: 'Integrations' },
+  readonly t = (k: string): string => this.i18n.t(k);
+
+  readonly tabs: { key: Tab; labelKey: string }[] = [
+    { key: 'general',      labelKey: 'settings.tab.general' },
+    { key: 'team',         labelKey: 'settings.tab.team' },
+    { key: 'integrations', labelKey: 'settings.tab.integrations' },
   ];
 
   readonly tab = signal<Tab>('general');

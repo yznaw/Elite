@@ -1,8 +1,9 @@
-import { Component, EventEmitter, Input, Output, computed, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
+import { I18nService } from '../../services/i18n.service';
 import { Order, QAR } from '../../models';
 
 interface TimelineItem { label: string; ts: string; state: 'done' | 'future'; }
@@ -49,8 +50,8 @@ interface TimelineItem { label: string; ts: string; state: 'done' | 'future'; }
           <div style="width:240px;flex-shrink:0;">
             <div class="lbl">Status</div>
             <div class="row gap-sm mb-16" style="flex-wrap:wrap;">
-              <ap-pill [kind]="paymentKind.kind">{{ paymentKind.label }}</ap-pill>
-              <ap-pill [kind]="fulfillmentKind.kind">{{ fulfillmentKind.label }}</ap-pill>
+              <ap-pill [kind]="paymentKind.kind">{{ t(paymentKind.labelKey) }}</ap-pill>
+              <ap-pill [kind]="fulfillmentKind.kind">{{ t(fulfillmentKind.labelKey) }}</ap-pill>
             </div>
             <div class="lbl">Customer</div>
             <div class="strong mb-8">{{ order.customer }}</div>
@@ -79,6 +80,9 @@ interface TimelineItem { label: string; ts: string; state: 'done' | 'future'; }
 export class OrderModalComponent {
   @Input({ required: true }) order!: Order;
   @Output() closed = new EventEmitter<void>();
+
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
 

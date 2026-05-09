@@ -3,13 +3,21 @@ export interface Product {
   name: string;
   sku: string;
   brand: string;
-  category: string;
   price: number;
   stock: number;
   has3d: boolean;
   views3d: number;
   hidden: boolean;
   image: string;
+}
+
+export interface Collection {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  productIds: string[];
+  hidden: boolean;
 }
 
 export interface MediaFile {
@@ -142,6 +150,18 @@ export interface StorefrontBlock {
   title: string;
   visible: boolean;
   config: string;
+
+  /** Type-specific configuration fields. Optional — only fields used by
+      the section's type are read; the rest are ignored. */
+  subtitle?: string;
+  ctaText?: string;
+  ctaLink?: string;
+  imageUrl?: string;
+  productIds?: string[];
+  collectionId?: string;
+  itemLimit?: number;
+  sortBy?: 'newest' | 'bestseller' | 'price-asc' | 'price-desc' | 'manual';
+  body?: string;
 }
 
 export interface PaletteEntry {

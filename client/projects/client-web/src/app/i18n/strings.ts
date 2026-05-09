@@ -1,0 +1,601 @@
+/**
+ * Bilingual dictionary for the customer-facing storefront.
+ * Add a key here once, render with `i18n.t('the.key')` in any component.
+ */
+
+export type Locale = 'en' | 'ar';
+
+const EN = {
+  // ─────────────────────────────────────────────────────────────────────
+  //  Brand
+  // ─────────────────────────────────────────────────────────────────────
+  'brand.name': 'ELITE',
+  'brand.tagline': 'Arabic Leather Artisans',
+  'brand.heritageEst': 'Est. 1962 · Doha',
+  'brand.heritageEstFull': 'Est. 1962 · Doha, Kingdom of Qatar',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Navigation
+  // ─────────────────────────────────────────────────────────────────────
+  'nav.atelier': 'Atelier',
+  'nav.collection': 'Collection',
+  'nav.story': 'Our Story',
+  'nav.contact': 'Contact',
+  'nav.cart': 'Cart',
+  'nav.menu': 'Menu',
+  'nav.openMenu': 'Open menu',
+  'nav.closeMenu': 'Close menu',
+  'nav.bespokeAvailable': 'Bespoke Appointments Available',
+  'nav.language': 'Language',
+  'nav.lang.en': 'English',
+  'nav.lang.ar': 'العربية',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Common
+  // ─────────────────────────────────────────────────────────────────────
+  'common.viewDetails': 'View Details',
+  'common.viewPiece': 'View Piece',
+  'common.exploreCollection': 'Explore Collection',
+  'common.viewFullCollection': 'View Full Collection',
+  'common.continueBrowsing': 'Continue Browsing',
+  'common.continue': 'Continue',
+  'common.back': 'Back',
+  'common.next': 'Next',
+  'common.cancel': 'Cancel',
+  'common.close': 'Close',
+  'common.send': 'Send',
+  'common.submit': 'Submit',
+  'common.scroll': 'Scroll',
+  'common.dragRotate': 'Drag · Rotate · Explore',
+  'common.currency.sar': 'SAR',
+  'common.currency.qar': 'QAR',
+  'common.dot': '·',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Cart drawer
+  // ─────────────────────────────────────────────────────────────────────
+  'cart.title': 'Your Selection',
+  'cart.piece': 'piece reserved',
+  'cart.pieces': 'pieces reserved',
+  'cart.empty.title': 'Empty',
+  'cart.empty.sub': 'Your curated collection awaits',
+  'cart.size': 'Size',
+  'cart.qty': 'Qty',
+  'cart.remove': 'Remove',
+  'cart.subtotal': 'Subtotal',
+  'cart.dutiesIncluded': 'Duties & bespoke packaging included',
+  'cart.proceedToCheckout': 'Proceed to Checkout',
+  'cart.trust.shipping': 'Complimentary Shipping',
+  'cart.trust.secure': 'Secure Checkout',
+  'cart.trust.returns': 'Returns 30D',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Footer
+  // ─────────────────────────────────────────────────────────────────────
+  'footer.tagline': 'Handcrafted in Doha since 1962. Limited to 400 pairs per year.',
+  'footer.col.collection': 'Collection',
+  'footer.col.atelier': 'Atelier',
+  'footer.col.client': 'Client',
+  'footer.link.allPieces': 'All Pieces',
+  'footer.link.newArrivals': 'New Arrivals',
+  'footer.link.signature': 'Signature',
+  'footer.link.limitedEdition': 'Limited Edition',
+  'footer.link.ourStory': 'Our Story',
+  'footer.link.craftsmanship': 'Craftsmanship',
+  'footer.link.bespoke': 'Bespoke',
+  'footer.link.appointments': 'Appointments',
+  'footer.link.contactUs': 'Contact Us',
+  'footer.link.sizeGuide': 'Size Guide',
+  'footer.link.careGuide': 'Care Guide',
+  'footer.link.returns': 'Returns',
+  'footer.copyright': '© 2026 Elite Collection. All rights reserved.',
+  'footer.cities': 'Doha · Dubai · Doha',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Home page
+  // ─────────────────────────────────────────────────────────────────────
+  'home.headline.line1': 'Where Heritage',
+  'home.headline.line2': 'Meets Sole',
+  'home.subhead': 'Hand-crafted Arabic leather shoes for those who command presence',
+  'home.cta.explore': 'Explore Collection',
+  'home.cta.story': 'Our Story',
+  'home.meta.handStitched': 'Hand-stitched Detail',
+  'home.meta.handStitched.sub': 'Triple-lock welt seam',
+  'home.meta.camelLeather': 'Premium Camel Leather',
+  'home.meta.camelLeather.sub': 'Full-grain, Doha tannery',
+  'home.meta.craftingTime': '48hr Crafting Time',
+  'home.meta.craftingTime.sub': 'Single artisan, zero compromise',
+
+  'home.featured.kicker': 'Curated Selection',
+  'home.featured.title': 'Icons of Craft',
+
+  'home.promise.kicker': 'The Promise',
+  'home.promise.headline.line1': '"Every pair is numbered.',
+  'home.promise.headline.line2': 'Every stitch, intentional."',
+  'home.stats.heritage': 'Years of Heritage',
+  'home.stats.artisans': 'Master Artisans',
+  'home.stats.perPair': 'Per Pair',
+  'home.stats.lifetime': 'Lifetime Care',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Collection page
+  // ─────────────────────────────────────────────────────────────────────
+  'collection.kicker': 'The Collection',
+  'collection.title': 'All Pieces',
+  'collection.worksSuffix': 'works',
+  'collection.empty': 'No pieces match your selection',
+
+  'collection.style.all': 'All',
+  'collection.style.oxford': 'Oxford',
+  'collection.style.derby': 'Derby',
+  'collection.style.loafer': 'Loafer',
+  'collection.style.boot': 'Boot',
+
+  'collection.leather.all': 'All',
+  'collection.leather.camelNappa': 'Camel Nappa',
+  'collection.leather.camelFullGrain': 'Camel Full-Grain',
+  'collection.leather.goatSuede': 'Goat Suede',
+  'collection.leather.calfLeather': 'Calf Leather',
+
+  'collection.sort.featured': 'Featured',
+  'collection.sort.priceLowHigh': 'Price: Low–High',
+  'collection.sort.priceHighLow': 'Price: High–Low',
+  'collection.sort.newest': 'Newest',
+
+  'collection.tag.signature': 'Signature',
+  'collection.tag.new': 'New',
+  'collection.tag.bestseller': 'Bestseller',
+  'collection.tag.limited': 'Limited',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Product page
+  // ─────────────────────────────────────────────────────────────────────
+  'product.breadcrumb.collection': 'Collection',
+  'product.reviews': 'reviews',
+  'product.handcraftedSuffix': 'Handcrafted in Doha',
+  'product.dutiesIncluded': '· Duties included',
+  'product.descriptionTemplate': 'A statement of understated authority. The {name} is individually shaped on a hand-carved wooden last, requiring 48 hours of continuous attention from a single master artisan. Limited to 40 pairs per season.',
+
+  'product.attr.leather': 'Leather',
+  'product.attr.style': 'Style',
+  'product.attr.origin': 'Origin',
+  'product.attr.originValue': 'Doha, Qatar',
+  'product.attr.edition': 'Edition',
+  'product.attr.editionValue': 'Numbered',
+
+  'product.size.label': 'Select Size (EU)',
+  'product.size.guide': 'Size Guide',
+  'product.size.required': '↑ Please select a size to continue',
+  'product.qty': 'Qty',
+
+  'product.cta.reserve': 'Reserve This Pair',
+  'product.cta.added': 'Added to Selection',
+  'product.cta.advisor': 'Speak with a Client Advisor',
+  'product.cta.advisorMsg': 'A client advisor will contact you within 2 hours.',
+
+  'product.trust.delivery': 'Free Express Delivery',
+  'product.trust.certificate': 'Certificate Included',
+  'product.trust.returns': '30-Day Returns',
+
+  'product.accordion.material': 'Material & Care',
+  'product.accordion.material.body': 'Crafted from hand-selected full-grain camel leather sourced exclusively from Doha tanneries. The leather is treated with natural oils to achieve its distinctive supple hand. Clean with a soft, dry cloth. Condition monthly with our complimentary leather balm. Store in the included cedar shoe trees.',
+  'product.accordion.delivery': 'Delivery & Packaging',
+  'product.accordion.delivery.body': 'Complimentary express delivery within Qatar (1–2 business days). International delivery to GCC within 3–5 business days. Each pair is presented in a hand-stamped box with silk tissue and a personalized certificate of authenticity signed by your craftsman.',
+  'product.accordion.sizing': 'Sizing & Fit',
+  'product.accordion.sizing.body': 'Our shoes are sized in EU measurements and run true to size. If you are between sizes, we recommend sizing up. Bespoke last modifications are available at no additional charge for returning clients. A complimentary sizing kit can be dispatched to your address upon request.',
+
+  'product.sticky.reserve': 'Reserve · {price}',
+  'product.sticky.added': '✓ Added',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Checkout
+  // ─────────────────────────────────────────────────────────────────────
+  'checkout.brand.kicker': 'Secure Checkout',
+  'checkout.step.details': 'Details',
+  'checkout.step.delivery': 'Delivery',
+  'checkout.step.payment': 'Payment',
+
+  'checkout.field.firstName': 'First Name',
+  'checkout.field.lastName': 'Last Name',
+  'checkout.field.email': 'Email Address',
+  'checkout.field.phone': 'Phone Number',
+  'checkout.field.address': 'Street Address',
+  'checkout.field.city': 'City',
+  'checkout.field.country': 'Country',
+  'checkout.field.cardholder': 'Cardholder Name',
+  'checkout.field.card': 'Card Number',
+  'checkout.field.expiry': 'Expiry (MM/YY)',
+  'checkout.field.cvv': 'CVV',
+
+  'checkout.country.qatar': 'Qatar',
+  'checkout.country.uae': 'UAE',
+  'checkout.country.kuwait': 'Kuwait',
+  'checkout.country.saudi': 'Saudi Arabia',
+  'checkout.country.bahrain': 'Bahrain',
+  'checkout.country.oman': 'Oman',
+
+  'checkout.delivery.title': 'Complimentary Express Delivery',
+  'checkout.delivery.sub': '1–2 business days · Signature required',
+  'checkout.delivery.free': 'Free',
+
+  'checkout.security': '256-bit SSL encryption · PCI DSS compliant',
+  'checkout.terms': 'By placing your order you agree to our terms of service',
+  'checkout.placeOrder': 'Place Order',
+
+  'checkout.summary.title': 'Order Summary',
+  'checkout.summary.empty': 'Your cart is empty',
+  'checkout.summary.subtotal': 'Subtotal',
+  'checkout.summary.delivery': 'Delivery',
+  'checkout.summary.deliveryValue': 'Complimentary',
+  'checkout.summary.duties': 'Duties',
+  'checkout.summary.dutiesValue': 'Included',
+  'checkout.summary.total': 'Total',
+
+  'checkout.confirm.title': 'Order Confirmed',
+  'checkout.confirm.body1': 'Your bespoke pair is now in the hands of our master craftsmen.',
+  'checkout.confirm.quote': '"We\'ll notify you when it begins its journey."',
+  'checkout.confirm.totalLabel': 'Order Total',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Story page
+  // ─────────────────────────────────────────────────────────────────────
+  'story.headline.line1': 'The Craft of',
+  'story.headline.line2': 'Silence & Precision',
+  'story.subhead': 'Six decades of Arabic leather artisanship. Twelve master craftsmen. One unbroken promise.',
+
+  'story.chapter.1962.title': 'A Workshop in Al-Dirah',
+  'story.chapter.1962.body': "In the ancient souks of Doha's Al-Dirah quarter, master cobbler Khalid Al-Rashidi opened a workshop with nothing but a single last, a curved needle, and an uncompromising vision. Every pair he produced bore the weight of his name — each stitch a contract between craftsman and wearer.",
+  'story.chapter.1978.title': 'The Camel Leather Discovery',
+  'story.chapter.1978.body': "A chance encounter with Bedouin leather traders from the Najd plateau introduced Khalid to full-grain camel hide — a material of extraordinary durability, warmth, and a grain unlike anything sourced from European tanneries. The leather breathes in desert heat and softens with wear into a second skin. It became the house's defining material overnight.",
+  'story.chapter.1995.title': 'Royal Patronage',
+  'story.chapter.1995.body': 'By royal appointment, Elite began crafting bespoke footwear for members of the Saudi royal household and senior government ministers. Each commission took between 60 and 90 days — a testament to the refusal to compromise quality for speed. Word spread quietly, as it does among those who know.',
+  'story.chapter.today.year': 'Today',
+  'story.chapter.today.title': 'Twelve Hands, One Pair',
+  'story.chapter.today.body': 'Today, every pair passes through the hands of twelve specialists — from the leather cutter who has worked here for 30 years, to the finisher who hand-burnishes each edge with beeswax and carnauba. We limit production to 400 pairs per year. Not because we must, but because excellence demands it. Each pair ships with a numbered certificate signed by its maker.',
+
+  'story.pullQuote.line1': '"A shoe is not a product.',
+  'story.pullQuote.line2': 'It is the autobiography of a craftsman."',
+  'story.pullQuote.author': '— Khalid Al-Rashidi, Founder',
+
+  'story.atelier.kicker': 'The Atelier',
+  'story.atelier.title': 'Twelve Masters',
+  'story.atelier.experience': 'experience',
+  'story.role.leatherSelector': 'Leather Selector',
+  'story.role.patternCutter': 'Pattern Cutter',
+  'story.role.lastMaker': 'Last Maker',
+  'story.role.weltStitcher': 'Welt Stitcher',
+  'story.role.heelBuilder': 'Heel Builder',
+  'story.role.edgeFinisher': 'Edge Finisher',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Contact page
+  // ─────────────────────────────────────────────────────────────────────
+  'contact.kicker': 'Personal Service',
+  'contact.headline.line1': 'Speak with a',
+  'contact.headline.line2': 'Client Advisor',
+  'contact.subhead': 'Every inquiry is handled personally by a dedicated advisor. Whether you seek a bespoke commission, sizing counsel, or a question about our craft — we are at your service.',
+
+  'contact.field.name': 'Full Name',
+  'contact.field.email': 'Email Address',
+  'contact.field.phone': 'Phone Number',
+  'contact.field.subject': 'Subject',
+  'contact.field.message': 'Your Message',
+
+  'contact.subject.bespoke': 'Bespoke Commission',
+  'contact.subject.product': 'Product Inquiry',
+  'contact.subject.sizing': 'Sizing Assistance',
+  'contact.subject.order': 'Order Support',
+  'contact.subject.press': 'Press & Partnerships',
+
+  'contact.send': 'Send Message',
+  'contact.success.kicker': 'Message Received',
+  'contact.success.headline.line1': 'A Client Advisor',
+  'contact.success.headline.line2': 'Will Be in Touch',
+  'contact.success.body': 'We respond to all inquiries within 2 business hours. For urgent matters, call our Doha atelier directly.',
+  'contact.success.directLine': 'Direct Line',
+
+  'contact.info.atelier.title': 'Doha Atelier',
+  'contact.info.atelier.l1': 'Al-Dirah Quarter, Doha',
+  'contact.info.atelier.l2': 'Kingdom of Qatar',
+  'contact.info.atelier.l3': 'Open Sun–Thu, 9am–6pm',
+  'contact.info.appointments.title': 'Private Appointments',
+  'contact.info.appointments.l1': 'Bespoke consultations by appointment',
+  'contact.info.appointments.l2': 'In-atelier or at your residence',
+  'contact.info.appointments.l3': 'Available 7 days a week',
+  'contact.info.client.title': 'Client Services',
+  'contact.info.client.l1': '+966 11 XXX XXXX',
+  'contact.info.client.l2': 'advisors@elitecollection.sa',
+  'contact.info.client.l3': 'Response within 2 hours',
+
+  'contact.promise.line1': '"No inquiry is too small. No request is unreasonable. You are our guest."',
+  'contact.promise.signature': 'The Elite Promise',
+} as const;
+
+const AR: Record<keyof typeof EN, string> = {
+  // Brand
+  'brand.name': 'إيليت',
+  'brand.tagline': 'حرفيون عرب لصناعة الجلود',
+  'brand.heritageEst': 'تأسس 1962 · الدوحة',
+  'brand.heritageEstFull': 'تأسس 1962 · الدوحة، دولة قطر',
+
+  // Navigation
+  'nav.atelier': 'الورشة',
+  'nav.collection': 'المجموعة',
+  'nav.story': 'قصتنا',
+  'nav.contact': 'تواصل معنا',
+  'nav.cart': 'السلة',
+  'nav.menu': 'القائمة',
+  'nav.openMenu': 'فتح القائمة',
+  'nav.closeMenu': 'إغلاق القائمة',
+  'nav.bespokeAvailable': 'مواعيد التفصيل الحصري متاحة',
+  'nav.language': 'اللغة',
+  'nav.lang.en': 'English',
+  'nav.lang.ar': 'العربية',
+
+  // Common
+  'common.viewDetails': 'عرض التفاصيل',
+  'common.viewPiece': 'عرض القطعة',
+  'common.exploreCollection': 'استكشف المجموعة',
+  'common.viewFullCollection': 'عرض المجموعة كاملة',
+  'common.continueBrowsing': 'متابعة التصفح',
+  'common.continue': 'متابعة',
+  'common.back': 'رجوع',
+  'common.next': 'التالي',
+  'common.cancel': 'إلغاء',
+  'common.close': 'إغلاق',
+  'common.send': 'إرسال',
+  'common.submit': 'إرسال',
+  'common.scroll': 'مرّر',
+  'common.dragRotate': 'اسحب · دوّر · استكشف',
+  'common.currency.sar': 'ر.س',
+  'common.currency.qar': 'ر.ق',
+  'common.dot': '·',
+
+  // Cart
+  'cart.title': 'اختياراتك',
+  'cart.piece': 'قطعة محجوزة',
+  'cart.pieces': 'قطع محجوزة',
+  'cart.empty.title': 'فارغة',
+  'cart.empty.sub': 'مجموعتك المنتقاة في الانتظار',
+  'cart.size': 'المقاس',
+  'cart.qty': 'الكمية',
+  'cart.remove': 'إزالة',
+  'cart.subtotal': 'المجموع الفرعي',
+  'cart.dutiesIncluded': 'الرسوم والتغليف الفاخر مشمولة',
+  'cart.proceedToCheckout': 'الانتقال إلى الدفع',
+  'cart.trust.shipping': 'شحن مجاني',
+  'cart.trust.secure': 'دفع آمن',
+  'cart.trust.returns': 'إرجاع خلال 30 يوماً',
+
+  // Footer
+  'footer.tagline': 'صناعة يدوية في الدوحة منذ 1962. محدود بـ 400 زوج سنوياً.',
+  'footer.col.collection': 'المجموعة',
+  'footer.col.atelier': 'الورشة',
+  'footer.col.client': 'خدمة العملاء',
+  'footer.link.allPieces': 'جميع القطع',
+  'footer.link.newArrivals': 'الوصول الحديث',
+  'footer.link.signature': 'التوقيع',
+  'footer.link.limitedEdition': 'إصدار محدود',
+  'footer.link.ourStory': 'قصتنا',
+  'footer.link.craftsmanship': 'الحرفية',
+  'footer.link.bespoke': 'تفصيل حصري',
+  'footer.link.appointments': 'المواعيد',
+  'footer.link.contactUs': 'تواصل معنا',
+  'footer.link.sizeGuide': 'دليل المقاسات',
+  'footer.link.careGuide': 'دليل العناية',
+  'footer.link.returns': 'الإرجاع',
+  'footer.copyright': '© 2026 إيليت كولكشن. جميع الحقوق محفوظة.',
+  'footer.cities': 'الدوحة · دبي · الدوحة',
+
+  // Home
+  'home.headline.line1': 'حيث يلتقي التراث',
+  'home.headline.line2': 'بنعل القدم',
+  'home.subhead': 'أحذية جلدية عربية مصنوعة يدوياً لمن يفرضون حضورهم',
+  'home.cta.explore': 'استكشف المجموعة',
+  'home.cta.story': 'قصتنا',
+  'home.meta.handStitched': 'حياكة يدوية دقيقة',
+  'home.meta.handStitched.sub': 'درز ثلاثي محكم',
+  'home.meta.camelLeather': 'جلد جمل فاخر',
+  'home.meta.camelLeather.sub': 'كامل الحبيبات · مدبغة الدوحة',
+  'home.meta.craftingTime': '48 ساعة من الصناعة',
+  'home.meta.craftingTime.sub': 'حرفي واحد · بلا تنازلات',
+
+  'home.featured.kicker': 'اختيارات منتقاة',
+  'home.featured.title': 'أيقونات الحرفة',
+
+  'home.promise.kicker': 'الوعد',
+  'home.promise.headline.line1': '"كل زوج مرقّم.',
+  'home.promise.headline.line2': 'وكل غرزة بنية مقصودة."',
+  'home.stats.heritage': 'سنة من الإرث',
+  'home.stats.artisans': 'حرفياً ماهراً',
+  'home.stats.perPair': 'لكل زوج',
+  'home.stats.lifetime': 'عناية مدى الحياة',
+
+  // Collection
+  'collection.kicker': 'المجموعة',
+  'collection.title': 'جميع القطع',
+  'collection.worksSuffix': 'قطعة',
+  'collection.empty': 'لا توجد قطع تطابق اختيارك',
+
+  'collection.style.all': 'الكل',
+  'collection.style.oxford': 'أوكسفورد',
+  'collection.style.derby': 'ديربي',
+  'collection.style.loafer': 'لوفر',
+  'collection.style.boot': 'بوت',
+
+  'collection.leather.all': 'الكل',
+  'collection.leather.camelNappa': 'جلد جمل نابا',
+  'collection.leather.camelFullGrain': 'جلد جمل كامل الحبيبات',
+  'collection.leather.goatSuede': 'جلد ماعز شامواه',
+  'collection.leather.calfLeather': 'جلد عجل',
+
+  'collection.sort.featured': 'مميّز',
+  'collection.sort.priceLowHigh': 'السعر: من الأقل إلى الأعلى',
+  'collection.sort.priceHighLow': 'السعر: من الأعلى إلى الأقل',
+  'collection.sort.newest': 'الأحدث',
+
+  'collection.tag.signature': 'التوقيع',
+  'collection.tag.new': 'جديد',
+  'collection.tag.bestseller': 'الأكثر مبيعاً',
+  'collection.tag.limited': 'محدود',
+
+  // Product
+  'product.breadcrumb.collection': 'المجموعة',
+  'product.reviews': 'تقييم',
+  'product.handcraftedSuffix': 'صناعة يدوية في الدوحة',
+  'product.dutiesIncluded': '· الرسوم مشمولة',
+  'product.descriptionTemplate': 'بيان من السلطة الهادئة. يُشكَّل {name} على قالب خشبي محفور يدوياً، ويتطلب 48 ساعة من الانتباه المتواصل لحرفي ماهر واحد. محدود بـ 40 زوجاً في الموسم.',
+
+  'product.attr.leather': 'الجلد',
+  'product.attr.style': 'الطراز',
+  'product.attr.origin': 'المنشأ',
+  'product.attr.originValue': 'الدوحة، قطر',
+  'product.attr.edition': 'الإصدار',
+  'product.attr.editionValue': 'مرقّم',
+
+  'product.size.label': 'اختر المقاس (EU)',
+  'product.size.guide': 'دليل المقاسات',
+  'product.size.required': '↑ اختر مقاساً للمتابعة',
+  'product.qty': 'الكمية',
+
+  'product.cta.reserve': 'احجز هذا الزوج',
+  'product.cta.added': 'أُضيف إلى الاختيارات',
+  'product.cta.advisor': 'تحدّث مع مستشار العملاء',
+  'product.cta.advisorMsg': 'سيتواصل معك مستشار العملاء خلال ساعتين.',
+
+  'product.trust.delivery': 'توصيل سريع مجاني',
+  'product.trust.certificate': 'شهادة مرفقة',
+  'product.trust.returns': 'إرجاع خلال 30 يوماً',
+
+  'product.accordion.material': 'المواد والعناية',
+  'product.accordion.material.body': 'مصنوع من جلد الجمل الكامل الحبيبات المُختار يدوياً والمستورد حصرياً من مدابغ الدوحة. يُعالَج الجلد بالزيوت الطبيعية للحصول على ملمسه المميز الناعم. نظّفه بقطعة قماش جافة وناعمة. عالجه شهرياً بمرهم الجلد المرفق. احفظه باستخدام قوالب الأرز المرفقة.',
+  'product.accordion.delivery': 'التوصيل والتغليف',
+  'product.accordion.delivery.body': 'توصيل سريع مجاني داخل قطر (1–2 يوم عمل). توصيل دولي إلى دول الخليج خلال 3–5 أيام عمل. يُقدَّم كل زوج في علبة مختومة يدوياً مع منديل حريري وشهادة أصالة شخصية موقّعة من الحرفي.',
+  'product.accordion.sizing': 'المقاسات والملاءمة',
+  'product.accordion.sizing.body': 'أحذيتنا مقاسة بالمقاييس الأوروبية وتأتي بمقاساتها الفعلية. إذا كنت بين مقاسين، نوصي باختيار المقاس الأكبر. تعديلات القوالب على الطلب متاحة بدون رسوم إضافية للعملاء العائدين. يمكن إرسال طقم قياس مجاني إلى عنوانك عند الطلب.',
+
+  'product.sticky.reserve': 'احجز · {price}',
+  'product.sticky.added': '✓ أُضيف',
+
+  // Checkout
+  'checkout.brand.kicker': 'دفع آمن',
+  'checkout.step.details': 'البيانات',
+  'checkout.step.delivery': 'التوصيل',
+  'checkout.step.payment': 'الدفع',
+
+  'checkout.field.firstName': 'الاسم الأول',
+  'checkout.field.lastName': 'اسم العائلة',
+  'checkout.field.email': 'البريد الإلكتروني',
+  'checkout.field.phone': 'رقم الهاتف',
+  'checkout.field.address': 'عنوان الشارع',
+  'checkout.field.city': 'المدينة',
+  'checkout.field.country': 'الدولة',
+  'checkout.field.cardholder': 'اسم حامل البطاقة',
+  'checkout.field.card': 'رقم البطاقة',
+  'checkout.field.expiry': 'تاريخ الانتهاء (MM/YY)',
+  'checkout.field.cvv': 'CVV',
+
+  'checkout.country.qatar': 'قطر',
+  'checkout.country.uae': 'الإمارات',
+  'checkout.country.kuwait': 'الكويت',
+  'checkout.country.saudi': 'السعودية',
+  'checkout.country.bahrain': 'البحرين',
+  'checkout.country.oman': 'عُمان',
+
+  'checkout.delivery.title': 'توصيل سريع مجاني',
+  'checkout.delivery.sub': '1–2 يوم عمل · يتطلب التوقيع',
+  'checkout.delivery.free': 'مجاني',
+
+  'checkout.security': 'تشفير SSL 256-bit · متوافق مع PCI DSS',
+  'checkout.terms': 'بإتمام طلبك فإنك توافق على شروط الخدمة',
+  'checkout.placeOrder': 'إتمام الطلب',
+
+  'checkout.summary.title': 'ملخص الطلب',
+  'checkout.summary.empty': 'سلتك فارغة',
+  'checkout.summary.subtotal': 'المجموع الفرعي',
+  'checkout.summary.delivery': 'التوصيل',
+  'checkout.summary.deliveryValue': 'مجاني',
+  'checkout.summary.duties': 'الرسوم',
+  'checkout.summary.dutiesValue': 'مشمولة',
+  'checkout.summary.total': 'الإجمالي',
+
+  'checkout.confirm.title': 'تم تأكيد الطلب',
+  'checkout.confirm.body1': 'زوجك المُفصَّل الآن في أيدي حرفيينا المهرة.',
+  'checkout.confirm.quote': '"سنبلّغك حين يبدأ رحلته."',
+  'checkout.confirm.totalLabel': 'إجمالي الطلب',
+
+  // Story
+  'story.headline.line1': 'حرفة',
+  'story.headline.line2': 'الصمت والإتقان',
+  'story.subhead': 'ستة عقود من الحرفية الجلدية العربية. اثنا عشر حرفياً ماهراً. وعد واحد لا يُكسَر.',
+
+  'story.chapter.1962.title': 'ورشة في الدِّيرة',
+  'story.chapter.1962.body': 'في أسواق حي الدِّيرة العتيقة في الدوحة، افتتح الحرفي الماهر خالد الراشدي ورشةً بقالبٍ واحد، وإبرة منحنية، ورؤية لا تقبل المساومة. كل زوج صنعه حمل ثقل اسمه — كل غرزة عقدٌ بين الحرفي ومُرتديه.',
+  'story.chapter.1978.title': 'اكتشاف جلد الجمل',
+  'story.chapter.1978.body': 'لقاء عابر مع تجار جلود بدو من هضبة نجد عرّف خالد على جلد الجمل كامل الحبيبات — مادة استثنائية في المتانة والدفء وحبيبات لا تشبه أي جلد من المدابغ الأوروبية. الجلد يتنفس في حر الصحراء ويلين بالاستعمال إلى جلد ثانٍ. أصبح المادة المُعرّفة للدار بين عشية وضحاها.',
+  'story.chapter.1995.title': 'الرعاية الملكية',
+  'story.chapter.1995.body': 'بأمر ملكي، بدأت إيليت في صناعة أحذية مُفصَّلة لأفراد العائلة المالكة السعودية وكبار الوزراء. كل تكليف استغرق بين 60 و90 يوماً — شاهدٌ على رفض المساومة على الجودة من أجل السرعة. انتشرت السمعة بهدوء، كما تنتقل بين العارفين.',
+  'story.chapter.today.year': 'اليوم',
+  'story.chapter.today.title': 'اثنتا عشرة يداً، زوجٌ واحد',
+  'story.chapter.today.body': 'اليوم، يمر كل زوج بأيدي اثني عشر متخصصاً — من قاطع الجلود الذي يعمل هنا منذ 30 عاماً، إلى المُلمِّع الذي يُلمّع كل حافة بشمع العسل والكارنوبا. نحدد الإنتاج بـ 400 زوج سنوياً. ليس لأنه مفروض علينا، بل لأن التميّز يقتضي ذلك. كل زوج يُشحَن مع شهادة مرقّمة موقّعة من صانعه.',
+
+  'story.pullQuote.line1': '"الحذاء ليس منتجاً.',
+  'story.pullQuote.line2': 'إنه السيرة الذاتية للحرفي."',
+  'story.pullQuote.author': '— خالد الراشدي، المؤسس',
+
+  'story.atelier.kicker': 'الورشة',
+  'story.atelier.title': 'اثنا عشر حرفياً',
+  'story.atelier.experience': 'خبرة',
+  'story.role.leatherSelector': 'منتقي الجلود',
+  'story.role.patternCutter': 'قاطع الأنماط',
+  'story.role.lastMaker': 'صانع القوالب',
+  'story.role.weltStitcher': 'حائك الدرز',
+  'story.role.heelBuilder': 'صانع الكعب',
+  'story.role.edgeFinisher': 'مُلمِّع الحواف',
+
+  // Contact
+  'contact.kicker': 'خدمة شخصية',
+  'contact.headline.line1': 'تحدّث مع',
+  'contact.headline.line2': 'مستشار العملاء',
+  'contact.subhead': 'كل استفسار يُعالَج شخصياً من قِبَل مستشار مُخصَّص. سواء كنت تطلب تفصيلاً حصرياً، أو نصيحة في المقاس، أو سؤالاً عن حرفتنا — نحن في خدمتك.',
+
+  'contact.field.name': 'الاسم الكامل',
+  'contact.field.email': 'البريد الإلكتروني',
+  'contact.field.phone': 'رقم الهاتف',
+  'contact.field.subject': 'الموضوع',
+  'contact.field.message': 'رسالتك',
+
+  'contact.subject.bespoke': 'تفصيل حصري',
+  'contact.subject.product': 'استفسار عن منتج',
+  'contact.subject.sizing': 'مساعدة في المقاس',
+  'contact.subject.order': 'دعم الطلبات',
+  'contact.subject.press': 'صحافة وشراكات',
+
+  'contact.send': 'إرسال الرسالة',
+  'contact.success.kicker': 'تم استلام الرسالة',
+  'contact.success.headline.line1': 'مستشار العملاء',
+  'contact.success.headline.line2': 'سيتواصل معك',
+  'contact.success.body': 'نرد على جميع الاستفسارات خلال ساعتين عمل. للأمور العاجلة، اتصل مباشرة بورشتنا في الدوحة.',
+  'contact.success.directLine': 'الخط المباشر',
+
+  'contact.info.atelier.title': 'ورشة الدوحة',
+  'contact.info.atelier.l1': 'حي الدِّيرة، الدوحة',
+  'contact.info.atelier.l2': 'دولة قطر',
+  'contact.info.atelier.l3': 'يفتح الأحد–الخميس، 9 صباحاً–6 مساءً',
+  'contact.info.appointments.title': 'مواعيد خاصة',
+  'contact.info.appointments.l1': 'استشارات تفصيل حصري بموعد مسبق',
+  'contact.info.appointments.l2': 'في الورشة أو في منزلك',
+  'contact.info.appointments.l3': 'متاحة 7 أيام في الأسبوع',
+  'contact.info.client.title': 'خدمة العملاء',
+  'contact.info.client.l1': '+966 11 XXX XXXX',
+  'contact.info.client.l2': 'advisors@elitecollection.sa',
+  'contact.info.client.l3': 'استجابة خلال ساعتين',
+
+  'contact.promise.line1': '"لا استفسار صغير، ولا طلب غير معقول. أنت ضيفنا."',
+  'contact.promise.signature': 'وعد إيليت',
+};
+
+export const STRINGS: Record<Locale, Record<string, string>> = {
+  en: EN,
+  ar: AR,
+};

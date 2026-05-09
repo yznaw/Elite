@@ -13,6 +13,11 @@ export const routes: Routes = [
       import('./pages/catalog/catalog.component').then((m) => m.CatalogComponent),
   },
   {
+    path: 'collections',
+    loadComponent: () =>
+      import('./pages/collections/collections.component').then((m) => m.CollectionsComponent),
+  },
+  {
     path: 'media',
     loadComponent: () =>
       import('./pages/media/media.component').then((m) => m.MediaComponent),

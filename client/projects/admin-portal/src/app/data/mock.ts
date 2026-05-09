@@ -1,5 +1,5 @@
 import {
-  Product, MediaFile, Order, Customer, SyncLog, SyncSource,
+  Product, Collection, MediaFile, Order, Customer, SyncLog, SyncSource,
   TeamMember, Integration, RevenueDay, TrafficSource, FunnelStep,
   StorefrontBlock, PaletteEntry, UpcomingRun, AUTO_TRIGGER,
 } from '../models';
@@ -7,18 +7,25 @@ import {
 export const TODAY = new Date('2026-04-29');
 
 export const PRODUCTS: Product[] = [
-  { id: 'P-001', name: 'Al-Mahmal Oxford', sku: 'EC-AMO-2026', brand: 'Elite Atelier', category: 'Oxford', price: 2800, stock: 14, has3d: true, views3d: 842, hidden: false, image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-002', name: 'Najd Derby', sku: 'EC-NDB-2026', brand: 'Elite Atelier', category: 'Derby', price: 2200, stock: 9, has3d: true, views3d: 621, hidden: false, image: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-003', name: 'Hijaz Loafer', sku: 'EC-HLF-2026', brand: 'Elite Atelier', category: 'Loafer', price: 1950, stock: 22, has3d: true, views3d: 1104, hidden: false, image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-004', name: 'Rub Al Khali Boot', sku: 'EC-RKB-2026', brand: 'Elite Atelier', category: 'Boot', price: 3400, stock: 5, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-005', name: 'Medina Mule', sku: 'EC-MML-2026', brand: 'Elite Atelier', category: 'Loafer', price: 1600, stock: 0, has3d: false, views3d: 0, hidden: true, image: 'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-006', name: 'Quraish Chelsea', sku: 'EC-QCH-2026', brand: 'Elite Atelier', category: 'Boot', price: 2650, stock: 11, has3d: true, views3d: 498, hidden: false, image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-007', name: 'Nike Air Max 90', sku: 'NKE-AM90-WHT', brand: 'Nike', category: 'Sneaker', price: 680, stock: 42, has3d: true, views3d: 1532, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-008', name: 'New Balance 990v6', sku: 'NB-990V6-GRY', brand: 'New Balance', category: 'Sneaker', price: 980, stock: 18, has3d: true, views3d: 867, hidden: false, image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-009', name: 'Adidas Samba OG', sku: 'AD-SMB-BLK', brand: 'Adidas', category: 'Sneaker', price: 540, stock: 31, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-010', name: 'Common Projects Achilles Low', sku: 'CP-ACH-WHT', brand: 'Common Projects', category: 'Sneaker', price: 1740, stock: 7, has3d: true, views3d: 412, hidden: false, image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-011', name: "Dr. Martens 1460", sku: 'DM-1460-CHR', brand: 'Dr. Martens', category: 'Boot', price: 880, stock: 24, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-012', name: 'ECCO Soft 7', sku: 'EC-S7-NVY', brand: 'ECCO', category: 'Sneaker', price: 740, stock: 13, has3d: true, views3d: 284, hidden: false, image: 'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-001', name: 'Al-Mahmal Oxford', sku: 'EC-AMO-2026', brand: 'Elite Atelier', price: 2800, stock: 14, has3d: true, views3d: 842, hidden: false, image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-002', name: 'Najd Derby', sku: 'EC-NDB-2026', brand: 'Elite Atelier', price: 2200, stock: 9, has3d: true, views3d: 621, hidden: false, image: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-003', name: 'Hijaz Loafer', sku: 'EC-HLF-2026', brand: 'Elite Atelier', price: 1950, stock: 22, has3d: true, views3d: 1104, hidden: false, image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-004', name: 'Rub Al Khali Boot', sku: 'EC-RKB-2026', brand: 'Elite Atelier', price: 3400, stock: 5, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-005', name: 'Medina Mule', sku: 'EC-MML-2026', brand: 'Elite Atelier', price: 1600, stock: 0, has3d: false, views3d: 0, hidden: true, image: 'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-006', name: 'Quraish Chelsea', sku: 'EC-QCH-2026', brand: 'Elite Atelier', price: 2650, stock: 11, has3d: true, views3d: 498, hidden: false, image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-007', name: 'Nike Air Max 90', sku: 'NKE-AM90-WHT', brand: 'Nike', price: 680, stock: 42, has3d: true, views3d: 1532, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-008', name: 'New Balance 990v6', sku: 'NB-990V6-GRY', brand: 'New Balance', price: 980, stock: 18, has3d: true, views3d: 867, hidden: false, image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-009', name: 'Adidas Samba OG', sku: 'AD-SMB-BLK', brand: 'Adidas', price: 540, stock: 31, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-010', name: 'Common Projects Achilles Low', sku: 'CP-ACH-WHT', brand: 'Common Projects', price: 1740, stock: 7, has3d: true, views3d: 412, hidden: false, image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-011', name: "Dr. Martens 1460", sku: 'DM-1460-CHR', brand: 'Dr. Martens', price: 880, stock: 24, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-012', name: 'ECCO Soft 7', sku: 'EC-S7-NVY', brand: 'ECCO', price: 740, stock: 13, has3d: true, views3d: 284, hidden: false, image: 'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=600&q=80&auto=format&fit=crop' },
+];
+
+export const COLLECTIONS: Collection[] = [
+  { id: 'COL-001', title: 'Summer 2026', description: 'Lightweight leathers and bright accents.', imageUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600&q=80', productIds: ['P-003', 'P-005', 'P-012'], hidden: false },
+  { id: 'COL-002', title: 'Classic Oxfords', description: 'Timeless elegance for formal occasions.', imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80', productIds: ['P-001'], hidden: false },
+  { id: 'COL-003', title: 'Street Style', description: 'Premium sneakers for everyday wear.', imageUrl: 'https://images.unsplash.com/photo-1527090526205-beaac8dc3c62?w=600&q=80', productIds: ['P-007', 'P-008', 'P-009', 'P-010', 'P-012'], hidden: false },
+  { id: 'COL-004', title: 'Winter Archive', description: 'Past season styles. Hidden from storefront.', imageUrl: null, productIds: ['P-004', 'P-006', 'P-011'], hidden: true },
 ];
 
 export const MEDIA_INIT: MediaFile[] = [

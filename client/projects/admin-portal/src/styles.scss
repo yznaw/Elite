@@ -4,6 +4,27 @@
    page reuses the same vocabulary (.card, .btn, .pill, .tbl, etc.).
    ============================================================ */
 
+/* ── Thmanyah Sans ─────────────────────────────────────────── */
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Sans'; src: url('assets/fonts/thmanyah/thmanyahsans-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
+/* ── Thmanyah Serif Display ────────────────────────────────── */
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Display'; src: url('assets/fonts/thmanyah/thmanyahserifdisplay-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
+/* ── Thmanyah Serif Text ───────────────────────────────────── */
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Light.woff2') format('woff2'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Medium.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Thmanyah Serif Text'; src: url('assets/fonts/thmanyah/thmanyahseriftext-Black.woff2') format('woff2'); font-weight: 900; font-style: normal; font-display: swap; }
+
 *,
 *::before,
 *::after {
@@ -60,8 +81,8 @@
   --shadow-lg: 0 16px 48px rgba(2, 70, 56, 0.12), 0 4px 12px rgba(2, 70, 56, 0.06);
 
   /* Typography */
-  --ff-ui: 'Montserrat', system-ui, sans-serif;
-  --ff-disp: 'Cormorant Garamond', Georgia, serif;
+  --ff-ui: 'Thmanyah Sans', system-ui, sans-serif;
+  --ff-disp: 'Thmanyah Serif Display', Georgia, serif;
   --ff-mono: 'SF Mono', Menlo, Monaco, Consolas, monospace;
 }
 
@@ -842,6 +863,42 @@ textarea.inp {
   justify-content: flex-end;
   background: var(--bg);
 }
+
+.save-bar-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--green);
+  color: #fff;
+  padding: 0 24px;
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.save-bar-top.dirty {
+  height: 54px;
+  opacity: 1;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+@keyframes shakeSave {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.save-bar-top.shake {
+  animation: shakeSave 0.4s ease-in-out;
+}
+
+.save-bar-top .btn-ghost { background: var(--danger); color: #fff; border-color: var(--danger); }
+.save-bar-top .btn-ghost:hover { filter: brightness(1.1); }
+.save-bar-top .btn-primary { background: #fff; color: var(--green); }
+.save-bar-top .btn-primary:hover { background: var(--bg-2); }
+.save-bar-top .btn-primary:disabled { background: rgba(255,255,255,0.5); color: var(--green); opacity: 0.7; }
+
 
 .modal {
   position: fixed;
@@ -2263,4 +2320,447 @@ textarea.inp {
   .grid-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* ============================================================
+   Mobile + RTL — additive layer
+   Applies to all pages without touching the design tokens above.
+   ============================================================ */
+
+/* Arabic font stack — auto-applied when html[dir="rtl"] */
+html[dir='rtl'] body,
+html[dir='rtl'] button,
+html[dir='rtl'] input,
+html[dir='rtl'] select,
+html[dir='rtl'] textarea {
+  font-family: var(--ff-ui);
+}
+
+html[dir='rtl'] .serif,
+html[dir='rtl'] .card-title,
+html[dir='rtl'] .kpi-value,
+html[dir='rtl'] .stat-card .v {
+  font-family: var(--ff-disp);
+}
+
+/* Card / section internals: mirror padding when RTL */
+html[dir='rtl'] body,
+html[dir='rtl'] body * {
+  letter-spacing: 0 !important;
+}
+
+/* The body had `overflow:hidden` which prevents page scrolling on
+   short mobile viewports. Allow scroll on small screens; the app
+   layout handles its own overflow at desktop sizes. */
+@media (max-width: 880px) {
+  body { overflow: auto; }
+  html, body { height: auto; min-height: 100%; }
+}
+
+/* ── App grid: collapse to 1 column on tablet/mobile, sidebar becomes a drawer ── */
+.app { transition: grid-template-columns 0.28s ease; }
+
+@media (max-width: 1024px) {
+  .app {
+    grid-template-columns: 1fr !important;
+  }
+  .app > .main { min-height: 100vh; }
+}
+
+/* The sidebar slides in from the inline-start edge as a drawer */
+@media (max-width: 1024px) {
+  .sidebar-host {
+    position: fixed !important;
+    top: 0; bottom: 0;
+    inset-inline-start: 0;
+    width: 280px;
+    max-width: 86vw;
+    z-index: 220;
+    transform: translateX(-100%);
+    transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 8px 0 32px rgba(2, 70, 56, 0.18);
+  }
+  html[dir='rtl'] .sidebar-host {
+    transform: translateX(100%);
+    box-shadow: -8px 0 32px rgba(2, 70, 56, 0.18);
+  }
+  .sidebar-host.open { transform: translateX(0); }
+}
+
+/* Backdrop behind the mobile sidebar */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 70, 56, 0.45);
+  backdrop-filter: blur(3px);
+  z-index: 210;
+  animation: fadeIn 0.2s ease;
+}
+
+/* ── Topbar: tighter on mobile, hamburger visible ── */
+.topbar-burger {
+  display: none;
+  width: 40px; height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.topbar-burger:hover { background: var(--bg); }
+.topbar-burger svg { width: 16px; height: 16px; }
+
+.topbar-search-mobile {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .topbar { padding: 0 16px !important; height: 60px !important; }
+  .topbar h1 { font-size: 18px !important; }
+  .topbar .crumb { font-size: 10px !important; }
+  .topbar-burger { display: inline-flex; }
+}
+
+@media (max-width: 720px) {
+  /* Hide the desktop search; condense to icon */
+  .topbar-search-desk { display: none !important; }
+  .topbar-search-mobile { display: inline-flex; }
+}
+
+/* ── Scroll area: comfortable mobile padding ── */
+@media (max-width: 1024px) {
+  .scroll-area {
+    padding: 18px 16px 32px !important;
+  }
+}
+
+/* ── KPI grids: 2 cols on tablet AND phone, 1 col only on the smallest devices ── */
+@media (max-width: 720px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+  .grid-4   { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+}
+@media (max-width: 380px) {
+  .kpi-grid { grid-template-columns: 1fr !important; }
+  .grid-4   { grid-template-columns: 1fr !important; }
+}
+
+/* Dashboard chart pair: desktop = 1.6fr 1fr, tablet/phone = 1 col */
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 1100px) {
+  .dashboard-charts { grid-template-columns: 1fr; }
+}
+
+/* Cards: tighter inner padding on phone */
+@media (max-width: 720px) {
+  .card-pad { padding: 16px !important; }
+  .card-header { padding: 14px 16px !important; }
+}
+
+/* Kpi card body — slim on phones so 2-up cards aren't cramped */
+@media (max-width: 720px) {
+  .kpi {
+    padding: 14px !important;
+    min-width: 0;
+  }
+  .kpi-label {
+    font-size: 9px !important;
+    letter-spacing: 0.1em !important;
+    margin-bottom: 8px !important;
+    gap: 6px !important;
+  }
+  .kpi-icon { width: 26px !important; height: 26px !important; border-radius: 6px !important; }
+  .kpi-value { font-size: 22px !important; margin-bottom: 6px !important; }
+  .kpi-delta { font-size: 10px !important; }
+  /* Hide the sparkline on the smallest width to keep numbers legible */
+  .kpi svg:not(.kpi-icon svg) { max-width: 50px; }
+}
+@media (max-width: 420px) {
+  .kpi svg:not(.kpi-icon svg) { display: none; }
+}
+
+/* Heat-row: tighten on narrow width so the bar + count don't crowd the title */
+@media (max-width: 720px) {
+  .heat-row { gap: 10px; padding: 10px 0; }
+  .heat-thumb { width: 38px; height: 38px; }
+  .heat-bar { width: 56px; }
+  .heat-count { width: 36px; font-size: 11px; }
+  .heat-title { font-size: 12.5px; }
+}
+
+/* Tables: enable horizontal scrolling within their card on mobile */
+.tbl-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 1024px) {
+  .tbl { min-width: 720px; }
+  .tbl th, .tbl td {
+    padding: 12px 14px !important;
+    font-size: 12.5px;
+  }
+}
+
+/* Drawer: full width on mobile + RTL slide direction */
+@media (max-width: 720px) {
+  .drawer {
+    width: 100vw !important;
+    max-width: 100vw;
+  }
+  .drawer-head { padding: 14px 16px !important; }
+  .drawer-body { padding: 16px !important; }
+  .drawer-foot { padding: 12px 16px !important; }
+}
+
+/* Slide direction follows document direction */
+html[dir='rtl'] .drawer {
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+  right: auto;
+  left: 0;
+  animation: slideLeft 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 12px 0 40px rgba(2, 70, 56, 0.18);
+}
+@keyframes slideLeft {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
+/* Modal: full-screen sheet on small phones */
+@media (max-width: 600px) {
+  .modal {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+    animation: fadeIn 0.2s ease !important;
+  }
+  .modal-head { padding: 16px !important; }
+  .modal-body { padding: 16px !important; }
+}
+
+/* Toast stack on mobile: full width minus margins, anchored bottom */
+@media (max-width: 600px) {
+  .toast-stack {
+    inset-inline-start: 12px;
+    inset-inline-end: 12px;
+    bottom: 12px;
+  }
+  html[dir='ltr'] .toast-stack { right: 12px; left: 12px; }
+  html[dir='rtl'] .toast-stack { right: 12px; left: 12px; }
+  .toast { min-width: 0; max-width: none; width: 100%; }
+}
+
+/* Filter bars: wrap and let chips scroll horizontally if needed */
+@media (max-width: 720px) {
+  .chip { padding: 6px 11px; font-size: 10px; }
+  .filter-pill { padding: 7px 14px; font-size: 10px; }
+  .inp { font-size: 14px; padding: 10px 12px; }
+  .lbl { font-size: 9px; }
+}
+
+/* Health banner narrower on mobile */
+@media (max-width: 720px) {
+  .health-banner { padding: 18px 18px !important; }
+  .health-banner div[style*="font-size:28px"] { font-size: 22px !important; }
+}
+
+/* Sync source card stacking on tablet */
+@media (max-width: 1100px) {
+  .sync-card { padding: 18px !important; }
+}
+
+/* Storefront builder: stack palette and live page */
+@media (max-width: 900px) {
+  .storefront-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Catalog grid responds to phone width via auto-fill, so just shrink card padding */
+@media (max-width: 720px) {
+  .prod-name { font-size: 16px !important; }
+  .prod-card { border-radius: 10px; }
+}
+
+/* Media grid: smaller minimums on phone */
+@media (max-width: 720px) {
+  .media-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; gap: 10px; }
+}
+
+/* Confirm dialog: a touch wider and never larger than viewport on phone */
+@media (max-width: 600px) {
+  .confirm-icon { width: 38px; height: 38px; }
+}
+
+/* ── RTL mirroring for icon-spaced buttons + chips + lists ── */
+html[dir='rtl'] .btn,
+html[dir='rtl'] .chip,
+html[dir='rtl'] .filter-pill,
+html[dir='rtl'] .pill,
+html[dir='rtl'] .lang-trigger,
+html[dir='rtl'] .toast,
+html[dir='rtl'] .save-badge,
+html[dir='rtl'] .trigger {
+  direction: rtl;
+}
+
+/* Mirror icons that have an obvious LTR direction (arrows, chevrons) */
+html[dir='rtl'] .mirror-on-rtl { transform: scaleX(-1); }
+html[dir='rtl'] .alink-arrow { transform: scaleX(-1); display: inline-block; }
+html[dir='rtl'] .crumb { direction: rtl; }
+
+/* Search input: icon flips to the right side */
+html[dir='rtl'] .inp.with-icon {
+  padding-inline-start: 36px;
+  padding-inline-end: 14px;
+}
+html[dir='rtl'] .inp-search svg {
+  left: auto; right: 12px;
+}
+
+/* Sidebar active marker: flip to the inline-end side */
+html[dir='rtl'] .nav-item.active::before {
+  left: auto;
+  right: -16px;
+  border-radius: 2px 0 0 2px;
+}
+
+/* Toast: keep readable in RTL — flip dot side via order */
+html[dir='rtl'] .toast { flex-direction: row-reverse; }
+
+/* Drawer foot: maintain end-aligned actions in RTL */
+html[dir='rtl'] .drawer-foot { flex-direction: row-reverse; }
+
+/* Tables and number columns: keep numerals LTR even in RTL doc */
+.mono, .num, .feed-time, [data-bidi='ltr'] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Date / SKU / amount cells in tables read more naturally LTR */
+html[dir='rtl'] .tbl td.num,
+html[dir='rtl'] .feed-time,
+html[dir='rtl'] .mono {
+  text-align: end;
+}
+
+/* Inputs/selects: ensure caret-side correct in RTL */
+html[dir='rtl'] .inp { text-align: start; }
+
+/* Logical replacements where heavy left/right legacy lingers */
+.heat-bar, .funnel-bar-track {
+  direction: ltr;
+}
+
+/* Select arrow (native) renders fine; nothing extra needed */
+
+/* Storefront block-handle: use logical margin */
+.blk-handle, .palette-blk { gap: 12px; }
+
+/* Skip stray underscoring in Arabic on hover anchors */
+html[dir='rtl'] a, html[dir='rtl'] .nav-item { text-decoration: none; }
+
+/* Visible focus for keyboard users (a11y improvement) */
+.btn:focus-visible,
+.chip:focus-visible,
+.icon-btn:focus-visible,
+.x-btn:focus-visible,
+.inp:focus-visible,
+.lang-trigger:focus-visible,
+.toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Larger tap targets on touch devices */
+@media (pointer: coarse) {
+  .icon-btn, .x-btn, .lang-trigger, .topbar-burger {
+    min-height: 40px; min-width: 40px;
+  }
+  .toggle { width: 44px; height: 26px; }
+  .toggle::after { width: 22px; height: 22px; }
+  .toggle.on::after { transform: translateX(18px); }
+  html[dir='rtl'] .toggle.on::after { transform: translateX(-18px); }
+}
+
+/* Safe-area insets for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+  .toast-stack {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================================
+   Sync feed: stacked card layout on mobile
+   Desktop grid is `auto 86px 1fr auto auto auto`
+   (icon, time, info, trigger, duration, status). On phones we
+   re-place each positional child onto a 2-row, 3-column grid:
+     row 1:  icon  | info     | status pill
+     row 2:  time  | trigger  | duration
+   ============================================================ */
+@media (max-width: 720px) {
+  .feed-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto !important;
+    grid-template-rows: auto auto !important;
+    column-gap: 12px !important;
+    row-gap: 8px !important;
+    padding: 14px 16px !important;
+    align-items: center !important;
+  }
+  /* Positional placement — sync-feed-row.component.ts has 6 direct children */
+  .feed-row > :nth-child(1) { grid-row: 1; grid-column: 1; }                                /* icon */
+  .feed-row > :nth-child(2) { grid-row: 2; grid-column: 1; font-size: 10.5px !important; min-width: 0; }  /* time */
+  .feed-row > :nth-child(3) { grid-row: 1; grid-column: 2; min-width: 0; }                  /* info */
+  .feed-row > :nth-child(4) { grid-row: 2; grid-column: 2; justify-self: start; }           /* trigger */
+  .feed-row > :nth-child(5) { grid-row: 2; grid-column: 3; justify-self: end; min-width: 0; }/* duration */
+  .feed-row > :nth-child(6) { grid-row: 1; grid-column: 3; align-self: start; }             /* status pill */
+
+  .feed-row.expanded { padding-inline-start: 13px !important; }
+  .feed-day { padding: 12px 16px 8px !important; }
+}
+
+/* Detail panel: 2-up stat grid on mobile, comfortable padding */
+@media (max-width: 720px) {
+  .feed-detail {
+    padding: 12px 16px 4px !important;
+  }
+  .feed-detail-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .feed-detail-grid .stat-cell { padding: 10px 12px !important; }
+  .err-block { font-size: 10.5px; }
+}
+
+/* Sync source card cluster: drop padding, keep usable on phone */
+@media (max-width: 720px) {
+  .sync-card { padding: 16px !important; gap: 14px !important; border-radius: 12px !important; }
+  .sync-card-icon { width: 34px !important; height: 34px !important; border-radius: 8px !important; }
+  .sync-card .stat-grid { grid-template-columns: 1fr 1fr; }
+  /* Health banner: smaller copy + buttons stack */
+  .health-banner { padding: 16px !important; border-radius: 12px !important; }
+  .health-banner div[style*="font-size:28px"] { font-size: 20px !important; }
+  .health-banner div[style*="font-size:12px"] { font-size: 11px !important; }
+  /* Stack action buttons on the banner */
+  .health-banner .row > .row { flex-wrap: wrap; gap: 8px; }
+}
+
+/* Sync schedule card: queued items + upcoming runs already stack
+   from the existing sync-layout rule above. Just tighten the
+   internal upcoming-runs row on phones. */
+@media (max-width: 720px) {
+  .feed-row > .feed-time {
+    font-size: 10.5px !important;
+  }
+  .trigger { padding: 3px 8px 3px 3px !important; font-size: 10px !important; }
+  .trigger .avatar { width: 18px !important; height: 18px !important; font-size: 8px !important; }
 }

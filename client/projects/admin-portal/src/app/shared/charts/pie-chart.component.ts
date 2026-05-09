@@ -13,8 +13,8 @@ interface PieSlice { source: string; pct: number; count: number; color: string; 
         <path [attr.d]="s.d" [attr.fill]="s.color" stroke="#fff" stroke-width="2"/>
       }
       <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="rInner" fill="#fff"/>
-      <text [attr.x]="cx" [attr.y]="cy - 4" text-anchor="middle" font-size="11" fill="#6b7088" font-family="Montserrat" letter-spacing="1.2">SOURCES</text>
-      <text [attr.x]="cx" [attr.y]="cy + 16" text-anchor="middle" font-size="22" fill="#0f2356" font-family="Cormorant Garamond" font-weight="500">{{ total() }}</text>
+      <text [attr.x]="cx" [attr.y]="cy - 4" text-anchor="middle" font-size="11" fill="#6b7088" style="font-family: var(--ff-ui);" letter-spacing="1.2">SOURCES</text>
+      <text [attr.x]="cx" [attr.y]="cy + 16" text-anchor="middle" font-size="22" fill="#0f2356" style="font-family: var(--ff-disp);" font-weight="500">{{ total() }}</text>
     </svg>
   `,
 })

@@ -16,11 +16,11 @@ import { CommonModule } from '@angular/common';
 
       @for (t of yTicks(); track t.v; let i = $index) {
         <line [attr.x1]="padL" [attr.y1]="t.y" [attr.x2]="w - padR" [attr.y2]="t.y" stroke="#e2e6f0" stroke-width="1" [attr.stroke-dasharray]="i === 0 ? '' : '2 4'"/>
-        <text [attr.x]="padL - 8" [attr.y]="t.y + 3" text-anchor="end" font-size="10" fill="#9ca0b3" font-family="Montserrat">{{ formatY(t.v) }}</text>
+        <text [attr.x]="padL - 8" [attr.y]="t.y + 3" text-anchor="end" font-size="10" fill="#9ca0b3" style="font-family: var(--ff-ui);">{{ formatY(t.v) }}</text>
       }
 
       @for (xt of xTicks(); track xt.idx) {
-        <text [attr.x]="xt.x" [attr.y]="h - 8" text-anchor="middle" font-size="10" fill="#9ca0b3" font-family="Montserrat">{{ xt.label }}</text>
+        <text [attr.x]="xt.x" [attr.y]="h - 8" text-anchor="middle" font-size="10" fill="#9ca0b3" style="font-family: var(--ff-ui);">{{ xt.label }}</text>
       }
 
       <path [attr.d]="areaPath()" [attr.fill]="'url(#' + gradId + ')'"/>

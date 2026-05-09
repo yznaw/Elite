@@ -1,11 +1,13 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { ProductDrawerComponent } from './product-drawer.component';
-import { PRODUCTS } from '../../data/mock';
+import { I18nService } from '../../services/i18n.service';
+import { ToastService } from '../../services/toast.service';
+import { PRODUCTS, COLLECTIONS } from '../../data/mock';
 import { Product, QAR } from '../../models';
 
 @Component({
@@ -18,31 +20,35 @@ import { Product, QAR } from '../../models';
         <div class="row gap-sm" style="flex-wrap:wrap;">
           <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
             <ap-icon name="search" [size]="14"/>
-            <input class="inp with-icon" placeholder="Search by name or SKU…" [ngModel]="search()" (ngModelChange)="search.set($event)"/>
+            <input class="inp with-icon" [placeholder]="t('catalog.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event)"/>
           </div>
-          <select class="inp" style="width:auto;" [ngModel]="cat()" (ngModelChange)="cat.set($event)">
-            @for (c of cats; track c) { <option [value]="c">{{ c }}</option> }
+          <select class="inp" style="width:auto;" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event)">
+            <option value="All">{{ t('catalog.allCollections') }}</option>
+            @for (c of collections; track c.id) {
+              <option [value]="c.id">{{ c.title }}</option>
+            }
           </select>
           <select class="inp" style="width:auto;" [ngModel]="v3d()" (ngModelChange)="v3d.set($event)">
-            @for (s of viewOptions; track s) { <option [value]="s">{{ s }}</option> }
+            <option value="All">{{ t('catalog.allCollections') }}</option>
+            <option value="Linked">{{ t('catalog.linked') }}</option>
+            <option value="Missing">{{ t('catalog.missing') }}</option>
           </select>
-          <button class="btn btn-gold"><ap-icon name="plus" [size]="14"/> New Product</button>
+          <button class="btn btn-gold"><ap-icon name="plus" [size]="14"/> {{ t('catalog.newProduct') }}</button>
         </div>
       </div>
 
       <div class="row mb-16" style="justify-content:space-between;">
-        <div class="muted small">{{ filtered().length }} products</div>
+        <div class="muted small">{{ filtered().length }}</div>
         <div class="row gap-sm small">
-          <span class="row gap-sm"><ap-pill kind="green">✓</ap-pill> 3D linked</span>
-          <span class="row gap-sm"><ap-pill kind="grey">○</ap-pill> 3D missing</span>
+          <span class="row gap-sm"><ap-pill kind="green">✓</ap-pill> {{ t('catalog.linked') }}</span>
+          <span class="row gap-sm"><ap-pill kind="grey">○</ap-pill> {{ t('catalog.missing') }}</span>
         </div>
       </div>
 
       @if (filtered().length === 0) {
         <div class="card">
-          <ap-empty-state icon="catalog" title="No products match your filters"
-            sub="Try a broader category or clear the search box. Add a new SKU with the button above.">
-            <button class="btn btn-outline btn-sm" (click)="clearFilters()">Clear filters</button>
+          <ap-empty-state icon="catalog" [title]="t('catalog.empty.title')" [sub]="t('catalog.empty.sub')">
+            <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
           </ap-empty-state>
         </div>
       } @else {
@@ -55,7 +61,7 @@ import { Product, QAR } from '../../models';
                 {{ p.has3d ? '✓ 3D' : '○ No 3D' }}
               </span>
               @if (p.hidden) {
-                <span class="prod-3d-badge" style="top:10px;right:10px;left:auto;background:rgba(239,68,68,0.92);">○ Hidden</span>
+                <span class="prod-3d-badge" style="top:10px;inset-inline-end:10px;inset-inline-start:auto;background:rgba(239,68,68,0.92);">○ {{ t('catalog.hidden') }}</span>
               }
             </div>
             <div class="prod-body">
@@ -74,28 +80,47 @@ import { Product, QAR } from '../../models';
       }
     </div>
 
-    @if (active()) {
-      <ap-product-drawer [product]="active()!" (closed)="active.set(null)"/>
+    @if (activeId(); as id) {
+      <ap-product-drawer
+        [products]="filtered()"
+        [currentId]="id"
+        (closed)="activeId.set(null)"
+        (currentIdChange)="activeId.set($event)"
+        (deleted)="onDeleted($event)"
+      />
     }
   `,
 })
 export class CatalogComponent {
+  private readonly i18n = inject(I18nService);
+  private readonly toast = inject(ToastService);
+  readonly t = (k: string): string => this.i18n.t(k);
+
   readonly QAR = QAR;
-  readonly products = PRODUCTS;
-  readonly cats = ['All', ...Array.from(new Set(PRODUCTS.map((p) => p.category)))];
+  readonly collections = COLLECTIONS.filter(c => !c.hidden);
   readonly viewOptions = ['All', 'Linked', 'Missing'];
 
+  /** Live, mutable product list — supports delete + undo. */
+  private readonly _products = signal<Product[]>([...PRODUCTS]);
+  /** Public computed for templates. */
+  readonly products = computed(() => this._products());
+
   readonly search = signal('');
-  readonly cat = signal('All');
+  readonly collectionId = signal('All');
   readonly v3d = signal('All');
-  readonly active = signal<Product | null>(null);
+
+  /** ID-based — drawer navigation just updates this. */
+  readonly activeId = signal<string | null>(null);
 
   readonly filtered = computed(() => {
     const s = this.search().toLowerCase();
-    const c = this.cat();
+    const colId = this.collectionId();
     const v = this.v3d();
-    return this.products.filter((p) => {
-      if (c !== 'All' && p.category !== c) return false;
+    return this._products().filter((p) => {
+      if (colId !== 'All') {
+        const col = COLLECTIONS.find(c => c.id === colId);
+        if (col && !col.productIds.includes(p.id)) return false;
+      }
       if (v !== 'All') {
         if (v === 'Linked' && !p.has3d) return false;
         if (v === 'Missing' && p.has3d) return false;
@@ -105,18 +130,64 @@ export class CatalogComponent {
     });
   });
 
-  openProduct(p: Product): void { this.active.set(p); }
+  openProduct(p: Product): void { this.activeId.set(p.id); }
 
   clearFilters(): void {
     this.search.set('');
-    this.cat.set('All');
+    this.collectionId.set('All');
     this.v3d.set('All');
   }
 
+  /**
+   * Delete handler from the drawer. We:
+   *   1. Remove the product from the live list (this also drops it from `filtered()`)
+   *   2. Decide what to show next: the next product at the same index, the
+   *      previous one, or close the drawer if the list is now empty
+   *   3. Show a success toast with an "Undo" action that re-inserts at the
+   *      original index and reopens the product
+   */
+  onDeleted(deleted: Product): void {
+    const before = this._products();
+    const beforeIndex = before.findIndex((p) => p.id === deleted.id);
+    if (beforeIndex < 0) return;
+
+    const visible = this.filtered();
+    const visibleIndex = visible.findIndex((p) => p.id === deleted.id);
+
+    // Remove from the live list
+    this._products.update((all) => all.filter((p) => p.id !== deleted.id));
+
+    // Decide what to focus next (within the filtered list)
+    const nextVisible = this.filtered();
+    if (nextVisible.length === 0) {
+      this.activeId.set(null);
+    } else {
+      const nextIdx = Math.min(Math.max(visibleIndex, 0), nextVisible.length - 1);
+      this.activeId.set(nextVisible[nextIdx].id);
+    }
+
+    this.toast.success(
+      this.t('product.toast.deleted.title'),
+      `${deleted.name} (${deleted.sku})`,
+      {
+        label: this.t('common.undo'),
+        run: () => {
+          this._products.update((all) => {
+            const restored = [...all];
+            restored.splice(beforeIndex, 0, deleted);
+            return restored;
+          });
+          this.activeId.set(deleted.id);
+          this.toast.info(this.t('product.toast.restored.title'), deleted.name);
+        },
+      },
+    );
+  }
+
   stockLabel(p: Product): string {
-    if (p.stock === 0) return 'Out of stock';
-    if (p.stock < 8) return `Low · ${p.stock}`;
-    return `${p.stock} in stock`;
+    if (p.stock === 0) return this.t('catalog.outOfStock');
+    if (p.stock < 8) return `${this.t('catalog.lowStock')} · ${p.stock}`;
+    return `${p.stock} ${this.t('catalog.inStock')}`;
   }
 
   onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }

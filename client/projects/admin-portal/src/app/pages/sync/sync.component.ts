@@ -9,6 +9,7 @@ import { SyncSourceCardComponent } from './sync-source-card.component';
 import { SyncFeedRowComponent } from './sync-feed-row.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
+import { I18nService } from '../../services/i18n.service';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { SYNC_LOGS, SYNC_SOURCES, UPCOMING_RUNS } from '../../data/mock';
 import { ME, SyncLog } from '../../models';
@@ -27,10 +28,10 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
           <div>
             <div class="row gap-sm mb-8">
               <span class="live-dot" [class.green]="overallHealth === 'healthy'" [class.amber]="overallHealth !== 'healthy'"></span>
-              <span style="font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:rgba(255,255,255,0.7);">System Status</span>
+              <span style="font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:rgba(255,255,255,0.7);">{{ t('sync.systemStatus') }}</span>
             </div>
             <div style="font-family:var(--ff-disp);font-size:28px;font-weight:500;margin-bottom:6px;">
-              {{ overallHealth === 'healthy' ? 'All systems operational' : 'Sync needs attention' }}
+              {{ overallHealth === 'healthy' ? t('sync.allOk') : t('sync.needsAttention') }}
             </div>
             <div style="font-size:12px;color:rgba(255,255,255,0.65);">
               {{ recordsToday.toLocaleString() }} records synced in the last 24h · {{ totalUpdated }} catalog updates · {{ partialCount }} warning{{ partialCount === 1 ? '' : 's' }} this week
@@ -40,12 +41,12 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
             <button class="btn" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);"
                     [disabled]="runningId() !== null" (click)="runManual('csv')">
               @if (runningId() !== null) {
-                <span class="spin-i"><ap-icon name="spinner" [size]="12"/></span> Syncing…
+                <span class="spin-i"><ap-icon name="spinner" [size]="12"/></span> {{ t('sync.syncing') }}
               } @else {
-                <ap-icon name="sync" [size]="14"/> Run Now
+                <ap-icon name="sync" [size]="14"/> {{ t('sync.runNow') }}
               }
             </button>
-            <button class="btn btn-gold" (click)="togglePause()">{{ paused() ? 'Resume Schedule' : 'Pause Schedule' }}</button>
+            <button class="btn btn-gold" (click)="togglePause()">{{ paused() ? t('sync.resume') : t('sync.pause') }}</button>
           </div>
         </div>
       </div>
@@ -58,12 +59,12 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
         <div class="card" style="display:flex;flex-direction:column;">
           <div class="card-header">
             <div>
-              <div class="card-title">Sync Schedule</div>
-              <div class="card-sub">Automated · every 12h · {{ queued().length }} manual queued</div>
+              <div class="card-title">{{ t('sync.scheduleHeader') }}</div>
+              <div class="card-sub">Auto · 12h · {{ queued().length }}</div>
             </div>
             <button class="btn btn-sm" [class.btn-primary]="scheduleOpen()" [class.btn-gold]="!scheduleOpen()" (click)="toggleSchedule()">
-              @if (scheduleOpen()) { Cancel }
-              @else { <ap-icon name="plus" [size]="12"/> Schedule Manual }
+              @if (scheduleOpen()) { {{ t('common.cancel') }} }
+              @else { <ap-icon name="plus" [size]="12"/> {{ t('sync.scheduleManual') }} }
             </button>
           </div>
 
@@ -71,14 +72,14 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
             <div style="padding:14px 20px;background:var(--gold-3);border-bottom:1px solid var(--border-2);">
               <div class="row gap-sm" style="align-items:flex-end;flex-wrap:wrap;">
                 <div style="flex:1 1 160px;">
-                  <label class="lbl">Run At</label>
-                  <input class="inp" type="datetime-local" value="2026-04-29T14:00" (input)="onSchedAt($event)"/>
+                  <label class="lbl">{{ t('sync.runAt') }}</label>
+                  <input class="inp mono" type="datetime-local" value="2026-05-07T14:00" (input)="onSchedAt($event)"/>
                 </div>
                 <div style="flex:2 1 200px;">
-                  <label class="lbl">Note (optional)</label>
+                  <label class="lbl">{{ t('sync.note') }}</label>
                   <input class="inp" placeholder="e.g. Pre-launch QA sync" [ngModel]="schedNote()" (ngModelChange)="schedNote.set($event)"/>
                 </div>
-                <button class="btn btn-primary" (click)="queueScheduled()">Queue Run</button>
+                <button class="btn btn-primary" (click)="queueScheduled()">{{ t('sync.queueRun') }}</button>
               </div>
               <div class="muted small mt-8">Queued runs execute on the system clock and appear in the activity feed with your initials.</div>
             </div>
@@ -99,7 +100,7 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
               }
             }
 
-            <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted);font-weight:600;" [style.margin-top.px]="queued().length > 0 ? 6 : 0">Upcoming Auto-runs</div>
+            <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted);font-weight:600;" [style.margin-top.px]="queued().length > 0 ? 6 : 0">{{ t('sync.upcomingRuns') }}</div>
             @for (r of upcomingRuns; track r.ts; let i = $index; let last = $last) {
               <div style="display:flex;gap:14px;align-items:center;padding:8px 0;" [style.border-bottom]="last ? 'none' : '1px solid var(--border-2)'">
                 <div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"
@@ -131,8 +132,8 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
       <div class="card">
         <div class="card-header" style="flex-wrap:wrap;gap:12px;">
           <div>
-            <div class="card-title">Activity Feed</div>
-            <div class="card-sub">{{ filtered().length }} of {{ logs().length }} runs · {{ counts().manual }} manual · {{ counts().auto }} scheduled</div>
+            <div class="card-title">{{ t('sync.activityFeed') }}</div>
+            <div class="card-sub">{{ filtered().length }} / {{ logs().length }} · {{ counts().manual }}M · {{ counts().auto }}A</div>
           </div>
           <div class="row gap-sm" style="flex-wrap:wrap;">
             <button class="chip" [class.active]="filter() === 'all'" (click)="filter.set('all')">All <span class="chip-count">{{ counts().all }}</span></button>
@@ -153,9 +154,8 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
         </div>
 
         @if (filtered().length === 0) {
-          <ap-empty-state icon="sync" title="No matching runs"
-            sub="Try a different filter to see more activity, or trigger a manual sync from the source card above.">
-            <button class="btn btn-outline btn-sm" (click)="filter.set('all')">Clear filter</button>
+          <ap-empty-state icon="sync" [title]="t('sync.empty.title')" [sub]="t('sync.empty.sub')">
+            <button class="btn btn-outline btn-sm" (click)="filter.set('all')">{{ t('common.clearFilter') }}</button>
           </ap-empty-state>
         } @else {
           @for (group of grouped(); track group.date) {
@@ -175,6 +175,9 @@ type Filter = 'all' | 'success' | 'partial' | 'errors' | 'manual' | 'auto';
 export class SyncComponent {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly i18n = inject(I18nService);
+
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly sources = SYNC_SOURCES;
   readonly upcomingRuns = UPCOMING_RUNS.slice(0, 3);

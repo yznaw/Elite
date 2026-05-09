@@ -10,10 +10,10 @@ interface Bar { label: string; value: number; }
   template: `
     <svg [attr.viewBox]="'0 0 ' + w + ' ' + h" width="100%" preserveAspectRatio="none" style="display:block;">
       @for (b of bars(); track b.label) {
-        <text [attr.x]="padL - 12" [attr.y]="b.y + b.h/2 + 4" text-anchor="end" font-size="11" fill="#3d4159" font-family="Montserrat" font-weight="500">{{ b.label }}</text>
+        <text [attr.x]="padL - 12" [attr.y]="b.y + b.h/2 + 4" text-anchor="end" font-size="11" fill="#3d4159" style="font-family: var(--ff-ui);" font-weight="500">{{ b.label }}</text>
         <rect [attr.x]="padL" [attr.y]="b.y" [attr.width]="innerW" [attr.height]="b.h" fill="rgba(15,35,86,0.04)" rx="3"/>
         <rect [attr.x]="padL" [attr.y]="b.y" [attr.width]="b.bw" [attr.height]="b.h" fill="#c5a572" rx="3"/>
-        <text [attr.x]="padL + b.bw + 8" [attr.y]="b.y + b.h/2 + 4" font-size="11" fill="#0f2356" font-family="Montserrat" font-weight="600">{{ b.value.toLocaleString() }}</text>
+        <text [attr.x]="padL + b.bw + 8" [attr.y]="b.y + b.h/2 + 4" font-size="11" fill="#0f2356" style="font-family: var(--ff-ui);" font-weight="600">{{ b.value.toLocaleString() }}</text>
       }
     </svg>
   `,

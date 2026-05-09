@@ -7,6 +7,7 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { fulfillmentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
+import { I18nService } from '../../services/i18n.service';
 import { ORDERS } from '../../data/mock';
 import { Customer, QAR } from '../../models';
 
@@ -58,7 +59,7 @@ import { Customer, QAR } from '../../models';
                     <div class="muted small">{{ o.date }} · {{ o.itemsCount }} items</div>
                   </div>
                   <div class="row gap-sm">
-                    <ap-pill [kind]="fulfillment(o.fulfillment).kind">{{ fulfillment(o.fulfillment).label }}</ap-pill>
+                    <ap-pill [kind]="fulfillment(o.fulfillment).kind">{{ t(fulfillment(o.fulfillment).labelKey) }}</ap-pill>
                     <span class="strong">{{ QAR(o.total) }}</span>
                   </div>
                 </div>
@@ -109,6 +110,9 @@ export class CustomerDrawerComponent {
   @Output() closed = new EventEmitter<void>();
 
   private readonly toast = inject(ToastService);
+  private readonly i18n = inject(I18nService);
+
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
   readonly fulfillment = fulfillmentPillKind;

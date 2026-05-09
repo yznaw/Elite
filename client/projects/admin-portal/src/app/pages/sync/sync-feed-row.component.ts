@@ -1,10 +1,11 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { TriggerBadgeComponent } from '../../shared/trigger-badge/trigger-badge.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { syncPillKind } from '../../shared/pill/status-pill';
+import { I18nService } from '../../services/i18n.service';
 import { SyncLog } from '../../models';
 
 @Component({
@@ -35,7 +36,7 @@ import { SyncLog } from '../../models';
       <div class="muted small mono" style="font-size:11px;min-width:50px;text-align:right;">
         {{ isRunning ? '— · — s' : (log.durationMs / 1000).toFixed(2) + 's' }}
       </div>
-      <ap-pill [kind]="pillKind.kind">{{ pillKind.label }}</ap-pill>
+      <ap-pill [kind]="pillKind.kind">{{ t(pillKind.labelKey) }}</ap-pill>
     </div>
 
     @if (expanded && !isRunning) {
@@ -80,6 +81,9 @@ export class SyncFeedRowComponent {
   @Input({ required: true }) log!: SyncLog;
   @Input() expanded = false;
   @Output() toggle = new EventEmitter<void>();
+
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
 
   get isRunning(): boolean { return this.log.status === 'running'; }
   get time(): string { return this.log.ts.split(' ')[1]; }
