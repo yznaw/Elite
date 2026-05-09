@@ -7,13 +7,33 @@ import {
 export const TODAY = new Date('2026-04-29');
 
 export const PRODUCTS: Product[] = [
-  { id: 'P-001', name: 'Al-Mahmal Oxford', sku: 'EC-AMO-2026', brand: 'Elite Atelier', price: 2800, stock: 14, has3d: true, views3d: 842, hidden: false, image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-002', name: 'Najd Derby', sku: 'EC-NDB-2026', brand: 'Elite Atelier', price: 2200, stock: 9, has3d: true, views3d: 621, hidden: false, image: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-001', name: 'Al-Mahmal Oxford', sku: 'EC-AMO-2026', brand: 'Elite Atelier', price: 2800, stock: 14, has3d: true, views3d: 842, hidden: false, image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop',
+    images: [
+      'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=600&q=80&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80&auto=format&fit=crop',
+    ],
+    variants: [
+      { id: 'V-001-1', sku: 'EC-AMO-2026-42-BLK', size: '42', color: 'Black',  material: 'Calf Leather',  price: 2800, stock: 4 },
+      { id: 'V-001-2', sku: 'EC-AMO-2026-43-BLK', size: '43', color: 'Black',  material: 'Calf Leather',  price: 2800, stock: 5 },
+      { id: 'V-001-3', sku: 'EC-AMO-2026-44-BLK', size: '44', color: 'Black',  material: 'Calf Leather',  price: 2800, stock: 3 },
+      { id: 'V-001-4', sku: 'EC-AMO-2026-43-BRN', size: '43', color: 'Brown',  material: 'Camel Leather', price: 2950, stock: 2 },
+    ] },
+  { id: 'P-002', name: 'Najd Derby', sku: 'EC-NDB-2026', brand: 'Elite Atelier', price: 2200, stock: 9, has3d: true, views3d: 621, hidden: false, image: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=600&q=80&auto=format&fit=crop',
+    variants: [
+      { id: 'V-002-1', sku: 'EC-NDB-2026-41-BLK', size: '41', color: 'Black',  material: 'Calf Leather', price: 2200, stock: 3 },
+      { id: 'V-002-2', sku: 'EC-NDB-2026-42-BLK', size: '42', color: 'Black',  material: 'Calf Leather', price: 2200, stock: 4 },
+      { id: 'V-002-3', sku: 'EC-NDB-2026-43-BLK', size: '43', color: 'Black',  material: 'Calf Leather', price: 2200, stock: 2 },
+    ] },
   { id: 'P-003', name: 'Hijaz Loafer', sku: 'EC-HLF-2026', brand: 'Elite Atelier', price: 1950, stock: 22, has3d: true, views3d: 1104, hidden: false, image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80&auto=format&fit=crop' },
   { id: 'P-004', name: 'Rub Al Khali Boot', sku: 'EC-RKB-2026', brand: 'Elite Atelier', price: 3400, stock: 5, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
   { id: 'P-005', name: 'Medina Mule', sku: 'EC-MML-2026', brand: 'Elite Atelier', price: 1600, stock: 0, has3d: false, views3d: 0, hidden: true, image: 'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=600&q=80&auto=format&fit=crop' },
   { id: 'P-006', name: 'Quraish Chelsea', sku: 'EC-QCH-2026', brand: 'Elite Atelier', price: 2650, stock: 11, has3d: true, views3d: 498, hidden: false, image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80&auto=format&fit=crop' },
-  { id: 'P-007', name: 'Nike Air Max 90', sku: 'NKE-AM90-WHT', brand: 'Nike', price: 680, stock: 42, has3d: true, views3d: 1532, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop' },
+  { id: 'P-007', name: 'Nike Air Max 90', sku: 'NKE-AM90-WHT', brand: 'Nike', price: 680, stock: 42, has3d: true, views3d: 1532, hidden: false, image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop',
+    images: [
+      'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=80&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80&auto=format&fit=crop',
+    ] },
   { id: 'P-008', name: 'New Balance 990v6', sku: 'NB-990V6-GRY', brand: 'New Balance', price: 980, stock: 18, has3d: true, views3d: 867, hidden: false, image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=80&auto=format&fit=crop' },
   { id: 'P-009', name: 'Adidas Samba OG', sku: 'AD-SMB-BLK', brand: 'Adidas', price: 540, stock: 31, has3d: false, views3d: 0, hidden: false, image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=80&auto=format&fit=crop' },
   { id: 'P-010', name: 'Common Projects Achilles Low', sku: 'CP-ACH-WHT', brand: 'Common Projects', price: 1740, stock: 7, has3d: true, views3d: 412, hidden: false, image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80&auto=format&fit=crop' },

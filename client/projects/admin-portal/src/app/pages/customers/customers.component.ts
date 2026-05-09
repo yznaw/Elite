@@ -1,6 +1,7 @@
 import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
@@ -9,7 +10,7 @@ import { SortableTableComponent, CellTplDirective, TableColumn } from '../../sha
 import { CustomerDrawerComponent } from './customer-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { CUSTOMERS } from '../../data/mock';
-import { Customer, QAR } from '../../models';
+import { Customer, Order, QAR } from '../../models';
 
 type View = 'table' | 'cards';
 const VIEW_KEY = 'elite-admin:customers:view';
@@ -65,7 +66,7 @@ const MOBILE_BP = 900;
         }
 
         <button class="btn btn-outline">{{ t('common.export') }}</button>
-        <button class="btn btn-gold"><ap-icon name="plus" [size]="14"/> {{ t('customers.add') }}</button>
+        <button class="btn btn-gold" (click)="createCustomer()"><ap-icon name="plus" [size]="14"/> {{ t('customers.add') }}</button>
       </div>
 
       @if (filtered().length === 0) {
@@ -134,7 +135,13 @@ const MOBILE_BP = 900;
     </div>
 
     @if (active(); as c) {
-      <ap-customer-drawer [customer]="c" (closed)="active.set(null)"/>
+      <ap-customer-drawer
+        [customer]="c"
+        [mode]="creatingId() === c.id ? 'create' : 'edit'"
+        (closed)="onDrawerClosed()"
+        (saved)="onCustomerSaved($event)"
+        (openOrder)="onOpenOrder($event)"
+      />
     }
   `,
   styles: [`
@@ -249,11 +256,16 @@ const MOBILE_BP = 900;
 })
 export class CustomersComponent {
   private readonly i18n = inject(I18nService);
+  private readonly router = inject(Router);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
-  readonly customers = CUSTOMERS;
+  /** Live, mutable customers list — supports edit + create. */
+  private readonly _customers = signal<Customer[]>([...CUSTOMERS]);
+  readonly customers = computed(() => this._customers());
   readonly active = signal<Customer | null>(null);
+  /** ID of a customer that's currently being created (drawer in 'create' mode). */
+  readonly creatingId = signal<string | null>(null);
   readonly search = signal('');
 
   readonly view = signal<View>(this.loadView());
@@ -267,7 +279,7 @@ export class CustomersComponent {
 
   readonly filtered = computed(() => {
     const q = this.search().toLowerCase();
-    return this.customers.filter((c) => {
+    return this._customers().filter((c) => {
       if (q && !(c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.city.toLowerCase().includes(q))) return false;
       return true;
     });
@@ -287,6 +299,50 @@ export class CustomersComponent {
 
   clearFilters(): void {
     this.search.set('');
+  }
+
+  /** "Add Customer" — synthesize a blank record and open the drawer in
+      create mode. Discarding without saving auto-removes the stub. */
+  createCustomer(): void {
+    const id = 'C-NEW-' + Date.now().toString(36).slice(-5).toUpperCase();
+    const today = new Date().toISOString().slice(0, 10);
+    const draft: Customer = {
+      id,
+      name: '', email: '', city: '',
+      orders: 0, ltv: 0, sizePref: 42,
+      lastOrder: today, joined: today,
+      notes: '',
+    };
+    this._customers.update((all) => [draft, ...all]);
+    this.creatingId.set(id);
+    this.active.set(draft);
+  }
+
+  onDrawerClosed(): void {
+    const id = this.creatingId();
+    if (id) {
+      const cust = this._customers().find((x) => x.id === id);
+      if (cust && !cust.name) {
+        this._customers.update((all) => all.filter((x) => x.id !== id));
+      }
+      this.creatingId.set(null);
+    }
+    this.active.set(null);
+  }
+
+  onCustomerSaved(_c: Customer): void {
+    // After the first save, the create stub becomes a real record — drop the
+    // creating flag so closing no longer purges it.
+    if (this.creatingId()) this.creatingId.set(null);
+    // Trigger a recompute of the filtered list (signal reads same array but
+    // mutation happened in-place inside the drawer's save).
+    this._customers.set([...this._customers()]);
+  }
+
+  onOpenOrder(o: Order): void {
+    this.active.set(null);
+    this.creatingId.set(null);
+    this.router.navigate(['/orders'], { queryParams: { id: o.id } });
   }
 
   setView(v: View): void {

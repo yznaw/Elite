@@ -41,12 +41,12 @@ All pages are lazy-loaded:
 | Route | Component | Description |
 |---|---|---|
 | `/dashboard` | `DashboardComponent` | KPIs, revenue chart, 3D heatmap, recent orders |
-| `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, inline editor with top save bar and draft auto-save |
-| `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover images |
+| `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, **New Product** create flow, inline editor with image gallery (drag-reorder + primary, file upload, drag/drop), variants table (size/color/material × SKU/price/stock), rich-text descriptions for EN & AR, top save bar, draft auto-save |
+| `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image upload (drag/drop + URL paste), drag-to-reorder linked products to control storefront display order |
 | `/media` | `MediaComponent` | Upload zone, file grid, auto-link by SKU, detail drawer |
 | `/storefront` | `StorefrontComponent` | Section editor with drag & drop, draft → publish, preview |
-| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, order detail drawer |
-| `/customers` | `CustomersComponent` | Customer table/cards, tier filter, detail drawer with notes |
+| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, full-height drawer with status workflow stepper, tracking number, internal notes & timeline |
+| `/customers` | `CustomersComponent` | Customer table/cards, tier filter, **Add Customer** create flow, fully editable detail drawer with real linked-orders history (rows navigate to /orders?id=…) |
 | `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel, top 3D interactions |
 | `/sync` | `SyncComponent` | Sync source cards, activity feed, manual queue, schedule management |
 | `/settings` | `SettingsComponent` | Store info, team members, integrations |
@@ -78,6 +78,7 @@ Located in `app/shared/`:
 | `TriggerBadgeComponent` | `trigger-badge/` | Shows who triggered an action (manual vs auto) |
 | `EmptyStateComponent` | `empty-state/` | Empty data state with icon and message |
 | `IconsComponent` | `icons/` | Centralized SVG icon library |
+| `RichTextComponent` | `rich-text/` | Lightweight `contenteditable` editor with bold/italic/underline/list/link/clear toolbar. Honours `dir` for RTL editing. Used for product descriptions (EN + AR). |
 
 ### Feedback
 
@@ -114,6 +115,13 @@ Located in `app/shared/`:
 - Shows success/error/info messages with auto-dismiss
 - Supports undo actions on delete operations
 
+### `NotificationService`
+
+- **File:** `services/notification.service.ts`
+- **Purpose:** Manages global notification state and unread counts
+- **Features:** Supports `push()`, `dismiss()`, `markRead()`, `markAllRead()`, and time-ago formatting
+- **Current State:** Seeded with mock data, ready to be wired to Server-Sent Events (SSE) or WebSockets
+
 ### `ConfirmService`
 
 - **File:** `services/confirm.service.ts`
@@ -136,6 +144,12 @@ Located in `app/shared/`:
 
 - **File:** `shared/sidebar-toggle.service.ts`
 - **Purpose:** Controls sidebar collapse/expand state
+
+### `httpErrorInterceptor`
+
+- **File:** `interceptors/http-error.interceptor.ts`
+- **Purpose:** Global HTTP error interceptor
+- **Features:** Catches all failed HTTP requests globally and displays contextual toasts via `ToastService` based on status code (401, 403, 404, 422, etc.).
 
 ---
 
@@ -228,9 +242,12 @@ All models are defined in `app/models/index.ts`:
 
 | Interface | Key Fields | Used By |
 |---|---|---|
-| `Product` | id, name, sku, brand, price, stock, has3d, hidden, collectionIds[] | Catalog, Dashboard |
+| `Product` | id, name, sku, brand, price, stock, has3d, hidden, image, images[]?, variants[]? | Catalog, Dashboard |
+| `ProductVariant` | id, sku, size, color, material, price, stock | Product drawer (Variants section) |
 | `MediaFile` | id, name, kind (image/glb), size, linkedTo, preview | Media Library |
-| `Order` | id, date, customer, total, payment, fulfillment, items[] | Orders |
+| `Order` | id, date, customer, total, payment, fulfillment, items[], trackingNumber?, timeline[]?, notes[]? | Orders |
+| `OrderTimelineEntry` | id, ts, kind, detail?, actor? | Order drawer timeline |
+| `OrderNote` | id, ts, author, initials, body | Order drawer internal notes |
 | `Customer` | id, name, email, orders, ltv, sizePref, notes | Customers |
 | `SyncLog` | id, ts, type, processed, updated, status, triggeredBy | Sync Feed |
 | `SyncSource` | id, name, status, schedule, successRate, spark7d | Sync Sources |

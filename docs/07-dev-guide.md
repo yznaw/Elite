@@ -258,11 +258,14 @@ Elite/
 │           ├── styles.scss                    ← @FONT-FACE + DESIGN TOKENS (2700+ lines)
 │           └── app/
 │               ├── app.routes.ts              ← 9 admin routes
-│               ├── i18n/strings.ts            ← EN/AR translations (1200 lines)
+│               ├── i18n/strings.ts            ← EN/AR translations (1200+ lines)
 │               ├── models/index.ts            ← All admin interfaces
 │               ├── data/mock.ts               ← Mock data (products, orders, etc.)
+│               ├── interceptors/
+│               │   └── http-error.interceptor.ts ← Global HTTP error handler
 │               ├── services/
 │               │   ├── storefront.service.ts  ← Draft/publish flow
+│               │   ├── notification.service.ts ← Global real-time alerts
 │               │   ├── toast.service.ts       ← Toast notifications
 │               │   ├── confirm.service.ts     ← Confirm dialogs
 │               │   ├── i18n.service.ts        ← Translation helper
