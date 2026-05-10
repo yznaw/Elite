@@ -66,6 +66,93 @@ The footer is **conditionally hidden** on the checkout page using a computed sig
 
 ---
 
+## Home Page 3D Hero
+
+The home page hero uses a first-party Three.js model viewer instead of an embedded Sketchfab iframe.
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `projects/client-web/src/app/pages/home/home.component.ts` | Three.js scene setup, GLB loading, color switching, animation, cleanup |
+| `projects/client-web/src/app/pages/home/home.component.html` | Hero canvas, loading/error states, 3 color swatch controls |
+| `projects/client-web/src/app/pages/home/home.component.scss` | White product-view layout, responsive framing, swatch UI |
+| `projects/client-web/src/assets/models/latest-brown-v2.glb` | Local GLB product model |
+| `projects/client-web/src/assets/draco/` | Local Draco decoder files required by the compressed GLB |
+
+### Dependencies
+
+The viewer depends on:
+
+- `three`
+- `@types/three`
+
+The GLB uses `KHR_draco_mesh_compression`, so `DRACOLoader` is configured with local decoder assets:
+
+```typescript
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('/assets/draco/');
+dracoLoader.setDecoderConfig({ type: 'wasm' });
+loader.setDRACOLoader(dracoLoader);
+```
+
+### Runtime Behavior
+
+- The canvas is initialized in `ngAfterViewInit()` and runs outside Angular via `NgZone.runOutsideAngular()`.
+- `GLTFLoader` loads `/assets/models/latest-brown-v2.glb`.
+- `OrbitControls` enables drag-to-rotate, damping, constrained vertical rotation, and auto-rotation.
+- A `ResizeObserver` keeps the renderer and camera aspect ratio aligned with the hero visual container.
+- `ngOnDestroy()` cancels the animation frame, disconnects observers, disposes controls, disposes Draco, and disposes Three.js geometries/materials.
+
+### Color Options
+
+The hero exposes three leather color options under the model:
+
+| ID | Label | Hex |
+|---|---|---|
+| `cognac` | Cognac | `#7b4b2b` |
+| `espresso` | Espresso | `#2e1b12` |
+| `sand` | Sand | `#b98d54` |
+
+Color switching is handled in the component without reloading the model. During model preparation, the leather `MeshStandardMaterial` instances are stored in `leatherMaterials`; clicking a swatch updates their `color` and marks them for update.
+
+```typescript
+selectLeatherColor(id: string): void {
+  this.selectedLeatherColor.set(id);
+  this.applyLeatherColor(id);
+}
+```
+
+### Framing and Responsive Notes
+
+The model is intentionally scaled large for the desktop hero. Compact viewports use a smaller scale and different horizontal offset so the model remains visible without clipping.
+
+When adjusting the model:
+
+- Use `frameModel()` for scale, position, and default rotation.
+- Use OrbitControls settings in `initHeroModel()` for auto-rotate speed and user drag feel.
+- Check both desktop and mobile screenshots after changing scale or rotation.
+- Keep the white canvas background; it is part of the premium product-view treatment.
+
+### Verification
+
+Run:
+
+```bash
+cd client
+npm run build:web
+```
+
+Manual QA:
+
+- Open the storefront home page.
+- Confirm the GLB loads and the loading state disappears.
+- Drag the model to rotate it.
+- Click Cognac, Espresso, and Sand; each should change the leather color instantly.
+- Check desktop and mobile widths to ensure the product is large but not clipped.
+
+---
+
 ## Shared Components
 
 Located in `app/shared/`:

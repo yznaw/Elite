@@ -11,6 +11,7 @@ import { RichTextComponent } from '../../shared/rich-text/rich-text.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
+import { AdminProductsService } from '../../services/admin-products.service';
 import { MEDIA_INIT, COLLECTIONS } from '../../data/mock';
 import { ME, Product, ProductVariant } from '../../models';
 
@@ -730,6 +731,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
+  private readonly productsApi = inject(AdminProductsService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
@@ -1030,17 +1032,25 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // Save / Discard / Delete
   // ────────────────────────────────────────────────────────────────────
 
-  save(): void {
+  async save(): Promise<void> {
     if (!this.dirty() || this.saveState() === 'saving') return;
     this.saveState.set('saving');
-    setTimeout(() => {
+
+    try {
+      const f = this.form();
+      await this.productsApi.saveProduct({
+        ...f,
+        has3d: this.product.has3d,
+        views3d: this.product.views3d,
+      });
+
       this.saveState.set('saved');
       const ts = new Date().toTimeString().slice(0, 5);
       this.lastSavedAt.set(ts);
       try { localStorage.removeItem(this.draftKey); } catch {}
       this.draftRestoredAt.set(null);
       this.initial = { ...this.form() };
-      
+
       // Update the actual mock collections for the sake of the prototype
       this.collections.forEach(c => {
         const wasInCol = c.productIds.includes(this.product.id);
@@ -1053,8 +1063,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       });
 
       // Persist editable fields back on the underlying product (mock-only
-      // mutation — real backend integration would issue a PATCH here).
-      const f = this.form();
+      // mutation so the current mock catalog reflects the saved API state.
       this.product.name = f.name;
       this.product.sku = f.sku;
       this.product.brand = f.brand;
@@ -1070,7 +1079,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.toast.success(this.t('product.toast.saved.title'), `${this.form().name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
       this.feedbackTimer = window.setTimeout(() => this.saveState.set('idle'), 1800);
-    }, 1000);
+    } catch {
+      this.saveState.set('error');
+      this.triggerShake();
+    }
   }
 
   async discard(): Promise<void> {

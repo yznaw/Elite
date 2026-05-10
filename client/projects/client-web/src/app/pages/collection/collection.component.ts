@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -20,7 +20,7 @@ type SortOption = (typeof SORT_OPTIONS)[number];
   templateUrl: './collection.component.html',
   styleUrl: './collection.component.scss',
 })
-export class CollectionComponent {
+export class CollectionComponent implements OnInit {
   private readonly products = inject(ProductsService);
   private readonly router = inject(Router);
 
@@ -31,7 +31,7 @@ export class CollectionComponent {
   readonly styleFilter = signal<StyleFilter>('All');
   readonly leatherFilter = signal<LeatherFilter>('All');
   readonly sort = signal<SortOption>('Featured');
-  readonly hovered = signal<number | null>(null);
+  readonly hovered = signal<string | null>(null);
 
   readonly filtered = computed<Product[]>(() => {
     let list = this.products.getAll();
@@ -44,6 +44,10 @@ export class CollectionComponent {
     if (so === 'Price: High–Low') list = [...list].sort((a, b) => b.price - a.price);
     return list;
   });
+
+  ngOnInit(): void {
+    void this.products.refresh();
+  }
 
   goToProduct(p: Product): void {
     void this.router.navigate(['/product', p.id]);

@@ -1,0 +1,209 @@
+const { Router } = require('express');
+const db = require('../db/client');
+const { ensureDefaultTenant } = require('../db/tenant');
+const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
+
+const router = Router();
+
+function mapOrder(row) {
+  return {
+    id: row.public_number,
+    dbId: row.id,
+    date: row.placed_at ? row.placed_at.toISOString().slice(0, 10) : '',
+    customer: row.customer_name,
+    itemsCount: Number(row.items_count || 0),
+    total: fromCents(row.total_cents),
+    payment: mapPayment(row.payment_status),
+    fulfillment: row.fulfillment_status,
+    items: row.items || [],
+    address: row.shipping_address?.line1 || row.shipping_address?.address || '',
+    trackingNumber: row.tracking_number || undefined,
+    timeline: row.timeline || [],
+    notes: row.notes || [],
+  };
+}
+
+function mapPayment(status) {
+  if (status === 'authorized') return 'pending';
+  if (status === 'partially_refunded') return 'refunded';
+  return status;
+}
+
+router.get('/', asyncHandler(async (_req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const result = await client.query(
+      `
+        SELECT
+          o.*,
+          COUNT(oi.id)::integer AS items_count,
+          s.tracking_number,
+          COALESCE(
+            jsonb_agg(
+              DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0))
+            ) FILTER (WHERE oi.id IS NOT NULL),
+            '[]'::jsonb
+          ) AS items
+        FROM orders o
+        LEFT JOIN order_items oi ON oi.order_id = o.id
+        LEFT JOIN shipments s ON s.order_id = o.id
+        WHERE o.tenant_id = $1
+        GROUP BY o.id, s.tracking_number
+        ORDER BY o.placed_at DESC
+      `,
+      [tenant.id],
+    );
+    ok(res, result.rows.map(mapOrder));
+  } finally {
+    client.release();
+  }
+}));
+
+router.get('/:id', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const result = await client.query(
+      `
+        SELECT o.*, COUNT(oi.id)::integer AS items_count, s.tracking_number,
+          COALESCE(jsonb_agg(DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0))) FILTER (WHERE oi.id IS NOT NULL), '[]'::jsonb) AS items,
+          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', t.occurred_at, 'kind', t.kind, 'detail', t.detail) ORDER BY t.occurred_at) FROM order_timeline_entries t WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
+          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', n.created_at, 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n WHERE n.order_id = o.id), '[]'::jsonb) AS notes
+        FROM orders o
+        LEFT JOIN order_items oi ON oi.order_id = o.id
+        LEFT JOIN shipments s ON s.order_id = o.id
+        WHERE o.tenant_id = $1 AND (o.id::text = $2 OR o.public_number = $2)
+        GROUP BY o.id, s.tracking_number
+      `,
+      [tenant.id, req.params.id],
+    );
+    if (result.rowCount === 0) return notFound(res, 'Order not found.');
+    ok(res, mapOrder(result.rows[0]));
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/', asyncHandler(async (req, res) => {
+  const customerName = String(req.body.customerName || req.body.customer || '').trim();
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!customerName || items.length === 0) return validationError(res, ['Customer name and at least one order item are required.']);
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const tenant = await ensureDefaultTenant(client);
+    const subtotal = items.reduce((sum, item) => sum + toCents(item.price || item.p || 0) * (Number(item.quantity || item.q) || 1), 0);
+    const publicNumber = req.body.publicNumber || `EC-${new Date().getFullYear().toString().slice(2)}-${Date.now().toString().slice(-5)}`;
+
+    const order = await client.query(
+      `
+        INSERT INTO orders (
+          tenant_id, public_number, customer_id, customer_email, customer_name, customer_phone,
+          payment_status, fulfillment_status, subtotal_cents, shipping_cents, tax_cents, discount_cents,
+          total_cents, shipping_address, billing_address
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb)
+        RETURNING *
+      `,
+      [
+        tenant.id,
+        publicNumber,
+        req.body.customerId || null,
+        req.body.customerEmail || null,
+        customerName,
+        req.body.customerPhone || null,
+        req.body.payment || 'pending',
+        req.body.fulfillment || 'awaiting',
+        subtotal,
+        toCents(req.body.shipping || 0),
+        toCents(req.body.tax || 0),
+        toCents(req.body.discount || 0),
+        toCents(req.body.total || 0) || subtotal,
+        JSON.stringify(req.body.shippingAddress || { line1: req.body.address || '' }),
+        JSON.stringify(req.body.billingAddress || req.body.shippingAddress || {}),
+      ],
+    );
+
+    for (const item of items) {
+      const qty = Number(item.quantity || item.q) || 1;
+      const unit = toCents(item.price || item.p || 0);
+      await client.query(
+        `
+          INSERT INTO order_items (tenant_id, order_id, product_id, variant_id, sku, product_name, size, quantity, unit_price_cents, total_cents)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `,
+        [tenant.id, order.rows[0].id, item.productId || null, item.variantId || null, item.sku || '', item.name || item.n || '', item.size || item.s || null, qty, unit, unit * qty],
+      );
+    }
+
+    await client.query(
+      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
+      [tenant.id, order.rows[0].id, 'placed', 'Order placed'],
+    );
+
+    await client.query('COMMIT');
+    created(res, mapOrder({ ...order.rows[0], items_count: items.length, items }), 'Order created.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+router.patch('/:id/status', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const tenant = await ensureDefaultTenant(client);
+    const order = await client.query(
+      `
+        UPDATE orders
+        SET payment_status = COALESCE($3, payment_status),
+            fulfillment_status = COALESCE($4, fulfillment_status),
+            status = COALESCE($5, status)
+        WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)
+        RETURNING *
+      `,
+      [tenant.id, req.params.id, req.body.payment, req.body.fulfillment, req.body.status],
+    );
+    if (order.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return notFound(res, 'Order not found.');
+    }
+    await client.query(
+      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
+      [tenant.id, order.rows[0].id, req.body.timelineKind || 'note', req.body.detail || 'Status updated'],
+    );
+    await client.query('COMMIT');
+    ok(res, mapOrder(order.rows[0]), 'Order status updated.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/:id/notes', asyncHandler(async (req, res) => {
+  const body = String(req.body.body || '').trim();
+  if (!body) return validationError(res, ['Note body is required.']);
+
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const order = await client.query('SELECT id FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)', [tenant.id, req.params.id]);
+    if (order.rowCount === 0) return notFound(res, 'Order not found.');
+    const note = await client.query(
+      'INSERT INTO order_notes (tenant_id, order_id, body) VALUES ($1, $2, $3) RETURNING *',
+      [tenant.id, order.rows[0].id, body],
+    );
+    created(res, note.rows[0], 'Order note added.');
+  } finally {
+    client.release();
+  }
+}));
+
+module.exports = router;

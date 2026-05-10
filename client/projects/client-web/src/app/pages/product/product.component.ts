@@ -74,10 +74,10 @@ export class ProductComponent implements OnInit, OnDestroy {
     ];
   });
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     const idParam = this.route.snapshot.paramMap.get('id');
-    const id = idParam ? Number(idParam) : NaN;
-    const p = Number.isFinite(id) ? this.productsSvc.getById(id) : undefined;
+    await this.productsSvc.ensureLoaded();
+    const p = idParam ? this.productsSvc.getById(idParam) : undefined;
     this.product.set(p ?? this.productsSvc.getAll()[0]);
 
     this.galleryTimer = window.setInterval(() => {

@@ -1,76 +1,93 @@
 <div>
   <!-- ── HERO ── -->
   <section class="hero">
+    <div class="hero-grain"></div>
     <div class="hero-ring hero-ring--lg"></div>
     <div class="hero-ring hero-ring--sm"></div>
 
-    <div class="anim-fade-up" style="animation-delay: 0.2s; text-align: center; margin-bottom: 32px; z-index: 2;">
-      <div style="display: inline-flex; align-items: center; gap: 10px;">
-        <div style="width: 32px; height: 1px; background: var(--gold-dim);"></div>
-        <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.35em; color: var(--gold); text-transform: uppercase;">
+    <div class="hero-shell">
+      <div class="hero-copy">
+        <div class="hero-kicker anim-fade-up" style="animation-delay: 0.15s;">
+          <span></span>
           Est. 1962 · Doha
-        </span>
-        <div style="width: 32px; height: 1px; background: var(--gold-dim);"></div>
-      </div>
-    </div>
+        </div>
 
-    <h1 class="anim-fade-up serif"
-      style="animation-delay: 0.35s; z-index: 2; text-align: center; font-size: clamp(48px, 10vw, 96px); font-weight: 300; line-height: 0.95; letter-spacing: -0.01em; color: var(--cream); margin-bottom: 8px;">
-      Where Heritage<br />
-      <em style="color: var(--gold); font-style: italic;">Meets Sole</em>
-    </h1>
+        <h1 class="hero-title anim-fade-up serif" style="animation-delay: 0.25s;">
+          Where Heritage
+          <em>Meets Sole</em>
+        </h1>
 
-    <p class="anim-fade-up"
-      style="animation-delay: 0.5s; z-index: 2; text-align: center; font-family: var(--ff-sans); font-size: 13px; font-weight: 300; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 64px; max-width: 320px;">
-      Hand-crafted Arabic leather shoes for those who command presence
-    </p>
+        <p class="hero-lede anim-fade-up" style="animation-delay: 0.35s;">
+          Hand-crafted Arabic leather shoes shaped with the restraint, polish, and presence of a private atelier.
+        </p>
 
-    <div class="anim-fade-up viewer"
-      style="animation-delay: 0.6s; position: relative; width: min(560px, 92vw); z-index: 2;">
-      <div class="viewer-glow"></div>
-
-      <div style="border: 1px solid var(--border); background: transparent; overflow: hidden; position: relative;">
-        <iframe
-          title="Yellow Leather Loafers"
-          frameBorder="0"
-          allowFullScreen
-          allow="autoplay; fullscreen; xr-spatial-tracking"
-          [src]="sketchfabSrc"
-          style="width: 100%; height: 420px; display: block; border: none;"
-        ></iframe>
-        <div class="corner corner--tl"></div>
-        <div class="corner corner--tr"></div>
-        <div class="corner corner--bl"></div>
-        <div class="corner corner--br"></div>
-      </div>
-
-      <div style="text-align: center; margin-top: 12px;">
-        <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase;">
-          Drag · Rotate · Explore
-        </span>
-      </div>
-    </div>
-
-    @if (metaVisible()) {
-      <div class="anim-fade-up"
-        style="animation-delay: 1s; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 28px; padding: 0 20px; z-index: 2;">
-        @for (c of metaCards; track c.id) {
-          <div class="glass tag-chip" style="font-size: 9px;">
-            <span style="margin-right: 5px;">{{ c.icon }}</span>
-            {{ c.label }}
+        @if (metaVisible()) {
+          <div class="hero-tags anim-fade-up" style="animation-delay: 0.45s;">
+            @for (c of metaCards; track c.id) {
+              <div class="glass tag-chip">
+                <span>{{ c.icon }}</span>
+                {{ c.label }}
+              </div>
+            }
           </div>
         }
-      </div>
-    }
 
-    <div class="anim-fade-up" style="animation-delay: 1.1s; display: flex; gap: 12px; margin-top: 36px; z-index: 2;">
-      <button class="btn-gold" (click)="goTo('/collection')" style="padding: 14px 32px;">Explore Collection</button>
-      <button class="btn-outline" (click)="goTo('/story')" style="padding: 14px 28px;">Our Story</button>
+        <div class="hero-actions anim-fade-up" style="animation-delay: 0.55s;">
+          <button class="btn-gold" (click)="goTo('/collection')">Explore Collection</button>
+          <button class="btn-outline" (click)="goTo('/story')">Our Story</button>
+        </div>
+      </div>
+
+      <div class="hero-visual anim-fade-up" style="animation-delay: 0.35s;">
+        <canvas
+          #heroCanvas
+          class="hero-canvas"
+          role="img"
+          aria-label="Interactive 3D model of a brown handcrafted leather shoe"
+          [class.is-ready]="modelLoaded()"
+        ></canvas>
+
+        @if (!modelLoaded() && !modelLoadFailed()) {
+          <div class="model-state">
+            <div class="model-spinner"></div>
+            <span>Preparing 3D atelier view</span>
+          </div>
+        }
+
+        @if (modelLoadFailed()) {
+          <div class="model-state model-state--error">
+            <span>3D model unavailable</span>
+          </div>
+        }
+
+        <div class="model-badge">
+          <span>360 Product View</span>
+          <span>Drag · Rotate · Explore</span>
+        </div>
+
+        <div class="model-colors" aria-label="Choose leather color">
+          @for (option of leatherColors; track option.id) {
+            <button
+              type="button"
+              class="model-color"
+              [class.is-active]="selectedLeatherColor() === option.id"
+              [style.--swatch]="option.swatch"
+              [attr.aria-label]="'Change model color to ' + option.name"
+              [attr.aria-pressed]="selectedLeatherColor() === option.id"
+              [title]="option.name"
+              (click)="selectLeatherColor(option.id)"
+            >
+              <span></span>
+              <small>{{ option.name }}</small>
+            </button>
+          }
+        </div>
+      </div>
     </div>
 
-    <div style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 6px;">
-      <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase;">Scroll</span>
-      <div style="width: 1px; height: 32px; background: linear-gradient(to bottom, var(--gold), transparent);"></div>
+    <div class="hero-scroll">
+      <span>Scroll</span>
+      <div></div>
     </div>
   </section>
 

@@ -16,6 +16,7 @@
 | 5 | [API Server](./05-api-server.md) | Backend Devs | Express setup, routes, middleware, adding endpoints |
 | 6 | [White-Label Guide](./06-white-label-guide.md) | Dev Team | How to rebrand and resell for a new client |
 | 7 | [Developer Guide](./07-dev-guide.md) | Dev Team | Local setup, conventions, how-to recipes |
+| 8 | [Database & API Implementation](./08-database-api-implementation.md) | Backend/Frontend Devs | PostgreSQL schema, endpoint map, SQL behavior, wired UI state |
 
 ---
 
@@ -33,3 +34,4 @@
 - **Onboarding a new client?** Go straight to [06 – White-Label Guide](./06-white-label-guide.md).
 - **Working on the frontend?** Read [03](./03-client-web.md) or [04](./04-admin-portal.md) depending on which app you're modifying.
 - **Adding an API endpoint?** See [05 – API Server](./05-api-server.md).
+- **Working with database-backed features?** See [08 – Database & API Implementation](./08-database-api-implementation.md).

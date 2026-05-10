@@ -34,7 +34,7 @@ export class CartService {
     this.openDrawer();
   }
 
-  remove(id: number, size: number): void {
+  remove(id: string, size: number): void {
     this._items.update((prev) => prev.filter((i) => !(i.id === id && i.size === size)));
   }
 
