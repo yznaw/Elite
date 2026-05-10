@@ -1,12 +1,13 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
-import { OrderModalComponent } from './order-modal.component';
+import { OrderDrawerComponent } from './order-drawer.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
@@ -16,7 +17,7 @@ import { Order, QAR } from '../../models';
 @Component({
   selector: 'ap-orders',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, OrderModalComponent],
+  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, OrderDrawerComponent],
   template: `
     <div class="page-fade">
       <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
@@ -91,15 +92,26 @@ import { Order, QAR } from '../../models';
     </div>
 
     @if (active(); as o) {
-      <ap-order-modal [order]="o" (closed)="active.set(null)"/>
+      <ap-order-drawer [value]="o" (closed)="active.set(null)" (updated)="onOrderUpdated($event)"/>
     }
   `,
 })
-export class OrdersComponent {
+export class OrdersComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly i18n = inject(I18nService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly t = (k: string): string => this.i18n.t(k);
+
+  ngOnInit(): void {
+    // Open the order specified in ?id=… (used when navigating in from
+    // the customer drawer's order history).
+    const id = this.route.snapshot.queryParamMap.get('id');
+    if (id) {
+      const target = this._orders().find((o) => o.id === id);
+      if (target) this.active.set(target);
+    }
+  }
 
   readonly QAR = QAR;
   readonly active = signal<Order | null>(null);
@@ -138,6 +150,11 @@ export class OrdersComponent {
   ];
 
   openOrder = (o: Order): void => { this.active.set(o); };
+
+  onOrderUpdated(updated: Order): void {
+    this._orders.update((all) => all.map((x) => (x.id === updated.id ? updated : x)));
+    this.active.set(updated);
+  }
 
   clearFilters(): void {
     this.search.set('');

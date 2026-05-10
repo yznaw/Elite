@@ -7,17 +7,20 @@ import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
+import { RichTextComponent } from '../../shared/rich-text/rich-text.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { MEDIA_INIT, COLLECTIONS } from '../../data/mock';
-import { ME, Product } from '../../models';
+import { ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
   name: string; sku: string; brand: string; collectionIds: string[];
   price: number; stock: number; hidden: boolean;
   enDesc: string; arDesc: string;
   metaTitle: string; metaDesc: string; slug: string;
+  variants: ProductVariant[];
+  images: string[];
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -27,7 +30,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
 @Component({
   selector: 'ap-product-drawer',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent],
   template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
@@ -35,7 +38,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
       <div class="drawer-head product-head">
         <div style="min-width:0;flex:1;">
           <div class="row gap-sm" style="flex-wrap:wrap;align-items:center;">
-            <div class="card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">{{ form().name }}</div>
+            <div class="card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">{{ form().name || t('catalog.newProduct') }}</div>
             <ap-pill [kind]="form().hidden ? 'red' : 'green'">
               {{ form().hidden ? t('product.status.hidden') : t('product.status.visible') }}
             </ap-pill>
@@ -137,7 +140,10 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
         <!-- Image preview + key facts -->
         <div class="mb-24" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           <div class="prod-img" style="border-radius:10px;">
-            <img [src]="product.image" [alt]="form().name" (error)="onImgError($event)"/>
+            <img [src]="primaryImage()" [alt]="form().name" (error)="onImgError($event)"/>
+            @if (form().images.length > 1) {
+              <span class="prod-3d-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">{{ form().images.length }}</span>
+            }
           </div>
           <div>
             <div class="row" style="justify-content:space-between;margin-bottom:14px;">
@@ -209,6 +215,122 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
           </div>
         </div>
 
+        <!-- Section: Variants -->
+        <div class="section-title">
+          <ap-icon name="catalog" [size]="14"/>
+          <span>{{ t('product.section.variants') }}</span>
+          @if (form().variants.length > 0) {
+            <span class="muted small" style="font-weight:400;margin-inline-start:auto;">{{ variantsSummary() }} · {{ variantsTotalStock() }} {{ t('product.field.stock') }}</span>
+          }
+        </div>
+
+        <div class="mb-24">
+          @if (form().variants.length === 0) {
+            <div class="variants-empty">
+              <div class="strong">{{ t('product.variants.empty.title') }}</div>
+              <div class="muted small mt-8">{{ t('product.variants.empty.sub') }}</div>
+              <button class="btn btn-outline btn-sm mt-16" (click)="addVariant()">
+                <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
+              </button>
+            </div>
+          } @else {
+            <div class="variants-table">
+              <div class="vt-head">
+                <div class="vt-c-sku">{{ t('product.variants.col.sku') }}</div>
+                <div class="vt-c-size">{{ t('product.variants.col.size') }}</div>
+                <div class="vt-c-color">{{ t('product.variants.col.color') }}</div>
+                <div class="vt-c-mat">{{ t('product.variants.col.material') }}</div>
+                <div class="vt-c-price">{{ t('product.variants.col.price') }}</div>
+                <div class="vt-c-stock">{{ t('product.variants.col.stock') }}</div>
+                <div class="vt-c-act"></div>
+              </div>
+              @for (v of form().variants; track v.id; let i = $index) {
+                <div class="vt-row">
+                  <div class="vt-c-sku"><input class="inp inp-sm mono" [placeholder]="t('product.variants.placeholder.sku')" [ngModel]="v.sku" (ngModelChange)="updateVariant(i, { sku: $event })"/></div>
+                  <div class="vt-c-size"><input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/></div>
+                  <div class="vt-c-color"><input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.color')" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/></div>
+                  <div class="vt-c-mat"><input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.material')" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })"/></div>
+                  <div class="vt-c-price"><input class="inp inp-sm mono" type="number" min="0" [ngModel]="v.price" (ngModelChange)="updateVariant(i, { price: +$event || 0 })"/></div>
+                  <div class="vt-c-stock"><input class="inp inp-sm mono" type="number" min="0" [ngModel]="v.stock" (ngModelChange)="updateVariant(i, { stock: +$event || 0 })"/></div>
+                  <div class="vt-c-act">
+                    <button class="vt-remove" (click)="removeVariant(i)" [attr.aria-label]="t('common.remove')">
+                      <ap-icon name="trash" [size]="12"/>
+                    </button>
+                  </div>
+                </div>
+              }
+              <div class="vt-foot">
+                <div class="muted small">
+                  @if (variantsPriceRange()) {
+                    <span>{{ t('product.variants.priceRange') }}: <span class="strong mono">{{ variantsPriceRange() }}</span></span>
+                  }
+                </div>
+                <button class="btn btn-outline btn-sm" (click)="addVariant()">
+                  <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Section: Image Gallery -->
+        <div class="section-title">
+          <ap-icon name="media" [size]="14"/>
+          <span>{{ t('product.section.gallery') }}</span>
+          @if (form().images.length > 0) {
+            <span class="muted small" style="font-weight:400;margin-inline-start:auto;">{{ form().images.length }} · {{ t('product.gallery.dragHint') }}</span>
+          }
+        </div>
+
+        <div class="mb-24">
+          <div class="gallery-drop"
+               (dragover)="onDragOver($event)"
+               (drop)="onDropImages($event)">
+            @if (form().images.length === 0) {
+              <div class="gallery-empty">
+                <div class="strong">{{ t('product.gallery.empty.title') }}</div>
+                <div class="muted small mt-8">{{ t('product.gallery.empty.sub') }}</div>
+              </div>
+            } @else {
+              <div class="gallery-grid">
+                @for (img of form().images; track img; let i = $index) {
+                  <div class="thumb"
+                       [class.is-primary]="i === 0"
+                       draggable="true"
+                       (dragstart)="onThumbDragStart(i, $event)"
+                       (dragover)="onThumbDragOver($event)"
+                       (drop)="onThumbDrop(i, $event)">
+                    <img [src]="img" [alt]="form().name" (error)="onImgError($event)"/>
+                    @if (i === 0) {
+                      <span class="thumb-primary">{{ t('product.gallery.primary') }}</span>
+                    }
+                    <div class="thumb-actions">
+                      @if (i !== 0) {
+                        <button class="thumb-act" type="button" (click)="setPrimaryImage(i)" [attr.aria-label]="t('product.gallery.makePrimary')" [attr.title]="t('product.gallery.makePrimary')">
+                          <ap-icon name="check" [size]="12"/>
+                        </button>
+                      }
+                      <button class="thumb-act danger" type="button" (click)="removeImage(i)" [attr.aria-label]="t('product.gallery.remove')" [attr.title]="t('product.gallery.remove')">
+                        <ap-icon name="trash" [size]="12"/>
+                      </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+            <label class="btn btn-gold btn-sm" style="cursor:pointer;">
+              <ap-icon name="upload" [size]="12"/> {{ t('product.gallery.upload') }}
+              <input type="file" multiple accept="image/*" hidden (change)="onUploadImages($event)"/>
+            </label>
+            <button class="btn btn-outline btn-sm" type="button" (click)="addImageUrl()">
+              <ap-icon name="link" [size]="12"/> {{ t('product.gallery.addUrl') }}
+            </button>
+          </div>
+        </div>
+
         <!-- Section: Media -->
         <div class="section-title">
           <ap-icon name="cube" [size]="14"/>
@@ -245,11 +367,19 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
 
         <div class="mb-24">
           <label class="lbl">{{ t('product.field.descEn') }}</label>
-          <textarea class="inp" rows="3" [ngModel]="form().enDesc" (ngModelChange)="set('enDesc', $event)"></textarea>
+          <ap-rich-text
+            dir="ltr"
+            [value]="form().enDesc"
+            [ariaLabel]="t('product.field.descEn')"
+            (valueChange)="set('enDesc', $event)"/>
         </div>
         <div class="mb-24">
           <label class="lbl">{{ t('product.field.descAr') }}</label>
-          <textarea class="inp" rows="3" dir="rtl" [ngModel]="form().arDesc" (ngModelChange)="set('arDesc', $event)"></textarea>
+          <ap-rich-text
+            dir="rtl"
+            [value]="form().arDesc"
+            [ariaLabel]="t('product.field.descAr')"
+            (valueChange)="set('arDesc', $event)"/>
         </div>
 
         <!-- Section: SEO -->
@@ -414,6 +544,152 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
 
 
 
+    /* Image Gallery */
+    .gallery-drop {
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      padding: 14px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .gallery-drop:hover { border-color: var(--gold); }
+    .gallery-empty {
+      padding: 22px;
+      text-align: center;
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+    }
+    .thumb {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      background: #fff;
+      cursor: grab;
+      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    }
+    .thumb img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+      pointer-events: none;
+    }
+    .thumb.is-primary { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(193, 154, 91, 0.18); }
+    .thumb:active { cursor: grabbing; transform: scale(0.98); }
+    .thumb-primary {
+      position: absolute;
+      top: 6px;
+      inset-inline-start: 6px;
+      background: var(--gold);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 99px;
+      text-transform: uppercase;
+    }
+    .thumb-actions {
+      position: absolute;
+      top: 6px;
+      inset-inline-end: 6px;
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    .thumb:hover .thumb-actions,
+    .thumb:focus-within .thumb-actions { opacity: 1; }
+    .thumb-act {
+      width: 24px; height: 24px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .thumb-act:hover { color: var(--green); border-color: var(--green); }
+    .thumb-act.danger:hover { color: var(--danger); border-color: var(--danger); }
+
+    /* Variants */
+    .variants-empty {
+      padding: 22px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      text-align: center;
+    }
+    .variants-table {
+      border: 1px solid var(--border-2);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .variants-table .vt-head,
+    .variants-table .vt-row {
+      display: grid;
+      grid-template-columns: minmax(140px, 1.4fr) 70px 90px minmax(110px, 1.1fr) 90px 80px 32px;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+    }
+    .variants-table .vt-head {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border-2);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink-2);
+    }
+    .variants-table .vt-row { border-top: 1px solid var(--border-2); }
+    .variants-table .vt-row:first-of-type { border-top: none; }
+    .variants-table .inp-sm {
+      height: 32px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    .vt-remove {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .vt-remove:hover {
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .vt-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--bg);
+      border-top: 1px solid var(--border-2);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    @media (max-width: 720px) {
+      .variants-table .vt-head { display: none; }
+      .variants-table .vt-row {
+        grid-template-columns: 1fr 1fr;
+        row-gap: 6px;
+      }
+      .vt-c-sku, .vt-c-mat { grid-column: 1 / -1; }
+      .vt-c-act { grid-column: 1 / -1; justify-self: end; }
+    }
+
     @media (max-width: 720px) {
       .nav-pos { padding: 0 4px; min-width: 28px; font-size: 10px; }
       .section-title { font-size: 15px; padding: 14px 0 10px; }
@@ -485,6 +761,14 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return list.find((p) => p.id === this._currentId()) ?? list[0];
   }
 
+  /** Live primary image — drives the preview tile in the drawer header
+      area and stays in sync with reordering / uploads. */
+  primaryImage(): string {
+    const imgs = this.form().images;
+    if (imgs.length > 0) return imgs[0];
+    return this.product?.image ?? '';
+  }
+
   private feedbackTimer: number | undefined;
   private autoSaveTimer: number | undefined;
   private syncTimer: number | undefined;
@@ -542,6 +826,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       price: 0, stock: 0, hidden: false,
       enDesc: '', arDesc: '',
       metaTitle: '', metaDesc: '', slug: '',
+      variants: [],
+      images: [],
     };
   }
 
@@ -559,7 +845,132 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       metaTitle: `${p.name} · ${p.brand} · Elite Collection`,
       metaDesc: `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
       slug: p.name.toLowerCase().replace(/\s+/g, '-'),
+      variants: (p.variants ?? []).map(v => ({ ...v })),
+      images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
     };
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Image gallery
+  // ────────────────────────────────────────────────────────────────────
+
+  addImageUrl(): void {
+    const url = window.prompt(this.t('product.gallery.urlPrompt'), 'https://');
+    if (url && url.trim()) {
+      this.set('images', [...this.form().images, url.trim()]);
+    }
+  }
+
+  onUploadImages(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    if (files.length === 0) return;
+    this.readFiles(files);
+    input.value = '';
+  }
+
+  onDropImages(ev: DragEvent): void {
+    ev.preventDefault();
+    const files = Array.from(ev.dataTransfer?.files ?? []).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) this.readFiles(files);
+  }
+
+  onDragOver(ev: DragEvent): void { ev.preventDefault(); }
+
+  private readFiles(files: File[]): void {
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = reader.result as string;
+        this.set('images', [...this.form().images, url]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  removeImage(index: number): void {
+    this.set('images', this.form().images.filter((_, i) => i !== index));
+  }
+
+  setPrimaryImage(index: number): void {
+    if (index === 0) return;
+    const imgs = [...this.form().images];
+    const [picked] = imgs.splice(index, 1);
+    imgs.unshift(picked);
+    this.set('images', imgs);
+  }
+
+  /** HTML5 drag-to-reorder for thumbnails. We track the dragged index in a
+      transient property — no service needed since drag is per-component. */
+  private dragFromIndex: number | null = null;
+
+  onThumbDragStart(index: number, ev: DragEvent): void {
+    this.dragFromIndex = index;
+    ev.dataTransfer?.setData('text/plain', String(index));
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  }
+
+  onThumbDragOver(ev: DragEvent): void {
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+  }
+
+  onThumbDrop(targetIndex: number, ev: DragEvent): void {
+    ev.preventDefault();
+    const from = this.dragFromIndex ?? Number(ev.dataTransfer?.getData('text/plain'));
+    this.dragFromIndex = null;
+    if (Number.isNaN(from) || from === targetIndex) return;
+    const imgs = [...this.form().images];
+    const [moved] = imgs.splice(from, 1);
+    imgs.splice(targetIndex, 0, moved);
+    this.set('images', imgs);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Variants
+  // ────────────────────────────────────────────────────────────────────
+
+  addVariant(): void {
+    const f = this.form();
+    const next: ProductVariant = {
+      id: 'V-' + Date.now().toString(36),
+      sku: f.sku ? `${f.sku}-NEW` : '',
+      size: '',
+      color: '',
+      material: '',
+      price: f.price || 0,
+      stock: 0,
+    };
+    this.set('variants', [...f.variants, next]);
+  }
+
+  updateVariant(index: number, patch: Partial<ProductVariant>): void {
+    const next = this.form().variants.map((v, i) => (i === index ? { ...v, ...patch } : v));
+    this.set('variants', next);
+  }
+
+  removeVariant(index: number): void {
+    const next = this.form().variants.filter((_, i) => i !== index);
+    this.set('variants', next);
+  }
+
+  variantsTotalStock(): number {
+    return this.form().variants.reduce((s, v) => s + (Number(v.stock) || 0), 0);
+  }
+
+  variantsPriceRange(): string {
+    const prices = this.form().variants.map(v => Number(v.price) || 0).filter(n => n > 0);
+    if (prices.length === 0) return '';
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    return min === max ? `QAR ${min.toLocaleString()}` : `QAR ${min.toLocaleString()} – ${max.toLocaleString()}`;
+  }
+
+  variantsSummary(): string {
+    const n = this.form().variants.length;
+    if (n === 0) return '';
+    const tpl = n === 1 ? this.t('product.variants.summary.one') : this.t('product.variants.summary.many');
+    return tpl.replace('{n}', String(n));
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -640,6 +1051,21 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
           c.productIds = c.productIds.filter(id => id !== this.product.id);
         }
       });
+
+      // Persist editable fields back on the underlying product (mock-only
+      // mutation — real backend integration would issue a PATCH here).
+      const f = this.form();
+      this.product.name = f.name;
+      this.product.sku = f.sku;
+      this.product.brand = f.brand;
+      this.product.price = f.price;
+      this.product.stock = f.stock;
+      this.product.hidden = f.hidden;
+      this.product.variants = f.variants.map(v => ({ ...v }));
+      this.product.images = [...f.images];
+      // Keep the legacy `image` field in sync with images[0] so the catalog
+      // grid, dashboard heatmap, and order rows use the new primary.
+      if (f.images.length > 0) this.product.image = f.images[0];
       
       this.toast.success(this.t('product.toast.saved.title'), `${this.form().name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);

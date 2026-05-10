@@ -33,7 +33,7 @@ import { Product, QAR } from '../../models';
             <option value="Linked">{{ t('catalog.linked') }}</option>
             <option value="Missing">{{ t('catalog.missing') }}</option>
           </select>
-          <button class="btn btn-gold"><ap-icon name="plus" [size]="14"/> {{ t('catalog.newProduct') }}</button>
+          <button class="btn btn-gold" (click)="createProduct()"><ap-icon name="plus" [size]="14"/> {{ t('catalog.newProduct') }}</button>
         </div>
       </div>
 
@@ -84,7 +84,7 @@ import { Product, QAR } from '../../models';
       <ap-product-drawer
         [products]="filtered()"
         [currentId]="id"
-        (closed)="activeId.set(null)"
+        (closed)="onDrawerClosed()"
         (currentIdChange)="activeId.set($event)"
         (deleted)="onDeleted($event)"
       />
@@ -131,6 +131,42 @@ export class CatalogComponent {
   });
 
   openProduct(p: Product): void { this.activeId.set(p.id); }
+
+  /** Drawer closed — discard any never-saved create stub so the catalog
+      doesn't keep a blank placeholder around. */
+  onDrawerClosed(): void {
+    const id = this.activeId();
+    if (id && id.startsWith('P-NEW-')) {
+      const p = this._products().find((x) => x.id === id);
+      if (p && !p.name) {
+        this._products.update((all) => all.filter((x) => x.id !== id));
+      }
+    }
+    this.activeId.set(null);
+  }
+
+  /** New Product flow: synthesize a blank product, prepend it to the list,
+      and open the drawer so the user can fill it in. The drawer's existing
+      save/discard pipeline takes care of persistence and toast feedback. */
+  createProduct(): void {
+    const id = 'P-NEW-' + Date.now().toString(36).slice(-5).toUpperCase();
+    const draft: Product = {
+      id,
+      name: '',
+      sku: '',
+      brand: '',
+      price: 0,
+      stock: 0,
+      has3d: false,
+      views3d: 0,
+      hidden: true,
+      image: 'https://images.unsplash.com/photo-1519415943484-9fa1873496d4?w=600&q=80&auto=format&fit=crop',
+      variants: [],
+    };
+    this._products.update((all) => [draft, ...all]);
+    this.clearFilters();
+    this.activeId.set(id);
+  }
 
   clearFilters(): void {
     this.search.set('');

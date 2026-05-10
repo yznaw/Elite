@@ -6,6 +6,7 @@ import { filter, map, startWith } from 'rxjs/operators';
 import { IconComponent } from '../icons/icon.component';
 import { AvatarComponent } from '../avatar/avatar.component';
 import { LanguageSwitcherComponent } from '../language-switcher/language-switcher.component';
+import { NotificationDropdownComponent } from '../notification-dropdown/notification-dropdown.component';
 import { I18nService } from '../../services/i18n.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
 
@@ -29,7 +30,7 @@ const META: Record<string, PageMeta> = {
 @Component({
   selector: 'ap-topbar',
   standalone: true,
-  imports: [CommonModule, IconComponent, AvatarComponent, LanguageSwitcherComponent],
+  imports: [CommonModule, IconComponent, AvatarComponent, LanguageSwitcherComponent, NotificationDropdownComponent],
   template: `
     <div class="topbar">
       <div class="row gap-sm" style="min-width:0;align-items:center;">
@@ -58,10 +59,7 @@ const META: Record<string, PageMeta> = {
 
         <ap-language-switcher/>
 
-        <button class="icon-btn" [attr.title]="t('topbar.notifications')" style="position:relative;">
-          <ap-icon name="bell" [size]="16"/>
-          <span style="position:absolute;top:6px;inset-inline-end:6px;width:8px;height:8px;border-radius:50%;background:var(--gold);border:2px solid #fff;"></span>
-        </button>
+        <ap-notification-dropdown/>
         <ap-avatar initials="YH"/>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { KpiComponent } from '../../shared/kpi/kpi.component';
 import { LineChartComponent } from '../../shared/charts/line-chart.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
@@ -12,31 +13,31 @@ import { Order, Product, QAR } from '../../models';
 @Component({
   selector: 'ap-dashboard',
   standalone: true,
-  imports: [CommonModule, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent],
+  imports: [CommonModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent],
   template: `
     <div class="page-fade">
       <div class="kpi-grid mb-24">
         <ap-kpi
-          label="Today's Revenue"
+          [label]="t('dash.todayRevenue')"
           [value]="QAR(todayRev)"
           [delta]="absDelta.toFixed(1) + '%'"
           [deltaUp]="delta >= 0"
           icon="chart"
           [sparkData]="last14Rev"/>
-        <ap-kpi label="Active Orders" value="34" delta="6 vs yesterday" [deltaUp]="true" icon="orders" [sparkData]="[18,22,28,21,24,30,34]"/>
-        <ap-kpi label="New Customers" value="12" delta="2.4%" [deltaUp]="true" icon="users" [sparkData]="[5,8,6,9,10,11,12]"/>
-        <ap-kpi label="Top 3D Views" value="1,532" delta="Nike Air Max 90" [deltaUp]="true" icon="cube" [sparkData]="[920,1080,1140,1280,1310,1420,1532]"/>
+        <ap-kpi [label]="t('dash.activeOrders')" value="34" [delta]="t('dash.activeOrders.delta')" [deltaUp]="true" icon="orders" [sparkData]="[18,22,28,21,24,30,34]"/>
+        <ap-kpi [label]="t('dash.newCustomers')" value="12" delta="2.4%" [deltaUp]="true" icon="users" [sparkData]="[5,8,6,9,10,11,12]"/>
+        <ap-kpi [label]="t('dash.top3DViews')" value="1,532" delta="Nike Air Max 90" [deltaUp]="true" icon="cube" [sparkData]="[920,1080,1140,1280,1310,1420,1532]"/>
       </div>
 
       <div class="dashboard-charts mb-24">
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Revenue · Last 30 days</div>
-              <div class="card-sub">{{ totalRevText }} total · 30 days</div>
+              <div class="card-title">{{ t('dash.revenue.title') }}</div>
+              <div class="card-sub">{{ totalRevText }} {{ t('dash.revenue.totalSuffix') }} · 30 {{ t('dash.revenue.daysSuffix') }}</div>
             </div>
             <div class="row gap-sm small">
-              <span class="row gap-sm"><span style="width:10px;height:2px;background:var(--green);"></span>Revenue</span>
+              <span class="row gap-sm"><span style="width:10px;height:2px;background:var(--green);"></span>{{ t('dash.revenue.legend') }}</span>
             </div>
           </div>
           <div class="card-pad" style="padding-top:6px;">
@@ -47,8 +48,8 @@ import { Order, Product, QAR } from '../../models';
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">3D Interaction Heatmap</div>
-              <div class="card-sub">Most-viewed models · last 7 days</div>
+              <div class="card-title">{{ t('dash.heatmap.title') }}</div>
+              <div class="card-sub">{{ t('dash.heatmap.sub') }}</div>
             </div>
           </div>
           <div class="card-pad">
@@ -70,10 +71,10 @@ import { Order, Product, QAR } from '../../models';
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Recent Orders</div>
-            <div class="card-sub">Latest 5 orders across all channels</div>
+            <div class="card-title">{{ t('dash.recent.title') }}</div>
+            <div class="card-sub">{{ t('dash.recent.sub') }}</div>
           </div>
-          <button class="btn btn-outline btn-sm">View All</button>
+          <button class="btn btn-outline btn-sm" routerLink="/orders">{{ t('common.viewAll') }}</button>
         </div>
         <ap-sortable-table [columns]="orderColumns" [rows]="recentOrders">
           <ng-template apCellTpl="id" let-r><span class="strong">{{ r.id }}</span></ng-template>
@@ -107,12 +108,12 @@ export class DashboardComponent {
   readonly maxViews = this.heatTop[0]?.views3d || 1;
 
   readonly orderColumns: TableColumn<Order>[] = [
-    { key: 'id', label: 'Order ID' },
-    { key: 'customer', label: 'Customer' },
-    { key: 'product', label: 'Product', noSort: true },
-    { key: 'size', label: 'Size', noSort: true, align: 'center' },
-    { key: 'fulfillment', label: 'Status' },
-    { key: 'total', label: 'Amount', align: 'right' },
+    { key: 'id',          label: 'Order ID', labelKey: 'orders.col.id' },
+    { key: 'customer',    label: 'Customer', labelKey: 'orders.col.customer' },
+    { key: 'product',     label: 'Product',  labelKey: 'dash.product', noSort: true },
+    { key: 'size',        label: 'Size',     labelKey: 'dash.size', noSort: true, align: 'center' },
+    { key: 'fulfillment', label: 'Status',   labelKey: 'dash.status' },
+    { key: 'total',       label: 'Amount',   labelKey: 'dash.amount', align: 'right' },
   ];
 
   formatRev = (v: number): string => 'QAR ' + (v / 1000).toFixed(0) + 'k';

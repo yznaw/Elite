@@ -1,3 +1,13 @@
+export interface ProductVariant {
+  id: string;
+  sku: string;
+  size: string;
+  color: string;
+  material: string;
+  price: number;
+  stock: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -8,7 +18,12 @@ export interface Product {
   has3d: boolean;
   views3d: number;
   hidden: boolean;
+  /** Primary thumbnail used everywhere except the editor gallery.
+      Mirrors `images[0]` whenever a gallery is present. */
   image: string;
+  /** Ordered gallery — the first entry is the primary image. */
+  images?: string[];
+  variants?: ProductVariant[];
 }
 
 export interface Collection {
@@ -41,16 +56,41 @@ export interface OrderItem {
   p: number;
 }
 
+export type OrderFulfillment = 'awaiting' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+export type OrderPayment = 'paid' | 'pending' | 'failed' | 'refunded';
+
+export interface OrderTimelineEntry {
+  id: string;
+  ts: string;
+  /** Stable key for i18n labels (e.g. 'placed', 'paid', 'processing'). */
+  kind: 'placed' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded' | 'returned' | 'note';
+  /** Optional inline detail (tracking number, refund amount, note text). */
+  detail?: string;
+  /** Who performed the action — empty for system-generated entries. */
+  actor?: string;
+}
+
+export interface OrderNote {
+  id: string;
+  ts: string;
+  author: string;
+  initials: string;
+  body: string;
+}
+
 export interface Order {
   id: string;
   date: string;
   customer: string;
   itemsCount: number;
   total: number;
-  payment: 'paid' | 'pending' | 'failed' | 'refunded';
-  fulfillment: 'shipped' | 'processing' | 'awaiting' | 'delivered' | 'cancelled' | 'returned';
+  payment: OrderPayment;
+  fulfillment: OrderFulfillment;
   items: OrderItem[];
   address: string;
+  trackingNumber?: string;
+  timeline?: OrderTimelineEntry[];
+  notes?: OrderNote[];
 }
 
 export interface Customer {

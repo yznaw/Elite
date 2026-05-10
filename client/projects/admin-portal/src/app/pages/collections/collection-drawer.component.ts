@@ -10,7 +10,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { Collection, Product } from '../../models';
+import { Collection } from '../../models';
 import { PRODUCTS } from '../../data/mock';
 
 interface FormShape {
@@ -114,18 +114,33 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           <label class="lbl">{{ t('collections.drawer.desc') }}</label>
           <textarea class="inp mb-16" rows="3" [placeholder]="t('collections.drawer.descHolder')" [ngModel]="form().description" (ngModelChange)="set('description', $event)"></textarea>
 
-          <label class="lbl">{{ t('product.section.media') }}</label>
-          <div style="padding:18px;border:1px dashed var(--border);border-radius:10px;background:var(--bg);text-align:center;">
+          <label class="lbl">{{ t('collections.cover.title') }}</label>
+          <div class="cover-drop"
+               [class.has-image]="!!form().imageUrl"
+               (dragover)="onCoverDragOver($event)"
+               (drop)="onCoverDrop($event)">
             @if (form().imageUrl) {
-               <img [src]="form().imageUrl" style="max-height: 120px; border-radius: 6px; margin-bottom: 12px;"/>
-               <div class="row gap-sm mt-16" style="justify-content:center;">
-                 <button class="btn btn-danger btn-sm" (click)="set('imageUrl', null)"><ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}</button>
-               </div>
+              <img class="cover-preview" [src]="form().imageUrl" [alt]="form().title"/>
             } @else {
-               <div class="muted"><ap-icon name="media" [size]="14"/></div>
-               <div class="row gap-sm mt-16" style="justify-content:center;">
-                 <button class="btn btn-gold btn-sm"><ap-icon name="upload" [size]="12"/> Upload Cover</button>
-               </div>
+              <div class="cover-empty">
+                <div class="muted"><ap-icon name="media" [size]="24"/></div>
+                <div class="strong mt-8">{{ t('collections.cover.empty.title') }}</div>
+                <div class="muted small mt-8">{{ t('collections.cover.empty.sub') }}</div>
+              </div>
+            }
+          </div>
+          <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+            <label class="btn btn-gold btn-sm" style="cursor:pointer;">
+              <ap-icon name="upload" [size]="12"/> {{ form().imageUrl ? t('collections.cover.replace') : t('collections.cover.upload') }}
+              <input type="file" accept="image/*" hidden (change)="onCoverPick($event)"/>
+            </label>
+            <button class="btn btn-outline btn-sm" type="button" (click)="addCoverUrl()">
+              <ap-icon name="link" [size]="12"/> {{ t('collections.cover.addUrl') }}
+            </button>
+            @if (form().imageUrl) {
+              <button class="btn btn-danger btn-sm" type="button" (click)="set('imageUrl', null)">
+                <ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}
+              </button>
             }
           </div>
         </div>
@@ -148,11 +163,17 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
               <div class="muted small">{{ t('collections.drawer.noProducts.sub') }}</div>
             </div>
           } @else {
-            <div class="grid-cards" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
-              @for (p of linkedProducts(); track p.id) {
-                <div class="prod-card" style="cursor:default;">
+            <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
+            <div class="grid-cards collection-products-grid" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
+              @for (p of linkedProducts(); track p.id; let i = $index) {
+                <div class="prod-card collection-prod"
+                     draggable="true"
+                     (dragstart)="onProductDragStart(i, $event)"
+                     (dragover)="onProductDragOver($event)"
+                     (drop)="onProductDrop(i, $event)">
                   <div class="prod-img">
                     <img [src]="p.image" [alt]="p.name"/>
+                    <span class="prod-3d-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
                     <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)"><ap-icon name="x" [size]="12"/></button>
                   </div>
                   <div class="prod-body">
@@ -248,6 +269,34 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
     .product-drawer.is-dirty .product-head { box-shadow: inset 4px 0 0 var(--gold); }
     html[dir='rtl'] .product-drawer.is-dirty .product-head { box-shadow: inset -4px 0 0 var(--gold); }
+
+    /* Cover image upload */
+    .cover-drop {
+      position: relative;
+      min-height: 160px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .cover-drop:hover { border-color: var(--gold); }
+    .cover-drop.has-image { padding: 0; min-height: 200px; }
+    .cover-empty { padding: 20px; text-align: center; }
+    .cover-preview {
+      width: 100%;
+      max-height: 240px;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Collection products: drag-to-reorder */
+    .collection-prod {
+      cursor: grab;
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .collection-prod:active { cursor: grabbing; transform: scale(0.98); }
   `],
 })
 export class CollectionDrawerComponent implements OnInit, OnDestroy {
@@ -294,8 +343,11 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   }
 
   readonly linkedProducts = computed(() => {
+    // Render in the order saved on `productIds` so drag-to-reorder is
+    // meaningful for storefront display order.
     const ids = this.form().productIds;
-    return PRODUCTS.filter(p => ids.includes(p.id));
+    const byId = new Map(PRODUCTS.map(p => [p.id, p]));
+    return ids.map(id => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
   });
 
   readonly pickerProducts = computed(() => {
@@ -348,6 +400,64 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     const ids = this.form().productIds;
     if (ids.includes(id)) this.set('productIds', ids.filter(pid => pid !== id));
     else this.set('productIds', [...ids, id]);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Cover image upload (file picker, drag & drop, paste-URL)
+  // ────────────────────────────────────────────────────────────────────
+
+  onCoverPick(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) this.readCover(file);
+    input.value = '';
+  }
+
+  onCoverDragOver(ev: DragEvent): void { ev.preventDefault(); }
+
+  onCoverDrop(ev: DragEvent): void {
+    ev.preventDefault();
+    const file = Array.from(ev.dataTransfer?.files ?? []).find(f => f.type.startsWith('image/'));
+    if (file) this.readCover(file);
+  }
+
+  addCoverUrl(): void {
+    const url = window.prompt(this.t('collections.cover.urlPrompt'), 'https://');
+    if (url && url.trim()) this.set('imageUrl', url.trim());
+  }
+
+  private readCover(file: File): void {
+    const reader = new FileReader();
+    reader.onload = () => this.set('imageUrl', reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Drag-to-reorder products (controls storefront display order)
+  // ────────────────────────────────────────────────────────────────────
+
+  private dragFromIndex: number | null = null;
+
+  onProductDragStart(index: number, ev: DragEvent): void {
+    this.dragFromIndex = index;
+    ev.dataTransfer?.setData('text/plain', String(index));
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  }
+
+  onProductDragOver(ev: DragEvent): void {
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+  }
+
+  onProductDrop(targetIndex: number, ev: DragEvent): void {
+    ev.preventDefault();
+    const from = this.dragFromIndex ?? Number(ev.dataTransfer?.getData('text/plain'));
+    this.dragFromIndex = null;
+    if (Number.isNaN(from) || from === targetIndex) return;
+    const ids = [...this.form().productIds];
+    const [moved] = ids.splice(from, 1);
+    ids.splice(targetIndex, 0, moved);
+    this.set('productIds', ids);
   }
 
   private scheduleAutoSave(): void {
