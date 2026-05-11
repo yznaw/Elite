@@ -1,6 +1,7 @@
 import {
   AfterViewInit,
   Component,
+  computed,
   ElementRef,
   NgZone,
   OnDestroy,
@@ -37,6 +38,15 @@ interface LeatherColorOption {
   swatch: string;
 }
 
+interface HeroModelOption {
+  id: string;
+  index: string;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  url: string;
+}
+
 @Component({
   selector: 'cw-home',
   standalone: true,
@@ -58,16 +68,59 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private controls?: OrbitControls;
   private dracoLoader?: DRACOLoader;
   private model?: THREE.Object3D;
-  private modelBaseY = 0;
+  private modelYaw = 0;
+  private isDraggingModel = false;
+  private lastPointerX = 0;
+  private modelLoadToken = 0;
+  private scrollFrame = 0;
+  private readonly handleModelPointerDown = (event: PointerEvent): void => this.onModelPointerDown(event);
+  private readonly handleModelPointerMove = (event: PointerEvent): void => this.onModelPointerMove(event);
+  private readonly handleModelPointerUp = (event: PointerEvent): void => this.onModelPointerUp(event);
+  private readonly handleScroll = (): void => this.queueHeroScroll();
   private readonly leatherMaterials: THREE.MeshStandardMaterial[] = [];
 
+  @ViewChild('heroSection') private heroSection?: ElementRef<HTMLElement>;
   @ViewChild('heroCanvas') private heroCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('heroShell') private heroShell?: ElementRef<HTMLElement>;
+  @ViewChild('heroVisual') private heroVisual?: ElementRef<HTMLElement>;
 
   readonly metaVisible = signal(false);
   readonly modelLoaded = signal(false);
   readonly modelLoadFailed = signal(false);
+  readonly selectedModelId = signal('heritage-mule');
   readonly selectedLeatherColor = signal('cognac');
   readonly featured: Product[] = this.products.getFeatured();
+
+  readonly heroModels: HeroModelOption[] = [
+    {
+      id: 'heritage-mule',
+      index: '01',
+      eyebrow: 'Heritage Series',
+      title: 'Doha Mule',
+      subtitle: 'A sculpted leather silhouette with hand-finished stitch detail.',
+      url: '/assets/models/latest-brown-v2.glb',
+    },
+    {
+      id: 'majlis-slide',
+      index: '02',
+      eyebrow: 'Majlis Edition',
+      title: 'Majlis Slide',
+      subtitle: 'A refined open form designed for warm evenings and private settings.',
+      url: '/assets/models/latest-brown-v2.glb',
+    },
+    {
+      id: 'atelier-form',
+      index: '03',
+      eyebrow: 'Atelier Form',
+      title: 'Nomad Sandal',
+      subtitle: 'A modern Arabic profile prepared for the next crafted model release.',
+      url: '/assets/models/latest-brown-v2.glb',
+    },
+  ];
+
+  readonly activeHeroModel = computed(
+    () => this.heroModels.find((model) => model.id === this.selectedModelId()) ?? this.heroModels[0],
+  );
 
   readonly leatherColors: LeatherColorOption[] = [
     { id: 'cognac', name: 'Cognac', color: 0x7b4b2b, swatch: '#7b4b2b' },
@@ -87,8 +140,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     { value: '48hr', label: 'Per Pair' },
     { value: '∞',   label: 'Lifetime Care' },
   ];
-
-  private readonly modelUrl = '/assets/models/latest-brown-v2.glb';
 
   ngOnInit(): void {
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
@@ -122,6 +173,24 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.applyLeatherColor(id);
   }
 
+  selectHeroModel(id: string): void {
+    if (this.selectedModelId() === id) return;
+
+    this.selectedModelId.set(id);
+    this.modelLoaded.set(false);
+    this.modelLoadFailed.set(false);
+
+    if (this.scene && this.controls) {
+      this.loadHeroModel(this.scene, this.controls);
+    }
+  }
+
+  selectAdjacentHeroModel(direction: -1 | 1): void {
+    const currentIndex = this.heroModels.findIndex((model) => model.id === this.selectedModelId());
+    const nextIndex = (currentIndex + direction + this.heroModels.length) % this.heroModels.length;
+    this.selectHeroModel(this.heroModels[nextIndex].id);
+  }
+
   private initHeroModel(): void {
     const canvas = this.heroCanvas?.nativeElement;
     const host = canvas?.parentElement;
@@ -131,7 +200,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     scene.background = new THREE.Color(0xffffff);
 
     const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-    camera.position.set(0.32, 0.38, 4.05);
+    camera.position.set(0, 0.38, 4.05);
 
     const renderer = new THREE.WebGLRenderer({
       canvas,
@@ -149,14 +218,15 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.enablePan = false;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.72;
-    controls.rotateSpeed = 0.72;
+    controls.enableRotate = false;
+    controls.enableZoom = false;
+    controls.autoRotate = false;
+    controls.rotateSpeed = 0.82;
     controls.minDistance = 2.35;
     controls.maxDistance = 5.8;
     controls.minPolarAngle = Math.PI / 3.1;
     controls.maxPolarAngle = Math.PI / 1.95;
-    controls.target.set(0, 0.04, 0);
+    controls.target.set(0, 0, 0);
 
     this.scene = scene;
     this.camera = camera;
@@ -166,6 +236,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.addHeroLighting(scene);
     this.addHeroGround(scene);
     this.bindHeroResize(host);
+    this.bindHeroScroll();
+    this.bindModelDrag(canvas);
     this.loadHeroModel(scene, controls);
     this.animateHero();
   }
@@ -218,7 +290,91 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resizeObserver.observe(host);
   }
 
+  private bindModelDrag(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener('pointerdown', this.handleModelPointerDown);
+    window.addEventListener('pointermove', this.handleModelPointerMove, { passive: true });
+    window.addEventListener('pointerup', this.handleModelPointerUp);
+    window.addEventListener('pointercancel', this.handleModelPointerUp);
+  }
+
+  private onModelPointerDown(event: PointerEvent): void {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    this.isDraggingModel = true;
+    this.lastPointerX = event.clientX;
+    this.heroCanvas?.nativeElement.setPointerCapture?.(event.pointerId);
+  }
+
+  private onModelPointerMove(event: PointerEvent): void {
+    if (!this.isDraggingModel || !this.model) return;
+
+    const deltaX = event.clientX - this.lastPointerX;
+    this.lastPointerX = event.clientX;
+    this.modelYaw += deltaX * 0.01;
+    this.model.rotation.y = this.modelYaw;
+  }
+
+  private onModelPointerUp(event: PointerEvent): void {
+    if (!this.isDraggingModel) return;
+
+    this.isDraggingModel = false;
+    const canvas = this.heroCanvas?.nativeElement;
+    if (canvas?.hasPointerCapture?.(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  private bindHeroScroll(): void {
+    window.addEventListener('scroll', this.handleScroll, { passive: true });
+    window.addEventListener('resize', this.handleScroll, { passive: true });
+    this.queueHeroScroll();
+  }
+
+  private queueHeroScroll(): void {
+    if (this.scrollFrame) return;
+
+    this.scrollFrame = window.requestAnimationFrame(() => {
+      this.scrollFrame = 0;
+      const hero = this.heroSection?.nativeElement;
+      const shell = this.heroShell?.nativeElement;
+      const visual = this.heroVisual?.nativeElement;
+      if (!hero || !shell || !visual) return;
+
+      const viewport = Math.max(window.innerHeight, 1);
+      const width = Math.max(window.innerWidth, 1);
+      const heroTop = hero.getBoundingClientRect().top + window.scrollY;
+      const scrollDistance = Math.max(hero.offsetHeight - viewport, viewport * 0.72);
+      const progress = Math.min(Math.max((window.scrollY - heroTop) / scrollDistance, 0), 1);
+      const maxShift = width <= 560
+        ? Math.min(width * 0.12, 54)
+        : width <= 920
+          ? Math.min(width * 0.22, 180)
+          : Math.min(width * 0.28, 360);
+      const shiftY = viewport * 0.04 * progress;
+      const scale = 1 - progress * 0.06;
+
+      const scrollProperties = {
+        '--hero-scroll-progress': progress.toFixed(4),
+        '--hero-shift-x': `${(maxShift * progress).toFixed(2)}px`,
+        '--hero-shift-y': `${shiftY.toFixed(2)}px`,
+        '--hero-scale': scale.toFixed(4),
+      };
+
+      Object.entries(scrollProperties).forEach(([property, value]) => {
+        shell.style.setProperty(property, value);
+        visual.style.setProperty(property, value);
+      });
+    });
+  }
+
   private loadHeroModel(scene: THREE.Scene, controls: OrbitControls): void {
+    const selectedModel = this.activeHeroModel();
+    const loadToken = ++this.modelLoadToken;
+
+    this.clearCurrentModel();
+    this.modelLoaded.set(false);
+    this.modelLoadFailed.set(false);
+
     const loader = new GLTFLoader();
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath('/assets/draco/');
@@ -227,22 +383,32 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dracoLoader = dracoLoader;
 
     loader.load(
-      this.modelUrl,
+      selectedModel.url,
       (gltf) => {
+        if (loadToken !== this.modelLoadToken) {
+          this.disposeObject(gltf.scene);
+          return;
+        }
+
         const model = gltf.scene;
         this.prepareModel(model);
-        this.frameModel(model, controls);
-        scene.add(model);
-        this.model = model;
-        this.modelBaseY = model.position.y;
+        const pivot = this.frameModel(model, controls);
+        scene.add(pivot);
+        this.model = pivot;
         this.ngZone.run(() => this.modelLoaded.set(true));
       },
       undefined,
-      () => this.ngZone.run(() => this.modelLoadFailed.set(true)),
+      () => {
+        if (loadToken === this.modelLoadToken) {
+          this.ngZone.run(() => this.modelLoadFailed.set(true));
+        }
+      },
     );
   }
 
   private prepareModel(model: THREE.Object3D): void {
+    this.leatherMaterials.length = 0;
+
     model.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
 
@@ -271,21 +437,32 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.applyLeatherColor(this.selectedLeatherColor());
   }
 
-  private frameModel(model: THREE.Object3D, controls: OrbitControls): void {
+  private frameModel(model: THREE.Object3D, controls: OrbitControls): THREE.Object3D {
     const box = new THREE.Box3().setFromObject(model);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const maxAxis = Math.max(size.x, size.y, size.z, 1);
     const hostWidth = this.heroCanvas?.nativeElement.parentElement?.clientWidth ?? 0;
     const isCompact = hostWidth < 560;
-    const scale = (isCompact ? 4.75 : 6.25) / maxAxis;
-    const xOffset = isCompact ? 0.72 : 0.34;
+    const scale = (isCompact ? 3.85 : 6.65) / maxAxis;
+    const yOffset = isCompact ? -0.18 : -0.34;
+    const defaultYaw = -Math.PI / 2 + 0.34;
+    const pivot = new THREE.Group();
+    const centeredModel = new THREE.Group();
 
-    model.position.set(-center.x * scale + xOffset, -center.y * scale - 0.03, -center.z * scale);
-    model.scale.setScalar(scale);
-    model.rotation.set(-0.11, -Math.PI / 2 + 0.34, 0.025);
-    controls.target.set(0, 0.08, 0);
+    model.position.set(-center.x, -center.y, -center.z);
+    centeredModel.add(model);
+    centeredModel.scale.setScalar(scale);
+    centeredModel.position.y = yOffset;
+    centeredModel.rotation.set(-0.11, 0, 0.025);
+    pivot.add(centeredModel);
+    pivot.rotation.y = defaultYaw;
+    this.modelYaw = defaultYaw;
+
+    controls.target.set(0, yOffset, 0);
     controls.update();
+
+    return pivot;
   }
 
   private applyLeatherColor(id: string): void {
@@ -302,29 +479,45 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.animationFrame = window.requestAnimationFrame(() => this.animateHero());
 
-    if (this.model) {
-      this.model.position.y = this.modelBaseY + Math.sin(Date.now() * 0.0016) * 0.018;
-    }
-
     this.controls?.update();
     this.renderer.render(this.scene, this.camera);
   }
 
   private destroyHeroModel(): void {
     if (this.animationFrame) window.cancelAnimationFrame(this.animationFrame);
+    if (this.scrollFrame) window.cancelAnimationFrame(this.scrollFrame);
+    window.removeEventListener('scroll', this.handleScroll);
+    window.removeEventListener('resize', this.handleScroll);
+    this.heroCanvas?.nativeElement.removeEventListener('pointerdown', this.handleModelPointerDown);
+    window.removeEventListener('pointermove', this.handleModelPointerMove);
+    window.removeEventListener('pointerup', this.handleModelPointerUp);
+    window.removeEventListener('pointercancel', this.handleModelPointerUp);
     this.resizeObserver?.disconnect();
     this.controls?.dispose();
     this.dracoLoader?.dispose();
 
-    if (this.scene) {
-      this.scene.traverse((child) => {
-        if (!(child instanceof THREE.Mesh)) return;
-        child.geometry.dispose();
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((material) => material.dispose());
-      });
-    }
+    this.clearCurrentModel();
+    if (this.scene) this.disposeObject(this.scene);
 
     this.renderer?.dispose();
+  }
+
+  private clearCurrentModel(): void {
+    if (!this.model) return;
+
+    this.scene?.remove(this.model);
+    this.disposeObject(this.model);
+    this.model = undefined;
+    this.leatherMaterials.length = 0;
+  }
+
+  private disposeObject(object: THREE.Object3D): void {
+    object.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+
+      child.geometry.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material) => material.dispose());
+    });
   }
 }

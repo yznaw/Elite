@@ -1,44 +1,24 @@
 <div>
   <!-- ── HERO ── -->
-  <section class="hero">
+  <section #heroSection class="hero">
     <div class="hero-grain"></div>
     <div class="hero-ring hero-ring--lg"></div>
     <div class="hero-ring hero-ring--sm"></div>
 
-    <div class="hero-shell">
-      <div class="hero-copy">
-        <div class="hero-kicker anim-fade-up" style="animation-delay: 0.15s;">
-          <span></span>
-          Est. 1962 · Doha
-        </div>
-
-        <h1 class="hero-title anim-fade-up serif" style="animation-delay: 0.25s;">
-          Where Heritage
-          <em>Meets Sole</em>
-        </h1>
-
-        <p class="hero-lede anim-fade-up" style="animation-delay: 0.35s;">
-          Hand-crafted Arabic leather shoes shaped with the restraint, polish, and presence of a private atelier.
-        </p>
-
-        @if (metaVisible()) {
-          <div class="hero-tags anim-fade-up" style="animation-delay: 0.45s;">
-            @for (c of metaCards; track c.id) {
-              <div class="glass tag-chip">
-                <span>{{ c.icon }}</span>
-                {{ c.label }}
-              </div>
-            }
-          </div>
-        }
-
-        <div class="hero-actions anim-fade-up" style="animation-delay: 0.55s;">
-          <button class="btn-gold" (click)="goTo('/collection')">Explore Collection</button>
-          <button class="btn-outline" (click)="goTo('/story')">Our Story</button>
-        </div>
+    <div #heroShell class="hero-shell">
+      <div class="hero-scroll-copy" aria-hidden="true">
+        <span>{{ activeHeroModel().eyebrow }}</span>
+        <strong class="serif">Crafted<br />to Move</strong>
+        <p>{{ activeHeroModel().title }}</p>
       </div>
 
-      <div class="hero-visual anim-fade-up" style="animation-delay: 0.35s;">
+      <div #heroVisual class="hero-visual">
+        <div class="model-heading">
+          <span>{{ activeHeroModel().eyebrow }}</span>
+          <h1 class="serif">{{ activeHeroModel().title }}</h1>
+          <p>{{ activeHeroModel().subtitle }}</p>
+        </div>
+
         <canvas
           #heroCanvas
           class="hero-canvas"
@@ -60,34 +40,57 @@
           </div>
         }
 
-        <div class="model-badge">
-          <span>360 Product View</span>
-          <span>Drag · Rotate · Explore</span>
+        <div class="model-switcher" role="radiogroup" aria-label="Switch 3D model">
+          <button
+            type="button"
+            class="model-arrow model-arrow--prev"
+            [attr.aria-label]="'Show previous 3D model'"
+            [title]="'Previous model'"
+            (click)="selectAdjacentHeroModel(-1)"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+
+          <div class="model-index" aria-live="polite">
+            {{ activeHeroModel().index }} / {{ heroModels.length }}
+          </div>
+
+          <button
+            type="button"
+            class="model-arrow model-arrow--next"
+            [attr.aria-label]="'Show next 3D model'"
+            [title]="'Next model'"
+            (click)="selectAdjacentHeroModel(1)"
+          >
+            <span aria-hidden="true">›</span>
+          </button>
         </div>
 
-        <div class="model-colors" aria-label="Choose leather color">
-          @for (option of leatherColors; track option.id) {
-            <button
-              type="button"
-              class="model-color"
-              [class.is-active]="selectedLeatherColor() === option.id"
-              [style.--swatch]="option.swatch"
-              [attr.aria-label]="'Change model color to ' + option.name"
-              [attr.aria-pressed]="selectedLeatherColor() === option.id"
-              [title]="option.name"
-              (click)="selectLeatherColor(option.id)"
-            >
-              <span></span>
-              <small>{{ option.name }}</small>
-            </button>
-          }
+        <div class="model-controls">
+          <div class="model-colors" role="radiogroup" aria-label="Choose leather color">
+            @for (option of leatherColors; track option.id) {
+              <button
+                type="button"
+                class="model-color"
+                role="radio"
+                [class.is-active]="selectedLeatherColor() === option.id"
+                [style.--swatch]="option.swatch"
+                [attr.aria-label]="'Change model color to ' + option.name"
+                [attr.aria-checked]="selectedLeatherColor() === option.id"
+                [title]="option.name"
+                (click)="selectLeatherColor(option.id)"
+              >
+                <span></span>
+              </button>
+            }
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="hero-scroll">
-      <span>Scroll</span>
-      <div></div>
+      <div class="hero-scroll">
+        <span>Scroll</span>
+        <div></div>
+      </div>
     </div>
   </section>
 
