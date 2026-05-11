@@ -6,12 +6,17 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "db:migrate": "psql \"$DATABASE_URL\" -f db/migrations/001_initial_schema.sql"
+    "db:migrate": "psql \"$DATABASE_URL\" -f db/migrations/001_initial_schema.sql",
+    "db:seed": "node db/seed.js",
+    "db:seed:admins": "node db/seed-admins.js"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-pg-simple": "^9.0.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-session": "^1.18.0",
     "morgan": "^1.10.0",
     "pg": "^8.20.0"
   },

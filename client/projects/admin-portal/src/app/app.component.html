@@ -1,12 +1,16 @@
-<div class="app">
-  <ap-sidebar/>
-  <div class="main">
-    <ap-topbar/>
-    <div class="scroll-area">
-      <router-outlet/>
+@if (showShell()) {
+  <div class="app">
+    <ap-sidebar/>
+    <div class="main">
+      <ap-topbar/>
+      <div class="scroll-area">
+        <router-outlet/>
+      </div>
     </div>
   </div>
-</div>
+} @else {
+  <router-outlet/>
+}
 
 <ap-toast/>
 <ap-confirm-dialog/>

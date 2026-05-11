@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const healthRouter = require('./health.route');
+const authRouter = require('./auth.route');
 const adminProductsRouter = require('./admin-products.route');
 const adminCollectionsRouter = require('./admin-collections.route');
 const adminCustomersRouter = require('./admin-customers.route');
@@ -12,27 +13,32 @@ const adminAnalyticsRouter = require('./admin-analytics.route');
 const productsRouter = require('./products.route');
 const contactRouter = require('./contact.route');
 const cartsRouter = require('./carts.route');
-// Import additional route modules here as you build them
-// const authRouter = require('./auth.route');
-// const userRouter = require('./user.route');
+const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
 
-// ─── Mount Routes ─────────────────────────────────────────────────────────────
+// ─── Public routes ───────────────────────────────────────────────────────────
 router.use('/health', healthRouter);
+router.use('/auth', authRouter);
 router.use('/products', productsRouter);
-router.use('/admin/products', adminProductsRouter);
-router.use('/admin/collections', adminCollectionsRouter);
-router.use('/admin/customers', adminCustomersRouter);
-router.use('/admin/orders', adminOrdersRouter);
-router.use('/admin/media', adminMediaRouter);
-router.use('/admin/storefront', adminStorefrontRouter);
-router.use('/admin/settings', adminSettingsRouter);
-router.use('/admin/sync', adminSyncRouter);
-router.use('/admin/analytics', adminAnalyticsRouter);
 router.use('/contact', contactRouter);
 router.use('/carts', cartsRouter);
-// router.use('/auth',   authRouter);
-// router.use('/users',  userRouter);
+
+// ─── Admin routes — require an authenticated session ────────────────────────
+const admin = Router();
+admin.use(requireAuth());
+admin.use('/products', adminProductsRouter);
+admin.use('/collections', adminCollectionsRouter);
+admin.use('/customers', adminCustomersRouter);
+admin.use('/orders', adminOrdersRouter);
+admin.use('/media', adminMediaRouter);
+admin.use('/storefront', adminStorefrontRouter);
+admin.use('/sync', adminSyncRouter);
+admin.use('/analytics', adminAnalyticsRouter);
+// Settings includes role-sensitive endpoints (team management). Owners and
+// admins can manage everything; viewers/managers can read store settings.
+admin.use('/settings', adminSettingsRouter);
+
+router.use('/admin', admin);
 
 module.exports = router;

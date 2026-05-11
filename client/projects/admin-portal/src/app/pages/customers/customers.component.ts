@@ -1,4 +1,4 @@
-import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -9,7 +9,7 @@ import { EmptyStateComponent } from '../../shared/empty-state/empty-state.compon
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { CustomerDrawerComponent } from './customer-drawer.component';
 import { I18nService } from '../../services/i18n.service';
-import { CUSTOMERS } from '../../data/mock';
+import { AdminCustomersService } from '../../services/admin-customers.service';
 import { Customer, Order, QAR } from '../../models';
 
 type View = 'table' | 'cards';
@@ -254,19 +254,32 @@ const MOBILE_BP = 900;
     html[dir='rtl'] .customer-card-foot .muted::after { content: ''; }
   `],
 })
-export class CustomersComponent {
+export class CustomersComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
+  private readonly customersApi = inject(AdminCustomersService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
-  /** Live, mutable customers list — supports edit + create. */
-  private readonly _customers = signal<Customer[]>([...CUSTOMERS]);
+  /** Live, mutable customers list — hydrated from the API on init. */
+  private readonly _customers = signal<Customer[]>([]);
   readonly customers = computed(() => this._customers());
+  readonly loading = signal(true);
   readonly active = signal<Customer | null>(null);
   /** ID of a customer that's currently being created (drawer in 'create' mode). */
   readonly creatingId = signal<string | null>(null);
   readonly search = signal('');
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const list = await this.customersApi.list();
+      this._customers.set(list);
+    } catch {
+      this._customers.set([]);
+    } finally {
+      this.loading.set(false);
+    }
+  }
 
   readonly view = signal<View>(this.loadView());
   readonly isMobile = signal(this.computeIsMobile());
@@ -330,13 +343,31 @@ export class CustomersComponent {
     this.active.set(null);
   }
 
-  onCustomerSaved(_c: Customer): void {
-    // After the first save, the create stub becomes a real record — drop the
-    // creating flag so closing no longer purges it.
-    if (this.creatingId()) this.creatingId.set(null);
-    // Trigger a recompute of the filtered list (signal reads same array but
-    // mutation happened in-place inside the drawer's save).
-    this._customers.set([...this._customers()]);
+  async onCustomerSaved(c: Customer): Promise<void> {
+    const wasDraft = !!this.creatingId() && c.id === this.creatingId();
+    const payload = {
+      name: c.name,
+      email: c.email,
+      city: c.city,
+      sizePref: c.sizePref,
+      notes: c.notes,
+    };
+
+    try {
+      const saved = wasDraft
+        ? await this.customersApi.create(payload)
+        : await this.customersApi.update(c.id, payload);
+
+      // Adopt the server's id (especially for newly-created records) and
+      // re-emit a fresh array so `filtered()` recomputes.
+      this._customers.update((all) => all.map((x) => (x.id === c.id ? { ...x, ...saved } : x)));
+      if (wasDraft) {
+        this.creatingId.set(null);
+        this.active.set({ ...c, ...saved });
+      }
+    } catch {
+      // Toast already raised by the global error interceptor.
+    }
   }
 
   onOpenOrder(o: Order): void {

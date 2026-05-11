@@ -11,7 +11,7 @@ import { OrderDrawerComponent } from './order-drawer.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
-import { ORDERS } from '../../data/mock';
+import { AdminOrdersService } from '../../services/admin-orders.service';
 import { Order, QAR } from '../../models';
 
 @Component({
@@ -100,12 +100,21 @@ export class OrdersComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly i18n = inject(I18nService);
   private readonly route = inject(ActivatedRoute);
+  private readonly ordersApi = inject(AdminOrdersService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
-  ngOnInit(): void {
-    // Open the order specified in ?id=… (used when navigating in from
-    // the customer drawer's order history).
+  async ngOnInit(): Promise<void> {
+    try {
+      const list = await this.ordersApi.list();
+      this._orders.set(list);
+    } catch {
+      this._orders.set([]);
+    } finally {
+      this.loading.set(false);
+    }
+
+    // Deep-link from customer drawer: ?id=EC-26-1042 auto-opens that order.
     const id = this.route.snapshot.queryParamMap.get('id');
     if (id) {
       const target = this._orders().find((o) => o.id === id);
@@ -120,8 +129,9 @@ export class OrdersComponent implements OnInit {
   readonly fulfillmentFilter = signal('all');
   readonly fulfillingId = signal<string | null>(null);
   readonly exporting = signal(false);
+  readonly loading = signal(true);
 
-  private readonly _orders = signal<Order[]>([...ORDERS]);
+  private readonly _orders = signal<Order[]>([]);
 
   readonly filtered = computed(() => {
     const q = this.search().toLowerCase();
@@ -162,17 +172,25 @@ export class OrdersComponent implements OnInit {
     this.fulfillmentFilter.set('all');
   }
 
-  markFulfilled(o: Order): void {
+  async markFulfilled(o: Order): Promise<void> {
     if (this.fulfillingId() === o.id) return;
     this.fulfillingId.set(o.id);
-    setTimeout(() => {
-      this._orders.update((all) => all.map((x) => (x.id === o.id ? { ...x, fulfillment: 'shipped' as const } : x)));
-      this.fulfillingId.set(null);
+    try {
+      const updated = await this.ordersApi.updateStatus(o.id, {
+        fulfillment: 'shipped',
+        timelineKind: 'shipped',
+        detail: 'Marked shipped from list view',
+      });
+      this._orders.update((all) => all.map((x) => (x.id === o.id ? { ...x, ...updated } : x)));
       this.toast.success('Order marked as shipped', `${o.id} · ${o.customer}`, {
         label: 'View',
-        run: () => this.openOrder({ ...o, fulfillment: 'shipped' }),
+        run: () => this.openOrder({ ...o, ...updated }),
       });
-    }, 900);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.fulfillingId.set(null);
+    }
   }
 
   exportCsv(): void {

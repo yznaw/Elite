@@ -1,5 +1,6 @@
 import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../services/toast.service';
 import { I18nService } from '../services/i18n.service';
@@ -22,7 +23,12 @@ import { I18nService } from '../services/i18n.service';
 export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const i18n = inject(I18nService);
+  const router = inject(Router);
   const t = (k: string) => i18n.t(k);
+
+  // The guard probes /auth/me on every navigation — a 401 there is the
+  // normal "not logged in" signal, not an error worth toasting.
+  const isAuthProbe = /\/api\/auth\/(me|login)$/.test(req.url);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
@@ -34,12 +40,13 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           { label: t('common.retry'), run: () => {} },
         );
       } else if (err.status === 401) {
-        toast.warning(
-          t('error.401.title'),
-          t('error.401.sub'),
-        );
-        // TODO: When auth is implemented, redirect to /login here
-        // router.navigateByUrl('/login');
+        if (!isAuthProbe) {
+          toast.warning(t('error.401.title'), t('error.401.sub'));
+        }
+        const onLogin = router.url.startsWith('/login');
+        if (!onLogin && !isAuthProbe) {
+          router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+        }
       } else if (err.status === 403) {
         toast.error(
           t('error.403.title'),

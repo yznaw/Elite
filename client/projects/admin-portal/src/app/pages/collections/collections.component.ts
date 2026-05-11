@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -7,7 +7,7 @@ import { EmptyStateComponent } from '../../shared/empty-state/empty-state.compon
 import { CollectionDrawerComponent } from './collection-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
-import { COLLECTIONS } from '../../data/mock';
+import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { Collection } from '../../models';
 
 @Component({
@@ -80,14 +80,27 @@ import { Collection } from '../../models';
     }
   `,
 })
-export class CollectionsComponent {
+export class CollectionsComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
+  private readonly collectionsApi = inject(AdminCollectionsService);
   readonly t = (k: string): string => this.i18n.t(k);
 
-  /** Live, mutable collection list */
-  private readonly _collections = signal<Collection[]>([...COLLECTIONS]);
+  /** Live, mutable collection list — hydrated from the API on init. */
+  private readonly _collections = signal<Collection[]>([]);
   readonly collections = computed(() => this._collections());
+  readonly loading = signal(true);
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const list = await this.collectionsApi.list();
+      this._collections.set(list);
+    } catch {
+      this._collections.set([]);
+    } finally {
+      this.loading.set(false);
+    }
+  }
 
   readonly search = signal('');
   readonly visibility = signal('All');
@@ -132,6 +145,10 @@ export class CollectionsComponent {
     const visible = this.filtered();
     const visibleIndex = visible.findIndex((c) => c.id === deleted.id);
 
+    // Newly created drafts that haven't been saved get prefixed IDs.
+    if (!deleted.id.startsWith('COL-NEW-')) {
+      this.collectionsApi.archive(deleted.id).catch(() => {});
+    }
     this._collections.update((all) => all.filter((c) => c.id !== deleted.id));
 
     const nextVisible = this.filtered();

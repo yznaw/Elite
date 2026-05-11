@@ -12,6 +12,7 @@ import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { Collection } from '../../models';
 import { PRODUCTS } from '../../data/mock';
+import { AdminCollectionsService } from '../../services/admin-collections.service';
 
 interface FormShape {
   title: string;
@@ -318,6 +319,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
+  private readonly collectionsApi = inject(AdminCollectionsService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   private initial!: FormShape;
@@ -473,19 +475,39 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     }, 400);
   }
 
-  save(): void {
+  async save(): Promise<void> {
     if (!this.dirty() || this.saveState() === 'saving') return;
     this.saveState.set('saving');
-    setTimeout(() => {
-      this.saveState.set('saved');
+
+    const f = this.form();
+    const payload = {
+      title: f.title,
+      description: f.description,
+      imageUrl: f.imageUrl,
+      productIds: f.productIds,
+      hidden: f.hidden,
+    };
+    const id = this.collection.id;
+    const isDraft = !id || id.startsWith('COL-NEW-');
+
+    try {
+      const saved = isDraft
+        ? await this.collectionsApi.create(payload)
+        : await this.collectionsApi.update(id, payload);
+
+      // Update the underlying collection in the parent's list — keep ids in
+      // sync if the server replaced our temporary draft id with a real UUID.
+      Object.assign(this.collection, saved);
+
       try { localStorage.removeItem(this.draftKey); } catch {}
       this.initial = { ...this.form() };
-      this.toast.success(this.t('collections.toast.saved.title'), `${this.form().title}`);
+      this.saveState.set('saved');
+      this.toast.success(this.t('collections.toast.saved.title'), `${saved.title}`);
       window.setTimeout(() => this.saveState.set('idle'), 1800);
-      
-      // Update actual collection reference (mock update)
-      Object.assign(this.collection, this.initial);
-    }, 800);
+    } catch {
+      this.saveState.set('error');
+      this.triggerShake();
+    }
   }
 
   async discard(): Promise<void> {

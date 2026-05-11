@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -7,7 +7,8 @@ import { EmptyStateComponent } from '../../shared/empty-state/empty-state.compon
 import { ProductDrawerComponent } from './product-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
-import { PRODUCTS, COLLECTIONS } from '../../data/mock';
+import { AdminProductsService } from '../../services/admin-products.service';
+import { COLLECTIONS } from '../../data/mock';
 import { Product, QAR } from '../../models';
 
 @Component({
@@ -91,9 +92,10 @@ import { Product, QAR } from '../../models';
     }
   `,
 })
-export class CatalogComponent {
+export class CatalogComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
+  private readonly productsApi = inject(AdminProductsService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
@@ -101,9 +103,23 @@ export class CatalogComponent {
   readonly viewOptions = ['All', 'Linked', 'Missing'];
 
   /** Live, mutable product list — supports delete + undo. */
-  private readonly _products = signal<Product[]>([...PRODUCTS]);
+  private readonly _products = signal<Product[]>([]);
   /** Public computed for templates. */
   readonly products = computed(() => this._products());
+  readonly loading = signal(true);
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const list = await this.productsApi.list();
+      this._products.set(list);
+    } catch {
+      // The HTTP error interceptor has already toasted; leave the list empty
+      // so the user sees the standard empty-state instead of stale mocks.
+      this._products.set([]);
+    } finally {
+      this.loading.set(false);
+    }
+  }
 
   readonly search = signal('');
   readonly collectionId = signal('All');
@@ -190,7 +206,13 @@ export class CatalogComponent {
     const visible = this.filtered();
     const visibleIndex = visible.findIndex((p) => p.id === deleted.id);
 
-    // Remove from the live list
+    // Remove from the live list, then archive on the server. A reject is
+    // swallowed silently — the global error interceptor surfaces the toast,
+    // and the user can refresh to recover. (Create-stubs use a P-NEW- prefix
+    // and were never persisted, so we skip the server call for those.)
+    if (!deleted.id.startsWith('P-NEW-')) {
+      this.productsApi.archive(deleted.id).catch(() => {});
+    }
     this._products.update((all) => all.filter((p) => p.id !== deleted.id));
 
     // Decide what to focus next (within the filtered list)

@@ -9,6 +9,10 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# ── Local credentials (never commit) ──────────────────────────
+server/admins.local.txt
+**/admins.local.txt
+
 # ── Angular build output ──────────────────────────────────────
 client/dist/
 client/.angular/

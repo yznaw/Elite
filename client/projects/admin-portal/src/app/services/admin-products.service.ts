@@ -1,7 +1,7 @@
-import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ProductVariant } from '../models';
+import { ApiClient } from './api-client.service';
+import { Product, ProductVariant } from '../models';
 
 export interface SaveProductPayload {
   name: string;
@@ -21,37 +21,27 @@ export interface SaveProductPayload {
   views3d: number;
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
-
-export interface SavedProductResponse {
-  id: string;
-  tenantId: string;
-  sku: string;
-  name: string;
-  slug: string;
-  status: 'draft' | 'active' | 'hidden' | 'archived';
-  base_price_cents: number;
-  stock_quantity: number;
-}
-
 @Injectable({ providedIn: 'root' })
 export class AdminProductsService {
-  private readonly http = inject(HttpClient);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly api = inject(ApiClient);
 
-  saveProduct(payload: SaveProductPayload): Promise<SavedProductResponse> {
-    return firstValueFrom(
-      this.http.post<ApiResponse<SavedProductResponse>>(`${this.apiBase}/admin/products`, payload),
-    ).then((res) => res.data);
+  list(): Promise<Product[]> {
+    return firstValueFrom(this.api.get<Product[]>('/admin/products'));
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
+  get(id: string): Promise<Product> {
+    return firstValueFrom(this.api.get<Product>(`/admin/products/${id}`));
+  }
+
+  saveProduct(payload: SaveProductPayload): Promise<Product> {
+    return firstValueFrom(this.api.post<Product>('/admin/products', payload));
+  }
+
+  update(id: string, payload: Partial<SaveProductPayload>): Promise<Product> {
+    return firstValueFrom(this.api.patch<Product>(`/admin/products/${id}`, payload));
+  }
+
+  archive(id: string): Promise<{ id: string }> {
+    return firstValueFrom(this.api.delete<{ id: string }>(`/admin/products/${id}`));
   }
 }

@@ -1,7 +1,7 @@
 # 08 — Database & API Implementation
 
 > **Audience:** Backend developers, frontend developers wiring pages to API  
-> **Last updated:** May 10, 2026
+> **Last updated:** May 11, 2026 — session auth + admin-portal API integration shipped
 
 ---
 
@@ -86,9 +86,79 @@ DATABASE_URL=postgresql://elite:elite_password@localhost:5432/elite
 DEFAULT_TENANT_SLUG=elite
 DEFAULT_TENANT_NAME=Elite
 DEFAULT_CURRENCY=QAR
+
+# Session-based auth
+SESSION_SECRET=dev-session-secret-change-me-in-production
+SESSION_COOKIE_NAME=elite.sid
+SESSION_MAX_AGE_MS=43200000      # 12h
+SESSION_COOKIE_SECURE=false      # set true in production (https)
+SESSION_COOKIE_SAMESITE=lax      # 'none' if admin runs on a different origin in prod
+
+# Default admin user (seeded on first boot if none exist for the tenant)
+DEFAULT_ADMIN_EMAIL=admin@elite.local
+DEFAULT_ADMIN_PASSWORD=elite-admin
+DEFAULT_ADMIN_NAME=Yusuf Hamad
 ```
 
 The API expects `DATABASE_URL` to be configured before database-backed routes can work.
+
+---
+
+## Authentication (session-based)
+
+Sessions are stored server-side in PostgreSQL via `connect-pg-simple`. The cookie is `HttpOnly` and `SameSite=Lax` (configurable). JWT was considered but rejected — a first-party admin tool benefits more from cheap revocation than from stateless tokens.
+
+| Endpoint | Behaviour |
+|---|---|
+| `POST /api/auth/login` | Look up `admin_users` by `(tenant_id, email)`, `bcrypt.compare` the password, write `req.session.user`, return the public user profile. |
+| `GET /api/auth/me` | Return `req.session.user` (401 if absent). |
+| `POST /api/auth/logout` | `req.session.destroy()` + clear cookie. |
+
+Every `/api/admin/*` route is gated by the `requireAuth()` middleware ([server/middleware/require-auth.js](../server/middleware/require-auth.js)) which 401s without a session and 403s when a role filter doesn't match.
+
+On first boot, [server/db/tenant.js](../server/db/tenant.js) calls `ensureDefaultAdminUser` which inserts the user from `DEFAULT_ADMIN_*` env vars (bcrypt-hashed). Re-runs are no-ops thanks to `ON CONFLICT (tenant_id, email)`.
+
+The session store auto-creates an `admin_sessions` table (via `createTableIfMissing: true`) — see `\d admin_sessions` for shape.
+
+### Client wiring
+
+| Piece | File |
+|---|---|
+| Auth state + login/logout/me | [client/projects/admin-portal/src/app/services/auth.service.ts](../client/projects/admin-portal/src/app/services/auth.service.ts) |
+| HttpClient wrapper with `withCredentials: true` | [services/api-client.service.ts](../client/projects/admin-portal/src/app/services/api-client.service.ts) |
+| Route guards | [guards/auth.guard.ts](../client/projects/admin-portal/src/app/guards/auth.guard.ts), [guards/role.guard.ts](../client/projects/admin-portal/src/app/guards/role.guard.ts) |
+| Login page | [pages/login/login.component.ts](../client/projects/admin-portal/src/app/pages/login/login.component.ts) |
+
+The HTTP error interceptor now redirects 401 → `/login` (with `returnUrl=`) and suppresses toasts when the failing call is the auth probe itself.
+
+---
+
+## Database Seeding
+
+```bash
+cd server
+npm run db:migrate   # one-time (or after schema changes)
+npm run db:seed      # idempotent — safe to re-run
+```
+
+`server/db/seed.js` writes a small but realistic fixture: 8 products with 2–3 variants each, 3 collections, 6 customers, 8 orders (with line items, shipments where applicable, timeline entries, and a few internal notes). It is not a copy of `data/mock.ts` — IDs are server-generated UUIDs, but `public_number`, SKU, and customer email act as natural idempotency keys so re-running the seed is non-destructive.
+
+### Multi-role admin seeding
+
+```bash
+npm run db:seed:admins
+```
+
+Creates one admin per role — `owner`, `admin`, `manager`, `viewer` — and writes their credentials to `server/admins.local.txt` (gitignored). Re-running rotates the passwords and rewrites the file, so the file and the database can never drift.
+
+| Role | Email | Test what |
+|---|---|---|
+| `owner`   | `owner@elite.local`   | Full access — including `/settings` (team management). |
+| `admin`   | `admin@elite.local`   | Day-to-day admin — can also access `/settings`. |
+| `manager` | `manager@elite.local` | Catalog + orders + customers; `/settings` is blocked by the role guard and redirects to `/dashboard`. |
+| `viewer`  | `viewer@elite.local`  | Read-only role for stakeholder demos. |
+
+> The credentials file is a plain text dev helper. It is `chmod 600` and listed in `.gitignore`. Never commit it. Production credentials must come from a secrets manager and pass through bcrypt.
 
 ---
 
@@ -151,6 +221,8 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 ---
 
 ## Admin API
+
+> All `/api/admin/*` endpoints require an active session cookie. Anonymous requests get `401 Authentication required`.
 
 ### Products
 
@@ -368,12 +440,36 @@ Recommended next steps:
 
 ---
 
+## Admin Portal → Schema Mapping (May 2026 updates)
+
+This section maps the admin-portal features shipped in May 2026 onto the tables/columns that back them. The schema already covers each feature — wiring the admin services from mock-in-memory to real `pg` queries is the remaining work.
+
+| Admin portal feature | Tables / columns used | Notes |
+|---|---|---|
+| Product variants (size / color / material) | `product_variants` (`sku`, `size`, `color`, `material`, `price_cents`, `stock_quantity`, `sort_order`, `is_active`) | One row per variant; `UNIQUE (tenant_id, sku)`. Replace-on-save semantics already documented for `POST /api/admin/products`. |
+| Product create flow ("New Product") | `products` (`INSERT … ON CONFLICT DO UPDATE` by `(tenant_id, sku)`) + `product_variants` | The drawer posts the full draft on first save. Until then the stub lives in the catalog signal only. |
+| Product image gallery (drag-reorder, primary, upload) | `media_assets` + `media_links` (`product_id`, `role`, `sort_order`) | `role='primary'` for the first image, `role='gallery'` for the rest; `sort_order` drives display order. `products.primary_media_id` mirrors the primary. |
+| Rich-text descriptions (EN + AR) | `product_translations` (`description` text) — one row per locale | Editor emits HTML; persist as-is. Sanitise on render for the storefront. |
+| Order detail drawer (replaces modal) | `orders` + `order_items` + `shipments` (`tracking_number`) + `order_timeline_entries` + `order_notes` | All four sections in the drawer map to these tables. |
+| Order status workflow (awaiting → processing → shipped → delivered, cancel/refund) | `orders.fulfillment_status` / `orders.payment_status` + `shipments` + `order_timeline_entries` | Each transition writes one row into `order_timeline_entries` with `kind` matching the workflow step. Tracking number lives on `shipments.tracking_number`; mark-as-shipped writes shipments + timeline together. |
+| Order internal notes | `order_notes` (`body`, `author_user_id`, `created_at`) | Notes also surface as a `kind='note'` row in `order_timeline_entries` so the audit log is unified. |
+| Customer edit / create + "Add Customer" | `customers` (`INSERT … ON CONFLICT DO UPDATE` on `(tenant_id, email)`) | `orders_count` / `ltv_cents` / `last_order_at` are denormalised; refresh from `v_customer_order_stats` after order changes. |
+| Customer order history with click-to-navigate | `orders` filtered by `customer_id` (or by name in the mock); navigation uses `/orders?id=…` | Admin orders route reads `?id=` query param and auto-opens that order's drawer. |
+| Collection cover image upload (drag-drop) | `collections.cover_media_id` + `media_assets` | Upload first inserts a `media_assets` row, then sets `cover_media_id`. Drag-drop path uses FileReader → data URL in the mock prototype; the real path is multipart upload then `INSERT media_assets`. |
+| Collection drag-to-reorder of products | `collection_products.sort_order` | Save writes `productIds` order back as `sort_order = 0..N`. `collection_products_collection_order_idx` already indexes this. |
+| Sidebar/Dashboard/etc. transcreated Arabic | n/a (frontend `i18n/strings.ts`) | DB content uses `*_translations` tables for product/collection bodies; UI chrome is bundled in the SPA. |
+| Dashboard i18n + `routerLink="/orders"` | n/a (frontend only) | KPI labels driven by `dash.*` keys; "View All" navigates with Angular Router. |
+
+> Notation: `INSERT … ON CONFLICT DO UPDATE` patterns reuse the existing routes documented in [Admin API](#admin-api).
+
+---
+
 ## Known Limitations
 
-- Authentication is not implemented yet.
-- Tenant selection is currently the default tenant from env variables.
+- Tenant selection is still the default tenant — multi-tenant routing (subdomain or header-based) is not wired yet.
 - Media upload stores metadata/URLs only; binary upload storage is not implemented.
-- Product image gallery is not fully persisted from the admin product drawer yet.
-- Some frontend screens still read mock data until their services are swapped over.
+- Product image gallery: schema is ready (`media_links` with `role='gallery'` + `sort_order`), but the admin product drawer currently stores the gallery as data URLs in memory; wire `POST /api/admin/media` + `media_links` writes from the drawer's save handler.
+- Collection cover upload: schema is ready (`collections.cover_media_id`); wire the drag-drop upload to `POST /api/admin/media` then `PATCH /api/admin/collections/:id` with the new media id.
+- Admin pages still on mock data: Dashboard, Media, Storefront, Sync, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
 - No automated backend test suite exists yet.
 

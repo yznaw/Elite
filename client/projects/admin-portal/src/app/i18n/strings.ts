@@ -785,6 +785,21 @@ const EN = {
   'notif.markAllRead': 'Mark all read',
   'notif.empty': 'All caught up — no new notifications',
 
+  // ── Login / Auth ──
+  'login.title': 'Sign in to your workspace',
+  'login.sub': 'Use your team account to access the Elite admin portal.',
+  'login.email': 'Email',
+  'login.email.placeholder': 'name@elite.local',
+  'login.password': 'Password',
+  'login.password.placeholder': 'Your password',
+  'login.submit': 'Sign in',
+  'login.submitting': 'Signing in…',
+  'login.invalid': 'Invalid email or password.',
+  'login.disabled': 'This account is disabled. Contact an admin.',
+  'login.unknownError': 'Could not sign in. Please try again.',
+  'login.signedOut': 'Signed out.',
+  'topbar.logout': 'Sign out',
+
   // ── HTTP Error Messages ──
   'error.network.title': 'Connection lost',
   'error.network.sub': 'Check your internet connection and try again.',
@@ -1564,6 +1579,21 @@ const AR: Record<keyof typeof EN, string> = {
   'notif.title': 'الإشعارات',
   'notif.markAllRead': 'تعيين الكل كمقروء',
   'notif.empty': 'لا توجد إشعارات جديدة',
+
+  // ── Login / Auth ──
+  'login.title': 'تسجيل الدخول إلى لوحة الإدارة',
+  'login.sub': 'استخدم حساب فريقك للوصول إلى بوّابة إدارة Elite.',
+  'login.email': 'البريد الإلكتروني',
+  'login.email.placeholder': 'name@elite.local',
+  'login.password': 'كلمة المرور',
+  'login.password.placeholder': 'كلمة المرور الخاصة بك',
+  'login.submit': 'تسجيل الدخول',
+  'login.submitting': 'جاري تسجيل الدخول…',
+  'login.invalid': 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+  'login.disabled': 'هذا الحساب موقوف. تواصل مع المسؤول.',
+  'login.unknownError': 'تعذّر تسجيل الدخول. يُرجى المحاولة مجدداً.',
+  'login.signedOut': 'تم تسجيل الخروج.',
+  'topbar.logout': 'تسجيل الخروج',
 
   // ── HTTP Error Messages ──
   'error.network.title': 'انقطع الاتصال',

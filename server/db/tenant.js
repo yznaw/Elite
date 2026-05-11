@@ -1,6 +1,11 @@
+const bcrypt = require('bcryptjs');
+
 const DEFAULT_TENANT_SLUG = process.env.DEFAULT_TENANT_SLUG || 'elite';
 const DEFAULT_TENANT_NAME = process.env.DEFAULT_TENANT_NAME || 'Elite';
 const DEFAULT_CURRENCY = process.env.DEFAULT_CURRENCY || 'QAR';
+const DEFAULT_ADMIN_EMAIL = process.env.DEFAULT_ADMIN_EMAIL || 'admin@elite.local';
+const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'elite-admin';
+const DEFAULT_ADMIN_NAME = process.env.DEFAULT_ADMIN_NAME || 'Yusuf Hamad';
 
 async function ensureDefaultTenant(client) {
   const result = await client.query(
@@ -35,7 +40,39 @@ async function ensureDefaultTenant(client) {
     [tenant.id, 'Arabic Leather Artisans'],
   );
 
+  await ensureDefaultAdminUser(client, tenant.id);
+
   return tenant;
+}
+
+/** Ensure at least one admin user exists for the tenant so the login page is
+    usable on a fresh install. Re-runs are no-ops thanks to `ON CONFLICT`. */
+async function ensureDefaultAdminUser(client, tenantId) {
+  const existing = await client.query(
+    'SELECT id FROM admin_users WHERE tenant_id = $1 LIMIT 1',
+    [tenantId],
+  );
+  if (existing.rowCount > 0) return;
+
+  const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
+  const initials = DEFAULT_ADMIN_NAME
+    .split(/\s+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  await client.query(
+    `
+      INSERT INTO admin_users (tenant_id, email, password_hash, full_name, initials, role, status)
+      VALUES ($1, $2, $3, $4, $5, 'owner', 'active')
+      ON CONFLICT (tenant_id, email) DO UPDATE
+      SET password_hash = EXCLUDED.password_hash,
+          status = 'active'
+    `,
+    [tenantId, DEFAULT_ADMIN_EMAIL, passwordHash, DEFAULT_ADMIN_NAME, initials || 'AD'],
+  );
 }
 
 async function getTenant(client) {
@@ -46,6 +83,10 @@ module.exports = {
   DEFAULT_TENANT_SLUG,
   DEFAULT_TENANT_NAME,
   DEFAULT_CURRENCY,
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_ADMIN_NAME,
   ensureDefaultTenant,
+  ensureDefaultAdminUser,
   getTenant,
 };

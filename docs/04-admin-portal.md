@@ -40,6 +40,7 @@ All pages are lazy-loaded:
 
 | Route | Component | Description |
 |---|---|---|
+| `/login` | `LoginComponent` | Public — email + password sign-in against `/api/auth/login`. Bounces authed users straight to the return URL. Sidebar/topbar are hidden on this route. |
 | `/dashboard` | `DashboardComponent` | KPIs, revenue chart, 3D heatmap, recent orders |
 | `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, **New Product** create flow, inline editor with image gallery (drag-reorder + primary, file upload, drag/drop), variants table (size/color/material × SKU/price/stock), rich-text descriptions for EN & AR, top save bar, draft auto-save |
 | `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image upload (drag/drop + URL paste), drag-to-reorder linked products to control storefront display order |
@@ -51,6 +52,8 @@ All pages are lazy-loaded:
 | `/sync` | `SyncComponent` | Sync source cards, activity feed, manual queue, schedule management |
 | `/settings` | `SettingsComponent` | Store info, team members, integrations |
 | `**` | — | Redirects to `/dashboard` |
+
+> Every route except `/login` is gated by `authGuard` (`canMatch`). `/settings` is additionally gated by `roleGuard(['owner','admin'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side.
 
 ---
 
@@ -402,8 +405,30 @@ export class YourPageComponent {
 
 ---
 
+## Backend Persistence Map
+
+Each admin section maps to one or more PostgreSQL tables defined in `server/db/migrations/001_initial_schema.sql`. The schema is multi-tenant — every row is scoped by `tenant_id`.
+
+| Section | Tables |
+|---|---|
+| Dashboard KPIs / charts | `daily_metrics`, `orders`, `analytics_events`, `product_interactions` |
+| Catalog · Product editor | `products`, `product_translations`, `product_variants`, `media_assets`, `media_links` (gallery role), `inventory_movements` |
+| Collections | `collections`, `collection_translations`, `collection_products` (`sort_order` drives storefront order), `media_assets` (cover image) |
+| Media library | `media_assets`, `media_links` |
+| Storefront editor | `storefront_snapshots`, `storefront_blocks`, `storefront_block_products` |
+| Orders · drawer | `orders`, `order_items`, `payments`, `shipments` (tracking number), `order_timeline_entries`, `order_notes` |
+| Customers · drawer | `customers`, `customer_addresses`, `orders` (history join), view `v_customer_order_stats` |
+| Sync | `sync_sources`, `sync_logs` |
+| Settings · team | `admin_users`, `store_settings`, `integrations`, `audit_events` |
+| Notifications bell | `notifications` |
+
+See [08 – Database & API Implementation](./08-database-api-implementation.md) for the endpoint-to-SQL map and the May 2026 admin-portal → schema mapping.
+
+---
+
 ## Related Documents
 
 - [03 – Client Web](./03-client-web.md) — The storefront app
 - [05 – API Server](./05-api-server.md) — Express API details
 - [06 – White-Label Guide](./06-white-label-guide.md) — Rebranding the admin
+- [08 – Database & API Implementation](./08-database-api-implementation.md) — PostgreSQL schema and endpoint map
