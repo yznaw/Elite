@@ -4,12 +4,9 @@ import { NavigationEnd, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs/operators';
 import { IconComponent } from '../icons/icon.component';
-import { AvatarComponent } from '../avatar/avatar.component';
 import { LanguageSwitcherComponent } from '../language-switcher/language-switcher.component';
 import { NotificationDropdownComponent } from '../notification-dropdown/notification-dropdown.component';
 import { I18nService } from '../../services/i18n.service';
-import { AuthService } from '../../services/auth.service';
-import { ToastService } from '../../services/toast.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
 
 interface PageMeta {
@@ -32,7 +29,7 @@ const META: Record<string, PageMeta> = {
 @Component({
   selector: 'ap-topbar',
   standalone: true,
-  imports: [CommonModule, IconComponent, AvatarComponent, LanguageSwitcherComponent, NotificationDropdownComponent],
+  imports: [CommonModule, IconComponent, LanguageSwitcherComponent, NotificationDropdownComponent],
   template: `
     <div class="topbar">
       <div class="row gap-sm" style="min-width:0;align-items:center;">
@@ -62,14 +59,6 @@ const META: Record<string, PageMeta> = {
         <ap-language-switcher/>
 
         <ap-notification-dropdown/>
-        <ap-avatar [initials]="userInitials()"/>
-        <button class="icon-btn logout-btn" (click)="logout()" [attr.aria-label]="t('topbar.logout')" [attr.title]="t('topbar.logout')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-        </button>
       </div>
     </div>
 
@@ -117,35 +106,19 @@ const META: Record<string, PageMeta> = {
       animation: fadeIn 0.18s ease;
     }
     .topbar-search-pane .inp { width: 100%; }
-    .logout-btn { color: var(--ink-2); }
-    .logout-btn:hover { color: var(--danger); }
   `],
 })
 export class TopbarComponent {
   private readonly i18n = inject(I18nService);
   readonly toggle = inject(SidebarToggleService);
   private readonly router = inject(Router);
-  private readonly auth = inject(AuthService);
-  private readonly toast = inject(ToastService);
 
   readonly searchOpen = signal(false);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
-  /** Live initials from the current session (or 'YH' as a safe fallback). */
-  readonly userInitials = computed(() => this.auth.user()?.initials || 'YH');
-
   toggleSearch(): void {
     this.searchOpen.update((o) => !o);
-  }
-
-  async logout(): Promise<void> {
-    try {
-      await this.auth.logout();
-      this.toast.info(this.t('login.signedOut'));
-    } finally {
-      this.router.navigate(['/login']);
-    }
   }
 
   private readonly url = toSignal(

@@ -1,10 +1,12 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { IconComponent, IconName } from '../icons/icon.component';
 import { AvatarComponent } from '../avatar/avatar.component';
 import { I18nService } from '../../services/i18n.service';
+import { AuthService } from '../../services/auth.service';
+import { ToastService } from '../../services/toast.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
 
 interface NavLink {
@@ -51,13 +53,32 @@ interface NavLink {
       </div>
 
       <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <ap-avatar initials="YH"/>
-          <div style="min-width:0;">
-            <div class="strong" style="font-size:12px;color:#fff;">Yusuf Hamad</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.5);">Admin · yusuf&#64;elite…</div>
+        @if (user(); as u) {
+          <div class="sidebar-user">
+            <ap-avatar [initials]="u.initials"/>
+            <div class="sidebar-user-meta">
+              <div class="strong sidebar-user-name">{{ u.name }}</div>
+              <div class="sidebar-user-sub">
+                <span class="sidebar-user-role">{{ t('settings.role.' + u.role) }}</span>
+                <span class="sidebar-user-sep">·</span>
+                <span class="sidebar-user-email" [attr.title]="u.email">{{ u.email }}</span>
+              </div>
+            </div>
+            <button
+              class="sidebar-logout"
+              type="button"
+              (click)="logout()"
+              [attr.aria-label]="t('topbar.logout')"
+              [attr.title]="t('topbar.logout')"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
-        </div>
+        }
       </div>
     </aside>
   `,
@@ -152,7 +173,62 @@ interface NavLink {
       border-top: 1px solid rgba(255, 255, 255, 0.06);
       position: relative; z-index: 1;
     }
-    .sidebar-user { display: flex; gap: 10px; align-items: center; }
+    .sidebar-user {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .sidebar-user-meta {
+      flex: 1;
+      min-width: 0;
+    }
+    .sidebar-user-name {
+      font-size: 12px;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sidebar-user-sub {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.55);
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      min-width: 0;
+    }
+    .sidebar-user-role {
+      color: var(--gold);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .sidebar-user-sep { opacity: 0.5; flex-shrink: 0; }
+    .sidebar-user-email {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .sidebar-logout {
+      width: 30px; height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+    .sidebar-logout:hover {
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.5);
+      background: rgba(239, 68, 68, 0.08);
+    }
 
     /* Compact-rail behavior at desktop tablet (icon-only) */
     @media (min-width: 1025px) and (max-width: 1180px) {
@@ -162,18 +238,31 @@ interface NavLink {
       .label-sub,
       .brand-sub,
       .nav-section-label,
-      .sidebar-user > div:not(.avatar) {
+      .sidebar-user-meta {
         display: none;
       }
       .nav-item { justify-content: center; }
+      .sidebar-user { justify-content: center; }
     }
   `],
 })
 export class SidebarComponent {
   private readonly i18n = inject(I18nService);
+  private readonly auth = inject(AuthService);
+  private readonly toast = inject(ToastService);
   readonly toggle = inject(SidebarToggleService);
 
   readonly t = (k: string): string => this.i18n.t(k);
+  readonly user = this.auth.user;
+
+  async logout(): Promise<void> {
+    try {
+      await this.auth.logout();
+      this.toast.info(this.t('login.signedOut'));
+    } finally {
+      this.router.navigate(['/login']);
+    }
+  }
 
   readonly links: NavLink[] = [
     { path: '/dashboard',  labelKey: 'nav.dashboard',  subKey: 'nav.dashboard.sub',  icon: 'dash' },
@@ -188,9 +277,11 @@ export class SidebarComponent {
     { path: '/settings',   labelKey: 'nav.settings',   subKey: 'nav.settings.sub',   icon: 'settings' },
   ];
 
-  constructor(router: Router) {
+  private readonly router = inject(Router);
+
+  constructor() {
     // Close the mobile drawer on every successful navigation
-    router.events
+    this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe(() => this.toggle.close());
   }

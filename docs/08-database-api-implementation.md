@@ -1,7 +1,7 @@
 # 08 — Database & API Implementation
 
 > **Audience:** Backend developers, frontend developers wiring pages to API  
-> **Last updated:** May 11, 2026 — session auth + admin-portal API integration shipped
+> **Last updated:** May 12, 2026 — password reset flow + dashboard live data + UI shell cleanup
 
 ---
 
@@ -27,8 +27,11 @@ The implementation added:
 | File | Purpose |
 |---|---|
 | `server/db/migrations/001_initial_schema.sql` | Full initial PostgreSQL schema |
+| `server/db/migrations/002_password_reset_tokens.sql` | Password reset tokens (SHA-256 hashed, one-shot, 30m TTL) |
 | `server/db/client.js` | Shared `pg` connection pool |
-| `server/db/tenant.js` | Creates/loads the default white-label tenant |
+| `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
+| `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |
+| `server/db/seed-admins.js` | One admin per role; writes credentials to `server/admins.local.txt` (gitignored) |
 | `server/db/README.md` | Database setup notes |
 | `server/db/API.md` | Endpoint-to-database command map |
 
@@ -113,6 +116,8 @@ Sessions are stored server-side in PostgreSQL via `connect-pg-simple`. The cooki
 | `POST /api/auth/login` | Look up `admin_users` by `(tenant_id, email)`, `bcrypt.compare` the password, write `req.session.user`, return the public user profile. |
 | `GET /api/auth/me` | Return `req.session.user` (401 if absent). |
 | `POST /api/auth/logout` | `req.session.destroy()` + clear cookie. |
+| `POST /api/auth/forgot` | Always returns 200 (no account-existence leak). If the email matches an active user, writes a SHA-256 hashed token to `password_reset_tokens` (30-min TTL) and prints the reset URL to the server console. Wire to a real email transport in production. |
+| `POST /api/auth/reset` | Validates `{token, password ≥ 8 chars}`, updates `admin_users.password_hash` and marks the token used. One-shot — replaying the same token returns 400. |
 
 Every `/api/admin/*` route is gated by the `requireAuth()` middleware ([server/middleware/require-auth.js](../server/middleware/require-auth.js)) which 401s without a session and 403s when a role filter doesn't match.
 
@@ -124,12 +129,25 @@ The session store auto-creates an `admin_sessions` table (via `createTableIfMiss
 
 | Piece | File |
 |---|---|
-| Auth state + login/logout/me | [client/projects/admin-portal/src/app/services/auth.service.ts](../client/projects/admin-portal/src/app/services/auth.service.ts) |
+| Auth state + `login` / `logout` / `me` / `forgotPassword` / `resetPassword` | [client/projects/admin-portal/src/app/services/auth.service.ts](../client/projects/admin-portal/src/app/services/auth.service.ts) |
 | HttpClient wrapper with `withCredentials: true` | [services/api-client.service.ts](../client/projects/admin-portal/src/app/services/api-client.service.ts) |
 | Route guards | [guards/auth.guard.ts](../client/projects/admin-portal/src/app/guards/auth.guard.ts), [guards/role.guard.ts](../client/projects/admin-portal/src/app/guards/role.guard.ts) |
 | Login page | [pages/login/login.component.ts](../client/projects/admin-portal/src/app/pages/login/login.component.ts) |
+| Forgot-password page | [pages/login/forgot-password.component.ts](../client/projects/admin-portal/src/app/pages/login/forgot-password.component.ts) |
+| Reset-password page (`/reset-password?token=…`) | [pages/login/reset-password.component.ts](../client/projects/admin-portal/src/app/pages/login/reset-password.component.ts) |
+| Live signed-in user (sidebar footer card) | [shared/sidebar/sidebar.component.ts](../client/projects/admin-portal/src/app/shared/sidebar/sidebar.component.ts) |
 
-The HTTP error interceptor now redirects 401 → `/login` (with `returnUrl=`) and suppresses toasts when the failing call is the auth probe itself.
+The HTTP error interceptor redirects 401 → `/login` (with `returnUrl=…`) and suppresses toasts when the failing call is the auth probe itself. The shell (`AppComponent`) hides sidebar + topbar on every auth route (`/login`, `/forgot-password`, `/reset-password`).
+
+### Reset password flow (end-to-end)
+
+1. User clicks **"Forgot password?"** on `/login` → lands on `/forgot-password`.
+2. Submits their email → `POST /api/auth/forgot`. Server always responds 200; if the account exists it inserts a token row and prints the URL to the API console (`[auth] Reset URL (valid 30m): http://localhost:4300/reset-password?token=…`).
+3. User opens the URL → `/reset-password?token=…` page validates the token client-side (presence) and prompts for a new password (≥ 8 chars, must match confirmation).
+4. Submit → `POST /api/auth/reset`. Server bcrypt-hashes the password, updates `admin_users`, marks the token `used_at = now()`. Replaying the same token returns 400.
+5. Toast confirms success → user is bounced to `/login` to sign in.
+
+> Email transport is intentionally not plumbed (no SMTP creds in the repo). Production deployments must send the URL via an email/SMS provider rather than `console.log`.
 
 ---
 
@@ -459,6 +477,9 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 | Collection drag-to-reorder of products | `collection_products.sort_order` | Save writes `productIds` order back as `sort_order = 0..N`. `collection_products_collection_order_idx` already indexes this. |
 | Sidebar/Dashboard/etc. transcreated Arabic | n/a (frontend `i18n/strings.ts`) | DB content uses `*_translations` tables for product/collection bodies; UI chrome is bundled in the SPA. |
 | Dashboard i18n + `routerLink="/orders"` | n/a (frontend only) | KPI labels driven by `dash.*` keys; "View All" navigates with Angular Router. |
+| Dashboard live KPIs + revenue chart + heatmap + Recent Orders | `orders`, `order_items`, `products`, `customers` | Loads in parallel from `/api/admin/orders`, `/api/admin/products`, `/api/admin/customers`. Today's revenue, active-orders count, recent customers, and the 30-day revenue series are all derived from real DB rows — no `mock.ts` import in the dashboard. |
+| Password reset flow | `password_reset_tokens` (SHA-256 hashed `token_hash`, `expires_at`, `used_at`) | `POST /api/auth/forgot` writes a row; `POST /api/auth/reset` validates + flips `used_at`. One-shot, 30-min TTL, replay-protected. |
+| Live signed-in user (sidebar) | `admin_users` (via `/api/auth/me`) | The sidebar footer reads `auth.user()` to render avatar initials, full name, role, and email. Sign-out lives next to the user card; the topbar avatar/logout were removed to eliminate the duplicate. |
 
 > Notation: `INSERT … ON CONFLICT DO UPDATE` patterns reuse the existing routes documented in [Admin API](#admin-api).
 
@@ -470,6 +491,7 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 - Media upload stores metadata/URLs only; binary upload storage is not implemented.
 - Product image gallery: schema is ready (`media_links` with `role='gallery'` + `sort_order`), but the admin product drawer currently stores the gallery as data URLs in memory; wire `POST /api/admin/media` + `media_links` writes from the drawer's save handler.
 - Collection cover upload: schema is ready (`collections.cover_media_id`); wire the drag-drop upload to `POST /api/admin/media` then `PATCH /api/admin/collections/:id` with the new media id.
-- Admin pages still on mock data: Dashboard, Media, Storefront, Sync, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
+- Admin pages still on mock data: Media, Storefront, Sync, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
+- Password reset emails: `POST /api/auth/forgot` currently logs the URL to stdout. Wire a real email transport (Resend / SES / SendGrid) and replace the `console.log` in [server/routes/auth.route.js](../server/routes/auth.route.js).
 - No automated backend test suite exists yet.
 

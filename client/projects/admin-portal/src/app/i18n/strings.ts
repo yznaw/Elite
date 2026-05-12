@@ -798,7 +798,30 @@ const EN = {
   'login.disabled': 'This account is disabled. Contact an admin.',
   'login.unknownError': 'Could not sign in. Please try again.',
   'login.signedOut': 'Signed out.',
+  'login.forgot': 'Forgot password?',
+  'login.backToLogin': 'Back to sign in',
   'topbar.logout': 'Sign out',
+
+  // ── Forgot / Reset password ──
+  'forgot.title': 'Reset your password',
+  'forgot.sub': 'Enter your account email. We\'ll send a one-time reset link to it.',
+  'forgot.submit': 'Send reset link',
+  'forgot.submitting': 'Sending…',
+  'forgot.sentTitle': 'Check your inbox',
+  'forgot.sentBody': 'If that email matches an Elite admin account, a reset link is on the way. The link expires in 30 minutes.',
+  'forgot.devNote': 'Dev only — reset links are printed to the API server console until email is wired up.',
+
+  'reset.title': 'Set a new password',
+  'reset.sub': 'Choose a new password to finish signing back in.',
+  'reset.password': 'New password',
+  'reset.confirm': 'Confirm new password',
+  'reset.submit': 'Update password',
+  'reset.submitting': 'Saving…',
+  'reset.invalidToken': 'Reset link is missing or invalid.',
+  'reset.expired': 'This reset link has expired or already been used. Request a new one.',
+  'reset.mismatch': 'Passwords don\'t match.',
+  'reset.tooShort': 'Password must be at least 8 characters.',
+  'reset.success': 'Password updated. Please sign in.',
 
   // ── HTTP Error Messages ──
   'error.network.title': 'Connection lost',
@@ -1593,7 +1616,30 @@ const AR: Record<keyof typeof EN, string> = {
   'login.disabled': 'هذا الحساب موقوف. تواصل مع المسؤول.',
   'login.unknownError': 'تعذّر تسجيل الدخول. يُرجى المحاولة مجدداً.',
   'login.signedOut': 'تم تسجيل الخروج.',
+  'login.forgot': 'نسيت كلمة المرور؟',
+  'login.backToLogin': 'العودة لتسجيل الدخول',
   'topbar.logout': 'تسجيل الخروج',
+
+  // ── Forgot / Reset password ──
+  'forgot.title': 'إعادة تعيين كلمة المرور',
+  'forgot.sub': 'أدخل البريد الإلكتروني لحسابك وسنرسل لك رابطاً لمرة واحدة.',
+  'forgot.submit': 'إرسال رابط الإعادة',
+  'forgot.submitting': 'جاري الإرسال…',
+  'forgot.sentTitle': 'تحقّق من بريدك',
+  'forgot.sentBody': 'إذا كان البريد مطابقاً لحساب Elite، فالرابط في طريقه إليك. الرابط صالح لمدة 30 دقيقة.',
+  'forgot.devNote': 'بيئة تطوير فقط — تُطبع روابط الإعادة في طرفية الـ API لحين توصيل البريد.',
+
+  'reset.title': 'تعيين كلمة مرور جديدة',
+  'reset.sub': 'اختر كلمة مرور جديدة لإكمال تسجيل الدخول.',
+  'reset.password': 'كلمة المرور الجديدة',
+  'reset.confirm': 'تأكيد كلمة المرور الجديدة',
+  'reset.submit': 'تحديث كلمة المرور',
+  'reset.submitting': 'جاري الحفظ…',
+  'reset.invalidToken': 'رابط الإعادة مفقود أو غير صحيح.',
+  'reset.expired': 'انتهت صلاحية رابط الإعادة أو تم استخدامه. اطلب رابطاً جديداً.',
+  'reset.mismatch': 'كلمتا المرور غير متطابقتين.',
+  'reset.tooShort': 'يجب أن تكون كلمة المرور 8 أحرف على الأقل.',
+  'reset.success': 'تم تحديث كلمة المرور. يُرجى تسجيل الدخول.',
 
   // ── HTTP Error Messages ──
   'error.network.title': 'انقطع الاتصال',

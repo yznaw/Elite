@@ -65,6 +65,18 @@ export class AuthService {
     }
   }
 
+  /** Always succeeds at the API level (no account-existence leak). The
+      server logs the reset URL to its console in dev. */
+  forgotPassword(email: string): Promise<void> {
+    return firstValueFrom(this.api.post<{ sent: true }>('/auth/forgot', { email }))
+      .then(() => undefined);
+  }
+
+  resetPassword(token: string, password: string): Promise<void> {
+    return firstValueFrom(this.api.post<{ reset: true }>('/auth/reset', { token, password }))
+      .then(() => undefined);
+  }
+
   hasRole(...roles: UserRole[]): boolean {
     const r = this._user()?.role;
     return !!r && roles.includes(r);

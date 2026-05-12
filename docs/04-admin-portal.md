@@ -40,8 +40,10 @@ All pages are lazy-loaded:
 
 | Route | Component | Description |
 |---|---|---|
-| `/login` | `LoginComponent` | Public — email + password sign-in against `/api/auth/login`. Bounces authed users straight to the return URL. Sidebar/topbar are hidden on this route. |
-| `/dashboard` | `DashboardComponent` | KPIs, revenue chart, 3D heatmap, recent orders |
+| `/login` | `LoginComponent` | Public — email + password sign-in against `/api/auth/login`. Bounces authed users straight to the return URL. "Forgot password?" link below the form. Sidebar/topbar are hidden on auth routes. |
+| `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
+| `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
+| `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, 3D heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. |
 | `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, **New Product** create flow, inline editor with image gallery (drag-reorder + primary, file upload, drag/drop), variants table (size/color/material × SKU/price/stock), rich-text descriptions for EN & AR, top save bar, draft auto-save |
 | `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image upload (drag/drop + URL paste), drag-to-reorder linked products to control storefront display order |
 | `/media` | `MediaComponent` | Upload zone, file grid, auto-link by SKU, detail drawer |
@@ -53,7 +55,7 @@ All pages are lazy-loaded:
 | `/settings` | `SettingsComponent` | Store info, team members, integrations |
 | `**` | — | Redirects to `/dashboard` |
 
-> Every route except `/login` is gated by `authGuard` (`canMatch`). `/settings` is additionally gated by `roleGuard(['owner','admin'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side.
+> Every route except `/login`, `/forgot-password`, and `/reset-password` is gated by `authGuard` (`canMatch`). `/settings` is additionally gated by `roleGuard(['owner','admin'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
 
 ---
 
@@ -65,8 +67,8 @@ Located in `app/shared/`:
 
 | Component | Folder | Description |
 |---|---|---|
-| `SidebarComponent` | `sidebar/` | Fixed left navigation with workspace sections, active route highlighting |
-| `TopbarComponent` | `topbar/` | Top bar with search, notification bell, language switcher, user avatar |
+| `SidebarComponent` | `sidebar/` | Fixed left navigation with workspace sections, active route highlighting. Footer card shows the live signed-in user (avatar initials, full name, translated role, email) with a Sign-out button — sourced from `AuthService.user()`, not hardcoded. |
+| `TopbarComponent` | `topbar/` | Top bar with title/breadcrumb, search, language switcher, and notification bell. The avatar + sign-out used to live here too — both moved to the sidebar to remove the duplicate. |
 
 ### Data Display
 

@@ -9,6 +9,16 @@ export const routes: Routes = [
       import('./pages/login/login.component').then((m) => m.LoginComponent),
   },
   {
+    path: 'forgot-password',
+    loadComponent: () =>
+      import('./pages/login/forgot-password.component').then((m) => m.ForgotPasswordComponent),
+  },
+  {
+    path: 'reset-password',
+    loadComponent: () =>
+      import('./pages/login/reset-password.component').then((m) => m.ResetPasswordComponent),
+  },
+  {
     path: '',
     canMatch: [authGuard],
     children: [

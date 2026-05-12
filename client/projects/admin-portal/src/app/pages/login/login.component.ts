@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { AuthService } from '../../services/auth.service';
@@ -11,7 +11,7 @@ import { LocaleService } from '../../services/locale.service';
 @Component({
   selector: 'ap-login',
   standalone: true,
-  imports: [CommonModule, FormsModule, SpinnerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent],
   template: `
     <div class="login-shell" [attr.dir]="locale.dir()">
       <div class="login-card">
@@ -70,6 +70,10 @@ import { LocaleService } from '../../services/locale.service';
               {{ t('login.submit') }}
             }
           </button>
+
+          <div class="login-foot">
+            <a routerLink="/forgot-password" class="login-link">{{ t('login.forgot') }}</a>
+          </div>
         </form>
       </div>
     </div>
@@ -143,6 +147,19 @@ import { LocaleService } from '../../services/locale.service';
       margin-bottom: 14px;
     }
     .btn-block { width: 100%; justify-content: center; }
+    .login-foot {
+      margin-top: 16px;
+      text-align: center;
+      font-size: 12px;
+    }
+    .login-link {
+      color: var(--green);
+      text-decoration: none;
+      font-weight: 500;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .login-link:hover { border-bottom-color: var(--gold); }
   `],
 })
 export class LoginComponent implements OnInit {

@@ -23,9 +23,14 @@ import { ConfirmDialogComponent } from './shared/confirm-dialog/confirm-dialog.c
 })
 export class AppComponent {
   private readonly router = inject(Router);
-  /** Tracks the current URL so the shell can hide sidebar/topbar on /login. */
+  /** Tracks the current URL so the shell can hide sidebar/topbar on the
+      auth routes (/login, /forgot-password, /reset-password). */
   private readonly currentUrl = signal<string>(this.router.url);
-  readonly showShell = computed(() => !this.currentUrl().startsWith('/login'));
+  private readonly authRoutes = ['/login', '/forgot-password', '/reset-password'];
+  readonly showShell = computed(() => {
+    const u = this.currentUrl();
+    return !this.authRoutes.some((r) => u.startsWith(r));
+  });
 
   constructor() {
     this.router.events

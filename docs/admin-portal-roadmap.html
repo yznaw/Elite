@@ -70,7 +70,7 @@
 
   <div class="summary">
     <div class="s-card total"><div class="num">51</div><div class="lbl">Total Items</div></div>
-    <div class="s-card" style="border-color:#15803d"><div class="num" style="color:#15803d" id="done-count">17</div><div class="lbl">Done</div></div>
+    <div class="s-card" style="border-color:#15803d"><div class="num" style="color:#15803d" id="done-count">18</div><div class="lbl">Done</div></div>
     <div class="s-card p0"><div class="num">6</div><div class="lbl">P0 Critical</div></div>
     <div class="s-card p1"><div class="num">19</div><div class="lbl">P1 High</div></div>
     <div class="s-card p2"><div class="num">20</div><div class="lbl">P2 Medium</div></div>
@@ -101,7 +101,7 @@
 const DATA=[
 {s:"Foundation & Cross-Cutting",items:[
 {p:"done",t:"Backend API Integration",c:"Implemented: ApiClient + typed admin services (products, collections, customers, orders) wrap /api/admin/* with credentials. Catalog, Collections, Customers, Orders now hydrate from PostgreSQL on init; saves/deletes round-trip through the API. db:seed creates realistic catalog + variants + collections + customers + orders + timelines for instant dev parity.",a:"✓ Completed — services/api-client.service.ts, services/admin-*.service.ts, pages/{catalog,collections,customers,orders}/*.component.ts, server/db/seed.js. Remaining mock-only pages (dashboard, media, storefront, sync, analytics, settings) follow the same pattern."},
-{p:"done",t:"Authentication & Authorization",c:"Implemented session-based auth (express-session + Postgres store), not JWT — simpler revocation for a first-party admin tool. /api/auth/{login,logout,me} with bcrypt-hashed passwords; default admin seeded on first boot. Angular AuthService + canMatch guards on every admin route, RoleGuard restricts /settings to owner/admin. LoginComponent at /login, 401s redirect with returnUrl. Topbar shows live user initials + Sign-out button.",a:"✓ Completed — server/{routes/auth.route.js,middleware/require-auth.js,index.js}, pages/login/, services/auth.service.ts, guards/{auth,role}.guard.ts"},
+{p:"done",t:"Authentication & Authorization",c:"Session-based auth (express-session + Postgres store via connect-pg-simple) + bcrypt password hashing. POST /api/auth/{login,logout,me,forgot,reset} with one-shot, SHA-256-hashed reset tokens (30m TTL, replay-protected, never leaks account existence). Angular AuthService + canMatch guards on every admin route, RoleGuard restricts /settings to owner/admin. /login, /forgot-password, /reset-password pages — sidebar shows the live signed-in user (name, role, email, initials) with a Sign-out button. db:seed:admins seeds one user per role and writes credentials to gitignored server/admins.local.txt.",a:"✓ Completed — server/{routes/auth.route.js,middleware/require-auth.js,index.js,db/migrations/002_password_reset_tokens.sql,db/seed-admins.js}, pages/login/{login,forgot-password,reset-password}.component.ts, services/auth.service.ts, shared/{sidebar,topbar}, guards/{auth,role}.guard.ts"},
 {p:"done",t:"Error Handling & Loading States",c:"Implemented: HTTP error interceptor with i18n, skeleton component with card/table/KPI/chart variants.",a:"✓ Completed — interceptors/http-error.interceptor.ts, shared/skeleton/skeleton.component.ts"},
 {p:"done",t:"Real-time Notifications",c:"Implemented: NotificationService + NotificationDropdownComponent with live alerts, mark-read, dismiss.",a:"✓ Completed — services/notification.service.ts, shared/notification-dropdown/"},
 {p:"done",t:"Arabic Transcreation (Remaining Pages)",c:"Implemented: every page (Catalog, Collections, Product Editor, Storefront, Orders, Customers, Media, Analytics, Sync, Settings) transcreated to native-feeling Arabic — beyond literal translation.",a:"✓ Completed — i18n/strings.ts"},
@@ -110,7 +110,7 @@ const DATA=[
 ]},
 {s:"Dashboard",items:[
 {p:"done",t:"Use i18n for All Strings",c:"Implemented: KPI labels, card titles, table column headers, and 'View All' button all use t('dash.*') / t('orders.col.*') keys. 'View All' now wired to /orders.",a:"✓ Completed — pages/dashboard/dashboard.component.ts"},
-{p:"p1",t:"Dynamic Date-Aware KPIs",c:"KPIs show hardcoded values.",a:"Fetch real-time KPIs from API with dynamic deltas."},
+{p:"done",t:"Dynamic Date-Aware KPIs",c:"Implemented: dashboard loads orders + products + customers in parallel from /api/admin/*. Today's revenue, active orders, new customers, top 3D views, the 30-day revenue chart, the heatmap, and the Recent Orders table all derive from real DB rows. No more hardcoded mock values after login.",a:"✓ Completed — pages/dashboard/dashboard.component.ts"},
 {p:"p2",t:"Date Range Picker",c:"Fixed to 'Last 30 days'.",a:"Add selector: Today, 7d, 30d, 90d, Custom."},
 {p:"done",t:"'View All' Button Should Navigate",c:"Implemented: button uses routerLink='/orders' and navigates from the Recent Orders card.",a:"✓ Completed — pages/dashboard/dashboard.component.ts"},
 {p:"p3",t:"Dashboard Customization",a:"Reorder, hide, or resize dashboard widgets."}

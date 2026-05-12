@@ -4,16 +4,27 @@ This folder contains the PostgreSQL schema for the Elite white-label ecommerce p
 
 ## Migration
 
-Initial schema:
+Apply migrations in order:
 
 ```bash
 psql "$DATABASE_URL" -f server/db/migrations/001_initial_schema.sql
+psql "$DATABASE_URL" -f server/db/migrations/002_password_reset_tokens.sql
 ```
 
 Or from the `server/` folder:
 
 ```bash
-npm run db:migrate
+npm run db:migrate                  # 001 (initial schema)
+psql "$DATABASE_URL" -f db/migrations/002_password_reset_tokens.sql
+```
+
+> The `db:migrate` script currently runs only `001`. When more migrations land, swap it for a runner that picks up `db/migrations/*.sql` in order.
+
+## Seed
+
+```bash
+npm run db:seed          # tenant + 8 products + variants + 3 collections + 6 customers + 8 orders
+npm run db:seed:admins   # one admin per role; writes server/admins.local.txt (gitignored)
 ```
 
 ## Design
