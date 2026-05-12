@@ -2,10 +2,12 @@ import { Component, HostListener, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { CartService } from '../../services/cart.service';
+import { I18nService } from '../../services/i18n.service';
+import { Locale, LocaleService } from '../../services/locale.service';
 
 interface NavLink {
   path: string;
-  label: string;
+  labelKey: string;
   exact?: boolean;
 }
 
@@ -14,13 +16,13 @@ interface NavLink {
   standalone: true,
   imports: [CommonModule, RouterLink, RouterLinkActive],
   template: `
-    <nav class="nav-shell" [class.is-scrolled]="scrolled()" aria-label="Primary navigation">
-      <a routerLink="/" class="brand-link" aria-label="Elite home">
-        <span class="brand-mark">ELITE</span>
-        <span class="brand-subtitle">Arabic Leather Artisans</span>
+    <nav class="nav-shell" [class.is-scrolled]="scrolled()" [attr.aria-label]="t('nav.menu')">
+      <a routerLink="/" class="brand-link" [attr.aria-label]="t('brand.name')">
+        <span class="brand-mark">{{ t('brand.name') }}</span>
+        <span class="brand-subtitle">{{ t('brand.tagline') }}</span>
       </a>
 
-      <div class="desktop-nav" aria-label="Main links">
+      <div class="desktop-nav" [attr.aria-label]="t('nav.menu')">
         @for (l of links; track l.path) {
           <a
             [routerLink]="l.path"
@@ -30,13 +32,22 @@ interface NavLink {
             class="nav-link"
             [class.is-active]="rla.isActive"
           >
-            {{ l.label }}
+            {{ t(l.labelKey) }}
           </a>
         }
       </div>
 
       <div class="nav-actions">
-        <button type="button" class="icon-btn cart-btn" (click)="cart.openDrawer()" aria-label="Open cart">
+        <div class="lang-switch" [attr.aria-label]="t('nav.language')">
+          <button type="button" [class.active]="locale.locale() === 'en'" (click)="setLocale('en')">
+            EN
+          </button>
+          <button type="button" [class.active]="locale.locale() === 'ar'" (click)="setLocale('ar')">
+            عربي
+          </button>
+        </div>
+
+        <button type="button" class="icon-btn cart-btn" (click)="cart.openDrawer()" [attr.aria-label]="t('nav.cart')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
             <line x1="3" y1="6" x2="21" y2="6" />
@@ -47,7 +58,7 @@ interface NavLink {
           }
         </button>
 
-        <button type="button" class="icon-btn menu-btn" (click)="menuOpen.set(true)" aria-label="Open menu">
+        <button type="button" class="icon-btn menu-btn" (click)="menuOpen.set(true)" [attr.aria-label]="t('nav.openMenu')">
           <span></span>
           <span></span>
         </button>
@@ -56,9 +67,9 @@ interface NavLink {
 
     @if (menuOpen()) {
       <div class="mobile-menu">
-        <button type="button" class="mobile-close" (click)="menuOpen.set(false)" aria-label="Close menu">×</button>
+        <button type="button" class="mobile-close" (click)="menuOpen.set(false)" [attr.aria-label]="t('nav.closeMenu')">×</button>
 
-        <div class="mobile-kicker">Navigation</div>
+        <div class="mobile-kicker">{{ t('nav.menu') }}</div>
 
         @for (l of links; track l.path; let i = $index) {
           <a
@@ -71,12 +82,21 @@ interface NavLink {
             [class.is-active]="rla.isActive"
             [style.animation-delay]="(i * 0.08) + 's'"
           >
-            {{ l.label }}
+            {{ t(l.labelKey) }}
           </a>
         }
 
+        <div class="mobile-lang">
+          <button type="button" [class.active]="locale.locale() === 'en'" (click)="setLocale('en')">
+            {{ t('nav.lang.en') }}
+          </button>
+          <button type="button" [class.active]="locale.locale() === 'ar'" (click)="setLocale('ar')">
+            {{ t('nav.lang.ar') }}
+          </button>
+        </div>
+
         <div class="mobile-footer">
-          <p>Bespoke Appointments Available</p>
+          <p>{{ t('nav.bespokeAvailable') }}</p>
         </div>
       </div>
     }
@@ -192,6 +212,39 @@ interface NavLink {
       align-items: center;
       justify-self: end;
       gap: 8px;
+    }
+
+    .lang-switch,
+    .mobile-lang {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 250, 240, 0.08);
+    }
+
+    .lang-switch button,
+    .mobile-lang button {
+      min-width: 38px;
+      min-height: 32px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: rgba(255, 250, 240, 0.7);
+      cursor: pointer;
+      font-family: var(--ff-sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0;
+      transition: background 0.24s ease, color 0.24s ease;
+    }
+
+    .lang-switch button.active,
+    .mobile-lang button.active {
+      background: rgba(255, 250, 240, 0.16);
+      color: #fffaf0;
     }
 
     .icon-btn {
@@ -336,12 +389,21 @@ interface NavLink {
       text-transform: uppercase;
     }
 
+    .mobile-lang {
+      align-self: flex-start;
+      margin-top: 28px;
+    }
+
     @media (max-width: 920px) {
       .nav-shell {
         grid-template-columns: 1fr auto;
       }
 
       .desktop-nav {
+        display: none;
+      }
+
+      .lang-switch {
         display: none;
       }
 
@@ -383,16 +445,23 @@ interface NavLink {
 })
 export class NavComponent {
   readonly cart = inject(CartService);
+  readonly locale = inject(LocaleService);
+  private readonly i18n = inject(I18nService);
+  readonly t = (key: string): string => this.i18n.t(key);
 
   readonly scrolled = signal(false);
   readonly menuOpen = signal(false);
 
   readonly links: NavLink[] = [
-    { path: '/', label: 'Atelier', exact: true },
-    { path: '/collection', label: 'Collection' },
-    { path: '/story', label: 'Our Story' },
-    { path: '/contact', label: 'Contact' },
+    { path: '/', labelKey: 'nav.atelier', exact: true },
+    { path: '/collection', labelKey: 'nav.collection' },
+    { path: '/story', labelKey: 'nav.story' },
+    { path: '/contact', labelKey: 'nav.contact' },
   ];
+
+  setLocale(next: Locale): void {
+    this.locale.set(next);
+  }
 
   @HostListener('window:scroll')
   onScroll(): void {

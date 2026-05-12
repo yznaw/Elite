@@ -18,22 +18,23 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ProductsService } from '../../services/products.service';
 import { Product } from '../../models/product.model';
+import { I18nService } from '../../services/i18n.service';
 
 interface MetaCard {
   id: number;
-  label: string;
-  sub: string;
+  labelKey: string;
+  subKey: string;
   icon: string;
 }
 
 interface PromiseStat {
   value: string;
-  label: string;
+  labelKey: string;
 }
 
 interface LeatherColorOption {
   id: string;
-  name: string;
+  nameKey: string;
   color: number;
   swatch: string;
 }
@@ -41,9 +42,9 @@ interface LeatherColorOption {
 interface HeroModelOption {
   id: string;
   index: string;
-  eyebrow: string;
-  title: string;
-  subtitle: string;
+  eyebrowKey: string;
+  titleKey: string;
+  subtitleKey: string;
   url: string;
 }
 
@@ -58,6 +59,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly products = inject(ProductsService);
   private readonly router = inject(Router);
   private readonly ngZone = inject(NgZone);
+  private readonly i18n = inject(I18nService);
 
   private metaTimer: number | undefined;
   private resizeObserver?: ResizeObserver;
@@ -95,25 +97,25 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     {
       id: 'heritage-mule',
       index: '01',
-      eyebrow: 'Heritage Series',
-      title: 'Doha Mule',
-      subtitle: 'A sculpted leather silhouette with hand-finished stitch detail.',
+      eyebrowKey: 'home.hero.heritageMule.eyebrow',
+      titleKey: 'home.hero.heritageMule.title',
+      subtitleKey: 'home.hero.heritageMule.subtitle',
       url: '/assets/models/latest-brown-v2.glb',
     },
     {
       id: 'majlis-slide',
       index: '02',
-      eyebrow: 'Majlis Edition',
-      title: 'Majlis Slide',
-      subtitle: 'A refined open form designed for warm evenings and private settings.',
+      eyebrowKey: 'home.hero.majlisSlide.eyebrow',
+      titleKey: 'home.hero.majlisSlide.title',
+      subtitleKey: 'home.hero.majlisSlide.subtitle',
       url: '/assets/models/latest-brown-v2.glb',
     },
     {
       id: 'atelier-form',
       index: '03',
-      eyebrow: 'Atelier Form',
-      title: 'Nomad Sandal',
-      subtitle: 'A modern Arabic profile prepared for the next crafted model release.',
+      eyebrowKey: 'home.hero.atelierForm.eyebrow',
+      titleKey: 'home.hero.atelierForm.title',
+      subtitleKey: 'home.hero.atelierForm.subtitle',
       url: '/assets/models/latest-brown-v2.glb',
     },
   ];
@@ -123,23 +125,29 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   );
 
   readonly leatherColors: LeatherColorOption[] = [
-    { id: 'cognac', name: 'Cognac', color: 0x7b4b2b, swatch: '#7b4b2b' },
-    { id: 'espresso', name: 'Espresso', color: 0x2e1b12, swatch: '#2e1b12' },
-    { id: 'sand', name: 'Sand', color: 0xb98d54, swatch: '#b98d54' },
+    { id: 'cognac', nameKey: 'home.leatherColor.cognac', color: 0x7b4b2b, swatch: '#7b4b2b' },
+    { id: 'espresso', nameKey: 'home.leatherColor.espresso', color: 0x2e1b12, swatch: '#2e1b12' },
+    { id: 'sand', nameKey: 'home.leatherColor.sand', color: 0xb98d54, swatch: '#b98d54' },
   ];
 
   readonly metaCards: MetaCard[] = [
-    { id: 1, label: 'Hand-stitched Detail', sub: 'Triple-lock welt seam', icon: '◊' },
-    { id: 2, label: 'Premium Camel Leather', sub: 'Full-grain, Doha tannery', icon: '◆' },
-    { id: 3, label: '48hr Crafting Time', sub: 'Single artisan, zero compromise', icon: '◈' },
+    { id: 1, labelKey: 'home.meta.handStitched', subKey: 'home.meta.handStitched.sub', icon: '◊' },
+    { id: 2, labelKey: 'home.meta.camelLeather', subKey: 'home.meta.camelLeather.sub', icon: '◆' },
+    { id: 3, labelKey: 'home.meta.craftingTime', subKey: 'home.meta.craftingTime.sub', icon: '◈' },
   ];
 
   readonly stats: PromiseStat[] = [
-    { value: '60+', label: 'Years of Heritage' },
-    { value: '12',  label: 'Master Artisans' },
-    { value: '48hr', label: 'Per Pair' },
-    { value: '∞',   label: 'Lifetime Care' },
+    { value: '60+', labelKey: 'home.stats.heritage' },
+    { value: '12',  labelKey: 'home.stats.artisans' },
+    { value: '48hr', labelKey: 'home.stats.perPair' },
+    { value: '∞',   labelKey: 'home.stats.lifetime' },
   ];
+
+  readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
+  readonly price = (value: number): string => this.i18n.price(value);
+  readonly productName = (product: Product): string => this.i18n.productName(product);
+  readonly productLeather = (value: string): string => this.i18n.productLeather(value);
+  readonly productTag = (value: string): string => this.i18n.productTag(value);
 
   ngOnInit(): void {
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);

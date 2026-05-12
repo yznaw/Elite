@@ -58,6 +58,32 @@ body {
   overflow-x: hidden;
 }
 
+html[dir='rtl'] body {
+  direction: rtl;
+}
+
+html[dir='rtl'] .float-label {
+  right: 16px;
+  left: auto;
+}
+
+html[dir='rtl'] .cart-drawer {
+  right: auto;
+  left: 0;
+  border-right: 1px solid var(--border);
+  border-left: 0;
+  animation-name: slideInLeft;
+}
+
+html[dir='rtl'] .cart-count {
+  right: auto;
+  left: -3px;
+}
+
+html[dir='rtl'] footer a {
+  text-align: start !important;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--surface); }
@@ -129,6 +155,10 @@ body {
 }
 @keyframes slideInRight {
   from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
   to   { transform: translateX(0); }
 }
 @keyframes shimmer {

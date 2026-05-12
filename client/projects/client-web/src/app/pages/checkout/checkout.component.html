@@ -5,20 +5,20 @@
         ✓
       </div>
       <h2 class="serif" style="font-size: 42px; font-weight: 300; color: var(--cream); margin-bottom: 12px;">
-        Order Confirmed
+        {{ t('checkout.confirm.title') }}
       </h2>
       <p style="font-family: var(--ff-sans); font-size: 13px; color: var(--muted); line-height: 1.8; margin-bottom: 8px;">
-        Your bespoke pair is now in the hands of our master craftsmen.
+        {{ t('checkout.confirm.body1') }}
       </p>
       <p style="font-family: var(--ff-serif); font-size: 18px; color: var(--gold); font-style: italic; margin-bottom: 36px;">
-        "We'll notify you when it begins its journey."
+        {{ t('checkout.confirm.quote') }}
       </p>
       <div style="border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 20px 0; margin-bottom: 36px;">
-        <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted); margin-bottom: 4px;">Order Total</div>
-        <div class="serif" style="font-size: 28px; color: var(--gold);">SAR {{ total().toLocaleString() }}</div>
+        <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted); margin-bottom: 4px;">{{ t('checkout.confirm.totalLabel') }}</div>
+        <div class="serif" style="font-size: 28px; color: var(--gold);">{{ price(total()) }}</div>
       </div>
       <button class="btn-gold" (click)="goCollection()" style="padding: 16px 48px; font-size: 11px; letter-spacing: 0.18em;">
-        Continue Browsing
+        {{ t('common.continueBrowsing') }}
       </button>
     </div>
   </div>
@@ -28,8 +28,8 @@
       <!-- LEFT: Form -->
       <div>
         <div style="text-align: center; margin-bottom: 40px;">
-          <div style="font-family: var(--ff-serif); font-size: 22px; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 4px;">ELITE</div>
-          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--muted); text-transform: uppercase;">Secure Checkout</div>
+          <div style="font-family: var(--ff-serif); font-size: 22px; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 4px;">{{ t('brand.name') }}</div>
+          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--muted); text-transform: uppercase;">{{ t('checkout.brand.kicker') }}</div>
         </div>
 
         <!-- Step indicators -->
@@ -44,7 +44,7 @@
                 @if (i < step()) { <span>✓</span> } @else { <span>{{ i + 1 }}</span> }
               </div>
               <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;"
-                [style.color]="i === step() ? 'var(--gold)' : 'var(--muted)'">{{ s }}</span>
+                [style.color]="i === step() ? 'var(--gold)' : 'var(--muted)'">{{ t(s) }}</span>
             </div>
             @if (i < steps.length - 1) {
               <div style="flex: 1; height: 1px; margin: 0 12px 20px;"
@@ -58,19 +58,19 @@
           <div class="anim-fade-up" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="float-wrap">
               <input class="float-input" type="text" [ngModel]="form().firstName" (ngModelChange)="set('firstName', $event)" placeholder=" " />
-              <label class="float-label">First Name</label>
+              <label class="float-label">{{ t('checkout.field.firstName') }}</label>
             </div>
             <div class="float-wrap">
               <input class="float-input" type="text" [ngModel]="form().lastName" (ngModelChange)="set('lastName', $event)" placeholder=" " />
-              <label class="float-label">Last Name</label>
+              <label class="float-label">{{ t('checkout.field.lastName') }}</label>
             </div>
             <div class="float-wrap" style="grid-column: 1/-1;">
               <input class="float-input" type="email" [ngModel]="form().email" (ngModelChange)="set('email', $event)" placeholder=" " />
-              <label class="float-label">Email Address</label>
+              <label class="float-label">{{ t('checkout.field.email') }}</label>
             </div>
             <div class="float-wrap" style="grid-column: 1/-1;">
               <input class="float-input" type="tel" [ngModel]="form().phone" (ngModelChange)="set('phone', $event)" placeholder=" " />
-              <label class="float-label">Phone Number</label>
+              <label class="float-label">{{ t('checkout.field.phone') }}</label>
             </div>
           </div>
         }
@@ -80,26 +80,26 @@
           <div class="anim-fade-up" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="float-wrap" style="grid-column: 1/-1;">
               <input class="float-input" type="text" [ngModel]="form().address" (ngModelChange)="set('address', $event)" placeholder=" " />
-              <label class="float-label">Street Address</label>
+              <label class="float-label">{{ t('checkout.field.address') }}</label>
             </div>
             <div class="float-wrap">
               <input class="float-input" type="text" [ngModel]="form().city" (ngModelChange)="set('city', $event)" placeholder=" " />
-              <label class="float-label">City</label>
+              <label class="float-label">{{ t('checkout.field.city') }}</label>
             </div>
             <div class="float-wrap">
               <select class="float-input" [ngModel]="form().country" (ngModelChange)="set('country', $event)"
                 style="padding-top: 20px; padding-bottom: 8px; cursor: pointer;">
-                @for (c of countries; track c) { <option [value]="c">{{ c }}</option> }
+                @for (c of countries; track c) { <option [value]="c">{{ countryLabel(c) }}</option> }
               </select>
-              <label class="float-label" style="top: 6px; font-size: 9px; color: var(--gold);">Country</label>
+              <label class="float-label" style="top: 6px; font-size: 9px; color: var(--gold);">{{ t('checkout.field.country') }}</label>
             </div>
             <div style="grid-column: 1/-1; padding: 16px; background: var(--card); border: 1px solid var(--border); margin-top: 4px;">
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                  <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream); margin-bottom: 2px;">Complimentary Express Delivery</div>
-                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">1–2 business days · Signature required</div>
+                  <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream); margin-bottom: 2px;">{{ t('checkout.delivery.title') }}</div>
+                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">{{ t('checkout.delivery.sub') }}</div>
                 </div>
-                <span style="font-family: var(--ff-serif); font-size: 16px; color: var(--gold);">Free</span>
+                <span style="font-family: var(--ff-serif); font-size: 16px; color: var(--gold);">{{ t('checkout.delivery.free') }}</span>
               </div>
             </div>
           </div>
@@ -110,23 +110,23 @@
           <div class="anim-fade-up" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="float-wrap" style="grid-column: 1/-1;">
               <input class="float-input" type="text" [ngModel]="form().name" (ngModelChange)="set('name', $event)" placeholder=" " />
-              <label class="float-label">Cardholder Name</label>
+              <label class="float-label">{{ t('checkout.field.cardholder') }}</label>
             </div>
             <div class="float-wrap" style="grid-column: 1/-1;">
               <input class="float-input" type="text" maxlength="19" [ngModel]="form().cardNum" (ngModelChange)="set('cardNum', $event)" placeholder="•••• •••• •••• ••••" />
-              <label class="float-label">Card Number</label>
+              <label class="float-label">{{ t('checkout.field.card') }}</label>
             </div>
             <div class="float-wrap">
               <input class="float-input" type="text" maxlength="5" [ngModel]="form().expiry" (ngModelChange)="set('expiry', $event)" placeholder=" " />
-              <label class="float-label">Expiry (MM/YY)</label>
+              <label class="float-label">{{ t('checkout.field.expiry') }}</label>
             </div>
             <div class="float-wrap">
               <input class="float-input" type="password" maxlength="4" [ngModel]="form().cvv" (ngModelChange)="set('cvv', $event)" placeholder=" " />
-              <label class="float-label">CVV</label>
+              <label class="float-label">{{ t('checkout.field.cvv') }}</label>
             </div>
             <div style="grid-column: 1/-1; display: flex; align-items: center; gap: 8px; padding: 10px 0;">
               <span style="font-size: 10px; color: var(--muted);">🔒</span>
-              <span style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;">256-bit SSL encryption · PCI DSS compliant</span>
+              <span style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;">{{ t('checkout.security') }}</span>
             </div>
           </div>
         }
@@ -134,15 +134,15 @@
         <!-- Nav buttons -->
         <div style="display: flex; gap: 12px; margin-top: 28px;">
           @if (step() > 0) {
-            <button class="btn-outline" (click)="back()" style="padding: 14px 24px; flex: 1;">Back</button>
+            <button class="btn-outline" (click)="back()" style="padding: 14px 24px; flex: 1;">{{ t('common.back') }}</button>
           }
           <button class="btn-gold" (click)="next()" style="padding: 16px; flex: 2; font-size: 11px; letter-spacing: 0.18em;">
-            {{ step() < steps.length - 1 ? 'Continue' : 'Place Order' }}
+            {{ step() < steps.length - 1 ? t('common.continue') : t('checkout.placeOrder') }}
           </button>
         </div>
 
         <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); text-align: center; margin-top: 16px; letterSpacing: 0.06em;">
-          By placing your order you agree to our terms of service
+          {{ t('checkout.terms') }}
         </p>
       </div>
 
@@ -150,25 +150,25 @@
       <div>
         <div class="glass" style="padding: 28px; position: sticky; top: 90px;">
           <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-bottom: 20px;">
-            Order Summary
+            {{ t('checkout.summary.title') }}
           </div>
 
           @if (cart.items().length === 0) {
-            <p style="font-family: var(--ff-sans); font-size: 12px; color: var(--muted);">Your cart is empty</p>
+            <p style="font-family: var(--ff-sans); font-size: 12px; color: var(--muted);">{{ t('checkout.summary.empty') }}</p>
           } @else {
             @for (item of cart.items(); track item.id + '-' + item.size) {
               <div style="display: flex; gap: 14px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border2);">
                 <div class="img-placeholder" style="width: 64px; height: 64px; flex-shrink: 0;">
-                  <img [src]="item.image" [alt]="item.name"
+                  <img [src]="item.image" [alt]="itemName(item)"
                     style="width: 100%; height: 100%; object-fit: cover; opacity: 0.95;"
                     (error)="onImgError($event)" />
                 </div>
                 <div style="flex: 1;">
-                  <div style="font-family: var(--ff-serif); font-size: 15px; color: var(--cream); margin-bottom: 2px;">{{ item.name }}</div>
-                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">Size {{ item.size }} · Qty {{ item.qty }}</div>
+                  <div style="font-family: var(--ff-serif); font-size: 15px; color: var(--cream); margin-bottom: 2px;">{{ itemName(item) }}</div>
+                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">{{ t('cart.size') }} {{ item.size }} · {{ t('cart.qty') }} {{ item.qty }}</div>
                 </div>
                 <div style="font-family: var(--ff-sans); font-size: 13px; color: var(--gold); white-space: nowrap;">
-                  SAR {{ (item.price * item.qty).toLocaleString() }}
+                  {{ price(item.price * item.qty) }}
                 </div>
               </div>
             }
@@ -177,23 +177,23 @@
           <div class="divider" style="margin: 8px 0 16px;"></div>
 
           <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">Subtotal</span>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">SAR {{ subtotal().toLocaleString() }}</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.subtotal') }}</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">{{ price(subtotal()) }}</span>
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">Delivery</span>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">Complimentary</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.delivery') }}</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">{{ t('checkout.summary.deliveryValue') }}</span>
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">Duties</span>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">Included</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.duties') }}</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">{{ t('checkout.summary.dutiesValue') }}</span>
           </div>
 
           <div class="divider" style="margin: 12px 0;"></div>
 
           <div style="display: flex; justify-content: space-between;">
-            <span style="font-family: var(--ff-sans); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cream);">Total</span>
-            <span style="font-family: var(--ff-serif); font-size: 22px; color: var(--gold);">SAR {{ total().toLocaleString() }}</span>
+            <span style="font-family: var(--ff-sans); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cream);">{{ t('checkout.summary.total') }}</span>
+            <span style="font-family: var(--ff-serif); font-size: 22px; color: var(--gold);">{{ price(total()) }}</span>
           </div>
         </div>
       </div>

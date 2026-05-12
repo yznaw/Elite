@@ -1,106 +1,126 @@
-<div style="padding-top: 80px; min-height: 100vh;">
-  <!-- Header -->
-  <div style="padding: 48px 24px 32px; max-width: 1200px; margin: 0 auto;">
-    <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; margin-bottom: 10px;">
-      The Collection
-    </div>
-    <div style="display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-      <h1 class="serif" style="font-size: clamp(36px, 7vw, 64px); font-weight: 300; color: var(--cream); line-height: 1;">
-        All Pieces
+<section class="collection-page">
+  <div class="collection-shell">
+    <aside class="filter-panel" aria-label="Collection filters">
+      <h1>
+        Filters
+        @if (activeFilterCount() > 0) {
+          <span>{{ activeFilterCount() }}</span>
+        }
       </h1>
-      <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted); letter-spacing: 0.08em;">
-        {{ filtered().length }} works
-      </span>
-    </div>
-  </div>
 
-  <div class="divider" style="max-width: 1200px; margin: 0 auto;"></div>
-
-  <!-- Filter bar -->
-  <div class="filter-bar"
-    style="position: sticky; top: 60px; z-index: 20; background: rgba(250,248,244,0.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border2); padding: 14px 24px;">
-    <div style="max-width: 1200px; margin: 0 auto; display: flex; gap: 10px; align-items: center; overflow-x: auto; padding-bottom: 2px;">
-      <div style="display: flex; gap: 6px; flex-shrink: 0;">
-        @for (f of styleFilters; track f) {
-          <button class="filter-pill" [class.active]="styleFilter() === f" (click)="setStyle(f)">{{ f }}</button>
-        }
-      </div>
-
-      <div style="width: 1px; height: 20px; background: var(--border); flex-shrink: 0;"></div>
-
-      <div style="display: flex; gap: 6px; flex-shrink: 0;">
-        @for (f of leatherFilters; track f) {
-          <button class="filter-pill" [class.active]="leatherFilter() === f" (click)="setLeather(f)" style="font-size: 10px;">{{ f }}</button>
-        }
-      </div>
-
-      <div style="margin-left: auto; flex-shrink: 0;">
-        <select [ngModel]="sort()" (ngModelChange)="setSort($event)"
-          style="background: var(--card); border: 1px solid var(--border); color: var(--cream-dim); font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 8px 12px; cursor: pointer; outline: none;">
-          @for (o of sortOptions; track o) {
-            <option [value]="o">{{ o }}</option>
+      @for (group of filterGroups(); track group.id) {
+        <div class="filter-group">
+          <h2>{{ group.title }}</h2>
+          @for (option of group.options; track option.value) {
+            <label class="filter-option">
+              <input
+                type="checkbox"
+                [checked]="isFilterSelected(group.id, option.value)"
+                (change)="toggleFilter(group.id, option.value)"
+              />
+              <span>{{ option.label }}</span>
+              <small>{{ option.count }}</small>
+            </label>
           }
-        </select>
-      </div>
-    </div>
-  </div>
+        </div>
+      }
 
-  <!-- Grid -->
-  <div style="max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px;">
-    @if (filtered().length === 0) {
-      <div style="text-align: center; padding: 80px 0;">
-        <p class="serif" style="font-size: 28px; color: var(--muted); font-style: italic;">No pieces match your selection</p>
-      </div>
-    } @else {
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 2px;">
-        @for (p of filtered(); track p.id; let i = $index) {
-          <div class="anim-fade-up"
-            (click)="goToProduct(p)"
-            (mouseenter)="hovered.set(p.id)"
-            (mouseleave)="hovered.set(null)"
-            [style.animation-delay]="(i * 0.06) + 's'"
-            style="cursor: pointer;">
-            <div style="position: relative; padding-bottom: 110%; overflow: hidden;">
-              <div class="img-placeholder" style="position: absolute; inset: 0;">
-                <img [src]="p.image" [alt]="p.name"
-                  style="width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.95; transition: transform 0.7s cubic-bezier(0.22,1,0.36,1);"
-                  [style.transform]="hovered() === p.id ? 'scale(1.05)' : 'scale(1)'"
-                  (error)="onImgError($event)" />
-                <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,4,0.65) 0%, transparent 55%); transition: opacity 0.3s;"
-                  [style.opacity]="hovered() === p.id ? 1 : 0.6"></div>
-              </div>
-
-              @if (p.tag) {
-                <div style="position: absolute; top: 16px; left: 16px;">
-                  <span class="tag-chip" style="font-size: 9px;">{{ p.tag }}</span>
-                </div>
-              }
-
-              <div style="position: absolute; bottom: 20px; left: 50%; transition: all 0.3s ease; white-space: nowrap;"
-                [style.transform]="hovered() === p.id ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(10px)'"
-                [style.opacity]="hovered() === p.id ? 1 : 0">
-                <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold); padding: 8px 18px; background: rgba(7,6,4,0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
-                  View Piece
-                </span>
-              </div>
-            </div>
-
-            <div style="padding: 16px 4px 24px;">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
-                <div class="serif" style="font-size: 19px; color: var(--cream); font-weight: 400; line-height: 1.1;">
-                  {{ p.name }}
-                </div>
-                <div style="font-family: var(--ff-sans); font-size: 13px; color: var(--gold); margin-left: 12px; white-space: nowrap;">
-                  SAR {{ p.price.toLocaleString() }}
-                </div>
-              </div>
-              <div style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase;">
-                {{ p.leather }} · {{ p.style }}
-              </div>
-            </div>
-          </div>
+      <div class="filter-group">
+        <h2>Sort</h2>
+        @for (o of sortOptions; track o) {
+          <label class="filter-option filter-option-sort">
+            <input
+              type="checkbox"
+              [checked]="sort() === o"
+              (change)="setSort(o)"
+            />
+            <span>{{ sortLabel(o) }}</span>
+          </label>
         }
       </div>
-    }
+
+      <button type="button" class="clear-filters" (click)="clearFilters()">
+        Clear
+      </button>
+    </aside>
+
+    <div class="catalog-area">
+      <div class="catalog-topline">
+        <span>{{ filtered().length }} {{ t("collection.worksSuffix") }}</span>
+        <!-- <button
+          type="button"
+          class="catalog-menu"
+          aria-label="Open collection menu"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button> -->
+      </div>
+
+      @if (filtered().length === 0) {
+        <div class="empty-state">
+          <p>{{ t("collection.empty") }}</p>
+          <button type="button" (click)="clearFilters()">Reset filters</button>
+        </div>
+      } @else {
+        <div class="product-grid">
+          @for (p of filtered(); track p.id; let i = $index) {
+            <article
+              class="product-tile"
+              (mouseenter)="hovered.set(p.id)"
+              (mouseleave)="hovered.set(null)"
+              [style.animation-delay]="i * 0.035 + 's'"
+            >
+              <button type="button" class="product-link" (click)="goToProduct(p)">
+                <span class="product-image-wrap">
+                  <img
+                    [src]="p.image"
+                    [alt]="productName(p)"
+                    (error)="onImgError($event)"
+                  />
+                </span>
+                <span class="product-copy">
+                  <span class="product-name">{{ productName(p) }}</span>
+                  <span class="product-meta"
+                    >{{ productStyle(p.style) }} Shoe</span
+                  >
+                  <span class="product-price">{{ price(p.price) }}</span>
+                </span>
+              </button>
+
+              <div class="purchase-panel">
+                <div class="size-picker" [attr.aria-label]="t('collection.quickAdd.size')">
+                  <span class="size-label">{{ t("collection.quickAdd.size") }}</span>
+                  <div class="size-options">
+                    @for (size of p.sizes; track size) {
+                      <button
+                        type="button"
+                        class="size-chip"
+                        [class.is-selected]="selectedSize(p) === size"
+                        [attr.aria-label]="t('collection.quickAdd.size') + ' ' + size"
+                        (click)="selectSize(p, size)"
+                      >
+                        {{ size }}
+                      </button>
+                    }
+                  </div>
+                </div>
+
+                <button type="button" class="quick-add" (click)="addToCart(p)">
+                  @if (addedProductId() === p.id) {
+                    <span>{{ t("collection.quickAdd.added") }}</span>
+                    <span class="quick-add-icon">✓</span>
+                  } @else {
+                    <span>{{ t("collection.quickAdd") }}</span>
+                    <span class="quick-add-arrow">→</span>
+                  }
+                </button>
+              </div>
+            </article>
+          }
+        </div>
+      }
+    </div>
   </div>
-</div>
+</section>

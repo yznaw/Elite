@@ -8,15 +8,20 @@ const DEFAULT_IMAGE =
 
 function mapRow(row) {
   const sizes = Array.isArray(row.sizes) ? row.sizes.filter(Boolean) : [];
+  const colors = Array.isArray(row.colors) ? row.colors.filter(Boolean) : [];
+  const materials = Array.isArray(row.materials) ? row.materials.filter(Boolean) : [];
 
   return {
     id: row.id,
     name: row.name,
+    brand: row.brand || '',
     price: Math.round(Number(row.base_price_cents || 0) / 100),
     tag: row.tag || '',
     leather: row.leather || '',
     style: row.style || '',
     sizes: sizes.length > 0 ? sizes.map((s) => Number(s)).filter(Number.isFinite) : [40, 41, 42, 43, 44],
+    colors,
+    materials,
     image: row.image || DEFAULT_IMAGE,
   };
 }
@@ -28,6 +33,7 @@ router.get('/', async (_req, res, next) => {
         SELECT
           p.id,
           p.name,
+          p.brand,
           p.base_price_cents,
           p.tag,
           p.leather,
@@ -37,6 +43,16 @@ router.get('/', async (_req, res, next) => {
               FILTER (WHERE pv.size IS NOT NULL AND pv.size <> ''),
             ARRAY[]::text[]
           ) AS sizes,
+          COALESCE(
+            array_agg(DISTINCT pv.color ORDER BY pv.color)
+              FILTER (WHERE pv.color IS NOT NULL AND pv.color <> ''),
+            ARRAY[]::text[]
+          ) AS colors,
+          COALESCE(
+            array_agg(DISTINCT pv.material ORDER BY pv.material)
+              FILTER (WHERE pv.material IS NOT NULL AND pv.material <> ''),
+            ARRAY[]::text[]
+          ) AS materials,
           COALESCE(primary_media.preview_url, primary_media.storage_url) AS image
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
@@ -64,6 +80,7 @@ router.get('/:id', async (req, res, next) => {
         SELECT
           p.id,
           p.name,
+          p.brand,
           p.base_price_cents,
           p.tag,
           p.leather,
@@ -73,6 +90,16 @@ router.get('/:id', async (req, res, next) => {
               FILTER (WHERE pv.size IS NOT NULL AND pv.size <> ''),
             ARRAY[]::text[]
           ) AS sizes,
+          COALESCE(
+            array_agg(DISTINCT pv.color ORDER BY pv.color)
+              FILTER (WHERE pv.color IS NOT NULL AND pv.color <> ''),
+            ARRAY[]::text[]
+          ) AS colors,
+          COALESCE(
+            array_agg(DISTINCT pv.material ORDER BY pv.material)
+              FILTER (WHERE pv.material IS NOT NULL AND pv.material <> ''),
+            ARRAY[]::text[]
+          ) AS materials,
           COALESCE(primary_media.preview_url, primary_media.storage_url) AS image
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true

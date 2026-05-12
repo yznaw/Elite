@@ -5,10 +5,10 @@
       <div style="padding: 20px 24px; display: flex; gap: 8px; align-items: center;">
         <button (click)="goCollection()"
           style="background: none; border: none; cursor: pointer; font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase;">
-          Collection
+          {{ t('product.breadcrumb.collection') }}
         </button>
         <span style="color: var(--muted); font-size: 10px;">›</span>
-        <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.12em; color: var(--gold); text-transform: uppercase;">{{ p.name }}</span>
+        <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.12em; color: var(--gold); text-transform: uppercase;">{{ productName(p) }}</span>
       </div>
 
       <div class="pdp-grid" style="display: grid; grid-template-columns: 1fr; gap: 0;">
@@ -16,7 +16,7 @@
         <div style="position: relative;">
           <div style="position: relative; padding-bottom: 85%; overflow: hidden; background: var(--card);">
             @for (src of gallery; track src; let i = $index) {
-              <img [src]="src" [alt]="p.name"
+              <img [src]="src" [alt]="productName(p)"
                 style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity 1s ease, transform 1s ease;"
                 [style.opacity]="galleryIdx() === i ? 1 : 0"
                 [style.transform]="galleryIdx() === i ? 'scale(1)' : 'scale(1.03)'"
@@ -26,11 +26,11 @@
 
             @if (p.tag) {
               <div style="position: absolute; top: 20px; left: 20px;">
-                <span class="tag-chip">{{ p.tag }}</span>
+                <span class="tag-chip">{{ productTag(p.tag) }}</span>
               </div>
             }
 
-            <button (click)="toggleWishlist()" aria-label="Toggle wishlist"
+            <button (click)="toggleWishlist()" [attr.aria-label]="t('product.aria.wishlist')"
               style="position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 50%; background: rgba(13,11,8,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; font-size: 16px;"
               [style.border]="wishlisted() ? '1px solid var(--gold)' : '1px solid var(--border)'">
               <span [style.color]="wishlisted() ? 'var(--gold)' : 'var(--muted)'">
@@ -38,11 +38,11 @@
               </span>
             </button>
 
-            <button (click)="navGallery(-1)" aria-label="Previous"
+            <button (click)="navGallery(-1)" [attr.aria-label]="t('product.aria.previousImage')"
               style="position: absolute; top: 50%; transform: translateY(-50%); left: 16px; width: 36px; height: 36px; background: rgba(13,11,8,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); cursor: pointer; color: var(--cream); font-size: 22px; display: flex; align-items: center; justify-content: center; transition: all 0.25s;">
               ‹
             </button>
-            <button (click)="navGallery(1)" aria-label="Next"
+            <button (click)="navGallery(1)" [attr.aria-label]="t('product.aria.nextImage')"
               style="position: absolute; top: 50%; transform: translateY(-50%); right: 16px; width: 36px; height: 36px; background: rgba(13,11,8,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); cursor: pointer; color: var(--cream); font-size: 22px; display: flex; align-items: center; justify-content: center; transition: all 0.25s;">
               ›
             </button>
@@ -65,7 +65,7 @@
           <!-- Dots -->
           <div style="display: flex; gap: 6px; justify-content: center; padding: 14px 0 0;">
             @for (src of gallery; track src; let i = $index) {
-              <button (click)="setGalleryIdx(i)" class="gallery-dot" [class.active]="galleryIdx() === i" [attr.aria-label]="'View image ' + (i+1)"></button>
+              <button (click)="setGalleryIdx(i)" class="gallery-dot" [class.active]="galleryIdx() === i" [attr.aria-label]="t('product.aria.viewImage', { index: i + 1 })"></button>
             }
           </div>
         </div>
@@ -78,36 +78,36 @@
                 <span class="star">★</span>
               }
             </div>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">48 reviews</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">48 {{ t('product.reviews') }}</span>
           </div>
 
           <h1 class="serif" style="font-size: clamp(32px, 6vw, 52px); font-weight: 300; color: var(--cream); line-height: 1.05; margin-bottom: 8px;">
-            {{ p.name }}
+            {{ productName(p) }}
           </h1>
 
           <p style="font-family: var(--ff-sans); font-size: 12px; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; margin-bottom: 20px;">
-            {{ p.leather }} · Handcrafted in Doha
+            {{ productLeather(p.leather) }} · {{ t('product.handcraftedSuffix') }}
           </p>
 
           <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 24px;">
             <span style="font-family: var(--ff-serif); font-size: 32px; color: var(--gold); font-weight: 300;">
-              SAR {{ p.price.toLocaleString() }}
+              {{ price(p.price) }}
             </span>
             <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase;">
-              · Duties included
+              {{ t('product.dutiesIncluded') }}
             </span>
           </div>
 
           <div class="divider" style="margin-bottom: 24px;"></div>
 
           <p style="font-family: var(--ff-sans); font-size: 13px; line-height: 1.8; color: var(--cream-dim); margin-bottom: 28px;">
-            A statement of understated authority. The {{ p.name }} is individually shaped on a hand-carved wooden last, requiring 48 hours of continuous attention from a single master artisan. Limited to 40 pairs per season.
+            {{ t('product.descriptionTemplate', { name: productName(p) }) }}
           </p>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px;">
             @for (a of attributes(); track a.key) {
               <div style="border-left: 1px solid var(--border); padding-left: 12px;">
-                <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase; margin-bottom: 3px;">{{ a.key }}</div>
+                <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase; margin-bottom: 3px;">{{ t(a.key) }}</div>
                 <div style="font-family: var(--ff-sans); font-size: 12px; color: var(--cream);">{{ a.value }}</div>
               </div>
             }
@@ -119,10 +119,10 @@
           <div id="size-section" style="margin-bottom: 28px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.15em; color: var(--cream-dim); text-transform: uppercase;">
-                Select Size (EU)
+                {{ t('product.size.label') }}
               </span>
               <button style="background: none; border: none; cursor: pointer; font-family: var(--ff-sans); font-size: 10px; color: var(--gold); letter-spacing: 0.06em; text-decoration: underline;">
-                Size Guide
+                {{ t('product.size.guide') }}
               </button>
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
@@ -132,19 +132,19 @@
             </div>
             @if (selectedSize() == null) {
               <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--gold); margin-top: 8px; letter-spacing: 0.06em;">
-                ↑ Please select a size to continue
+                {{ t('product.size.required') }}
               </p>
             }
           </div>
 
           <!-- Qty -->
           <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
-            <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.15em; color: var(--cream-dim); text-transform: uppercase;">Qty</span>
+            <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.15em; color: var(--cream-dim); text-transform: uppercase;">{{ t('product.qty') }}</span>
             <div style="display: flex; align-items: center; gap: 0; border: 1px solid var(--border);">
-              <button (click)="decQty()" aria-label="Decrease quantity"
+              <button (click)="decQty()" [attr.aria-label]="t('product.aria.decreaseQty')"
                 style="width: 36px; height: 36px; background: none; border: none; color: var(--cream-dim); cursor: pointer; font-size: 16px; transition: color 0.2s; border-right: 1px solid var(--border);">−</button>
               <span style="width: 36px; text-align: center; font-family: var(--ff-sans); font-size: 13px; color: var(--cream);">{{ qty() }}</span>
-              <button (click)="incQty()" aria-label="Increase quantity"
+              <button (click)="incQty()" [attr.aria-label]="t('product.aria.increaseQty')"
                 style="width: 36px; height: 36px; background: none; border: none; color: var(--cream-dim); cursor: pointer; font-size: 16px; transition: color 0.2s; border-left: 1px solid var(--border);">+</button>
             </div>
           </div>
@@ -154,23 +154,23 @@
             style="width: 100%; padding: 18px; font-size: 11px; letter-spacing: 0.2em; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; position: relative;">
             @if (addedFeedback()) {
               <span style="display: flex; align-items: center; gap: 8px;">
-                <span>✓</span> Added to Selection
+                <span>✓</span> {{ t('product.cta.added') }}
               </span>
             } @else {
-              <span>Reserve This Pair</span>
-              <span style="opacity: 0.6; font-size: 10px;">· SAR {{ (p.price * qty()).toLocaleString() }}</span>
+              <span>{{ t('product.cta.reserve') }}</span>
+              <span style="opacity: 0.6; font-size: 10px;">· {{ price(p.price * qty()) }}</span>
             }
           </button>
 
           <button class="btn-outline" (click)="speakToAdvisor()"
             style="width: 100%; padding: 14px; font-size: 10px; letter-spacing: 0.15em;">
-            Speak with a Client Advisor
+            {{ t('product.cta.advisor') }}
           </button>
 
           <div style="display: flex; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; gap: 10px;">
-            @for (t of ['Free Express Delivery','Certificate Included','30-Day Returns']; track t) {
+            @for (trustKey of ['product.trust.delivery','product.trust.certificate','product.trust.returns']; track trustKey) {
               <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.08em; color: var(--muted); text-align: center;">
-                ✓ {{ t }}
+                ✓ {{ t(trustKey) }}
               </span>
             }
           </div>
@@ -183,13 +183,13 @@
               <div style="border-bottom: 1px solid var(--border2); margin-bottom: 0;">
                 <button (click)="toggleAccordion(acc.id)"
                   style="width: 100%; background: none; border: none; cursor: pointer; padding: 16px 0; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-family: var(--ff-sans); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cream);">{{ acc.title }}</span>
+                  <span style="font-family: var(--ff-sans); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cream);">{{ t(acc.titleKey) }}</span>
                   <span style="color: var(--gold); font-size: 16px; font-weight: 300; line-height: 1; transition: transform 0.3s ease; display: block;"
                     [style.transform]="openAccordion() === acc.id ? 'rotate(45deg)' : 'rotate(0)'">+</span>
                 </button>
                 <div class="accordion-content" [class.open]="openAccordion() === acc.id">
                   <p style="font-family: var(--ff-sans); font-size: 12px; line-height: 1.8; color: var(--cream-dim); padding-bottom: 16px;">
-                    {{ acc.content }}
+                    {{ t(acc.contentKey) }}
                   </p>
                 </div>
               </div>
@@ -202,9 +202,9 @@
     <div class="sticky-atc" id="sticky-atc" style="display: none;">
       <button class="btn-gold" (click)="add()" style="width: 100%; padding: 16px; font-size: 11px; letter-spacing: 0.18em;">
         @if (addedFeedback()) {
-          <ng-container>✓ Added</ng-container>
+          <ng-container>{{ t('product.sticky.added') }}</ng-container>
         } @else {
-          <ng-container>Reserve · SAR {{ (p.price * qty()).toLocaleString() }}</ng-container>
+          <ng-container>{{ t('product.sticky.reserve', { price: price(p.price * qty()) }) }}</ng-container>
         }
       </button>
     </div>

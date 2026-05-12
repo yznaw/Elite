@@ -41,10 +41,12 @@ const EN = {
   'common.continue': 'Continue',
   'common.back': 'Back',
   'common.next': 'Next',
+  'common.previous': 'Previous',
   'common.cancel': 'Cancel',
   'common.close': 'Close',
   'common.send': 'Send',
   'common.submit': 'Submit',
+  'common.loading': 'Loading',
   'common.scroll': 'Scroll',
   'common.dragRotate': 'Drag · Rotate · Explore',
   'common.currency.sar': 'SAR',
@@ -106,6 +108,29 @@ const EN = {
   'home.meta.craftingTime': '48hr Crafting Time',
   'home.meta.craftingTime.sub': 'Single artisan, zero compromise',
 
+  'home.hero.scroll.line1': 'Crafted',
+  'home.hero.scroll.line2': 'to Move',
+  'home.hero.aria': 'Interactive 3D model of a brown handcrafted leather shoe',
+  'home.model.loading': 'Preparing 3D atelier view',
+  'home.model.unavailable': '3D model unavailable',
+  'home.model.switch': 'Switch 3D model',
+  'home.model.previous': 'Show previous 3D model',
+  'home.model.next': 'Show next 3D model',
+  'home.model.chooseLeather': 'Choose leather color',
+  'home.model.changeLeather': 'Change model color to {name}',
+  'home.hero.heritageMule.eyebrow': 'Heritage Series',
+  'home.hero.heritageMule.title': 'Doha Mule',
+  'home.hero.heritageMule.subtitle': 'A sculpted leather silhouette with hand-finished stitch detail.',
+  'home.hero.majlisSlide.eyebrow': 'Majlis Edition',
+  'home.hero.majlisSlide.title': 'Majlis Slide',
+  'home.hero.majlisSlide.subtitle': 'A refined open form designed for warm evenings and private settings.',
+  'home.hero.atelierForm.eyebrow': 'Atelier Form',
+  'home.hero.atelierForm.title': 'Nomad Sandal',
+  'home.hero.atelierForm.subtitle': 'A modern Arabic profile prepared for the next crafted model release.',
+  'home.leatherColor.cognac': 'Cognac',
+  'home.leatherColor.espresso': 'Espresso',
+  'home.leatherColor.sand': 'Sand',
+
   'home.featured.kicker': 'Curated Selection',
   'home.featured.title': 'Icons of Craft',
 
@@ -124,6 +149,9 @@ const EN = {
   'collection.title': 'All Pieces',
   'collection.worksSuffix': 'works',
   'collection.empty': 'No pieces match your selection',
+  'collection.quickAdd': 'Add to Cart',
+  'collection.quickAdd.added': 'Added',
+  'collection.quickAdd.size': 'Size',
 
   'collection.style.all': 'All',
   'collection.style.oxford': 'Oxford',
@@ -151,6 +179,12 @@ const EN = {
   //  Product page
   // ─────────────────────────────────────────────────────────────────────
   'product.breadcrumb.collection': 'Collection',
+  'product.aria.wishlist': 'Toggle wishlist',
+  'product.aria.previousImage': 'Previous image',
+  'product.aria.nextImage': 'Next image',
+  'product.aria.viewImage': 'View image {index}',
+  'product.aria.decreaseQty': 'Decrease quantity',
+  'product.aria.increaseQty': 'Increase quantity',
   'product.reviews': 'reviews',
   'product.handcraftedSuffix': 'Handcrafted in Doha',
   'product.dutiesIncluded': '· Duties included',
@@ -241,6 +275,7 @@ const EN = {
   // ─────────────────────────────────────────────────────────────────────
   'story.headline.line1': 'The Craft of',
   'story.headline.line2': 'Silence & Precision',
+  'story.hero.alt': 'Artisan workshop',
   'story.subhead': 'Six decades of Arabic leather artisanship. Twelve master craftsmen. One unbroken promise.',
 
   'story.chapter.1962.title': 'A Workshop in Al-Dirah',
@@ -260,6 +295,7 @@ const EN = {
   'story.atelier.kicker': 'The Atelier',
   'story.atelier.title': 'Twelve Masters',
   'story.atelier.experience': 'experience',
+  'story.yearsAbbr': 'yrs',
   'story.role.leatherSelector': 'Leather Selector',
   'story.role.patternCutter': 'Pattern Cutter',
   'story.role.lastMaker': 'Last Maker',
@@ -309,6 +345,28 @@ const EN = {
 
   'contact.promise.line1': '"No inquiry is too small. No request is unreasonable. You are our guest."',
   'contact.promise.signature': 'The Elite Promise',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Product data
+  // ─────────────────────────────────────────────────────────────────────
+  'productData.1.name': 'Al-Mahmal Oxford',
+  'productData.2.name': 'Najd Derby',
+  'productData.3.name': 'Hijaz Loafer',
+  'productData.4.name': 'Rub Al Khali Boot',
+  'productData.5.name': 'Medina Mule',
+  'productData.6.name': 'Quraish Chelsea',
+  'productData.tag.signature': 'Signature',
+  'productData.tag.new': 'New',
+  'productData.tag.bestseller': 'Bestseller',
+  'productData.tag.limited': 'Limited',
+  'productData.leather.camelNappa': 'Camel Nappa',
+  'productData.leather.camelFullGrain': 'Camel Full-Grain',
+  'productData.leather.goatSuede': 'Goat Suede',
+  'productData.leather.calfLeather': 'Calf Leather',
+  'productData.style.oxford': 'Oxford',
+  'productData.style.derby': 'Derby',
+  'productData.style.loafer': 'Loafer',
+  'productData.style.boot': 'Boot',
 } as const;
 
 const AR: Record<keyof typeof EN, string> = {
@@ -341,10 +399,12 @@ const AR: Record<keyof typeof EN, string> = {
   'common.continue': 'متابعة',
   'common.back': 'رجوع',
   'common.next': 'التالي',
+  'common.previous': 'السابق',
   'common.cancel': 'إلغاء',
   'common.close': 'إغلاق',
   'common.send': 'إرسال',
   'common.submit': 'إرسال',
+  'common.loading': 'جارٍ التحميل',
   'common.scroll': 'مرّر',
   'common.dragRotate': 'اسحب · دوّر · استكشف',
   'common.currency.sar': 'ر.س',
@@ -400,6 +460,29 @@ const AR: Record<keyof typeof EN, string> = {
   'home.meta.craftingTime': '48 ساعة من الصناعة',
   'home.meta.craftingTime.sub': 'حرفي واحد · بلا تنازلات',
 
+  'home.hero.scroll.line1': 'صُمّم',
+  'home.hero.scroll.line2': 'للحركة',
+  'home.hero.aria': 'نموذج ثلاثي الأبعاد تفاعلي لحذاء جلدي بني مصنوع يدوياً',
+  'home.model.loading': 'جارٍ تجهيز عرض الورشة ثلاثي الأبعاد',
+  'home.model.unavailable': 'النموذج ثلاثي الأبعاد غير متاح',
+  'home.model.switch': 'تبديل النموذج ثلاثي الأبعاد',
+  'home.model.previous': 'عرض النموذج ثلاثي الأبعاد السابق',
+  'home.model.next': 'عرض النموذج ثلاثي الأبعاد التالي',
+  'home.model.chooseLeather': 'اختر لون الجلد',
+  'home.model.changeLeather': 'تغيير لون النموذج إلى {name}',
+  'home.hero.heritageMule.eyebrow': 'سلسلة التراث',
+  'home.hero.heritageMule.title': 'حذاء الدوحة المفتوح',
+  'home.hero.heritageMule.subtitle': 'تصميم جلدي منحوت بتفاصيل حياكة يدوية مصقولة.',
+  'home.hero.majlisSlide.eyebrow': 'إصدار المجلس',
+  'home.hero.majlisSlide.title': 'حذاء المجلس',
+  'home.hero.majlisSlide.subtitle': 'قالب مفتوح راقٍ لأمسيات دافئة ومجالس خاصة.',
+  'home.hero.atelierForm.eyebrow': 'قالب الورشة',
+  'home.hero.atelierForm.title': 'صندل الرحّال',
+  'home.hero.atelierForm.subtitle': 'ملامح عربية معاصرة مهيأة لإصدار حرفي قادم.',
+  'home.leatherColor.cognac': 'كونياك',
+  'home.leatherColor.espresso': 'إسبريسو',
+  'home.leatherColor.sand': 'رملي',
+
   'home.featured.kicker': 'اختيارات منتقاة',
   'home.featured.title': 'أيقونات الحرفة',
 
@@ -416,6 +499,9 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.title': 'جميع القطع',
   'collection.worksSuffix': 'قطعة',
   'collection.empty': 'لا توجد قطع تطابق اختيارك',
+  'collection.quickAdd': 'أضف إلى السلة',
+  'collection.quickAdd.added': 'أُضيف',
+  'collection.quickAdd.size': 'المقاس',
 
   'collection.style.all': 'الكل',
   'collection.style.oxford': 'أوكسفورد',
@@ -441,6 +527,12 @@ const AR: Record<keyof typeof EN, string> = {
 
   // Product
   'product.breadcrumb.collection': 'المجموعة',
+  'product.aria.wishlist': 'تبديل قائمة الرغبات',
+  'product.aria.previousImage': 'الصورة السابقة',
+  'product.aria.nextImage': 'الصورة التالية',
+  'product.aria.viewImage': 'عرض الصورة {index}',
+  'product.aria.decreaseQty': 'تقليل الكمية',
+  'product.aria.increaseQty': 'زيادة الكمية',
   'product.reviews': 'تقييم',
   'product.handcraftedSuffix': 'صناعة يدوية في الدوحة',
   'product.dutiesIncluded': '· الرسوم مشمولة',
@@ -527,6 +619,7 @@ const AR: Record<keyof typeof EN, string> = {
   // Story
   'story.headline.line1': 'حرفة',
   'story.headline.line2': 'الصمت والإتقان',
+  'story.hero.alt': 'ورشة حرفيين',
   'story.subhead': 'ستة عقود من الحرفية الجلدية العربية. اثنا عشر حرفياً ماهراً. وعد واحد لا يُكسَر.',
 
   'story.chapter.1962.title': 'ورشة في الدِّيرة',
@@ -546,6 +639,7 @@ const AR: Record<keyof typeof EN, string> = {
   'story.atelier.kicker': 'الورشة',
   'story.atelier.title': 'اثنا عشر حرفياً',
   'story.atelier.experience': 'خبرة',
+  'story.yearsAbbr': 'سنة',
   'story.role.leatherSelector': 'منتقي الجلود',
   'story.role.patternCutter': 'قاطع الأنماط',
   'story.role.lastMaker': 'صانع القوالب',
@@ -593,6 +687,26 @@ const AR: Record<keyof typeof EN, string> = {
 
   'contact.promise.line1': '"لا استفسار صغير، ولا طلب غير معقول. أنت ضيفنا."',
   'contact.promise.signature': 'وعد إيليت',
+
+  // Product data
+  'productData.1.name': 'أوكسفورد المحمل',
+  'productData.2.name': 'ديربي نجد',
+  'productData.3.name': 'لوفر الحجاز',
+  'productData.4.name': 'بوت الربع الخالي',
+  'productData.5.name': 'حذاء المدينة المفتوح',
+  'productData.6.name': 'تشيلسي قريش',
+  'productData.tag.signature': 'توقيع',
+  'productData.tag.new': 'جديد',
+  'productData.tag.bestseller': 'الأكثر مبيعاً',
+  'productData.tag.limited': 'محدود',
+  'productData.leather.camelNappa': 'جلد جمل نابا',
+  'productData.leather.camelFullGrain': 'جلد جمل كامل الحبيبات',
+  'productData.leather.goatSuede': 'جلد ماعز شامواه',
+  'productData.leather.calfLeather': 'جلد عجل',
+  'productData.style.oxford': 'أوكسفورد',
+  'productData.style.derby': 'ديربي',
+  'productData.style.loafer': 'لوفر',
+  'productData.style.boot': 'بوت',
 };
 
 export const STRINGS: Record<Locale, Record<string, string>> = {
