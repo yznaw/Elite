@@ -2,6 +2,8 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, slugify, toCents, validationError } = require('./lib');
+const { upload } = require('../middleware/upload');
+const { storage } = require('../lib/storage');
 
 const router = Router();
 
@@ -265,5 +267,113 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     client.release();
   }
 }));
+
+/**
+ * POST /api/admin/products/:id/images
+ *
+ * Multipart upload of one or more images for a product. Each file is stored
+ * via the storage adapter, then `media_assets` + `media_links` rows are
+ * written so the gallery shows up in /api/admin/products list responses.
+ *
+ * On the first image upload (or when ?primary=true), the product's
+ * `primary_media_id` is updated so list views and storefront use the new
+ * image as the thumbnail.
+ *
+ * Returns the resulting `images: string[]` array (URLs in display order)
+ * so the frontend can patch its local form state with one assignment.
+ */
+router.post(
+  '/:id/images',
+  upload.array('files', 12),
+  asyncHandler(async (req, res) => {
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (files.length === 0) return validationError(res, ['No files received.']);
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const tenant = await ensureDefaultTenant(client);
+      const userId = req.session?.user?.id || null;
+      const productId = req.params.id;
+
+      const exists = await client.query('SELECT id FROM products WHERE tenant_id = $1 AND id = $2', [tenant.id, productId]);
+      if (exists.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return notFound(res, 'Product not found.');
+      }
+
+      const startOrderRes = await client.query(
+        "SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM media_links WHERE product_id = $1 AND role = 'gallery'",
+        [productId],
+      );
+      let sortOrder = Number(startOrderRes.rows[0].next || 0);
+
+      const newMediaIds = [];
+      for (const file of files) {
+        const stored = await storage.save({
+          buffer: file.buffer,
+          filename: file.originalname,
+          mimeType: file.mimetype,
+        });
+        const inserted = await client.query(
+          `
+            INSERT INTO media_assets (
+              tenant_id, filename, kind, mime_type, size_bytes,
+              storage_url, preview_url, uploaded_by_user_id, metadata
+            )
+            VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8::jsonb)
+            RETURNING id
+          `,
+          [
+            tenant.id, file.originalname, stored.mimeType, file.size,
+            stored.url, stored.url, userId,
+            JSON.stringify({ storagePath: stored.storagePath, originalName: file.originalname }),
+          ],
+        );
+        const mediaId = inserted.rows[0].id;
+        await client.query(
+          `
+            INSERT INTO media_links (tenant_id, media_id, product_id, role, sort_order)
+            VALUES ($1, $2, $3, 'gallery', $4)
+          `,
+          [tenant.id, mediaId, productId, sortOrder],
+        );
+        newMediaIds.push(mediaId);
+        sortOrder += 1;
+      }
+
+      // If the product had no primary image yet, promote the first uploaded
+      // file to primary so list/heatmap thumbs work immediately.
+      const primaryCheck = await client.query('SELECT primary_media_id FROM products WHERE id = $1', [productId]);
+      if (!primaryCheck.rows[0].primary_media_id && newMediaIds.length > 0) {
+        await client.query('UPDATE products SET primary_media_id = $1 WHERE id = $2', [newMediaIds[0], productId]);
+      }
+
+      // Compose the returned `images[]` so the client can patch in place.
+      const allImages = await client.query(
+        `
+          SELECT COALESCE(m.preview_url, m.storage_url) AS url
+          FROM media_links ml
+          JOIN media_assets m ON m.id = ml.media_id
+          WHERE ml.product_id = $1 AND ml.role IN ('gallery', 'primary')
+          ORDER BY ml.sort_order
+        `,
+        [productId],
+      );
+
+      await client.query('COMMIT');
+      created(res, {
+        productId,
+        uploaded: newMediaIds.length,
+        images: allImages.rows.map((r) => r.url),
+      }, `Uploaded ${newMediaIds.length} image${newMediaIds.length === 1 ? '' : 's'}.`);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }),
+);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
@@ -7,10 +7,19 @@ import { MediaDetailDrawerComponent } from './media-detail-drawer.component';
 import { AutoLinkModalComponent, LinkPair } from './auto-link-modal.component';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
-import { MEDIA_INIT } from '../../data/mock';
+import { AdminMediaService } from '../../services/admin-media.service';
+import { MediaUploadService } from '../../services/media-upload.service';
 import { fmtBytes, MediaFile } from '../../models';
 
 type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
+
+interface PendingUpload {
+  id: string;
+  name: string;
+  thumb: string;
+  percent: number;
+  error?: string;
+}
 
 @Component({
   selector: 'ap-media',
@@ -55,7 +64,10 @@ type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
               {{ t('media.dropFiles.autoLink') }}
             </div>
             <div class="row gap-sm" style="justify-content:center;flex-wrap:wrap;">
-              <button class="btn btn-primary"><ap-icon name="upload" [size]="14"/> {{ t('media.browse') }}</button>
+              <label class="btn btn-primary" style="cursor:pointer;">
+                <ap-icon name="upload" [size]="14"/> {{ t('media.browse') }}
+                <input type="file" multiple accept="image/*,.glb,.gltf" hidden (change)="onPick($event)"/>
+              </label>
               <button class="btn btn-gold" [disabled]="counts().unlinked === 0" (click)="autoLinking.set(true)">
                 <ap-icon name="wand" [size]="14"/>
                 {{ t('media.autoLink') }}
@@ -65,6 +77,30 @@ type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
               </button>
             </div>
           </div>
+
+          @if (pending().length > 0) {
+            <div class="upload-list">
+              @for (u of pending(); track u.id) {
+                <div class="upload-row" [class.is-error]="!!u.error">
+                  <div class="upload-thumb">
+                    @if (u.thumb) { <img [src]="u.thumb" [alt]="u.name"/> }
+                    @else { <ap-icon name="cube" [size]="18"/> }
+                  </div>
+                  <div class="upload-meta">
+                    <div class="upload-name">{{ u.name }}</div>
+                    @if (u.error) {
+                      <div class="upload-error">{{ u.error }}</div>
+                    } @else {
+                      <div class="upload-progress">
+                        <div class="upload-progress-fill" [style.width.%]="u.percent"></div>
+                      </div>
+                    }
+                  </div>
+                  <div class="upload-pct">{{ u.error ? '!' : (u.percent + '%') }}</div>
+                </div>
+              }
+            </div>
+          }
         </div>
       </div>
 
@@ -114,18 +150,98 @@ type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
         (apply)="applyAutoLink($event)"/>
     }
   `,
+  styles: [`
+    .upload-list {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-top: 1px dashed var(--border-2);
+      padding-top: 14px;
+    }
+    .upload-row {
+      display: grid;
+      grid-template-columns: 40px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border-2);
+      border-radius: 10px;
+    }
+    .upload-row.is-error { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05); }
+    .upload-thumb {
+      width: 40px; height: 40px; border-radius: 6px;
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-2, var(--bg));
+      color: var(--muted);
+    }
+    .upload-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .upload-meta { min-width: 0; }
+    .upload-name {
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .upload-progress {
+      width: 100%; height: 4px;
+      background: var(--bg-2, rgba(0,0,0,0.06));
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .upload-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), var(--gold));
+      transition: width 0.18s ease;
+    }
+    .upload-pct {
+      font-family: var(--ff-disp);
+      font-size: 11px;
+      color: var(--ink-2);
+      letter-spacing: 0.04em;
+      min-width: 36px;
+      text-align: end;
+    }
+    .upload-row.is-error .upload-pct { color: var(--danger); font-weight: 700; }
+    .upload-error { font-size: 11px; color: var(--danger); }
+
+    @media (max-width: 560px) {
+      .drop-zone { padding: 18px 14px; }
+      .upload-row { grid-template-columns: 32px 1fr auto; padding: 8px; }
+      .upload-thumb { width: 32px; height: 32px; }
+    }
+  `],
 })
-export class MediaComponent {
+export class MediaComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly i18n = inject(I18nService);
+  private readonly mediaApi = inject(AdminMediaService);
+  private readonly uploads = inject(MediaUploadService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
-  readonly media = signal<MediaFile[]>(MEDIA_INIT);
+  readonly media = signal<MediaFile[]>([]);
   readonly filter = signal<FilterKey>('all');
   readonly active = signal<MediaFile | null>(null);
   readonly autoLinking = signal(false);
   readonly dragOver = signal(false);
+  readonly pending = signal<PendingUpload[]>([]);
+
+  async ngOnInit(): Promise<void> {
+    await this.refresh();
+  }
+
+  private async refresh(): Promise<void> {
+    try {
+      this.media.set(await this.mediaApi.list());
+    } catch {
+      this.media.set([]);
+    }
+  }
 
   readonly counts = computed(() => {
     const m = this.media();
@@ -153,10 +269,93 @@ export class MediaComponent {
     return m.filter((x) => !x.linkedTo);
   });
 
+  // ── Drag & drop / file picker ─────────────────────────────────────────────
+
+  onDragOver(e: DragEvent): void {
+    e.preventDefault();
+    this.dragOver.set(true);
+  }
+
+  onDrop(e: DragEvent): void {
+    e.preventDefault();
+    this.dragOver.set(false);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) {
+      this.toast.warning('No files dropped', 'Try dragging a JPG, PNG, or .glb file.');
+      return;
+    }
+    void this.upload(files);
+  }
+
+  onPick(e: Event): void {
+    const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (files.length > 0) void this.upload(files);
+  }
+
+  /** Real upload with per-file progress rows. The API call sends the whole
+      batch so the browser reports a single progress series — we mirror it
+      across every row in the batch. */
+  private async upload(files: File[]): Promise<void> {
+    const accepted: { file: File; id: string }[] = [];
+    for (const file of files) {
+      const reason = this.uploads.validate(file);
+      if (reason) {
+        this.toast.error(reason, file.name);
+        continue;
+      }
+      const id = `up-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      accepted.push({ file, id });
+      const thumb = await readPreview(file);
+      this.pending.update((rows) => [...rows, { id, name: file.name, thumb, percent: 0 }]);
+    }
+    if (accepted.length === 0) return;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const ids = accepted.map((a) => a.id);
+        this.uploads.uploadMedia(accepted.map((a) => a.file)).subscribe({
+          next: (ev) => {
+            if (ev.stage === 'uploading') {
+              this.pending.update((rows) =>
+                rows.map((r) => (ids.includes(r.id) ? { ...r, percent: ev.percent } : r)),
+              );
+            }
+            if (ev.stage === 'done') {
+              this.toast.success(
+                `${accepted.length} ${accepted.length === 1 ? 'file' : 'files'} uploaded`,
+                'Media library refreshed.',
+              );
+              resolve();
+            }
+          },
+          error: (err) => reject(err),
+        });
+      });
+      // Re-fetch so the new rows appear with their server-assigned ids,
+      // upload timestamps, and uploader info.
+      await this.refresh();
+    } catch {
+      this.pending.update((rows) =>
+        rows.map((r) =>
+          accepted.some((a) => a.id === r.id) ? { ...r, error: this.t('error.unknown.title') } : r,
+        ),
+      );
+    } finally {
+      window.setTimeout(() => {
+        this.pending.update((rows) => rows.filter((r) => !accepted.some((a) => a.id === r.id)));
+      }, 700);
+    }
+  }
+
+  // ── Existing flows (unchanged) ────────────────────────────────────────────
+
   onUpdate(next: MediaFile): void {
     const prev = this.media().find((m) => m.id === next.id) ?? null;
     this.media.update((all) => all.map((m) => (m.id === next.id ? next : m)));
     this.active.set(next);
+    void this.mediaApi.link(next.id, next.linkedTo, 'gallery').catch(() => undefined);
     this.toast.success(
       next.linkedTo ? 'File linked' : 'File unlinked',
       next.name,
@@ -164,9 +363,16 @@ export class MediaComponent {
     );
   }
 
-  onDelete(id: string): void {
+  async onDelete(id: string): Promise<void> {
     const removed = this.media().find((m) => m.id === id);
     this.media.update((all) => all.filter((m) => m.id !== id));
+    try {
+      await this.mediaApi.remove(id);
+    } catch {
+      // The error interceptor already toasted; restore optimistic delete.
+      if (removed) this.media.update((all) => [removed, ...all]);
+      return;
+    }
     this.toast.success('File deleted', '1 file removed from library', removed ? {
       label: 'Undo',
       run: () => this.media.update((all) => [...all, removed]),
@@ -181,6 +387,10 @@ export class MediaComponent {
         return pair ? { ...m, linkedTo: pair.productId } : m;
       }),
     );
+    // Persist each link change in the background.
+    for (const pair of pairs) {
+      void this.mediaApi.link(pair.mediaId, pair.productId, 'gallery').catch(() => undefined);
+    }
     this.autoLinking.set(false);
     this.toast.success(
       `Linked ${pairs.length} ${pairs.length === 1 ? 'file' : 'files'}`,
@@ -191,22 +401,19 @@ export class MediaComponent {
 
   private revertMedia(prev: MediaFile): void {
     this.media.update((all) => all.map((m) => (m.id === prev.id ? prev : m)));
+    void this.mediaApi.link(prev.id, prev.linkedTo, 'gallery').catch(() => undefined);
     this.toast.info('Change reverted', prev.name);
   }
+}
 
-  onDragOver(e: DragEvent): void {
-    e.preventDefault();
-    this.dragOver.set(true);
-  }
-
-  onDrop(e: DragEvent): void {
-    e.preventDefault();
-    this.dragOver.set(false);
-    const count = e.dataTransfer?.files.length ?? 0;
-    if (count === 0) {
-      this.toast.warning('No files dropped', 'Try dragging a JPG, PNG, or .glb file.');
-      return;
-    }
-    this.toast.info('Upload simulated', `${count} file${count === 1 ? '' : 's'} queued (prototype)`);
-  }
+/** File → data URL (used for the per-row thumbnail before the server
+    returns the canonical URL). Resolves to '' for non-image files. */
+function readPreview(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) return Promise.resolve('');
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string) || '');
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
 }

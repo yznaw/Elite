@@ -1,7 +1,7 @@
 # 08 — Database & API Implementation
 
 > **Audience:** Backend developers, frontend developers wiring pages to API  
-> **Last updated:** May 12, 2026 — password reset flow + dashboard live data + UI shell cleanup
+> **Last updated:** May 12, 2026 — real file uploads (storage adapter), password reset flow, dashboard live data, UI shell cleanup
 
 ---
 
@@ -32,6 +32,8 @@ The implementation added:
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
 | `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |
 | `server/db/seed-admins.js` | One admin per role; writes credentials to `server/admins.local.txt` (gitignored) |
+| `server/lib/storage.js` | Storage adapter — disk driver now, S3/Supabase-ready interface |
+| `server/middleware/upload.js` | Shared `multer` config (memory storage, 50 MB cap, mimetype filter) |
 | `server/db/README.md` | Database setup notes |
 | `server/db/API.md` | Endpoint-to-database command map |
 
@@ -180,6 +182,39 @@ Creates one admin per role — `owner`, `admin`, `manager`, `viewer` — and wri
 
 ---
 
+## Media Uploads (Storage Adapter)
+
+`multer` parses multipart requests in memory; the buffer is then handed to a pluggable storage adapter. The adapter shape (`save({ buffer, filename, mimeType }) → { url, storagePath, mimeType }` + `remove(storagePath)`) is the same one S3 / Supabase / R2 drivers will implement, so the route code never knows which provider is wired up.
+
+| Concern | Where |
+|---|---|
+| Driver selection | `STORAGE_DRIVER=disk` (default). New drivers register in `server/lib/storage.js`. |
+| Local disk path | `server/uploads/` — gitignored. Served as `/uploads/*` via `express.static`. |
+| Max file size | `UPLOAD_MAX_SIZE_BYTES` env (default `52428800` = 50 MB). 413 returned on overflow. |
+| Allowed types | `image/{jpeg,png,webp,gif,avif}` + `.glb` (model/gltf-binary). 415 on mismatch. |
+| Filenames on disk | `<base36-timestamp>-<8 hex>.<ext>` — collision-free and never exposes the user-supplied name. |
+| Tracking on disk | `media_assets.metadata->>'storagePath'` stores the absolute path so DELETE can clean up the file. |
+
+### Swapping to S3 / Supabase
+
+1. `npm install @aws-sdk/client-s3` (or `@supabase/supabase-js`).
+2. Add a new driver in `server/lib/storage.js` implementing `save()` + `remove()`.
+3. Set `STORAGE_DRIVER=s3` (plus `STORAGE_BUCKET=…`, AWS credentials, etc.). No route code changes.
+
+### Client side
+
+| Piece | File |
+|---|---|
+| `MediaUploadService` (XHR-based, real progress events) | [client/projects/admin-portal/src/app/services/media-upload.service.ts](../client/projects/admin-portal/src/app/services/media-upload.service.ts) |
+| Product drawer gallery → batch upload + per-file progress | [pages/catalog/product-drawer.component.ts](../client/projects/admin-portal/src/app/pages/catalog/product-drawer.component.ts) |
+| Media library drop zone → real upload + auto-refresh | [pages/media/media.component.ts](../client/projects/admin-portal/src/app/pages/media/media.component.ts) |
+
+Validation runs locally first (same rules the server enforces) so the UI rejects obvious mismatches without a round-trip; the server check is the authority.
+
+Touch UX: every upload trigger is a `<label>` wrapping a hidden `<input type="file">`, so phones get the OS file picker on tap without needing drag/drop.
+
+---
+
 ## Setup Commands
 
 Install dependencies:
@@ -285,10 +320,11 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 
 | Method | Endpoint | Database behavior |
 |---|---|---|
-| `GET` | `/api/admin/media` | `SELECT` media with product links |
-| `POST` | `/api/admin/media` | `INSERT` media metadata |
-| `PATCH` | `/api/admin/media/:id/link` | Transaction: replace `media_links` for asset |
-| `DELETE` | `/api/admin/media/:id` | `DELETE` media asset |
+| `GET`    | `/api/admin/media`           | `SELECT` media with product links + uploader info |
+| `POST`   | `/api/admin/media`           | **Multipart**: store each `files[]` via the storage adapter, `INSERT media_assets`, optionally `INSERT media_links` if `productId` is in the form. Returns array. **JSON fallback**: legacy URL-only `INSERT`. |
+| `PATCH`  | `/api/admin/media/:id/link`  | Transaction: replace `media_links` for asset |
+| `DELETE` | `/api/admin/media/:id`       | `DELETE media_assets` row + `storage.remove()` to clear the file on disk |
+| `POST`   | `/api/admin/products/:id/images` | **Multipart**: batch-uploads images for a product. Transaction writes `media_assets` + `media_links` (role=`gallery`, `sort_order` continuing from current max) and promotes the first new image to `products.primary_media_id` if none was set. Returns the resulting `images: string[]` so the client patches state in one assignment. |
 
 ### Storefront Editor
 
@@ -480,6 +516,7 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 | Dashboard live KPIs + revenue chart + heatmap + Recent Orders | `orders`, `order_items`, `products`, `customers` | Loads in parallel from `/api/admin/orders`, `/api/admin/products`, `/api/admin/customers`. Today's revenue, active-orders count, recent customers, and the 30-day revenue series are all derived from real DB rows — no `mock.ts` import in the dashboard. |
 | Password reset flow | `password_reset_tokens` (SHA-256 hashed `token_hash`, `expires_at`, `used_at`) | `POST /api/auth/forgot` writes a row; `POST /api/auth/reset` validates + flips `used_at`. One-shot, 30-min TTL, replay-protected. |
 | Live signed-in user (sidebar) | `admin_users` (via `/api/auth/me`) | The sidebar footer reads `auth.user()` to render avatar initials, full name, role, and email. Sign-out lives next to the user card; the topbar avatar/logout were removed to eliminate the duplicate. |
+| Real file uploads (product images + media library) | `media_assets` (rows + `metadata.storagePath`) + `media_links` (role/sort_order) + `products.primary_media_id` | `POST /api/admin/media` (multipart, returns array) and `POST /api/admin/products/:id/images` (multipart, returns ordered `images[]`). Storage adapter writes to disk locally; swap to S3/Supabase via `STORAGE_DRIVER` env. `DELETE` removes file from disk too. |
 
 > Notation: `INSERT … ON CONFLICT DO UPDATE` patterns reuse the existing routes documented in [Admin API](#admin-api).
 
@@ -488,8 +525,7 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 ## Known Limitations
 
 - Tenant selection is still the default tenant — multi-tenant routing (subdomain or header-based) is not wired yet.
-- Media upload stores metadata/URLs only; binary upload storage is not implemented.
-- Product image gallery: schema is ready (`media_links` with `role='gallery'` + `sort_order`), but the admin product drawer currently stores the gallery as data URLs in memory; wire `POST /api/admin/media` + `media_links` writes from the drawer's save handler.
+- Production storage driver: currently disk-only. S3 / Supabase / R2 adapters need to be added in `server/lib/storage.js` and selected via `STORAGE_DRIVER`.
 - Collection cover upload: schema is ready (`collections.cover_media_id`); wire the drag-drop upload to `POST /api/admin/media` then `PATCH /api/admin/collections/:id` with the new media id.
 - Admin pages still on mock data: Media, Storefront, Sync, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
 - Password reset emails: `POST /api/auth/forgot` currently logs the URL to stdout. Wire a real email transport (Resend / SES / SendGrid) and replace the `console.log` in [server/routes/auth.route.js](../server/routes/auth.route.js).

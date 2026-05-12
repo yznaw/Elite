@@ -12,6 +12,7 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminProductsService } from '../../services/admin-products.service';
+import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
 import { MEDIA_INIT, COLLECTIONS } from '../../data/mock';
 import { ME, Product, ProductVariant } from '../../models';
 
@@ -27,6 +28,18 @@ interface FormShape {
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
+
+/** Read a File as a data URL — used for the upload-row thumbnail before
+    the server returns the canonical URL. Resolves to '' on non-images. */
+function readPreview(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) return Promise.resolve('');
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string) || '');
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+}
 
 @Component({
   selector: 'ap-product-drawer',
@@ -287,13 +300,30 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
           <div class="gallery-drop"
                (dragover)="onDragOver($event)"
                (drop)="onDropImages($event)">
-            @if (form().images.length === 0) {
+            @if (form().images.length === 0 && pendingUploads().length === 0) {
               <div class="gallery-empty">
                 <div class="strong">{{ t('product.gallery.empty.title') }}</div>
                 <div class="muted small mt-8">{{ t('product.gallery.empty.sub') }}</div>
               </div>
             } @else {
               <div class="gallery-grid">
+                @for (u of pendingUploads(); track u.id) {
+                  <div class="thumb thumb-uploading" [class.thumb-error]="!!u.error">
+                    @if (u.thumb) {
+                      <img [src]="u.thumb" [alt]="u.name"/>
+                    }
+                    <div class="thumb-overlay">
+                      @if (u.error) {
+                        <span class="thumb-error-msg">{{ u.error }}</span>
+                      } @else {
+                        <div class="thumb-progress-track">
+                          <div class="thumb-progress-fill" [style.width.%]="u.percent"></div>
+                        </div>
+                        <span class="thumb-progress-pct">{{ u.percent }}%</span>
+                      }
+                    </div>
+                  </div>
+                }
                 @for (img of form().images; track img; let i = $index) {
                   <div class="thumb"
                        [class.is-primary]="i === 0"
@@ -618,6 +648,64 @@ const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
     .thumb-act:hover { color: var(--green); border-color: var(--green); }
     .thumb-act.danger:hover { color: var(--danger); border-color: var(--danger); }
 
+    /* Upload-in-flight thumbnail state */
+    .thumb-uploading { cursor: progress; border: 2px solid var(--gold-2, var(--gold)); }
+    .thumb-uploading img { filter: brightness(0.55) saturate(0.85); }
+    .thumb-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      pointer-events: none;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+    .thumb-progress-track {
+      width: 80%;
+      height: 4px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .thumb-progress-fill {
+      height: 100%;
+      background: var(--gold);
+      transition: width 0.18s ease;
+    }
+    .thumb-progress-pct {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      font-family: var(--ff-disp);
+    }
+    .thumb-error { border-color: var(--danger); }
+    .thumb-error img { filter: brightness(0.4) saturate(0); }
+    .thumb-error-msg {
+      font-size: 10px;
+      text-align: center;
+      color: #fff;
+      background: rgba(239,68,68,0.85);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    /* Mobile-friendly gallery grid + drop zone — touch-tap reaches the file
+       picker because the upload button is a <label for=""> wrapping a hidden
+       input, no drag required. */
+    @media (max-width: 560px) {
+      .gallery-drop { padding: 10px; }
+      .gallery-grid {
+        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+        gap: 8px;
+      }
+      .thumb-actions { opacity: 1; }   /* always visible on touch — no hover */
+      .thumb-act { width: 28px; height: 28px; }
+    }
+
     /* Variants */
     .variants-empty {
       padding: 22px;
@@ -732,6 +820,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly productsApi = inject(AdminProductsService);
+  private readonly uploads = inject(MediaUploadService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
@@ -863,31 +952,125 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Per-pending-file progress UI state. We render one row per active upload
+      with a thumbnail (data URL while uploading), filename, percent + status. */
+  readonly pendingUploads = signal<Array<{
+    id: string;
+    name: string;
+    thumb: string;
+    percent: number;
+    error?: string;
+  }>>([]);
+  readonly isUploading = computed(() => this.pendingUploads().length > 0);
+
   onUploadImages(ev: Event): void {
     const input = ev.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     if (files.length === 0) return;
-    this.readFiles(files);
+    void this.uploadFiles(files);
     input.value = '';
   }
 
   onDropImages(ev: DragEvent): void {
     ev.preventDefault();
     const files = Array.from(ev.dataTransfer?.files ?? []).filter(f => f.type.startsWith('image/'));
-    if (files.length > 0) this.readFiles(files);
+    if (files.length > 0) void this.uploadFiles(files);
   }
 
   onDragOver(ev: DragEvent): void { ev.preventDefault(); }
 
-  private readFiles(files: File[]): void {
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const url = reader.result as string;
-        this.set('images', [...this.form().images, url]);
-      };
-      reader.readAsDataURL(file);
-    });
+  /**
+   * Uploads images via the storage adapter. We buffer files into the
+   * pendingUploads signal so the UI renders a thumbnail + progress bar per
+   * file in flight. On success we replace the form's images[] with the
+   * authoritative list returned by the server (so order stays in sync if
+   * the user uploaded multiple at once).
+   *
+   * Brand-new product stubs (P-NEW-*) don't have a server-side row yet, so
+   * we fall back to the legacy data-URL preview path; the URL gets persisted
+   * the first time the user saves the product.
+   */
+  private async uploadFiles(files: File[]): Promise<void> {
+    if (this.product?.id?.startsWith('P-NEW-')) {
+      // Pre-save stub: keep using local data URLs so the gallery preview
+      // works before the product exists on the server.
+      for (const file of files) {
+        const reader = new FileReader();
+        await new Promise<void>((resolve) => {
+          reader.onload = () => {
+            const url = reader.result as string;
+            this.set('images', [...this.form().images, url]);
+            resolve();
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+      this.toast.info(this.t('product.gallery.upload'), this.t('product.gallery.empty.sub'));
+      return;
+    }
+
+    // Pre-flight: validate + seed thumbnails so the UI renders progress rows
+    // immediately rather than after the first network event.
+    const accepted: { file: File; id: string }[] = [];
+    for (const file of files) {
+      const reason = this.uploads.validate(file);
+      if (reason) {
+        this.toast.error(reason, file.name);
+        continue;
+      }
+      const id = `up-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      accepted.push({ file, id });
+      const thumb = await readPreview(file);
+      this.pendingUploads.update((rows) => [...rows, { id, name: file.name, thumb, percent: 0 }]);
+    }
+    if (accepted.length === 0) return;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const filesToSend = accepted.map((a) => a.file);
+        let lastPercent = 0;
+        this.uploads.uploadProductImages(this.product.id, filesToSend).subscribe({
+          next: (ev) => {
+            if (ev.stage === 'uploading') {
+              lastPercent = ev.percent;
+              // Mirror the same percent across all rows in this batch — the
+              // browser only reports a single combined progress event.
+              this.pendingUploads.update((rows) =>
+                rows.map((r) => (accepted.some((a) => a.id === r.id) ? { ...r, percent: lastPercent } : r)),
+              );
+            }
+            if (ev.stage === 'done') {
+              const result = ev.result as ProductImageUploadResult;
+              if (result?.images) {
+                this.set('images', result.images);
+                this.initial = { ...this.initial, images: [...result.images] };
+              }
+              this.toast.success(
+                `${result?.uploaded ?? accepted.length} ${this.t('product.gallery.upload').toLowerCase()}`,
+                this.product.name,
+              );
+              resolve();
+            }
+          },
+          error: (err) => reject(err),
+        });
+      });
+    } catch {
+      // The HTTP error interceptor already toasted — flag the rows.
+      this.pendingUploads.update((rows) =>
+        rows.map((r) =>
+          accepted.some((a) => a.id === r.id) ? { ...r, error: this.t('error.unknown.title') } : r,
+        ),
+      );
+    } finally {
+      // Clear the rows after a brief delay so the user sees the 100% / error
+      // state before it disappears.
+      window.setTimeout(() => {
+        this.pendingUploads.update((rows) =>
+          rows.filter((r) => !accepted.some((a) => a.id === r.id)),
+        );
+      }, 700);
+    }
   }
 
   removeImage(index: number): void {

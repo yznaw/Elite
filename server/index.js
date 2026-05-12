@@ -8,6 +8,7 @@ const PgSimple = require('connect-pg-simple')(session);
 const routes = require('./routes');
 const db = require('./db/client');
 const { ensureDefaultTenant } = require('./db/tenant');
+const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,6 +63,18 @@ app.use(
   }),
 );
 
+// ─── Static uploads ──────────────────────────────────────────────────────────
+// Served outside `/api` so URLs persisted in the DB (e.g. /uploads/abc.jpg)
+// can be hit directly by <img> tags from any origin behind the same host.
+app.use(
+  uploadsPublicBase,
+  express.static(uploadsDir, {
+    maxAge: '7d',
+    immutable: true,
+    fallthrough: false,
+  }),
+);
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api', routes);
 
@@ -72,6 +85,20 @@ app.use((req, res) => {
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, _next) => {
+  // Friendly multer errors — file too big, wrong type, etc.
+  if (err && err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        success: false,
+        message: 'One of the uploaded files exceeds the 50 MB limit.',
+      });
+    }
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  if (err && /Unsupported file type/.test(err.message || '')) {
+    return res.status(415).json({ success: false, message: err.message });
+  }
+
   console.error(err.stack);
   res.status(err.status || 500).json({
     success: false,

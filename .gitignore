@@ -13,6 +13,9 @@ yarn-error.log*
 server/admins.local.txt
 **/admins.local.txt
 
+# ── Local uploads (disk-driver storage) ───────────────────────
+server/uploads/
+
 # ── Angular build output ──────────────────────────────────────
 client/dist/
 client/.angular/

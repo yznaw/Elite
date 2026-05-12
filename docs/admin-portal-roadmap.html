@@ -70,7 +70,7 @@
 
   <div class="summary">
     <div class="s-card total"><div class="num">51</div><div class="lbl">Total Items</div></div>
-    <div class="s-card" style="border-color:#15803d"><div class="num" style="color:#15803d" id="done-count">18</div><div class="lbl">Done</div></div>
+    <div class="s-card" style="border-color:#15803d"><div class="num" style="color:#15803d" id="done-count">20</div><div class="lbl">Done</div></div>
     <div class="s-card p0"><div class="num">6</div><div class="lbl">P0 Critical</div></div>
     <div class="s-card p1"><div class="num">19</div><div class="lbl">P1 High</div></div>
     <div class="s-card p2"><div class="num">20</div><div class="lbl">P2 Medium</div></div>
@@ -116,7 +116,7 @@ const DATA=[
 {p:"p3",t:"Dashboard Customization",a:"Reorder, hide, or resize dashboard widgets."}
 ]},
 {s:"Catalog & Product Editor",items:[
-{p:"p0",t:"File Upload for Product Images",c:"Images use external URLs. No upload.",a:"Drag & drop upload to S3/Supabase Storage."},
+{p:"done",t:"File Upload for Product Images",c:"Implemented: POST /api/admin/products/:id/images accepts multipart batches (up to 12 files, 50 MB each). Files go through a storage adapter (disk locally, S3/Supabase swap is a one-line config) and are linked via media_links with sort_order. First upload auto-promotes to primary_media_id. Drawer shows per-file thumbnail + real XHR progress bar; mobile uses always-visible thumb actions for touch. Server validates mimetype (image/* + .glb), returns the full ordered images[] so the client patches state with one assignment.",a:"✓ Completed — server/lib/storage.js, server/middleware/upload.js, server/routes/admin-products.route.js, services/media-upload.service.ts, pages/catalog/product-drawer.component.ts"},
 {p:"done",t:"Product Variants (Size, Color, Material)",c:"Implemented: ProductVariant model + editable variants table inside the product drawer (SKU, size, color, material, price, stock per variant). Total stock and price range are summarised live.",a:"✓ Completed — models/index.ts, pages/catalog/product-drawer.component.ts"},
 {p:"done",t:"Rich Text Editor for Descriptions",c:"Implemented: in-house RichTextComponent with toolbar (heading, bold, italic, underline, ordered/bulleted lists, link, clear formatting). Used for both EN (LTR) and AR (RTL) description fields. No new runtime dependency.",a:"✓ Completed — shared/rich-text/rich-text.component.ts, pages/catalog/product-drawer.component.ts"},
 {p:"done",t:"Product Create Flow",c:"Implemented: 'New Product' synthesizes a blank product, prepends it to the catalog, opens the drawer for editing. Discarding without naming auto-removes the stub; saving persists name/SKU/brand/price/stock/variants back on the product.",a:"✓ Completed — pages/catalog/catalog.component.ts, pages/catalog/product-drawer.component.ts"},
@@ -156,7 +156,7 @@ const DATA=[
 {p:"p3",t:"Customer Communication Log",a:"Track email/SMS/WhatsApp messages per customer."}
 ]},
 {s:"Media Library",items:[
-{p:"p0",t:"Real File Upload",c:"Drop zone shows 'Upload simulated'.",a:"Real upload to cloud storage with progress bar."},
+{p:"done",t:"Real File Upload",c:"Implemented: media library drop zone now uses the same storage adapter — drag/drop or tap-to-browse on mobile (label wraps a hidden file input), per-file thumbnail + progress row, batch uploads via POST /api/admin/media. Friendly errors for unsupported types (415) and oversized files (413). Grid auto-refreshes after each batch so server-assigned UUIDs, uploader info, and timestamps land instantly. DELETE removes the file from disk too, not just the row.",a:"✓ Completed — server/{lib/storage.js,middleware/upload.js,routes/admin-media.route.js,index.js}, services/{media-upload,admin-media}.service.ts, pages/media/media.component.ts"},
 {p:"p1",t:"Bulk Delete / Bulk Link",c:"One file at a time.",a:"Multi-select with bulk actions."},
 {p:"p2",t:"Image Optimization",a:"Auto-generate WebP thumbnails on upload."},
 {p:"p2",t:"3D Model Preview",c:"3D cards show label but no preview.",a:"Embed <model-viewer> for .glb files."}

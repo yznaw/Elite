@@ -44,9 +44,9 @@ All pages are lazy-loaded:
 | `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
 | `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
 | `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, 3D heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. |
-| `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, **New Product** create flow, inline editor with image gallery (drag-reorder + primary, file upload, drag/drop), variants table (size/color/material × SKU/price/stock), rich-text descriptions for EN & AR, top save bar, draft auto-save |
+| `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, **New Product** create flow, inline editor with image gallery (drag-reorder + primary, **real multipart upload to `POST /api/admin/products/:id/images` with per-file progress bar**, drag/drop on desktop + tap-to-browse on mobile), variants table (size/color/material × SKU/price/stock), rich-text descriptions for EN & AR, top save bar, draft auto-save |
 | `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image upload (drag/drop + URL paste), drag-to-reorder linked products to control storefront display order |
-| `/media` | `MediaComponent` | Upload zone, file grid, auto-link by SKU, detail drawer |
+| `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, **real multipart upload to `POST /api/admin/media` via drag/drop or tap-to-browse** (per-file thumbnail + progress row, 15 % / 60 % / 100 % … ), 415 / 413 errors surfaced inline, auto-link by SKU, detail drawer. Delete removes the file from storage too. |
 | `/storefront` | `StorefrontComponent` | Section editor with drag & drop, draft → publish, preview |
 | `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, full-height drawer with status workflow stepper, tracking number, internal notes & timeline |
 | `/customers` | `CustomersComponent` | Customer table/cards, tier filter, **Add Customer** create flow, fully editable detail drawer with real linked-orders history (rows navigate to /orders?id=…) |
@@ -416,7 +416,7 @@ Each admin section maps to one or more PostgreSQL tables defined in `server/db/m
 | Dashboard KPIs / charts | `daily_metrics`, `orders`, `analytics_events`, `product_interactions` |
 | Catalog · Product editor | `products`, `product_translations`, `product_variants`, `media_assets`, `media_links` (gallery role), `inventory_movements` |
 | Collections | `collections`, `collection_translations`, `collection_products` (`sort_order` drives storefront order), `media_assets` (cover image) |
-| Media library | `media_assets`, `media_links` |
+| Media library | `media_assets`, `media_links`, plus disk storage under `server/uploads/` (served as `/uploads/*`) via the storage adapter in `server/lib/storage.js` |
 | Storefront editor | `storefront_snapshots`, `storefront_blocks`, `storefront_block_products` |
 | Orders · drawer | `orders`, `order_items`, `payments`, `shipments` (tracking number), `order_timeline_entries`, `order_notes` |
 | Customers · drawer | `customers`, `customer_addresses`, `orders` (history join), view `v_customer_order_stats` |
