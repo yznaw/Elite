@@ -6,6 +6,7 @@ import { filter, map, startWith } from 'rxjs/operators';
 import { NavComponent } from './shared/nav/nav.component';
 import { FooterComponent } from './shared/footer/footer.component';
 import { CartDrawerComponent } from './shared/cart-drawer/cart-drawer.component';
+import { LocaleService } from './services/locale.service';
 
 @Component({
   selector: 'cw-root',
@@ -16,6 +17,7 @@ import { CartDrawerComponent } from './shared/cart-drawer/cart-drawer.component'
 })
 export class AppComponent {
   private readonly router = inject(Router);
+  private readonly locale = inject(LocaleService);
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(

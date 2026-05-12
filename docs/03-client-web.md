@@ -74,9 +74,9 @@ The home page hero uses a first-party Three.js model viewer instead of an embedd
 
 | File | Purpose |
 |---|---|
-| `projects/client-web/src/app/pages/home/home.component.ts` | Three.js scene setup, GLB loading, color switching, animation, cleanup |
-| `projects/client-web/src/app/pages/home/home.component.html` | Hero canvas, loading/error states, 3 color swatch controls |
-| `projects/client-web/src/app/pages/home/home.component.scss` | White product-view layout, responsive framing, swatch UI |
+| `projects/client-web/src/app/pages/home/home.component.ts` | Three.js scene setup, model-slot carousel, GLB loading, color switching, animation, cleanup |
+| `projects/client-web/src/app/pages/home/home.component.html` | Centered hero canvas, dynamic model heading, loading/error states, side model arrows, circular color radio controls |
+| `projects/client-web/src/app/pages/home/home.component.scss` | Full-screen white product-view layout, title area, side arrow controls, circular color controls, scroll transition, responsive framing |
 | `projects/client-web/src/assets/models/latest-brown-v2.glb` | Local GLB product model |
 | `projects/client-web/src/assets/draco/` | Local Draco decoder files required by the compressed GLB |
 
@@ -100,13 +100,29 @@ loader.setDRACOLoader(dracoLoader);
 
 - The canvas is initialized in `ngAfterViewInit()` and runs outside Angular via `NgZone.runOutsideAngular()`.
 - `GLTFLoader` loads `/assets/models/latest-brown-v2.glb`.
-- `OrbitControls` enables drag-to-rotate, damping, constrained vertical rotation, and auto-rotation.
+- The camera stays fixed in the center of the product stage. `OrbitControls` keeps damping/camera state stable, while pointer drag rotates the loaded model around a centered Three.js pivot group for manual 360-degree rotation.
 - A `ResizeObserver` keeps the renderer and camera aspect ratio aligned with the hero visual container.
+- The hero is a pinned scroll scene: the section is taller than one viewport, the model stage stays sticky, and scroll progress updates CSS variables so the model zooms/shifts before the page continues into the next section.
+- As the model shifts right during pinned scroll, a large left-side editorial title fades/slides in using the same scroll progress variables.
 - `ngOnDestroy()` cancels the animation frame, disconnects observers, disposes controls, disposes Draco, and disposes Three.js geometries/materials.
+
+### Model Slots
+
+The hero exposes three 3D model slots through `heroModels`. All three currently point to the same placeholder GLB until the final two models are available.
+
+| ID | Title | Current URL |
+|---|---|---|
+| `heritage-mule` | Doha Mule | `/assets/models/latest-brown-v2.glb` |
+| `majlis-slide` | Majlis Slide | `/assets/models/latest-brown-v2.glb` |
+| `atelier-form` | Nomad Sandal | `/assets/models/latest-brown-v2.glb` |
+
+Each slot controls the eyebrow, title, subtitle, and GLB URL shown in the hero. To replace a placeholder later, update only that slot's `url` value and keep the file under `projects/client-web/src/assets/models/`.
+
+Model switching is exposed through left/right arrow buttons on either side of the 3D product stage. The arrows call `selectAdjacentHeroModel(-1 | 1)`, which cycles through `heroModels`, updates the heading, and reloads the selected GLB slot.
 
 ### Color Options
 
-The hero exposes three leather color options under the model:
+The hero exposes three circular radio-style leather color controls under the model:
 
 | ID | Label | Hex |
 |---|---|---|
@@ -125,12 +141,13 @@ selectLeatherColor(id: string): void {
 
 ### Framing and Responsive Notes
 
-The model is intentionally scaled large for the desktop hero. Compact viewports use a smaller scale and different horizontal offset so the model remains visible without clipping.
+The model is intentionally centered and scaled large for the desktop hero. Compact viewports use a smaller scale so the model remains visible without clipping.
 
 When adjusting the model:
 
-- Use `frameModel()` for scale, position, and default rotation.
-- Use OrbitControls settings in `initHeroModel()` for auto-rotate speed and user drag feel.
+- Use `frameModel()` for scale, centered pivot setup, vertical position, and default rotation.
+- Use `bindModelDrag()` and the pointer handlers for manual 360-degree turntable rotation. The camera should remain fixed so the product does not orbit away from the center.
+- Use `queueHeroScroll()`, `.hero` height, `.hero-shell` sticky positioning, `.hero-scroll-copy`, and the shared CSS variables when changing the pinned zoom/shift/text-reveal transition.
 - Check both desktop and mobile screenshots after changing scale or rotation.
 - Keep the white canvas background; it is part of the premium product-view treatment.
 
@@ -147,8 +164,10 @@ Manual QA:
 
 - Open the storefront home page.
 - Confirm the GLB loads and the loading state disappears.
-- Drag the model to rotate it.
+- Click the left and right model arrows; each should update the heading and keep the 3D canvas active.
+- Drag the model to rotate it manually.
 - Click Cognac, Espresso, and Sand; each should change the leather color instantly.
+- Scroll down from the hero; the model should finish its zoom/right-shift transition, the large left editorial text should appear while pinned, then the featured section should begin scrolling into view.
 - Check desktop and mobile widths to ensure the product is large but not clipped.
 
 ---
@@ -159,7 +178,7 @@ Located in `app/shared/`:
 
 | Component | Selector | Description |
 |---|---|---|
-| `NavComponent` | `<cw-nav>` | Top navigation bar with logo, links, language toggle, cart icon |
+| `NavComponent` | `<cw-nav>` | Floating green primary navigation bar with logo, desktop links, cart icon, and mobile menu |
 | `FooterComponent` | `<cw-footer>` | Footer with link columns, brand tagline, copyright |
 | `CartDrawerComponent` | `<cw-cart-drawer>` | Slide-in cart panel with items, quantities, subtotal, checkout button |
 

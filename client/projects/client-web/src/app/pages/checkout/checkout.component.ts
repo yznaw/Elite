@@ -3,8 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CartService } from '../../services/cart.service';
+import { I18nService } from '../../services/i18n.service';
 
-const STEPS = ['Details', 'Delivery', 'Payment'] as const;
+const STEPS = ['checkout.step.details', 'checkout.step.delivery', 'checkout.step.payment'] as const;
 
 interface CheckoutForm {
   firstName: string;
@@ -30,12 +31,14 @@ interface CheckoutForm {
 export class CheckoutComponent {
   readonly cart = inject(CartService);
   private readonly router = inject(Router);
+  private readonly i18n = inject(I18nService);
 
   readonly steps = STEPS;
   readonly countries = ['Qatar', 'UAE', 'Kuwait', 'Saudi Arabia', 'Bahrain', 'Oman'];
 
   readonly step = signal(0);
   readonly placed = signal(false);
+  readonly placedTotal = signal(0);
 
   readonly form = signal<CheckoutForm>({
     firstName: '',
@@ -52,7 +55,11 @@ export class CheckoutComponent {
   });
 
   readonly subtotal = computed(() => this.cart.subtotal());
-  readonly total = computed(() => this.subtotal());
+  readonly total = computed(() => (this.placed() ? this.placedTotal() : this.subtotal()));
+
+  readonly t = (key: string): string => this.i18n.t(key);
+  readonly price = (value: number): string => this.i18n.price(value);
+  readonly itemName = (item: { id: string; name: string }): string => this.i18n.productName(item);
 
   set<K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
@@ -62,6 +69,7 @@ export class CheckoutComponent {
     if (this.step() < STEPS.length - 1) {
       this.step.update((s) => s + 1);
     } else {
+      this.placedTotal.set(this.total());
       this.placed.set(true);
       this.cart.clear();
     }
@@ -82,5 +90,17 @@ export class CheckoutComponent {
 
   onImgError(e: Event): void {
     (e.target as HTMLImageElement).style.display = 'none';
+  }
+
+  countryLabel(country: string): string {
+    const keys: Record<string, string> = {
+      Qatar: 'checkout.country.qatar',
+      UAE: 'checkout.country.uae',
+      Kuwait: 'checkout.country.kuwait',
+      'Saudi Arabia': 'checkout.country.saudi',
+      Bahrain: 'checkout.country.bahrain',
+      Oman: 'checkout.country.oman',
+    };
+    return this.t(keys[country] ?? country);
   }
 }

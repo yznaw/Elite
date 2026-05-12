@@ -1,167 +1,349 @@
 <div>
   <!-- ── HERO ── -->
-  <section class="hero">
+  <section #heroSection class="hero">
     <div class="hero-grain"></div>
     <div class="hero-ring hero-ring--lg"></div>
     <div class="hero-ring hero-ring--sm"></div>
 
-    <div class="hero-shell">
-      <div class="hero-copy">
-        <div class="hero-kicker anim-fade-up" style="animation-delay: 0.15s;">
-          <span></span>
-          Est. 1962 · Doha
-        </div>
-
-        <h1 class="hero-title anim-fade-up serif" style="animation-delay: 0.25s;">
-          Where Heritage
-          <em>Meets Sole</em>
-        </h1>
-
-        <p class="hero-lede anim-fade-up" style="animation-delay: 0.35s;">
-          Hand-crafted Arabic leather shoes shaped with the restraint, polish, and presence of a private atelier.
-        </p>
-
-        @if (metaVisible()) {
-          <div class="hero-tags anim-fade-up" style="animation-delay: 0.45s;">
-            @for (c of metaCards; track c.id) {
-              <div class="glass tag-chip">
-                <span>{{ c.icon }}</span>
-                {{ c.label }}
-              </div>
-            }
-          </div>
-        }
-
-        <div class="hero-actions anim-fade-up" style="animation-delay: 0.55s;">
-          <button class="btn-gold" (click)="goTo('/collection')">Explore Collection</button>
-          <button class="btn-outline" (click)="goTo('/story')">Our Story</button>
-        </div>
+    <div #heroShell class="hero-shell">
+      <div class="hero-scroll-copy" aria-hidden="true">
+        <span>{{ t(activeHeroModel().eyebrowKey) }}</span>
+        <strong class="serif">{{ t('home.hero.scroll.line1') }}<br />{{ t('home.hero.scroll.line2') }}</strong>
+        <p>{{ t(activeHeroModel().titleKey) }}</p>
       </div>
 
-      <div class="hero-visual anim-fade-up" style="animation-delay: 0.35s;">
+      <div #heroVisual class="hero-visual">
+        <div class="model-heading">
+          <span>{{ t(activeHeroModel().eyebrowKey) }}</span>
+          <h1 class="serif">{{ t(activeHeroModel().titleKey) }}</h1>
+          <p>{{ t(activeHeroModel().subtitleKey) }}</p>
+        </div>
+
         <canvas
           #heroCanvas
           class="hero-canvas"
           role="img"
-          aria-label="Interactive 3D model of a brown handcrafted leather shoe"
+          [attr.aria-label]="t('home.hero.aria')"
           [class.is-ready]="modelLoaded()"
         ></canvas>
 
         @if (!modelLoaded() && !modelLoadFailed()) {
           <div class="model-state">
             <div class="model-spinner"></div>
-            <span>Preparing 3D atelier view</span>
+            <span>{{ t('home.model.loading') }}</span>
           </div>
         }
 
         @if (modelLoadFailed()) {
           <div class="model-state model-state--error">
-            <span>3D model unavailable</span>
+            <span>{{ t('home.model.unavailable') }}</span>
           </div>
         }
 
-        <div class="model-badge">
-          <span>360 Product View</span>
-          <span>Drag · Rotate · Explore</span>
+        <div
+          class="model-switcher"
+          role="radiogroup"
+          [attr.aria-label]="t('home.model.switch')"
+        >
+          <button
+            type="button"
+            class="model-arrow model-arrow--prev"
+            [attr.aria-label]="t('home.model.previous')"
+            [title]="t('common.previous')"
+            (click)="selectAdjacentHeroModel(-1)"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+
+          <!-- <div class="model-index" aria-live="polite">
+            {{ activeHeroModel().index }} / {{ heroModels.length }}
+          </div> -->
+
+          <button
+            type="button"
+            class="model-arrow model-arrow--next"
+            [attr.aria-label]="t('home.model.next')"
+            [title]="t('common.next')"
+            (click)="selectAdjacentHeroModel(1)"
+          >
+            <span aria-hidden="true">›</span>
+          </button>
         </div>
 
-        <div class="model-colors" aria-label="Choose leather color">
-          @for (option of leatherColors; track option.id) {
-            <button
-              type="button"
-              class="model-color"
-              [class.is-active]="selectedLeatherColor() === option.id"
-              [style.--swatch]="option.swatch"
-              [attr.aria-label]="'Change model color to ' + option.name"
-              [attr.aria-pressed]="selectedLeatherColor() === option.id"
-              [title]="option.name"
-              (click)="selectLeatherColor(option.id)"
-            >
-              <span></span>
-              <small>{{ option.name }}</small>
-            </button>
-          }
+        <div class="model-controls">
+          <div
+            class="model-colors"
+            role="radiogroup"
+            [attr.aria-label]="t('home.model.chooseLeather')"
+          >
+            @for (option of leatherColors; track option.id) {
+              <button
+                type="button"
+                class="model-color"
+                role="radio"
+                [class.is-active]="selectedLeatherColor() === option.id"
+                [style.--swatch]="option.swatch"
+                [attr.aria-label]="t('home.model.changeLeather', { name: t(option.nameKey) })"
+                [attr.aria-checked]="selectedLeatherColor() === option.id"
+                [title]="t(option.nameKey)"
+                (click)="selectLeatherColor(option.id)"
+              >
+                <span></span>
+              </button>
+            }
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="hero-scroll">
-      <span>Scroll</span>
-      <div></div>
+      <div class="hero-scroll">
+        <span>{{ t('common.scroll') }}</span>
+        <div></div>
+      </div>
     </div>
   </section>
 
   <!-- ── FEATURED ── -->
-  <section style="padding: 80px 24px; max-width: 1200px; margin: 0 auto;">
-    <div style="text-align: center; margin-bottom: 56px;">
-      <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; margin-bottom: 12px;">
-        Curated Selection
+  <section style="padding: 80px 24px; max-width: 1200px; margin: 0 auto">
+    <div style="text-align: center; margin-bottom: 56px">
+      <div
+        style="
+          font-family: var(--ff-sans);
+          font-size: 9px;
+          letter-spacing: 0.3em;
+          color: var(--gold);
+          text-transform: uppercase;
+          margin-bottom: 12px;
+        "
+      >
+        {{ t('home.featured.kicker') }}
       </div>
-      <h2 class="serif" style="font-size: clamp(32px, 6vw, 54px); font-weight: 300; color: var(--cream); line-height: 1.1;">
-        Icons of Craft
+      <h2
+        class="serif"
+        style="
+          font-size: clamp(32px, 6vw, 54px);
+          font-weight: 300;
+          color: var(--cream);
+          line-height: 1.1;
+        "
+      >
+        {{ t('home.featured.title') }}
       </h2>
     </div>
 
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2px;">
+    <div
+      style="
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 2px;
+      "
+    >
       @for (p of featured; track p.id; let i = $index) {
-        <div (click)="goToProduct(p)" class="product-card anim-fade-up"
-          style="position: relative; overflow: hidden;"
-          [style.animation-delay]="(i * 0.12) + 's'">
-          <div style="overflow: hidden; position: relative; padding-bottom: 120%;">
-            <div class="img-placeholder card-img" style="position: absolute; inset: 0;">
-              <img [src]="p.image" [alt]="p.name"
-                style="width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.95; transition: transform 0.6s cubic-bezier(0.22,1,0.36,1);"
-                (error)="onImgError($event)" />
-              <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(7,6,4,0.7) 0%, transparent 50%);"></div>
+        <div
+          (click)="goToProduct(p)"
+          class="product-card anim-fade-up"
+          style="position: relative; overflow: hidden"
+          [style.animation-delay]="i * 0.12 + 's'"
+        >
+          <div
+            style="overflow: hidden; position: relative; padding-bottom: 120%"
+          >
+            <div
+              class="img-placeholder card-img"
+              style="position: absolute; inset: 0"
+            >
+              <img
+                [src]="p.image"
+                [alt]="p.name"
+                style="
+                  width: 100%;
+                  height: 100%;
+                  object-fit: cover;
+                  display: block;
+                  opacity: 0.95;
+                  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+                "
+                (error)="onImgError($event)"
+              />
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  background: linear-gradient(
+                    to top,
+                    rgba(7, 6, 4, 0.7) 0%,
+                    transparent 50%
+                  );
+                "
+              ></div>
             </div>
 
             @if (p.tag) {
-              <div style="position: absolute; top: 16px; left: 16px;">
-                <span class="tag-chip">{{ p.tag }}</span>
+              <div style="position: absolute; top: 16px; left: 16px">
+                <span class="tag-chip">{{ productTag(p.tag) }}</span>
               </div>
             }
 
-            <div class="card-overlay"
-              style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(7,6,4,0.5);">
-              <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold); padding: 10px 20px;">
-                View Details
+            <div
+              class="card-overlay"
+              style="
+                position: absolute;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(7, 6, 4, 0.5);
+              "
+            >
+              <span
+                style="
+                  font-family: var(--ff-sans);
+                  font-size: 10px;
+                  letter-spacing: 0.2em;
+                  text-transform: uppercase;
+                  color: var(--gold);
+                  border: 1px solid var(--gold);
+                  padding: 10px 20px;
+                "
+              >
+                {{ t('common.viewDetails') }}
               </span>
             </div>
           </div>
 
-          <div style="padding: 20px 4px 8px;">
-            <div style="font-family: var(--ff-serif); font-size: 20px; color: var(--cream); margin-bottom: 3px;">{{ p.name }}</div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase;">{{ p.leather }}</span>
-              <span style="font-family: var(--ff-sans); font-size: 13px; color: var(--gold);">SAR {{ p.price.toLocaleString() }}</span>
+          <div style="padding: 20px 4px 8px">
+            <div
+              style="
+                font-family: var(--ff-serif);
+                font-size: 20px;
+                color: var(--cream);
+                margin-bottom: 3px;
+              "
+            >
+              {{ productName(p) }}
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <span
+                style="
+                  font-family: var(--ff-sans);
+                  font-size: 10px;
+                  letter-spacing: 0.1em;
+                  color: var(--muted);
+                  text-transform: uppercase;
+                "
+                >{{ productLeather(p.leather) }}</span
+              >
+              <span
+                style="
+                  font-family: var(--ff-sans);
+                  font-size: 13px;
+                  color: var(--gold);
+                "
+                >{{ price(p.price) }}</span
+              >
             </div>
           </div>
         </div>
       }
     </div>
 
-    <div style="text-align: center; margin-top: 48px;">
-      <button class="btn-outline" (click)="goTo('/collection')" style="padding: 14px 40px;">View Full Collection</button>
+    <div style="text-align: center; margin-top: 48px">
+      <button
+        class="btn-outline"
+        (click)="goTo('/collection')"
+        style="padding: 14px 40px"
+      >
+        {{ t('common.viewFullCollection') }}
+      </button>
     </div>
   </section>
 
   <!-- ── CRAFT BANNER ── -->
-  <section style="margin: 0 24px 80px; padding: 60px 40px; background: linear-gradient(135deg, var(--card) 0%, var(--card2) 100%); border: 1px solid var(--border); position: relative; overflow: hidden;">
-    <div style="position: absolute; top: -40px; right: -40px; width: 200px; height: 200px; border-radius: 50%; border: 1px solid rgba(201,169,110,0.08);"></div>
-    <div style="position: absolute; bottom: -60px; left: -20px; width: 150px; height: 150px; border-radius: 50%; border: 1px solid rgba(201,169,110,0.06);"></div>
-    <div style="position: relative; z-index: 1;">
-      <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; margin-bottom: 16px;">
-        The Promise
+  <section
+    style="
+      margin: 0 24px 80px;
+      padding: 60px 40px;
+      background: linear-gradient(135deg, var(--card) 0%, var(--card2) 100%);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    "
+  >
+    <div
+      style="
+        position: absolute;
+        top: -40px;
+        right: -40px;
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        border: 1px solid rgba(201, 169, 110, 0.08);
+      "
+    ></div>
+    <div
+      style="
+        position: absolute;
+        bottom: -60px;
+        left: -20px;
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        border: 1px solid rgba(201, 169, 110, 0.06);
+      "
+    ></div>
+    <div style="position: relative; z-index: 1">
+      <div
+        style="
+          font-family: var(--ff-sans);
+          font-size: 9px;
+          letter-spacing: 0.3em;
+          color: var(--gold);
+          text-transform: uppercase;
+          margin-bottom: 16px;
+        "
+      >
+        {{ t('home.promise.kicker') }}
       </div>
-      <h3 class="serif" style="font-size: clamp(28px, 5vw, 48px); font-weight: 300; color: var(--cream); line-height: 1.15; max-width: 600px; margin-bottom: 24px;">
-        "Every pair is numbered.<br />
-        <em style="color: var(--gold);">Every stitch, intentional."</em>
+      <h3
+        class="serif"
+        style="
+          font-size: clamp(28px, 5vw, 48px);
+          font-weight: 300;
+          color: var(--cream);
+          line-height: 1.15;
+          max-width: 600px;
+          margin-bottom: 24px;
+        "
+      >
+        {{ t('home.promise.headline.line1') }}<br />
+        <em style="color: var(--gold)">{{ t('home.promise.headline.line2') }}</em>
       </h3>
-      <div style="display: flex; gap: 40px; flex-wrap: wrap;">
-        @for (s of stats; track s.label) {
+      <div style="display: flex; gap: 40px; flex-wrap: wrap">
+        @for (s of stats; track s.labelKey) {
           <div>
-            <div class="serif" style="font-size: 32px; color: var(--gold); font-weight: 300;">{{ s.value }}</div>
-            <div style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-top: 2px;">{{ s.label }}</div>
+            <div
+              class="serif"
+              style="font-size: 32px; color: var(--gold); font-weight: 300"
+            >
+              {{ s.value }}
+            </div>
+            <div
+              style="
+                font-family: var(--ff-sans);
+                font-size: 10px;
+                letter-spacing: 0.1em;
+                color: var(--muted);
+                text-transform: uppercase;
+                margin-top: 2px;
+              "
+            >
+              {{ t(s.labelKey) }}
+            </div>
           </div>
         }
       </div>

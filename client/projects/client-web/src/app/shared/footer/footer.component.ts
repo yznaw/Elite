@@ -1,14 +1,15 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { I18nService } from '../../services/i18n.service';
 
 interface FooterLink {
-  label: string;
+  labelKey: string;
   path: string;
 }
 
 interface FooterColumn {
-  title: string;
+  titleKey: string;
   links: FooterLink[];
 }
 
@@ -20,20 +21,20 @@ interface FooterColumn {
     <footer style="border-top: 1px solid var(--border); padding: 48px 24px 32px; background: var(--surface);">
       <div style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 40px;">
         <div>
-          <div style="font-family: var(--ff-serif); font-size: 20px; letter-spacing: 0.15em; color: var(--gold); margin-bottom: 6px;">ELITE</div>
-          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; margin-bottom: 16px;">Arabic Leather Artisans</div>
+          <div style="font-family: var(--ff-serif); font-size: 20px; letter-spacing: 0.15em; color: var(--gold); margin-bottom: 6px;">{{ t('brand.name') }}</div>
+          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; margin-bottom: 16px;">{{ t('brand.tagline') }}</div>
           <p style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted); line-height: 1.8; max-width: 220px;">
-            Handcrafted in Doha since 1962. Limited to 400 pairs per year.
+            {{ t('footer.tagline') }}
           </p>
         </div>
 
-        @for (col of columns; track col.title) {
+        @for (col of columns; track col.titleKey) {
           <div>
-            <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--gold); margin-bottom: 16px;">{{ col.title }}</div>
-            @for (l of col.links; track l.label) {
+            <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--gold); margin-bottom: 16px;">{{ t(col.titleKey) }}</div>
+            @for (l of col.links; track l.labelKey) {
               <a [routerLink]="l.path"
                 style="display: block; text-decoration: none; font-family: var(--ff-sans); font-size: 12px; color: var(--muted); text-align: left; padding: 4px 0; letter-spacing: 0.04em; transition: color 0.2s;">
-                {{ l.label }}
+                {{ t(l.labelKey) }}
               </a>
             }
           </div>
@@ -44,42 +45,45 @@ interface FooterColumn {
 
       <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
         <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;">
-          © 2026 Elite Collection. All rights reserved.
+          {{ t('footer.copyright') }}
         </p>
         <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;">
-          Doha · Dubai · Doha
+          {{ t('footer.cities') }}
         </p>
       </div>
     </footer>
   `,
 })
 export class FooterComponent {
+  private readonly i18n = inject(I18nService);
+  readonly t = (key: string): string => this.i18n.t(key);
+
   readonly columns: FooterColumn[] = [
     {
-      title: 'Collection',
+      titleKey: 'footer.col.collection',
       links: [
-        { label: 'All Pieces', path: '/collection' },
-        { label: 'New Arrivals', path: '/collection' },
-        { label: 'Signature', path: '/collection' },
-        { label: 'Limited Edition', path: '/collection' },
+        { labelKey: 'footer.link.allPieces', path: '/collection' },
+        { labelKey: 'footer.link.newArrivals', path: '/collection' },
+        { labelKey: 'footer.link.signature', path: '/collection' },
+        { labelKey: 'footer.link.limitedEdition', path: '/collection' },
       ],
     },
     {
-      title: 'Atelier',
+      titleKey: 'footer.col.atelier',
       links: [
-        { label: 'Our Story', path: '/story' },
-        { label: 'Craftsmanship', path: '/story' },
-        { label: 'Bespoke', path: '/contact' },
-        { label: 'Appointments', path: '/contact' },
+        { labelKey: 'footer.link.ourStory', path: '/story' },
+        { labelKey: 'footer.link.craftsmanship', path: '/story' },
+        { labelKey: 'footer.link.bespoke', path: '/contact' },
+        { labelKey: 'footer.link.appointments', path: '/contact' },
       ],
     },
     {
-      title: 'Client',
+      titleKey: 'footer.col.client',
       links: [
-        { label: 'Contact Us', path: '/contact' },
-        { label: 'Size Guide', path: '/contact' },
-        { label: 'Care Guide', path: '/contact' },
-        { label: 'Returns', path: '/contact' },
+        { labelKey: 'footer.link.contactUs', path: '/contact' },
+        { labelKey: 'footer.link.sizeGuide', path: '/contact' },
+        { labelKey: 'footer.link.careGuide', path: '/contact' },
+        { labelKey: 'footer.link.returns', path: '/contact' },
       ],
     },
   ];
