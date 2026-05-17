@@ -13,6 +13,7 @@ const adminAnalyticsRouter = require('./admin-analytics.route');
 const productsRouter = require('./products.route');
 const contactRouter = require('./contact.route');
 const cartsRouter = require('./carts.route');
+const storefrontContentRouter = require('./storefront-content.route');
 const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
@@ -23,6 +24,7 @@ router.use('/auth', authRouter);
 router.use('/products', productsRouter);
 router.use('/contact', contactRouter);
 router.use('/carts', cartsRouter);
+router.use('/storefront-content', storefrontContentRouter.publicRouter);
 
 // ─── Admin routes — require an authenticated session ────────────────────────
 const admin = Router();
@@ -33,6 +35,7 @@ admin.use('/customers', adminCustomersRouter);
 admin.use('/orders', adminOrdersRouter);
 admin.use('/media', adminMediaRouter);
 admin.use('/storefront', adminStorefrontRouter);
+admin.use('/storefront-content', storefrontContentRouter.adminRouter);
 admin.use('/sync', adminSyncRouter);
 admin.use('/analytics', adminAnalyticsRouter);
 // Settings includes role-sensitive endpoints (team management). Owners and

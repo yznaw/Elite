@@ -8,15 +8,26 @@ import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { StorefrontService } from '../../services/storefront.service';
 import { SectionDrawerComponent } from './section-drawer.component';
+import { HomeContentComponent } from '../home-content/home-content.component';
 import { PALETTE, STOREFRONT_DEFAULT } from '../../data/mock';
 import { StorefrontBlock } from '../../models';
 
 @Component({
   selector: 'ap-storefront',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, SectionDrawerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, SectionDrawerComponent, HomeContentComponent],
   template: `
     <div class="page-fade">
+      <ap-home-content/>
+
+      <div class="storefront-section-divider">
+        <div>
+          <p>{{ t('storefront.live.title') }}</p>
+          <h2>Section Control</h2>
+        </div>
+        <span>Manage the remaining reusable storefront sections from the same workspace.</span>
+      </div>
+
       <!-- Top toolbar (mobile) — Add Section button + Preview / Publish -->
       <div class="storefront-toolbar mb-16">
         <div class="row gap-sm" style="align-items:center;flex-wrap:wrap;">
@@ -154,6 +165,49 @@ import { StorefrontBlock } from '../../models';
     }
   `,
   styles: [`
+    :host ::ng-deep ap-home-content .home-admin {
+      margin-bottom: 24px;
+    }
+
+    .storefront-section-divider {
+      display: grid;
+      gap: 10px;
+      margin: 8px 0 16px;
+      padding: 18px 22px;
+      border: 1px solid var(--border-2);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .storefront-section-divider p {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .storefront-section-divider h2 {
+      margin: 0;
+      color: var(--text);
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .storefront-section-divider span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    @media (min-width: 760px) {
+      .storefront-section-divider {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+      }
+    }
+
     .storefront-toolbar { display: none; }
     @media (max-width: 900px) {
       .storefront-toolbar { display: block; }

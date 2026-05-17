@@ -102,164 +102,51 @@
     </div>
   </section>
 
-  <!-- ── FEATURED ── -->
-  <section style="padding: 80px 24px; max-width: 1200px; margin: 0 auto">
-    <div style="text-align: center; margin-bottom: 56px">
-      <div
-        style="
-          font-family: var(--ff-sans);
-          font-size: 9px;
-          letter-spacing: 0.3em;
-          color: var(--gold);
-          text-transform: uppercase;
-          margin-bottom: 12px;
-        "
-      >
-        {{ t('home.featured.kicker') }}
+  <!-- ── HOME CONTENT: DISCOUNT + COLLECTIONS ── -->
+  <section class="home-commerce" aria-labelledby="home-discount-title">
+    <div class="discount-hero anim-fade-up">
+      <div class="discount-image">
+        <img [src]="contentData().hero.imageUrl" [alt]="contentData().hero.title" />
       </div>
-      <h2
-        class="serif"
-        style="
-          font-size: clamp(32px, 6vw, 54px);
-          font-weight: 300;
-          color: var(--cream);
-          line-height: 1.1;
-        "
-      >
-        {{ t('home.featured.title') }}
-      </h2>
-    </div>
 
-    <div
-      style="
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 2px;
-      "
-    >
-      @for (p of featured; track p.id; let i = $index) {
-        <div
-          (click)="goToProduct(p)"
-          class="product-card anim-fade-up"
-          style="position: relative; overflow: hidden"
-          [style.animation-delay]="i * 0.12 + 's'"
-        >
-          <div
-            style="overflow: hidden; position: relative; padding-bottom: 120%"
-          >
-            <div
-              class="img-placeholder card-img"
-              style="position: absolute; inset: 0"
-            >
-              <img
-                [src]="p.image"
-                [alt]="p.name"
-                style="
-                  width: 100%;
-                  height: 100%;
-                  object-fit: cover;
-                  display: block;
-                  opacity: 0.95;
-                  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-                "
-                (error)="onImgError($event)"
-              />
-              <div
-                style="
-                  position: absolute;
-                  inset: 0;
-                  background: linear-gradient(
-                    to top,
-                    rgba(7, 6, 4, 0.7) 0%,
-                    transparent 50%
-                  );
-                "
-              ></div>
-            </div>
+      <div class="discount-copy">
+        <p class="discount-kicker">Elite Collection</p>
+        <h2 id="home-discount-title">{{ contentData().hero.title }}</h2>
+        <p class="discount-body">{{ contentData().hero.body }}</p>
 
-            @if (p.tag) {
-              <div style="position: absolute; top: 16px; left: 16px">
-                <span class="tag-chip">{{ productTag(p.tag) }}</span>
-              </div>
-            }
-
-            <div
-              class="card-overlay"
-              style="
-                position: absolute;
-                inset: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: rgba(7, 6, 4, 0.5);
-              "
-            >
-              <span
-                style="
-                  font-family: var(--ff-sans);
-                  font-size: 10px;
-                  letter-spacing: 0.2em;
-                  text-transform: uppercase;
-                  color: var(--gold);
-                  border: 1px solid var(--gold);
-                  padding: 10px 20px;
-                "
-              >
-                {{ t('common.viewDetails') }}
-              </span>
-            </div>
-          </div>
-
-          <div style="padding: 20px 4px 8px">
-            <div
-              style="
-                font-family: var(--ff-serif);
-                font-size: 20px;
-                color: var(--cream);
-                margin-bottom: 3px;
-              "
-            >
-              {{ productName(p) }}
-            </div>
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-              "
-            >
-              <span
-                style="
-                  font-family: var(--ff-sans);
-                  font-size: 10px;
-                  letter-spacing: 0.1em;
-                  color: var(--muted);
-                  text-transform: uppercase;
-                "
-                >{{ productLeather(p.leather) }}</span
-              >
-              <span
-                style="
-                  font-family: var(--ff-sans);
-                  font-size: 13px;
-                  color: var(--gold);
-                "
-                >{{ price(p.price) }}</span
-              >
-            </div>
-          </div>
+        <div class="discount-callout">
+          <span>Come and Enjoy Sale!</span>
+          <strong>{{ contentData().hero.discountText }}</strong>
         </div>
-      }
+
+        <button type="button" class="discount-cta" (click)="goToContentLink(contentData().hero.ctaLink)">
+          {{ contentData().hero.ctaText }}
+        </button>
+      </div>
     </div>
 
-    <div style="text-align: center; margin-top: 48px">
-      <button
-        class="btn-outline"
-        (click)="goTo('/collection')"
-        style="padding: 14px 40px"
-      >
-        {{ t('common.viewFullCollection') }}
-      </button>
+    <div class="collection-showcase">
+      <div class="collection-heading">
+        <h2>Featured Collections</h2>
+        <p>Dare to mix and match. Explore the latest edits by category.</p>
+      </div>
+
+      <div class="collection-grid">
+        @for (tile of contentData().collections; track tile.id) {
+          <button
+            type="button"
+            [class]="'collection-tile tile-' + tile.id"
+            (click)="goToContentLink(tile.link)"
+          >
+            <img [src]="tile.imageUrl" [alt]="tile.title" />
+            <span class="collection-overlay"></span>
+            <span class="collection-title">{{ tile.title }}</span>
+            @if (tile.ctaText) {
+              <span class="collection-action">{{ tile.ctaText }}</span>
+            }
+          </button>
+        }
+      </div>
     </div>
   </section>
 

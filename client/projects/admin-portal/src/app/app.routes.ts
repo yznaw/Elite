@@ -48,6 +48,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/storefront/storefront.component').then((m) => m.StorefrontComponent),
       },
+      { path: 'home-content', pathMatch: 'full', redirectTo: 'storefront' },
       {
         path: 'orders',
         loadComponent: () =>

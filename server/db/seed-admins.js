@@ -35,6 +35,13 @@ const ROLES = [
     notes: 'Day-to-day admin. Can manage catalog, orders, customers, settings.',
   },
   {
+    role: 'admin',
+    email: 'yazan@test.com',
+    name: 'Yazan Mutlaq',
+    notes: 'Requested admin account.',
+    password: '123',
+  },
+  {
     role: 'manager',
     email: 'manager@elite.local',
     name: 'Salim Al-Hajri',
@@ -132,7 +139,7 @@ async function main() {
 
     const rows = [];
     for (const spec of ROLES) {
-      const password = generatePassword(spec.role);
+      const password = spec.password || generatePassword(spec.role);
       await upsertAdmin(client, tenant.id, spec, password);
       rows.push({ ...spec, password });
     }

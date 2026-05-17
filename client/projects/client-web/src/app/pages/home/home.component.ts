@@ -16,9 +16,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { ProductsService } from '../../services/products.service';
-import { Product } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
+import { HomeContentService } from '../../services/home-content.service';
 
 interface MetaCard {
   id: number;
@@ -56,10 +55,10 @@ interface HeroModelOption {
   styleUrl: './home.component.scss',
 })
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
-  private readonly products = inject(ProductsService);
   private readonly router = inject(Router);
   private readonly ngZone = inject(NgZone);
   private readonly i18n = inject(I18nService);
+  private readonly homeContent = inject(HomeContentService);
 
   private metaTimer: number | undefined;
   private resizeObserver?: ResizeObserver;
@@ -91,7 +90,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly modelLoadFailed = signal(false);
   readonly selectedModelId = signal('heritage-mule');
   readonly selectedLeatherColor = signal('cognac');
-  readonly featured: Product[] = this.products.getFeatured();
+  readonly contentData = this.homeContent.contentData;
 
   readonly heroModels: HeroModelOption[] = [
     {
@@ -144,12 +143,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   ];
 
   readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
-  readonly price = (value: number): string => this.i18n.price(value);
-  readonly productName = (product: Product): string => this.i18n.productName(product);
-  readonly productLeather = (value: string): string => this.i18n.productLeather(value);
-  readonly productTag = (value: string): string => this.i18n.productTag(value);
 
   ngOnInit(): void {
+    void this.homeContent.refresh(true);
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
   }
 
@@ -162,18 +158,20 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.destroyHeroModel();
   }
 
-  goToProduct(p: Product): void {
-    void this.router.navigate(['/product', p.id]);
-    window.scrollTo(0, 0);
-  }
-
   goTo(path: string): void {
     void this.router.navigate([path]);
     window.scrollTo(0, 0);
   }
 
-  onImgError(e: Event): void {
-    (e.target as HTMLImageElement).style.display = 'none';
+  goToContentLink(link: string): void {
+    const target = link?.trim() || '/collection';
+    if (/^https?:\/\//i.test(target)) {
+      window.location.href = target;
+      return;
+    }
+
+    void this.router.navigateByUrl(target);
+    window.scrollTo(0, 0);
   }
 
   selectLeatherColor(id: string): void {
