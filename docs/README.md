@@ -26,6 +26,14 @@
 - **Brand Config** → [`../brand.config.json`](../brand.config.json) — White-label configuration
 - **Server ENV** → [`../server/.env.example`](../server/.env.example) — Environment variables
 
+## Planning & Tracking
+
+| Document | Description |
+|---|---|
+| [Master Plan](./master-plan.html) | Full backlog — what's live vs what still needs building, with acceptance criteria per feature. Click items to track progress. |
+| [POS System Plan](./pos-system-plan.html) | POS build — acceptance criteria per phase and sign-off gates for milestone payments (QAR 19,000 total). |
+| [Production Launch](./production-launch.html) | Pre-launch checklist and go-live readiness tracker. |
+
 ---
 
 ## How to Use These Docs

@@ -315,13 +315,17 @@ server/
 ├── index.js                         ← Entry point — middleware, session, bootstrap
 ├── .env.example                     ← Environment variable template
 ├── db/
-│   ├── index.js                     ← pg Pool + ensureDefaultTenant() helper
+│   ├── client.js                    ← pg Pool singleton
+│   ├── tenant.js                    ← ensureDefaultTenant() helper + admin seed
+│   ├── seed.js                      ← Idempotent fixture data (products, customers, orders)
+│   ├── seed-admins.js               ← One admin per role; writes credentials to admins.local.txt
 │   └── migrations/
 │       ├── 001_initial_schema.sql   ← Full schema (tenants, products, orders, …)
-│       ├── 002_auth.sql             ← admin_users, sessions table
+│       ├── 002_password_reset_tokens.sql ← Reset tokens (SHA-256 hashed, one-shot, 30m TTL)
 │       └── 003_ref_tables.sql       ← ref_colors, ref_materials, ref_size_sets
 ├── middleware/
-│   └── auth.js                      ← requireAuth + requireRole helpers
+│   ├── require-auth.js              ← requireAuth + requireRole helpers
+│   └── upload.js                    ← Shared multer config (50 MB cap, mimetype filter)
 ├── lib/
 │   └── storage.js                   ← Disk storage adapter (multer dest + delete helper)
 └── routes/
@@ -339,19 +343,19 @@ server/
     ├── admin-analytics.route.js     ← KPI + chart data
     ├── admin-storefront.route.js    ← Storefront snapshots + publish
     ├── admin-settings.route.js      ← Store settings + team
-    ├── admin-sync.route.js          ← Sync sources + logs
-    ├── admin-pos.route.js           ← POS transactions, refunds, Z reports, print
     ├── products.route.js            ← Public storefront product listing
     ├── carts.route.js               ← Public storefront cart
     └── contact.route.js             ← Public contact form
 ```
+
+> **POS backend (`admin-pos.route.js`) is planned but not yet built.** The endpoint table above in the POS section describes the target API. Implementation follows the acceptance criteria in [`docs/pos-system-plan.html`](./pos-system-plan.html).
 
 ### Session & Auth
 
 Admin authentication uses **server-side sessions** (no JWT):
 - `express-session` with `connect-pg-simple` stores sessions in the `session` PostgreSQL table
 - Login: `POST /api/auth/login` — checks `admin_users.password_hash` (bcrypt), sets `req.session.userId`
-- All `/api/admin/*` routes are gated by `requireAuth` middleware which reads `req.session.userId`
+- All `/api/admin/*` routes are gated by `requireAuth` in `middleware/require-auth.js`, which reads `req.session.userId`
 - Role-restricted routes (settings, reference) are additionally gated by `requireRole(['owner','admin'])`
 
 ### Bulk Import endpoint (`POST /api/admin/bulk-import`)

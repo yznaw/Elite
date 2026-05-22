@@ -64,11 +64,6 @@ export const routes: Routes = [
           import('./pages/analytics/analytics.component').then((m) => m.AnalyticsComponent),
       },
       {
-        path: 'sync',
-        loadComponent: () =>
-          import('./pages/sync/sync.component').then((m) => m.SyncComponent),
-      },
-      {
         path: 'reference',
         canMatch: [roleGuard(['owner', 'admin'])],
         loadComponent: () =>

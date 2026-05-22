@@ -34,13 +34,3 @@ export function fulfillmentPillKind(s: string): PillInfo {
     default:           return { kind: 'grey',  labelKey: 'pill.' + s,       label: s };
   }
 }
-
-export function syncPillKind(s: string): PillInfo {
-  switch (s) {
-    case 'success': return { kind: 'green', labelKey: 'pill.success', label: 'Success' };
-    case 'failed':  return { kind: 'red',   labelKey: 'pill.failed',  label: 'Failed' };
-    case 'partial': return { kind: 'amber', labelKey: 'pill.partial', label: 'Partial' };
-    case 'running': return { kind: 'blue',  labelKey: 'pill.running', label: 'Running' };
-    default:        return { kind: 'grey',  labelKey: 'pill.' + s,    label: s };
-  }
-}

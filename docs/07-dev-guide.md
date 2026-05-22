@@ -269,13 +269,17 @@ Elite/
 │   ├── index.js                               ← Entry point — middleware, session, bootstrap
 │   ├── .env.example                           ← Env template
 │   ├── db/
-│   │   ├── index.js                           ← pg Pool + ensureDefaultTenant()
+│   │   ├── client.js                          ← pg Pool singleton
+│   │   ├── tenant.js                          ← ensureDefaultTenant() + admin seed
+│   │   ├── seed.js                            ← Idempotent fixture data
+│   │   ├── seed-admins.js                     ← One admin per role; writes admins.local.txt
 │   │   └── migrations/
 │   │       ├── 001_initial_schema.sql         ← Full schema
-│   │       ├── 002_auth.sql                   ← admin_users + sessions table
+│   │       ├── 002_password_reset_tokens.sql  ← Reset tokens (SHA-256, 30m TTL)
 │   │       └── 003_ref_tables.sql             ← ref_colors, ref_materials, ref_size_sets
 │   ├── middleware/
-│   │   └── auth.js                            ← requireAuth + requireRole helpers
+│   │   ├── require-auth.js                    ← requireAuth + requireRole helpers
+│   │   └── upload.js                          ← Shared multer config
 │   ├── lib/
 │   │   └── storage.js                         ← Disk storage adapter
 │   └── routes/
@@ -293,11 +297,10 @@ Elite/
 │       ├── admin-analytics.route.js           ← KPI + chart data
 │       ├── admin-storefront.route.js          ← Storefront snapshots + publish
 │       ├── admin-settings.route.js            ← Store settings + team
-│       ├── admin-sync.route.js                ← Sync sources + logs
-│       ├── admin-pos.route.js                 ← POS transactions, Z reports, print
 │       ├── products.route.js                  ← Public storefront listing
 │       ├── carts.route.js                     ← Public cart
 │       └── contact.route.js                   ← Public contact form
+│                                              (admin-pos.route.js — planned, not yet built)
 │
 ├── client/
 │   ├── angular.json                           ← Angular workspace config
@@ -326,22 +329,27 @@ Elite/
 │               ├── app.routes.ts              ← Admin routes (dashboard, catalog, reference, …)
 │               ├── i18n/strings.ts            ← EN/AR translations (1200+ lines)
 │               ├── models/index.ts            ← All admin interfaces
-│               ├── data/mock.ts               ← Mock data (analytics, sync — not yet live)
+│               ├── data/mock.ts               ← Mock data (analytics — not yet live)
 │               ├── interceptors/
 │               │   └── http-error.interceptor.ts ← Global HTTP error handler
 │               ├── services/
 │               │   ├── api-client.service.ts  ← HTTP wrapper (envelope unwrap, credentials)
+│               │   ├── auth.service.ts        ← Login, logout, session user
 │               │   ├── admin-products.service.ts ← Product CRUD via API
 │               │   ├── admin-ref.service.ts   ← Colors / materials / size sets via API
+│               │   ├── admin-collections.service.ts ← Collections CRUD
+│               │   ├── admin-orders.service.ts ← Orders + workflow + notes
+│               │   ├── admin-customers.service.ts ← Customer CRM
+│               │   ├── admin-media.service.ts ← Media library
+│               │   ├── media-upload.service.ts ← Multipart upload with per-file progress
 │               │   ├── storefront.service.ts  ← Draft/publish flow
 │               │   ├── notification.service.ts ← Global real-time alerts
 │               │   ├── toast.service.ts       ← Toast notifications
 │               │   ├── confirm.service.ts     ← Confirm dialogs
 │               │   ├── i18n.service.ts        ← Translation helper
-│               │   ├── locale.service.ts      ← Language + RTL
-│               │   ├── pos.service.ts         ← POS cart state (signals), scan logic
-│               │   ├── pos-sync.service.ts    ← Offline IndexedDB queue + background sync
-│               │   └── escpos.service.ts      ← ESC/POS byte stream, WebUSB/TCP printer
+│               │   └── locale.service.ts      ← Language + RTL
+│               │                              (pos.service.ts, pos-sync.service.ts,
+│               │                               escpos.service.ts — planned, not yet built)
 │               ├── pages/
 │               │   ├── catalog/
 │               │   │   ├── catalog.component.ts

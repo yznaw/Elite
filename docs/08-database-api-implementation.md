@@ -15,7 +15,7 @@ The implementation added:
 - A PostgreSQL database client for the Express server.
 - A default tenant helper for white-label/multi-tenant data.
 - Public storefront API routes.
-- Admin API routes for catalog, collections, customers, orders, media, storefront editor, settings, sync, analytics, and integrations.
+- Admin API routes for catalog, collections, customers, orders, media, storefront editor, settings, analytics, and integrations.
 - Product save wiring from the admin portal to PostgreSQL.
 - Storefront collection loading from the `products` table.
 - Documentation for endpoint-to-SQL behavior.
@@ -71,8 +71,6 @@ The initial schema includes tables for:
 - Traffic sources
 - Conversion funnel steps
 - Product interactions / 3D views
-- Sync sources
-- Sync logs
 - Integrations
 - Notifications
 - Contact submissions
@@ -347,16 +345,6 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 | `GET` | `/api/admin/settings/integrations` | `SELECT` integrations |
 | `POST` | `/api/admin/settings/integrations` | `INSERT ... ON CONFLICT DO UPDATE` integration |
 
-### Sync
-
-| Method | Endpoint | Database behavior |
-|---|---|---|
-| `GET` | `/api/admin/sync/sources` | `SELECT` sync sources |
-| `POST` | `/api/admin/sync/sources` | `INSERT ... ON CONFLICT DO UPDATE` sync source |
-| `GET` | `/api/admin/sync/logs` | `SELECT` sync logs |
-| `POST` | `/api/admin/sync/sources/:sourceId/run` | Transaction: `INSERT` running sync log, `UPDATE` source status |
-| `PATCH` | `/api/admin/sync/logs/:id/complete` | Transaction: `UPDATE` log, `UPDATE` source status |
-
 ### Analytics
 
 | Method | Endpoint | Database behavior |
@@ -423,7 +411,7 @@ Still mock-backed in many admin screens:
 - Media page still starts from `MEDIA_INIT`
 - Analytics/dashboard still use mock rollups
 - Storefront editor service still uses localStorage
-- Settings/sync pages still use mock arrays
+- Settings page still uses mock arrays
 
 The API routes exist for these areas, so each page can now be migrated from mock data to HTTP services incrementally.
 
@@ -452,7 +440,6 @@ Smoke-tested endpoints:
 - `GET /api/admin/media`
 - `GET /api/admin/settings/store`
 - `POST /api/admin/settings/team`
-- `GET /api/admin/sync/sources`
 - `GET /api/admin/analytics/overview`
 - `POST /api/contact`
 - `POST /api/admin/storefront/draft`
@@ -474,7 +461,6 @@ Recommended next steps:
    - `AdminMediaService`
    - `AdminStorefrontApiService`
    - `AdminSettingsService`
-   - `AdminSyncService`
    - `AdminAnalyticsService`
 
 2. Replace page-level mock imports with service-backed signals.
@@ -527,7 +513,7 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 - Tenant selection is still the default tenant — multi-tenant routing (subdomain or header-based) is not wired yet.
 - Production storage driver: currently disk-only. S3 / Supabase / R2 adapters need to be added in `server/lib/storage.js` and selected via `STORAGE_DRIVER`.
 - Collection cover upload: schema is ready (`collections.cover_media_id`); wire the drag-drop upload to `POST /api/admin/media` then `PATCH /api/admin/collections/:id` with the new media id.
-- Admin pages still on mock data: Media, Storefront, Sync, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
+- Admin pages still on mock data: Media, Storefront, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
 - Password reset emails: `POST /api/auth/forgot` currently logs the URL to stdout. Wire a real email transport (Resend / SES / SendGrid) and replace the `console.log` in [server/routes/auth.route.js](../server/routes/auth.route.js).
 - No automated backend test suite exists yet.
 

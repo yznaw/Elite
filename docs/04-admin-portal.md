@@ -52,12 +52,11 @@ All pages are lazy-loaded:
 | `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, full-height drawer with status workflow stepper, tracking number, internal notes & timeline |
 | `/customers` | `CustomersComponent` | Customer table/cards, tier filter, **Add Customer** create flow, fully editable detail drawer with real linked-orders history (rows navigate to /orders?id=…) |
 | `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel, top 3D interactions |
-| `/sync` | `SyncComponent` | Sync source cards, activity feed, manual queue, schedule management |
 | `/settings` | `SettingsComponent` | Store info, team members, integrations |
-| `/pos` | `PosComponent` | **Point of Sale** — full-screen dark-theme cashier interface. Touch-optimized product grid, live cart panel, USB + camera barcode scanning, Cash / Card / Split checkout, ESC/POS thermal receipt printing (Bixolon 80mm via WebUSB/TCP), automated cash drawer trigger (RJ12), barcode label generation (Code 128/EAN-13 30×20mm), Park & Resume multi-session carts, offline-first PWA with IndexedDB queue, X Report (mid-shift read), Z Report (end-of-day close with cash float & variance), full/partial returns & refunds, Manager PIN role-based security. Hides sidebar/topbar — renders standalone full-width. |
+| `/pos` | `PosComponent` | **Point of Sale** *(planned — not yet built)*. Full-screen dark-theme cashier interface. Touch-optimized product grid, live cart panel, USB + camera barcode scanning, Cash / Card / Split checkout, ESC/POS thermal receipt printing (Bixolon 80mm via WebUSB/TCP), automated cash drawer trigger (RJ12), barcode label generation (Code 128/EAN-13 30×20mm), Park & Resume multi-session carts, offline-first PWA with IndexedDB queue, X Report (mid-shift read), Z Report (end-of-day close with cash float & variance), full/partial returns & refunds, Manager PIN role-based security. Hides sidebar/topbar — renders standalone full-width. See [`docs/pos-system-plan.html`](./pos-system-plan.html) for acceptance criteria. |
 | `**` | — | Redirects to `/dashboard` |
 
-> Every route except `/login`, `/forgot-password`, and `/reset-password` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` is gated by `roleGuard(['owner','admin','cashier'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
+> Every route except `/login`, `/forgot-password`, and `/reset-password` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` will be gated by `roleGuard(['owner','admin','cashier'])` when built. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
 
 ---
 
@@ -112,6 +111,11 @@ Located in `app/shared/`:
 
 All admin services inject `ApiClient` and call `firstValueFrom()` to return Promises.
 
+### `AuthService`
+
+- **File:** `services/auth.service.ts`
+- **Purpose:** Login, logout, session user — wraps `/api/auth/*` endpoints and exposes the current user signal
+
 ### `AdminProductsService`
 
 - **File:** `services/admin-products.service.ts`
@@ -123,6 +127,26 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
   - `update(id, partial)` → `Product`
   - `archive(id)` → `{ id }`
   - `bulkDelete(ids[])` → `{ deleted: number }`
+
+### `AdminCollectionsService`
+
+- **File:** `services/admin-collections.service.ts`
+- **Purpose:** CRUD for product collections — list, create, update, delete, reorder products within a collection
+
+### `AdminOrdersService`
+
+- **File:** `services/admin-orders.service.ts`
+- **Purpose:** Order list, status transitions, adding notes, and timeline entries — wraps `/api/admin/orders/*`
+
+### `AdminCustomersService`
+
+- **File:** `services/admin-customers.service.ts`
+- **Purpose:** Customer list, detail, create, update — includes linked order history — wraps `/api/admin/customers/*`
+
+### `AdminMediaService` / `MediaUploadService`
+
+- **Files:** `services/admin-media.service.ts`, `services/media-upload.service.ts`
+- **Purpose:** `AdminMediaService` fetches the media list and handles deletes. `MediaUploadService` wraps the multipart upload to `POST /api/admin/media` with per-file progress reporting via RxJS.
 
 ### `AdminRefService`
 
@@ -213,9 +237,7 @@ The admin portal has its own i18n dictionary with **640+ keys** covering all adm
 | `customers.*` | Customer CRM |
 | `media.*` | Media library (40+ keys including auto-link) |
 | `analytics.*` | Analytics page |
-| `sync.*` | Sync engine (80+ keys for feed, sources, queue) |
 | `settings.*` | Settings page |
-| `pos.*` | POS system (80+ keys: cashier UI, checkout, receipts, reports, scanner, hardware status, refunds, manager PIN, labels, offline banner) |
 | `dash.*` | Dashboard KPIs and charts |
 | `orderModal.*` | Order detail modal |
 | `customerDrawer.*` | Customer detail drawer |
@@ -242,7 +264,7 @@ Unlike standard auto-translation, the Arabic localization for the Elite platform
 
 ## Mock Data Layer
 
-> Most sections are now connected to the real PostgreSQL API. The mock layer (`app/data/mock.ts`) is only used for data that has not yet been wired to a live endpoint (analytics charts, sync feed, storefront blocks).
+> Most sections are now connected to the real PostgreSQL API. The mock layer (`app/data/mock.ts`) is only used for data that has not yet been wired to a live endpoint (analytics charts, storefront blocks).
 
 All mock data lives in `app/data/mock.ts`:
 
@@ -252,13 +274,11 @@ All mock data lives in `app/data/mock.ts`:
 | `MEDIA_INIT` | `MediaFile[]` | 17 media files (images + 3D models) |
 | `CUSTOMERS` | `Customer[]` | 10 customers with profiles |
 | `ORDERS` | `Order[]` | 12 orders with line items |
-| `SYNC_LOGS` | `SyncLog[]` | 11 sync log entries |
-| `SYNC_SOURCES` | `SyncSource[]` | 1 sync source (Counterpoint POS) |
 | `REVENUE_30D` | `RevenueDay[]` | 30 days of generated revenue data |
 | `TRAFFIC` | `TrafficSource[]` | 4 traffic sources |
 | `FUNNEL` | `FunnelStep[]` | 5-step conversion funnel |
 | `TEAM` | `TeamMember[]` | 4 team members |
-| `INTEGRATIONS` | `Integration[]` | 3 integrations |
+| `INTEGRATIONS` | `Integration[]` | 2 integrations |
 | `STOREFRONT_DEFAULT` | `StorefrontBlock[]` | 5 default storefront sections |
 | `PALETTE` | `PaletteEntry[]` | 5 available block types |
 
@@ -291,8 +311,6 @@ All models are defined in `app/models/index.ts`:
 | `OrderTimelineEntry` | id, ts, kind, detail?, actor? | Order drawer timeline |
 | `OrderNote` | id, ts, author, initials, body | Order drawer internal notes |
 | `Customer` | id, name, email, orders, ltv, sizePref, notes | Customers |
-| `SyncLog` | id, ts, type, processed, updated, status, triggeredBy | Sync Feed |
-| `SyncSource` | id, name, status, schedule, successRate, spark7d | Sync Sources |
 | `StorefrontBlock` | id, type, title, visible, config, ctaText, productIds | Storefront Editor |
 | `TeamMember` | id, name, email, role, initials | Settings |
 | `Integration` | id, name, desc, connected | Settings |
@@ -458,7 +476,6 @@ Each admin section maps to one or more PostgreSQL tables defined in `server/db/m
 | Storefront editor | `storefront_snapshots`, `storefront_blocks`, `storefront_block_products` |
 | Orders · drawer | `orders`, `order_items`, `payments`, `shipments` (tracking number), `order_timeline_entries`, `order_notes` |
 | Customers · drawer | `customers`, `customer_addresses`, `orders` (history join), view `v_customer_order_stats` |
-| Sync | `sync_sources`, `sync_logs` |
 | Settings · team | `admin_users`, `store_settings`, `integrations`, `audit_events` |
 | Notifications bell | `notifications` |
 
@@ -468,12 +485,14 @@ See [08 – Database & API Implementation](./08-database-api-implementation.md) 
 
 ## POS System
 
-The `/pos` route is a standalone full-screen page that hides the sidebar and topbar. It is a **Progressive Web App (PWA)** with offline support.
+> **Status: Planned — not yet built.** The architecture below is the target design. Implementation follows the acceptance criteria in [`docs/pos-system-plan.html`](./pos-system-plan.html). The server route (`admin-pos.route.js`), Angular page (`pages/pos/`), and POS services do not yet exist in the codebase.
 
-### Architecture
+The `/pos` route will be a standalone full-screen page that hides the sidebar and topbar. It is designed as a **Progressive Web App (PWA)** with offline support.
+
+### Target Architecture
 
 ```
-pages/pos/
+pages/pos/                          (planned)
 ├── pos.component.ts                ← Main layout (left grid + right cart, full-width dark theme)
 ├── pos-product-grid.component.ts   ← Scrollable 3-col product grid, tap-to-add
 ├── pos-cart.component.ts           ← Live order panel with qty controls, discount field
@@ -485,7 +504,7 @@ pages/pos/
 ├── pos-label-print.component.ts    ← Barcode label generation (Code 128/EAN-13, 30×20mm)
 └── pos-manager-pin.component.ts    ← Manager PIN overlay for restricted actions
 
-services/
+services/                           (planned)
 ├── pos.service.ts                  ← Cart state (Angular signals), scan logic, transaction API
 ├── pos-sync.service.ts             ← Offline IndexedDB queue + background sync on reconnect
 └── escpos.service.ts               ← ESC/POS byte stream builder, WebUSB/TCP printer + cash drawer
