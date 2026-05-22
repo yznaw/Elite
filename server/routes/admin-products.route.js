@@ -247,6 +247,42 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
 }));
 
+// POST /api/admin/products/bulk-delete — permanently removes products by ID array
+router.post('/bulk-delete', asyncHandler(async (req, res) => {
+  const ids = req.body?.ids;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return validationError(res, ['ids must be a non-empty array of product IDs.']);
+  }
+
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
+
+    // Remove media links, variants, then products — scoped to tenant
+    await client.query(
+      'DELETE FROM media_links WHERE product_id = ANY($1::uuid[])',
+      [ids],
+    );
+    await client.query(
+      'DELETE FROM product_variants WHERE product_id = ANY($1::uuid[])',
+      [ids],
+    );
+    const result = await client.query(
+      'DELETE FROM products WHERE tenant_id = $1 AND id = ANY($2::uuid[]) RETURNING id',
+      [tenant.id, ids],
+    );
+
+    await client.query('COMMIT');
+    ok(res, { deleted: result.rowCount }, `${result.rowCount} product(s) deleted.`);
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
 router.delete('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {

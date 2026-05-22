@@ -44,4 +44,8 @@ export class AdminProductsService {
   archive(id: string): Promise<{ id: string }> {
     return firstValueFrom(this.api.delete<{ id: string }>(`/admin/products/${id}`));
   }
+
+  bulkDelete(ids: string[]): Promise<{ deleted: number }> {
+    return firstValueFrom(this.api.post<{ deleted: number }>('/admin/products/bulk-delete', { ids }));
+  }
 }
