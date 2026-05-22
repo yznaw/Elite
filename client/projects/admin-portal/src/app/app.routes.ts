@@ -69,6 +69,12 @@ export const routes: Routes = [
           import('./pages/sync/sync.component').then((m) => m.SyncComponent),
       },
       {
+        path: 'reference',
+        canMatch: [roleGuard(['owner', 'admin'])],
+        loadComponent: () =>
+          import('./pages/reference/reference.component').then((m) => m.ReferenceComponent),
+      },
+      {
         // Only owners and admins can manage workspace settings & team members.
         path: 'settings',
         canMatch: [roleGuard(['owner', 'admin'])],

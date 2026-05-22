@@ -32,6 +32,8 @@ const EN = {
   'nav.analytics.sub': 'Insights',
   'nav.sync': 'Sync Logs',
   'nav.sync.sub': 'System Health',
+  'nav.reference': 'Reference Lists',
+  'nav.reference.sub': 'Colors · Materials · Sizes',
   'nav.settings': 'Settings',
   'nav.settings.sub': 'Access & Config',
 
@@ -865,6 +867,8 @@ const AR: Record<keyof typeof EN, string> = {
   'nav.analytics.sub': 'تحليلات ورؤى',
   'nav.sync': 'تحديث البيانات',
   'nav.sync.sub': 'سجلات النظام',
+  'nav.reference': 'القوائم المرجعية',
+  'nav.reference.sub': 'الألوان · المواد · المقاسات',
   'nav.settings': 'إعدادات النظام',
   'nav.settings.sub': 'التهيئة والصلاحيات',
 
