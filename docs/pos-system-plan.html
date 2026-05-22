@@ -639,12 +639,12 @@
             <li>Transaction history log with cashier and date filters</li>
             <li>Full EN / AR i18n (transcreated luxury tone)</li>
             <li>Posiflex Windows touch terminal optimized (Chromium-based)</li>
+            <li>Multi-register / multi-cashier live sync view (real-time via SSE or WebSocket)</li>
           </ul>
         </div>
         <div style="background:#fef9ef;border:1px solid #fde68a;border-radius:10px;padding:18px 20px">
           <div class="pill pill-gold" style="margin-bottom:10px">🔜 Future Phase</div>
           <ul class="checklist">
-            <li>Multi-register / multi-cashier live sync view</li>
             <li>Gift receipt mode with custom branding</li>
             <li>Loyalty points accumulation & tier upgrades</li>
             <li>WhatsApp receipt delivery</li>
@@ -1361,11 +1361,12 @@ document.addEventListener(<span class="st">'keydown'</span>, (e) => {
       <div class="tl-item">
         <div class="tl-dot"></div>
         <h4>Phase 1 — Core POS Interface & Offline Engine (PWA) <span style="float:right;font-size:12px;color:var(--gold);font-weight:400">QAR 6,000</span></h4>
-        <p style="margin-bottom:8px">Touch-optimized retail UI, offline-first Service Workers with IndexedDB cart queue, Park &amp; Resume multi-session carts, database migration, core Angular service with signals.</p>
+        <p style="margin-bottom:8px">Touch-optimized retail UI, offline-first Service Workers with IndexedDB cart queue, Park &amp; Resume multi-session carts, multi-register / multi-cashier live sync view (real-time via SSE or WebSocket), database migration, core Angular service with signals.</p>
         <div class="tl-tags">
           <span class="tag tag-blue">Angular PWA</span>
           <span class="tag tag-gold">Service Workers</span>
           <span class="tag tag-gold">IndexedDB</span>
+          <span class="tag tag-blue">SSE / WebSocket</span>
           <span class="tag tag-green">SQL Migration</span>
           <span class="tag tag-grey">~8 files</span>
         </div>
