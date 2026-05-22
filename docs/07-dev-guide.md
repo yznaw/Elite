@@ -52,7 +52,9 @@ This starts all three processes concurrently:
 |---|---|---|
 | Express API | http://localhost:3000/api | Yes (nodemon) |
 | Client Web | http://localhost:4200 | Yes (ng serve) |
-| Admin Portal | http://localhost:4300 | Yes (ng serve) |
+| Admin Portal | http://localhost:4300 | Yes (ng serve, with proxy) |
+
+> **Dev proxy** — `client/proxy.conf.json` proxies `/api` and `/uploads` from the Angular dev server (port 4300) to Express (port 3000). This means `<img src="/uploads/...">` in the admin portal correctly resolves to the Express static file server in development. No proxy changes needed in production (same origin).
 
 ### Start Individually
 
@@ -104,6 +106,8 @@ npm run admin    # admin-portal only
 - **Standalone only** — No `NgModule` declarations. Every component sets `standalone: true`
 - **Lazy-loaded pages** — All page components are loaded via `loadComponent()` in routes
 - **Signals for state** — Use `signal()`, `computed()`, `effect()` instead of `BehaviorSubject`
+- **No arrow functions in templates** — Angular 17 templates do not allow `=>` in event bindings. Extract to named component methods: `(click)="doThing()"` not `(click)="sig.update(v => !v)"`
+- **No self-closing non-void tags** — `<option [value]="x">{{ x }}</option>`, never `<option [value]="x"/>`
 - **Inject function** — Use `inject()` instead of constructor injection:
 
 ```typescript
@@ -218,6 +222,40 @@ See [05 – API Server](./05-api-server.md#how-to-add-a-new-route) for the step-
 
 See [06 – White-Label Guide](./06-white-label-guide.md#step-3-update-storefront-css-tokens) for the complete rebranding process.
 
+### Run the POS in Development
+
+The POS page runs at `http://localhost:4300/pos`. The standard `npm run dev` command starts everything including the POS route.
+
+For hardware testing (thermal printer, cash drawer), the Express server must be reachable from the POS terminal. Set `PRINTER_HOST` in `server/.env` to your Bixolon printer's IP address:
+
+```bash
+PRINTER_HOST=192.168.1.100
+PRINTER_PORT=9100
+```
+
+To test USB printing via WebUSB, open the POS in Chrome/Edge (WebUSB is not supported in Firefox or Safari). The browser will prompt for USB device permission on first use.
+
+To simulate a USB barcode scan in dev, focus the search input and type any 6+ character string followed by Enter within 100ms — or use a real USB scanner.
+
+### POS npm Packages
+
+| Package | Location | Purpose |
+|---|---|---|
+| `@zxing/browser` | `client/` | Camera-based barcode/QR scanning |
+| `bwip-js` | `client/` | Barcode image generation for labels (Code 128, EAN-13) |
+| `dexie` | `client/` | IndexedDB wrapper for offline cart queue |
+| `escpos-buffer` | `server/` | ESC/POS byte stream builder for thermal receipts |
+| `bcrypt` | `server/` | Manager PIN hashing |
+
+Install after cloning:
+```bash
+# client
+cd client && npm install @zxing/browser bwip-js dexie
+
+# server
+cd server && npm install escpos-buffer bcrypt
+```
+
 ---
 
 ## Project Map (Quick Reference)
@@ -228,14 +266,42 @@ Elite/
 ├── docs/                                      ← YOU ARE HERE
 │
 ├── server/
-│   ├── index.js                               ← Server entry
+│   ├── index.js                               ← Entry point — middleware, session, bootstrap
 │   ├── .env.example                           ← Env template
+│   ├── db/
+│   │   ├── index.js                           ← pg Pool + ensureDefaultTenant()
+│   │   └── migrations/
+│   │       ├── 001_initial_schema.sql         ← Full schema
+│   │       ├── 002_auth.sql                   ← admin_users + sessions table
+│   │       └── 003_ref_tables.sql             ← ref_colors, ref_materials, ref_size_sets
+│   ├── middleware/
+│   │   └── auth.js                            ← requireAuth + requireRole helpers
+│   ├── lib/
+│   │   └── storage.js                         ← Disk storage adapter
 │   └── routes/
 │       ├── index.js                           ← Route aggregator
-│       └── health.route.js                    ← Health endpoint
+│       ├── lib.js                             ← asyncHandler, ok, created, notFound, …
+│       ├── health.route.js                    ← GET /api/health
+│       ├── auth.route.js                      ← Login, logout, forgot/reset password
+│       ├── admin-products.route.js            ← Product CRUD + bulk-delete
+│       ├── admin-bulk-import.route.js         ← CSV upload → NDJSON streaming
+│       ├── admin-ref.route.js                 ← Colors, materials, size sets CRUD
+│       ├── admin-media.route.js               ← Media library upload/delete
+│       ├── admin-collections.route.js         ← Collections CRUD
+│       ├── admin-orders.route.js              ← Orders + workflow + notes + timeline
+│       ├── admin-customers.route.js           ← Customers + order history
+│       ├── admin-analytics.route.js           ← KPI + chart data
+│       ├── admin-storefront.route.js          ← Storefront snapshots + publish
+│       ├── admin-settings.route.js            ← Store settings + team
+│       ├── admin-sync.route.js                ← Sync sources + logs
+│       ├── admin-pos.route.js                 ← POS transactions, Z reports, print
+│       ├── products.route.js                  ← Public storefront listing
+│       ├── carts.route.js                     ← Public cart
+│       └── contact.route.js                   ← Public contact form
 │
 ├── client/
 │   ├── angular.json                           ← Angular workspace config
+│   ├── proxy.conf.json                        ← Dev proxy: /api + /uploads → :3000
 │   ├── tsconfig.json                          ← TS config + @shared/* alias
 │   └── projects/
 │       ├── client-web/src/
@@ -243,10 +309,10 @@ Elite/
 │       │   ├── styles.scss                    ← @FONT-FACE + DESIGN TOKENS + global CSS
 │       │   └── app/
 │       │       ├── app.routes.ts              ← Page routes
-│       │       ├── i18n/strings.ts            ← EN/AR translations (600 lines)
+│       │       ├── i18n/strings.ts            ← EN/AR translations
 │       │       ├── models/product.model.ts    ← Product + CartItem types
 │       │       ├── services/
-│       │       │   ├── products.service.ts    ← Product data (mock)
+│       │       │   ├── products.service.ts    ← Product data
 │       │       │   ├── cart.service.ts        ← Cart state (signals)
 │       │       │   ├── locale.service.ts      ← Language + RTL
 │       │       │   └── i18n.service.ts        ← Translation helper
@@ -257,20 +323,32 @@ Elite/
 │           ├── index.html                     ← HTML shell
 │           ├── styles.scss                    ← @FONT-FACE + DESIGN TOKENS (2700+ lines)
 │           └── app/
-│               ├── app.routes.ts              ← 9 admin routes
+│               ├── app.routes.ts              ← Admin routes (dashboard, catalog, reference, …)
 │               ├── i18n/strings.ts            ← EN/AR translations (1200+ lines)
 │               ├── models/index.ts            ← All admin interfaces
-│               ├── data/mock.ts               ← Mock data (products, orders, etc.)
+│               ├── data/mock.ts               ← Mock data (analytics, sync — not yet live)
 │               ├── interceptors/
 │               │   └── http-error.interceptor.ts ← Global HTTP error handler
 │               ├── services/
+│               │   ├── api-client.service.ts  ← HTTP wrapper (envelope unwrap, credentials)
+│               │   ├── admin-products.service.ts ← Product CRUD via API
+│               │   ├── admin-ref.service.ts   ← Colors / materials / size sets via API
 │               │   ├── storefront.service.ts  ← Draft/publish flow
 │               │   ├── notification.service.ts ← Global real-time alerts
 │               │   ├── toast.service.ts       ← Toast notifications
 │               │   ├── confirm.service.ts     ← Confirm dialogs
 │               │   ├── i18n.service.ts        ← Translation helper
-│               │   └── locale.service.ts      ← Language + RTL
-│               ├── pages/                     ← 9 lazy-loaded pages
+│               │   ├── locale.service.ts      ← Language + RTL
+│               │   ├── pos.service.ts         ← POS cart state (signals), scan logic
+│               │   ├── pos-sync.service.ts    ← Offline IndexedDB queue + background sync
+│               │   └── escpos.service.ts      ← ESC/POS byte stream, WebUSB/TCP printer
+│               ├── pages/
+│               │   ├── catalog/
+│               │   │   ├── catalog.component.ts
+│               │   │   ├── product-drawer.component.ts
+│               │   │   └── bulk-import-dialog.component.ts
+│               │   ├── reference/             ← Colors, materials, size sets management
+│               │   └── …                      ← dashboard, orders, customers, media, etc.
 │               └── shared/                    ← 15+ reusable components
 │
 └── shared/                                    ← Cross-app TypeScript types

@@ -44,7 +44,8 @@ All pages are lazy-loaded:
 | `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
 | `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
 | `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, 3D heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. |
-| `/catalog` | `CatalogComponent` | Product grid/list, search, collection filtering, **New Product** create flow, inline editor with image gallery (drag-reorder + primary, **real multipart upload to `POST /api/admin/products/:id/images` with per-file progress bar**, drag/drop on desktop + tap-to-browse on mobile), variants table (size/color/material × SKU/price/stock), rich-text descriptions for EN & AR, top save bar, draft auto-save |
+| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted in localStorage). Search, status quick-filter (All / Active / Hidden), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). **Advanced filter panel**: collection, image status, 3D status, variant count, color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select** with checkbox overlay: Select All, **Set Status** (Active/Hidden) for selection, **Delete** with inline confirm. **New Product** create flow: inline drawer with image gallery (drag-reorder + primary, real multipart upload with per-file progress bar, drag/drop + tap-to-browse), **variants table with color swatch select from `ref_colors`, material select from `ref_materials`, size input with datalist suggestions from `ref_size_sets`**, "Generate sizes" wizard that auto-creates variant rows from a named size set, rich-text descriptions EN & AR, draft auto-save. **Bulk Import** (CSV → products grouped by English Name, each color row → `product_variant`, images from Google Drive, live NDJSON streaming, downloadable CSV report). |
+| `/reference` | `ReferenceComponent` | Reference data management — **Colors** (name EN/AR + hex, inline color picker, swatch preview), **Materials** (name EN/AR), **Size Charts** (named size sets with comma-editable size arrays). Full CRUD for each, changes immediately available as dropdowns in the product drawer and filters in the catalog. Owner/admin only. |
 | `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image upload (drag/drop + URL paste), drag-to-reorder linked products to control storefront display order |
 | `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, **real multipart upload to `POST /api/admin/media` via drag/drop or tap-to-browse** (per-file thumbnail + progress row, 15 % / 60 % / 100 % … ), 415 / 413 errors surfaced inline, auto-link by SKU, detail drawer. Delete removes the file from storage too. |
 | `/storefront` | `StorefrontComponent` | Section editor with drag & drop, draft → publish, preview |
@@ -53,9 +54,10 @@ All pages are lazy-loaded:
 | `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel, top 3D interactions |
 | `/sync` | `SyncComponent` | Sync source cards, activity feed, manual queue, schedule management |
 | `/settings` | `SettingsComponent` | Store info, team members, integrations |
+| `/pos` | `PosComponent` | **Point of Sale** — full-screen dark-theme cashier interface. Touch-optimized product grid, live cart panel, USB + camera barcode scanning, Cash / Card / Split checkout, ESC/POS thermal receipt printing (Bixolon 80mm via WebUSB/TCP), automated cash drawer trigger (RJ12), barcode label generation (Code 128/EAN-13 30×20mm), Park & Resume multi-session carts, offline-first PWA with IndexedDB queue, X Report (mid-shift read), Z Report (end-of-day close with cash float & variance), full/partial returns & refunds, Manager PIN role-based security. Hides sidebar/topbar — renders standalone full-width. |
 | `**` | — | Redirects to `/dashboard` |
 
-> Every route except `/login`, `/forgot-password`, and `/reset-password` is gated by `authGuard` (`canMatch`). `/settings` is additionally gated by `roleGuard(['owner','admin'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
+> Every route except `/login`, `/forgot-password`, and `/reset-password` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` is gated by `roleGuard(['owner','admin','cashier'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
 
 ---
 
@@ -97,6 +99,38 @@ Located in `app/shared/`:
 ---
 
 ## Services
+
+### `ApiClient`
+
+- **File:** `services/api-client.service.ts`
+- **Purpose:** Single HTTP wrapper used by all admin services
+- **Behaviour:**
+  - Resolves base URL automatically — `localhost:3000/api` in dev, `/api` in production
+  - Sends `withCredentials: true` on every request so the session cookie travels with admin calls
+  - Unwraps the `{ success, data }` envelope — callers receive `data` directly
+- **Methods:** `get<T>(path)`, `post<T>(path, body)`, `put<T>(path, body)`, `patch<T>(path, body)`, `delete<T>(path)`
+
+All admin services inject `ApiClient` and call `firstValueFrom()` to return Promises.
+
+### `AdminProductsService`
+
+- **File:** `services/admin-products.service.ts`
+- **Purpose:** CRUD for the product catalog
+- **Methods:**
+  - `list()` → `Product[]`
+  - `get(id)` → `Product`
+  - `saveProduct(payload)` → `Product`
+  - `update(id, partial)` → `Product`
+  - `archive(id)` → `{ id }`
+  - `bulkDelete(ids[])` → `{ deleted: number }`
+
+### `AdminRefService`
+
+- **File:** `services/admin-ref.service.ts`
+- **Purpose:** CRUD for reference data — colors, materials, size sets
+- **Interfaces exported:** `RefColor`, `RefMaterial`, `RefSizeSet`
+- **Methods:** `getColors/createColor/updateColor/deleteColor`, `getMaterials/createMaterial/updateMaterial/deleteMaterial`, `getSizeSets/createSizeSet/updateSizeSet/deleteSizeSet`
+- Changes here are immediately reflected in the product drawer dropdowns and catalog filters.
 
 ### `StorefrontService`
 
@@ -181,6 +215,7 @@ The admin portal has its own i18n dictionary with **640+ keys** covering all adm
 | `analytics.*` | Analytics page |
 | `sync.*` | Sync engine (80+ keys for feed, sources, queue) |
 | `settings.*` | Settings page |
+| `pos.*` | POS system (80+ keys: cashier UI, checkout, receipts, reports, scanner, hardware status, refunds, manager PIN, labels, offline banner) |
 | `dash.*` | Dashboard KPIs and charts |
 | `orderModal.*` | Order detail modal |
 | `customerDrawer.*` | Customer detail drawer |
@@ -207,7 +242,9 @@ Unlike standard auto-translation, the Arabic localization for the Elite platform
 
 ## Mock Data Layer
 
-All admin data is currently mocked in `app/data/mock.ts`:
+> Most sections are now connected to the real PostgreSQL API. The mock layer (`app/data/mock.ts`) is only used for data that has not yet been wired to a live endpoint (analytics charts, sync feed, storefront blocks).
+
+All mock data lives in `app/data/mock.ts`:
 
 | Export | Type | Description |
 |---|---|---|
@@ -413,6 +450,7 @@ Each admin section maps to one or more PostgreSQL tables defined in `server/db/m
 
 | Section | Tables |
 |---|---|
+| POS | `pos_transactions`, `pos_transaction_items`, `pos_z_reports`, `pos_parked_carts`, `product_variants.barcode` (added column), `admin_users.pos_pin_hash` (added column) |
 | Dashboard KPIs / charts | `daily_metrics`, `orders`, `analytics_events`, `product_interactions` |
 | Catalog · Product editor | `products`, `product_translations`, `product_variants`, `media_assets`, `media_links` (gallery role), `inventory_movements` |
 | Collections | `collections`, `collection_translations`, `collection_products` (`sort_order` drives storefront order), `media_assets` (cover image) |
@@ -425,6 +463,76 @@ Each admin section maps to one or more PostgreSQL tables defined in `server/db/m
 | Notifications bell | `notifications` |
 
 See [08 – Database & API Implementation](./08-database-api-implementation.md) for the endpoint-to-SQL map and the May 2026 admin-portal → schema mapping.
+
+---
+
+## POS System
+
+The `/pos` route is a standalone full-screen page that hides the sidebar and topbar. It is a **Progressive Web App (PWA)** with offline support.
+
+### Architecture
+
+```
+pages/pos/
+├── pos.component.ts                ← Main layout (left grid + right cart, full-width dark theme)
+├── pos-product-grid.component.ts   ← Scrollable 3-col product grid, tap-to-add
+├── pos-cart.component.ts           ← Live order panel with qty controls, discount field
+├── pos-checkout.component.ts       ← Cash / Card / Split payment modals + change calculator
+├── pos-receipt.component.ts        ← ESC/POS receipt overlay (print + email + new sale)
+├── pos-scanner.component.ts        ← Camera viewfinder via @zxing/browser
+├── pos-refund.component.ts         ← Returns flow (scan receipt QR or lookup by order ID)
+├── pos-z-report.component.ts       ← X Report (mid-shift) and Z Report (end-of-day close)
+├── pos-label-print.component.ts    ← Barcode label generation (Code 128/EAN-13, 30×20mm)
+└── pos-manager-pin.component.ts    ← Manager PIN overlay for restricted actions
+
+services/
+├── pos.service.ts                  ← Cart state (Angular signals), scan logic, transaction API
+├── pos-sync.service.ts             ← Offline IndexedDB queue + background sync on reconnect
+└── escpos.service.ts               ← ESC/POS byte stream builder, WebUSB/TCP printer + cash drawer
+```
+
+### Scanner Input
+
+**USB Barcode Scanner** (HID keyboard emulation) — zero config. The search input detects ≥ 6 keystrokes arriving within 100ms and treats the sequence as a scan, not manual typing. Auto-looks up `product_variants.barcode`.
+
+**Camera Scanner** — `@zxing/browser`, triggered by the "📷 Camera Scan" button. Uses `facingMode: 'environment'` (rear camera). Supports EAN-13, EAN-8, Code 128, QR.
+
+### ESC/POS Thermal Printing
+
+Receipts are sent as raw ESC/POS byte streams to a Bixolon 80mm thermal printer via:
+- **WebUSB** — direct USB connection from the browser (Chrome/Edge on Windows)
+- **TCP Socket** — server calls `POST /api/pos/print/receipt`, which opens a TCP socket to the printer on port 9100
+
+After each cash sale the server sends an RJ12 cash drawer pulse (`ESC p 0x00 0x19 0xFA`) through the printer.
+
+### Offline PWA
+
+Service Worker caches the app shell and product catalog. Sales made offline are queued to **IndexedDB** via `pos-sync.service.ts` and auto-posted to `POST /api/pos/transactions` when connectivity is restored. A banner shows pending queue count.
+
+### Park & Resume
+
+Up to 5 carts can be suspended simultaneously. Parked carts are stored in `pos_parked_carts` (server, 4-hour TTL) and also in IndexedDB for offline access.
+
+### Role-Based Security (Manager PIN)
+
+| Action | Cashier | Manager |
+|---|---|---|
+| Apply discount > 10% | ✗ | ✔ (PIN) |
+| Void transaction | ✗ | ✔ (PIN) |
+| Process refund | ✗ | ✔ (PIN) |
+| Run Z Report (close day) | ✗ | ✔ (PIN) |
+| Manual cash drawer open | ✗ | ✔ (PIN) |
+
+PINs are stored as bcrypt hashes in `admin_users.pos_pin_hash`. The PIN overlay does not log out the active cashier session.
+
+### X Report & Z Report
+
+- **X Report** — read-only mid-shift snapshot. Any role can run it. Does not reset counters.
+- **Z Report** — end-of-day close. Manager PIN required. Saves an immutable signed record to `pos_z_reports`. Includes: gross sales, refunds, net sales, cash/card breakdown, opening float, expected cash, physical cash count, and over/short variance.
+
+### Barcode Label Printing
+
+Labels are generated client-side using `bwip-js`. Format: Code 128 (alphanumeric SKU) or EAN-13 (numeric). Size: 30×20mm. Compatible with Dymo LabelWriter 450 and Zebra ZD220. Bulk print is available from the Catalog page (select variants → "Print Labels").
 
 ---
 

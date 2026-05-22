@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POS System Plan — Elite Collection</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:   #024638;
+      --green-2: #036350;
+      --green-3: #012b23;
+      --green-4: #048269;
+      --gold:    #c5a572;
+      --gold-2:  #d6bc91;
+      --bg:      #f5f6fa;
+      --surface: #ffffff;
+      --ink:     #1a1f36;
+      --ink-2:   #3d4159;
+      --muted:   #6b7088;
+      --border:  #e4e6f0;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger:  #ef4444;
+      --info:    #3b82f6;
+      --radius:  12px;
+      --shadow:  0 2px 12px rgba(2,70,56,.08);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+    }
+
+    /* ─── Layout ───────────────────────────────────────────── */
+    .page { max-width: 1100px; margin: 0 auto; padding: 48px 24px 96px; }
+
+    /* ─── Header ───────────────────────────────────────────── */
+    .doc-header {
+      background: linear-gradient(135deg, var(--green-3) 0%, var(--green) 60%, var(--green-2) 100%);
+      border-radius: var(--radius);
+      padding: 48px 48px 40px;
+      color: #fff;
+      margin-bottom: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .doc-header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    .doc-header .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(197,165,114,.2);
+      border: 1px solid var(--gold);
+      color: var(--gold-2);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+    .doc-header h1 { font-size: 36px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 8px; }
+    .doc-header p  { font-size: 16px; opacity: .75; max-width: 560px; }
+    .doc-header .meta { margin-top: 24px; display: flex; gap: 24px; flex-wrap: wrap; }
+    .doc-header .meta-item { display: flex; align-items: center; gap: 8px; font-size: 13px; opacity: .65; }
+
+    /* ─── Section ──────────────────────────────────────────── */
+    .section { margin-bottom: 48px; }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--green-2);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ─── Cards ────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 28px 32px;
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: var(--ink); }
+    .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+    .card p  { font-size: 14px; color: var(--ink-2); margin-bottom: 12px; }
+
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+
+    /* ─── Phase cards ───────────────────────────────────────── */
+    .phase-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .phase-header {
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .phase-num {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--green);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .phase-header h3 { font-size: 15px; font-weight: 700; margin: 0; }
+    .phase-header p  { font-size: 12px; color: var(--muted); margin: 0; }
+    .phase-body { padding: 0 24px 20px; }
+
+    /* ─── Checklist ─────────────────────────────────────────── */
+    .checklist { list-style: none; }
+    .checklist li {
+      font-size: 13px;
+      color: var(--ink-2);
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li::before {
+      content: '▸';
+      color: var(--gold);
+      font-size: 12px;
+      margin-top: 1px;
+      flex-shrink: 0;
+    }
+
+    /* ─── Table ─────────────────────────────────────────────── */
+    .tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--green); color: #fff; }
+    thead th { padding: 12px 16px; text-align: left; font-weight: 600; font-size: 12px; letter-spacing: .04em; }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f9fbfa; }
+    tbody td { padding: 11px 16px; color: var(--ink-2); vertical-align: top; }
+    tbody td:first-child { color: var(--ink); font-weight: 500; }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .04em;
+    }
+    .tag-green { background: #d1fae5; color: #065f46; }
+    .tag-gold  { background: #fef3c7; color: #92400e; }
+    .tag-blue  { background: #dbeafe; color: #1e40af; }
+    .tag-red   { background: #fee2e2; color: #991b1b; }
+    .tag-grey  { background: #f3f4f6; color: #374151; }
+
+    /* ─── Wireframe ─────────────────────────────────────────── */
+    .wireframe-wrap {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .wf-title {
+      background: var(--green);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: 10px 18px;
+    }
+    .wf-body { padding: 20px; }
+
+    /* ─── POS Mockup ────────────────────────────────────────── */
+    .pos-shell {
+      background: #0f1923;
+      border-radius: 10px;
+      overflow: hidden;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+    .pos-topbar {
+      background: #1a2634;
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2a3a4a;
+    }
+    .pos-topbar .brand { color: var(--gold); font-size: 13px; font-weight: 700; letter-spacing: .05em; }
+    .pos-topbar .actions { display: flex; gap: 8px; }
+    .pos-topbar .actions span {
+      background: #2a3a4a;
+      color: #8a9ab0;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+    .pos-main { display: flex; height: 520px; }
+    .pos-left {
+      flex: 1;
+      border-right: 1px solid #1e2d3d;
+      display: flex;
+      flex-direction: column;
+    }
+    .pos-search {
+      padding: 12px;
+      border-bottom: 1px solid #1e2d3d;
+    }
+    .pos-search-bar {
+      background: #1e2d3d;
+      border: 1px solid #2a3a4a;
+      border-radius: 8px;
+      color: #c0cfe0;
+      font-size: 13px;
+      padding: 10px 14px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pos-search-bar .icon { color: #4a6a80; }
+    .pos-search-bar .cursor { animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .pos-scan-btn {
+      margin-top: 8px;
+      background: #1e2d3d;
+      border: 1px dashed #2a3a4a;
+      border-radius: 6px;
+      color: #4a8a70;
+      font-size: 11px;
+      padding: 7px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pos-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      align-content: start;
+    }
+    .pos-product {
+      background: #1a2634;
+      border: 1px solid #2a3a4a;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .pos-product:hover { border-color: var(--gold); }
+    .pos-product-img {
+      height: 72px;
+      background: #2a3a4a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #4a6a80;
+      font-size: 22px;
+    }
+    .pos-product-info { padding: 8px 9px; }
+    .pos-product-name { font-size: 10px; color: #c0cfe0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pos-product-price { font-size: 11px; color: var(--gold); margin-top: 2px; }
+    .pos-product-sku { font-size: 9px; color: #4a6a80; margin-top: 1px; }
+    .pos-right { width: 300px; display: flex; flex-direction: column; }
+    .pos-order-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid #1e2d3d;
+      color: #8a9ab0;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pos-order-num { color: var(--gold); font-size: 12px; }
+    .pos-items { flex: 1; overflow-y: auto; padding: 10px 12px; }
+    .pos-item {
+      background: #1a2634;
+      border: 1px solid #2a3a4a;
+      border-radius: 7px;
+      padding: 10px 11px;
+      margin-bottom: 8px;
+    }
+    .pos-item-name { font-size: 11px; color: #c0cfe0; font-weight: 600; }
+    .pos-item-meta { font-size: 10px; color: #4a6a80; margin-top: 2px; }
+    .pos-item-row  { display: flex; justify-content: space-between; align-items: center; margin-top: 7px; }
+    .pos-qty-ctrl  { display: flex; align-items: center; gap: 6px; }
+    .pos-qty-ctrl span { background: #2a3a4a; color: #c0cfe0; font-size: 10px; padding: 3px 8px; border-radius: 4px; }
+    .pos-qty-btn { color: #4a8a70; font-size: 14px; cursor: pointer; }
+    .pos-item-price { font-size: 12px; color: var(--gold); font-weight: 600; }
+    .pos-totals {
+      padding: 12px 14px;
+      border-top: 1px solid #1e2d3d;
+      border-bottom: 1px solid #1e2d3d;
+    }
+    .pos-total-row { display: flex; justify-content: space-between; font-size: 11px; color: #8a9ab0; margin-bottom: 4px; }
+    .pos-total-row.final { font-size: 14px; color: #fff; font-weight: 700; margin-top: 8px; padding-top: 8px; border-top: 1px solid #2a3a4a; }
+    .pos-total-row.final span:last-child { color: var(--gold); }
+    .pos-payment { padding: 10px 12px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .pos-pay-btn {
+      border-radius: 7px;
+      padding: 10px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+    }
+    .pos-pay-btn.cash { background: #1a3a28; border: 1px solid #2a5a40; color: #4a9a70; }
+    .pos-pay-btn.card { background: #1a2a3a; border: 1px solid #2a4a6a; color: #4a8ab0; }
+    .pos-pay-btn.split { background: #2a2a1a; border: 1px solid #4a4a2a; color: #8a8a40; }
+
+    /* ─── Modal mockup ──────────────────────────────────────── */
+    .modal-mockup {
+      background: #1a2634;
+      border: 1px solid #2a3a4a;
+      border-radius: 10px;
+      padding: 24px;
+      font-family: 'SF Mono', monospace;
+      max-width: 360px;
+    }
+    .modal-title { color: #fff; font-size: 14px; font-weight: 700; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #2a3a4a; }
+    .modal-row { display: flex; justify-content: space-between; font-size: 12px; color: #8a9ab0; margin-bottom: 8px; }
+    .modal-row.total { color: #fff; font-size: 15px; font-weight: 700; padding-top: 10px; border-top: 1px solid #2a3a4a; }
+    .modal-row.total span:last-child { color: var(--gold); }
+    .modal-input {
+      background: #0f1923;
+      border: 1px solid #2a3a4a;
+      border-radius: 6px;
+      color: var(--gold);
+      font-size: 20px;
+      font-weight: 700;
+      padding: 12px 14px;
+      width: 100%;
+      margin: 16px 0 8px;
+      text-align: right;
+    }
+    .modal-change { text-align: right; font-size: 13px; color: var(--success); margin-bottom: 16px; }
+    .modal-btns { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+    .modal-btn { padding: 12px; border-radius: 7px; font-size: 12px; font-weight: 700; text-align: center; }
+    .modal-btn.cancel { background: #2a3a4a; color: #8a9ab0; }
+    .modal-btn.confirm { background: var(--green); color: var(--gold); }
+
+    /* ─── Receipt mockup ────────────────────────────────────── */
+    .receipt-mockup {
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 24px 20px;
+      font-family: 'Courier New', monospace;
+      max-width: 280px;
+      margin: 0 auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,.1);
+    }
+    .receipt-header { text-align: center; margin-bottom: 16px; }
+    .receipt-header h3 { font-size: 15px; font-weight: 900; letter-spacing: .1em; color: var(--ink); }
+    .receipt-header p  { font-size: 10px; color: var(--muted); }
+    .receipt-divider { border: none; border-top: 1px dashed #ccc; margin: 10px 0; }
+    .receipt-item { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-2); margin-bottom: 5px; }
+    .receipt-item .name { flex: 1; }
+    .receipt-item .price { font-weight: 600; }
+    .receipt-sub { font-size: 9px; color: var(--muted); margin-top: -4px; margin-bottom: 6px; }
+    .receipt-total-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink); margin-bottom: 4px; }
+    .receipt-total-row.grand { font-size: 14px; font-weight: 900; margin-top: 6px; padding-top: 6px; border-top: 2px solid var(--ink); }
+    .receipt-footer { text-align: center; margin-top: 16px; font-size: 10px; color: var(--muted); }
+    .receipt-actions { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+    .receipt-btn {
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .receipt-btn.print { background: var(--green); color: #fff; }
+    .receipt-btn.email { background: #f3f4f6; color: var(--ink-2); border: 1px solid var(--border); }
+    .receipt-btn.close { background: #f3f4f6; color: var(--ink-2); border: 1px solid var(--border); }
+
+    /* ─── Pill badges ───────────────────────────────────────── */
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .pill-green { background: #d1fae5; color: #065f46; }
+    .pill-gold  { background: #fef3c7; color: #92400e; }
+    .pill-blue  { background: #dbeafe; color: #1e40af; }
+
+    /* ─── Flow diagram ──────────────────────────────────────── */
+    .flow { display: flex; align-items: flex-start; gap: 0; flex-wrap: wrap; margin: 16px 0; }
+    .flow-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-width: 100px;
+    }
+    .flow-icon {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: var(--green);
+      color: #fff;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .flow-label { font-size: 11px; color: var(--ink-2); text-align: center; max-width: 80px; font-weight: 500; }
+    .flow-arrow { align-self: center; color: var(--border); font-size: 18px; padding: 0 4px; margin-top: -20px; }
+
+    /* ─── File list ─────────────────────────────────────────── */
+    .file-list { list-style: none; }
+    .file-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .file-list li:last-child { border-bottom: none; }
+    .file-icon { font-size: 16px; flex-shrink: 0; }
+    .file-path { color: var(--ink); font-family: 'SF Mono', monospace; font-size: 12px; }
+    .file-desc { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+    /* ─── Timeline ──────────────────────────────────────────── */
+    .timeline { position: relative; padding-left: 28px; }
+    .timeline::before { content: ''; position: absolute; left: 9px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+    .tl-item { position: relative; margin-bottom: 24px; }
+    .tl-dot {
+      position: absolute;
+      left: -23px;
+      top: 3px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--green);
+      border: 2px solid var(--surface);
+      box-shadow: 0 0 0 2px var(--border);
+    }
+    .tl-item h4 { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+    .tl-item p  { font-size: 13px; color: var(--ink-2); }
+    .tl-tags    { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+
+    /* ─── Code block ─────────────────────────────────────────── */
+    pre {
+      background: #0f1923;
+      color: #c0cfe0;
+      border-radius: 8px;
+      padding: 18px 20px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    code { color: #4a9a80; }
+    .cm  { color: #4a6a80; }
+    .kw  { color: #6a9adf; }
+    .st  { color: #c5a572; }
+
+    /* ─── Two-col ────────────────────────────────────────────── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ─── Highlight box ──────────────────────────────────────── */
+    .highlight-box {
+      background: linear-gradient(135deg, #f0faf6 0%, #e8f7f2 100%);
+      border: 1px solid #b7e4d4;
+      border-left: 4px solid var(--green-2);
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 13px;
+      color: var(--ink-2);
+      margin: 16px 0;
+    }
+    .highlight-box strong { color: var(--green); }
+
+    /* ─── TOC ────────────────────────────────────────────────── */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      margin-bottom: 40px;
+    }
+    .toc h2 { font-size: 14px; font-weight: 700; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 14px; }
+    .toc ol  { padding-left: 20px; }
+    .toc li  { font-size: 14px; margin-bottom: 7px; }
+    .toc a   { color: var(--green-2); text-decoration: none; font-weight: 500; }
+    .toc a:hover { color: var(--gold); }
+
+    /* ─── Shift summary ─────────────────────────────────────── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    @media (max-width: 700px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+    .kpi-label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; margin-bottom: 8px; }
+    .kpi-val   { font-size: 22px; font-weight: 700; color: var(--ink); }
+    .kpi-sub   { font-size: 11px; color: var(--success); margin-top: 3px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══════════════════════════════ HEADER ═══════════════════════════════ -->
+  <div class="doc-header">
+    <div class="badge">📋 Implementation Plan</div>
+    <h1>POS System — Elite Collection</h1>
+    <p>Full in-store Point of Sale system — PWA offline-capable, Posiflex/Bixolon hardware-integrated, with barcode scanning, ESC/POS thermal printing, Sadad/NAPS payment gateways, returns, role-based security, and X/Z financial reports.</p>
+    <div class="meta">
+      <div class="meta-item">📅 Created: 22 May 2026</div>
+      <div class="meta-item">🏗 Stack: Angular 17 + Express + PostgreSQL</div>
+      <div class="meta-item">📍 Route: /pos</div>
+      <div class="meta-item">🌐 EN / AR</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ TOC ═══════════════════════════════ -->
+  <div class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#overview">Overview & Goals</a></li>
+      <li><a href="#main-ui">Main POS Screen — Live Mockup</a></li>
+      <li><a href="#checkout">Checkout Flow — Cash, Card, Split</a></li>
+      <li><a href="#receipt">Receipt — ESC/POS Thermal & Email</a></li>
+      <li><a href="#shift">X Report & Z Report — Financial Reporting</a></li>
+      <li><a href="#scanner">Barcode Scanner & Label Printing</a></li>
+      <li><a href="#offline">Offline PWA & Park/Resume</a></li>
+      <li><a href="#hardware">Hardware Integration (Posiflex, Bixolon, Cash Drawer)</a></li>
+      <li><a href="#payments">Payment Gateways — Sadad / QPay / NAPS</a></li>
+      <li><a href="#returns">Returns & Refund System</a></li>
+      <li><a href="#roles">Role-Based Security — Manager PIN</a></li>
+      <li><a href="#phases">Implementation Phases</a></li>
+      <li><a href="#api">API Endpoints</a></li>
+      <li><a href="#db">Database Schema</a></li>
+      <li><a href="#files">Files To Create / Modify</a></li>
+      <li><a href="#i18n">i18n Keys (EN / AR)</a></li>
+      <li><a href="#ux">UX Decisions</a></li>
+    </ol>
+  </div>
+
+  <!-- ═══════════════════════════════ OVERVIEW ═══════════════════════════ -->
+  <div class="section" id="overview">
+    <div class="section-title">01 — Overview & Goals</div>
+    <div class="card">
+      <h2>What we're building</h2>
+      <p>A <strong>dedicated POS page</strong> at <code>/pos</code> inside the existing admin portal. Optimized for a physical luxury goods counter — works on iPad, tablet, or desktop. Two input modes: USB barcode scanner (plug-and-play) and camera scan fallback.</p>
+
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-icon">📦</div>
+          <div class="flow-label">Scan / Search Product</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-icon">🛒</div>
+          <div class="flow-label">Build Order Cart</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-icon">💳</div>
+          <div class="flow-label">Select Payment</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-icon">✅</div>
+          <div class="flow-label">Complete Sale</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-icon">🖨</div>
+          <div class="flow-label">Print / Email Receipt</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-icon">📊</div>
+          <div class="flow-label">Update Inventory</div>
+        </div>
+      </div>
+
+      <div class="card-grid" style="margin-top:24px">
+        <div style="background:#f0faf6;border:1px solid #b7e4d4;border-radius:10px;padding:18px 20px">
+          <div class="pill pill-green" style="margin-bottom:10px">✔ Included</div>
+          <ul class="checklist">
+            <li>USB + Bluetooth barcode scanner (zero config — keyboard emulation)</li>
+            <li>Camera scan via ZXing browser library</li>
+            <li>Barcode label generation & printing (Code 128 / EAN-13, 30×20mm)</li>
+            <li>Real-time product search by name / SKU / barcode</li>
+            <li>Cart with qty controls, item-level & cart-level discounts</li>
+            <li>Cash, Card, and Split (mixed tender) payment methods</li>
+            <li>Change calculator for cash payments</li>
+            <li>ESC/POS thermal receipt via Bixolon 80mm (WebUSB / network)</li>
+            <li>Automated cash drawer kick via RJ12 port on Bixolon printer</li>
+            <li>Arabic + English bilingual receipt layout</li>
+            <li>Email digital receipt to customer</li>
+            <li>Sadad / QPay / NAPS local Qatari payment gateway integration</li>
+            <li>Returns & partial refunds — scan receipt or look up by Order ID</li>
+            <li>Role-based security — Manager PIN for voids, discounts &gt;10%, refunds</li>
+            <li>Park &amp; Resume — suspend a transaction, serve another customer, return</li>
+            <li>Offline-First PWA — Service Workers + IndexedDB queue, auto-sync on reconnect</li>
+            <li>X Report (mid-shift) and Z Report (end-of-day with cash float &amp; variance)</li>
+            <li>Phone-number customer lookup → attach sale to online profile</li>
+            <li>Inventory decrement on sale completion (atomic)</li>
+            <li>Transaction history log with cashier and date filters</li>
+            <li>Full EN / AR i18n (transcreated luxury tone)</li>
+            <li>Posiflex Windows touch terminal optimized (Chromium-based)</li>
+          </ul>
+        </div>
+        <div style="background:#fef9ef;border:1px solid #fde68a;border-radius:10px;padding:18px 20px">
+          <div class="pill pill-gold" style="margin-bottom:10px">🔜 Future Phase</div>
+          <ul class="checklist">
+            <li>Multi-register / multi-cashier live sync view</li>
+            <li>Gift receipt mode with custom branding</li>
+            <li>Loyalty points accumulation & tier upgrades</li>
+            <li>WhatsApp receipt delivery</li>
+            <li>Customer-facing display (second screen)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ MAIN UI ════════════════════════════ -->
+  <div class="section" id="main-ui">
+    <div class="section-title">02 — Main POS Screen</div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="background:var(--green);color:#fff;padding:14px 20px;font-size:13px;font-weight:600;letter-spacing:.04em;display:flex;align-items:center;gap:8px">
+        <span>🖥</span> LIVE MOCKUP — Main POS Layout (Dark Theme, Full Width)
+      </div>
+      <div style="padding:20px;background:#0a1520">
+        <div class="pos-shell">
+          <!-- Topbar -->
+          <div class="pos-topbar">
+            <div class="brand">◈ ELITE COLLECTION — POS</div>
+            <div class="actions">
+              <span>Cashier: Yusuf Hamad</span>
+              <span>22 May 2026</span>
+              <span style="background:#1a3a28;color:#4a9a70;border:1px solid #2a5a40">📊 Shift Report</span>
+              <span style="background:#3a1a1a;color:#cf6679;border:1px solid #5a2a2a">⏻ End Shift</span>
+            </div>
+          </div>
+          <!-- Main -->
+          <div class="pos-main">
+            <!-- Left: Product grid -->
+            <div class="pos-left">
+              <div class="pos-search">
+                <div class="pos-search-bar">
+                  <span class="icon">🔍</span>
+                  <span style="flex:1">Scan barcode or search product...</span>
+                  <span class="cursor">|</span>
+                </div>
+                <div class="pos-scan-btn">📷 Camera Scan</div>
+              </div>
+              <div style="padding:8px 12px 0;font-size:10px;color:#4a6a80;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Quick Add — Frequent Items</div>
+              <div class="pos-grid">
+                <div class="pos-product">
+                  <div class="pos-product-img">⌚</div>
+                  <div class="pos-product-info">
+                    <div class="pos-product-name">Maison Noir Watch</div>
+                    <div class="pos-product-price">QAR 4,200</div>
+                    <div class="pos-product-sku">SKU: MN-WCH-001</div>
+                  </div>
+                </div>
+                <div class="pos-product" style="border-color:var(--gold)">
+                  <div class="pos-product-img">🧴</div>
+                  <div class="pos-product-info">
+                    <div class="pos-product-name">Elite Oud Parfum</div>
+                    <div class="pos-product-price">QAR 1,800</div>
+                    <div class="pos-product-sku">SKU: EL-OUD-50</div>
+                  </div>
+                </div>
+                <div class="pos-product">
+                  <div class="pos-product-img">👔</div>
+                  <div class="pos-product-info">
+                    <div class="pos-product-name">Silk Scarf Premium</div>
+                    <div class="pos-product-price">QAR 2,500</div>
+                    <div class="pos-product-sku">SKU: SC-SLK-R</div>
+                  </div>
+                </div>
+                <div class="pos-product">
+                  <div class="pos-product-img">👛</div>
+                  <div class="pos-product-info">
+                    <div class="pos-product-name">Leather Wallet</div>
+                    <div class="pos-product-price">QAR 850</div>
+                    <div class="pos-product-sku">SKU: LW-BRN-M</div>
+                  </div>
+                </div>
+                <div class="pos-product">
+                  <div class="pos-product-img">💍</div>
+                  <div class="pos-product-info">
+                    <div class="pos-product-name">Gold Ring 18K</div>
+                    <div class="pos-product-price">QAR 6,500</div>
+                    <div class="pos-product-sku">SKU: GR-18K-7</div>
+                  </div>
+                </div>
+                <div class="pos-product">
+                  <div class="pos-product-img">👗</div>
+                  <div class="pos-product-info">
+                    <div class="pos-product-name">Embroidered Abaya</div>
+                    <div class="pos-product-price">QAR 3,800</div>
+                    <div class="pos-product-sku">SKU: AB-EMB-BK</div>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:8px 12px;border-top:1px solid #1e2d3d;text-align:center">
+                <span style="font-size:11px;color:#4a8a70;cursor:pointer">▾ Show all 120 products</span>
+              </div>
+            </div>
+            <!-- Right: Cart -->
+            <div class="pos-right">
+              <div class="pos-order-header">
+                <span>Current Order</span>
+                <span class="pos-order-num">#POS-0042</span>
+              </div>
+              <div class="pos-items">
+                <div class="pos-item">
+                  <div class="pos-item-name">Maison Noir Watch</div>
+                  <div class="pos-item-meta">Black / Steel · Size M</div>
+                  <div class="pos-item-row">
+                    <div class="pos-qty-ctrl">
+                      <span class="pos-qty-btn">−</span>
+                      <span>1</span>
+                      <span class="pos-qty-btn">+</span>
+                    </div>
+                    <div class="pos-item-price">QAR 4,200</div>
+                  </div>
+                </div>
+                <div class="pos-item" style="border-color:var(--gold)">
+                  <div class="pos-item-name">Elite Oud Parfum 50ml</div>
+                  <div class="pos-item-meta">Ref: EL-OUD-50</div>
+                  <div class="pos-item-row">
+                    <div class="pos-qty-ctrl">
+                      <span class="pos-qty-btn">−</span>
+                      <span>2</span>
+                      <span class="pos-qty-btn">+</span>
+                    </div>
+                    <div class="pos-item-price">QAR 3,600</div>
+                  </div>
+                </div>
+              </div>
+              <div class="pos-totals">
+                <div class="pos-total-row"><span>Subtotal</span><span>QAR 7,800</span></div>
+                <div class="pos-total-row"><span>Discount</span><span style="color:#4a9a70">− QAR 0</span></div>
+                <div class="pos-total-row final"><span>TOTAL</span><span>QAR 7,800</span></div>
+              </div>
+              <div class="pos-payment">
+                <div class="pos-pay-btn cash">💵<br>CASH</div>
+                <div class="pos-pay-btn card">💳<br>CARD</div>
+                <div class="pos-pay-btn split">✂️<br>SPLIT</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box">
+      <strong>Layout decision:</strong> The POS hides the standard admin sidebar and uses a full-width dark layout optimized for touch screens and counter use. A persistent topbar shows the cashier name, date, and shift controls.
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ CHECKOUT ════════════════════════════ -->
+  <div class="section" id="checkout">
+    <div class="section-title">03 — Checkout Flow</div>
+
+    <div class="two-col">
+      <!-- Cash -->
+      <div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="background:var(--green);color:#fff;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:.04em">💵 CASH PAYMENT MODAL</div>
+          <div style="padding:20px;background:#0a1520">
+            <div class="modal-mockup">
+              <div class="modal-title">Cash Payment</div>
+              <div class="modal-row"><span>Order Total</span><span style="color:var(--gold);font-weight:700">QAR 7,800</span></div>
+              <input class="modal-input" value="QAR 8,000" readonly />
+              <div class="modal-change">Change Due: QAR 200 ✓</div>
+              <div style="font-size:11px;color:#4a6a80;margin-bottom:12px">Customer (optional)</div>
+              <div style="background:#0f1923;border:1px solid #2a3a4a;border-radius:5px;padding:9px 12px;font-size:11px;color:#4a6a80;margin-bottom:14px">🔍 Search or add customer...</div>
+              <div class="modal-btns">
+                <div class="modal-btn cancel">Cancel</div>
+                <div class="modal-btn confirm">✓ COMPLETE SALE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="highlight-box" style="margin-top:12px">
+          Numpad auto-focuses on open. Change is calculated in real-time as the cashier types. Press <strong>Enter</strong> or tap Complete Sale to finalize.
+        </div>
+      </div>
+
+      <!-- Card -->
+      <div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="background:#1a2a4a;color:#fff;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:.04em">💳 CARD PAYMENT MODAL</div>
+          <div style="padding:20px;background:#0a1520">
+            <div class="modal-mockup" style="background:#1a2634">
+              <div class="modal-title">Card Payment</div>
+              <div class="modal-row total"><span>Charge Amount</span><span>QAR 7,800</span></div>
+              <div style="margin:20px 0;text-align:center">
+                <div style="width:80px;height:80px;border-radius:50%;background:#1e2d3d;border:3px solid #2a3a4a;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:32px">💳</div>
+                <div style="font-size:12px;color:#4a9ab0;margin-top:12px">Present card to terminal...</div>
+                <div style="font-size:10px;color:#4a6a80;margin-top:4px">Or tap / insert / swipe</div>
+              </div>
+              <div class="modal-btns">
+                <div class="modal-btn cancel">Cancel</div>
+                <div class="modal-btn confirm" style="background:#1a2a4a;color:#4a8ab0">✓ CONFIRM PAID</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="highlight-box" style="margin-top:12px">
+          Card modal is manual-confirm (cashier confirms after terminal approves). Future phase will integrate Tap Payments or Stripe Terminal for auto-confirmation.
+        </div>
+      </div>
+    </div>
+
+    <!-- Split -->
+    <div class="card" style="margin-top:8px;padding:0;overflow:hidden">
+      <div style="background:#2a2a1a;color:var(--gold);padding:10px 18px;font-size:12px;font-weight:700;letter-spacing:.04em">✂️ SPLIT PAYMENT MODAL</div>
+      <div style="padding:24px;background:#0a1520;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+        <div class="modal-mockup" style="flex:1;min-width:260px">
+          <div class="modal-title">Split Payment — QAR 7,800</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">
+            <div>
+              <div style="font-size:10px;color:#4a6a80;margin-bottom:6px">💵 CASH AMOUNT</div>
+              <input class="modal-input" style="font-size:16px;padding:9px 12px" value="QAR 3,800" readonly />
+            </div>
+            <div>
+              <div style="font-size:10px;color:#4a6a80;margin-bottom:6px">💳 CARD AMOUNT</div>
+              <input class="modal-input" style="font-size:16px;padding:9px 12px" value="QAR 4,000" readonly />
+            </div>
+          </div>
+          <div class="modal-row"><span>Remaining</span><span style="color:var(--success)">QAR 0 ✓</span></div>
+          <div class="modal-btns" style="margin-top:14px">
+            <div class="modal-btn cancel">Cancel</div>
+            <div class="modal-btn confirm" style="background:#2a2a1a;color:var(--gold);border:1px solid #4a4a2a">✓ COMPLETE SPLIT</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;font-size:12px;color:#8a9ab0;line-height:1.8">
+          <div style="color:#c0cfe0;font-weight:700;margin-bottom:10px">How Split Works</div>
+          <div>1. Total is pre-filled as Cash</div>
+          <div>2. Cashier adjusts cash amount</div>
+          <div>3. Card amount auto-calculates as remainder</div>
+          <div>4. Both totals must sum to order total before confirming</div>
+          <div style="margin-top:12px;color:#4a6a80">Any combo of cash + card. Card is always charged first.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ RECEIPT ═════════════════════════════ -->
+  <div class="section" id="receipt">
+    <div class="section-title">04 — Receipt — ESC/POS Thermal & Email</div>
+    <div class="two-col">
+      <div>
+        <div class="card">
+          <h3 style="margin-bottom:16px">Print / Digital Receipt</h3>
+          <div class="receipt-mockup">
+            <div class="receipt-header">
+              <h3>ELITE COLLECTION</h3>
+              <p>Doha, Qatar · Tel: +974 XXXX XXXX</p>
+              <hr class="receipt-divider" />
+              <p>Receipt #POS-0042</p>
+              <p>22 May 2026 · 14:32</p>
+              <p>Cashier: Yusuf Hamad</p>
+            </div>
+            <hr class="receipt-divider" />
+            <div class="receipt-item">
+              <div class="name">Maison Noir Watch</div>
+              <div class="price">4,200</div>
+            </div>
+            <div class="receipt-sub">Black / Steel · Size M · MN-WCH-001</div>
+            <div class="receipt-item">
+              <div class="name">Elite Oud Parfum 50ml ×2</div>
+              <div class="price">3,600</div>
+            </div>
+            <div class="receipt-sub">2 × QAR 1,800 · EL-OUD-50</div>
+            <hr class="receipt-divider" />
+            <div class="receipt-total-row"><span>Subtotal</span><span>QAR 7,800</span></div>
+            <div class="receipt-total-row"><span>Discount</span><span>– QAR 0</span></div>
+            <div class="receipt-total-row grand"><span>TOTAL</span><span>QAR 7,800</span></div>
+            <div class="receipt-total-row" style="margin-top:6px"><span>Cash Paid</span><span>QAR 8,000</span></div>
+            <div class="receipt-total-row"><span>Change</span><span>QAR 200</span></div>
+            <hr class="receipt-divider" />
+            <div class="receipt-footer">
+              شكراً لزيارتكم<br>Thank you for your visit<br><br>
+              www.elitecollection.qa
+            </div>
+            <div class="receipt-actions">
+              <div class="receipt-btn print">🖨 Print</div>
+              <div class="receipt-btn email">📧 Email</div>
+              <div class="receipt-btn close">✕ Close</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h3>ESC/POS Thermal Printing — Bixolon</h3>
+          <ul class="checklist" style="margin-top:12px">
+            <li>🖨 <strong>ESC/POS Direct Print</strong> — receipt sent directly to <strong>Bixolon 80mm thermal printer</strong> via WebUSB (USB-connected) or network socket (LAN-connected). No browser print dialog — one tap, instant print.</li>
+            <li>💰 <strong>Cash Drawer Trigger</strong> — after printing, an ESC/POS pulse command is sent through the Bixolon's <strong>RJ12 kick port</strong> to automatically open the cash drawer.</li>
+            <li>📧 <strong>Email</strong> — prompts for customer email if not linked, sends via <code>/api/pos/receipts/:id/email</code></li>
+            <li>🌐 <strong>Browser Fallback</strong> — if WebUSB is unavailable, <code>@media print</code> CSS targets 80mm roll width as a fallback</li>
+            <li>✕ <strong>New Sale</strong> — clears cart and starts fresh order</li>
+          </ul>
+          <div class="highlight-box" style="margin-top:16px">
+            <strong>Library:</strong> <code>escpos-buffer</code> or <code>node-escpos</code> on the server side generates raw ESC/POS byte streams. The Angular client calls <code>POST /api/pos/print</code> and the server sends bytes to the printer via a local network socket or passes them to WebUSB from the browser.
+          </div>
+          <pre style="margin-top:12px"><span class="cm">// ESC/POS cash drawer trigger (RJ12 via Bixolon)</span>
+<span class="cm">// Sent immediately after receipt print job</span>
+<span class="kw">const</span> CASH_DRAWER_PULSE = Buffer.from([
+  0x1B, 0x70,  <span class="cm">// ESC p — kick-port command</span>
+  0x00,        <span class="cm">// pin 2</span>
+  0x19, 0xFA   <span class="cm">// pulse on/off times</span>
+]);</pre>
+        </div>
+        <div class="card" style="margin-top:0">
+          <h3>Receipt Data Stored</h3>
+          <ul class="checklist" style="margin-top:12px">
+            <li>Transaction ID, timestamp, cashier</li>
+            <li>Line items with price snapshots (price at time of sale)</li>
+            <li>Payment method + amounts</li>
+            <li>Change given (cash)</li>
+            <li>Optional linked customer ID</li>
+            <li>Linked to <code>inventory_movements</code> for stock audit</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ SHIFT ═══════════════════════════════ -->
+  <div class="section" id="shift">
+    <div class="section-title">05 — X Report & Z Report — Financial Reporting</div>
+    <div class="card">
+      <h2 style="margin-bottom:8px">Industry-Standard X & Z Reports</h2>
+      <p>These are the standard financial reconciliation reports required by retail accountants and store managers worldwide.</p>
+
+      <div class="two-col" style="margin-top:20px">
+        <div style="background:#f0faf6;border:1px solid #b7e4d4;border-radius:10px;padding:20px">
+          <div style="font-size:14px;font-weight:700;color:var(--green);margin-bottom:10px">📊 X Report — Mid-Shift Read</div>
+          <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px">Run at any point during the shift. Shows current totals <strong>without resetting</strong> the register. Used by managers to check progress without closing the shift.</p>
+          <ul class="checklist">
+            <li>Total gross sales so far</li>
+            <li>Transaction count</li>
+            <li>Cash takings this shift</li>
+            <li>Card takings this shift</li>
+            <li>Total discounts applied</li>
+            <li>Total refunds processed</li>
+            <li>Net sales (gross minus refunds/discounts)</li>
+          </ul>
+        </div>
+        <div style="background:#fff8f0;border:1px solid #fcd9b0;border-radius:10px;padding:20px">
+          <div style="font-size:14px;font-weight:700;color:#b45309;margin-bottom:10px">🔐 Z Report — End-of-Day Close</div>
+          <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px">Run once at end of day. <strong>Resets the register counters</strong> to zero. The report is stored on the server as a signed, immutable record and printed. Manager PIN required.</p>
+          <ul class="checklist">
+            <li>All X Report data (final for the day)</li>
+            <li>Opening cash float entered at shift start</li>
+            <li>Expected cash in drawer (float + cash sales − change given)</li>
+            <li>Cashier enters physical cash count</li>
+            <li>Over/short variance displayed clearly</li>
+            <li>Report signed with cashier ID + timestamp</li>
+            <li>Stored as immutable record in <code>pos_z_reports</code> table</li>
+            <li>Printed on Bixolon thermal + server copy saved</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <h3 style="margin-bottom:16px">Live Shift KPIs (always visible in topbar)</h3>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Gross Sales</div>
+            <div class="kpi-val">QAR 43,200</div>
+            <div class="kpi-sub">18 transactions</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Cash Takings</div>
+            <div class="kpi-val">QAR 18,500</div>
+            <div class="kpi-sub">43% of total</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Card Takings</div>
+            <div class="kpi-val">QAR 24,700</div>
+            <div class="kpi-sub">57% of total</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Cash Variance</div>
+            <div class="kpi-val" style="color:var(--success)">+ QAR 50</div>
+            <div class="kpi-sub" style="color:var(--success)">Over by 50</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px">
+        <h3 style="margin-bottom:12px">Top 5 Items Sold Today</h3>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Product</th><th>SKU</th><th>Units Sold</th><th>Revenue</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Elite Oud Parfum 50ml</td><td>EL-OUD-50</td><td>6</td><td>QAR 10,800</td></tr>
+              <tr><td>2</td><td>Maison Noir Watch</td><td>MN-WCH-001</td><td>2</td><td>QAR 8,400</td></tr>
+              <tr><td>3</td><td>Embroidered Abaya</td><td>AB-EMB-BK</td><td>2</td><td>QAR 7,600</td></tr>
+              <tr><td>4</td><td>Silk Scarf Premium</td><td>SC-SLK-R</td><td>3</td><td>QAR 7,500</td></tr>
+              <tr><td>5</td><td>Leather Wallet</td><td>LW-BRN-M</td><td>5</td><td>QAR 4,250</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+        <span style="background:var(--green);color:#fff;padding:8px 18px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">📊 X Report (Read)</span>
+        <span style="background:#b45309;color:#fff;padding:8px 18px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">🔐 Z Report (Close Day)</span>
+        <span style="background:#f3f4f6;color:var(--ink-2);padding:8px 18px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border)">📊 Export CSV</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ SCANNER ═════════════════════════════ -->
+  <div class="section" id="scanner">
+    <div class="section-title">06 — Barcode Scanner & Label Printing</div>
+    <div class="two-col">
+      <div class="card">
+        <h3>USB Barcode Scanner</h3>
+        <p>Works as a USB HID keyboard device — no drivers, no config. The search input listens for rapid keystrokes followed by an Enter key.</p>
+        <ul class="checklist" style="margin-top:12px">
+          <li>Scanner types ≥ 6 characters in &lt; 100ms → auto-detected as a scan, not manual typing</li>
+          <li>Triggers <code>scanProduct(barcode)</code> on the POS service</li>
+          <li>Product is looked up by <code>product_variants.barcode</code> field</li>
+          <li>If found → item added to cart with a success toast</li>
+          <li>If not found → error toast with the scanned code shown</li>
+          <li>Supports EAN-13, EAN-8, Code 128, QR Code</li>
+        </ul>
+        <pre><span class="cm">// Scan detection logic in POS service</span>
+<span class="kw">let</span> scanBuffer = <span class="st">''</span>;
+<span class="kw">let</span> lastKeyTime = 0;
+
+document.addEventListener(<span class="st">'keydown'</span>, (e) => {
+  <span class="kw">const</span> now = Date.now();
+  <span class="kw">if</span> (now - lastKeyTime &lt; 80) {
+    scanBuffer += e.key;
+  } <span class="kw">else</span> {
+    scanBuffer = e.key;
+  }
+  lastKeyTime = now;
+  <span class="kw">if</span> (e.key === <span class="st">'Enter'</span> && scanBuffer.length >= 6) {
+    posService.scanProduct(scanBuffer.slice(0, -1));
+    scanBuffer = <span class="st">''</span>;
+  }
+});</pre>
+      </div>
+      <div class="card">
+        <h3>Camera Scanner (ZXing)</h3>
+        <p>Tap the "📷 Camera Scan" button to open a live viewfinder overlay that uses the device camera.</p>
+        <ul class="checklist" style="margin-top:12px">
+          <li>Library: <code>@zxing/browser</code> (1.5MB, tree-shakeable)</li>
+          <li>Supports QR Code, EAN-13, EAN-8, Code 128, Data Matrix</li>
+          <li>Shows live camera feed with scanning reticle overlay</li>
+          <li>Plays a subtle beep sound on successful decode</li>
+          <li>Auto-closes viewfinder and adds item to cart</li>
+          <li>Works on iOS Safari, Android Chrome, desktop Chrome/Firefox</li>
+          <li>Requests <code>facingMode: 'environment'</code> (rear camera)</li>
+        </ul>
+        <div style="background:#0f1923;border-radius:8px;padding:20px;text-align:center;margin-top:12px">
+          <div style="width:180px;height:120px;border:2px solid #4a9a70;border-radius:8px;margin:0 auto;display:flex;align-items:center;justify-content:center;position:relative">
+            <div style="position:absolute;top:-1px;left:-1px;width:20px;height:20px;border-top:3px solid var(--gold);border-left:3px solid var(--gold);border-radius:2px 0 0 0"></div>
+            <div style="position:absolute;top:-1px;right:-1px;width:20px;height:20px;border-top:3px solid var(--gold);border-right:3px solid var(--gold);border-radius:0 2px 0 0"></div>
+            <div style="position:absolute;bottom:-1px;left:-1px;width:20px;height:20px;border-bottom:3px solid var(--gold);border-left:3px solid var(--gold);border-radius:0 0 0 2px"></div>
+            <div style="position:absolute;bottom:-1px;right:-1px;width:20px;height:20px;border-bottom:3px solid var(--gold);border-right:3px solid var(--gold);border-radius:0 0 2px 0"></div>
+            <div style="font-size:11px;color:#4a9a70;text-align:center">📷<br><span style="font-size:9px">Scanning...</span></div>
+          </div>
+          <div style="font-size:10px;color:#4a6a80;margin-top:10px">Point camera at barcode or QR code</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:0">
+      <h3>Barcode Label Generation & Printing</h3>
+      <p>Products without an existing barcode can have one generated and printed as a 30×20mm adhesive label directly from the POS or from the Catalog page.</p>
+      <ul class="checklist" style="margin-top:12px">
+        <li><strong>Format:</strong> Code 128 (alphanumeric SKU) or EAN-13 (numeric variant ID) — auto-selected based on SKU content</li>
+        <li><strong>Label size:</strong> 30×20mm — compatible with Dymo LabelWriter 450 and Zebra ZD220</li>
+        <li><strong>Content:</strong> Barcode + product name (truncated) + variant (color/size) + price in QAR</li>
+        <li><strong>Generation:</strong> <code>bwip-js</code> library generates barcode SVG client-side; label layout rendered to canvas and printed via browser or WebUSB</li>
+        <li><strong>Bulk print:</strong> Select multiple variants in the Catalog page → "Print Labels" → specify quantity per variant → batch job</li>
+        <li>Barcode value is saved to <code>product_variants.barcode</code> for future scan lookup</li>
+      </ul>
+      <div style="background:#0f1923;border-radius:8px;padding:16px;margin-top:14px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="background:#fff;border-radius:4px;padding:10px 14px;text-align:center;min-width:120px">
+          <div style="font-size:8px;color:#333;margin-bottom:4px">Maison Noir Watch</div>
+          <div style="font-size:8px;color:#666;margin-bottom:6px">Black / Steel · M</div>
+          <div style="height:24px;background:repeating-linear-gradient(90deg,#000 0,#000 2px,#fff 2px,#fff 4px);border-radius:1px;margin-bottom:4px"></div>
+          <div style="font-size:7px;color:#333;font-family:monospace">MN-WCH-001</div>
+          <div style="font-size:9px;font-weight:700;color:#000;margin-top:2px">QAR 4,200</div>
+        </div>
+        <div style="font-size:12px;color:#8a9ab0;line-height:1.7">
+          <div style="color:#c0cfe0;font-weight:700;margin-bottom:6px">30×20mm Label Preview</div>
+          <div>• Product name (top)</div>
+          <div>• Variant details</div>
+          <div>• Code 128 barcode</div>
+          <div>• SKU below barcode</div>
+          <div>• Price (bottom right)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ OFFLINE PWA ═════════════════════════ -->
+  <div class="section" id="offline">
+    <div class="section-title">07 — Offline PWA & Park / Resume</div>
+    <div class="two-col">
+      <div class="card">
+        <h3>Offline-First Service Workers</h3>
+        <p>The POS is built as a <strong>Progressive Web App (PWA)</strong>. If the store's internet drops, the cashier never loses a sale.</p>
+        <ul class="checklist" style="margin-top:12px">
+          <li><strong>Service Worker</strong> caches the Angular app shell, product catalog, and prices on first load</li>
+          <li>When offline → sales are queued to <strong>IndexedDB</strong> with a "pending sync" flag</li>
+          <li>Offline queue persists across page refreshes and browser restarts</li>
+          <li>When connection restores → background sync posts queued transactions to <code>/api/pos/transactions</code> automatically</li>
+          <li>Inventory is decremented optimistically locally; reconciled on sync</li>
+          <li>A persistent banner shows online/offline status and pending transaction count</li>
+          <li>Product catalog is refreshed from the server every 15 minutes when online</li>
+        </ul>
+        <pre><span class="cm">// IndexedDB queue structure (Dexie.js)</span>
+<span class="kw">interface</span> PendingTransaction {
+  localId:   string;       <span class="cm">// UUID generated offline</span>
+  items:     CartItem[];
+  payment:   PaymentData;
+  createdAt: number;       <span class="cm">// Unix timestamp</span>
+  synced:    <span class="kw">boolean</span>;
+}</pre>
+      </div>
+      <div class="card">
+        <h3>Park & Resume — Multi-Session Cart</h3>
+        <p>A cashier can <strong>suspend</strong> the current transaction mid-way, serve a different customer, then <strong>return</strong> to the parked order without losing anything.</p>
+        <ul class="checklist" style="margin-top:12px">
+          <li>Up to <strong>5 parked carts</strong> can exist simultaneously</li>
+          <li>[⏸ Park Order] button saves current cart to IndexedDB with a name/number</li>
+          <li>A persistent "Parked Orders" tab in the POS topbar shows count</li>
+          <li>Tapping a parked order instantly restores it as the active cart</li>
+          <li>Parked carts expire after 4 hours if not resumed</li>
+          <li>Parked orders are local-only; they do not consume inventory until completed</li>
+        </ul>
+        <div style="background:#0f1923;border-radius:8px;padding:14px;margin-top:12px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <div style="background:#1a2634;border:1px solid #2a3a4a;border-radius:5px;padding:6px 12px;font-size:11px;color:#c0cfe0">Active Cart</div>
+            <div style="background:#2a2a1a;border:1px solid var(--gold);border-radius:5px;padding:6px 12px;font-size:11px;color:var(--gold)">⏸ Parked #1 — QAR 3,200</div>
+            <div style="background:#1a2634;border:1px dashed #2a3a4a;border-radius:5px;padding:6px 12px;font-size:11px;color:#4a6a80">⏸ Parked #2 — QAR 850</div>
+          </div>
+          <div style="font-size:10px;color:#4a6a80">Tap any parked cart to restore it as active</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ HARDWARE ═════════════════════════════ -->
+  <div class="section" id="hardware">
+    <div class="section-title">08 — Hardware Integration</div>
+    <div class="card">
+      <h2 style="margin-bottom:16px">Supported Hardware — Existing Equipment</h2>
+      <p style="margin-bottom:20px">The system is engineered to run on Elite Collection's <strong>existing hardware</strong> — no new registers or iPad ecosystems required.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Device</th><th>Model / Spec</th><th>Integration Method</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Main Terminal</td>
+              <td>Posiflex Windows Touch Terminal (or any Windows PC)</td>
+              <td>Chromium browser — full-screen PWA mode (<code>--kiosk</code>)</td>
+              <td><span class="tag tag-green">Supported</span></td>
+            </tr>
+            <tr>
+              <td>Barcode Scanner</td>
+              <td>USB or Bluetooth handheld 1D/2D (any brand, keyboard emulation)</td>
+              <td>HID keyboard emulation — plug in and scan, zero config</td>
+              <td><span class="tag tag-green">Supported</span></td>
+            </tr>
+            <tr>
+              <td>Receipt Printer</td>
+              <td>Bixolon SRP-350III or compatible 80mm ESC/POS thermal</td>
+              <td>WebUSB (direct USB) <em>or</em> TCP socket via local network (port 9100)</td>
+              <td><span class="tag tag-green">Supported</span></td>
+            </tr>
+            <tr>
+              <td>Cash Drawer</td>
+              <td>RJ12 kick-port compatible drawer</td>
+              <td>ESC/POS pulse command sent through Bixolon printer automatically after each cash sale</td>
+              <td><span class="tag tag-green">Supported</span></td>
+            </tr>
+            <tr>
+              <td>Payment Terminal</td>
+              <td>QNB/NAPS or Sadad Payment Solutions standalone terminal</td>
+              <td>Manual-confirm (cashier confirms paid on terminal, then confirms in POS). Future: direct Bluetooth/serial integration.</td>
+              <td><span class="tag tag-gold">Manual Confirm v1</span></td>
+            </tr>
+            <tr>
+              <td>Label Printer</td>
+              <td>Dymo LabelWriter 450 or Zebra ZD220 (30×20mm labels)</td>
+              <td>WebUSB or DYMO SDK for label generation and print</td>
+              <td><span class="tag tag-green">Supported</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="highlight-box" style="margin-top:20px">
+        <strong>Kiosk Mode:</strong> On Posiflex terminals, Chrome is launched in <code>--kiosk</code> mode pointing to <code>http://localhost:4300/pos</code>. The POS runs full-screen with no browser UI, behaving exactly like a native application. The admin portal's Express server runs locally on the same machine or on the store's local server.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ PAYMENTS ═════════════════════════════ -->
+  <div class="section" id="payments">
+    <div class="section-title">09 — Payment Gateways — Sadad / QPay / NAPS</div>
+    <div class="card">
+      <h2 style="margin-bottom:8px">Local Qatari Payment Integration</h2>
+      <p style="margin-bottom:20px">Card payments are routed through local Qatari acquirers — no international gateway fees, no foreign data residency concerns.</p>
+      <div class="card-grid">
+        <div style="background:#f0f4ff;border:1px solid #c7d2fe;border-radius:10px;padding:18px">
+          <div style="font-size:14px;font-weight:700;color:#3730a3;margin-bottom:8px">🏦 Sadad Payment Solutions</div>
+          <ul class="checklist">
+            <li>Qatar's national electronic payment network</li>
+            <li>Bluetooth terminal pairing for direct charge initiation</li>
+            <li>Receives approval/decline callback from terminal</li>
+            <li>Supports QNB, CBQ, Doha Bank, Al Khaliji cards</li>
+          </ul>
+        </div>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:18px">
+          <div style="font-size:14px;font-weight:700;color:#166534;margin-bottom:8px">💳 QPay / NAPS</div>
+          <ul class="checklist">
+            <li>Qatar's interbank network — VISA, Mastercard, NAPS debit</li>
+            <li>Standalone terminal approach (v1: manual confirm)</li>
+            <li>Phase 2: Bluetooth serial integration for auto-confirm</li>
+            <li>Supports tap (contactless), chip+PIN, swipe</li>
+          </ul>
+        </div>
+      </div>
+      <div class="highlight-box" style="margin-top:20px">
+        <strong>v1 Implementation (Manual Confirm):</strong> The POS displays the charge amount and shows "Present card to terminal." The cashier processes on the physical terminal. Once approved, the cashier taps "Confirm Paid" in the POS — this records the card transaction and triggers the receipt. This approach works with <em>any</em> terminal immediately without API integration.<br><br>
+        <strong>v2 (Future — Direct Integration):</strong> Once the acquirer's SDK/API is approved (typically requires a merchant agreement with the bank), the POS will send the charge request directly to the terminal via Bluetooth or local network and receive the approval code automatically.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ RETURNS ══════════════════════════════ -->
+  <div class="section" id="returns">
+    <div class="section-title">10 — Returns & Refund System</div>
+    <div class="two-col">
+      <div class="card">
+        <h3>Refund Flow</h3>
+        <p>A Manager PIN is required to initiate any refund. Two ways to look up the original sale:</p>
+        <ul class="checklist" style="margin-top:12px">
+          <li>📷 <strong>Scan original receipt</strong> — QR code on receipt encodes the transaction ID, instantly loads the sale</li>
+          <li>🔍 <strong>Search by Order ID or phone number</strong> — manual lookup for lost receipts</li>
+          <li>Cashier selects which items to refund and the quantity (partial refunds supported)</li>
+          <li>Refund method must match original payment (cash → cash, card → card)</li>
+          <li>For card refunds: cashier processes reversal on the physical terminal, then confirms in POS</li>
+          <li>Inventory is restored on refund completion</li>
+          <li>Refund creates a negative <code>pos_transaction</code> record linked to the original</li>
+          <li>All refunds appear in X/Z reports as negative line items</li>
+        </ul>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Refund Modal Mockup</h3>
+          <div style="background:#0f1923;border-radius:8px;padding:16px;font-family:monospace;font-size:12px">
+            <div style="color:var(--gold);font-weight:700;margin-bottom:12px;font-size:13px">🔄 PROCESS REFUND</div>
+            <div style="background:#1a2634;border-radius:6px;padding:10px;margin-bottom:10px">
+              <div style="color:#8a9ab0;font-size:10px">Original Sale #POS-0042 · 22 May 2026</div>
+              <div style="color:#c0cfe0;margin-top:4px">Maison Noir Watch ×1</div>
+              <div style="color:var(--gold)">QAR 4,200</div>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:10px">
+              <div style="background:#3a1a1a;border:1px solid #5a2a2a;color:#cf6679;padding:8px 12px;border-radius:5px;font-size:11px;flex:1;text-align:center">Full Refund<br>QAR 4,200</div>
+              <div style="background:#1a3a28;border:1px solid #2a5a40;color:#4a9a70;padding:8px 12px;border-radius:5px;font-size:11px;flex:1;text-align:center">Partial Refund<br>Enter amount</div>
+            </div>
+            <div style="background:#1e2d3d;border-radius:5px;padding:8px 12px;font-size:10px;color:#4a6a80">Manager PIN: ● ● ● ● required to confirm</div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:0">
+          <h3>Void vs Refund</h3>
+          <ul class="checklist">
+            <li><strong>Void</strong> — cancels a transaction <em>before</em> it is closed. Manager PIN required. No receipt issued. Inventory restored immediately.</li>
+            <li><strong>Refund</strong> — reverses a <em>completed</em> transaction. Tracked separately in reports. Receipt printed with REFUND watermark.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ ROLES ════════════════════════════════ -->
+  <div class="section" id="roles">
+    <div class="section-title">11 — Role-Based Security — Manager PIN</div>
+    <div class="card">
+      <h2 style="margin-bottom:8px">Cashier vs Manager Permissions</h2>
+      <p style="margin-bottom:20px">The POS enforces two roles. A logged-in admin user can be designated as <strong>Cashier</strong> or <strong>Manager</strong>. Certain sensitive operations require a Manager PIN override — entered at the POS, no need to log out.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Action</th><th>Cashier</th><th>Manager</th><th>Override Method</th></tr></thead>
+          <tbody>
+            <tr><td>Open a new sale</td><td><span class="tag tag-green">✔ Allowed</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>—</td></tr>
+            <tr><td>Add items to cart</td><td><span class="tag tag-green">✔ Allowed</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>—</td></tr>
+            <tr><td>Apply discount ≤ 10%</td><td><span class="tag tag-green">✔ Allowed</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>—</td></tr>
+            <tr><td>Apply discount &gt; 10%</td><td><span class="tag tag-red">✗ Blocked</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>Manager PIN popup</td></tr>
+            <tr><td>Void a transaction</td><td><span class="tag tag-red">✗ Blocked</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>Manager PIN popup</td></tr>
+            <tr><td>Process a refund</td><td><span class="tag tag-red">✗ Blocked</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>Manager PIN popup</td></tr>
+            <tr><td>Run X Report</td><td><span class="tag tag-green">✔ Allowed</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>—</td></tr>
+            <tr><td>Run Z Report (close day)</td><td><span class="tag tag-red">✗ Blocked</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>Manager PIN required</td></tr>
+            <tr><td>Open cash drawer manually</td><td><span class="tag tag-red">✗ Blocked</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>Manager PIN popup</td></tr>
+            <tr><td>Edit opening cash float</td><td><span class="tag tag-red">✗ Blocked</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>Manager PIN required</td></tr>
+            <tr><td>Print barcode labels</td><td><span class="tag tag-green">✔ Allowed</span></td><td><span class="tag tag-green">✔ Allowed</span></td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="highlight-box" style="margin-top:20px">
+        <strong>Manager PIN Override:</strong> When a cashier attempts a restricted action, a PIN dialog slides in. The manager enters their 4-digit PIN without logging the cashier out. The action is recorded in the audit log with both the cashier's and manager's IDs. PINs are stored as bcrypt hashes — never plain text.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ PHASES ══════════════════════════════ -->
+  <div class="section" id="phases">
+    <div class="section-title">12 — Implementation Phases</div>
+    <div class="timeline">
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Phase 1 — Core POS Interface & Offline Engine (PWA) <span style="float:right;font-size:12px;color:var(--gold);font-weight:400">QAR 6,000</span></h4>
+        <p style="margin-bottom:8px">Touch-optimized retail UI, offline-first Service Workers with IndexedDB cart queue, Park &amp; Resume multi-session carts, database migration, core Angular service with signals.</p>
+        <div class="tl-tags">
+          <span class="tag tag-blue">Angular PWA</span>
+          <span class="tag tag-gold">Service Workers</span>
+          <span class="tag tag-gold">IndexedDB</span>
+          <span class="tag tag-green">SQL Migration</span>
+          <span class="tag tag-grey">~8 files</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Phase 2 — Hardware API Bridge & Peripherals <span style="float:right;font-size:12px;color:var(--gold);font-weight:400">QAR 4,500</span></h4>
+        <p style="margin-bottom:8px">USB + Bluetooth barcode scanner integration. Camera scan via <code>@zxing/browser</code>. Barcode label generation (Code 128/EAN-13, 30×20mm via <code>bwip-js</code>). ESC/POS thermal receipt printing via WebUSB/TCP to Bixolon 80mm. Automated RJ12 cash drawer trigger.</p>
+        <div class="tl-tags">
+          <span class="tag tag-gold">@zxing/browser</span>
+          <span class="tag tag-gold">bwip-js</span>
+          <span class="tag tag-gold">ESC/POS</span>
+          <span class="tag tag-gold">WebUSB</span>
+          <span class="tag tag-grey">Bixolon + Cash Drawer</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Phase 3 — Financial Operations & Local Gateways <span style="float:right;font-size:12px;color:var(--gold);font-weight:400">QAR 4,500</span></h4>
+        <p style="margin-bottom:8px">Sadad / QPay / NAPS terminal connectivity (v1: manual-confirm). Split payments and item-level + cart-level dynamic discounts. X Report and Z Report with opening cash float, expected vs physical variance, and signed daily records.</p>
+        <div class="tl-tags">
+          <span class="tag tag-blue">Sadad / NAPS</span>
+          <span class="tag tag-blue">Split Payment</span>
+          <span class="tag tag-blue">X &amp; Z Reports</span>
+          <span class="tag tag-blue">Cash Float</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Phase 4 — Store Operations & Retail CRM <span style="float:right;font-size:12px;color:var(--gold);font-weight:400">QAR 4,000</span></h4>
+        <p style="margin-bottom:8px">Returns &amp; full/partial refund logic — scan receipt QR or look up by Order ID. Role-based security: Manager vs Cashier permissions, Manager PIN overlay for voids/discounts &gt;10%/refunds. Phone-number customer lookup, attach physical sales to online customer profiles for LTV tracking and digital receipt delivery.</p>
+        <div class="tl-tags">
+          <span class="tag tag-red">Returns &amp; Refunds</span>
+          <span class="tag tag-red">Manager PIN</span>
+          <span class="tag tag-green">Customer CRM</span>
+          <span class="tag tag-grey">Roles &amp; Audit Log</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Phase 5 — Route, Sidebar, i18n & Docs</h4>
+        <p>Add <code>/pos</code> route to <code>app.routes.ts</code>. Add "Shop" section to sidebar. Add ~80 <code>pos.*</code> keys to <code>strings.ts</code> in both EN and AR (transcreated). Update <code>04</code>, <code>05</code>, <code>07</code> docs.</p>
+        <div class="tl-tags">
+          <span class="tag tag-grey">Routing</span>
+          <span class="tag tag-grey">Sidebar</span>
+          <span class="tag tag-grey">i18n EN+AR</span>
+          <span class="tag tag-grey">Docs</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ API ════════════════════════════════ -->
+  <div class="section" id="api">
+    <div class="section-title">13 — API Endpoints</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Description</th>
+            <th>Body / Params</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/products/search</code></td>
+            <td>Search products by name, SKU, or barcode</td>
+            <td>?q=string (min 2 chars)</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/products/scan/:barcode</code></td>
+            <td>Instant barcode/QR lookup — returns single variant + product</td>
+            <td>:barcode in URL</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/transactions</code></td>
+            <td>Create & finalize a sale, decrements stock</td>
+            <td>{ items[], paymentMethod, paidAmount, customerId? }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/transactions</code></td>
+            <td>Transaction history with date + cashier filters</td>
+            <td>?from=&to=&cashierId=&page=</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/transactions/:id</code></td>
+            <td>Single transaction with all line items</td>
+            <td>:id in URL</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/transactions/:id/receipt</code></td>
+            <td>Receipt data formatted for print / email</td>
+            <td>:id in URL</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/transactions/:id/email</code></td>
+            <td>Email receipt to customer</td>
+            <td>{ email: string }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/shift/summary</code></td>
+            <td>Live shift totals, counts, payment breakdown, top items (X Report data)</td>
+            <td>?date= (defaults to today)</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/shift/z-report</code></td>
+            <td>Close the day — generate & store immutable Z Report. Manager PIN required.</td>
+            <td>{ cashierCount, managerPin }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/shift/z-reports</code></td>
+            <td>List all past Z Reports (history)</td>
+            <td>?from=&to=</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/refunds</code></td>
+            <td>Process full or partial refund against an original transaction</td>
+            <td>{ originalTxId, items[], managerPin }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/transactions/:id/void</code></td>
+            <td>Void an open (not yet closed) transaction. Manager PIN required.</td>
+            <td>{ managerPin }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/print/receipt</code></td>
+            <td>Generate ESC/POS byte stream for thermal printer, trigger cash drawer</td>
+            <td>{ transactionId, openDrawer: boolean }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/print/labels</code></td>
+            <td>Generate barcode label PDF/bytes for batch printing (Code 128 / EAN-13)</td>
+            <td>{ variants: [{id, qty}] }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">POST</span></td>
+            <td><code>/api/pos/parked</code></td>
+            <td>Save a parked cart to server (for multi-device resume)</td>
+            <td>{ items[], label? }</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">GET</span></td>
+            <td><code>/api/pos/parked</code></td>
+            <td>List all parked carts for current cashier</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ DB ═════════════════════════════════ -->
+  <div class="section" id="db">
+    <div class="section-title">14 — Database Schema</div>
+    <div class="card">
+      <h3 style="margin-bottom:14px">Migration: <code>server/db/migrations/004_pos.sql</code></h3>
+      <pre><span class="cm">-- Add barcode field to product variants</span>
+<span class="kw">ALTER TABLE</span> product_variants
+  <span class="kw">ADD COLUMN IF NOT EXISTS</span> barcode <span class="st">VARCHAR(64)</span>;
+
+<span class="kw">CREATE UNIQUE INDEX IF NOT EXISTS</span> ux_variant_barcode
+  <span class="kw">ON</span> product_variants (tenant_id, barcode)
+  <span class="kw">WHERE</span> barcode IS NOT NULL;
+
+<span class="cm">-- POS Transactions</span>
+<span class="kw">CREATE TABLE IF NOT EXISTS</span> pos_transactions (
+  id              UUID <span class="kw">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+  tenant_id       UUID <span class="kw">NOT NULL REFERENCES</span> tenants(id),
+  cashier_id      UUID <span class="kw">NOT NULL REFERENCES</span> admin_users(id),
+  customer_id     UUID <span class="kw">REFERENCES</span> customers(id),
+  subtotal        NUMERIC(12,2) <span class="kw">NOT NULL</span>,
+  discount        NUMERIC(12,2) <span class="kw">NOT NULL DEFAULT</span> 0,
+  total           NUMERIC(12,2) <span class="kw">NOT NULL</span>,
+  payment_method  <span class="st">VARCHAR(16) NOT NULL</span>,  <span class="cm">-- cash | card | split</span>
+  cash_amount     NUMERIC(12,2),
+  card_amount     NUMERIC(12,2),
+  paid_amount     NUMERIC(12,2),
+  change_given    NUMERIC(12,2),
+  receipt_emailed <span class="kw">BOOLEAN DEFAULT</span> false,
+  created_at      TIMESTAMPTZ <span class="kw">NOT NULL DEFAULT</span> now()
+);
+
+<span class="cm">-- POS Transaction Line Items</span>
+<span class="kw">CREATE TABLE IF NOT EXISTS</span> pos_transaction_items (
+  id               UUID <span class="kw">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+  transaction_id   UUID <span class="kw">NOT NULL REFERENCES</span> pos_transactions(id),
+  product_id       UUID <span class="kw">REFERENCES</span> products(id),
+  variant_id       UUID <span class="kw">REFERENCES</span> product_variants(id),
+  name_snapshot    <span class="st">TEXT NOT NULL</span>,   <span class="cm">-- product name at time of sale</span>
+  sku_snapshot     <span class="st">VARCHAR(64)</span>,
+  price_snapshot   NUMERIC(12,2) <span class="kw">NOT NULL</span>,
+  qty              INT <span class="kw">NOT NULL DEFAULT</span> 1
+);
+
+<span class="kw">CREATE INDEX</span> idx_pos_tx_tenant_date
+  <span class="kw">ON</span> pos_transactions (tenant_id, created_at <span class="kw">DESC</span>);
+<span class="kw">CREATE INDEX</span> idx_pos_tx_cashier
+  <span class="kw">ON</span> pos_transactions (cashier_id, created_at <span class="kw">DESC</span>);
+
+<span class="cm">-- Z Reports (immutable end-of-day records)</span>
+<span class="kw">CREATE TABLE IF NOT EXISTS</span> pos_z_reports (
+  id              UUID <span class="kw">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+  tenant_id       UUID <span class="kw">NOT NULL REFERENCES</span> tenants(id),
+  cashier_id      UUID <span class="kw">NOT NULL REFERENCES</span> admin_users(id),
+  report_date     DATE <span class="kw">NOT NULL</span>,
+  gross_sales     NUMERIC(12,2) <span class="kw">NOT NULL</span>,
+  total_refunds   NUMERIC(12,2) <span class="kw">NOT NULL DEFAULT</span> 0,
+  net_sales       NUMERIC(12,2) <span class="kw">NOT NULL</span>,
+  cash_takings    NUMERIC(12,2) <span class="kw">NOT NULL DEFAULT</span> 0,
+  card_takings    NUMERIC(12,2) <span class="kw">NOT NULL DEFAULT</span> 0,
+  opening_float   NUMERIC(12,2) <span class="kw">NOT NULL DEFAULT</span> 0,
+  expected_cash   NUMERIC(12,2) <span class="kw">NOT NULL</span>,
+  physical_cash   NUMERIC(12,2) <span class="kw">NOT NULL</span>,
+  variance        NUMERIC(12,2) <span class="kw">GENERATED ALWAYS AS</span> (physical_cash - expected_cash) <span class="kw">STORED</span>,
+  tx_count        INT <span class="kw">NOT NULL DEFAULT</span> 0,
+  closed_at       TIMESTAMPTZ <span class="kw">NOT NULL DEFAULT</span> now()
+);
+
+<span class="cm">-- Parked carts (server-side persistence for multi-device)</span>
+<span class="kw">CREATE TABLE IF NOT EXISTS</span> pos_parked_carts (
+  id          UUID <span class="kw">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+  tenant_id   UUID <span class="kw">NOT NULL REFERENCES</span> tenants(id),
+  cashier_id  UUID <span class="kw">NOT NULL REFERENCES</span> admin_users(id),
+  label       <span class="st">VARCHAR(64)</span>,
+  cart_data   JSONB <span class="kw">NOT NULL</span>,
+  created_at  TIMESTAMPTZ <span class="kw">NOT NULL DEFAULT</span> now(),
+  expires_at  TIMESTAMPTZ <span class="kw">NOT NULL DEFAULT</span> now() + INTERVAL <span class="st">'4 hours'</span>
+);
+
+<span class="cm">-- Add manager_pin (bcrypt) to admin_users</span>
+<span class="kw">ALTER TABLE</span> admin_users
+  <span class="kw">ADD COLUMN IF NOT EXISTS</span> pos_pin_hash <span class="st">VARCHAR(72)</span>;  <span class="cm">-- bcrypt hash</span></pre>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ FILES ══════════════════════════════ -->
+  <div class="section" id="files">
+    <div class="section-title">15 — Files To Create / Modify</div>
+    <div class="two-col">
+      <div class="card">
+        <h3 style="margin-bottom:14px">🆕 Create</h3>
+        <ul class="file-list">
+          <li><span class="file-icon">🗄</span><span class="file-path">server/db/migrations/004_pos.sql</span></li>
+          <li><span class="file-icon">🔌</span><span class="file-path">server/routes/admin-pos.route.js</span></li>
+          <li><span class="file-icon">⚡</span><span class="file-path">…/pages/pos/pos.component.ts</span></li>
+          <li><span class="file-icon">📦</span><span class="file-path">…/pages/pos/pos-product-grid.component.ts</span></li>
+          <li><span class="file-icon">🛒</span><span class="file-path">…/pages/pos/pos-cart.component.ts</span></li>
+          <li><span class="file-icon">💳</span><span class="file-path">…/pages/pos/pos-checkout.component.ts</span></li>
+          <li><span class="file-icon">🖨</span><span class="file-path">…/pages/pos/pos-receipt.component.ts</span></li>
+          <li><span class="file-icon">📷</span><span class="file-path">…/pages/pos/pos-scanner.component.ts</span></li>
+          <li><span class="file-icon">🔄</span><span class="file-path">…/pages/pos/pos-refund.component.ts</span></li>
+          <li><span class="file-icon">📊</span><span class="file-path">…/pages/pos/pos-z-report.component.ts</span></li>
+          <li><span class="file-icon">🏷</span><span class="file-path">…/pages/pos/pos-label-print.component.ts</span></li>
+          <li><span class="file-icon">🔐</span><span class="file-path">…/pages/pos/pos-manager-pin.component.ts</span></li>
+          <li><span class="file-icon">⚙️</span><span class="file-path">…/services/pos.service.ts</span></li>
+          <li><span class="file-icon">📶</span><span class="file-path">…/services/pos-sync.service.ts</span></li>
+          <li><span class="file-icon">🖨</span><span class="file-path">…/services/escpos.service.ts</span></li>
+          <li><span class="file-icon">📦</span><span class="file-path">ngsw-config.json</span><span class="file-desc">Service Worker config</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:14px">✏️ Modify</h3>
+        <ul class="file-list">
+          <li><span class="file-icon">🔗</span><span class="file-path">server/routes/index.js</span><span class="file-desc">mount /api/pos</span></li>
+          <li><span class="file-icon">🗺</span><span class="file-path">…/app.routes.ts</span><span class="file-desc">add /pos route</span></li>
+          <li><span class="file-icon">🧭</span><span class="file-path">…/sidebar/sidebar.component.ts</span><span class="file-desc">add POS link</span></li>
+          <li><span class="file-icon">🌐</span><span class="file-path">…/i18n/strings.ts</span><span class="file-desc">60 pos.* keys</span></li>
+          <li><span class="file-icon">📄</span><span class="file-path">docs/04-admin-portal.md</span><span class="file-desc">add /pos entry</span></li>
+          <li><span class="file-icon">📄</span><span class="file-path">docs/05-api-server.md</span><span class="file-desc">add POS endpoints</span></li>
+          <li><span class="file-icon">📄</span><span class="file-path">docs/07-dev-guide.md</span><span class="file-desc">add POS section</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ I18N ════════════════════════════════ -->
+  <div class="section" id="i18n">
+    <div class="section-title">16 — i18n Keys (EN / AR Transcreated)</div>
+    <div class="card">
+      <div class="highlight-box">
+        <strong>Transcreation note:</strong> Arabic follows the luxury Transcreation approach used across the platform. e.g. "نقطة البيع" (Point of Sale), "اكتمل البيع" (Sale Complete — not just "Done"), "المبلغ المسدّد" (Amount Tendered — premium tone).
+      </div>
+      <div class="tbl-wrap" style="margin-top:16px">
+        <table>
+          <thead><tr><th>Key</th><th>English</th><th>Arabic (Transcreated)</th></tr></thead>
+          <tbody>
+            <tr><td>pos.title</td><td>Point of Sale</td><td>نقطة البيع</td></tr>
+            <tr><td>pos.searchPlaceholder</td><td>Scan barcode or search product...</td><td>امسح الباركود أو ابحث عن قطعة...</td></tr>
+            <tr><td>pos.cameraScann</td><td>Camera Scan</td><td>المسح بالكاميرا</td></tr>
+            <tr><td>pos.quickAdd</td><td>Quick Add — Frequent Items</td><td>إضافة سريعة — الأكثر مبيعاً</td></tr>
+            <tr><td>pos.currentOrder</td><td>Current Order</td><td>الطلب الحالي</td></tr>
+            <tr><td>pos.subtotal</td><td>Subtotal</td><td>المجموع الفرعي</td></tr>
+            <tr><td>pos.discount</td><td>Discount</td><td>الخصم</td></tr>
+            <tr><td>pos.total</td><td>Total</td><td>الإجمالي</td></tr>
+            <tr><td>pos.pay.cash</td><td>Cash</td><td>نقداً</td></tr>
+            <tr><td>pos.pay.card</td><td>Card</td><td>بطاقة</td></tr>
+            <tr><td>pos.pay.split</td><td>Split</td><td>تقسيم</td></tr>
+            <tr><td>pos.checkout.amountTendered</td><td>Amount Tendered</td><td>المبلغ المسدّد</td></tr>
+            <tr><td>pos.checkout.changeDue</td><td>Change Due</td><td>المبلغ المُعاد</td></tr>
+            <tr><td>pos.checkout.completeSale</td><td>Complete Sale</td><td>اكتمال البيع</td></tr>
+            <tr><td>pos.receipt.thankYou</td><td>Thank you for your visit</td><td>شكراً لزيارتكم</td></tr>
+            <tr><td>pos.shift.endShift</td><td>End Shift</td><td>إنهاء الوردية</td></tr>
+            <tr><td>pos.shift.totalSales</td><td>Total Sales</td><td>إجمالي المبيعات</td></tr>
+            <tr><td>pos.shift.transactions</td><td>Transactions</td><td>المعاملات</td></tr>
+            <tr><td>pos.error.notFound</td><td>Product not found for this barcode</td><td>لم يُعثر على قطعة بهذا الباركود</td></tr>
+            <tr><td>pos.error.outOfStock</td><td>This item is out of stock</td><td>هذه القطعة غير متوفرة في المخزون</td></tr>
+            <tr><td>pos.offline.banner</td><td>Offline — sales queued, will sync on reconnect</td><td>غير متصل — المبيعات محفوظة وستُزامن عند العودة</td></tr>
+            <tr><td>pos.park.park</td><td>Park Order</td><td>إيقاف مؤقت للطلب</td></tr>
+            <tr><td>pos.park.resume</td><td>Resume Parked Order</td><td>استئناف الطلب الموقوف</td></tr>
+            <tr><td>pos.report.xReport</td><td>X Report — Mid-Shift Read</td><td>تقرير X — قراءة منتصف الوردية</td></tr>
+            <tr><td>pos.report.zReport</td><td>Z Report — Close Day</td><td>تقرير Z — إغلاق اليوم</td></tr>
+            <tr><td>pos.report.openingFloat</td><td>Opening Cash Float</td><td>رصيد الصندوق الافتتاحي</td></tr>
+            <tr><td>pos.report.expectedCash</td><td>Expected Cash in Drawer</td><td>النقد المتوقع في الصندوق</td></tr>
+            <tr><td>pos.report.physicalCash</td><td>Physical Cash Count</td><td>العد الفعلي للنقد</td></tr>
+            <tr><td>pos.report.variance</td><td>Over / Short Variance</td><td>الفرق (زيادة / نقص)</td></tr>
+            <tr><td>pos.refund.title</td><td>Process Refund</td><td>معالجة الإسترداد</td></tr>
+            <tr><td>pos.refund.fullRefund</td><td>Full Refund</td><td>استرداد كامل</td></tr>
+            <tr><td>pos.refund.partialRefund</td><td>Partial Refund</td><td>استرداد جزئي</td></tr>
+            <tr><td>pos.refund.complete</td><td>Refund Complete</td><td>اكتمل الاسترداد</td></tr>
+            <tr><td>pos.void.confirm</td><td>Void this transaction?</td><td>هل تريد إلغاء هذه المعاملة؟</td></tr>
+            <tr><td>pos.manager.pinRequired</td><td>Manager PIN Required</td><td>يُشترط رمز المدير</td></tr>
+            <tr><td>pos.manager.enterPin</td><td>Enter Manager PIN</td><td>أدخل رمز المدير</td></tr>
+            <tr><td>pos.label.print</td><td>Print Labels</td><td>طباعة الملصقات</td></tr>
+            <tr><td>pos.label.qty</td><td>Quantity per label</td><td>الكمية لكل ملصق</td></tr>
+            <tr><td>pos.hardware.printerReady</td><td>Printer connected</td><td>الطابعة متصلة</td></tr>
+            <tr><td>pos.hardware.printerError</td><td>Printer not found — check USB/network</td><td>تعذّر الاتصال بالطابعة — تحقق من التوصيل</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ UX ═════════════════════════════════ -->
+  <div class="section" id="ux">
+    <div class="section-title">17 — UX Decisions</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Decision</th><th>Choice</th><th>Reasoning</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Theme</td>
+            <td><span class="tag tag-grey">Dark (full-width)</span></td>
+            <td>Hides admin sidebar; easier on eyes at a bright retail counter; premium look</td>
+          </tr>
+          <tr>
+            <td>Product grid</td>
+            <td><span class="tag tag-grey">3-col image cards</span></td>
+            <td>Fast visual recognition; large tap targets for touch; luxury product imagery front and center</td>
+          </tr>
+          <tr>
+            <td>Cart panel</td>
+            <td><span class="tag tag-grey">Fixed right side</span></td>
+            <td>Always visible; no context switching; cashier and customer can both see it</td>
+          </tr>
+          <tr>
+            <td>Scanner input</td>
+            <td><span class="tag tag-grey">USB-first, camera fallback</span></td>
+            <td>USB is faster and more reliable at counter; camera is a convenience fallback for phones/tablets</td>
+          </tr>
+          <tr>
+            <td>Checkout</td>
+            <td><span class="tag tag-grey">Modal per payment type</span></td>
+            <td>Minimizes taps under time pressure; one clear action per screen</td>
+          </tr>
+          <tr>
+            <td>Currency</td>
+            <td><span class="tag tag-grey">QAR — no VAT</span></td>
+            <td>Qatar has no sales tax; matches existing QAR() utility throughout the platform</td>
+          </tr>
+          <tr>
+            <td>Customer link</td>
+            <td><span class="tag tag-grey">Optional at checkout</span></td>
+            <td>Not all walk-in sales need a customer record; linking is offered but never blocks completion</td>
+          </tr>
+          <tr>
+            <td>Receipt print</td>
+            <td><span class="tag tag-grey">Browser print + 80mm CSS</span></td>
+            <td>No third-party PDF library; @media print handles 80mm thermal roll layout natively</td>
+          </tr>
+          <tr>
+            <td>Inventory</td>
+            <td><span class="tag tag-grey">Decrement on sale POST</span></td>
+            <td>Stock updated atomically in the same transaction as the sale record — no drift</td>
+          </tr>
+          <tr>
+            <td>Numpad</td>
+            <td><span class="tag tag-grey">Virtual numpad on touch</span></td>
+            <td>On tablets, a large on-screen numpad speeds cash entry without relying on system keyboard</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="highlight-box" style="margin-top:24px">
+      <strong>Accessibility:</strong> All interactive elements ≥ 44px tap target. POS uses high-contrast dark theme with gold/green status indicators. Keyboard-navigable for desktop cashiers. Arabic layout mirrors correctly in RTL mode — cart panel moves to the left, search to the right.
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ FOOTER ═════════════════════════════ -->
+  <div style="text-align:center;margin-top:64px;padding-top:32px;border-top:1px solid var(--border)">
+    <div style="font-size:13px;color:var(--muted)">Elite Collection Admin Portal — POS System Plan</div>
+    <div style="font-size:12px;color:var(--border);margin-top:4px">docs/pos-system-plan.html · Branch: Admin · 22 May 2026 · Updated from Nous proposal v1</div>
+  </div>
+
+</div>
+</body>
+</html>
