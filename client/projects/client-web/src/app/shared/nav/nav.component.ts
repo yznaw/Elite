@@ -121,9 +121,7 @@ interface NavLink {
       padding: 10px 12px 10px 24px;
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 999px;
-      background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 42%),
-        var(--green-2, #036350);
+      background: #004538;
       box-shadow: 0 20px 52px rgba(3, 99, 80, 0.22), 0 2px 0 rgba(255, 255, 255, 0.1) inset;
       transform: translateX(-50%);
       transition: min-height 0.28s ease, padding 0.28s ease, top 0.28s ease, box-shadow 0.28s ease;
