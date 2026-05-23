@@ -12,6 +12,9 @@ interface Accordion {
   contentKey: string;
 }
 
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=900&q=85&auto=format&fit=crop';
+
 @Component({
   selector: 'cw-product',
   standalone: true,
@@ -28,13 +31,6 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   private galleryTimer: number | undefined;
   private feedbackTimer: number | undefined;
-
-  readonly gallery: string[] = [
-    'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=900&q=85&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=900&q=85&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=900&q=85&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=900&q=85&auto=format&fit=crop',
-  ];
 
   readonly accordions: Accordion[] = [
     {
@@ -62,6 +58,15 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly wishlisted = signal(false);
   readonly qty = signal(1);
 
+  readonly gallery = computed(() => {
+    const p = this.product();
+    if (!p) return [FALLBACK_IMAGE];
+    const images = [...(p.images ?? []), p.image]
+      .map((src) => String(src || '').trim())
+      .filter(Boolean);
+    return images.length ? [...new Set(images)] : [FALLBACK_IMAGE];
+  });
+
   readonly attributes = computed(() => {
     const p = this.product();
     if (!p) return [];
@@ -81,12 +86,13 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     const idParam = this.route.snapshot.paramMap.get('id');
-    await this.productsSvc.ensureLoaded();
+    await this.productsSvc.refresh();
     const p = idParam ? this.productsSvc.getById(idParam) : undefined;
     this.product.set(p ?? this.productsSvc.getAll()[0]);
+    this.galleryIdx.set(0);
 
     this.galleryTimer = window.setInterval(() => {
-      this.galleryIdx.update((i) => (i + 1) % this.gallery.length);
+      this.galleryIdx.update((i) => (i + 1) % this.gallery().length);
     }, 5000);
   }
 
@@ -105,7 +111,7 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   navGallery(dir: number): void {
     this.galleryIdx.update(
-      (i) => (i + dir + this.gallery.length) % this.gallery.length,
+      (i) => (i + dir + this.gallery().length) % this.gallery().length,
     );
   }
 
@@ -137,7 +143,7 @@ export class ProductComponent implements OnInit, OnDestroy {
       id: p.id,
       name: p.name,
       price: p.price,
-      image: p.image,
+      image: this.gallery()[this.galleryIdx()] ?? p.image,
       leather: p.leather,
       size,
       qty: this.qty(),
@@ -152,6 +158,11 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   onImgError(e: Event): void {
-    (e.target as HTMLImageElement).style.display = 'none';
+    const img = e.target as HTMLImageElement;
+    if (img.src !== FALLBACK_IMAGE) {
+      img.src = FALLBACK_IMAGE;
+      return;
+    }
+    img.style.display = 'none';
   }
 }

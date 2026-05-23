@@ -52,6 +52,63 @@ async function replaceVariants(client, tenantId, productId, variants) {
   }
 }
 
+async function findOrCreateImageAsset(client, tenantId, url, index) {
+  const existing = await client.query(
+    `
+      SELECT id
+      FROM media_assets
+      WHERE tenant_id = $1
+        AND kind = 'image'
+        AND (storage_url = $2 OR preview_url = $2)
+      ORDER BY created_at
+      LIMIT 1
+    `,
+    [tenantId, url],
+  );
+  if (existing.rowCount > 0) return existing.rows[0].id;
+
+  const filename = String(url).split('/').pop()?.split('?')[0] || `product-image-${index + 1}`;
+  const inserted = await client.query(
+    `
+      INSERT INTO media_assets (tenant_id, filename, kind, mime_type, storage_url, preview_url, metadata)
+      VALUES ($1, $2, 'image', $3, $4, $4, $5::jsonb)
+      RETURNING id
+    `,
+    [
+      tenantId,
+      filename,
+      filename.startsWith('data:') ? 'image/preview' : null,
+      url,
+      JSON.stringify({ source: 'admin-product-save' }),
+    ],
+  );
+  return inserted.rows[0].id;
+}
+
+async function replaceImages(client, tenantId, productId, images) {
+  const urls = [...new Set((Array.isArray(images) ? images : []).map((url) => String(url || '').trim()).filter(Boolean))];
+
+  await client.query("DELETE FROM media_links WHERE tenant_id = $1 AND product_id = $2 AND role IN ('gallery', 'primary')", [tenantId, productId]);
+
+  const mediaIds = [];
+  for (const [index, url] of urls.entries()) {
+    const mediaId = await findOrCreateImageAsset(client, tenantId, url, index);
+    mediaIds.push(mediaId);
+    await client.query(
+      `
+        INSERT INTO media_links (tenant_id, media_id, product_id, role, sort_order)
+        VALUES ($1, $2, $3, 'gallery', $4)
+      `,
+      [tenantId, mediaId, productId, index],
+    );
+  }
+
+  await client.query(
+    'UPDATE products SET primary_media_id = $1, updated_at = now() WHERE tenant_id = $2 AND id = $3',
+    [mediaIds[0] || null, tenantId, productId],
+  );
+}
+
 function mapAdminProduct(row) {
   return {
     id: row.id,
@@ -69,6 +126,43 @@ function mapAdminProduct(row) {
   };
 }
 
+async function loadAdminProduct(client, tenantId, productId) {
+  const result = await client.query(
+    `
+      SELECT
+        p.*,
+        COALESCE(primary_media.preview_url, primary_media.storage_url, '') AS image,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', pv.id,
+              'sku', pv.sku,
+              'size', pv.size,
+              'color', pv.color,
+              'material', pv.material,
+              'price', round(pv.price_cents / 100.0),
+              'stock', pv.stock_quantity
+            )
+          ) FILTER (WHERE pv.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS variants,
+        COALESCE((
+          SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
+          FROM media_links ml
+          JOIN media_assets m ON m.id = ml.media_id
+          WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+        ), ARRAY[]::text[]) AS images
+      FROM products p
+      LEFT JOIN product_variants pv ON pv.product_id = p.id
+      LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
+      WHERE p.tenant_id = $1 AND p.id = $2 AND p.status <> 'archived'
+      GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
+    `,
+    [tenantId, productId],
+  );
+  return result.rowCount === 0 ? null : mapAdminProduct(result.rows[0]);
+}
+
 async function upsertProduct(client, tenant, product) {
   const name = String(product.name).trim();
   const sku = String(product.sku).trim();
@@ -81,44 +175,68 @@ async function upsertProduct(client, tenant, product) {
     ar: String(product.arDesc || '').trim(),
   };
 
-  const upserted = await client.query(
-    `
-      INSERT INTO products (
-        tenant_id, sku, brand, name, slug, status, description,
-        base_price_cents, currency, stock_quantity, has_3d, views_3d
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
-      ON CONFLICT (tenant_id, sku) DO UPDATE
-      SET brand = EXCLUDED.brand,
-          name = EXCLUDED.name,
-          slug = EXCLUDED.slug,
-          status = EXCLUDED.status,
-          description = EXCLUDED.description,
-          base_price_cents = EXCLUDED.base_price_cents,
-          currency = EXCLUDED.currency,
-          stock_quantity = EXCLUDED.stock_quantity,
-          has_3d = EXCLUDED.has_3d,
-          views_3d = EXCLUDED.views_3d
-      RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity
-    `,
-    [
-      tenant.id,
-      sku,
-      brand,
-      name,
-      slugify(product.slug || name),
-      status,
-      JSON.stringify(description),
-      toCents(product.price),
-      currency,
-      Math.max(0, Number.parseInt(product.stock, 10) || 0),
-      Boolean(product.has3d),
-      Math.max(0, Number.parseInt(product.views3d, 10) || 0),
-    ],
-  );
+  const params = [
+    tenant.id,
+    sku,
+    brand,
+    name,
+    slugify(product.slug || name),
+    status,
+    JSON.stringify(description),
+    toCents(product.price),
+    currency,
+    Math.max(0, Number.parseInt(product.stock, 10) || 0),
+    Boolean(product.has3d),
+    Math.max(0, Number.parseInt(product.views3d, 10) || 0),
+  ];
+
+  const upserted = product.id
+    ? await client.query(
+      `
+        UPDATE products
+        SET sku = $2,
+            brand = $3,
+            name = $4,
+            slug = $5,
+            status = $6,
+            description = $7::jsonb,
+            base_price_cents = $8,
+            currency = $9,
+            stock_quantity = $10,
+            has_3d = $11,
+            views_3d = $12,
+            updated_at = now()
+        WHERE tenant_id = $1 AND id = $13
+        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity
+      `,
+      [...params, product.id],
+    )
+    : await client.query(
+      `
+        INSERT INTO products (
+          tenant_id, sku, brand, name, slug, status, description,
+          base_price_cents, currency, stock_quantity, has_3d, views_3d
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
+        ON CONFLICT (tenant_id, sku) DO UPDATE
+        SET brand = EXCLUDED.brand,
+            name = EXCLUDED.name,
+            slug = EXCLUDED.slug,
+            status = EXCLUDED.status,
+            description = EXCLUDED.description,
+            base_price_cents = EXCLUDED.base_price_cents,
+            currency = EXCLUDED.currency,
+            stock_quantity = EXCLUDED.stock_quantity,
+            has_3d = EXCLUDED.has_3d,
+            views_3d = EXCLUDED.views_3d
+        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity
+      `,
+      params,
+    );
 
   const saved = upserted.rows[0];
   await replaceVariants(client, tenant.id, saved.id, Array.isArray(product.variants) ? product.variants : []);
+  await replaceImages(client, tenant.id, saved.id, images);
   return { ...saved, tenantId: tenant.id, imageCount: images.length };
 }
 
@@ -145,16 +263,15 @@ router.get('/', asyncHandler(async (_req, res) => {
             ) FILTER (WHERE pv.id IS NOT NULL),
             '[]'::jsonb
           ) AS variants,
-          COALESCE(
-            array_agg(DISTINCT COALESCE(media.preview_url, media.storage_url))
-              FILTER (WHERE media.id IS NOT NULL),
-            ARRAY[]::text[]
-          ) AS images
+          COALESCE((
+            SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
+            FROM media_links ml
+            JOIN media_assets m ON m.id = ml.media_id
+            WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+          ), ARRAY[]::text[]) AS images
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
-        LEFT JOIN media_links ml ON ml.product_id = p.id
-        LEFT JOIN media_assets media ON media.id = ml.media_id
         WHERE p.tenant_id = $1 AND p.status <> 'archived'
         GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
         ORDER BY p.created_at DESC
@@ -199,8 +316,9 @@ router.post('/', asyncHandler(async (req, res) => {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
     const saved = await upsertProduct(client, tenant, req.body);
+    const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
-    created(res, saved, 'Product saved.');
+    created(res, product, 'Product saved.');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -231,14 +349,17 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       enDesc: req.body.enDesc ?? existing.description?.en,
       arDesc: req.body.arDesc ?? existing.description?.ar,
       slug: req.body.slug ?? existing.slug,
+      id: req.params.id,
       variants: req.body.variants,
+      images: req.body.images,
       has3d: req.body.has3d ?? existing.has_3d,
       views3d: req.body.views3d ?? existing.views_3d,
     };
 
     const saved = await upsertProduct(client, tenant, payload);
+    const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
-    ok(res, saved, 'Product updated.');
+    ok(res, product, 'Product updated.');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

@@ -252,9 +252,18 @@ const EN = {
   'checkout.delivery.sub': '1–2 business days · Signature required',
   'checkout.delivery.free': 'Free',
 
+  'checkout.gateway.title': 'Payment Gateway',
+  'checkout.gateway.sub': 'Your order will be created now with payment pending. The live gateway can be connected here later without changing the order workflow.',
+  'checkout.gateway.status': 'Pending',
   'checkout.security': '256-bit SSL encryption · PCI DSS compliant',
   'checkout.terms': 'By placing your order you agree to our terms of service',
   'checkout.placeOrder': 'Place Order',
+  'checkout.placing': 'Placing Order…',
+  'checkout.error.empty': 'Your cart is empty.',
+  'checkout.error.step0': 'Enter your name, email, and phone to continue.',
+  'checkout.error.step1': 'Enter your delivery address and city to continue.',
+  'checkout.error.step2': 'Review the payment step to continue.',
+  'checkout.error.submit': 'We could not place the order. Please try again.',
 
   'checkout.summary.title': 'Order Summary',
   'checkout.summary.empty': 'Your cart is empty',
@@ -268,6 +277,7 @@ const EN = {
   'checkout.confirm.title': 'Order Confirmed',
   'checkout.confirm.body1': 'Your bespoke pair is now in the hands of our master craftsmen.',
   'checkout.confirm.quote': '"We\'ll notify you when it begins its journey."',
+  'checkout.confirm.orderLabel': 'Order Number',
   'checkout.confirm.totalLabel': 'Order Total',
 
   // ─────────────────────────────────────────────────────────────────────
@@ -598,9 +608,18 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.delivery.sub': '1–2 يوم عمل · يتطلب التوقيع',
   'checkout.delivery.free': 'مجاني',
 
+  'checkout.gateway.title': 'بوابة الدفع',
+  'checkout.gateway.sub': 'سيتم إنشاء الطلب الآن بحالة دفع معلّقة. يمكن ربط بوابة الدفع الفعلية هنا لاحقاً دون تغيير مسار الطلب.',
+  'checkout.gateway.status': 'معلّق',
   'checkout.security': 'تشفير SSL 256-bit · متوافق مع PCI DSS',
   'checkout.terms': 'بإتمام طلبك فإنك توافق على شروط الخدمة',
   'checkout.placeOrder': 'إتمام الطلب',
+  'checkout.placing': 'جارٍ إنشاء الطلب…',
+  'checkout.error.empty': 'سلتك فارغة.',
+  'checkout.error.step0': 'أدخل الاسم والبريد الإلكتروني ورقم الهاتف للمتابعة.',
+  'checkout.error.step1': 'أدخل عنوان التوصيل والمدينة للمتابعة.',
+  'checkout.error.step2': 'راجع خطوة الدفع للمتابعة.',
+  'checkout.error.submit': 'تعذّر إنشاء الطلب. حاول مرة أخرى.',
 
   'checkout.summary.title': 'ملخص الطلب',
   'checkout.summary.empty': 'سلتك فارغة',
@@ -614,6 +633,7 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.confirm.title': 'تم تأكيد الطلب',
   'checkout.confirm.body1': 'زوجك المُفصَّل الآن في أيدي حرفيينا المهرة.',
   'checkout.confirm.quote': '"سنبلّغك حين يبدأ رحلته."',
+  'checkout.confirm.orderLabel': 'رقم الطلب',
   'checkout.confirm.totalLabel': 'إجمالي الطلب',
 
   // Story

@@ -82,12 +82,21 @@ export interface Order {
   id: string;
   date: string;
   customer: string;
+  customerEmail?: string;
+  customerPhone?: string;
   itemsCount: number;
   total: number;
   payment: OrderPayment;
   fulfillment: OrderFulfillment;
   items: OrderItem[];
   address: string;
+  shippingAddress?: Record<string, string>;
+  billingAddress?: Record<string, string>;
+  paymentGateway?: {
+    provider?: string;
+    method?: string;
+    status?: string;
+  };
   trackingNumber?: string;
   timeline?: OrderTimelineEntry[];
   notes?: OrderNote[];

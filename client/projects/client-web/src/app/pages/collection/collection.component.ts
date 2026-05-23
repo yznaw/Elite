@@ -8,6 +8,8 @@ import { I18nService } from '../../services/i18n.service';
 import { CartService } from '../../services/cart.service';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&q=85&auto=format&fit=crop';
 const FILTER_TITLES = {
   category: 'Categories',
   price: 'Price',
@@ -197,7 +199,12 @@ export class CollectionComponent implements OnInit {
   }
 
   onImgError(e: Event): void {
-    (e.target as HTMLImageElement).style.display = 'none';
+    const img = e.target as HTMLImageElement;
+    if (img.src !== FALLBACK_IMAGE) {
+      img.src = FALLBACK_IMAGE;
+      return;
+    }
+    img.style.display = 'none';
   }
 
   private matchesFilters(product: Product, selected: SelectedFilters): boolean {

@@ -14,6 +14,7 @@ export interface Product {
   materials?: string[];
   sizes: number[];
   image: string;
+  images?: string[];
 }
 
 export interface CartItem {

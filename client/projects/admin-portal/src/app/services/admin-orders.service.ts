@@ -7,6 +7,7 @@ export interface OrderStatusPayload {
   payment?: OrderPayment;
   fulfillment?: OrderFulfillment;
   status?: string;
+  trackingNumber?: string;
   timelineKind?: string;
   detail?: string;
 }

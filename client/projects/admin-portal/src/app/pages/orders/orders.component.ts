@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -96,7 +96,7 @@ import { Order, QAR } from '../../models';
     }
   `,
 })
-export class OrdersComponent implements OnInit {
+export class OrdersComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly i18n = inject(I18nService);
   private readonly route = inject(ActivatedRoute);
@@ -104,21 +104,46 @@ export class OrdersComponent implements OnInit {
 
   readonly t = (k: string): string => this.i18n.t(k);
 
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+
   async ngOnInit(): Promise<void> {
-    try {
-      const list = await this.ordersApi.list();
-      this._orders.set(list);
-    } catch {
-      this._orders.set([]);
-    } finally {
-      this.loading.set(false);
-    }
+    await this.refreshOrders();
+    this.refreshTimer = setInterval(() => void this.refreshOrders(true), 15000);
 
     // Deep-link from customer drawer: ?id=EC-26-1042 auto-opens that order.
     const id = this.route.snapshot.queryParamMap.get('id');
     if (id) {
       const target = this._orders().find((o) => o.id === id);
-      if (target) this.active.set(target);
+      if (target) void this.openOrder(target);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+  }
+
+  private async refreshOrders(silent = false): Promise<void> {
+    if (!silent) this.loading.set(true);
+    try {
+      const list = await this.ordersApi.list();
+      this._orders.set(list);
+      const active = this.active();
+      if (active) {
+        const updated = list.find((o) => o.id === active.id);
+        if (updated) {
+          this.active.set({
+            ...active,
+            ...updated,
+            items: active.items.length ? active.items : updated.items,
+            timeline: active.timeline?.length ? active.timeline : updated.timeline,
+            notes: active.notes?.length ? active.notes : updated.notes,
+          });
+        }
+      }
+    } catch {
+      if (!silent) this._orders.set([]);
+    } finally {
+      if (!silent) this.loading.set(false);
     }
   }
 
@@ -159,7 +184,15 @@ export class OrdersComponent implements OnInit {
     { key: 'actions',     label: '',            noSort: true, align: 'right' },
   ];
 
-  openOrder = (o: Order): void => { this.active.set(o); };
+  openOrder = (o: Order): void => {
+    this.active.set(o);
+    void this.ordersApi.get(o.id)
+      .then((full) => {
+        this._orders.update((all) => all.map((x) => (x.id === full.id ? { ...x, ...full } : x)));
+        this.active.set(full);
+      })
+      .catch(() => {});
+  };
 
   onOrderUpdated(updated: Order): void {
     this._orders.update((all) => all.map((x) => (x.id === updated.id ? updated : x)));

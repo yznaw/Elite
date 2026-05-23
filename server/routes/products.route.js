@@ -1,15 +1,19 @@
 const { Router } = require('express');
 const db = require('../db/client');
+const { ensureDefaultTenant } = require('../db/tenant');
 
 const router = Router();
 
 const DEFAULT_IMAGE =
-  'https://images.unsplash.com/photo-1519415943484-9fa1873496d4?w=600&q=85&auto=format&fit=crop';
+  'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=85&auto=format&fit=crop';
 
 function mapRow(row) {
   const sizes = Array.isArray(row.sizes) ? row.sizes.filter(Boolean) : [];
   const colors = Array.isArray(row.colors) ? row.colors.filter(Boolean) : [];
   const materials = Array.isArray(row.materials) ? row.materials.filter(Boolean) : [];
+  const media = Array.isArray(row.images) ? row.images.filter(Boolean) : [];
+  const image = row.image || media[0] || DEFAULT_IMAGE;
+  const images = [...new Set([image, ...media])];
 
   return {
     id: row.id,
@@ -22,13 +26,16 @@ function mapRow(row) {
     sizes: sizes.length > 0 ? sizes.map((s) => Number(s)).filter(Number.isFinite) : [40, 41, 42, 43, 44],
     colors,
     materials,
-    image: row.image || DEFAULT_IMAGE,
+    image,
+    images,
   };
 }
 
 router.get('/', async (_req, res, next) => {
+  const client = await db.pool.connect();
   try {
-    const result = await db.query(
+    const tenant = await ensureDefaultTenant(client);
+    const result = await client.query(
       `
         SELECT
           p.id,
@@ -53,14 +60,43 @@ router.get('/', async (_req, res, next) => {
               FILTER (WHERE pv.material IS NOT NULL AND pv.material <> ''),
             ARRAY[]::text[]
           ) AS materials,
-          COALESCE(primary_media.preview_url, primary_media.storage_url) AS image
+          COALESCE(
+            primary_media.preview_url,
+            primary_media.storage_url,
+            (
+              SELECT COALESCE(m.preview_url, m.storage_url)
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+              ORDER BY ml.sort_order
+              LIMIT 1
+            )
+          ) AS image,
+          COALESCE(
+            ARRAY(
+              SELECT url
+              FROM (
+                SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, -1 AS sort_order
+                WHERE primary_media.id IS NOT NULL
+                UNION
+                SELECT COALESCE(m.preview_url, m.storage_url) AS url, ml.sort_order
+                FROM media_links ml
+                JOIN media_assets m ON m.id = ml.media_id
+                WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+              ) product_media
+              WHERE url IS NOT NULL AND url <> ''
+              ORDER BY sort_order
+            ),
+            ARRAY[]::text[]
+          ) AS images
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
-        WHERE p.status <> 'archived'
-        GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
+        WHERE p.tenant_id = $1 AND p.status = 'active'
+        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url
         ORDER BY p.created_at DESC
       `,
+      [tenant.id],
     );
 
     res.json({
@@ -70,12 +106,16 @@ router.get('/', async (_req, res, next) => {
     });
   } catch (err) {
     next(err);
+  } finally {
+    client.release();
   }
 });
 
 router.get('/:id', async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
-    const result = await db.query(
+    const tenant = await ensureDefaultTenant(client);
+    const result = await client.query(
       `
         SELECT
           p.id,
@@ -100,15 +140,43 @@ router.get('/:id', async (req, res, next) => {
               FILTER (WHERE pv.material IS NOT NULL AND pv.material <> ''),
             ARRAY[]::text[]
           ) AS materials,
-          COALESCE(primary_media.preview_url, primary_media.storage_url) AS image
+          COALESCE(
+            primary_media.preview_url,
+            primary_media.storage_url,
+            (
+              SELECT COALESCE(m.preview_url, m.storage_url)
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+              ORDER BY ml.sort_order
+              LIMIT 1
+            )
+          ) AS image,
+          COALESCE(
+            ARRAY(
+              SELECT url
+              FROM (
+                SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, -1 AS sort_order
+                WHERE primary_media.id IS NOT NULL
+                UNION
+                SELECT COALESCE(m.preview_url, m.storage_url) AS url, ml.sort_order
+                FROM media_links ml
+                JOIN media_assets m ON m.id = ml.media_id
+                WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+              ) product_media
+              WHERE url IS NOT NULL AND url <> ''
+              ORDER BY sort_order
+            ),
+            ARRAY[]::text[]
+          ) AS images
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
-        WHERE p.id = $1 AND p.status <> 'archived'
-        GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
+        WHERE p.tenant_id = $1 AND p.id = $2 AND p.status = 'active'
+        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url
         LIMIT 1
       `,
-      [req.params.id],
+      [tenant.id, req.params.id],
     );
 
     if (result.rowCount === 0) {
@@ -125,6 +193,8 @@ router.get('/:id', async (req, res, next) => {
     });
   } catch (err) {
     next(err);
+  } finally {
+    client.release();
   }
 });
 

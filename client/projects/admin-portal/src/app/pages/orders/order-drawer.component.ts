@@ -8,7 +8,8 @@ import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-p
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
-import { ME, Order, OrderFulfillment, OrderNote, OrderTimelineEntry, QAR } from '../../models';
+import { AdminOrdersService } from '../../services/admin-orders.service';
+import { Order, OrderFulfillment, OrderTimelineEntry, QAR } from '../../models';
 
 const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
   placed:     'orderModal.tl.placed',
@@ -142,7 +143,19 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
         <div class="grid-2 mb-24">
           <div>
             <div class="strong mb-8">{{ order().customer }}</div>
-            <div class="muted small">{{ t('orderModal.loyalty') }} <ap-pill kind="gold">{{ t('orderModal.vip') }}</ap-pill></div>
+            @if (order().customerEmail) {
+              <div class="muted small" style="line-height:1.7;">{{ order().customerEmail }}</div>
+            }
+            @if (order().customerPhone) {
+              <div class="muted small" style="line-height:1.7;">{{ order().customerPhone }}</div>
+            }
+            @if (order().paymentGateway) {
+              <div class="muted small mt-8">
+                {{ t('orderDrawer.paymentGateway') }}:
+                <span class="mono">{{ order().paymentGateway?.provider }}</span>
+                · {{ order().paymentGateway?.status }}
+              </div>
+            }
           </div>
           <div>
             <div class="lbl">{{ t('orderModal.shippingAddress') }}</div>
@@ -342,6 +355,7 @@ export class OrderDrawerComponent {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly ordersApi = inject(AdminOrdersService);
 
   readonly t = (k: string): string => this.i18n.t(k);
   readonly QAR = QAR;
@@ -452,56 +466,50 @@ export class OrderDrawerComponent {
     return o.payment === 'paid' && o.fulfillment !== 'cancelled';
   }
 
-  transition(target: OrderFulfillment): void {
+  async transition(target: OrderFulfillment): Promise<void> {
     if (this.busy()) return;
     if (target === 'shipped' && !this.trackingDraft().trim()) {
       this.toast.error(this.t('orderDrawer.tracking.required'));
       return;
     }
     this.busy.set(true);
-    setTimeout(() => {
+    try {
       const o = this._order();
-      const updated: Order = {
-        ...o,
+      const updated = await this.ordersApi.updateStatus(o.id, {
         fulfillment: target,
-        trackingNumber: target === 'shipped' ? this.trackingDraft().trim() : o.trackingNumber,
-        timeline: [
-          ...(o.timeline ?? []),
-          {
-            id: 'tl-' + Date.now().toString(36),
-            ts: this.now(),
-            kind: target as OrderTimelineEntry['kind'],
-            actor: ME.name,
-            detail: target === 'shipped' ? this.trackingDraft().trim() : undefined,
-          },
-        ],
-      };
+        trackingNumber: target === 'shipped' ? this.trackingDraft().trim() : undefined,
+        timelineKind: target as OrderTimelineEntry['kind'],
+        detail: target === 'shipped' ? this.trackingDraft().trim() : `Marked ${target}`,
+      });
       this._order.set(updated);
       this.updated.emit(updated);
-      this.busy.set(false);
       const toastKey = `orderDrawer.toast.${target}.title`;
       this.toast.success(this.t(toastKey), `${o.id} · ${o.customer}`);
-    }, 600);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.busy.set(false);
+    }
   }
 
-  confirmPayment(): void {
+  async confirmPayment(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
-    setTimeout(() => {
+    try {
       const o = this._order();
-      const updated: Order = {
-        ...o,
+      const updated = await this.ordersApi.updateStatus(o.id, {
         payment: 'paid',
-        timeline: [
-          ...(o.timeline ?? []),
-          { id: 'tl-' + Date.now().toString(36), ts: this.now(), kind: 'paid', actor: ME.name },
-        ],
-      };
+        timelineKind: 'paid',
+        detail: 'Payment confirmed',
+      });
       this._order.set(updated);
       this.updated.emit(updated);
-      this.busy.set(false);
       this.toast.success(this.t('orderDrawer.toast.paid.title'), o.id);
-    }, 500);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   async cancelOrder(): Promise<void> {
@@ -515,21 +523,22 @@ export class OrderDrawerComponent {
     });
     if (!ok) return;
     this.busy.set(true);
-    setTimeout(() => {
+    try {
       const o = this._order();
-      const updated: Order = {
-        ...o,
+      const updated = await this.ordersApi.updateStatus(o.id, {
+        status: 'cancelled',
         fulfillment: 'cancelled',
-        timeline: [
-          ...(o.timeline ?? []),
-          { id: 'tl-' + Date.now().toString(36), ts: this.now(), kind: 'cancelled', actor: ME.name },
-        ],
-      };
+        timelineKind: 'cancelled',
+        detail: 'Order cancelled',
+      });
       this._order.set(updated);
       this.updated.emit(updated);
-      this.busy.set(false);
       this.toast.info(this.t('orderDrawer.toast.cancelled.title'), o.id);
-    }, 500);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   async refundOrder(): Promise<void> {
@@ -543,76 +552,72 @@ export class OrderDrawerComponent {
     });
     if (!ok) return;
     this.busy.set(true);
-    setTimeout(() => {
+    try {
       const o = this._order();
-      const updated: Order = {
-        ...o,
+      const updated = await this.ordersApi.updateStatus(o.id, {
         payment: 'refunded',
-        timeline: [
-          ...(o.timeline ?? []),
-          { id: 'tl-' + Date.now().toString(36), ts: this.now(), kind: 'refunded', actor: ME.name, detail: QAR(o.total) },
-        ],
-      };
+        status: 'refunded',
+        timelineKind: 'refunded',
+        detail: QAR(o.total),
+      });
       this._order.set(updated);
       this.updated.emit(updated);
-      this.busy.set(false);
       this.toast.success(this.t('orderDrawer.toast.refunded.title'), `${o.id} · ${QAR(o.total)}`);
-    }, 500);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────
   // Tracking + notes
   // ────────────────────────────────────────────────────────────────────
 
-  saveTracking(): void {
+  async saveTracking(): Promise<void> {
+    if (this.busy()) return;
     const tn = this.trackingDraft().trim();
     const o = this._order();
     if (tn === (o.trackingNumber ?? '')) return;
-    const updated: Order = {
-      ...o,
-      trackingNumber: tn,
-      timeline: [
-        ...(o.timeline ?? []),
-        { id: 'tl-' + Date.now().toString(36), ts: this.now(), kind: 'note', actor: ME.name, detail: `${this.t('orderModal.tl.tracking')}: ${tn}` },
-      ],
-    };
-    this._order.set(updated);
-    this.updated.emit(updated);
-    this.toast.success(this.t('orderDrawer.toast.tracking.title'), tn);
+    this.busy.set(true);
+    try {
+      const updated = await this.ordersApi.updateStatus(o.id, {
+        trackingNumber: tn,
+        timelineKind: 'note',
+        detail: `${this.t('orderModal.tl.tracking')}: ${tn}`,
+      });
+      this._order.set(updated);
+      this.updated.emit(updated);
+      this.toast.success(this.t('orderDrawer.toast.tracking.title'), tn);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.busy.set(false);
+    }
   }
 
-  addNote(): void {
+  async addNote(): Promise<void> {
+    if (this.busy()) return;
     const body = this.noteDraft().trim();
     if (!body) return;
     const o = this._order();
-    const note: OrderNote = {
-      id: 'n-' + Date.now().toString(36),
-      ts: this.now(),
-      author: ME.name,
-      initials: ME.initials,
-      body,
-    };
-    const updated: Order = {
-      ...o,
-      notes: [...(o.notes ?? []), note],
-      timeline: [
-        ...(o.timeline ?? []),
-        { id: 'tl-' + Date.now().toString(36), ts: note.ts, kind: 'note', actor: ME.name, detail: body.length > 60 ? body.slice(0, 57) + '…' : body },
-      ],
-    };
-    this._order.set(updated);
-    this.updated.emit(updated);
-    this.noteDraft.set('');
-    this.toast.success(this.t('orderDrawer.toast.note.title'));
+    this.busy.set(true);
+    try {
+      await this.ordersApi.addNote(o.id, body);
+      const updated = await this.ordersApi.get(o.id);
+      this._order.set(updated);
+      this.updated.emit(updated);
+      this.noteDraft.set('');
+      this.toast.success(this.t('orderDrawer.toast.note.title'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   timelineLabel(kind: OrderTimelineEntry['kind']): string {
     return TIMELINE_LABEL[kind];
   }
 
-  private now(): string {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
 }

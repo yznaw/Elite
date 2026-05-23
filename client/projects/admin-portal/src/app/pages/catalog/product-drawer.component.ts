@@ -1221,11 +1221,14 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
     try {
       const f = this.form();
-      await this.productsApi.saveProduct({
+      const payload = {
         ...f,
         has3d: this.product.has3d,
         views3d: this.product.views3d,
-      });
+      };
+      const saved = this.product.id.startsWith('P-NEW-')
+        ? await this.productsApi.saveProduct(payload)
+        : await this.productsApi.update(this.product.id, payload);
 
       this.saveState.set('saved');
       const ts = new Date().toTimeString().slice(0, 5);
@@ -1247,17 +1250,25 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
       // Persist editable fields back on the underlying product (mock-only
       // mutation so the current mock catalog reflects the saved API state.
-      this.product.name = f.name;
-      this.product.sku = f.sku;
-      this.product.brand = f.brand;
-      this.product.price = f.price;
-      this.product.stock = f.stock;
-      this.product.hidden = f.hidden;
-      this.product.variants = f.variants.map(v => ({ ...v }));
-      this.product.images = [...f.images];
+      const previousId = this.product.id;
+      this.product.id = saved.id;
+      this.product.name = saved.name;
+      this.product.sku = saved.sku;
+      this.product.brand = saved.brand;
+      this.product.price = saved.price;
+      this.product.stock = saved.stock;
+      this.product.hidden = saved.hidden;
+      this.product.has3d = saved.has3d;
+      this.product.views3d = saved.views3d;
+      this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
+      this.product.images = [...(saved.images ?? f.images)];
       // Keep the legacy `image` field in sync with images[0] so the catalog
       // grid, dashboard heatmap, and order rows use the new primary.
-      if (f.images.length > 0) this.product.image = f.images[0];
+      this.product.image = saved.image || this.product.images?.[0] || this.product.image;
+      if (previousId !== saved.id) {
+        this._currentId.set(saved.id);
+        this.currentIdChange.emit(saved.id);
+      }
       
       this.toast.success(this.t('product.toast.saved.title'), `${this.form().name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);

@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
-const { asyncHandler, created, notFound, ok, toCents, validationError } = require('./lib');
+const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
 
@@ -10,6 +10,73 @@ async function loadCart(client, cartId) {
   if (cart.rowCount === 0) return null;
   const items = await client.query('SELECT * FROM cart_items WHERE cart_id = $1 ORDER BY created_at', [cartId]);
   return { ...cart.rows[0], items: items.rows };
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
+function publicOrderNumber() {
+  const year = new Date().getFullYear().toString().slice(2);
+  const suffix = `${Date.now().toString().slice(-5)}${Math.floor(Math.random() * 90 + 10)}`;
+  return `EC-${year}-${suffix}`;
+}
+
+function normalizeCheckout(req) {
+  const customer = req.body.customer || {};
+  const shippingAddress = req.body.shippingAddress || {};
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  const fullName = String(
+    shippingAddress.fullName ||
+    customer.name ||
+    `${customer.firstName || ''} ${customer.lastName || ''}`,
+  ).trim();
+
+  return {
+    customer: {
+      firstName: String(customer.firstName || '').trim(),
+      lastName: String(customer.lastName || '').trim(),
+      email: String(customer.email || req.body.email || '').trim(),
+      phone: String(customer.phone || req.body.phone || shippingAddress.phone || '').trim(),
+      name: fullName || 'Guest',
+    },
+    shippingAddress: {
+      fullName: fullName || 'Guest',
+      phone: String(shippingAddress.phone || customer.phone || '').trim(),
+      line1: String(shippingAddress.line1 || shippingAddress.address || '').trim(),
+      city: String(shippingAddress.city || '').trim(),
+      country: String(shippingAddress.country || '').trim(),
+    },
+    items,
+  };
+}
+
+async function upsertCustomer(client, tenantId, customer, shippingAddress) {
+  if (!customer.email) return null;
+  const result = await client.query(
+    `
+      INSERT INTO customers (tenant_id, email, full_name, phone, city, country, last_order_at)
+      VALUES ($1, $2, $3, $4, $5, $6, now())
+      ON CONFLICT (tenant_id, email)
+      DO UPDATE SET
+        full_name = EXCLUDED.full_name,
+        phone = EXCLUDED.phone,
+        city = EXCLUDED.city,
+        country = EXCLUDED.country,
+        last_order_at = now(),
+        updated_at = now()
+      RETURNING id
+    `,
+    [
+      tenantId,
+      customer.email,
+      customer.name,
+      customer.phone || null,
+      shippingAddress.city || null,
+      shippingAddress.country || null,
+    ],
+  );
+  return result.rows[0].id;
 }
 
 router.post('/', asyncHandler(async (req, res) => {
@@ -27,6 +94,135 @@ router.post('/', asyncHandler(async (req, res) => {
       [tenant.id, req.body.customerId || null, req.body.sessionId || null, req.body.currency || tenant.currency],
     );
     created(res, result.rows[0], 'Cart ready.');
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/checkout', asyncHandler(async (req, res) => {
+  const checkout = normalizeCheckout(req);
+  const errors = [];
+  if (!checkout.customer.name || checkout.customer.name === 'Guest') errors.push('Customer name is required.');
+  if (!checkout.customer.email) errors.push('Customer email is required.');
+  if (!checkout.customer.phone) errors.push('Customer phone is required.');
+  if (!checkout.shippingAddress.line1 || !checkout.shippingAddress.city || !checkout.shippingAddress.country) {
+    errors.push('Delivery address, city, and country are required.');
+  }
+  if (checkout.items.length === 0) errors.push('At least one cart item is required.');
+  if (errors.length > 0) return validationError(res, errors);
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const tenant = await ensureDefaultTenant(client);
+    const customerId = await upsertCustomer(client, tenant.id, checkout.customer, checkout.shippingAddress);
+    const subtotalCents = checkout.items.reduce((sum, item) => {
+      const qty = Number(item.qty || item.quantity) || 1;
+      return sum + toCents(item.price) * qty;
+    }, 0);
+
+    const order = await client.query(
+      `
+        INSERT INTO orders (
+          tenant_id, public_number, customer_id, customer_email, customer_name, customer_phone,
+          payment_status, fulfillment_status, subtotal_cents, total_cents, shipping_address, billing_address,
+          metadata
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'pending', 'awaiting', $7, $7, $8::jsonb, $9::jsonb, $10::jsonb)
+        RETURNING *
+      `,
+      [
+        tenant.id,
+        publicOrderNumber(),
+        customerId,
+        checkout.customer.email,
+        checkout.customer.name,
+        checkout.customer.phone,
+        subtotalCents,
+        JSON.stringify(checkout.shippingAddress),
+        JSON.stringify(checkout.shippingAddress),
+        JSON.stringify({
+          source: 'client-web-checkout',
+          paymentGateway: {
+            provider: req.body.payment?.provider || 'pending_gateway',
+            method: req.body.payment?.method || 'gateway_placeholder',
+            status: 'pending',
+          },
+        }),
+      ],
+    );
+
+    for (const item of checkout.items) {
+      const qty = Number(item.qty || item.quantity) || 1;
+      const unit = toCents(item.price);
+      await client.query(
+        `
+          INSERT INTO order_items (
+            tenant_id, order_id, product_id, variant_id, sku, product_name, size,
+            quantity, unit_price_cents, total_cents, media_url, metadata
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
+        `,
+        [
+          tenant.id,
+          order.rows[0].id,
+          isUuid(item.id || item.productId) ? (item.id || item.productId) : null,
+          isUuid(item.variantId) ? item.variantId : null,
+          String(item.sku || item.id || ''),
+          String(item.name || item.n || 'Item'),
+          item.size || item.s || null,
+          qty,
+          unit,
+          unit * qty,
+          item.image || null,
+          JSON.stringify({ leather: item.leather || null }),
+        ],
+      );
+    }
+
+    await client.query(
+      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
+      [tenant.id, order.rows[0].id, 'placed', 'Checkout submitted; payment gateway pending integration.'],
+    );
+    await client.query(
+      `
+        INSERT INTO payments (tenant_id, order_id, provider, method, status, amount_cents, currency, raw_payload)
+        VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7::jsonb)
+      `,
+      [
+        tenant.id,
+        order.rows[0].id,
+        req.body.payment?.provider || 'pending_gateway',
+        req.body.payment?.method || 'gateway_placeholder',
+        subtotalCents,
+        tenant.currency,
+        JSON.stringify({ integrationPending: true }),
+      ],
+    );
+    if (customerId) {
+      await client.query(
+        `
+          UPDATE customers
+          SET orders_count = orders_count + 1,
+              ltv_cents = ltv_cents + $3,
+              last_order_at = now(),
+              updated_at = now()
+          WHERE tenant_id = $1 AND id = $2
+        `,
+        [tenant.id, customerId, subtotalCents],
+      );
+    }
+
+    await client.query('COMMIT');
+    created(res, {
+      id: order.rows[0].public_number,
+      total: fromCents(order.rows[0].total_cents),
+      payment: 'pending',
+      fulfillment: order.rows[0].fulfillment_status,
+    }, 'Checkout order created.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }

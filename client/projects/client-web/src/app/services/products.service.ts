@@ -53,8 +53,10 @@ export class ProductsService {
     if (force) this.loadPromise = null;
     if (this.loadPromise) return this.loadPromise;
 
+    const url = force ? `${this.apiBase}/products?t=${Date.now()}` : `${this.apiBase}/products`;
+
     this.loadPromise = firstValueFrom(
-      this.http.get<ApiResponse<Product[]>>(`${this.apiBase}/products`),
+      this.http.get<ApiResponse<Product[]>>(url),
     )
       .then((res) => {
         if (Array.isArray(res.data) && res.data.length > 0) {

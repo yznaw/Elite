@@ -1,206 +1,176 @@
 @if (product(); as p) {
-  <div style="padding-top: 70px; min-height: 100vh;">
-    <div style="max-width: 1200px; margin: 0 auto; padding: 0 0 120px;">
-      <!-- Breadcrumb -->
-      <div style="padding: 20px 24px; display: flex; gap: 8px; align-items: center;">
-        <button (click)="goCollection()"
-          style="background: none; border: none; cursor: pointer; font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase;">
+  <main class="product-page">
+    <div class="product-shell">
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <button type="button" (click)="goCollection()">
           {{ t('product.breadcrumb.collection') }}
         </button>
-        <span style="color: var(--muted); font-size: 10px;">›</span>
-        <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.12em; color: var(--gold); text-transform: uppercase;">{{ productName(p) }}</span>
-      </div>
+        <span>/</span>
+        <strong>{{ productName(p) }}</strong>
+      </nav>
 
-      <div class="pdp-grid" style="display: grid; grid-template-columns: 1fr; gap: 0;">
-        <!-- Gallery -->
-        <div style="position: relative;">
-          <div style="position: relative; padding-bottom: 85%; overflow: hidden; background: var(--card);">
-            @for (src of gallery; track src; let i = $index) {
-              <img [src]="src" [alt]="productName(p)"
-                style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity 1s ease, transform 1s ease;"
-                [style.opacity]="galleryIdx() === i ? 1 : 0"
-                [style.transform]="galleryIdx() === i ? 'scale(1)' : 'scale(1.03)'"
-                (error)="onImgError($event)" />
+      <section class="pdp-grid">
+        <div class="gallery-panel">
+          <div class="gallery-frame">
+            @for (src of gallery(); track src; let i = $index) {
+              <img
+                [src]="src"
+                [alt]="productName(p)"
+                [class.is-active]="galleryIdx() === i"
+                (error)="onImgError($event)"
+              />
             }
-            <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 60%, rgba(7,6,4,0.4) 100%); pointer-events: none;"></div>
 
             @if (p.tag) {
-              <div style="position: absolute; top: 20px; left: 20px;">
-                <span class="tag-chip">{{ productTag(p.tag) }}</span>
-              </div>
+              <span class="tag-chip">{{ productTag(p.tag) }}</span>
             }
 
-            <button (click)="toggleWishlist()" [attr.aria-label]="t('product.aria.wishlist')"
-              style="position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 50%; background: rgba(13,11,8,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; font-size: 16px;"
-              [style.border]="wishlisted() ? '1px solid var(--gold)' : '1px solid var(--border)'">
-              <span [style.color]="wishlisted() ? 'var(--gold)' : 'var(--muted)'">
-                {{ wishlisted() ? '♥' : '♡' }}
-              </span>
+            <button
+              type="button"
+              class="wishlist-btn"
+              [class.is-active]="wishlisted()"
+              (click)="toggleWishlist()"
+              [attr.aria-label]="t('product.aria.wishlist')"
+            >
+              {{ wishlisted() ? '♥' : '♡' }}
             </button>
 
-            <button (click)="navGallery(-1)" [attr.aria-label]="t('product.aria.previousImage')"
-              style="position: absolute; top: 50%; transform: translateY(-50%); left: 16px; width: 36px; height: 36px; background: rgba(13,11,8,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); cursor: pointer; color: var(--cream); font-size: 22px; display: flex; align-items: center; justify-content: center; transition: all 0.25s;">
-              ‹
-            </button>
-            <button (click)="navGallery(1)" [attr.aria-label]="t('product.aria.nextImage')"
-              style="position: absolute; top: 50%; transform: translateY(-50%); right: 16px; width: 36px; height: 36px; background: rgba(13,11,8,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); cursor: pointer; color: var(--cream); font-size: 22px; display: flex; align-items: center; justify-content: center; transition: all 0.25s;">
-              ›
-            </button>
-          </div>
-
-          <!-- Thumbnails -->
-          <div style="display: flex; gap: 2px; padding: 2px 0;">
-            @for (src of gallery; track src; let i = $index) {
-              <button (click)="setGalleryIdx(i)"
-                style="flex: 1; padding-bottom: 20%; position: relative; overflow: hidden; cursor: pointer; transition: border-color 0.3s; background: var(--card);"
-                [style.border]="galleryIdx() === i ? '1px solid var(--gold)' : '1px solid transparent'">
-                <img [src]="src" alt=""
-                  style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity 0.3s;"
-                  [style.opacity]="galleryIdx() === i ? 1 : 0.45"
-                  (error)="onImgError($event)" />
+            @if (gallery().length > 1) {
+              <button
+                type="button"
+                class="gallery-nav gallery-nav-prev"
+                (click)="navGallery(-1)"
+                [attr.aria-label]="t('product.aria.previousImage')"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                class="gallery-nav gallery-nav-next"
+                (click)="navGallery(1)"
+                [attr.aria-label]="t('product.aria.nextImage')"
+              >
+                ›
               </button>
             }
           </div>
 
-          <!-- Dots -->
-          <div style="display: flex; gap: 6px; justify-content: center; padding: 14px 0 0;">
-            @for (src of gallery; track src; let i = $index) {
-              <button (click)="setGalleryIdx(i)" class="gallery-dot" [class.active]="galleryIdx() === i" [attr.aria-label]="t('product.aria.viewImage', { index: i + 1 })"></button>
-            }
-          </div>
-        </div>
-
-        <!-- Details -->
-        <div style="padding: 32px 24px 40px;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-            <div style="display: flex; gap: 2px;">
-              @for (s of [1,2,3,4,5]; track s) {
-                <span class="star">★</span>
+          @if (gallery().length > 1) {
+            <div class="thumb-strip" aria-label="Product images">
+              @for (src of gallery(); track src; let i = $index) {
+                <button
+                  type="button"
+                  class="thumb"
+                  [class.is-active]="galleryIdx() === i"
+                  (click)="setGalleryIdx(i)"
+                  [attr.aria-label]="t('product.aria.viewImage', { index: i + 1 })"
+                >
+                  <img [src]="src" alt="" (error)="onImgError($event)" />
+                </button>
               }
             </div>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">48 {{ t('product.reviews') }}</span>
+          }
+        </div>
+
+        <article class="details-panel">
+          <div class="review-row">
+            <span aria-hidden="true">★★★★★</span>
+            <small>48 {{ t('product.reviews') }}</small>
           </div>
 
-          <h1 class="serif" style="font-size: clamp(32px, 6vw, 52px); font-weight: 300; color: var(--cream); line-height: 1.05; margin-bottom: 8px;">
-            {{ productName(p) }}
-          </h1>
-
-          <p style="font-family: var(--ff-sans); font-size: 12px; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; margin-bottom: 20px;">
+          <h1>{{ productName(p) }}</h1>
+          <p class="descriptor">
             {{ productLeather(p.leather) }} · {{ t('product.handcraftedSuffix') }}
           </p>
 
-          <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 24px;">
-            <span style="font-family: var(--ff-serif); font-size: 32px; color: var(--gold); font-weight: 300;">
-              {{ price(p.price) }}
-            </span>
-            <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase;">
-              {{ t('product.dutiesIncluded') }}
-            </span>
+          <div class="price-row">
+            <span>{{ price(p.price) }}</span>
+            <small>{{ t('product.dutiesIncluded') }}</small>
           </div>
 
-          <div class="divider" style="margin-bottom: 24px;"></div>
-
-          <p style="font-family: var(--ff-sans); font-size: 13px; line-height: 1.8; color: var(--cream-dim); margin-bottom: 28px;">
+          <p class="description">
             {{ t('product.descriptionTemplate', { name: productName(p) }) }}
           </p>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px;">
+          <dl class="attribute-grid">
             @for (a of attributes(); track a.key) {
-              <div style="border-left: 1px solid var(--border); padding-left: 12px;">
-                <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase; margin-bottom: 3px;">{{ t(a.key) }}</div>
-                <div style="font-family: var(--ff-sans); font-size: 12px; color: var(--cream);">{{ a.value }}</div>
+              <div>
+                <dt>{{ t(a.key) }}</dt>
+                <dd>{{ a.value }}</dd>
               </div>
             }
-          </div>
+          </dl>
 
-          <div class="divider" style="margin-bottom: 24px;"></div>
-
-          <!-- Size -->
-          <div id="size-section" style="margin-bottom: 28px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.15em; color: var(--cream-dim); text-transform: uppercase;">
-                {{ t('product.size.label') }}
-              </span>
-              <button style="background: none; border: none; cursor: pointer; font-family: var(--ff-sans); font-size: 10px; color: var(--gold); letter-spacing: 0.06em; text-decoration: underline;">
-                {{ t('product.size.guide') }}
-              </button>
+          <div id="size-section" class="size-section">
+            <div class="section-label">
+              <span>{{ t('product.size.label') }}</span>
+              <button type="button">{{ t('product.size.guide') }}</button>
             </div>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <div class="size-options">
               @for (s of p.sizes; track s) {
-                <button class="size-btn" [class.active]="selectedSize() === s" (click)="selectSize(s)">{{ s }}</button>
+                <button
+                  type="button"
+                  class="size-btn"
+                  [class.active]="selectedSize() === s"
+                  (click)="selectSize(s)"
+                >
+                  {{ s }}
+                </button>
               }
             </div>
             @if (selectedSize() == null) {
-              <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--gold); margin-top: 8px; letter-spacing: 0.06em;">
-                {{ t('product.size.required') }}
-              </p>
+              <p class="required-note">{{ t('product.size.required') }}</p>
             }
           </div>
 
-          <!-- Qty -->
-          <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
-            <span style="font-family: var(--ff-sans); font-size: 10px; letter-spacing: 0.15em; color: var(--cream-dim); text-transform: uppercase;">{{ t('product.qty') }}</span>
-            <div style="display: flex; align-items: center; gap: 0; border: 1px solid var(--border);">
-              <button (click)="decQty()" [attr.aria-label]="t('product.aria.decreaseQty')"
-                style="width: 36px; height: 36px; background: none; border: none; color: var(--cream-dim); cursor: pointer; font-size: 16px; transition: color 0.2s; border-right: 1px solid var(--border);">−</button>
-              <span style="width: 36px; text-align: center; font-family: var(--ff-sans); font-size: 13px; color: var(--cream);">{{ qty() }}</span>
-              <button (click)="incQty()" [attr.aria-label]="t('product.aria.increaseQty')"
-                style="width: 36px; height: 36px; background: none; border: none; color: var(--cream-dim); cursor: pointer; font-size: 16px; transition: color 0.2s; border-left: 1px solid var(--border);">+</button>
+          <div class="qty-row">
+            <span>{{ t('product.qty') }}</span>
+            <div class="qty-control">
+              <button type="button" (click)="decQty()" [attr.aria-label]="t('product.aria.decreaseQty')">−</button>
+              <strong>{{ qty() }}</strong>
+              <button type="button" (click)="incQty()" [attr.aria-label]="t('product.aria.increaseQty')">+</button>
             </div>
           </div>
 
-          <!-- CTA -->
-          <button class="btn-gold" (click)="add()"
-            style="width: 100%; padding: 18px; font-size: 11px; letter-spacing: 0.2em; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; position: relative;">
-            @if (addedFeedback()) {
-              <span style="display: flex; align-items: center; gap: 8px;">
-                <span>✓</span> {{ t('product.cta.added') }}
-              </span>
-            } @else {
-              <span>{{ t('product.cta.reserve') }}</span>
-              <span style="opacity: 0.6; font-size: 10px;">· {{ price(p.price * qty()) }}</span>
-            }
-          </button>
+          <div class="cta-stack">
+            <button type="button" class="reserve-btn" (click)="add()">
+              @if (addedFeedback()) {
+                <span>✓ {{ t('product.cta.added') }}</span>
+              } @else {
+                <span>{{ t('product.cta.reserve') }}</span>
+                <small>{{ price(p.price * qty()) }}</small>
+              }
+            </button>
+            <button type="button" class="advisor-btn" (click)="speakToAdvisor()">
+              {{ t('product.cta.advisor') }}
+            </button>
+          </div>
 
-          <button class="btn-outline" (click)="speakToAdvisor()"
-            style="width: 100%; padding: 14px; font-size: 10px; letter-spacing: 0.15em;">
-            {{ t('product.cta.advisor') }}
-          </button>
-
-          <div style="display: flex; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; gap: 10px;">
+          <div class="trust-row">
             @for (trustKey of ['product.trust.delivery','product.trust.certificate','product.trust.returns']; track trustKey) {
-              <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.08em; color: var(--muted); text-align: center;">
-                ✓ {{ t(trustKey) }}
-              </span>
+              <span>✓ {{ t(trustKey) }}</span>
             }
           </div>
 
-          <div class="divider" style="margin: 28px 0;"></div>
-
-          <!-- Accordions -->
-          <div>
+          <div class="accordion-list">
             @for (acc of accordions; track acc.id) {
-              <div style="border-bottom: 1px solid var(--border2); margin-bottom: 0;">
-                <button (click)="toggleAccordion(acc.id)"
-                  style="width: 100%; background: none; border: none; cursor: pointer; padding: 16px 0; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-family: var(--ff-sans); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cream);">{{ t(acc.titleKey) }}</span>
-                  <span style="color: var(--gold); font-size: 16px; font-weight: 300; line-height: 1; transition: transform 0.3s ease; display: block;"
-                    [style.transform]="openAccordion() === acc.id ? 'rotate(45deg)' : 'rotate(0)'">+</span>
+              <section>
+                <button type="button" (click)="toggleAccordion(acc.id)">
+                  <span>{{ t(acc.titleKey) }}</span>
+                  <strong [class.is-open]="openAccordion() === acc.id">+</strong>
                 </button>
                 <div class="accordion-content" [class.open]="openAccordion() === acc.id">
-                  <p style="font-family: var(--ff-sans); font-size: 12px; line-height: 1.8; color: var(--cream-dim); padding-bottom: 16px;">
-                    {{ t(acc.contentKey) }}
-                  </p>
+                  <p>{{ t(acc.contentKey) }}</p>
                 </div>
-              </div>
+              </section>
             }
           </div>
-        </div>
-      </div>
+        </article>
+      </section>
     </div>
 
-    <div class="sticky-atc" id="sticky-atc" style="display: none;">
-      <button class="btn-gold" (click)="add()" style="width: 100%; padding: 16px; font-size: 11px; letter-spacing: 0.18em;">
+    <div class="sticky-atc" id="sticky-atc">
+      <button type="button" class="reserve-btn" (click)="add()">
         @if (addedFeedback()) {
           <ng-container>{{ t('product.sticky.added') }}</ng-container>
         } @else {
@@ -208,5 +178,5 @@
         }
       </button>
     </div>
-  </div>
+  </main>
 }

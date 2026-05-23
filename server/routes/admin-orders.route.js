@@ -6,27 +6,60 @@ const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError
 const router = Router();
 
 function mapOrder(row) {
+  const shippingAddress = row.shipping_address || {};
   return {
     id: row.public_number,
     dbId: row.id,
     date: row.placed_at ? row.placed_at.toISOString().slice(0, 10) : '',
     customer: row.customer_name,
+    customerEmail: row.customer_email || '',
+    customerPhone: row.customer_phone || '',
     itemsCount: Number(row.items_count || 0),
     total: fromCents(row.total_cents),
     payment: mapPayment(row.payment_status),
     fulfillment: row.fulfillment_status,
     items: row.items || [],
-    address: row.shipping_address?.line1 || row.shipping_address?.address || '',
+    address: formatAddress(shippingAddress),
+    shippingAddress,
+    billingAddress: row.billing_address || {},
+    paymentGateway: row.metadata?.paymentGateway || undefined,
     trackingNumber: row.tracking_number || undefined,
     timeline: row.timeline || [],
     notes: row.notes || [],
   };
 }
 
+function formatAddress(address) {
+  return [
+    address.line1 || address.address,
+    address.city,
+    address.region,
+    address.country,
+  ].filter(Boolean).join(', ');
+}
+
 function mapPayment(status) {
   if (status === 'authorized') return 'pending';
   if (status === 'partially_refunded') return 'refunded';
   return status;
+}
+
+async function loadAdminOrder(client, tenantId, id) {
+  const result = await client.query(
+    `
+      SELECT o.*, COUNT(oi.id)::integer AS items_count, s.tracking_number,
+        COALESCE(jsonb_agg(DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0))) FILTER (WHERE oi.id IS NOT NULL), '[]'::jsonb) AS items,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail) ORDER BY t.occurred_at) FROM order_timeline_entries t WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', to_char(n.created_at, 'YYYY-MM-DD HH24:MI'), 'author', 'Admin', 'initials', 'AD', 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n WHERE n.order_id = o.id), '[]'::jsonb) AS notes
+      FROM orders o
+      LEFT JOIN order_items oi ON oi.order_id = o.id
+      LEFT JOIN shipments s ON s.order_id = o.id
+      WHERE o.tenant_id = $1 AND (o.id::text = $2 OR o.public_number = $2)
+      GROUP BY o.id, s.tracking_number
+    `,
+    [tenantId, id],
+  );
+  return result.rowCount === 0 ? null : mapOrder(result.rows[0]);
 }
 
 router.get('/', asyncHandler(async (_req, res) => {
@@ -64,22 +97,9 @@ router.get('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
-    const result = await client.query(
-      `
-        SELECT o.*, COUNT(oi.id)::integer AS items_count, s.tracking_number,
-          COALESCE(jsonb_agg(DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0))) FILTER (WHERE oi.id IS NOT NULL), '[]'::jsonb) AS items,
-          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', t.occurred_at, 'kind', t.kind, 'detail', t.detail) ORDER BY t.occurred_at) FROM order_timeline_entries t WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
-          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', n.created_at, 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n WHERE n.order_id = o.id), '[]'::jsonb) AS notes
-        FROM orders o
-        LEFT JOIN order_items oi ON oi.order_id = o.id
-        LEFT JOIN shipments s ON s.order_id = o.id
-        WHERE o.tenant_id = $1 AND (o.id::text = $2 OR o.public_number = $2)
-        GROUP BY o.id, s.tracking_number
-      `,
-      [tenant.id, req.params.id],
-    );
-    if (result.rowCount === 0) return notFound(res, 'Order not found.');
-    ok(res, mapOrder(result.rows[0]));
+    const order = await loadAdminOrder(client, tenant.id, req.params.id);
+    if (!order) return notFound(res, 'Order not found.');
+    ok(res, order);
   } finally {
     client.release();
   }
@@ -158,6 +178,7 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
+    const trackingNumber = String(req.body.trackingNumber || '').trim();
     const order = await client.query(
       `
         UPDATE orders
@@ -173,12 +194,43 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
       await client.query('ROLLBACK');
       return notFound(res, 'Order not found.');
     }
+
+    if (trackingNumber) {
+      const shipment = await client.query(
+        `
+          UPDATE shipments
+          SET tracking_number = $3,
+              status = COALESCE($4, status),
+              shipped_at = CASE WHEN $4 = 'shipped' THEN COALESCE(shipped_at, now()) ELSE shipped_at END,
+              updated_at = now()
+          WHERE tenant_id = $1 AND order_id = $2
+          RETURNING id
+        `,
+        [tenant.id, order.rows[0].id, trackingNumber, req.body.fulfillment || order.rows[0].fulfillment_status],
+      );
+      if (shipment.rowCount === 0) {
+        await client.query(
+          `
+            INSERT INTO shipments (tenant_id, order_id, tracking_number, status, shipped_at, address)
+            VALUES ($1, $2, $3, COALESCE($4, 'awaiting'), CASE WHEN $4 = 'shipped' THEN now() ELSE NULL END, $5::jsonb)
+          `,
+        [
+          tenant.id,
+          order.rows[0].id,
+          trackingNumber,
+          req.body.fulfillment || order.rows[0].fulfillment_status,
+          JSON.stringify(order.rows[0].shipping_address || {}),
+        ],
+        );
+      }
+    }
+
     await client.query(
       'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
       [tenant.id, order.rows[0].id, req.body.timelineKind || 'note', req.body.detail || 'Status updated'],
     );
     await client.query('COMMIT');
-    ok(res, mapOrder(order.rows[0]), 'Order status updated.');
+    ok(res, await loadAdminOrder(client, tenant.id, req.params.id), 'Order status updated.');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -199,6 +251,10 @@ router.post('/:id/notes', asyncHandler(async (req, res) => {
     const note = await client.query(
       'INSERT INTO order_notes (tenant_id, order_id, body) VALUES ($1, $2, $3) RETURNING *',
       [tenant.id, order.rows[0].id, body],
+    );
+    await client.query(
+      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
+      [tenant.id, order.rows[0].id, 'note', body.length > 80 ? `${body.slice(0, 77)}...` : body],
     );
     created(res, note.rows[0], 'Order note added.');
   } finally {
