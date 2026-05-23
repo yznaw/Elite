@@ -7,6 +7,7 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
+import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { OrderDrawerComponent } from './order-drawer.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
@@ -17,22 +18,22 @@ import { Order, QAR } from '../../models';
 @Component({
   selector: 'ap-orders',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, OrderDrawerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, PaginationComponent, OrderDrawerComponent],
   template: `
     <div class="page-fade">
       <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
         <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
           <ap-icon name="search" [size]="14"/>
-          <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event)"/>
+          <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
         </div>
-        <select class="inp" style="width:auto;" [ngModel]="paymentFilter()" (ngModelChange)="paymentFilter.set($event)">
+        <select class="inp" style="width:auto;" [ngModel]="paymentFilter()" (ngModelChange)="paymentFilter.set($event); page.set(0)">
           <option value="all">{{ t('orders.allPayment') }}</option>
           <option value="paid">{{ t('pill.paid') }}</option>
           <option value="pending">{{ t('pill.pending') }}</option>
           <option value="refunded">{{ t('pill.refunded') }}</option>
           <option value="failed">{{ t('pill.failed') }}</option>
         </select>
-        <select class="inp" style="width:auto;" [ngModel]="fulfillmentFilter()" (ngModelChange)="fulfillmentFilter.set($event)">
+        <select class="inp" style="width:auto;" [ngModel]="fulfillmentFilter()" (ngModelChange)="fulfillmentFilter.set($event); page.set(0)">
           <option value="all">{{ t('orders.allFulfillment') }}</option>
           <option value="awaiting">{{ t('pill.awaiting') }}</option>
           <option value="processing">{{ t('pill.processing') }}</option>
@@ -55,7 +56,7 @@ import { Order, QAR } from '../../models';
             <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
           </ap-empty-state>
         } @else {
-          <ap-sortable-table [columns]="columns" [rows]="filtered()" [rowClick]="openOrder">
+          <ap-sortable-table [columns]="columns" [rows]="paged()" [rowClick]="openOrder">
             <ng-template apCellTpl="id" let-r>
               <span class="strong mono" style="color:var(--green);">{{ r.id }}</span>
             </ng-template>
@@ -89,6 +90,15 @@ import { Order, QAR } from '../../models';
           </ap-sortable-table>
         }
       </div>
+
+      <ap-pagination
+        [page]="page()"
+        [pageSize]="pageSize()"
+        [total]="filtered().length"
+        [totalPages]="totalPages()"
+        (pageChange)="page.set($event)"
+        (pageSizeChange)="onPageSizeChange($event)"
+      />
     </div>
 
     @if (active(); as o) {
@@ -130,6 +140,8 @@ export class OrdersComponent implements OnInit {
   readonly fulfillingId = signal<string | null>(null);
   readonly exporting = signal(false);
   readonly loading = signal(true);
+  readonly page = signal(0);
+  readonly pageSize = signal(50);
 
   private readonly _orders = signal<Order[]>([]);
 
@@ -143,6 +155,14 @@ export class OrdersComponent implements OnInit {
       if (q && !(o.id.toLowerCase().includes(q) || o.customer.toLowerCase().includes(q))) return false;
       return true;
     });
+  });
+
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
+
+  readonly paged = computed(() => {
+    const all = this.filtered();
+    const start = this.page() * this.pageSize();
+    return all.slice(start, start + this.pageSize());
   });
 
   readonly paymentPill = paymentPillKind;
@@ -170,6 +190,12 @@ export class OrdersComponent implements OnInit {
     this.search.set('');
     this.paymentFilter.set('all');
     this.fulfillmentFilter.set('all');
+    this.page.set(0);
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(0);
   }
 
   async markFulfilled(o: Order): Promise<void> {
@@ -196,10 +222,28 @@ export class OrdersComponent implements OnInit {
   exportCsv(): void {
     if (this.exporting()) return;
     this.exporting.set(true);
-    this.toast.info('Preparing export', `${this.filtered().length} orders`);
-    setTimeout(() => {
+    try {
+      const orders = this.filtered();
+      const headers = ['Order ID', 'Date', 'Customer', 'Items', 'Total (QAR)', 'Payment', 'Fulfillment'];
+      const rows = orders.map((o) => [
+        o.id, o.date, o.customer, o.itemsCount,
+        o.total.toFixed(2), o.payment, o.fulfillment,
+      ]);
+      const csv = [headers, ...rows]
+        .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+        .join('\r\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.toast.success('Export downloaded', `${orders.length} order${orders.length !== 1 ? 's' : ''} · CSV`);
+    } finally {
       this.exporting.set(false);
-      this.toast.success('Export ready', 'orders-2026-04-29.csv · 12 KB');
-    }, 1200);
+    }
   }
 }

@@ -260,11 +260,11 @@
     <span class="phase-pct" id="pct-fix" style="color:#EF4444;">0%</span>
   </div>
 
-  <div class="feat-row next check-item" data-id="fix-01" data-phase="fix" onclick="toggle(this)">
+  <div class="feat-row done check-item checked" data-id="fix-01" data-phase="fix" onclick="toggle(this)">
     <div class="check-box"></div>
     <div class="feat-icon" style="background:#FEE2E2;">⚙️</div>
     <div class="feat-body">
-      <div class="feat-title">Settings — Save actually persists <span class="badge broken">Broken</span></div>
+      <div class="feat-title">Settings — Save actually persists <span class="badge done">Done</span></div>
       <div class="feat-desc">Store name, currency, timezone, logo upload — all currently show a toast but save nothing to the DB. Wire the Save button to <code>POST /api/admin/settings</code> and load on page open.</div>
       <span class="ac-label">Acceptance Criteria</span>
       <ul class="ac-list">
@@ -277,11 +277,11 @@
     </div>
   </div>
 
-  <div class="feat-row next check-item" data-id="fix-02" data-phase="fix" onclick="toggle(this)">
+  <div class="feat-row done check-item checked" data-id="fix-02" data-phase="fix" onclick="toggle(this)">
     <div class="check-box"></div>
     <div class="feat-icon" style="background:#FEE2E2;">📥</div>
     <div class="feat-body">
-      <div class="feat-title">Orders — Real CSV export <span class="badge broken">Broken</span></div>
+      <div class="feat-title">Orders — Real CSV export <span class="badge done">Done</span></div>
       <div class="feat-desc">The "Export CSV" button shows a toast but downloads nothing. Generate a real <code>.csv</code> file from the current filtered order list and trigger download — same pattern as import report already in the codebase.</div>
       <span class="ac-label">Acceptance Criteria</span>
       <ul class="ac-list">
@@ -319,11 +319,11 @@
     <span class="phase-pct" id="pct-crit" style="color:#F97316;">0%</span>
   </div>
 
-  <div class="feat-row next check-item" data-id="crit-01" data-phase="crit" onclick="toggle(this)">
+  <div class="feat-row done check-item checked" data-id="crit-01" data-phase="crit" onclick="toggle(this)">
     <div class="check-box"></div>
     <div class="feat-icon" style="background:#FFF7ED;">📄</div>
     <div class="feat-body">
-      <div class="feat-title">Pagination — All admin lists <span class="badge need">Critical</span></div>
+      <div class="feat-title">Pagination — All admin lists <span class="badge done">Done</span></div>
       <div class="feat-desc">Products, orders, customers, and media all load every row at once. With 500+ products or 1,000+ orders this will be slow and unusable. Add server-side pagination (page + limit params) to all 4 list endpoints and add a simple page control to each list UI.</div>
       <span class="ac-label">Acceptance Criteria</span>
       <ul class="ac-list">
@@ -337,11 +337,11 @@
     </div>
   </div>
 
-  <div class="feat-row next check-item" data-id="crit-02" data-phase="crit" onclick="toggle(this)">
+  <div class="feat-row done check-item checked" data-id="crit-02" data-phase="crit" onclick="toggle(this)">
     <div class="check-box"></div>
     <div class="feat-icon" style="background:#FFF7ED;">🗑️</div>
     <div class="feat-body">
-      <div class="feat-title">Orphaned Media Cleanup <span class="badge need">Do Now</span></div>
+      <div class="feat-title">Orphaned Media Cleanup <span class="badge done">Done</span></div>
       <div class="feat-desc">There are currently 272 unlinked images from the first failed import sitting on disk and in the DB, linked to nothing. One button in the Media page: "Clean up X unlinked files (Y MB)" → confirm → delete. Prevents wasted storage and a cluttered media library.</div>
       <span class="ac-label">Acceptance Criteria</span>
       <ul class="ac-list">
