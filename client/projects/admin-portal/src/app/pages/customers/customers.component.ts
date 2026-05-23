@@ -7,6 +7,7 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
+import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { CustomerDrawerComponent } from './customer-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { AdminCustomersService } from '../../services/admin-customers.service';
@@ -19,13 +20,13 @@ const MOBILE_BP = 900;
 @Component({
   selector: 'ap-customers',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, AvatarComponent, EmptyStateComponent, SortableTableComponent, CellTplDirective, CustomerDrawerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, PillComponent, AvatarComponent, EmptyStateComponent, SortableTableComponent, CellTplDirective, PaginationComponent, CustomerDrawerComponent],
   template: `
     <div class="page-fade">
       <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
         <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
           <ap-icon name="search" [size]="14"/>
-          <input class="inp with-icon" [placeholder]="t('customers.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event)"/>
+          <input class="inp with-icon" [placeholder]="t('customers.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
         </div>
 
         <!-- View toggle (desktop only — mobile is always cards) -->
@@ -77,7 +78,7 @@ const MOBILE_BP = 900;
         </div>
       } @else if (effectiveView() === 'table') {
         <div class="card">
-          <ap-sortable-table [columns]="columns" [rows]="filtered()" [rowClick]="openCustomer">
+          <ap-sortable-table [columns]="columns" [rows]="paged()" [rowClick]="openCustomer">
             <ng-template apCellTpl="name" let-r>
               <div class="row gap-sm">
                 <ap-avatar [initials]="initials(r.name)"/>
@@ -98,7 +99,7 @@ const MOBILE_BP = 900;
       } @else {
         <!-- Cards view -->
         <div class="customer-cards">
-          @for (c of filtered(); track c.id) {
+          @for (c of paged(); track c.id) {
             <button class="customer-card" (click)="openCustomer(c)" type="button">
               <div class="customer-card-head">
                 <ap-avatar [initials]="initials(c.name)" size="lg"/>
@@ -133,6 +134,15 @@ const MOBILE_BP = 900;
         </div>
       }
     </div>
+
+    <ap-pagination
+      [page]="page()"
+      [pageSize]="pageSize()"
+      [total]="filtered().length"
+      [totalPages]="totalPages()"
+      (pageChange)="page.set($event)"
+      (pageSizeChange)="onPageSizeChange($event)"
+    />
 
     @if (active(); as c) {
       <ap-customer-drawer
@@ -284,6 +294,8 @@ export class CustomersComponent implements OnInit {
   readonly view = signal<View>(this.loadView());
   readonly isMobile = signal(this.computeIsMobile());
   readonly effectiveView = computed<View>(() => (this.isMobile() ? 'cards' : this.view()));
+  readonly page = signal(0);
+  readonly pageSize = signal(50);
 
   @HostListener('window:resize')
   onResize(): void {
@@ -296,6 +308,14 @@ export class CustomersComponent implements OnInit {
       if (q && !(c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.city.toLowerCase().includes(q))) return false;
       return true;
     });
+  });
+
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
+
+  readonly paged = computed(() => {
+    const all = this.filtered();
+    const start = this.page() * this.pageSize();
+    return all.slice(start, start + this.pageSize());
   });
 
   readonly columns: TableColumn<Customer>[] = [
@@ -312,6 +332,12 @@ export class CustomersComponent implements OnInit {
 
   clearFilters(): void {
     this.search.set('');
+    this.page.set(0);
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(0);
   }
 
   /** "Add Customer" — synthesize a blank record and open the drawer in

@@ -40,6 +40,12 @@ export class ApiClient {
       .pipe(map((res) => res.data));
   }
 
+  put<T>(path: string, body: unknown): Observable<T> {
+    return this.http
+      .put<ApiEnvelope<T>>(this.url(path), body, { withCredentials: true })
+      .pipe(map((res) => res.data));
+  }
+
   patch<T>(path: string, body: unknown): Observable<T> {
     return this.http
       .patch<ApiEnvelope<T>>(this.url(path), body, { withCredentials: true })

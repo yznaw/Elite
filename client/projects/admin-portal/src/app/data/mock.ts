@@ -1,7 +1,7 @@
 import {
-  Product, Collection, MediaFile, Order, Customer, SyncLog, SyncSource,
+  Product, Collection, MediaFile, Order, Customer,
   TeamMember, Integration, RevenueDay, TrafficSource, FunnelStep,
-  StorefrontBlock, PaletteEntry, UpcomingRun, AUTO_TRIGGER,
+  StorefrontBlock, PaletteEntry,
 } from '../models';
 
 export const TODAY = new Date('2026-04-29');
@@ -96,49 +96,6 @@ export const ORDERS: Order[] = [
   { id: 'EC-26-1031', date: '2026-04-20', customer: 'Aisha Al-Mahmoud', itemsCount: 2, total: 4400, payment: 'paid', fulfillment: 'delivered', items: [{ n: 'Hijaz Loafer', s: 38, q: 1, p: 1950 }, { n: 'Quraish Chelsea', s: 38, q: 1, p: 2450 }], address: 'Tower B 1208, The Pearl, Doha' },
 ];
 
-export const SYNC_LOGS: SyncLog[] = [
-  { id: 'L-119', ts: '2026-04-29 09:42:18', type: 'Product Sync', sourceId: 'csv', processed: 1, updated: 1, status: 'success', durationMs: 920, err: '', triggeredBy: { type: 'manual', user: 'Mona Al-Sayed', initials: 'MS', context: 'Product · P-004 Rub Al Khali Boot' } },
-  { id: 'L-118', ts: '2026-04-29 06:00:14', type: 'CSV Sync', sourceId: 'csv', processed: 1240, updated: 38, status: 'success', durationMs: 4180, err: '', triggeredBy: AUTO_TRIGGER },
-  { id: 'L-117', ts: '2026-04-29 02:14:55', type: 'CSV Sync', sourceId: 'csv', processed: 1239, updated: 0, status: 'success', durationMs: 3820, err: '', triggeredBy: { type: 'manual', user: 'Yusuf Hamad', initials: 'YH', context: 'Manual full sync · pre-launch QA' } },
-  { id: 'L-116', ts: '2026-04-28 18:00:21', type: 'CSV Sync', sourceId: 'csv', processed: 1238, updated: 14, status: 'success', durationMs: 3960, err: '', triggeredBy: AUTO_TRIGGER },
-  { id: 'L-114', ts: '2026-04-28 06:00:09', type: 'CSV Sync', sourceId: 'csv', processed: 1235, updated: 22, status: 'success', durationMs: 4310, err: '', triggeredBy: AUTO_TRIGGER },
-  { id: 'L-113', ts: '2026-04-27 21:08:33', type: 'CSV Sync', sourceId: 'csv', processed: 1232, updated: 11, status: 'success', durationMs: 4720, err: '', triggeredBy: { type: 'manual', user: 'Yusuf Hamad', initials: 'YH', context: 'Manual retry of L-112' } },
-  { id: 'L-112', ts: '2026-04-27 18:00:42', type: 'CSV Sync', sourceId: 'csv', processed: 1232, updated: 11, status: 'partial', durationMs: 5240, err: '2 SKUs failed validation: missing barcode (P-098, P-104).', triggeredBy: AUTO_TRIGGER },
-  { id: 'L-111', ts: '2026-04-27 06:00:18', type: 'CSV Sync', sourceId: 'csv', processed: 1230, updated: 7, status: 'success', durationMs: 4080, err: '', triggeredBy: AUTO_TRIGGER },
-  { id: 'L-109', ts: '2026-04-26 18:00:13', type: 'CSV Sync', sourceId: 'csv', processed: 1229, updated: 18, status: 'success', durationMs: 4220, err: '', triggeredBy: AUTO_TRIGGER },
-  { id: 'L-108', ts: '2026-04-26 06:00:07', type: 'CSV Sync', sourceId: 'csv', processed: 1227, updated: 31, status: 'success', durationMs: 4490, err: '', triggeredBy: AUTO_TRIGGER },
-  { id: 'L-107', ts: '2026-04-25 18:00:11', type: 'CSV Sync', sourceId: 'csv', processed: 1224, updated: 9, status: 'success', durationMs: 4070, err: '', triggeredBy: AUTO_TRIGGER },
-];
-
-export const SYNC_SOURCES: SyncSource[] = [
-  {
-    id: 'csv',
-    name: 'Counterpoint POS',
-    desc: 'Inventory pull from in-store POS · CSV feed',
-    iconBg: 'csv',
-    status: 'success',
-    schedule: 'Every 12 hours',
-    lastRun: '2026-04-29 06:00',
-    nextRun: '2026-04-29 18:00',
-    nextRunIn: 'in 5h 47m',
-    recordsToday: 1240,
-    updatedToday: 38,
-    avgMs: 4180,
-    successRate: 99.2,
-    spark7d: [99, 100, 98, 100, 100, 99, 99],
-    last7runs: ['success', 'success', 'success', 'success', 'partial', 'success', 'success'],
-    paused: false,
-  },
-];
-
-export const UPCOMING_RUNS: UpcomingRun[] = [
-  { ts: '2026-04-29 18:00', label: 'Today, 18:00', in: 'in 5h 47m' },
-  { ts: '2026-04-30 06:00', label: 'Tomorrow, 06:00', in: 'in 17h 47m' },
-  { ts: '2026-04-30 18:00', label: 'Tomorrow, 18:00', in: 'in 29h 47m' },
-  { ts: '2026-05-01 06:00', label: 'May 1, 06:00', in: 'in 41h 47m' },
-  { ts: '2026-05-01 18:00', label: 'May 1, 18:00', in: 'in 53h 47m' },
-];
-
 export const REVENUE_30D: RevenueDay[] = (() => {
   const seed = [3200, 4100, 2900, 5400, 4800, 7200, 6100, 4500, 3800, 5200, 6800, 7500, 5900, 4300, 5100, 6600, 8200, 7100, 5400, 6300, 7800, 9100, 6800, 5500, 7200, 8400, 9600, 7300, 8100, 9800];
   return seed.map((v, i) => ({
@@ -172,7 +129,6 @@ export const TEAM: TeamMember[] = [
 ];
 
 export const INTEGRATIONS: Integration[] = [
-  { id: 'cp', name: 'Counterpoint POS CSV', desc: 'Hourly inventory pull from in-store POS.', connected: true, meta: 'Configured · /api/cp.csv · every 12h' },
   { id: 'google', name: 'Google Shopping', desc: 'Push catalog feed to Google Merchant.', connected: true, meta: 'Connected · 412 SKUs live' },
   { id: 'mailer', name: 'Mailgun · Transactional', desc: 'Order confirmations & shipping emails.', connected: true, meta: 'Connected · 286 emails sent today' },
 ];

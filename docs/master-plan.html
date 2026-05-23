@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Master Plan — Elite Collection Admin Portal</title>
+<style>
+  :root {
+    --gold:#C9A84C; --gold-light:#F5EDD6; --gold-mid:#E8D5A0;
+    --ink:#1A1A2E; --ink-2:#3D3D5C; --muted:#6B7280;
+    --surface:#FFFFFF; --bg:#F8F7F4; --bg-2:#F0EDE6; --border:#E5E0D5;
+    --green:#16A34A; --green-bg:#F0FDF4; --green-border:#BBF7D0;
+    --blue:#2563EB; --blue-bg:#EFF6FF; --blue-border:#BFDBFE;
+    --orange:#D97706; --orange-bg:#FFFBEB; --orange-border:#FDE68A;
+    --red:#DC2626; --red-bg:#FEF2F2;
+    --purple:#7C3AED; --purple-bg:#F5F3FF;
+    --radius:12px; --shadow:0 2px 12px rgba(0,0,0,.07); --shadow-lg:0 8px 32px rgba(0,0,0,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;}
+
+  /* ── Sticky Progress Bar ── */
+  .sticky-bar{
+    position:sticky;top:0;z-index:100;
+    background:rgba(26,26,46,.97);backdrop-filter:blur(10px);
+    padding:10px 32px;display:flex;align-items:center;gap:16px;
+    border-bottom:1px solid rgba(201,168,76,.25);
+  }
+  .sticky-label{font-size:11px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;}
+  .sticky-track{flex:1;height:6px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden;}
+  .sticky-fill{height:100%;background:linear-gradient(90deg,#C9A84C,#E8D5A0);border-radius:3px;transition:width .4s ease;width:0%;}
+  .sticky-pct{font-size:13px;font-weight:800;color:#E8D5A0;white-space:nowrap;min-width:36px;text-align:right;}
+  .sticky-count{font-size:12px;color:rgba(255,255,255,.4);white-space:nowrap;}
+  .reset-btn{font-size:11px;font-weight:600;color:rgba(255,255,255,.3);background:none;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:3px 10px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+  .reset-btn:hover{color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.25);}
+
+  /* ── Hero ── */
+  .hero{background:linear-gradient(135deg,#1A1A2E 0%,#2D2D4A 60%,#3D3525 100%);color:#fff;padding:56px 48px 48px;position:relative;overflow:hidden;}
+  .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 80% 50%,rgba(201,168,76,.18) 0%,transparent 65%);pointer-events:none;}
+  .hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,.18);border:1px solid rgba(201,168,76,.35);color:#E8D5A0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:20px;}
+  .hero h1{font-size:36px;font-weight:800;line-height:1.15;margin-bottom:12px;}
+  .hero h1 span{color:var(--gold);}
+  .hero p{font-size:15px;opacity:.65;max-width:640px;line-height:1.7;}
+  .hero-meta{display:flex;gap:32px;margin-top:32px;padding-top:28px;border-top:1px solid rgba(255,255,255,.1);flex-wrap:wrap;}
+  .hero-stat{display:flex;flex-direction:column;gap:2px;}
+  .hero-stat-n{font-size:26px;font-weight:800;color:var(--gold);}
+  .hero-stat-l{font-size:12px;opacity:.5;text-transform:uppercase;letter-spacing:.06em;}
+
+  /* ── Layout ── */
+  .page{max-width:1060px;margin:0 auto;padding:40px 32px 80px;}
+
+  /* ── Section header ── */
+  .section{display:flex;align-items:center;gap:14px;margin:52px 0 20px;}
+  .sec-dot{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;}
+  .sec-title{font-size:19px;font-weight:800;}
+  .sec-sub{font-size:13px;color:var(--muted);margin-top:1px;}
+  .sec-line{flex:1;height:1px;background:var(--border);}
+
+  /* ── Done bar ── */
+  .done-bar{background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius);padding:16px 20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:20px;}
+  .done-bar-title{font-size:13px;font-weight:700;color:var(--green);white-space:nowrap;}
+  .done-tag{font-size:12px;padding:3px 10px;border-radius:6px;background:#D1FAE5;color:#065F46;font-weight:600;}
+
+  /* ── Category label ── */
+  .cat-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:20px 0 10px;display:flex;align-items:center;gap:10px;}
+  .cat-label-text{white-space:nowrap;}
+  .phase-track{flex:1;height:4px;background:#E5E0D5;border-radius:2px;overflow:hidden;min-width:60px;}
+  .phase-fill{height:100%;border-radius:2px;transition:width .4s ease;width:0%;}
+  .phase-pct{font-size:10px;font-weight:700;min-width:32px;text-align:right;}
+
+  /* ── Feature row ── */
+  .feat-row{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    display:flex;align-items:flex-start;gap:16px;padding:16px 18px;
+    margin-bottom:8px;box-shadow:var(--shadow);transition:box-shadow .15s,transform .15s,border-color .2s,background .2s;
+  }
+
+  /* status variants */
+  .feat-row.next  {border-color:#BFDBFE;background:linear-gradient(145deg,#EFF6FF 0%,#fff 60%);}
+  .feat-row.later {border-color:var(--border);background:var(--surface);}
+  .feat-row.cut   {border-color:var(--border);background:var(--bg-2);opacity:.7;}
+
+  /* ── Check item (clickable) ── */
+  .check-item{cursor:pointer;user-select:none;}
+  .check-item:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px);}
+  .check-item.checked{
+    border-color:var(--green-border) !important;
+    background:linear-gradient(145deg,#F0FDF4 0%,#fff 60%) !important;
+  }
+  .check-item.checked .feat-title{color:var(--green);}
+  .check-item.checked .feat-desc{opacity:.7;}
+
+  /* Checkbox circle */
+  .check-box{
+    width:20px;height:20px;border-radius:50%;border:2px solid #CBD5E1;
+    flex-shrink:0;margin-top:9px;display:flex;align-items:center;justify-content:center;
+    transition:all .2s;background:#fff;
+  }
+  .check-item.checked .check-box{background:var(--green);border-color:var(--green);}
+  .check-item.checked .check-box::after{content:'✓';color:#fff;font-size:11px;font-weight:800;}
+
+  .feat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;margin-top:1px;}
+  .feat-body{flex:1;}
+  .feat-title{font-size:14px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;transition:color .2s;}
+  .feat-desc{font-size:13px;color:var(--muted);line-height:1.55;}
+  .feat-row.cut .feat-title{text-decoration:line-through;color:var(--muted);}
+
+  /* badges */
+  .badge{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;}
+  .badge.done   {background:#D1FAE5;color:#065F46;}
+  .badge.new    {background:#DBEAFE;color:#1E40AF;}
+  .badge.fix    {background:#FEE2E2;color:#991B1B;}
+  .badge.broken {background:#FEE2E2;color:#991B1B;}
+  .badge.need   {background:#FEF3C7;color:#92400E;}
+  .badge.later  {background:#F3E8FF;color:#5B21B6;}
+  .badge.cut    {background:var(--bg-2);color:var(--muted);}
+
+  /* ── Acceptance Criteria list ── */
+  .ac-label{
+    display:block;font-size:10px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.07em;color:var(--muted);margin-top:10px;margin-bottom:5px;
+  }
+  .ac-list{
+    list-style:none;padding:10px 12px;margin-top:0;
+    background:var(--bg);border:1px solid var(--border);border-radius:7px;
+  }
+  .ac-list li{
+    font-size:12px;color:var(--ink-2);line-height:1.45;
+    padding:3px 0 3px 18px;position:relative;
+  }
+  .ac-list li+li{border-top:1px dashed var(--border);}
+  .ac-list li::before{
+    content:'✓';position:absolute;left:0;top:4px;
+    color:var(--green);font-weight:800;font-size:10px;
+  }
+  .check-item.checked .ac-list{opacity:.6;}
+
+  /* ── Callout ── */
+  .callout{border-radius:var(--radius);padding:14px 18px;display:flex;gap:12px;align-items:flex-start;font-size:13px;line-height:1.55;margin-bottom:20px;}
+  .callout.gold {background:var(--gold-light);border:1px solid var(--gold-mid);}
+  .callout.blue {background:var(--blue-bg);border:1px solid var(--blue-border);}
+  .callout.red  {background:var(--red-bg);border:1px solid #FECACA;}
+  .callout-icon{font-size:18px;flex-shrink:0;margin-top:1px;}
+  .callout strong{display:block;font-weight:700;color:var(--ink);margin-bottom:2px;}
+
+  /* ── Footer ── */
+  footer{text-align:center;padding:32px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);margin-top:64px;}
+
+  @media(max-width:640px){
+    .hero{padding:32px 20px;}
+    .hero h1{font-size:26px;}
+    .page{padding:24px 16px 60px;}
+    .feat-row{flex-wrap:wrap;gap:10px;}
+    .sticky-bar{padding:8px 16px;gap:10px;}
+    .sticky-count{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ STICKY PROGRESS BAR ══ -->
+<div class="sticky-bar">
+  <span class="sticky-label">Backlog</span>
+  <div class="sticky-track"><div class="sticky-fill" id="gp-fill"></div></div>
+  <span class="sticky-pct" id="gp-pct">0%</span>
+  <span class="sticky-count" id="gp-count">0 / 25 done</span>
+  <button class="reset-btn" onclick="resetAll()">Reset</button>
+</div>
+
+<!-- ══ HERO ══ -->
+<div class="hero">
+  <div class="hero-badge">📋 Master Plan</div>
+  <h1>Elite Collection —<br/><span>What Gets Built</span></h1>
+  <p>A single consolidated plan — everything the admin portal needs for one luxury goods shop. What's live and what's next. No scope, no timelines, no bloat.</p>
+  <div class="hero-meta">
+    <div class="hero-stat"><span class="hero-stat-n">34</span><span class="hero-stat-l">Built &amp; Live</span></div>
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-done">0</span><span class="hero-stat-l">Backlog Done</span></div>
+    <div class="hero-stat"><span class="hero-stat-n">25</span><span class="hero-stat-l">Total Backlog</span></div>
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-pct">0%</span><span class="hero-stat-l">Backlog Complete</span></div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ══════════════════════════════════════════
+       SECTION 1 — ALREADY LIVE
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-dot" style="background:var(--green);color:#fff;">✓</div>
+    <div><div class="sec-title">Already Live</div><div class="sec-sub">Everything currently working in the portal</div></div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="done-bar">
+    <span class="done-bar-title">Foundation →</span>
+    <span class="done-tag">Login &amp; Auth</span>
+    <span class="done-tag">Session persistence</span>
+    <span class="done-tag">Password reset</span>
+    <span class="done-tag">Role guard</span>
+    <span class="done-tag">Arabic i18n</span>
+    <span class="done-tag">Error handling</span>
+    <span class="done-tag">Notifications</span>
+    <span class="done-tag">Toast system</span>
+  </div>
+
+  <div class="done-bar" style="background:linear-gradient(to right,#F0FDF4,#ECFDF5);border-color:#6EE7B7;">
+    <span class="done-bar-title" style="color:#047857;">Catalog &amp; Products →</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Product CRUD</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Variants (color, size, material)</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Image upload</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Rich text editor</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Advanced filters</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Sort &amp; view toggle</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Bulk status edit</span>
+    <span class="done-tag" style="background:#A7F3D0;color:#064E3B;">Bulk delete</span>
+  </div>
+
+  <div class="done-bar" style="background:linear-gradient(to right,#EFF6FF,#F0F9FF);border-color:#93C5FD;">
+    <span class="done-bar-title" style="color:#1D4ED8;">Reference Lists →</span>
+    <span class="done-tag" style="background:#BFDBFE;color:#1E3A8A;">13 Colors with hex</span>
+    <span class="done-tag" style="background:#BFDBFE;color:#1E3A8A;">8 Materials</span>
+    <span class="done-tag" style="background:#BFDBFE;color:#1E3A8A;">5 Size sets</span>
+    <span class="done-tag" style="background:#BFDBFE;color:#1E3A8A;">Generate sizes wizard</span>
+    <span class="done-tag" style="background:#BFDBFE;color:#1E3A8A;">/reference page</span>
+  </div>
+
+  <div class="done-bar" style="background:linear-gradient(to right,#FFFBEB,#FEF9C3);border-color:#FCD34D;">
+    <span class="done-bar-title" style="color:#92400E;">Operations →</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">CSV Bulk Import</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Drive image fetch</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">NDJSON streaming</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Orders + workflow</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Order notes + timeline</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Customers + order history</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Collections + cover image</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Media library</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Dashboard with real KPIs</span>
+    <span class="done-tag" style="background:#FDE68A;color:#78350F;">Storefront editor</span>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════
+       SECTION 2 — BACKLOG
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-dot" style="background:var(--blue);color:#fff;">→</div>
+    <div><div class="sec-title">Backlog</div><div class="sec-sub">Everything a real shop genuinely needs — click to mark done</div></div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="callout red">
+    <div class="callout-icon">🔴</div>
+    <div><strong>Currently broken or fake</strong>These 3 features exist in the UI but don't work correctly today. Fix these first.</div>
+  </div>
+
+  <!-- ── FIX FIRST ── -->
+  <div class="cat-label">
+    <span class="cat-label-text">🔴 Fix First — Currently Broken</span>
+    <div class="phase-track"><div class="phase-fill" id="fill-fix" style="background:#EF4444;"></div></div>
+    <span class="phase-pct" id="pct-fix" style="color:#EF4444;">0%</span>
+  </div>
+
+  <div class="feat-row done check-item checked" data-id="fix-01" data-phase="fix" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FEE2E2;">⚙️</div>
+    <div class="feat-body">
+      <div class="feat-title">Settings — Save actually persists <span class="badge done">Done</span></div>
+      <div class="feat-desc">Store name, currency, timezone, logo upload — all currently show a toast but save nothing to the DB. Wire the Save button to <code>POST /api/admin/settings</code> and load on page open.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li><code>GET /api/admin/settings</code> returns the previously saved values after a page reload</li>
+        <li>Store name, currency, and timezone are visible in the UI immediately after save, and survive a browser restart</li>
+        <li>Uploaded logo is served from storage and appears in the header after reload</li>
+        <li>Submitting an empty store name shows a validation error — no toast, no DB write</li>
+        <li>No mock or hardcoded defaults appear once a real value has been saved</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row done check-item checked" data-id="fix-02" data-phase="fix" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FEE2E2;">📥</div>
+    <div class="feat-body">
+      <div class="feat-title">Orders — Real CSV export <span class="badge done">Done</span></div>
+      <div class="feat-desc">The "Export CSV" button shows a toast but downloads nothing. Generate a real <code>.csv</code> file from the current filtered order list and trigger download — same pattern as import report already in the codebase.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>Clicking "Export CSV" triggers a file download within 2 seconds — no toast, a real <code>.csv</code> file</li>
+        <li>The file includes all visible columns: order #, date, customer name, items, total, and status</li>
+        <li>Active filters (status, search query, date range) are reflected in the exported rows</li>
+        <li>Exporting with no active filters downloads all orders</li>
+        <li>The file opens without encoding errors in both Excel and Google Sheets (UTF-8 BOM)</li>
+        <li>An export of zero matching orders produces a header-only CSV, not an error</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="fix-03" data-phase="fix" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FEE2E2;">📊</div>
+    <div class="feat-body">
+      <div class="feat-title">Analytics — Real data <span class="badge broken">Broken</span></div>
+      <div class="feat-desc">All analytics charts use <code>mock.ts</code>. Connect to the existing <code>/api/admin/analytics</code> endpoints which already query the real DB for revenue, orders, top products, and traffic data.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>No import from <code>mock.ts</code> remains in the analytics component or any of its children</li>
+        <li>Revenue total on the chart matches a manual sum of completed orders for the same period in the DB</li>
+        <li>"Top Products" list matches a manual count of product line items across completed orders</li>
+        <li>Charts show an empty state (not a zero-line or frozen chart) when there are no orders in the selected period</li>
+        <li>No future dates appear on any chart axis</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── CRITICAL ── -->
+  <div class="cat-label" style="margin-top:24px;">
+    <span class="cat-label-text">🟠 Critical — Will Break with Real Data</span>
+    <div class="phase-track"><div class="phase-fill" id="fill-crit" style="background:#F97316;"></div></div>
+    <span class="phase-pct" id="pct-crit" style="color:#F97316;">0%</span>
+  </div>
+
+  <div class="feat-row done check-item checked" data-id="crit-01" data-phase="crit" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FFF7ED;">📄</div>
+    <div class="feat-body">
+      <div class="feat-title">Pagination — All admin lists <span class="badge done">Done</span></div>
+      <div class="feat-desc">Products, orders, customers, and media all load every row at once. With 500+ products or 1,000+ orders this will be slow and unusable. Add server-side pagination (page + limit params) to all 4 list endpoints and add a simple page control to each list UI.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>Products, orders, customers, and media lists each show a maximum of 50 rows/items per page by default</li>
+        <li>All four server endpoints accept <code>?page=N&amp;limit=M</code> query params and return a <code>total</code> count in the response</li>
+        <li>Page controls (previous / next / current page) are visible on every list and are disabled at the first and last pages</li>
+        <li>Total record count is displayed (e.g. "Showing 1–50 of 834 products")</li>
+        <li>Navigating between pages preserves the active sort column, sort direction, and any active filter</li>
+        <li>The initial page load for a list with 500+ rows completes within 1 second</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row done check-item checked" data-id="crit-02" data-phase="crit" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FFF7ED;">🗑️</div>
+    <div class="feat-body">
+      <div class="feat-title">Orphaned Media Cleanup <span class="badge done">Done</span></div>
+      <div class="feat-desc">There are currently 272 unlinked images from the first failed import sitting on disk and in the DB, linked to nothing. One button in the Media page: "Clean up X unlinked files (Y MB)" → confirm → delete. Prevents wasted storage and a cluttered media library.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A "Clean up X unlinked files (Y MB)" button is visible in the Media page and shows an accurate count and total size</li>
+        <li>A confirmation dialog is shown before any deletion — no files are deleted on a single click</li>
+        <li>After confirmation, all files that are not linked to any product variant are deleted from disk and removed from the DB</li>
+        <li>Files linked to at least one product variant are never deleted by this operation</li>
+        <li>After cleanup the button is hidden (or shows "0 unlinked files") and the media library count decreases accordingly</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── HIGH VALUE ── -->
+  <div class="cat-label" style="margin-top:24px;">
+    <span class="cat-label-text">🔵 High Value — Daily Use Features</span>
+    <div class="phase-track"><div class="phase-fill" id="fill-hv" style="background:#2563EB;"></div></div>
+    <span class="phase-pct" id="pct-hv" style="color:#2563EB;">0%</span>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-01" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📋</div>
+    <div class="feat-body">
+      <div class="feat-title">Duplicate Product <span class="badge new">New</span></div>
+      <div class="feat-desc">A "Duplicate" button in the product drawer toolbar. Copies the product + all variants + description + price. SKU gets a <code>-COPY</code> suffix. Status set to Hidden. Opens the duplicate immediately in the drawer. Daily time-saver for a shop adding similar styles.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>"Duplicate" button is visible in the product drawer toolbar for existing (saved) products only</li>
+        <li>The duplicate includes all variants, their prices, colors, sizes, materials, and images</li>
+        <li>Each duplicated variant's SKU has <code>-COPY</code> appended to the original SKU</li>
+        <li>The duplicated product's status is "Hidden" regardless of the original's status</li>
+        <li>The duplicated product opens immediately in the drawer after the API call completes</li>
+        <li>The original product's data is completely unchanged after the operation</li>
+        <li>Stock quantities on duplicated variants are set to 0 (copying stock is a data hazard)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-02" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📤</div>
+    <div class="feat-body">
+      <div class="feat-title">Export Catalog to CSV <span class="badge new">New</span></div>
+      <div class="feat-desc">Download the currently filtered catalog as a CSV in the same format as the import template. Useful for offline editing, price updates, and re-importing. Button in the catalog toolbar next to Import.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>"Export CSV" button is visible in the catalog toolbar, next to the Import button</li>
+        <li>Download begins within 3 seconds for a catalog of up to 500 products</li>
+        <li>The exported file uses the same column headers and format as the import template</li>
+        <li>Active catalog filters (status, category, search) are applied — only filtered products are exported</li>
+        <li>Re-importing the exported file with no edits creates no new products (idempotent, updates only)</li>
+        <li>File opens without encoding errors in Excel and Google Sheets (UTF-8 BOM)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-03" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">🖨️</div>
+    <div class="feat-body">
+      <div class="feat-title">Print Invoice / Packing Slip <span class="badge new">New</span></div>
+      <div class="feat-desc">A "Print" button in the order drawer. Opens a clean, print-optimised view with: order number, date, customer name and address, line items with SKU/size/color/price, subtotal, total. No dependencies — pure CSS <code>@media print</code>. Every shop ships physical goods and needs this.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>"Print" button appears in the order drawer toolbar for all orders regardless of status</li>
+        <li>The print view contains: order number, date, customer name and shipping address, all line items with SKU / size / color / qty / unit price, subtotal, and grand total</li>
+        <li>No admin sidebar, topbar, filter panels, or action buttons appear on the printed page</li>
+        <li>Implemented using <code>@media print</code> CSS only — no external print library or PDF generation</li>
+        <li>Prints correctly on A4 paper in portrait orientation with no clipped content</li>
+        <li>Elite Collection store logo and contact details appear at the top of the print view</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-04" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">🏷️</div>
+    <div class="feat-body">
+      <div class="feat-title">Brands &amp; Categories <span class="badge new">New</span></div>
+      <div class="feat-desc">Right now brand is hard-coded as "Elite" and there are no product categories. Add a category picker (Men → Footwear → Slippers) in the product drawer, and a category filter in the catalog. Required for storefront navigation. Simple 2-level hierarchy — no need for unlimited depth.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A 2-level category picker (e.g. Men → Footwear) is visible in the product drawer</li>
+        <li>The catalog toolbar includes a category filter dropdown that filters the product list</li>
+        <li>Products can be saved without a category — the field is optional</li>
+        <li>Categories can be created, renamed, and deleted from a Settings or Reference page</li>
+        <li>Deleting a category does not delete the products assigned to it — products become uncategorised</li>
+        <li>The selected category persists to the DB and loads correctly when the product drawer is reopened</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-05" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">🔍</div>
+    <div class="feat-body">
+      <div class="feat-title">Product SEO Fields <span class="badge new">New</span></div>
+      <div class="feat-desc">Add a collapsible "SEO" section at the bottom of the product drawer with: Meta Title, Meta Description (with character counter), and URL Slug (auto-generated but editable). These fields exist in the DB schema but aren't surfaced in the UI yet.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A collapsible "SEO" panel appears at the bottom of the product drawer (collapsed by default)</li>
+        <li>Panel contains: Meta Title input, Meta Description textarea with character counter, and URL Slug input</li>
+        <li>Meta Description counter displays current / max characters (e.g. "45 / 160") and turns red above 160</li>
+        <li>URL Slug auto-generates from the product name when the product is first created, but is manually editable</li>
+        <li>Slug is validated as URL-safe: lowercase, hyphens only, no spaces or special characters — invalid input shows an inline error</li>
+        <li>All three fields persist to the DB on save and load correctly when the drawer is reopened</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-06" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📅</div>
+    <div class="feat-body">
+      <div class="feat-title">Dashboard Date Range Filter <span class="badge need">Need</span></div>
+      <div class="feat-desc">The dashboard is fixed to "Last 30 days". Add Today / 7 days / 30 days / 90 days toggle buttons above the KPI cards. Updates all charts and metrics. One of the most-used admin features in any shop.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>Today / 7 days / 30 days / 90 days toggle buttons appear above the KPI cards</li>
+        <li>All KPI metrics (revenue, orders, new customers, average order value) update when a range is selected</li>
+        <li>All dashboard charts (revenue over time, top products, etc.) update to reflect the selected date range</li>
+        <li>The active button is visually highlighted; default selection is "30 days" on page load</li>
+        <li>The selected range label is reflected in the chart title or subtitle (e.g. "Revenue — Last 7 days")</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-07" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FFF7ED;">📦</div>
+    <div class="feat-body">
+      <div class="feat-title">Bulk Stock Update via CSV <span class="badge new">New</span></div>
+      <div class="feat-desc">A simple "Stock Import" tab in the bulk import dialog. Upload a 2-column CSV (SKU, Stock). Updates variant stock quantities in bulk — essential after a physical inventory count. Shows SKUs not found in the report.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A "Stock Import" tab is visible inside the existing bulk import dialog</li>
+        <li>A downloadable 2-column CSV template (SKU, Stock) is available from the tab</li>
+        <li>Uploading a valid CSV updates the <code>stock_quantity</code> of matched variants in the DB</li>
+        <li>SKUs present in the CSV but not found in the catalog are listed in the result report</li>
+        <li>Rows with negative or non-numeric stock values are flagged with the row number and skipped</li>
+        <li>Price, color, size, and all other variant fields are not modified by the stock import</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-08" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FFF7ED;">⚠️</div>
+    <div class="feat-body">
+      <div class="feat-title">Low Stock Alerts <span class="badge new">New</span></div>
+      <div class="feat-desc">A "Low Stock" card on the dashboard showing how many variants are below threshold (default: 5 units). Clicking it filters the catalog to show only low-stock products. No emails — just a visible dashboard signal.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A "Low Stock" KPI card is visible on the dashboard showing the count of variants at or below the threshold</li>
+        <li>The threshold defaults to 5 units and is configurable in Settings</li>
+        <li>Clicking the card navigates to the catalog with a pre-applied "low stock" filter</li>
+        <li>The filtered catalog shows only products that have at least one variant at or below the threshold</li>
+        <li>The card is hidden (or shows 0) when no variants are below threshold</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-09" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📱</div>
+    <div class="feat-body">
+      <div class="feat-title">Mobile Responsiveness Audit <span class="badge need">Need</span></div>
+      <div class="feat-desc">QA pass at 390px (iPhone), 768px (iPad), and 1024px. Known issues: some table columns overflow, sidebar doesn't collapse on tablet, filter panel width. Fix any layout breaks. The shop owner likely checks the portal on their phone.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>All pages render without a horizontal scrollbar at 390px, 768px, and 1024px viewport widths</li>
+        <li>The admin sidebar collapses or is hidden at 768px and below; a hamburger or back-navigation is provided</li>
+        <li>Data tables with many columns scroll horizontally within their container — they do not overflow the page</li>
+        <li>All interactive controls (buttons, inputs, checkboxes) have a minimum touch target of 44×44px on mobile</li>
+        <li>The filter panel adapts to mobile width and is fully operable on touch</li>
+        <li>No feature or action button is inaccessible or hidden due to layout issues on mobile</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-10" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#FEE2E2;">🔐</div>
+    <div class="feat-body">
+      <div class="feat-title">Role-Gated Bulk Operations <span class="badge need">Must Have</span></div>
+      <div class="feat-desc">Restrict destructive bulk operations (bulk delete, bulk import, bulk status change) to Owner and Admin roles only. Managers see the catalog but bulk action buttons are hidden. Server enforces the role check on every bulk endpoint — the UI gate alone is not enough. Required once team invitations are live.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>Manager and Viewer roles: bulk delete, bulk import, and bulk status change buttons are not rendered in the UI</li>
+        <li>The server returns HTTP 403 when a Manager or Viewer calls any bulk endpoint directly (bypassing the UI)</li>
+        <li>Owner and Admin roles retain full access to all bulk operation buttons and endpoints</li>
+        <li>Role enforcement is applied in server middleware, not only in the Angular route guard</li>
+        <li>A test with a valid Manager JWT calling a bulk endpoint directly returns 403 with a clear error message</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="hv-11" data-phase="hv" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#F5EDD6;">🔍</div>
+    <div class="feat-body">
+      <div class="feat-title">Dry-Run Import (Preview Before Commit) <span class="badge new">New</span></div>
+      <div class="feat-desc">Upload a CSV and see exactly what would happen — how many products would be created vs updated, which rows have validation errors — before writing a single row to the database. A "Preview" checkbox in the import dialog. Gives confidence before importing 300+ products.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A "Preview (dry run)" checkbox is visible in the import dialog, checked by default on first use</li>
+        <li>With Preview enabled, the import pipeline runs fully but no rows are written to the DB — verified by checking row counts before and after</li>
+        <li>The preview report shows: number of products to create (new SKUs), products to update (existing SKUs), and rows with validation errors</li>
+        <li>Error rows include the CSV row number and the specific reason (e.g. "Missing required field: Price")</li>
+        <li>After reviewing the preview, the user can click "Proceed with Import" to run the actual write, or "Cancel"</li>
+        <li>Preview completes in the same time frame as a real import of the same file size</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── POLISH ── -->
+  <div class="cat-label" style="margin-top:24px;">
+    <span class="cat-label-text">🟣 Polish &amp; Completeness</span>
+    <div class="phase-track"><div class="phase-fill" id="fill-pol" style="background:#7C3AED;"></div></div>
+    <span class="phase-pct" id="pct-pol" style="color:#7C3AED;">0%</span>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-01" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">🔄</div>
+    <div class="feat-body">
+      <div class="feat-title">Retry Failed Import Rows <span class="badge new">New</span></div>
+      <div class="feat-desc">After an import, if some products failed (image download timeout, network error), a "Retry Failed (N)" button re-runs only those rows without re-processing everything.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>After any import that contains failures, a "Retry Failed (N)" button appears in the result panel showing the count of failed rows</li>
+        <li>Clicking retry submits only the previously failed rows — successfully imported rows are not reprocessed</li>
+        <li>The retry result report distinguishes rows that succeeded on retry from rows that are still failing</li>
+        <li>The "Retry" button disappears once all rows have been successfully imported or explicitly dismissed</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-02" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📋</div>
+    <div class="feat-body">
+      <div class="feat-title">Import History Log <span class="badge new">New</span></div>
+      <div class="feat-desc">A history tab in the import dialog showing past imports with date, filename, and counts. Click to expand and see per-product results. Re-download the CSV report from any past import.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A "History" tab is visible in the import dialog alongside the "Import" and "Stock Import" tabs</li>
+        <li>Each entry shows: date and time, filename, and counts (created / updated / failed)</li>
+        <li>Clicking an entry expands a per-product result list showing status and reason for each row</li>
+        <li>A "Download Report" button on each entry re-downloads the original CSV result file for that import</li>
+        <li>History is paginated or limited to the last 20 imports to avoid an infinitely long list</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-03" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">🖼️</div>
+    <div class="feat-body">
+      <div class="feat-title">Image Deduplication <span class="badge new">New</span></div>
+      <div class="feat-desc">Before saving a downloaded image, compute its SHA-256 hash and check if an identical file already exists. Re-use the existing asset instead of saving a duplicate. Prevents storage waste on repeated imports.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>Importing the same image URL twice results in only one file stored on disk — verified by file count before and after</li>
+        <li>Both product variants that share the source image correctly reference the single stored asset</li>
+        <li>The media library file count does not increase when a duplicate image is detected</li>
+        <li>SHA-256 hash is stored alongside the asset record in the DB and used for lookup before downloading</li>
+        <li>Images that are visually similar but byte-different (e.g. re-compressed) are still stored separately</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-04" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">🏷️</div>
+    <div class="feat-body">
+      <div class="feat-title">Product Tags <span class="badge new">New</span></div>
+      <div class="feat-desc">Free-form tags (Best Seller, New Arrival, Ramadan, Sale) assignable to products and usable as catalog filters. Simple multi-select in the product drawer. Useful for seasonal marketing.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>A tag multi-select input is visible in the product drawer</li>
+        <li>New tags can be created on the fly by typing and pressing Enter — no pre-seeded list required</li>
+        <li>Existing tags appear as suggestions when the user starts typing</li>
+        <li>The catalog toolbar includes a "Tag" filter that shows only products with the selected tag</li>
+        <li>Tags persist to the DB on save and load correctly when the drawer is reopened</li>
+        <li>Deleting a tag from the reference list does not delete the products it was applied to</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-05" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">🌐</div>
+    <div class="feat-body">
+      <div class="feat-title">Storefront — Live Split-Screen Preview <span class="badge new">New</span></div>
+      <div class="feat-desc">Embed an iframe preview of the storefront alongside the editor so changes are visible in real time without opening a new tab. The editor and preview sit side-by-side.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>The storefront editor layout shows the editing panel on the left and an iframe preview on the right</li>
+        <li>Changes to storefront settings (colours, banner text, logo) are reflected in the preview without a full page reload</li>
+        <li>The preview panel is independently scrollable</li>
+        <li>Both panels are fully usable at a 1280px viewport width without horizontal overflow or clipping</li>
+        <li>The iframe preview updates within 1 second of saving a change</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-06" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📅</div>
+    <div class="feat-body">
+      <div class="feat-title">Orders — Date Range Filter <span class="badge new">New</span></div>
+      <div class="feat-desc">Today / This Week / This Month / Custom date range filter on the orders list. Useful for end-of-day or end-of-month reporting.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>Today / This Week / This Month / Custom range filter options are visible in the orders list toolbar</li>
+        <li>Selecting a preset updates the order list to show only orders within that period</li>
+        <li>Custom range reveals a date picker for start and end dates; the list updates on selection</li>
+        <li>The active filter is shown as a visible chip or label so it is clear a filter is applied</li>
+        <li>The active date filter is applied when exporting the order CSV (see fix-02)</li>
+        <li>Clearing the filter restores the unfiltered order list</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-07" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📏</div>
+    <div class="feat-body">
+      <div class="feat-title">Size Column in CSV Import <span class="badge new">New</span></div>
+      <div class="feat-desc">Add an optional <code>Size</code> column to the import template so each CSV row can represent a specific color + size combination. Allows full variant grids to be imported in one file.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>The import template CSV download includes an optional <code>Size</code> column with example values</li>
+        <li>A row with both <code>Color</code> and <code>Size</code> columns imports as the exact matching variant (matched by both attributes)</li>
+        <li>A row with <code>Color</code> but no <code>Size</code> value imports using the existing color-only matching logic — no regression</li>
+        <li>A <code>Size</code> value that does not match any size in the product's assigned size set is flagged in the import report with the row number</li>
+        <li>The import report distinguishes "size not found" errors from other validation errors</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-08" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">👥</div>
+    <div class="feat-body">
+      <div class="feat-title">Team Invitations <span class="badge new">New</span></div>
+      <div class="feat-desc">Invite team members by email from the Settings → Team page. Each invite generates a secure token link. The recipient sets their own password on first login. Role is assigned at invite time (admin, manager, viewer).</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>An "Invite Member" button and form are visible on the Settings → Team page</li>
+        <li>Submitting the form sends an email with a secure, single-use invite link (token valid for 48 hours)</li>
+        <li>The recipient follows the link, sets a password, and is immediately logged in with the assigned role</li>
+        <li>The role assigned at invite time (Admin, Manager, Viewer) is enforced on the new user's first login</li>
+        <li>An expired or already-used invite link shows a clear error page — it does not grant access</li>
+        <li>Inviting an already-registered email address shows a friendly error without revealing whether the account exists</li>
+        <li>Pending invites appear in the Team page with an option to revoke them before they are accepted</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="feat-row next check-item" data-id="pol-09" data-phase="pol" onclick="toggle(this)">
+    <div class="check-box"></div>
+    <div class="feat-icon" style="background:#EFF6FF;">📱</div>
+    <div class="feat-body">
+      <div class="feat-title">Storefront — Mobile Preview Toggle <span class="badge new">New</span></div>
+      <div class="feat-desc">Toggle the storefront preview between Desktop, Tablet (768px), and Mobile (390px) viewports using an iframe resize. Builds on top of the live split-screen preview.</div>
+      <span class="ac-label">Acceptance Criteria</span>
+      <ul class="ac-list">
+        <li>Desktop / Tablet (768px) / Mobile (390px) toggle buttons appear above the storefront preview panel</li>
+        <li>Clicking a toggle resizes the preview iframe to the selected width within 200ms</li>
+        <li>The current viewport label is visually highlighted among the three options</li>
+        <li>The toggle is only active when the live split-screen preview (pol-05) is visible</li>
+        <li>The selected viewport is remembered for the duration of the browser session</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Elite Collection Admin Portal · Master Plan · Generated 2026-05-22 · Single-shop edition
+</footer>
+
+<script>
+  const STORAGE_KEY = 'elite-master-acceptance';
+  const TOTAL = 25;
+  const PHASES = ['fix', 'crit', 'hv', 'pol'];
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch(e) { return {}; }
+  }
+
+  function saveState(s) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch(e) {}
+  }
+
+  function applyItem(el, checked) {
+    el.classList.toggle('checked', !!checked);
+  }
+
+  function updateProgress() {
+    const state = loadState();
+    const done = Object.values(state).filter(Boolean).length;
+    const pct = TOTAL > 0 ? Math.round((done / TOTAL) * 100) : 0;
+    document.getElementById('gp-fill').style.width = pct + '%';
+    document.getElementById('gp-pct').textContent = pct + '%';
+    document.getElementById('gp-count').textContent = done + ' / ' + TOTAL + ' done';
+    document.getElementById('stat-done').textContent = done;
+    document.getElementById('stat-pct').textContent = pct + '%';
+  }
+
+  function updatePhaseProgress(phase) {
+    const state = loadState();
+    const items = document.querySelectorAll('[data-phase="' + phase + '"]');
+    const total = items.length;
+    let done = 0;
+    items.forEach(function(el) { if (state[el.dataset.id]) done++; });
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const fill = document.getElementById('fill-' + phase);
+    const pctEl = document.getElementById('pct-' + phase);
+    if (fill) fill.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+  }
+
+  function toggle(el) {
+    const id = el.dataset.id;
+    const phase = el.dataset.phase;
+    const state = loadState();
+    state[id] = !state[id];
+    saveState(state);
+    applyItem(el, state[id]);
+    updateProgress();
+    updatePhaseProgress(phase);
+  }
+
+  function resetAll() {
+    if (!confirm('Reset all acceptance criteria? This cannot be undone.')) return;
+    saveState({});
+    document.querySelectorAll('.check-item').forEach(function(el) { applyItem(el, false); });
+    PHASES.forEach(function(p) { updatePhaseProgress(p); });
+    updateProgress();
+  }
+
+  function init() {
+    const state = loadState();
+    document.querySelectorAll('.check-item').forEach(function(el) {
+      applyItem(el, !!state[el.dataset.id]);
+    });
+    PHASES.forEach(function(p) { updatePhaseProgress(p); });
+    updateProgress();
+  }
+
+  init();
+</script>
+</body>
+</html>

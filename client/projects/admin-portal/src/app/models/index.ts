@@ -123,39 +123,6 @@ export interface Trigger {
   label?: string;
 }
 
-export interface SyncLog {
-  id: string;
-  ts: string;
-  type: string;
-  sourceId: string;
-  processed: number;
-  updated: number;
-  status: 'success' | 'failed' | 'partial' | 'running';
-  durationMs: number;
-  err: string;
-  triggeredBy: Trigger;
-}
-
-export interface SyncSource {
-  id: string;
-  name: string;
-  desc: string;
-  iconBg: string;
-  status: 'success' | 'failed' | 'partial' | 'running';
-  schedule: string;
-  lastRun: string;
-  nextRun: string;
-  nextRunIn: string;
-  recordsToday: number;
-  updatedToday: number;
-  avgMs: number;
-  successRate: number;
-  spark7d: number[];
-  last7runs: ('success' | 'partial' | 'failed' | 'pending')[];
-  paused: boolean;
-  error?: string;
-}
-
 export interface TeamMember {
   id: string;
   name: string;
@@ -218,12 +185,6 @@ export interface PaletteEntry {
   desc: string;
 }
 
-export interface UpcomingRun {
-  ts: string;
-  label: string;
-  in: string;
-}
-
 export const QAR = (n: number): string => 'QAR ' + n.toLocaleString();
 
 export const fmtBytes = (n: number): string => {
@@ -233,4 +194,3 @@ export const fmtBytes = (n: number): string => {
 };
 
 export const ME = { id: 'T-1', name: 'Yusuf Hamad', initials: 'YH', role: 'Admin' as const };
-export const AUTO_TRIGGER: Trigger = { type: 'auto', label: 'Schedule' };

@@ -5,7 +5,7 @@ export type IconName =
   | 'dash' | 'catalog' | 'store' | 'orders' | 'users' | 'chart' | 'sync' | 'settings'
   | 'media' | 'search' | 'bell' | 'plus' | 'x' | 'drag' | 'edit' | 'trash' | 'eye'
   | 'upload' | 'cube' | 'link' | 'unlink' | 'wand' | 'check' | 'arrow' | 'arrowUp' | 'arrowDn'
-  | 'csv' | 'clock' | 'spinner';
+  | 'csv' | 'clock' | 'spinner' | 'list' | 'filter' | 'grid' | 'rows';
 
 @Component({
   selector: 'ap-icon',
@@ -156,6 +156,27 @@ export type IconName =
       @case ('spinner') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" [attr.width]="size" [attr.height]="size">
           <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        </svg>
+      }
+      @case ('list') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+      }
+      @case ('filter') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+        </svg>
+      }
+      @case ('grid') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+      }
+      @case ('rows') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/>
         </svg>
       }
     }

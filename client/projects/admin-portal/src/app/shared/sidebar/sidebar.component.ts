@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -273,7 +273,7 @@ export class SidebarComponent {
     { path: '/orders',     labelKey: 'nav.orders',     subKey: 'nav.orders.sub',     icon: 'orders' },
     { path: '/customers',  labelKey: 'nav.customers',  subKey: 'nav.customers.sub',  icon: 'users' },
     { path: '/analytics',  labelKey: 'nav.analytics',  subKey: 'nav.analytics.sub',  icon: 'chart' },
-    { path: '/sync',       labelKey: 'nav.sync',       subKey: 'nav.sync.sub',       icon: 'sync' },
+{ path: '/reference',  labelKey: 'nav.reference',  subKey: 'nav.reference.sub',  icon: 'list' },
     { path: '/settings',   labelKey: 'nav.settings',   subKey: 'nav.settings.sub',   icon: 'settings' },
   ];
 

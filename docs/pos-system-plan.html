@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>POS System — Acceptance Criteria · Elite Collection</title>
+<style>
+  :root {
+    --gold: #C9A84C; --gold-light: #F5EDD6; --gold-mid: #E8D5A0;
+    --ink: #1A1A2E; --ink-2: #3D3D5C; --muted: #6B7280;
+    --surface: #FFFFFF; --bg: #F8F7F4; --bg-2: #F0EDE6; --border: #E5E0D5;
+    --green: #16A34A; --green-bg: #F0FDF4; --green-border: #BBF7D0;
+    --blue: #2563EB; --blue-bg: #EFF6FF;
+    --orange: #D97706; --orange-bg: #FFFBEB;
+    --red: #DC2626; --red-bg: #FEF2F2;
+    --purple: #7C3AED; --purple-bg: #F5F3FF;
+    --radius: 12px; --shadow: 0 2px 12px rgba(0,0,0,.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--ink); line-height: 1.6; }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #012b23 0%, #024638 60%, #3D3525 100%);
+    color: #fff; padding: 56px 48px 48px; position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 80% 50%, rgba(197,165,114,.18) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(197,165,114,.18); border: 1px solid rgba(197,165,114,.35);
+    color: #E8D5A0; font-size: 12px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 5px 14px; border-radius: 20px; margin-bottom: 20px;
+  }
+  .hero h1 { font-size: 36px; font-weight: 800; line-height: 1.15; margin-bottom: 12px; }
+  .hero h1 span { color: var(--gold); }
+  .hero p { font-size: 16px; opacity: .65; max-width: 640px; }
+  .hero-meta { display: flex; gap: 32px; margin-top: 32px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,.1); flex-wrap: wrap; }
+  .hero-stat { display: flex; flex-direction: column; gap: 2px; }
+  .hero-stat-n { font-size: 26px; font-weight: 800; color: var(--gold); }
+  .hero-stat-l { font-size: 12px; opacity: .5; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* ── Sticky progress ── */
+  .global-prog-wrap {
+    background: rgba(255,255,255,.94); border-bottom: 1px solid var(--border);
+    padding: 16px 48px; position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .global-prog-inner { max-width: 960px; margin: 0 auto; display: flex; align-items: center; gap: 16px; }
+  .gp-label { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .gp-track { flex: 1; height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; overflow: hidden; }
+  .gp-fill  { height: 100%; background: var(--blue); border-radius: 4px; transition: width .4s ease; }
+  .gp-pct   { font-size: 13px; font-weight: 800; color: var(--blue); min-width: 40px; text-align: right; }
+  .gp-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  /* ── Layout ── */
+  .page { max-width: 960px; margin: 0 auto; padding: 40px 32px 80px; }
+
+  /* ── Section header ── */
+  .section { display: flex; align-items: center; gap: 14px; margin: 48px 0 6px; }
+  .sec-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .sec-title { font-size: 18px; font-weight: 800; }
+  .sec-sub   { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .sec-cost  { font-size: 13px; font-weight: 700; color: var(--gold); margin-top: 1px; }
+  .sec-line  { flex: 1; height: 1px; background: var(--border); }
+  .sec-badge { font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
+  .sec-badge.p1 { background: #DBEAFE; color: #1E40AF; }
+  .sec-badge.p2 { background: #FEF3C7; color: #92400E; }
+  .sec-badge.p3 { background: #F3E8FF; color: #6D28D9; }
+  .sec-badge.p4 { background: #FEE2E2; color: #991B1B; }
+  .sec-badge.db { background: var(--green-bg); color: #166534; }
+
+  /* ── Phase mini-progress ── */
+  .phase-prog {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 16px; margin-bottom: 10px;
+    font-size: 12px;
+  }
+  .pp-label { color: var(--muted); font-weight: 600; flex: 1; }
+  .pp-track { width: 120px; height: 5px; background: rgba(0,0,0,.08); border-radius: 3px; overflow: hidden; }
+  .pp-fill  { height: 100%; background: var(--blue); border-radius: 3px; transition: width .3s; }
+  .pp-pct   { font-weight: 800; color: var(--blue); min-width: 36px; text-align: right; }
+
+  /* ── Checklist card ── */
+  .checklist-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 24px;
+    box-shadow: var(--shadow); margin-bottom: 12px;
+  }
+  .checklist-card.done { border-color: var(--green-border); background: linear-gradient(145deg, #F0FDF4 0%, #fff 70%); }
+  .card-group-label {
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--muted); padding: 8px 0 10px; margin-top: 4px;
+    border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+  }
+  .card-group-label:first-child { border-top: none; margin-top: 0; }
+
+  /* ── Check item ── */
+  .check-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 11px 8px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .1s; border-radius: 6px; margin: 0 -8px;
+  }
+  .check-item:last-child { border-bottom: none; }
+  .check-item:hover { background: rgba(0,0,0,.02); }
+  .check-item.checked .ci-title { text-decoration: line-through; color: var(--muted); }
+  .check-item.checked .ci-desc  { opacity: .5; }
+
+  .ci-box {
+    width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--border);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: all .15s; margin-top: 2px; background: var(--surface);
+  }
+  .check-item.checked .ci-box { background: var(--green); border-color: var(--green); }
+  .ci-check { display: none; }
+  .check-item.checked .ci-check { display: block; }
+
+  .ci-body { flex: 1; min-width: 0; }
+  .ci-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .ci-desc  { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .ci-tags  { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .ci-tag   { font-size: 11px; padding: 2px 8px; border-radius: 5px; background: var(--bg-2); color: var(--muted); }
+  .ci-tag.red    { background: var(--red-bg);    color: var(--red); }
+  .ci-tag.green  { background: var(--green-bg);  color: var(--green); }
+  .ci-tag.blue   { background: var(--blue-bg);   color: var(--blue); }
+  .ci-tag.orange { background: var(--orange-bg); color: var(--orange); }
+  .ci-tag.purple { background: var(--purple-bg); color: var(--purple); }
+
+  /* ── Callout ── */
+  .callout { border-radius: var(--radius); padding: 14px 18px; display: flex; gap: 12px; align-items: flex-start; font-size: 13px; line-height: 1.55; margin-bottom: 16px; }
+  .callout.info  { background: var(--blue-bg);   border: 1px solid #BFDBFE; }
+  .callout.green { background: var(--green-bg);  border: 1px solid var(--green-border); }
+  .callout.gold  { background: #FFFBEB; border: 1px solid #FDE68A; }
+  .callout-icon  { font-size: 18px; flex-shrink: 0; }
+  .callout strong { display: block; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+
+  /* ── Summary bar ── */
+  .phase-summary {
+    background: linear-gradient(135deg, #024638, #036350);
+    border-radius: var(--radius); padding: 18px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px; margin-top: 16px; margin-bottom: 4px;
+  }
+  .ps-label { color: rgba(255,255,255,.6); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .ps-val   { color: var(--gold); font-size: 22px; font-weight: 800; }
+  .ps-note  { color: rgba(255,255,255,.5); font-size: 11px; margin-top: 2px; }
+
+  /* ── Reset btn ── */
+  .reset-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 12px; color: var(--muted); cursor: pointer; transition: all .15s; }
+  .reset-btn:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── Phase gate ── */
+  .phase-gate {
+    border: 1px solid var(--green-border); background: var(--green-bg);
+    border-radius: var(--radius); padding: 16px 20px; margin-top: 10px; margin-bottom: 4px;
+  }
+  .phase-gate-title {
+    font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--green); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .phase-gate-list { list-style: none; padding: 0; margin: 0; }
+  .phase-gate-list li {
+    font-size: 13px; color: var(--ink-2); padding: 5px 0 5px 20px;
+    position: relative; line-height: 1.45; border-bottom: 1px dashed var(--green-border);
+  }
+  .phase-gate-list li:last-child { border-bottom: none; }
+  .phase-gate-list li::before {
+    content: '🔒'; position: absolute; left: 0; top: 5px; font-size: 11px;
+  }
+  .phase-gate-note {
+    font-size: 11px; color: var(--muted); margin-top: 10px; padding-top: 8px;
+    border-top: 1px solid var(--green-border);
+  }
+
+  footer { text-align: center; padding: 32px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 64px; }
+
+  @media (max-width: 640px) {
+    .hero { padding: 32px 20px; } .hero h1 { font-size: 26px; }
+    .page { padding: 24px 16px 60px; } .global-prog-wrap { padding: 12px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">◈ POS Build — Phase Tracker</div>
+  <h1>Acceptance Criteria —<br/><span>Elite Collection POS</span></h1>
+  <p>Every criterion that must pass before a phase is signed off and the milestone payment is released. Work through each phase in order.</p>
+  <div class="hero-meta">
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-done">0</span><span class="hero-stat-l">Passed</span></div>
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-total">0</span><span class="hero-stat-l">Total Criteria</span></div>
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-pct">0%</span><span class="hero-stat-l">Complete</span></div>
+    <div style="margin-left:auto;display:flex;align-items:flex-end;">
+      <button class="reset-btn" onclick="resetAll()">↺ Reset All</button>
+    </div>
+  </div>
+</div>
+
+<!-- STICKY PROGRESS -->
+<div class="global-prog-wrap">
+  <div class="global-prog-inner">
+    <span class="gp-label">Build Progress</span>
+    <div class="gp-track"><div class="gp-fill" id="gp-fill" style="width:0%"></div></div>
+    <span class="gp-count" id="gp-count">0 / 0</span>
+    <span class="gp-pct" id="gp-pct">0%</span>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="callout info" style="margin-top:8px">
+    <div class="callout-icon">ℹ️</div>
+    <div><strong>How to use this document</strong>Each checkbox is one verifiable acceptance criterion. A phase is complete — and its milestone payment is released — only when every criterion in that phase is checked. Criteria are tested on the actual Posiflex terminal with real Bixolon printer and live product data.</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       DATABASE MIGRATION
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#F0FDF4;">🗄️</div>
+    <div><div class="sec-title">DB Migration — Prerequisites</div><div class="sec-sub">Must pass before any POS testing begins</div></div>
+    <span class="sec-badge db">Pre-requisite</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-prog" id="prog-db">
+    <span class="pp-label">Database readiness</span>
+    <div class="pp-track"><div class="pp-fill" id="fill-db" style="width:0%"></div></div>
+    <span class="pp-pct" id="pct-db">0%</span>
+  </div>
+
+  <div class="checklist-card" id="card-db">
+    <div class="check-item" data-id="db1" data-phase="db" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Migration 004_pos.sql runs without errors</div>
+        <div class="ci-desc">Tables <code>pos_transactions</code>, <code>pos_transaction_items</code>, <code>pos_z_reports</code>, and <code>pos_parked_carts</code> are created. Column <code>product_variants.barcode</code> and <code>admin_users.pos_pin_hash</code> are added.</div>
+        <div class="ci-tags"><span class="ci-tag green">SQL</span><span class="ci-tag">psql -f 004_pos.sql</span></div>
+      </div>
+    </div>
+    <div class="check-item" data-id="db2" data-phase="db" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Unique index on barcode is enforced</div>
+        <div class="ci-desc">Inserting two variants with the same barcode under the same tenant returns a unique constraint error.</div>
+        <div class="ci-tags"><span class="ci-tag blue">DB constraint</span></div>
+      </div>
+    </div>
+    <div class="check-item" data-id="db3" data-phase="db" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Z Report variance column is computed correctly</div>
+        <div class="ci-desc"><code>variance = physical_cash − expected_cash</code> is stored as a generated column and matches manual calculation.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Generated column</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="phase-gate">
+    <div class="phase-gate-title">🗄️ DB Phase — Sign-Off Gate</div>
+    <ul class="phase-gate-list">
+      <li>Migration runs on the production database without errors and without data loss to existing tables</li>
+      <li>A rollback script exists and successfully returns the DB to its previous state in a test environment</li>
+      <li>All existing admin features (products, orders, customers) continue to operate normally after migration</li>
+      <li>Verified by the developer running <code>psql -f 004_pos.sql</code> on the live server and confirming all 3 criteria above are checked</li>
+    </ul>
+    <div class="phase-gate-note">No payment is associated with this prerequisite phase — it gates Phase 1 testing.</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PHASE 1
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#EFF6FF;">🖥️</div>
+    <div>
+      <div class="sec-title">Phase 1 — Core POS Interface & Offline Engine</div>
+      <div class="sec-sub">Touch UI · Offline PWA · Park & Resume · Multi-Register Sync</div>
+      <div class="sec-cost">Released on full phase sign-off</div>
+    </div>
+    <span class="sec-badge p1">Phase 1</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-prog">
+    <span class="pp-label">Phase 1 progress</span>
+    <div class="pp-track"><div class="pp-fill" id="fill-p1" style="width:0%"></div></div>
+    <span class="pp-pct" id="pct-p1">0%</span>
+  </div>
+
+  <div class="checklist-card" id="card-p1">
+
+    <div class="card-group-label">1.1 — Touch-Optimized Retail UI</div>
+
+    <div class="check-item" data-id="p1-01" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">POS opens at /pos in full-screen mode — sidebar and topbar are hidden</div>
+        <div class="ci-desc">Navigating to /pos renders the dark full-width cashier layout. No admin sidebar, no topbar. Works in Chrome kiosk mode on Posiflex terminal.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Route</span><span class="ci-tag">Posiflex terminal</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-02" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Product grid loads all active products with image, name, SKU, and price</div>
+        <div class="ci-desc">Products from the live database are shown. Hidden/inactive products do not appear. Out-of-stock products are visually dimmed with a badge.</div>
+        <div class="ci-tags"><span class="ci-tag blue">API: GET /api/pos/products/search</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-03" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Search returns results within 300ms for name, SKU, and barcode queries</div>
+        <div class="ci-desc">Typing in the search bar filters the product grid in real time. A 2-character minimum is enforced. Empty results shows a "not found" state.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Search</span><span class="ci-tag">≤ 300ms</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-04" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Tapping a product card adds it to the cart with qty = 1</div>
+        <div class="ci-desc">Tapping the same card again increments qty by 1. Cart panel updates instantly. Total recalculates correctly.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-05" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cart qty controls (+ / −) and remove (×) work correctly</div>
+        <div class="ci-desc">Decrementing to 0 removes the item. Total and subtotal recalculate on every change. Negative quantities are not possible.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-06" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cart-level discount field applies correctly to the order total</div>
+        <div class="ci-desc">Entering a percentage (e.g. 10%) reduces the total. Discount amount is shown as a separate line. Maximum 100%, minimum 0%.</div>
+        <div class="ci-tags"><span class="ci-tag orange">Manager PIN required if &gt; 10%</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-07" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cash payment modal calculates change due correctly</div>
+        <div class="ci-desc">Change Due = Amount Tendered − Order Total. Displayed in real time as cashier types. Confirm button is disabled if tendered amount is less than total.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Cash Modal</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-08" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Card payment modal records the sale on manual cashier confirm</div>
+        <div class="ci-desc">Cashier processes on physical terminal, taps "Confirm Paid" in POS. Transaction is saved, receipt appears.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Card Modal</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-09" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Split payment modal auto-balances: cash + card must equal order total</div>
+        <div class="ci-desc">Editing the cash field updates the card field as the remainder. Confirm button is disabled if amounts do not sum to the order total.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Split Modal</span></div>
+      </div>
+    </div>
+
+    <div class="card-group-label">1.2 — Offline-First Service Workers</div>
+
+    <div class="check-item" data-id="p1-10" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">POS loads and is fully functional after disabling the network</div>
+        <div class="ci-desc">Product grid, search, and cart all work from cached data. A visible "Offline" banner appears at the top of the screen.</div>
+        <div class="ci-tags"><span class="ci-tag orange">Test: disable Wi-Fi on terminal</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-11" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Sales completed while offline are queued to IndexedDB</div>
+        <div class="ci-desc">The offline banner shows the number of pending transactions (e.g. "Offline — 3 sales pending sync").</div>
+        <div class="ci-tags"><span class="ci-tag blue">IndexedDB</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-12" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Queued sales auto-post to the server within 5 seconds of reconnection</div>
+        <div class="ci-desc">Re-enable the network → all pending transactions are synced, inventory is decremented correctly, and the banner disappears.</div>
+        <div class="ci-tags"><span class="ci-tag green">Background Sync</span><span class="ci-tag">≤ 5 seconds</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-13" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Offline queue survives a browser/tab close and page refresh</div>
+        <div class="ci-desc">Close and reopen the POS while offline — pending sales are still in the queue and the banner still shows the correct count.</div>
+        <div class="ci-tags"><span class="ci-tag orange">Test: close tab mid-offline</span></div>
+      </div>
+    </div>
+
+    <div class="card-group-label">1.3 — Park & Resume</div>
+
+    <div class="check-item" data-id="p1-14" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cashier can park a transaction and immediately start a new empty cart</div>
+        <div class="ci-desc">Tapping "Park Order" suspends the current cart and opens a fresh empty cart. The parked cart tab appears in the topbar.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-15" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Resuming a parked cart restores all items, quantities, and discounts exactly</div>
+        <div class="ci-desc">Tap a parked cart tab → cart is restored with no data loss. No duplicate items are added.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-16" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Up to 5 carts can be parked simultaneously</div>
+        <div class="ci-desc">The 6th park attempt shows a friendly error ("Maximum 5 parked orders"). Existing parked carts are unaffected.</div>
+      </div>
+    </div>
+
+    <div class="card-group-label">1.4 — Multi-Register / Multi-Cashier Live Sync</div>
+
+    <div class="check-item" data-id="p1-17" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">A sale on Register A reflects updated stock on Register B within 2 seconds</div>
+        <div class="ci-desc">Two terminals open simultaneously. Complete a sale on Terminal 1 — Terminal 2's product grid shows the updated stock level without a manual refresh.</div>
+        <div class="ci-tags"><span class="ci-tag blue">SSE / WebSocket</span><span class="ci-tag">≤ 2 seconds</span><span class="ci-tag orange">Test: 2 terminals</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p1-18" data-phase="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Two cashiers cannot oversell a product with only 1 unit in stock</div>
+        <div class="ci-desc">Both cashiers add the same last-in-stock item simultaneously. Only one sale succeeds; the other receives an out-of-stock error and their cart is updated.</div>
+        <div class="ci-tags"><span class="ci-tag red">Race condition test</span></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <div class="phase-gate">
+    <div class="phase-gate-title">🖥️ Phase 1 — Sign-Off Gate · Released</div>
+    <ul class="phase-gate-list">
+      <li>End-to-end retail sale on the physical Posiflex terminal: search product → add to cart → apply discount → cash payment → receipt prints — completes without errors</li>
+      <li>Offline mode verified: disable Wi-Fi mid-session, complete 2 sales, re-enable Wi-Fi, confirm both transactions sync to the server within 5 seconds and inventory is decremented</li>
+      <li>Park &amp; resume verified with 3 simultaneous parked carts — all items, quantities, and discounts restore exactly</li>
+      <li>Race condition test: two terminals simultaneously attempt to sell the last unit of the same product — only one sale succeeds, the other receives an out-of-stock error</li>
+      <li>All 18 individual criteria in Phase 1 are checked and verified on the physical Posiflex terminal</li>
+    </ul>
+    <div class="phase-gate-note">Payment is released only after all 18 criteria AND all 4 gate tests above pass on the actual Posiflex hardware.</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PHASE 2
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#FFFBEB;">🔧</div>
+    <div>
+      <div class="sec-title">Phase 2 — Hardware API Bridge & Peripherals</div>
+      <div class="sec-sub">Barcode scanning · Thermal printing · Cash drawer · Label printing</div>
+      <div class="sec-cost">Released on full phase sign-off</div>
+    </div>
+    <span class="sec-badge p2">Phase 2</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-prog">
+    <span class="pp-label">Phase 2 progress</span>
+    <div class="pp-track"><div class="pp-fill" id="fill-p2" style="width:0%"></div></div>
+    <span class="pp-pct" id="pct-p2">0%</span>
+  </div>
+
+  <div class="checklist-card" id="card-p2">
+
+    <div class="card-group-label">2.1 — Barcode Scanning (USB + Camera)</div>
+
+    <div class="check-item" data-id="p2-01" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">USB scanner: scan a known barcode → correct product added to cart in under 1 second</div>
+        <div class="ci-desc">Plug in USB scanner, scan any variant with a stored barcode. Product is found and added instantly. No keyboard input required.</div>
+        <div class="ci-tags"><span class="ci-tag blue">USB HID</span><span class="ci-tag">≤ 1 second</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2-02" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Scanning an unknown barcode shows an error toast with the scanned code</div>
+        <div class="ci-desc">The cart is not changed. The error message includes the raw barcode value so the cashier can identify it.</div>
+        <div class="ci-tags"><span class="ci-tag orange">Not found state</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2-03" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Camera scanner: opens viewfinder, decodes a barcode within 3 seconds under normal lighting</div>
+        <div class="ci-desc">Tap "Camera Scan" → rear camera activates → point at barcode → product added to cart. Plays an audible beep on success. Viewfinder closes automatically.</div>
+        <div class="ci-tags"><span class="ci-tag blue">@zxing/browser</span><span class="ci-tag">≤ 3 seconds</span></div>
+      </div>
+    </div>
+
+    <div class="card-group-label">2.2 — Barcode Label Generation & Printing</div>
+
+    <div class="check-item" data-id="p2-04" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">A barcode label is generated for any product variant within 500ms</div>
+        <div class="ci-desc">Label shows: product name, variant (color/size), Code 128 barcode, SKU below barcode, and price in QAR. Layout fits 30×20mm.</div>
+        <div class="ci-tags"><span class="ci-tag blue">bwip-js</span><span class="ci-tag">30×20mm</span><span class="ci-tag">≤ 500ms</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2-05" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Printed label scans correctly on the USB barcode scanner and matches the correct variant</div>
+        <div class="ci-desc">Print a label, scan it at the POS → the exact variant (color, size, price) is added to the cart.</div>
+        <div class="ci-tags"><span class="ci-tag green">End-to-end verify</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2-06" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Bulk label print: select 5+ variants from the catalog → all labels print in one job</div>
+        <div class="ci-desc">Each variant prints the specified quantity. No duplicates or missing labels.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Batch print</span></div>
+      </div>
+    </div>
+
+    <div class="card-group-label">2.3 — ESC/POS Thermal Receipt Printing (Bixolon 80mm)</div>
+
+    <div class="check-item" data-id="p2-07" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Receipt prints on the Bixolon 80mm within 2 seconds of completing a sale — no browser dialog</div>
+        <div class="ci-desc">Print fires automatically after sale confirmation. No browser print dialog appears. Paper feeds correctly with a cutter line at the end.</div>
+        <div class="ci-tags"><span class="ci-tag blue">ESC/POS</span><span class="ci-tag">Bixolon SRP-350III</span><span class="ci-tag">≤ 2 seconds</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2-08" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Receipt is bilingual: Arabic and English both print correctly with no garbled characters</div>
+        <div class="ci-desc">Arabic text is right-aligned with correct letter shaping. English text is left-aligned. Store name, "Thank you / شكراً لزيارتكم", and line items all display correctly.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Arabic + English</span><span class="ci-tag">RTL text</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2-09" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Receipt contains all required fields: receipt #, date/time, cashier, line items, totals, payment method</div>
+        <div class="ci-desc">All items printed match the order exactly. Discounts, cash paid, and change due are shown for cash transactions.</div>
+      </div>
+    </div>
+
+    <div class="card-group-label">2.4 — Cash Drawer Trigger (RJ12)</div>
+
+    <div class="check-item" data-id="p2-10" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cash drawer opens automatically immediately after every cash or split sale</div>
+        <div class="ci-desc">The ESC/POS kick-port command is sent through the Bixolon printer. Drawer opens within 1 second of receipt printing.</div>
+        <div class="ci-tags"><span class="ci-tag blue">RJ12 kick port</span><span class="ci-tag">ESC p command</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2-11" data-phase="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cash drawer does NOT open on card-only sales</div>
+        <div class="ci-desc">Complete a card-only transaction → receipt prints → drawer stays closed.</div>
+        <div class="ci-tags"><span class="ci-tag green">Negative test</span></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <div class="phase-gate">
+    <div class="phase-gate-title">🔧 Phase 2 — Sign-Off Gate · Released</div>
+    <ul class="phase-gate-list">
+      <li>Complete retail hardware loop on the physical Posiflex terminal: USB-scan a barcode → item added to cart → checkout → receipt prints from Bixolon → cash drawer opens — total time under 10 seconds</li>
+      <li>Print a barcode label for any product variant, scan the printed label at the POS, and confirm the exact variant (color, size, price) is added to the cart — no manual lookup needed</li>
+      <li>Bilingual receipt (Arabic + English) prints from the Bixolon 80mm with correct RTL text shaping — verified by a native Arabic reader</li>
+      <li>Cash drawer does not open on a card-only transaction — verified in 3 consecutive card sales</li>
+      <li>All 11 individual criteria in Phase 2 are checked and verified on the physical hardware</li>
+    </ul>
+    <div class="phase-gate-note">Payment is released only after all 11 criteria AND all 4 gate tests above pass on the Posiflex + Bixolon SRP-350III hardware.</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PHASE 3
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#F5F3FF;">💳</div>
+    <div>
+      <div class="sec-title">Phase 3 — Financial Operations & Local Gateways</div>
+      <div class="sec-sub">Sadad / QPay / NAPS · Split payments · X & Z Reports · Cash float</div>
+      <div class="sec-cost">Released on full phase sign-off</div>
+    </div>
+    <span class="sec-badge p3">Phase 3</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-prog">
+    <span class="pp-label">Phase 3 progress</span>
+    <div class="pp-track"><div class="pp-fill" id="fill-p3" style="width:0%"></div></div>
+    <span class="pp-pct" id="pct-p3">0%</span>
+  </div>
+
+  <div class="checklist-card" id="card-p3">
+
+    <div class="card-group-label">3.1 — Payment Terminal (Sadad / QPay / NAPS)</div>
+
+    <div class="check-item" data-id="p3-01" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Card payment modal displays the exact charge amount to present to the physical terminal</div>
+        <div class="ci-desc">Amount shown in the modal matches the order total exactly (no rounding errors).</div>
+        <div class="ci-tags"><span class="ci-tag blue">Sadad / NAPS</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3-02" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Manual "Confirm Paid" records the card transaction and triggers the receipt</div>
+        <div class="ci-desc">Transaction is saved to the database with payment_method = 'card'. Inventory is decremented. Receipt prints.</div>
+      </div>
+    </div>
+
+    <div class="card-group-label">3.2 — Split Payments & Dynamic Discounts</div>
+
+    <div class="check-item" data-id="p3-03" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Split payment transaction is saved with correct cash_amount and card_amount breakdown</div>
+        <div class="ci-desc">Both amounts are stored in the database. cash_amount + card_amount = order total exactly. Receipt shows both amounts.</div>
+        <div class="ci-tags"><span class="ci-tag blue">DB: pos_transactions</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3-04" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Item-level discount can be applied to individual line items independently</div>
+        <div class="ci-desc">Discounting one item does not affect others. Total reflects per-item discounts correctly.</div>
+      </div>
+    </div>
+
+    <div class="card-group-label">3.3 — X Report (Mid-Shift)</div>
+
+    <div class="check-item" data-id="p3-05" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">X Report shows accurate gross sales, cash takings, card takings, discounts, and refunds for the current shift</div>
+        <div class="ci-desc">Complete 3 known transactions with various payment methods. X Report totals match exactly.</div>
+        <div class="ci-tags"><span class="ci-tag blue">API: GET /api/pos/shift/summary</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3-06" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Running the X Report multiple times does not reset or alter any counters</div>
+        <div class="ci-desc">Run X Report twice in the same shift → both reports show identical totals.</div>
+        <div class="ci-tags"><span class="ci-tag green">Non-destructive read</span></div>
+      </div>
+    </div>
+
+    <div class="card-group-label">3.4 — Z Report (End-of-Day)</div>
+
+    <div class="check-item" data-id="p3-07" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Z Report is blocked for cashier role — Manager PIN is required</div>
+        <div class="ci-desc">Logged-in cashier sees the Z Report button but tapping it shows the Manager PIN overlay. Incorrect PIN is rejected.</div>
+        <div class="ci-tags"><span class="ci-tag red">Role guard</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3-08" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Z Report stores an immutable record in pos_z_reports that cannot be edited or deleted</div>
+        <div class="ci-desc">After Z Report runs, attempt to DELETE or UPDATE the row via direct SQL → constraint error. The record is permanent.</div>
+        <div class="ci-tags"><span class="ci-tag blue">DB: pos_z_reports</span><span class="ci-tag orange">Immutability test</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3-09" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cash float: expected cash = opening float + cash sales − change given</div>
+        <div class="ci-desc">Set opening float. Complete a cash sale with change given. Expected cash calculation must be verified.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Formula verify</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3-10" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Variance (over/short) = physical cash count − expected cash, and is shown clearly as positive (over) or negative (short)</div>
+        <div class="ci-desc">Enter a physical count that differs from expected → variance shows as "+QAR X (Over)" or "−QAR X (Short)" in green or red respectively.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Variance display</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3-11" data-phase="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Z Report prints to the Bixolon thermal printer and a server copy is stored</div>
+        <div class="ci-desc">Report prints automatically after Manager PIN confirmation. API returns the stored report ID. Report is visible in the Z Report history list.</div>
+        <div class="ci-tags"><span class="ci-tag blue">API: GET /api/pos/shift/z-reports</span></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <div class="phase-gate">
+    <div class="phase-gate-title">💳 Phase 3 — Sign-Off Gate · Released</div>
+    <ul class="phase-gate-list">
+      <li>End-of-day procedure executed in full: complete 3 known test transactions → run X Report → verify all totals match → count physical cash → run Z Report with Manager PIN → receipt prints → immutable DB record verified</li>
+      <li>All financial totals in the Z Report (gross sales, cash, card, discounts, refunds) match the manually recorded test transaction amounts exactly — zero discrepancy</li>
+      <li>Split payment: order paid with mixed payment methods — DB record shows exact split, receipt shows both amounts, change due is zero</li>
+      <li>Z Report row cannot be modified or deleted via direct SQL — constraint error confirmed</li>
+      <li>All 11 individual criteria in Phase 3 are checked and verified</li>
+    </ul>
+    <div class="phase-gate-note">Payment is released only after all 11 criteria AND the end-of-day gate procedure above pass without errors.</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PHASE 4
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#FEF2F2;">🏪</div>
+    <div>
+      <div class="sec-title">Phase 4 — Store Operations & Retail CRM</div>
+      <div class="sec-sub">Returns & refunds · Manager PIN security · Customer loyalty</div>
+      <div class="sec-cost">Released on full phase sign-off</div>
+    </div>
+    <span class="sec-badge p4">Phase 4</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-prog">
+    <span class="pp-label">Phase 4 progress</span>
+    <div class="pp-track"><div class="pp-fill" id="fill-p4" style="width:0%"></div></div>
+    <span class="pp-pct" id="pct-p4">0%</span>
+  </div>
+
+  <div class="checklist-card" id="card-p4">
+
+    <div class="card-group-label">4.1 — Returns & Refund Logic</div>
+
+    <div class="check-item" data-id="p4-01" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Scanning the QR code on an original receipt loads the correct transaction for refund</div>
+        <div class="ci-desc">Scan the QR on a printed receipt → refund modal pre-fills with all original line items and amounts.</div>
+        <div class="ci-tags"><span class="ci-tag blue">QR receipt lookup</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-02" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Manual order ID search also loads the transaction for refund</div>
+        <div class="ci-desc">Type or paste a transaction ID → same refund modal appears with correct data.</div>
+        <div class="ci-tags"><span class="ci-tag blue">API: GET /api/pos/transactions/:id</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-03" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Full refund: all items returned, full amount refunded, and stock is restored</div>
+        <div class="ci-desc">After full refund, the product variant's stock quantity increases by the refunded amount. The negative transaction is saved and linked to the original.</div>
+        <div class="ci-tags"><span class="ci-tag green">Stock verify</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-04" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Partial refund: cashier selects specific items and quantities — refund amount is calculated correctly</div>
+        <div class="ci-desc">Refund 1 of 2 units of an item → refund amount = 1 × price. Remaining item stays on the original transaction. Stock for the refunded qty is restored.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-05" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Refunds appear as negative line items in both the X Report and Z Report</div>
+        <div class="ci-desc">Process a refund. Run X Report → "Total Refunds" field shows the refund amount. Net sales = gross − refunds.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Report integration</span></div>
+      </div>
+    </div>
+
+    <div class="card-group-label">4.2 — Role-Based Security (Manager PIN)</div>
+
+    <div class="check-item" data-id="p4-06" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Cashier cannot initiate a refund — Manager PIN overlay appears and incorrect PIN is rejected</div>
+        <div class="ci-desc">Tap Refund as cashier → PIN modal appears. Enter wrong PIN → error message, modal stays open. Enter correct PIN → refund proceeds.</div>
+        <div class="ci-tags"><span class="ci-tag red">Role: cashier blocked</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-07" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Discount greater than 10% is blocked for cashier — Manager PIN required</div>
+        <div class="ci-desc">Enter 11% discount as cashier → PIN modal appears. Approve with manager PIN → discount is applied. The cashier session is unchanged after PIN entry.</div>
+        <div class="ci-tags"><span class="ci-tag red">Role: cashier blocked</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-08" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Void transaction is blocked for cashier — Manager PIN required</div>
+        <div class="ci-desc">Cashier attempts to void an open transaction → PIN modal. On approval, transaction is voided and inventory is restored.</div>
+        <div class="ci-tags"><span class="ci-tag red">Role: cashier blocked</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-09" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Manager PIN is stored as a bcrypt hash — plain text PIN is never stored or logged</div>
+        <div class="ci-desc">Inspect the admin_users table — pos_pin_hash field starts with <code>$2b$</code>. Server logs contain no PIN values. API request/response bodies contain no plain PIN after hashing.</div>
+        <div class="ci-tags"><span class="ci-tag red">Security</span><span class="ci-tag blue">bcrypt</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-10" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">All Manager PIN overrides are recorded in the audit log with cashier ID, manager ID, action, and timestamp</div>
+        <div class="ci-desc">After a PIN override, query the audit_events table → row exists with correct actor IDs and action type.</div>
+        <div class="ci-tags"><span class="ci-tag blue">DB: audit_events</span></div>
+      </div>
+    </div>
+
+    <div class="card-group-label">4.3 — Customer Attachment & Loyalty</div>
+
+    <div class="check-item" data-id="p4-11" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Typing a phone number at checkout finds an existing customer within 500ms</div>
+        <div class="ci-desc">Customer name appears below the input. Tapping the result links them to the sale.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Phone lookup</span><span class="ci-tag">≤ 500ms</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-12" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">POS sale attached to a customer appears in their order history in the admin CRM</div>
+        <div class="ci-desc">Complete a POS sale linked to a customer. Open that customer in the Customers page → the sale appears in their linked orders list with correct amount and date.</div>
+        <div class="ci-tags"><span class="ci-tag green">End-to-end</span><span class="ci-tag blue">CRM integration</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p4-13" data-phase="p4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Customer lifetime value (LTV) in the CRM updates after a POS sale is attached</div>
+        <div class="ci-desc">Before: customer LTV = QAR X. Complete a POS sale linked to them for QAR Y. After: LTV = X + Y.</div>
+        <div class="ci-tags"><span class="ci-tag green">LTV update</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="phase-gate">
+    <div class="phase-gate-title">🏪 Phase 4 — Sign-Off Gate</div>
+    <ul class="phase-gate-list">
+      <li>Full return flow verified end-to-end: print a receipt from a real Phase 1 sale → scan the receipt QR code at the POS → select items to refund → Manager PIN approved → stock quantity increases by refunded amount → refund appears as a negative line in the X Report</li>
+      <li>Partial refund verified: refund 1 of 2 units — refund amount equals exactly 1× unit price, remaining item stays on the original transaction</li>
+      <li>Manager PIN security: cashier role cannot initiate refund, void, Z Report, or apply >10% discount without a correct Manager PIN — verified for each action type</li>
+      <li>Customer loyalty end-to-end: POS sale linked to a customer → admin CRM LTV increases by sale amount → sale appears in customer's order history with correct date and amount</li>
+      <li>Audit log verified: after each Manager PIN override, query <code>audit_events</code> — row exists with correct cashier ID, manager ID, action type, and timestamp</li>
+      <li>All 13 individual criteria in Phase 4 are checked and verified</li>
+    </ul>
+  </div>
+
+</div>
+
+<footer>
+  Elite Collection · POS Acceptance Criteria · Branch: Admin · 22 May 2026
+</footer>
+
+<script>
+  const STORAGE_KEY = 'elite-pos-acceptance';
+
+  const PHASES = {
+    db: [], p1: [], p2: [], p3: [], p4: []
+  };
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+  }
+  function saveState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function toggle(el) {
+    const id = el.dataset.id;
+    const phase = el.dataset.phase;
+    const state = loadState();
+    state[id] = !state[id];
+    saveState(state);
+    applyState(el, state[id]);
+    updateProgress();
+    updatePhaseProgress(phase);
+  }
+
+  function applyState(el, checked) {
+    el.classList.toggle('checked', !!checked);
+  }
+
+  function updatePhaseProgress(phase) {
+    const items = document.querySelectorAll(`.check-item[data-phase="${phase}"]`);
+    const done  = document.querySelectorAll(`.check-item[data-phase="${phase}"].checked`);
+    const pct   = items.length ? Math.round((done.length / items.length) * 100) : 0;
+    const fill  = document.getElementById(`fill-${phase}`);
+    const pctEl = document.getElementById(`pct-${phase}`);
+    if (fill)  fill.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (fill) fill.style.background = pct === 100 ? 'var(--green)' : pct >= 50 ? '#C9A84C' : 'var(--blue)';
+    if (pctEl) pctEl.style.color = pct === 100 ? 'var(--green)' : pct >= 50 ? '#C9A84C' : 'var(--blue)';
+  }
+
+  function updateProgress() {
+    const all   = document.querySelectorAll('.check-item[data-id]');
+    const done  = document.querySelectorAll('.check-item[data-id].checked');
+    const total = all.length;
+    const count = done.length;
+    const pct   = total ? Math.round((count / total) * 100) : 0;
+
+    document.getElementById('gp-fill').style.width  = pct + '%';
+    document.getElementById('gp-pct').textContent   = pct + '%';
+    document.getElementById('gp-count').textContent = `${count} / ${total}`;
+    document.getElementById('stat-done').textContent  = count;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-pct').textContent   = pct + '%';
+
+    const fill = document.getElementById('gp-fill');
+    const pctEl = document.getElementById('gp-pct');
+    const color = pct === 100 ? '#16A34A' : pct >= 50 ? '#C9A84C' : '#2563EB';
+    fill.style.background = color;
+    pctEl.style.color = color;
+  }
+
+  function resetAll() {
+    if (!confirm('Reset all acceptance criteria? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('.check-item.checked').forEach(el => el.classList.remove('checked'));
+    updateProgress();
+    ['db','p1','p2','p3','p4'].forEach(updatePhaseProgress);
+  }
+
+  function init() {
+    const state = loadState();
+    document.querySelectorAll('.check-item[data-id]').forEach(el => {
+      if (state[el.dataset.id]) applyState(el, true);
+    });
+    updateProgress();
+    ['db','p1','p2','p3','p4'].forEach(updatePhaseProgress);
+  }
+
+  init();
+</script>
+</body>
+</html>

@@ -192,6 +192,48 @@ router.patch(
 );
 
 router.delete(
+  '/orphaned',
+  asyncHandler(async (_req, res) => {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const tenant = await ensureDefaultTenant(client);
+
+      // Find all unlinked assets (no entry in media_links for this tenant)
+      const lookup = await client.query(
+        `
+          SELECT m.id, m.metadata
+          FROM media_assets m
+          LEFT JOIN media_links ml ON ml.media_id = m.id
+          WHERE m.tenant_id = $1 AND ml.media_id IS NULL
+        `,
+        [tenant.id],
+      );
+
+      const ids = lookup.rows.map((r) => r.id);
+      let deleted = 0;
+
+      for (const row of lookup.rows) {
+        const storagePath = row.metadata?.storagePath;
+        await client.query('DELETE FROM media_assets WHERE tenant_id = $1 AND id = $2', [tenant.id, row.id]);
+        if (storagePath) {
+          await storage.remove(storagePath).catch(() => undefined);
+        }
+        deleted++;
+      }
+
+      await client.query('COMMIT');
+      ok(res, { deleted, ids }, `${deleted} orphaned media asset${deleted === 1 ? '' : 's'} deleted.`);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
+router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
     const client = await db.pool.connect();

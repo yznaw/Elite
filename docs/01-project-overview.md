@@ -41,7 +41,6 @@ The platform is built as a **white-label product** — meaning the same codebase
 - 📦 **Orders** — search, filter by payment/fulfillment status, order detail drawer
 - 👥 **Customer CRM** — customer cards, order history, size preferences, internal notes
 - 📈 **Analytics** — sessions vs conversions, traffic sources, conversion funnel, top 3D interactions
-- 🔄 **Sync Engine** — sync logs, system health, schedule management, manual triggers
 - ⚙️ **Settings** — store info, team members with roles, integrations
 - 🌐 **Bilingual (EN/AR)** with full RTL support
 

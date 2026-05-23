@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Production Launch Checklist — Elite Collection</title>
+<style>
+  :root {
+    --gold: #C9A84C; --gold-light: #F5EDD6; --gold-mid: #E8D5A0;
+    --ink: #1A1A2E; --ink-2: #3D3D5C; --muted: #6B7280;
+    --surface: #FFFFFF; --bg: #F8F7F4; --bg-2: #F0EDE6; --border: #E5E0D5;
+    --green: #16A34A; --green-bg: #F0FDF4; --green-border: #BBF7D0;
+    --blue: #2563EB; --blue-bg: #EFF6FF;
+    --orange: #D97706; --orange-bg: #FFFBEB;
+    --red: #DC2626; --red-bg: #FEF2F2;
+    --purple: #7C3AED; --purple-bg: #F5F3FF;
+    --radius: 12px; --shadow: 0 2px 12px rgba(0,0,0,.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--ink); line-height: 1.6; }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #1A1A2E 0%, #2D2D4A 60%, #3D3525 100%);
+    color: #fff; padding: 56px 48px 48px; position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 80% 50%, rgba(201,168,76,.18) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(201,168,76,.18); border: 1px solid rgba(201,168,76,.35);
+    color: #E8D5A0; font-size: 12px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 5px 14px; border-radius: 20px; margin-bottom: 20px;
+  }
+  .hero h1 { font-size: 36px; font-weight: 800; line-height: 1.15; margin-bottom: 12px; }
+  .hero h1 span { color: var(--gold); }
+  .hero p { font-size: 16px; opacity: .65; max-width: 620px; }
+  .hero-meta { display: flex; gap: 32px; margin-top: 32px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,.1); flex-wrap: wrap; }
+  .hero-stat { display: flex; flex-direction: column; gap: 2px; }
+  .hero-stat-n { font-size: 26px; font-weight: 800; color: var(--gold); }
+  .hero-stat-l { font-size: 12px; opacity: .5; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* ── Global progress bar ── */
+  .global-prog-wrap {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 16px 48px; position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(12px); background: rgba(255,255,255,.94);
+  }
+  .global-prog-inner { max-width: 960px; margin: 0 auto; display: flex; align-items: center; gap: 16px; }
+  .gp-label { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .gp-track { flex: 1; height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; overflow: hidden; }
+  .gp-fill  { height: 100%; background: var(--green); border-radius: 4px; transition: width .4s ease; }
+  .gp-pct   { font-size: 13px; font-weight: 800; color: var(--green); min-width: 40px; text-align: right; }
+  .gp-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  /* ── Layout ── */
+  .page { max-width: 960px; margin: 0 auto; padding: 40px 32px 80px; }
+
+  /* ── Section header ── */
+  .section {
+    display: flex; align-items: center; gap: 14px; margin: 48px 0 16px;
+  }
+  .sec-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .sec-title { font-size: 18px; font-weight: 800; }
+  .sec-sub   { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .sec-line  { flex: 1; height: 1px; background: var(--border); }
+  .sec-badge {
+    font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 20px; flex-shrink: 0; white-space: nowrap;
+  }
+  .sec-badge.critical { background: #FEE2E2; color: #991B1B; }
+  .sec-badge.important { background: #FEF3C7; color: #92400E; }
+  .sec-badge.info { background: #DBEAFE; color: #1E40AF; }
+
+  /* ── Checklist card ── */
+  .checklist-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 24px;
+    box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 0;
+    margin-bottom: 12px; transition: border-color .2s;
+  }
+  .checklist-card.done { border-color: var(--green-border); background: linear-gradient(145deg, #F0FDF4 0%, #fff 70%); }
+
+  .check-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .1s; border-radius: 6px;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px;
+  }
+  .check-item:last-child { border-bottom: none; }
+  .check-item:hover { background: rgba(0,0,0,.02); }
+  .check-item.checked .ci-title { text-decoration: line-through; color: var(--muted); }
+  .check-item.checked .ci-desc  { opacity: .5; }
+
+  .ci-box {
+    width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--border);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: all .15s; margin-top: 2px; background: var(--surface);
+  }
+  .check-item.checked .ci-box {
+    background: var(--green); border-color: var(--green);
+  }
+  .ci-check { display: none; }
+  .check-item.checked .ci-check { display: block; }
+
+  .ci-body { flex: 1; }
+  .ci-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .ci-desc  { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .ci-tags  { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .ci-tag   { font-size: 11px; padding: 2px 8px; border-radius: 5px; background: var(--bg-2); color: var(--muted); }
+  .ci-tag.red    { background: var(--red-bg); color: var(--red); }
+  .ci-tag.green  { background: var(--green-bg); color: var(--green); }
+  .ci-tag.blue   { background: var(--blue-bg); color: var(--blue); }
+  .ci-tag.orange { background: var(--orange-bg); color: var(--orange); }
+
+  /* ── Code blocks ── */
+  .code-wrap {
+    background: #1e1e2e; border-radius: 8px; padding: 14px 16px;
+    margin-top: 10px; position: relative; overflow-x: auto;
+  }
+  .code-wrap code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px; line-height: 1.7; color: #cdd6f4; white-space: pre;
+    display: block;
+  }
+  .code-wrap .c { color: #6c7086; }   /* comment */
+  .code-wrap .k { color: #cba6f7; }   /* keyword */
+  .code-wrap .s { color: #a6e3a1; }   /* string */
+  .code-wrap .v { color: #fab387; }   /* variable/value */
+  .code-copy {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(255,255,255,.1); border: none; border-radius: 5px;
+    color: #cdd6f4; font-size: 11px; padding: 3px 8px; cursor: pointer;
+    transition: background .15s;
+  }
+  .code-copy:hover { background: rgba(255,255,255,.2); }
+
+  /* ── Callout ── */
+  .callout {
+    border-radius: var(--radius); padding: 14px 18px;
+    display: flex; gap: 12px; align-items: flex-start; font-size: 13px;
+    line-height: 1.55; margin-bottom: 16px;
+  }
+  .callout.warn  { background: var(--orange-bg); border: 1px solid #FDE68A; }
+  .callout.info  { background: var(--blue-bg);   border: 1px solid #BFDBFE; }
+  .callout.green { background: var(--green-bg);  border: 1px solid var(--green-border); }
+  .callout-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .callout strong { display: block; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+
+  /* ── Footer ── */
+  footer { text-align: center; padding: 32px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 64px; }
+
+  /* ── Reset button ── */
+  .reset-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px; font-size: 12px; color: var(--muted); cursor: pointer;
+    transition: all .15s;
+  }
+  .reset-btn:hover { border-color: var(--red); color: var(--red); }
+
+  @media (max-width: 640px) {
+    .hero { padding: 32px 20px; }
+    .hero h1 { font-size: 26px; }
+    .page { padding: 24px 16px 60px; }
+    .global-prog-wrap { padding: 12px 20px; }
+    .checklist-card { padding: 14px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ HERO ══ -->
+<div class="hero">
+  <div class="hero-badge">🚀 Production Launch</div>
+  <h1>Launch Checklist —<br/><span>Elite Collection</span></h1>
+  <p>Everything required to take the platform from local development to a live, secure, production server. Work through each section in order.</p>
+  <div class="hero-meta">
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-done">0</span><span class="hero-stat-l">Steps Done</span></div>
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-total">0</span><span class="hero-stat-l">Total Steps</span></div>
+    <div class="hero-stat"><span class="hero-stat-n" id="stat-pct">0%</span><span class="hero-stat-l">Complete</span></div>
+    <div style="margin-left:auto;display:flex;align-items:flex-end;">
+      <button class="reset-btn" onclick="resetAll()">↺ Reset All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STICKY PROGRESS ══ -->
+<div class="global-prog-wrap">
+  <div class="global-prog-inner">
+    <span class="gp-label">Launch Progress</span>
+    <div class="gp-track"><div class="gp-fill" id="gp-fill" style="width:0%"></div></div>
+    <span class="gp-count" id="gp-count">0 / 0</span>
+    <span class="gp-pct" id="gp-pct">0%</span>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ════════════════════════════════════════════
+       1. SERVER SETUP
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#EFF6FF;">🖥️</div>
+    <div><div class="sec-title">1 — Server Setup</div><div class="sec-sub">Provision a VPS and install required software</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card" id="card-server">
+
+    <div class="check-item" data-id="s1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Provision a VPS (Ubuntu 22.04 recommended)</div>
+        <div class="ci-desc">DigitalOcean, Hetzner, or AWS Lightsail. Minimum 1 GB RAM / 1 vCPU for this app. Add your SSH key during setup.</div>
+        <div class="ci-tags"><span class="ci-tag blue">Ubuntu 22.04 LTS</span><span class="ci-tag">1 GB+ RAM</span><span class="ci-tag">1 vCPU+</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="s2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Install Node.js 20 LTS</div>
+        <div class="ci-desc">Use the NodeSource setup script — do NOT use the Ubuntu default node which is outdated.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code><span class="c"># Install Node 20 LTS via NodeSource</span>
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v  <span class="c"># should print v20.x.x</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="s3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Install PostgreSQL 15+</div>
+        <div class="ci-desc">Install Postgres, create a dedicated database user and database for the app.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo apt install -y postgresql postgresql-contrib
+sudo -u postgres psql -c "CREATE USER elite WITH PASSWORD 'STRONG_PASSWORD_HERE';"
+sudo -u postgres psql -c "CREATE DATABASE elite OWNER elite;"</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="s4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Install Nginx</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo apt install -y nginx
+sudo systemctl enable nginx</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="s5" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Install PM2 (process manager)</div>
+        <div class="ci-desc">PM2 keeps the Node server running and auto-restarts it on crash or reboot.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo npm install -g pm2
+pm2 startup  <span class="c"># follow the printed command to enable on boot</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="s6" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Configure UFW firewall</div>
+        <div class="ci-desc">Allow only SSH, HTTP (80), and HTTPS (443). Block direct access to port 3000.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable</code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       2. DEPLOY CODE
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#F0FDF4;">📦</div>
+    <div><div class="sec-title">2 — Deploy the Code</div><div class="sec-sub">Get the codebase onto the server</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card" id="card-deploy">
+
+    <div class="check-item" data-id="d1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Clone the repository onto the server</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>cd /var/www
+sudo git clone https://github.com/YOUR_ORG/elite.git
+sudo chown -R $USER:$USER /var/www/elite</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="d2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Install server dependencies</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>cd /var/www/elite/server && npm install --omit=dev</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="d3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Build Angular admin portal (production build)</div>
+        <div class="ci-desc">Run this on the server (or locally and upload the <code>dist/</code> folder). Output goes to <code>client/dist/admin-portal/browser/</code>.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>cd /var/www/elite/client
+npm install
+npx ng build admin-portal --configuration=production</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="d4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Create the uploads / media storage directory</div>
+        <div class="ci-desc">The server saves uploaded images here. Must be writable by the Node process.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>mkdir -p /var/www/elite/server/uploads
+chmod 755 /var/www/elite/server/uploads</code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       3. ENVIRONMENT VARIABLES
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#FEF2F2;">🔐</div>
+    <div><div class="sec-title">3 — Environment Variables</div><div class="sec-sub">Production secrets — never commit these to git</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-icon">⚠️</div>
+    <div><strong>Never commit .env to git</strong>The <code>.env</code> file must be created manually on the server. It should NOT be in the repository. Verify <code>.gitignore</code> includes <code>server/.env</code>.</div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="e1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Create <code>server/.env</code> with production values</div>
+        <div class="ci-desc">Copy the template and fill in every value. Use a strong random SESSION_SECRET (32+ chars).</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code><span class="c"># /var/www/elite/server/.env</span>
+
+PORT=3000
+NODE_ENV=<span class="v">production</span>
+
+<span class="c"># PostgreSQL — use the user/db you created in step 1</span>
+DATABASE_URL=<span class="s">postgresql://elite:STRONG_PASSWORD@localhost:5432/elite</span>
+DEFAULT_TENANT_SLUG=<span class="s">elite</span>
+DEFAULT_TENANT_NAME=<span class="s">Elite</span>
+DEFAULT_CURRENCY=<span class="s">QAR</span>
+
+<span class="c"># Replace with your actual domains</span>
+CORS_ORIGINS=<span class="s">https://yourdomain.com,https://admin.yourdomain.com</span>
+
+<span class="c"># Generate with: openssl rand -hex 32</span>
+SESSION_SECRET=<span class="v">REPLACE_WITH_64_CHAR_RANDOM_STRING</span>
+SESSION_COOKIE_NAME=<span class="s">elite.sid</span>
+SESSION_MAX_AGE_MS=<span class="v">43200000</span>
+SESSION_COOKIE_SECURE=<span class="v">true</span>   <span class="c"># MUST be true with HTTPS</span>
+SESSION_COOKIE_SAMESITE=<span class="s">lax</span>
+
+<span class="c"># Google Drive image import (optional)</span>
+GOOGLE_API_KEY=<span class="s">YOUR_GOOGLE_API_KEY</span>
+
+<span class="c"># Default admin — change password immediately after first login!</span>
+DEFAULT_ADMIN_EMAIL=<span class="s">admin@yourdomain.com</span>
+DEFAULT_ADMIN_PASSWORD=<span class="v">CHANGE_ME_IMMEDIATELY</span>
+DEFAULT_ADMIN_NAME=<span class="s">Admin</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="e2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Generate a strong SESSION_SECRET</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>openssl rand -hex 32</code></div>
+        <div class="ci-desc" style="margin-top:6px;">Copy the output and paste it as the <code>SESSION_SECRET</code> value.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="e3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Restrict .env file permissions</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>chmod 600 /var/www/elite/server/.env</code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       4. DATABASE MIGRATIONS
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#F5F3FF;">🗄️</div>
+    <div><div class="sec-title">4 — Database Migrations</div><div class="sec-sub">Create all tables on the production database</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="m1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Run initial schema migration (001)</div>
+        <div class="ci-desc">Creates all core tables: products, variants, media_assets, orders, etc.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>psql "postgresql://elite:PASSWORD@localhost:5432/elite" \
+  -f /var/www/elite/server/db/migrations/001_initial_schema.sql</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="m2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Run reference tables migration (003)</div>
+        <div class="ci-desc">Creates <code>ref_colors</code>, <code>ref_materials</code>, <code>ref_size_sets</code> tables.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>psql "postgresql://elite:PASSWORD@localhost:5432/elite" \
+  -f /var/www/elite/server/db/migrations/003_ref_tables.sql</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="m3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Seed the default tenant + reference data</div>
+        <div class="ci-desc">The server seeds the default tenant and admin user on first boot automatically when <code>DEFAULT_TENANT_SLUG</code> is set. You can also run the seed script manually.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>cd /var/www/elite/server
+node index.js  <span class="c"># start once — it seeds on boot, then Ctrl+C and use PM2</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="m4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Verify tables were created successfully</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>psql "postgresql://elite:PASSWORD@localhost:5432/elite" -c "\dt"
+<span class="c"># Should list: products, product_variants, media_assets,
+#              media_links, ref_colors, ref_materials, ref_size_sets,
+#              tenants, admin_users, sessions, orders, ...</span></code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       5. PM2 — PROCESS MANAGER
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#FFFBEB;">⚙️</div>
+    <div><div class="sec-title">5 — PM2 Process Manager</div><div class="sec-sub">Keep Node running in the background, auto-restart on crash and reboot</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="p1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Start the API server with PM2</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>cd /var/www/elite/server
+pm2 start index.js --name elite-api --env production
+pm2 save  <span class="c"># persist so it survives reboots</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Verify PM2 shows the server as "online"</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>pm2 status
+<span class="c"># elite-api  online  ✓</span>
+pm2 logs elite-api --lines 20  <span class="c"># check for startup errors</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="p3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Confirm health endpoint responds</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>curl http://localhost:3000/api/health
+<span class="c"># {"success":true,"status":"ok",...}</span></code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       6. NGINX CONFIG
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#ECFDF5;">🌐</div>
+    <div><div class="sec-title">6 — Nginx Configuration</div><div class="sec-sub">Serve the Angular app + proxy API requests</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="n1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Create Nginx site config for the admin portal</div>
+        <div class="ci-desc">Replace <code>admin.yourdomain.com</code> with your actual admin subdomain.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code><span class="c"># /etc/nginx/sites-available/elite-admin</span>
+server {
+    listen 80;
+    server_name <span class="v">admin.yourdomain.com</span>;
+
+    root /var/www/elite/client/dist/admin-portal/browser;
+    index index.html;
+
+    <span class="c"># Angular: serve index.html for all unknown routes (SPA routing)</span>
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    <span class="c"># Proxy all /api/* requests to the Node server</span>
+    location /api/ {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 300s;  <span class="c"># needed for long bulk imports</span>
+    }
+
+    <span class="c"># Serve uploaded media files directly</span>
+    location /uploads/ {
+        alias /var/www/elite/server/uploads/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="n2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Enable the site and test Nginx config</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo ln -s /etc/nginx/sites-available/elite-admin /etc/nginx/sites-enabled/
+sudo nginx -t          <span class="c"># must say "syntax is ok"</span>
+sudo systemctl reload nginx</code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       7. SSL — HTTPS
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#F0FDF4;">🔒</div>
+    <div><div class="sec-title">7 — SSL / HTTPS</div><div class="sec-sub">Free SSL certificate via Let's Encrypt (Certbot)</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-icon">ℹ️</div>
+    <div><strong>DNS must point to your server first</strong>Make sure <code>admin.yourdomain.com</code> is pointing to your server's IP in your DNS settings before running Certbot, otherwise it will fail.</div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="ssl1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Point your domain's DNS A record to the server IP</div>
+        <div class="ci-desc">In your domain registrar's DNS settings, add an A record: <code>admin</code> → <code>YOUR_SERVER_IP</code>. Allow up to 10 minutes for propagation.</div>
+        <div class="ci-tags"><span class="ci-tag orange">DNS propagation can take up to 10 min</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="ssl2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Install Certbot and get SSL certificate</div>
+        <div class="ci-desc">Certbot will automatically edit your Nginx config to add HTTPS and set up auto-renewal.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d admin.yourdomain.com
+<span class="c"># Follow the prompts — choose to redirect HTTP → HTTPS</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="ssl3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Verify SSL is working</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>curl -I https://admin.yourdomain.com/api/health
+<span class="c"># Should return HTTP/2 200 with {"success":true,...}</span></code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       8. POST-LAUNCH SECURITY
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#FEF2F2;">🛡️</div>
+    <div><div class="sec-title">8 — Post-Launch Security</div><div class="sec-sub">Harden the live environment immediately after first login</div></div>
+    <span class="sec-badge critical">Critical</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="sec1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Change the default admin password immediately</div>
+        <div class="ci-desc">Log in to the admin portal and change the password from <code>DEFAULT_ADMIN_PASSWORD</code> to a strong unique password in Settings → Account.</div>
+        <div class="ci-tags"><span class="ci-tag red">Do this on first login — don't skip</span></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="sec2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Remove DEFAULT_ADMIN_PASSWORD from .env</div>
+        <div class="ci-desc">Once the admin account exists in the DB, the DEFAULT_ADMIN_PASSWORD env var is no longer needed. Remove it to prevent accidental re-seeding.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="sec3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Verify SESSION_COOKIE_SECURE=true in .env</div>
+        <div class="ci-desc">With HTTPS live, cookies must be set to secure-only or they won't be sent by the browser.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="sec4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Disable password-based SSH — use SSH keys only</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code><span class="c"># Edit /etc/ssh/sshd_config:</span>
+PasswordAuthentication no
+sudo systemctl restart sshd</code></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       9. BACKUP & MONITORING
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#EFF6FF;">📊</div>
+    <div><div class="sec-title">9 — Backups &amp; Monitoring</div><div class="sec-sub">Protect data and know when things break</div></div>
+    <span class="sec-badge important">Important</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="bk1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Set up daily PostgreSQL backups</div>
+        <div class="ci-desc">Add a cron job to dump the database every night and keep 7 days of backups.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code><span class="c"># Add to crontab: crontab -e</span>
+0 2 * * * pg_dump "postgresql://elite:PASSWORD@localhost:5432/elite" \
+  | gzip > /backups/elite-$(date +\%Y\%m\%d).sql.gz \
+  && find /backups -name "*.sql.gz" -mtime +7 -delete</code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="bk2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Enable PM2 monitoring / logs</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>pm2 logs elite-api       <span class="c"># tail live logs</span>
+pm2 monit              <span class="c"># real-time CPU / memory dashboard</span></code></div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="bk3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Set up uptime monitoring (optional but recommended)</div>
+        <div class="ci-desc">Free options: UptimeRobot or BetterUptime — monitor <code>https://admin.yourdomain.com/api/health</code> and get an email/SMS if it goes down.</div>
+        <div class="ci-tags"><span class="ci-tag blue">UptimeRobot — free tier</span><span class="ci-tag blue">BetterUptime — free tier</span></div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       10. FINAL SMOKE TEST
+  ════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-icon" style="background:#F0FDF4;">✅</div>
+    <div><div class="sec-title">10 — Final Smoke Test</div><div class="sec-sub">Verify everything works end-to-end before announcing</div></div>
+    <span class="sec-badge info">Verification</span>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="checklist-card">
+
+    <div class="check-item" data-id="t1" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Open admin portal URL — login page loads</div>
+        <div class="ci-desc">Visit <code>https://admin.yourdomain.com</code> in a private/incognito window.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="t2" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Login with admin credentials</div>
+        <div class="ci-desc">Login succeeds and redirects to the dashboard without errors.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="t3" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Catalog page loads — create a test product</div>
+        <div class="ci-desc">Go to Catalog → New Product, fill in details, save. Product appears in the list.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="t4" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Upload a product image — appears in media library</div>
+        <div class="ci-desc">Image saves to disk, thumbnail shows in the media library, no console errors.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="t5" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Reference Lists page loads — colors / materials / sizes visible</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="t6" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Refresh the page — session persists (stays logged in)</div>
+        <div class="ci-desc">Confirms PostgreSQL-backed session store is working correctly.</div>
+      </div>
+    </div>
+
+    <div class="check-item" data-id="t7" onclick="toggle(this)">
+      <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="ci-body">
+        <div class="ci-title">Reboot the server — app comes back automatically</div>
+        <div class="ci-desc">Confirms PM2 startup is configured correctly.</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo reboot
+<span class="c"># Wait 30 seconds, then visit the URL again — should load fine</span></code></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       QUICK REFERENCE
+  ════════════════════════════════════════════ -->
+  <div class="section" style="margin-top:56px;">
+    <div class="sec-icon" style="background:#F5F3FF;">📋</div>
+    <div><div class="sec-title">Quick Reference — Day-to-Day Commands</div><div class="sec-sub">Useful commands for managing the live server</div></div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 26px;box-shadow:var(--shadow);">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+
+      <div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">Deploy New Code</div>
+        <div class="code-wrap" style="margin-top:0;"><code>cd /var/www/elite && git pull
+cd server && npm install --omit=dev
+cd ../client && npx ng build admin-portal \
+  --configuration=production
+pm2 restart elite-api</code></div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">View Server Logs</div>
+        <div class="code-wrap" style="margin-top:0;"><code>pm2 logs elite-api --lines 50
+pm2 logs elite-api --err   <span class="c"># errors only</span>
+pm2 flush                  <span class="c"># clear logs</span></code></div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">Restart / Stop Server</div>
+        <div class="code-wrap" style="margin-top:0;"><code>pm2 restart elite-api
+pm2 stop    elite-api
+pm2 start   elite-api</code></div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">Manual DB Backup</div>
+        <div class="code-wrap" style="margin-top:0;"><code>pg_dump "postgresql://elite:PASS\
+@localhost:5432/elite" \
+  > backup-$(date +%Y%m%d).sql</code></div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">Check Nginx Status</div>
+        <div class="code-wrap" style="margin-top:0;"><code>sudo nginx -t
+sudo systemctl status nginx
+sudo systemctl reload nginx</code></div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">Renew SSL Certificate</div>
+        <div class="code-wrap" style="margin-top:0;"><code><span class="c"># Auto-renews via cron — test with:</span>
+sudo certbot renew --dry-run</code></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Elite Collection Admin Portal · Production Launch Checklist · Updated 2026-05-22
+</footer>
+
+<script>
+  const STORAGE_KEY = 'elite-launch-checklist';
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch { return {}; }
+  }
+
+  function saveState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function toggle(el) {
+    const id = el.dataset.id;
+    const state = loadState();
+    state[id] = !state[id];
+    saveState(state);
+    applyState(el, state[id]);
+    updateProgress();
+  }
+
+  function applyState(el, checked) {
+    el.classList.toggle('checked', !!checked);
+  }
+
+  function updateProgress() {
+    const all   = document.querySelectorAll('.check-item[data-id]');
+    const done  = document.querySelectorAll('.check-item[data-id].checked');
+    const total = all.length;
+    const count = done.length;
+    const pct   = total ? Math.round((count / total) * 100) : 0;
+
+    document.getElementById('gp-fill').style.width  = pct + '%';
+    document.getElementById('gp-pct').textContent   = pct + '%';
+    document.getElementById('gp-count').textContent = `${count} / ${total}`;
+    document.getElementById('stat-done').textContent  = count;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-pct').textContent   = pct + '%';
+
+    // Color the progress bar green / gold
+    const fill = document.getElementById('gp-fill');
+    fill.style.background = pct === 100 ? '#16A34A' : pct >= 50 ? '#C9A84C' : '#2563EB';
+  }
+
+  function resetAll() {
+    if (!confirm('Reset all checkboxes? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('.check-item.checked').forEach(el => el.classList.remove('checked'));
+    updateProgress();
+  }
+
+  function copyCode(btn) {
+    const code = btn.nextElementSibling.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = '✓ Copied';
+      setTimeout(() => btn.textContent = 'Copy', 1600);
+    });
+  }
+
+  // ── Init ──
+  function init() {
+    const state = loadState();
+    document.querySelectorAll('.check-item[data-id]').forEach(el => {
+      if (state[el.dataset.id]) applyState(el, true);
+    });
+    updateProgress();
+  }
+
+  init();
+</script>
+</body>
+</html>

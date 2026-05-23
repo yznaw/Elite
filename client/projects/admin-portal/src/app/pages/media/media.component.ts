@@ -2,10 +2,12 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
+import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { MediaCardComponent } from './media-card.component';
 import { MediaDetailDrawerComponent } from './media-detail-drawer.component';
 import { AutoLinkModalComponent, LinkPair } from './auto-link-modal.component';
 import { ToastService } from '../../services/toast.service';
+import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminMediaService } from '../../services/admin-media.service';
 import { MediaUploadService } from '../../services/media-upload.service';
@@ -24,7 +26,7 @@ interface PendingUpload {
 @Component({
   selector: 'ap-media',
   standalone: true,
-  imports: [CommonModule, IconComponent, EmptyStateComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
+  imports: [CommonModule, IconComponent, EmptyStateComponent, PaginationComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
   template: `
     <div class="page-fade">
       <div class="grid-4 mb-24">
@@ -106,20 +108,30 @@ interface PendingUpload {
 
       <div class="row gap-sm mb-16" style="justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div class="row gap-sm" style="flex-wrap:wrap;">
-          <button class="chip" [class.active]="filter() === 'all'" (click)="filter.set('all')">
+          <button class="chip" [class.active]="filter() === 'all'" (click)="filter.set('all'); page.set(0)">
             {{ t('media.filter.all') }} <span class="chip-count">{{ counts().all }}</span>
           </button>
-          <button class="chip" [class.active]="filter() === 'image'" (click)="filter.set('image')">
+          <button class="chip" [class.active]="filter() === 'image'" (click)="filter.set('image'); page.set(0)">
             {{ t('media.filter.images') }} <span class="chip-count">{{ counts().image }}</span>
           </button>
-          <button class="chip" [class.active]="filter() === 'glb'" (click)="filter.set('glb')">
+          <button class="chip" [class.active]="filter() === 'glb'" (click)="filter.set('glb'); page.set(0)">
             {{ t('media.filter.3d') }} <span class="chip-count">{{ counts().glb }}</span>
           </button>
-          <button class="chip" [class.active]="filter() === 'unlinked'" (click)="filter.set('unlinked')"
+          <button class="chip" [class.active]="filter() === 'unlinked'" (click)="filter.set('unlinked'); page.set(0)"
                   [style.background]="filter() === 'unlinked' ? 'var(--warning)' : ''" [style.border-color]="filter() === 'unlinked' ? 'var(--warning)' : ''">
             {{ t('media.filter.unlinked') }} <span class="chip-count">{{ counts().unlinked }}</span>
           </button>
         </div>
+
+        @if (counts().unlinked > 0) {
+          <button class="btn btn-danger-outline btn-sm" [disabled]="cleaningUp()" (click)="cleanupOrphaned()">
+            @if (cleaningUp()) {
+              <span class="pg-spinner"></span> Cleaning up…
+            } @else {
+              🗑 Clean up {{ counts().unlinked }} unlinked {{ counts().unlinked === 1 ? 'file' : 'files' }} ({{ orphanedSize() }})
+            }
+          </button>
+        }
       </div>
 
       @if (filtered().length === 0) {
@@ -130,10 +142,19 @@ interface PendingUpload {
         </div>
       } @else {
         <div class="media-grid">
-          @for (m of filtered(); track m.id) {
+          @for (m of pagedMedia(); track m.id) {
             <ap-media-card [media]="m" [selected]="active()?.id === m.id" (clicked)="active.set(m)"/>
           }
         </div>
+
+        <ap-pagination
+          [page]="page()"
+          [pageSize]="pageSize()"
+          [total]="filtered().length"
+          [totalPages]="totalPages()"
+          (pageChange)="page.set($event)"
+          (pageSizeChange)="onPageSizeChange($event)"
+        />
       }
     </div>
 
@@ -209,6 +230,25 @@ interface PendingUpload {
     .upload-row.is-error .upload-pct { color: var(--danger); font-weight: 700; }
     .upload-error { font-size: 11px; color: var(--danger); }
 
+    .btn-danger-outline {
+      border-color: rgba(239,68,68,0.5);
+      color: #dc2626;
+      background: rgba(239,68,68,0.05);
+    }
+    .btn-danger-outline:hover:not(:disabled) {
+      background: rgba(239,68,68,0.1);
+      border-color: #dc2626;
+    }
+    .pg-spinner {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border: 2px solid rgba(220,38,38,0.3);
+      border-top-color: #dc2626;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     @media (max-width: 560px) {
       .drop-zone { padding: 18px 14px; }
       .upload-row { grid-template-columns: 32px 1fr auto; padding: 8px; }
@@ -218,6 +258,7 @@ interface PendingUpload {
 })
 export class MediaComponent implements OnInit {
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly mediaApi = inject(AdminMediaService);
   private readonly uploads = inject(MediaUploadService);
@@ -230,6 +271,9 @@ export class MediaComponent implements OnInit {
   readonly autoLinking = signal(false);
   readonly dragOver = signal(false);
   readonly pending = signal<PendingUpload[]>([]);
+  readonly cleaningUp = signal(false);
+  readonly page = signal(0);
+  readonly pageSize = signal(48);
 
   async ngOnInit(): Promise<void> {
     await this.refresh();
@@ -268,6 +312,50 @@ export class MediaComponent implements OnInit {
     if (f === 'glb') return m.filter((x) => x.kind === 'glb');
     return m.filter((x) => !x.linkedTo);
   });
+
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
+
+  readonly pagedMedia = computed(() => {
+    const all = this.filtered();
+    const start = this.page() * this.pageSize();
+    return all.slice(start, start + this.pageSize());
+  });
+
+  readonly orphanedSize = computed(() =>
+    fmtBytes(this.media().filter((m) => !m.linkedTo).reduce((s, m) => s + m.size, 0)),
+  );
+
+  onPageSizeChange(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(0);
+  }
+
+  async cleanupOrphaned(): Promise<void> {
+    const count = this.counts().unlinked;
+    if (count === 0 || this.cleaningUp()) return;
+    const ok = await this.confirm.ask({
+      title: `Delete ${count} unlinked ${count === 1 ? 'file' : 'files'}?`,
+      message: `This will permanently delete ${count} media ${count === 1 ? 'file' : 'files'} (${this.orphanedSize()}) that are not linked to any product. This cannot be undone.`,
+      confirmLabel: 'Delete unlinked files',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    this.cleaningUp.set(true);
+    try {
+      const { deleted } = await this.mediaApi.deleteOrphaned();
+      this.media.update((all) => all.filter((m) => m.linkedTo));
+      this.page.set(0);
+      this.toast.success(
+        `${deleted} ${deleted === 1 ? 'file' : 'files'} deleted`,
+        'Orphaned media cleaned up',
+      );
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.cleaningUp.set(false);
+    }
+  }
 
   // ── Drag & drop / file picker ─────────────────────────────────────────────
 

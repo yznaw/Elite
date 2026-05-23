@@ -12,6 +12,7 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminProductsService } from '../../services/admin-products.service';
+import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
 import { MEDIA_INIT, COLLECTIONS } from '../../data/mock';
 import { ME, Product, ProductVariant } from '../../models';
@@ -261,9 +262,40 @@ function readPreview(file: File): Promise<string> {
               @for (v of form().variants; track v.id; let i = $index) {
                 <div class="vt-row">
                   <div class="vt-c-sku"><input class="inp inp-sm mono" [placeholder]="t('product.variants.placeholder.sku')" [ngModel]="v.sku" (ngModelChange)="updateVariant(i, { sku: $event })"/></div>
-                  <div class="vt-c-size"><input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/></div>
-                  <div class="vt-c-color"><input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.color')" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/></div>
-                  <div class="vt-c-mat"><input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.material')" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })"/></div>
+                  <div class="vt-c-size">
+                    @if (refSizeSets().length > 0) {
+                      <input class="inp inp-sm" list="size-options" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
+                    } @else {
+                      <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
+                    }
+                  </div>
+                  <div class="vt-c-color">
+                    @if (refColors().length > 0) {
+                      <div class="color-select-wrap">
+                        <span class="color-dot" [style.background]="colorHex(v.color)"></span>
+                        <select class="inp inp-sm color-select" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })">
+                          <option value="">{{ t('product.variants.placeholder.color') }}</option>
+                          @for (c of refColors(); track c.id) {
+                            <option [value]="c.name_en">{{ c.name_en }}</option>
+                          }
+                        </select>
+                      </div>
+                    } @else {
+                      <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.color')" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/>
+                    }
+                  </div>
+                  <div class="vt-c-mat">
+                    @if (refMaterials().length > 0) {
+                      <select class="inp inp-sm" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })">
+                        <option value="">{{ t('product.variants.placeholder.material') }}</option>
+                        @for (m of refMaterials(); track m.id) {
+                          <option [value]="m.name_en">{{ m.name_en }}</option>
+                        }
+                      </select>
+                    } @else {
+                      <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.material')" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })"/>
+                    }
+                  </div>
                   <div class="vt-c-price"><input class="inp inp-sm mono" type="number" min="0" [ngModel]="v.price" (ngModelChange)="updateVariant(i, { price: +$event || 0 })"/></div>
                   <div class="vt-c-stock"><input class="inp inp-sm mono" type="number" min="0" [ngModel]="v.stock" (ngModelChange)="updateVariant(i, { stock: +$event || 0 })"/></div>
                   <div class="vt-c-act">
@@ -273,15 +305,39 @@ function readPreview(file: File): Promise<string> {
                   </div>
                 </div>
               }
+
+              <!-- Size datalist for free-text with suggestions -->
+              <datalist id="size-options">
+                @for (ss of refSizeSets(); track ss.id) {
+                  @for (sz of ss.sizes; track sz) { <option [value]="sz">{{ sz }}</option> }
+                }
+              </datalist>
+
               <div class="vt-foot">
                 <div class="muted small">
                   @if (variantsPriceRange()) {
                     <span>{{ t('product.variants.priceRange') }}: <span class="strong mono">{{ variantsPriceRange() }}</span></span>
                   }
                 </div>
-                <button class="btn btn-outline btn-sm" (click)="addVariant()">
-                  <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
-                </button>
+                <div class="row gap-sm" style="flex-wrap:wrap;">
+                  @if (refSizeSets().length > 0) {
+                    <div class="gen-sizes-wrap">
+                      <select class="inp inp-sm" #sizeSetSel style="font-size:11px;">
+                        <option value="">Generate sizes…</option>
+                        @for (ss of refSizeSets(); track ss.id) {
+                          <option [value]="ss.id">{{ ss.name }}</option>
+                        }
+                      </select>
+                      <button class="btn btn-outline btn-sm" [disabled]="!sizeSetSel.value"
+                              (click)="generateSizes(sizeSetSel.value); sizeSetSel.value=''">
+                        <ap-icon name="wand" [size]="12"/> Go
+                      </button>
+                    </div>
+                  }
+                  <button class="btn btn-outline btn-sm" (click)="addVariant()">
+                    <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
+                  </button>
+                </div>
               </div>
             </div>
           }
@@ -769,6 +825,21 @@ function readPreview(file: File): Promise<string> {
       gap: 12px;
       flex-wrap: wrap;
     }
+
+    /* Color swatch select */
+    .color-select-wrap {
+      display: flex; align-items: center; gap: 6px; width: 100%;
+    }
+    .color-dot {
+      width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,.15);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.3);
+      transition: background 0.12s;
+    }
+    .color-select { flex: 1; }
+
+    /* Generate sizes row */
+    .gen-sizes-wrap { display: flex; gap: 4px; align-items: center; }
     @media (max-width: 720px) {
       .variants-table .vt-head { display: none; }
       .variants-table .vt-row {
@@ -820,7 +891,12 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly productsApi = inject(AdminProductsService);
+  private readonly refApi = inject(AdminRefService);
   private readonly uploads = inject(MediaUploadService);
+
+  readonly refColors   = signal<RefColor[]>([]);
+  readonly refMaterials = signal<RefMaterial[]>([]);
+  readonly refSizeSets  = signal<RefSizeSet[]>([]);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
@@ -871,8 +947,17 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
 
   ngOnInit(): void {
-    // currentId setter already ran via @Input — but if not yet, hydrate now.
     if (!this.initial) this.resetForCurrent();
+    // Load reference lists in the background — non-blocking
+    Promise.all([
+      this.refApi.getColors(),
+      this.refApi.getMaterials(),
+      this.refApi.getSizeSets(),
+    ]).then(([colors, materials, sizes]) => {
+      this.refColors.set(colors);
+      this.refMaterials.set(materials);
+      this.refSizeSets.set(sizes);
+    }).catch(() => { /* silently degrade to free-text inputs */ });
   }
 
   ngOnDestroy(): void {
@@ -1137,6 +1222,34 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   removeVariant(index: number): void {
     const next = this.form().variants.filter((_, i) => i !== index);
     this.set('variants', next);
+  }
+
+  colorHex(name: string | undefined): string {
+    if (!name) return '#e5e7eb';
+    return this.refColors().find(c => c.name_en === name)?.hex ?? '#e5e7eb';
+  }
+
+  generateSizes(sizeSetId: string): void {
+    const ss = this.refSizeSets().find(s => s.id === sizeSetId);
+    if (!ss) return;
+    const f = this.form();
+    const existing = new Set(f.variants.map(v => v.size));
+    const toAdd = ss.sizes.filter(sz => !existing.has(sz));
+    const newVariants: ProductVariant[] = toAdd.map(sz => ({
+      id: 'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
+      sku: f.sku ? `${f.sku}-${sz}` : '',
+      size: sz,
+      color: '',
+      material: '',
+      price: f.price || 0,
+      stock: 0,
+    }));
+    if (newVariants.length === 0) {
+      this.toast.info('All sizes already added', ss.name);
+      return;
+    }
+    this.set('variants', [...f.variants, ...newVariants]);
+    this.toast.success(`${newVariants.length} sizes added`, ss.name);
   }
 
   variantsTotalStock(): number {
