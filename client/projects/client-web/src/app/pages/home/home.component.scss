@@ -128,7 +128,7 @@
 }
 
 .collection-showcase {
-  padding-top: 82px;
+  padding-bottom: 82px;
 }
 
 .collection-heading {
@@ -252,7 +252,7 @@
   }
 
   .collection-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -263,23 +263,10 @@
 
   .collection-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(4, 132px);
   }
 
   .collection-tile {
-    min-height: 0;
-  }
-
-  .tile-footwear { grid-column: 1; grid-row: 1 / 3; }
-  .tile-headwear { grid-column: 1; grid-row: 3 / 5; }
-  .tile-jacket { grid-column: 2; grid-row: 1 / 4; }
-  .tile-bags { grid-column: 2; grid-row: 4 / 5; }
-  .tile-accessories { grid-column: 3; grid-row: 1 / 2; }
-  .tile-bottoms { grid-column: 3; grid-row: 2 / 5; }
-
-  .tile-bags .collection-title,
-  .tile-accessories .collection-title {
-    font-size: 38px;
+    min-height: 360px;
   }
 }
 
@@ -327,34 +314,28 @@
 }
 
 .hero-shell {
-  --hero-scroll-progress: 0;
-  --hero-shift-x: 0px;
-  --hero-shift-y: 0px;
-  --hero-scale: 1;
   position: sticky;
   top: 0;
   z-index: 2;
   width: min(1240px, 100%);
   height: 100svh;
   min-height: 100svh;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.38fr) minmax(0, 0.62fr);
+  column-gap: clamp(28px, 5vw, 76px);
   align-items: center;
-  justify-content: center;
+  justify-content: stretch;
 }
 
 .hero-scroll-copy {
-  position: absolute;
-  top: 50%;
-  left: clamp(18px, 5vw, 64px);
+  position: relative;
   z-index: 5;
-  width: min(440px, 34vw);
-  opacity: calc((var(--hero-scroll-progress) - 0.28) * 2.85);
+  grid-column: 1;
+  width: min(440px, 100%);
+  opacity: 1;
   pointer-events: none;
-  transform:
-    translate3d(calc(-68px + (var(--hero-scroll-progress) * 68px)), -50%, 0)
-    scale(calc(0.94 + (var(--hero-scroll-progress) * 0.06)));
-  transition: opacity 0.18s linear, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
+  transform: none;
+  transition: opacity 0.18s linear;
 }
 
 .hero-scroll-copy span {
@@ -370,18 +351,18 @@
 .hero-scroll-copy strong {
   display: block;
   color: rgba(26, 18, 8, 0.92);
-  font-size: clamp(68px, 9.5vw, 146px);
+  font-size: clamp(54px, 6.8vw, 96px);
   font-weight: 300;
-  line-height: 0.82;
+  line-height: 0.9;
   letter-spacing: 0;
 }
 
 .hero-scroll-copy p {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
   font-family: var(--ff-sans);
-  font-size: 10px;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
+  font-size: clamp(13px, 1.15vw, 15px);
+  line-height: 1.75;
+  letter-spacing: 0.04em;
   color: var(--muted);
 }
 
@@ -459,65 +440,14 @@
 
 .hero-visual {
   position: relative;
-  width: min(1160px, 100%);
+  grid-column: 2;
+  justify-self: end;
+  width: min(760px, 100%);
   min-height: clamp(560px, 74svh, 780px);
   background: #fff;
   isolation: isolate;
   animation: fadeIn 0.7s ease both;
-  transform:
-    translate3d(var(--hero-shift-x), var(--hero-shift-y), 0)
-    scale(var(--hero-scale));
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
-}
-
-.hero-visual::before {
-  content: "";
-  position: absolute;
-  inset: auto 12% 11% 12%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(184, 146, 74, 0.32), transparent);
-  z-index: 2;
-}
-
-.model-heading {
-  position: absolute;
-  top: clamp(54px, 7vh, 82px);
-  left: 50%;
-  z-index: 6;
-  width: min(620px, 88vw);
-  text-align: center;
-  pointer-events: none;
-  transform: translateX(-50%);
-}
-
-.model-heading span {
-  display: block;
-  margin-bottom: 8px;
-  font-family: var(--ff-sans);
-  font-size: 9px;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: var(--gold);
-}
-
-.model-heading h1 {
-  margin: 0;
-  color: var(--cream);
-  font-size: clamp(42px, 7.2vw, 86px);
-  font-weight: 300;
-  line-height: 0.94;
-  letter-spacing: 0;
-}
-
-.model-heading p {
-  width: min(420px, 100%);
-  margin: 14px auto 0;
-  color: var(--muted);
-  font-family: var(--ff-sans);
-  font-size: 12px;
-  line-height: 1.7;
-  letter-spacing: 0.06em;
+  transform: none;
 }
 
 .hero-canvas {
@@ -754,9 +684,12 @@
   .hero-shell {
     height: 100svh;
     min-height: 100svh;
+    grid-template-columns: minmax(240px, 0.36fr) minmax(0, 0.64fr);
+    column-gap: clamp(20px, 4vw, 44px);
   }
 
   .hero-visual {
+    width: min(620px, 100%);
     min-height: clamp(500px, 72svh, 680px);
   }
 
@@ -766,62 +699,77 @@
   }
 
   .hero-scroll-copy {
-    left: 24px;
-    width: min(360px, 42vw);
+    width: min(320px, 100%);
   }
 
   .hero-scroll-copy strong {
-    font-size: clamp(52px, 10vw, 96px);
+    font-size: clamp(42px, 6.8vw, 68px);
   }
 }
 
 @media (max-width: 560px) {
   .hero {
+    min-height: 118svh;
     padding-right: 16px;
     padding-left: 16px;
   }
 
+  .hero-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(360px, 46svh);
+    row-gap: 8px;
+    align-content: start;
+    padding-top: 122px;
+    padding-bottom: 28px;
+  }
+
   .hero-visual {
-    min-height: clamp(470px, 72svh, 600px);
+    grid-column: 1;
+    width: min(100%, 390px);
+    min-height: clamp(360px, 46svh, 430px);
+    justify-self: center;
+    align-self: start;
+    margin-top: -2px;
   }
 
   .hero-scroll-copy {
-    top: auto;
-    bottom: 116px;
-    left: 50%;
-    width: min(320px, 86vw);
-    text-align: center;
-    transform:
-      translate3d(-50%, calc(28px - (var(--hero-scroll-progress) * 28px)), 0)
-      scale(calc(0.96 + (var(--hero-scroll-progress) * 0.04)));
+    grid-column: 1;
+    width: min(390px, 100%);
+    text-align: left;
+    transform: none;
+    align-self: start;
   }
 
-  .hero-scroll-copy span,
+  .hero-scroll-copy span {
+    margin-bottom: 10px;
+    letter-spacing: 0.24em;
+  }
+
   .hero-scroll-copy p {
-    display: none;
+    font-size: 12px;
+    line-height: 1.6;
+    margin-top: 12px;
+    max-width: 32ch;
   }
 
   .hero-scroll-copy strong {
-    font-size: clamp(42px, 13vw, 66px);
-    line-height: 0.88;
+    font-size: clamp(38px, 12.8vw, 58px);
+    line-height: 0.94;
   }
 
-  .model-heading {
-    top: 76px;
-    width: min(330px, 86vw);
+  .model-badge {
+    top: 8px;
+    right: 8px;
+    padding: 8px 9px;
   }
 
-  .model-heading h1 {
-    font-size: clamp(38px, 12vw, 52px);
-  }
-
-  .model-heading p {
-    font-size: 11px;
-    line-height: 1.55;
+  .model-badge span:first-child,
+  .model-badge span:last-child {
+    font-size: 8px;
   }
 
   .model-controls {
-    bottom: 18px;
+    bottom: 6px;
     gap: 10px;
   }
 
@@ -831,7 +779,7 @@
   }
 
   .model-switcher {
-    inset: 48% 8px auto;
+    inset: 47% 2px auto;
   }
 
   .model-arrow {
@@ -850,5 +798,51 @@
   .model-color {
     width: 34px;
     height: 34px;
+  }
+
+  .hero-scroll {
+    display: none;
+  }
+
+  .home-commerce {
+    padding: 42px 12px 62px;
+  }
+
+  .discount-hero {
+    padding: 10px;
+    gap: 16px;
+  }
+
+  .discount-image {
+    min-height: 240px;
+  }
+
+  .discount-copy h2 {
+    font-size: clamp(32px, 10vw, 46px);
+    line-height: 1;
+  }
+
+  .discount-callout strong {
+    font-size: clamp(48px, 18vw, 72px);
+  }
+
+  .discount-cta {
+    width: 100%;
+  }
+
+  .collection-showcase {
+    padding-bottom: 44px;
+  }
+
+  .collection-grid {
+    gap: 12px;
+  }
+
+  .collection-tile {
+    min-height: 196px;
+  }
+
+  .collection-title {
+    font-size: clamp(30px, 10vw, 42px);
   }
 }

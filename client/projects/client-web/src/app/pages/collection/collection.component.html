@@ -1,126 +1,208 @@
 <section class="collection-page">
-  <div class="collection-shell">
-    <aside class="filter-panel" aria-label="Collection filters">
-      <h1>
-        Filters
-        @if (activeFilterCount() > 0) {
-          <span>{{ activeFilterCount() }}</span>
-        }
-      </h1>
+  @if (isCollectionLanding()) {
+    <div class="collection-landing">
+      <div class="collection-landing__head">
+        <span>Collections</span>
+        <h1>Shop by collection</h1>
+      </div>
 
-      @for (group of filterGroups(); track group.id) {
-        <div class="filter-group">
-          <h2>{{ group.title }}</h2>
-          @for (option of group.options; track option.value) {
-            <label class="filter-option">
-              <input
-                type="checkbox"
-                [checked]="isFilterSelected(group.id, option.value)"
-                (change)="toggleFilter(group.id, option.value)"
-              />
-              <span>{{ option.label }}</span>
-              <small>{{ option.count }}</small>
-            </label>
-          }
+      @if (!collectionsLoaded()) {
+        <div class="empty-state empty-state--collections">
+          <p>Loading collections...</p>
         </div>
-      }
-
-      <div class="filter-group">
-        <h2>Sort</h2>
-        @for (o of sortOptions; track o) {
-          <label class="filter-option filter-option-sort">
-            <input
-              type="checkbox"
-              [checked]="sort() === o"
-              (change)="setSort(o)"
-            />
-            <span>{{ sortLabel(o) }}</span>
-          </label>
-        }
-      </div>
-
-      <button type="button" class="clear-filters" (click)="clearFilters()">
-        Clear
-      </button>
-    </aside>
-
-    <div class="catalog-area">
-      <div class="catalog-topline">
-        <span>{{ filtered().length }} {{ t("collection.worksSuffix") }}</span>
-        <!-- <button
-          type="button"
-          class="catalog-menu"
-          aria-label="Open collection menu"
-        >
-          <span></span>
-          <span></span>
-          <span></span>
-        </button> -->
-      </div>
-
-      @if (filtered().length === 0) {
-        <div class="empty-state">
-          <p>{{ t("collection.empty") }}</p>
-          <button type="button" (click)="clearFilters()">Reset filters</button>
+      } @else if (collections().length > 0) {
+        <div class="collection-picker collection-picker--landing" aria-label="Collections">
+          @for (collection of collections(); track collection.id) {
+            <button
+              type="button"
+              class="collection-card"
+              (click)="selectCollection(collection)"
+            >
+              @if (collection.imageUrl) {
+                <img [src]="collection.imageUrl" [alt]="collection.title" />
+              }
+              <span>{{ collection.productIds.length }} pieces</span>
+              <strong>{{ collection.title }}</strong>
+            </button>
+          }
         </div>
       } @else {
-        <div class="product-grid">
-          @for (p of filtered(); track p.id; let i = $index) {
-            <article
-              class="product-tile"
-              (mouseenter)="hovered.set(p.id)"
-              (mouseleave)="hovered.set(null)"
-              [style.animation-delay]="i * 0.035 + 's'"
-            >
-              <button type="button" class="product-link" (click)="goToProduct(p)">
-                <span class="product-image-wrap">
-                  <img
-                    [src]="p.image"
-                    [alt]="productName(p)"
-                    (error)="onImgError($event)"
-                  />
-                </span>
-                <span class="product-copy">
-                  <span class="product-name">{{ productName(p) }}</span>
-                  <span class="product-meta"
-                    >{{ productStyle(p.style) }} Shoe</span
-                  >
-                  <span class="product-price">{{ price(p.price) }}</span>
-                </span>
-              </button>
-
-              <div class="purchase-panel">
-                <div class="size-picker" [attr.aria-label]="t('collection.quickAdd.size')">
-                  <span class="size-label">{{ t("collection.quickAdd.size") }}</span>
-                  <div class="size-options">
-                    @for (size of p.sizes; track size) {
-                      <button
-                        type="button"
-                        class="size-chip"
-                        [class.is-selected]="selectedSize(p) === size"
-                        [attr.aria-label]="t('collection.quickAdd.size') + ' ' + size"
-                        (click)="selectSize(p, size)"
-                      >
-                        {{ size }}
-                      </button>
-                    }
-                  </div>
-                </div>
-
-                <button type="button" class="quick-add" (click)="addToCart(p)">
-                  @if (addedProductId() === p.id) {
-                    <span>{{ t("collection.quickAdd.added") }}</span>
-                    <span class="quick-add-icon">✓</span>
-                  } @else {
-                    <span>{{ t("collection.quickAdd") }}</span>
-                    <span class="quick-add-arrow">→</span>
-                  }
-                </button>
-              </div>
-            </article>
-          }
+        <div class="empty-state empty-state--collections">
+          <p>No collections are published yet.</p>
         </div>
       }
     </div>
-  </div>
+  } @else {
+    @if (activeCollection(); as collection) {
+      <div class="collection-detail-head">
+        <button type="button" class="back-to-collections" (click)="showAllCollections()">
+          ← Collections
+        </button>
+        <h1>{{ collection.title }}</h1>
+        @if (collection.description) {
+          <p>{{ collection.description }}</p>
+        }
+      </div>
+
+      <div class="collection-shell">
+        @if (filtersOpen()) {
+          <button
+            type="button"
+            class="filter-backdrop"
+            aria-label="Close filters"
+            (click)="closeFilters()"
+          ></button>
+        }
+
+        <aside class="filter-panel" [class.is-open]="filtersOpen()" aria-label="Collection filters">
+          <h1>
+            Filters
+            @if (activeFilterCount() > 0) {
+              <span>{{ activeFilterCount() }}</span>
+            }
+          </h1>
+          <button type="button" class="filter-close" (click)="closeFilters()">
+            Done
+          </button>
+
+          @for (group of filterGroups(); track group.id) {
+            <div class="filter-group">
+              <h2>{{ group.title }}</h2>
+              @for (option of group.options; track option.value) {
+                <label class="filter-option">
+                  <input
+                    type="checkbox"
+                    [checked]="isFilterSelected(group.id, option.value)"
+                    (change)="toggleFilter(group.id, option.value)"
+                  />
+                  <span>{{ option.label }}</span>
+                  <small>{{ option.count }}</small>
+                </label>
+              }
+            </div>
+          }
+
+          <div class="filter-group">
+            <h2>Sort</h2>
+            @for (o of sortOptions; track o) {
+              <label class="filter-option filter-option-sort">
+                <input
+                  type="checkbox"
+                  [checked]="sort() === o"
+                  (change)="setSort(o)"
+                />
+                <span>{{ sortLabel(o) }}</span>
+              </label>
+            }
+          </div>
+
+          <button type="button" class="clear-filters" (click)="clearFilters()">
+            Clear
+          </button>
+        </aside>
+
+        <div class="catalog-area">
+          <div class="catalog-topline">
+            <span>{{ filtered().length }} {{ t("collection.worksSuffix") }}</span>
+            <button type="button" class="filter-toggle" (click)="openFilters()">
+              Filters
+              @if (activeFilterCount() > 0) {
+                <span>{{ activeFilterCount() }}</span>
+              }
+            </button>
+          </div>
+
+          @if (filtered().length === 0) {
+            <div class="empty-state">
+              <p>{{ t("collection.empty") }}</p>
+              <button type="button" (click)="clearFilters()">Reset filters</button>
+            </div>
+          } @else {
+            <div class="product-grid">
+              @for (p of filtered(); track p.id; let i = $index) {
+                <article
+                  class="product-tile"
+                  (mouseenter)="hovered.set(p.id)"
+                  (mouseleave)="hovered.set(null)"
+                  [style.animation-delay]="i * 0.035 + 's'"
+                >
+                  <button type="button" class="product-link" (click)="goToProduct(p)">
+                    <span class="product-image-wrap">
+                      <img
+                        [src]="p.image"
+                        [alt]="productName(p)"
+                        (error)="onImgError($event)"
+                      />
+                    </span>
+                    <span class="product-copy">
+                      <span class="product-name">{{ productName(p) }}</span>
+                      <span class="product-meta"
+                        >{{ productStyle(p.style) }} Shoe</span
+                      >
+                      @if (productColorNames(p).length > 0) {
+                        <span class="product-colors" aria-label="Available colors">
+                          @for (color of productColorNames(p); track color) {
+                            <span
+                              class="product-color-swatch"
+                              [style.background]="colorHex(color)"
+                              [attr.title]="color"
+                              [attr.aria-label]="color"
+                            ></span>
+                          }
+                        </span>
+                      }
+                      <span class="product-price">{{ price(p.price) }}</span>
+                    </span>
+                  </button>
+
+                  <div class="purchase-panel">
+                    <div class="size-picker" [attr.aria-label]="t('collection.quickAdd.size')">
+                      <span class="size-label">{{ t("collection.quickAdd.size") }}</span>
+                      <div class="size-options">
+                        @for (size of p.sizes; track size) {
+                          <button
+                            type="button"
+                            class="size-chip"
+                            [class.is-selected]="selectedSize(p) === size"
+                            [attr.aria-label]="t('collection.quickAdd.size') + ' ' + size"
+                            (click)="selectSize(p, size)"
+                          >
+                            {{ size }}
+                          </button>
+                        }
+                      </div>
+                    </div>
+
+                    <button type="button" class="quick-add" (click)="addToCart(p)">
+                      @if (addedProductId() === p.id) {
+                        <span>{{ t("collection.quickAdd.added") }}</span>
+                        <span class="quick-add-icon">✓</span>
+                      } @else {
+                        <span>{{ t("collection.quickAdd") }}</span>
+                        <span class="quick-add-arrow">→</span>
+                      }
+                    </button>
+
+                    <button type="button" class="buy-now" (click)="buyNow(p)">
+                      <span>{{ t("collection.buyNow") }}</span>
+                      <span class="quick-add-arrow">→</span>
+                    </button>
+                  </div>
+                </article>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    } @else if (!collectionsLoaded()) {
+      <div class="empty-state empty-state--collections">
+        <p>Loading collection...</p>
+      </div>
+    } @else {
+      <div class="empty-state empty-state--collections">
+        <p>Collection not found.</p>
+        <button type="button" (click)="showAllCollections()">Back to collections</button>
+      </div>
+    }
+  }
 </section>

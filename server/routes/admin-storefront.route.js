@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok } = require('./lib');
+const { DEFAULT_HOME_LAYOUT } = require('./storefront.route');
 
 const router = Router();
 
@@ -61,7 +62,14 @@ router.get('/draft', asyncHandler(async (_req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
-    ok(res, await loadSnapshot(client, tenant.id, 'draft'));
+    const snapshot = await loadSnapshot(client, tenant.id, 'draft');
+    ok(res, snapshot || {
+      id: 'default-home-layout',
+      status: 'draft',
+      savedAt: null,
+      publishedAt: null,
+      blocks: DEFAULT_HOME_LAYOUT,
+    });
   } finally {
     client.release();
   }
@@ -71,7 +79,14 @@ router.get('/published', asyncHandler(async (_req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
-    ok(res, await loadSnapshot(client, tenant.id, 'published'));
+    const snapshot = await loadSnapshot(client, tenant.id, 'published');
+    ok(res, snapshot || {
+      id: 'default-home-layout',
+      status: 'published',
+      savedAt: null,
+      publishedAt: null,
+      blocks: DEFAULT_HOME_LAYOUT,
+    });
   } finally {
     client.release();
   }

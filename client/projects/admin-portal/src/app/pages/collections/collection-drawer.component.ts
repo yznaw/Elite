@@ -10,9 +10,9 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { Collection } from '../../models';
-import { PRODUCTS } from '../../data/mock';
+import { Collection, Product } from '../../models';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
+import { AdminProductsService } from '../../services/admin-products.service';
 
 interface FormShape {
   title: string;
@@ -320,6 +320,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly collectionsApi = inject(AdminCollectionsService);
+  private readonly productsApi = inject(AdminProductsService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   private initial!: FormShape;
@@ -329,6 +330,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   readonly deleting = signal(false);
   readonly pickingProducts = signal(false);
   readonly pickerSearch = signal('');
+  readonly products = signal<Product[]>([]);
 
   readonly currentIndex = computed(() => this._collections().findIndex((c) => c.id === this._currentId()));
   readonly canPrev = computed(() => this.currentIndex() > 0);
@@ -348,22 +350,36 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     // Render in the order saved on `productIds` so drag-to-reorder is
     // meaningful for storefront display order.
     const ids = this.form().productIds;
-    const byId = new Map(PRODUCTS.map(p => [p.id, p]));
+    const byId = new Map(this.products().map(p => [p.id, p]));
     return ids.map(id => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
   });
 
   readonly pickerProducts = computed(() => {
     const s = this.pickerSearch().toLowerCase();
-    if (!s) return PRODUCTS;
-    return PRODUCTS.filter(p => p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s));
+    const products = this.products();
+    if (!s) return products;
+    return products.filter(p => p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s));
   });
 
   private autoSaveTimer: number | undefined;
 
   get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
 
-  ngOnInit(): void { if (!this.initial) this.resetForCurrent(); }
+  ngOnInit(): void {
+    if (!this.initial) this.resetForCurrent();
+    void this.loadProducts();
+  }
   ngOnDestroy(): void { if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); }
+
+  private async loadProducts(): Promise<void> {
+    try {
+      const products = await this.productsApi.list();
+      this.products.set(products.filter((product) => !product.hidden));
+    } catch {
+      this.products.set([]);
+      this.toast.warning('Products unavailable', 'Could not load products for this collection.');
+    }
+  }
 
   private resetForCurrent(): void {
     const c = this.collection;

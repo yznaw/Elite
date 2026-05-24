@@ -1,239 +1,242 @@
 <div>
-  <!-- ── HERO ── -->
-  <section #heroSection class="hero">
-    <div class="hero-grain"></div>
-    <div class="hero-ring hero-ring--lg"></div>
-    <div class="hero-ring hero-ring--sm"></div>
+  @for (section of layoutSections(); track section.id) {
+    @if (section.visible) {
+      @switch (section.id) {
+        @case ('home-hero') {
+          <section class="hero">
+            <div class="hero-grain"></div>
+            <div class="hero-ring hero-ring--lg"></div>
+            <div class="hero-ring hero-ring--sm"></div>
 
-    <div #heroShell class="hero-shell">
-      <div class="hero-scroll-copy" aria-hidden="true">
-        <span>{{ t(activeHeroModel().eyebrowKey) }}</span>
-        <strong class="serif">{{ t('home.hero.scroll.line1') }}<br />{{ t('home.hero.scroll.line2') }}</strong>
-        <p>{{ t(activeHeroModel().titleKey) }}</p>
-      </div>
+            <div class="hero-shell">
+              <div class="hero-scroll-copy" aria-live="polite">
+                <span>{{ t(activeHeroModel().eyebrowKey) }}</span>
+                <strong class="serif">{{ t(activeHeroModel().titleKey) }}</strong>
+                <p>{{ t(activeHeroModel().subtitleKey) }}</p>
+              </div>
 
-      <div #heroVisual class="hero-visual">
-        <div class="model-heading">
-          <span>{{ t(activeHeroModel().eyebrowKey) }}</span>
-          <h1 class="serif">{{ t(activeHeroModel().titleKey) }}</h1>
-          <p>{{ t(activeHeroModel().subtitleKey) }}</p>
-        </div>
+              <div class="hero-visual">
+                <canvas
+                  #heroCanvas
+                  class="hero-canvas"
+                  role="img"
+                  [attr.aria-label]="t('home.hero.aria')"
+                  [class.is-ready]="modelLoaded()"
+                ></canvas>
 
-        <canvas
-          #heroCanvas
-          class="hero-canvas"
-          role="img"
-          [attr.aria-label]="t('home.hero.aria')"
-          [class.is-ready]="modelLoaded()"
-        ></canvas>
+                @if (!modelLoaded() && !modelLoadFailed()) {
+                  <div class="model-state">
+                    <div class="model-spinner"></div>
+                    <span>{{ t('home.model.loading') }}</span>
+                  </div>
+                }
 
-        @if (!modelLoaded() && !modelLoadFailed()) {
-          <div class="model-state">
-            <div class="model-spinner"></div>
-            <span>{{ t('home.model.loading') }}</span>
-          </div>
-        }
+                @if (modelLoadFailed()) {
+                  <div class="model-state model-state--error">
+                    <span>{{ t('home.model.unavailable') }}</span>
+                  </div>
+                }
 
-        @if (modelLoadFailed()) {
-          <div class="model-state model-state--error">
-            <span>{{ t('home.model.unavailable') }}</span>
-          </div>
-        }
+                <div
+                  class="model-switcher"
+                  role="radiogroup"
+                  [attr.aria-label]="t('home.model.switch')"
+                >
+                  <button
+                    type="button"
+                    class="model-arrow model-arrow--prev"
+                    [attr.aria-label]="t('home.model.previous')"
+                    [title]="t('common.previous')"
+                    (click)="selectAdjacentHeroModel(-1)"
+                  >
+                    <span aria-hidden="true">‹</span>
+                  </button>
 
-        <div
-          class="model-switcher"
-          role="radiogroup"
-          [attr.aria-label]="t('home.model.switch')"
-        >
-          <button
-            type="button"
-            class="model-arrow model-arrow--prev"
-            [attr.aria-label]="t('home.model.previous')"
-            [title]="t('common.previous')"
-            (click)="selectAdjacentHeroModel(-1)"
-          >
-            <span aria-hidden="true">‹</span>
-          </button>
+                  <button
+                    type="button"
+                    class="model-arrow model-arrow--next"
+                    [attr.aria-label]="t('home.model.next')"
+                    [title]="t('common.next')"
+                    (click)="selectAdjacentHeroModel(1)"
+                  >
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
 
-          <!-- <div class="model-index" aria-live="polite">
-            {{ activeHeroModel().index }} / {{ heroModels.length }}
-          </div> -->
+                <div class="model-controls">
+                  <div
+                    class="model-colors"
+                    role="radiogroup"
+                    [attr.aria-label]="t('home.model.chooseLeather')"
+                  >
+                    @for (option of leatherColors; track option.id) {
+                      <button
+                        type="button"
+                        class="model-color"
+                        role="radio"
+                        [class.is-active]="selectedLeatherColor() === option.id"
+                        [style.--swatch]="option.swatch"
+                        [attr.aria-label]="t('home.model.changeLeather', { name: t(option.nameKey) })"
+                        [attr.aria-checked]="selectedLeatherColor() === option.id"
+                        [title]="t(option.nameKey)"
+                        (click)="selectLeatherColor(option.id)"
+                      >
+                        <span></span>
+                      </button>
+                    }
+                  </div>
+                </div>
+              </div>
 
-          <button
-            type="button"
-            class="model-arrow model-arrow--next"
-            [attr.aria-label]="t('home.model.next')"
-            [title]="t('common.next')"
-            (click)="selectAdjacentHeroModel(1)"
-          >
-            <span aria-hidden="true">›</span>
-          </button>
-        </div>
-
-        <div class="model-controls">
-          <div
-            class="model-colors"
-            role="radiogroup"
-            [attr.aria-label]="t('home.model.chooseLeather')"
-          >
-            @for (option of leatherColors; track option.id) {
-              <button
-                type="button"
-                class="model-color"
-                role="radio"
-                [class.is-active]="selectedLeatherColor() === option.id"
-                [style.--swatch]="option.swatch"
-                [attr.aria-label]="t('home.model.changeLeather', { name: t(option.nameKey) })"
-                [attr.aria-checked]="selectedLeatherColor() === option.id"
-                [title]="t(option.nameKey)"
-                (click)="selectLeatherColor(option.id)"
-              >
-                <span></span>
-              </button>
-            }
-          </div>
-        </div>
-      </div>
-
-      <div class="hero-scroll">
-        <span>{{ t('common.scroll') }}</span>
-        <div></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── HOME CONTENT: DISCOUNT + COLLECTIONS ── -->
-  <section class="home-commerce" aria-labelledby="home-discount-title">
-    <div class="discount-hero anim-fade-up">
-      <div class="discount-image">
-        <img [src]="contentData().hero.imageUrl" [alt]="contentData().hero.title" />
-      </div>
-
-      <div class="discount-copy">
-        <p class="discount-kicker">Elite Collection</p>
-        <h2 id="home-discount-title">{{ contentData().hero.title }}</h2>
-        <p class="discount-body">{{ contentData().hero.body }}</p>
-
-        <div class="discount-callout">
-          <span>Come and Enjoy Sale!</span>
-          <strong>{{ contentData().hero.discountText }}</strong>
-        </div>
-
-        <button type="button" class="discount-cta" (click)="goToContentLink(contentData().hero.ctaLink)">
-          {{ contentData().hero.ctaText }}
-        </button>
-      </div>
-    </div>
-
-    <div class="collection-showcase">
-      <div class="collection-heading">
-        <h2>Featured Collections</h2>
-        <p>Dare to mix and match. Explore the latest edits by category.</p>
-      </div>
-
-      <div class="collection-grid">
-        @for (tile of contentData().collections; track tile.id) {
-          <button
-            type="button"
-            [class]="'collection-tile tile-' + tile.id"
-            (click)="goToContentLink(tile.link)"
-          >
-            <img [src]="tile.imageUrl" [alt]="tile.title" />
-            <span class="collection-overlay"></span>
-            <span class="collection-title">{{ tile.title }}</span>
-            @if (tile.ctaText) {
-              <span class="collection-action">{{ tile.ctaText }}</span>
-            }
-          </button>
-        }
-      </div>
-    </div>
-  </section>
-
-  <!-- ── CRAFT BANNER ── -->
-  <section
-    style="
-      margin: 0 24px 80px;
-      padding: 60px 40px;
-      background: linear-gradient(135deg, var(--card) 0%, var(--card2) 100%);
-      border: 1px solid var(--border);
-      position: relative;
-      overflow: hidden;
-    "
-  >
-    <div
-      style="
-        position: absolute;
-        top: -40px;
-        right: -40px;
-        width: 200px;
-        height: 200px;
-        border-radius: 50%;
-        border: 1px solid rgba(201, 169, 110, 0.08);
-      "
-    ></div>
-    <div
-      style="
-        position: absolute;
-        bottom: -60px;
-        left: -20px;
-        width: 150px;
-        height: 150px;
-        border-radius: 50%;
-        border: 1px solid rgba(201, 169, 110, 0.06);
-      "
-    ></div>
-    <div style="position: relative; z-index: 1">
-      <div
-        style="
-          font-family: var(--ff-sans);
-          font-size: 9px;
-          letter-spacing: 0.3em;
-          color: var(--gold);
-          text-transform: uppercase;
-          margin-bottom: 16px;
-        "
-      >
-        {{ t('home.promise.kicker') }}
-      </div>
-      <h3
-        class="serif"
-        style="
-          font-size: clamp(28px, 5vw, 48px);
-          font-weight: 300;
-          color: var(--cream);
-          line-height: 1.15;
-          max-width: 600px;
-          margin-bottom: 24px;
-        "
-      >
-        {{ t('home.promise.headline.line1') }}<br />
-        <em style="color: var(--gold)">{{ t('home.promise.headline.line2') }}</em>
-      </h3>
-      <div style="display: flex; gap: 40px; flex-wrap: wrap">
-        @for (s of stats; track s.labelKey) {
-          <div>
-            <div
-              class="serif"
-              style="font-size: 32px; color: var(--gold); font-weight: 300"
-            >
-              {{ s.value }}
+              <div class="hero-scroll">
+                <span>{{ t('common.scroll') }}</span>
+                <div></div>
+              </div>
             </div>
+          </section>
+        }
+
+        @case ('home-collections') {
+          <section class="home-commerce" aria-labelledby="home-collection-title">
+            <div class="collection-showcase">
+              <div class="collection-heading">
+                <h2 id="home-collection-title">Featured Collections</h2>
+                <p>Dare to mix and match. Explore the latest edits by category.</p>
+              </div>
+
+              <div class="collection-grid">
+                @for (tile of contentData().collections; track tile.id) {
+                  <button
+                    type="button"
+                    class="collection-tile"
+                    (click)="goToCollectionTile(tile)"
+                  >
+                    <img [src]="tile.imageUrl" [alt]="tile.title" />
+                    <span class="collection-overlay"></span>
+                    <span class="collection-title">{{ tile.title }}</span>
+                    @if (tile.ctaText) {
+                      <span class="collection-action">{{ tile.ctaText }}</span>
+                    }
+                  </button>
+                }
+              </div>
+            </div>
+          </section>
+        }
+
+        @case ('home-discount') {
+          <section class="home-commerce" aria-labelledby="home-discount-title">
+            <div class="discount-hero anim-fade-up">
+              <div class="discount-image">
+                <img [src]="contentData().hero.imageUrl" [alt]="contentData().hero.title" />
+              </div>
+
+              <div class="discount-copy">
+                <p class="discount-kicker">Elite Collection</p>
+                <h2 id="home-discount-title">{{ contentData().hero.title }}</h2>
+                <p class="discount-body">{{ contentData().hero.body }}</p>
+
+                <div class="discount-callout">
+                  <span>Come and Enjoy Sale!</span>
+                  <strong>{{ contentData().hero.discountText }}</strong>
+                </div>
+
+                <button type="button" class="discount-cta" (click)="goToContentLink(contentData().hero.ctaLink)">
+                  {{ contentData().hero.ctaText }}
+                </button>
+              </div>
+            </div>
+          </section>
+        }
+
+        @case ('home-promise') {
+          <section
+            style="
+              margin: 0 24px 80px;
+              padding: 60px 40px;
+              background: linear-gradient(135deg, var(--card) 0%, var(--card2) 100%);
+              border: 1px solid var(--border);
+              position: relative;
+              overflow: hidden;
+            "
+          >
             <div
               style="
-                font-family: var(--ff-sans);
-                font-size: 10px;
-                letter-spacing: 0.1em;
-                color: var(--muted);
-                text-transform: uppercase;
-                margin-top: 2px;
+                position: absolute;
+                top: -40px;
+                right: -40px;
+                width: 200px;
+                height: 200px;
+                border-radius: 50%;
+                border: 1px solid rgba(201, 169, 110, 0.08);
               "
-            >
-              {{ t(s.labelKey) }}
+            ></div>
+            <div
+              style="
+                position: absolute;
+                bottom: -60px;
+                left: -20px;
+                width: 150px;
+                height: 150px;
+                border-radius: 50%;
+                border: 1px solid rgba(201, 169, 110, 0.06);
+              "
+            ></div>
+            <div style="position: relative; z-index: 1">
+              <div
+                style="
+                  font-family: var(--ff-sans);
+                  font-size: 9px;
+                  letter-spacing: 0.3em;
+                  color: var(--gold);
+                  text-transform: uppercase;
+                  margin-bottom: 16px;
+                "
+              >
+                {{ t('home.promise.kicker') }}
+              </div>
+              <h3
+                class="serif"
+                style="
+                  font-size: clamp(28px, 5vw, 48px);
+                  font-weight: 300;
+                  color: var(--cream);
+                  line-height: 1.15;
+                  max-width: 600px;
+                  margin-bottom: 24px;
+                "
+              >
+                {{ t('home.promise.headline.line1') }}<br />
+                <em style="color: var(--gold)">{{ t('home.promise.headline.line2') }}</em>
+              </h3>
+              <div style="display: flex; gap: 40px; flex-wrap: wrap">
+                @for (s of stats; track s.labelKey) {
+                  <div>
+                    <div
+                      class="serif"
+                      style="font-size: 32px; color: var(--gold); font-weight: 300"
+                    >
+                      {{ s.value }}
+                    </div>
+                    <div
+                      style="
+                        font-family: var(--ff-sans);
+                        font-size: 10px;
+                        letter-spacing: 0.1em;
+                        color: var(--muted);
+                        text-transform: uppercase;
+                        margin-top: 2px;
+                      "
+                    >
+                      {{ t(s.labelKey) }}
+                    </div>
+                  </div>
+                }
+              </div>
             </div>
-          </div>
+          </section>
         }
-      </div>
-    </div>
-  </section>
+      }
+    }
+  }
 </div>

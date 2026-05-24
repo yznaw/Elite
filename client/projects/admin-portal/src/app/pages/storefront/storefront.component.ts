@@ -1,492 +1,276 @@
-import { Component, HostListener, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
-import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { StorefrontService } from '../../services/storefront.service';
-import { SectionDrawerComponent } from './section-drawer.component';
-import { HomeContentComponent } from '../home-content/home-content.component';
-import { PALETTE, STOREFRONT_DEFAULT } from '../../data/mock';
+import { HOME_LAYOUT_BLOCKS, StorefrontService } from '../../services/storefront.service';
+import { ToastService } from '../../services/toast.service';
 import { StorefrontBlock } from '../../models';
+import { HomeContentComponent } from '../home-content/home-content.component';
 
 @Component({
   selector: 'ap-storefront',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, SectionDrawerComponent, HomeContentComponent],
+  imports: [CommonModule, IconComponent, SpinnerComponent, HomeContentComponent],
   template: `
     <div class="page-fade">
       <ap-home-content/>
 
-      <div class="storefront-section-divider">
-        <div>
-          <p>{{ t('storefront.live.title') }}</p>
-          <h2>Section Control</h2>
-        </div>
-        <span>Manage the remaining reusable storefront sections from the same workspace.</span>
-      </div>
-
-      <!-- Top toolbar (mobile) — Add Section button + Preview / Publish -->
-      <div class="storefront-toolbar mb-16">
-        <div class="row gap-sm" style="align-items:center;flex-wrap:wrap;">
-          <button class="btn btn-outline" (click)="togglePalette()" [attr.aria-expanded]="paletteOpen()">
-            <ap-icon name="plus" [size]="14"/>
-            {{ paletteOpen() ? t('storefront.palette.hide') : t('storefront.palette.show') }}
-            <span class="muted small" style="margin-inline-start:4px;">({{ palette.length }})</span>
-          </button>
-          <span class="muted small grow">{{ visibleCount() }} / {{ blocks().length }} {{ t('storefront.visibleCount') }}</span>
-          <button class="btn btn-outline" (click)="preview()"><ap-icon name="eye" [size]="14"/> {{ t('storefront.preview') }}</button>
-          <button class="btn btn-gold" [disabled]="publishing() || !storefront.hasUnpublishedChanges()" (click)="publish()">
-            @if (publishing()) {
-              <ap-spinner [size]="12"/> {{ t('storefront.publishing') }}
-            } @else {
-              {{ storefront.hasUnpublishedChanges() ? t('storefront.publish') : t('storefront.published') }}
-            }
-          </button>
-        </div>
-      </div>
-
-      <div class="storefront-grid">
-        <!-- Available Blocks panel (collapsible) -->
-        <div class="card storefront-palette" [class.collapsed]="!paletteOpen()" [attr.aria-hidden]="!paletteOpen()">
-          <button class="palette-head" (click)="togglePalette()" type="button" [attr.aria-expanded]="paletteOpen()">
-            <div style="text-align:start;">
-              <div class="card-title">{{ t('storefront.palette.title') }}</div>
-              <div class="card-sub">{{ t('storefront.palette.sub') }}</div>
+      <section class="layout-controller card">
+        <div class="card-header layout-controller__head">
+          <div>
+            <p class="eyebrow">Existing Layout</p>
+            <div class="card-title">Home Section Control</div>
+            <div class="card-sub">
+              Reorder or hide the real sections rendered on the customer home page.
             </div>
-            <span class="palette-chevron" [class.open]="paletteOpen()" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </span>
-          </button>
+          </div>
 
-          @if (paletteOpen()) {
-            <div class="card-pad col palette-list">
-              @for (p of palette; track p.type) {
-                <div class="palette-blk" draggable="true"
-                     (dragstart)="onPaletteDragStart($event, p.type)"
-                     (click)="addBlockOfType(p.type)"
-                     role="button"
-                     [attr.aria-label]="t('storefront.palette.add') + ' ' + p.type">
-                  <span style="color:var(--gold);"><ap-icon name="drag" [size]="14"/></span>
-                  <div class="grow">
-                    <div class="strong" style="font-size:12px;">{{ p.type }}</div>
-                    <div class="muted small">{{ p.desc }}</div>
-                  </div>
-                  <ap-icon name="plus" [size]="12"/>
-                </div>
+          <div class="row gap-sm layout-actions">
+            <button class="btn btn-outline" type="button" (click)="resetLayout()">
+              <ap-icon name="sync" [size]="14"/> Reset order
+            </button>
+            <button class="btn btn-outline" type="button" (click)="viewStorefront()">
+              <ap-icon name="eye" [size]="14"/> {{ t('storefront.preview') }}
+            </button>
+            <button
+              class="btn btn-gold"
+              type="button"
+              [disabled]="publishing()"
+              (click)="publish()"
+            >
+              @if (publishing()) {
+                <ap-spinner [size]="12"/> {{ t('storefront.publishing') }}
+              } @else {
+                {{ t('storefront.publish') }}
               }
-            </div>
-          }
+            </button>
+          </div>
         </div>
 
-        <!-- Live page order -->
-        <div class="card">
-          <div class="card-header">
-            <div style="min-width:0;">
-              <div class="row gap-sm" style="align-items:center;flex-wrap:wrap;">
-                <div class="card-title">{{ t('storefront.live.title') }}</div>
-                @if (storefront.hasUnpublishedChanges()) {
-                  <span class="save-badge dirty">{{ t('storefront.unpublished') }}</span>
-                }
-              </div>
-              <div class="card-sub">{{ visibleCount() }} {{ t('storefront.live.visible') }} · {{ blocks().length }} {{ t('storefront.live.total') }}</div>
-            </div>
-            <div class="row gap-sm storefront-toolbar-desk" style="flex-shrink:0;">
-              <button class="btn btn-outline" (click)="preview()"><ap-icon name="eye" [size]="14"/> {{ t('storefront.preview') }}</button>
-              <button class="btn btn-gold" [disabled]="publishing() || !storefront.hasUnpublishedChanges()" (click)="publish()">
-                @if (publishing()) {
-                  <ap-spinner [size]="12"/> {{ t('storefront.publishing') }}
-                } @else {
-                  {{ storefront.hasUnpublishedChanges() ? t('storefront.publish') : t('storefront.published') }}
-                }
-              </button>
-            </div>
-          </div>
-          <div class="card-pad col">
-            @if (blocks().length === 0) {
-              <div class="muted small center" style="padding:32px 16px;">
-                {{ t('storefront.live.empty') }}
-              </div>
+        <div class="card-pad">
+          <div class="layout-summary">
+            <span>{{ visibleCount() }} visible</span>
+            <span>{{ blocks().length }} total</span>
+            @if (storefront.hasUnpublishedChanges()) {
+              <span class="save-badge dirty">{{ t('storefront.unpublished') }}</span>
             }
+          </div>
 
-            @for (b of blocks(); track b.id) {
-              <div class="blk"
-                   draggable="true"
-                   [class.dragging]="draggingId() === b.id"
-                   [class.drop-target]="dropTargetId() === b.id"
-                   [class.is-hidden]="!b.visible"
-                   (dragstart)="onDragStart(b.id)"
-                   (dragover)="onDragOver($event, b.id)"
-                   (drop)="onDrop($event, b.id)"
-                   (dragend)="onDragEnd()">
-                <span class="blk-handle"><ap-icon name="drag" [size]="14"/></span>
-                <button type="button" class="blk-info-btn" (click)="openSection(b)" [attr.aria-label]="t('storefront.editSection') + ' ' + b.type">
-                  <div class="blk-info">
-                    <div class="blk-title">
-                      {{ b.type }}
-                      <span class="muted small" style="margin-inline-start:6px;font-weight:400;">· {{ b.title }}</span>
-                    </div>
-                    <div class="blk-meta">{{ b.config }}</div>
-                  </div>
-                </button>
-                <div class="blk-controls">
-                  <button class="toggle" [class.on]="b.visible" (click)="toggleVisible(b.id)" [attr.aria-label]="t('storefront.section.toggleVisibility')"></button>
-                  <button class="icon-btn" (click)="openSection(b)" [attr.title]="t('common.edit')"><ap-icon name="edit" [size]="14"/></button>
-                  <button class="icon-btn" (click)="remove(b.id)" [attr.title]="t('common.remove')" style="color:var(--danger);">
-                    <ap-icon name="trash" [size]="14"/>
-                  </button>
+          <div class="layout-list">
+            @for (block of blocks(); track block.id) {
+              <article
+                class="layout-block"
+                draggable="true"
+                [class.dragging]="draggingId() === block.id"
+                [class.drop-target]="dropTargetId() === block.id"
+                [class.is-hidden]="!block.visible"
+                (dragstart)="onDragStart(block.id)"
+                (dragover)="onDragOver($event, block.id)"
+                (drop)="onDrop($event, block.id)"
+                (dragend)="onDragEnd()"
+              >
+                <span class="layout-handle" aria-hidden="true">
+                  <ap-icon name="drag" [size]="14"/>
+                </span>
+
+                <div class="layout-copy">
+                  <div class="layout-title">{{ block.title }}</div>
+                  <div class="layout-meta">{{ block.config }}</div>
                 </div>
-              </div>
+
+                <button
+                  class="toggle"
+                  type="button"
+                  [class.on]="block.visible"
+                  (click)="toggleVisible(block.id)"
+                  [attr.aria-label]="t('storefront.section.toggleVisibility')"
+                ></button>
+              </article>
             }
 
-            <div class="palette-blk drop-zone-end"
-                 [class.drop-target]="dropTargetId() === '__end__'"
-                 (dragover)="onDragOver($event, '__end__')"
-                 (drop)="onDrop($event, '__end__')">
-              <span class="muted"><ap-icon name="plus" [size]="14"/></span>
-              <span class="muted small">{{ t('storefront.dropEnd') }}</span>
+            <div
+              class="layout-drop-end"
+              [class.drop-target]="dropTargetId() === '__end__'"
+              (dragover)="onDragOver($event, '__end__')"
+              (drop)="onDrop($event, '__end__')"
+            >
+              <ap-icon name="drag" [size]="14"/>
+              <span>Drop here to place at the end</span>
             </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
-
-    @if (active(); as b) {
-      <ap-section-drawer
-        [block]="b"
-        (closed)="active.set(null)"
-        (saved)="onSaved($event)"
-        (deletedBlock)="onDeleted($event)"
-      />
-    }
   `,
   styles: [`
     :host ::ng-deep ap-home-content .home-admin {
       margin-bottom: 24px;
     }
 
-    .storefront-section-divider {
-      display: grid;
-      gap: 10px;
-      margin: 8px 0 16px;
-      padding: 18px 22px;
-      border: 1px solid var(--border-2);
-      border-radius: 8px;
-      background: var(--surface);
+    .layout-controller {
+      overflow: hidden;
     }
 
-    .storefront-section-divider p {
-      margin: 0 0 6px;
-      color: var(--muted);
+    .layout-controller__head {
+      gap: 18px;
+      align-items: start;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--gold);
       font-size: 10px;
       font-weight: 900;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
     }
 
-    .storefront-section-divider h2 {
-      margin: 0;
-      color: var(--text);
-      font-size: 22px;
-      letter-spacing: 0;
+    .layout-actions {
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
-    .storefront-section-divider span {
+    .layout-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .layout-summary span:not(.save-badge) {
+      padding: 6px 10px;
+      border: 1px solid var(--border-2);
+      border-radius: 999px;
+      background: var(--bg);
+    }
+
+    .layout-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .layout-block,
+    .layout-drop-end {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 74px;
+      padding: 14px;
+      border: 1px solid var(--border-2);
+      border-radius: 8px;
+      background: var(--surface);
+      transition: border-color 0.16s ease, background 0.16s ease, opacity 0.16s ease, transform 0.16s ease;
+    }
+
+    .layout-block.dragging {
+      opacity: 0.48;
+      transform: scale(0.995);
+    }
+
+    .layout-block.drop-target,
+    .layout-drop-end.drop-target {
+      border-color: var(--gold);
+      background: var(--gold-3);
+    }
+
+    .layout-block.is-hidden {
+      opacity: 0.56;
+    }
+
+    .layout-handle {
+      display: inline-flex;
+      color: var(--muted);
+      cursor: grab;
+    }
+
+    .layout-copy {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .layout-title {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .layout-meta {
+      margin-top: 3px;
       color: var(--muted);
       font-size: 12px;
       font-weight: 600;
     }
 
-    @media (min-width: 760px) {
-      .storefront-section-divider {
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: end;
-      }
-    }
-
-    .storefront-toolbar { display: none; }
-    @media (max-width: 900px) {
-      .storefront-toolbar { display: block; }
-      .storefront-toolbar-desk { display: none !important; }
-    }
-
-    /* Storefront grid: 2-up on desktop, stacked on tablet/phone */
-    .storefront-grid {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 20px;
-      align-items: flex-start;
-    }
-    @media (max-width: 900px) {
-      .storefront-grid { grid-template-columns: 1fr; gap: 14px; }
-    }
-
-    /* Palette: collapsed state hides body, header acts as toggle */
-    .palette-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      padding: 18px 22px;
-      border: none;
-      background: var(--surface);
-      cursor: pointer;
-      font: inherit;
-      color: inherit;
-      border-bottom: 1px solid var(--border-2);
-      transition: background 0.12s;
-    }
-    .palette-head:hover { background: var(--bg); }
-    .storefront-palette.collapsed .palette-head { border-bottom: none; }
-
-    .palette-chevron {
-      width: 28px; height: 28px;
-      display: inline-flex; align-items: center; justify-content: center;
+    .layout-drop-end {
+      justify-content: center;
+      min-height: 52px;
       color: var(--muted);
-      transition: transform 0.2s;
-    }
-    .palette-chevron.open { transform: rotate(180deg); }
-
-    /* On mobile, the palette is always shown via toggle button at the top.
-       The card heading toggle is hidden so we don't have two toggles. */
-    @media (max-width: 900px) {
-      .palette-head { display: none; }
-      .storefront-palette {
-        order: -1; /* show above the live list when expanded */
-      }
-      .storefront-palette.collapsed { display: none; }
-    }
-    /* On desktop, the heading toggle is visible (palette can still collapse for focus mode) */
-    @media (min-width: 901px) {
-      .storefront-palette.collapsed .card-pad,
-      .storefront-palette.collapsed .palette-list { display: none; }
-    }
-
-    .palette-list { padding-top: 14px; }
-
-    /* Palette block — clickable to add at the bottom on mobile */
-    .palette-blk { transition: all 0.12s; }
-    .palette-blk:active { transform: scale(0.98); }
-
-    .drop-zone-end {
-      transition: all 0.15s;
-    }
-    .drop-zone-end.drop-target {
-      border-color: var(--gold) !important;
-      background: var(--gold-3) !important;
-    }
-
-    /* Live block: clickable info area + visual hidden state */
-    .blk-info-btn {
-      flex: 1;
-      min-width: 0;
-      background: none;
-      border: none;
-      padding: 0;
-      text-align: start;
-      cursor: pointer;
-      font: inherit;
-      color: inherit;
-    }
-    .blk-info-btn:hover .blk-title { color: var(--green); }
-    .blk-info-btn:hover .blk-title > span { color: var(--ink-2); }
-    .blk.is-hidden { opacity: 0.55; }
-    .blk.is-hidden .blk-title::before {
-      content: '○ ';
-      color: var(--danger);
+      font-size: 12px;
       font-weight: 700;
+      border-style: dashed;
+    }
+
+    @media (min-width: 760px) {
+      .layout-controller__head {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+      }
     }
   `],
 })
-export class StorefrontComponent {
+export class StorefrontComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   readonly storefront = inject(StorefrontService);
 
-  readonly t = (k: string): string => this.i18n.t(k);
-
-  readonly palette = PALETTE;
-
-  /** Blocks come from the persisted draft if it exists, otherwise the default seed. */
-  readonly blocks = signal<StorefrontBlock[]>(this.storefront.draft()?.blocks ?? STOREFRONT_DEFAULT.map((b) => ({ ...b })));
+  readonly t = (key: string): string => this.i18n.t(key);
+  readonly blocks = signal<StorefrontBlock[]>(this.normalizeBlocks(this.storefront.draft()?.blocks));
   readonly draggingId = signal<string | null>(null);
   readonly dropTargetId = signal<string | null>(null);
   readonly publishing = signal(false);
-
-  /** Block currently being edited in the side drawer. */
-  readonly active = signal<StorefrontBlock | null>(null);
-
-  /** Palette open/closed. On mobile defaults to closed (saves space). */
-  readonly paletteOpen = signal<boolean>(this.computeIsMobile() ? false : true);
+  readonly visibleCount = computed(() => this.blocks().filter((block) => block.visible).length);
 
   constructor() {
-    /** Persist any change to the blocks list as a draft. The customer-web's
-        preview mode reads this same key. */
     effect(() => {
-      const list = this.blocks();
-      this.storefront.saveDraft(list);
+      this.storefront.saveDraft(this.blocks());
     });
+  }
 
-    /** If the draft was empty when the editor mounted but now there's a
-        published version, prefer it (handy when reopening on another tab). */
-    if (!this.storefront.draft() && this.storefront.published()) {
-      const pub = this.storefront.published()!;
-      this.blocks.set(pub.blocks);
+  async ngOnInit(): Promise<void> {
+    try {
+      const draft = await this.storefront.loadDraft();
+      this.blocks.set(this.normalizeBlocks(draft?.blocks));
+    } catch {
+      this.toast.warning('Using local layout', 'The saved storefront layout could not be loaded.');
     }
   }
-
-  @HostListener('window:resize')
-  onResize(): void {
-    // Keep desktop default open when resizing back up; don't force-close on resize down.
-  }
-
-  private computeIsMobile(): boolean {
-    return typeof window !== 'undefined' && window.innerWidth <= 900;
-  }
-
-  visibleCount = computed(() => this.blocks().filter((b) => b.visible).length);
-
-  togglePalette(): void {
-    this.paletteOpen.update((v) => !v);
-  }
-
-  // ── Section drawer ──────────────────────────────────────────────────
-
-  openSection(b: StorefrontBlock): void {
-    this.active.set({ ...b });
-  }
-
-  onSaved(updated: StorefrontBlock): void {
-    this.blocks.update((bs) => bs.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
-    this.active.set(null);
-  }
-
-  onDeleted(block: StorefrontBlock): void {
-    const before = this.blocks();
-    const beforeIndex = before.findIndex((b) => b.id === block.id);
-    this.blocks.update((bs) => bs.filter((b) => b.id !== block.id));
-    this.active.set(null);
-    this.toast.success(
-      this.t('storefront.toast.removed.title'),
-      `${block.type} · ${block.title}`,
-      {
-        label: this.t('common.undo'),
-        run: () => {
-          this.blocks.update((bs) => {
-            const restored = [...bs];
-            restored.splice(beforeIndex, 0, block);
-            return restored;
-          });
-        },
-      },
-    );
-  }
-
-  // ── Visibility toggle (inline) ──────────────────────────────────────
 
   toggleVisible(id: string): void {
-    let nextVisible = false;
-    let block: StorefrontBlock | undefined;
-    this.blocks.update((bs) =>
-      bs.map((b) => {
-        if (b.id !== id) return b;
-        nextVisible = !b.visible;
-        block = { ...b, visible: nextVisible };
-        return block;
-      }),
-    );
-    if (block) {
-      this.toast.info(
-        nextVisible ? this.t('storefront.toast.shown.title') : this.t('storefront.toast.hidden.title'),
-        `${block.type} · ${block.title}`,
-      );
-    }
+    this.blocks.update((blocks) => blocks.map((block) => (
+      block.id === id ? { ...block, visible: !block.visible } : block
+    )));
   }
 
-  // ── Remove (with confirm) ───────────────────────────────────────────
-
-  async remove(id: string): Promise<void> {
-    const block = this.blocks().find((b) => b.id === id);
-    if (!block) return;
-    const ok = await this.confirm.ask({
-      title: this.t('storefront.deleteConfirm.title'),
-      message: this.t('storefront.deleteConfirm.message') + ` "${block.type} · ${block.title}".`,
-      confirmLabel: this.t('storefront.delete.button'),
-      cancelLabel: this.t('common.cancel'),
-      variant: 'danger',
-    });
-    if (!ok) return;
-    this.onDeleted(block);
+  resetLayout(): void {
+    this.blocks.set(HOME_LAYOUT_BLOCKS.map((block) => ({ ...block })));
   }
 
-  // ── Add a block (mobile-friendly: tap to append, drag to insert) ────
-
-  addBlockOfType(type: string): void {
-    const newBlk = this.makeBlockOfType(type);
-    this.blocks.update((bs) => [...bs, newBlk]);
-    this.toast.success(
-      this.t('storefront.toast.added.title'),
-      `${type}`,
-      { label: this.t('common.configure'), run: () => this.openSection(newBlk) },
-    );
-    // Auto-collapse on mobile after adding
-    if (this.computeIsMobile()) this.paletteOpen.set(false);
-  }
-
-  private makeBlockOfType(type: string): StorefrontBlock {
-    return {
-      id: 'b' + Date.now(),
-      type,
-      title: type,
-      visible: true,
-      config: this.t('storefront.newBlock.config'),
-    };
-  }
-
-  /**
-   * Open the live customer-web in a new tab with `?preview=storefront&token=…`.
-   * The customer-web reads the draft from localStorage (or, in production,
-   * fetches /api/storefront/draft using the token).
-   *
-   * Pop-up blockers can refuse `window.open()` outside a user gesture, so
-   * we fall through to a clipboard copy if it fails.
-   */
-  preview(): void {
-    // Save the latest draft synchronously so the preview tab sees the freshest copy.
-    this.storefront.saveDraft(this.blocks());
-
-    const url = this.storefront.buildPreviewLink();
-    const tab = window.open(url, '_blank', 'noopener,noreferrer');
-
-    if (tab) {
-      this.toast.info(
-        this.t('storefront.preview.toast'),
-        `${this.visibleCount()} ${this.t('storefront.live.visible')}`,
-      );
-    } else {
-      // Pop-up blocked → put the link on the clipboard
-      try { navigator.clipboard?.writeText(url); } catch {}
-      this.toast.warning(
-        this.t('storefront.preview.blocked.title'),
-        this.t('storefront.preview.blocked.sub'),
-        { label: this.t('common.tryAgain'), run: () => this.preview() },
-      );
-    }
+  viewStorefront(): void {
+    window.open(this.storefront.storefrontUrl(), '_blank', 'noopener,noreferrer');
   }
 
   async publish(): Promise<void> {
-    if (this.publishing() || !this.storefront.hasUnpublishedChanges()) return;
+    if (this.publishing()) return;
 
-    const visible = this.visibleCount();
     const ok = await this.confirm.ask({
       title: this.t('storefront.publishConfirm.title'),
-      message:
-        `${this.t('storefront.publishConfirm.message')} ${visible} ${this.t('storefront.publishConfirm.sectionsVisible')}.`,
+      message: `Publish ${this.visibleCount()} visible home sections to the customer storefront?`,
       confirmLabel: this.t('storefront.publish'),
       cancelLabel: this.t('common.cancel'),
       variant: 'info',
@@ -495,77 +279,68 @@ export class StorefrontComponent {
 
     this.publishing.set(true);
 
-    // Snapshot the current blocks for undo
-    const previousPublished = this.storefront.published();
-
-    // In production: replace with a POST to /api/storefront/publish.
-    // The setTimeout simulates the round-trip.
-    setTimeout(() => {
-      this.storefront.publish();
+    try {
+      const blocks = this.normalizeBlocks(this.blocks());
+      await this.storefront.saveDraftRemote(blocks);
+      await this.storefront.publishRemote();
+      this.blocks.set(blocks);
+      this.toast.success(this.t('storefront.publish.toast.title'), this.t('storefront.publish.toast.sub'));
+    } catch {
+      this.toast.error('Publish failed', 'The home layout could not be saved.');
+    } finally {
       this.publishing.set(false);
-      this.toast.success(
-        this.t('storefront.publish.toast.title'),
-        this.t('storefront.publish.toast.sub'),
-        previousPublished ? {
-          label: this.t('common.undo'),
-          run: () => {
-            this.storefront.revertPublished(previousPublished);
-            this.toast.info(this.t('storefront.unpublish.toast.title'), '');
-          },
-        } : undefined,
-      );
-    }, 700);
+    }
   }
 
-  // ── Drag and drop reorder ───────────────────────────────────────────
+  onDragStart(id: string): void {
+    this.draggingId.set(id);
+  }
 
-  onDragStart(id: string): void { this.draggingId.set(id); }
-
-  onDragOver(e: DragEvent, id: string): void {
-    e.preventDefault();
+  onDragOver(event: DragEvent, id: string): void {
+    event.preventDefault();
     this.dropTargetId.set(id);
   }
 
-  onPaletteDragStart(e: DragEvent, type: string): void {
-    e.dataTransfer?.setData('text/palette', type);
-  }
-
-  onDrop(e: DragEvent, id: string): void {
-    e.preventDefault();
+  onDrop(event: DragEvent, id: string): void {
+    event.preventDefault();
     const draggingId = this.draggingId();
-    if (!draggingId) {
-      const type = e.dataTransfer?.getData('text/palette');
-      if (type) {
-        const newBlk = this.makeBlockOfType(type);
-        this.blocks.update((bs) => {
-          const idx = bs.findIndex((b) => b.id === id);
-          const next = [...bs];
-          next.splice(idx === -1 ? bs.length : idx, 0, newBlk);
-          return next;
-        });
-        this.toast.success(
-          this.t('storefront.toast.added.title'),
-          `${type}`,
-          { label: this.t('common.configure'), run: () => this.openSection(newBlk) },
-        );
-      }
-    } else if (draggingId !== id) {
-      this.blocks.update((bs) => {
-        const fromIdx = bs.findIndex((b) => b.id === draggingId);
-        const toIdx = bs.findIndex((b) => b.id === id);
-        if (fromIdx === -1 || toIdx === -1) return bs;
-        const next = [...bs];
-        const [moved] = next.splice(fromIdx, 1);
-        next.splice(toIdx, 0, moved);
-        return next;
-      });
+    if (!draggingId || draggingId === id) {
+      this.onDragEnd();
+      return;
     }
-    this.draggingId.set(null);
-    this.dropTargetId.set(null);
+
+    this.blocks.update((blocks) => {
+      const fromIndex = blocks.findIndex((block) => block.id === draggingId);
+      if (fromIndex === -1) return blocks;
+
+      const next = [...blocks];
+      const [moved] = next.splice(fromIndex, 1);
+      const toIndex = id === '__end__' ? next.length : next.findIndex((block) => block.id === id);
+      next.splice(toIndex === -1 ? next.length : toIndex, 0, moved);
+      return next;
+    });
+    this.onDragEnd();
   }
 
   onDragEnd(): void {
     this.draggingId.set(null);
     this.dropTargetId.set(null);
+  }
+
+  private normalizeBlocks(blocks: StorefrontBlock[] | undefined | null): StorefrontBlock[] {
+    const incoming = Array.isArray(blocks) ? blocks : [];
+    const defaults = HOME_LAYOUT_BLOCKS;
+    const allowed = new Set(defaults.map((block) => block.id));
+    const ordered = incoming
+      .filter((block) => allowed.has(block.id))
+      .map((block) => ({
+        ...defaults.find((fallback) => fallback.id === block.id)!,
+        visible: block.visible !== false,
+      }));
+    const missing = defaults
+      .filter((fallback) => !ordered.some((block) => block.id === fallback.id))
+      .map((block) => ({ ...block }));
+
+    return [...ordered, ...missing];
   }
 }

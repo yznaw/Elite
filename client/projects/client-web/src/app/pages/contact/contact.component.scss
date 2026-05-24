@@ -1,5 +1,20 @@
 :host { display: block; }
 
+@media (max-width: 899px) {
+  :host ::ng-deep .contact-grid {
+    padding: 0 14px 56px !important;
+    gap: 22px !important;
+  }
+
+  :host ::ng-deep .contact-grid .glass {
+    padding: 22px 16px !important;
+  }
+
+  :host ::ng-deep form > div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @media (min-width: 900px) {
   .contact-grid {
     grid-template-columns: 1fr 380px !important;

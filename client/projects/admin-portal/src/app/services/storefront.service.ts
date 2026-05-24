@@ -1,5 +1,7 @@
-import { Injectable, computed, effect, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { StorefrontBlock } from '../models';
+import { ApiClient } from './api-client.service';
 
 const DRAFT_KEY     = 'elite:storefront:draft';
 const PUBLISHED_KEY = 'elite:storefront:published';
@@ -8,8 +10,15 @@ const PREVIEW_TOKEN = 'elite-admin:preview-token';
 interface Snapshot {
   blocks: StorefrontBlock[];
   /** ISO timestamp of when this snapshot was committed. */
-  savedAt: string;
+  savedAt: string | null;
 }
+
+export const HOME_LAYOUT_BLOCKS: StorefrontBlock[] = [
+  { id: 'home-hero', type: '3D Hero', title: '3D Hero', visible: true, config: 'Interactive model hero' },
+  { id: 'home-collections', type: 'Featured Collections', title: 'Featured Collections', visible: true, config: '3 admin collections' },
+  { id: 'home-discount', type: 'Discount Hero', title: 'Discount Hero', visible: true, config: 'Promotional split section' },
+  { id: 'home-promise', type: 'Craft Promise', title: 'Craft Promise', visible: true, config: 'Stats and atelier promise' },
+];
 
 /**
  * Storefront layout persistence + publish flow.
@@ -24,6 +33,7 @@ interface Snapshot {
  */
 @Injectable({ providedIn: 'root' })
 export class StorefrontService {
+  private readonly api = inject(ApiClient);
   private readonly _draft = signal<Snapshot | null>(this.load(DRAFT_KEY));
   private readonly _published = signal<Snapshot | null>(this.load(PUBLISHED_KEY));
 
@@ -62,6 +72,21 @@ export class StorefrontService {
     this._draft.set({ blocks, savedAt: new Date().toISOString() });
   }
 
+  async loadDraft(): Promise<Snapshot | null> {
+    const snapshot = await firstValueFrom(this.api.get<Snapshot | null>('/admin/storefront/draft'));
+    if (snapshot) this._draft.set(snapshot);
+    return snapshot;
+  }
+
+  async saveDraftRemote(blocks: StorefrontBlock[]): Promise<Snapshot | null> {
+    const snapshot = await firstValueFrom(this.api.post<Snapshot | null>('/admin/storefront/draft', {
+      title: 'Home layout',
+      blocks,
+    }));
+    if (snapshot) this._draft.set(snapshot);
+    return snapshot;
+  }
+
   /** Promote draft → published. Customer-web reads from the published key. */
   publish(): Snapshot | null {
     const d = this._draft();
@@ -69,6 +94,12 @@ export class StorefrontService {
     const next: Snapshot = { blocks: d.blocks, savedAt: new Date().toISOString() };
     this._published.set(next);
     return next;
+  }
+
+  async publishRemote(): Promise<Snapshot | null> {
+    const snapshot = await firstValueFrom(this.api.post<Snapshot | null>('/admin/storefront/publish', {}));
+    if (snapshot) this._published.set(snapshot);
+    return snapshot;
   }
 
   /** Roll the published snapshot back (used by the Undo affordance after a publish). */
@@ -122,7 +153,11 @@ export class StorefrontService {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as Snapshot;
-      if (parsed && Array.isArray(parsed.blocks) && typeof parsed.savedAt === 'string') return parsed;
+      if (
+        parsed
+        && Array.isArray(parsed.blocks)
+        && (typeof parsed.savedAt === 'string' || parsed.savedAt === null)
+      ) return parsed;
       return null;
     } catch {
       return null;

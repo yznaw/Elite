@@ -1,6 +1,8 @@
 const { Router } = require('express');
 const { asyncHandler, ok, validationError } = require('./lib');
 
+const HOME_COLLECTION_LIMIT = 3;
+
 const DEFAULT_HOME_CONTENT = {
   hero: {
     imageUrl: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1500&q=85&auto=format&fit=crop',
@@ -30,24 +32,6 @@ const DEFAULT_HOME_CONTENT = {
       imageUrl: 'https://images.unsplash.com/photo-1520975682031-ae4edb553dcc?w=900&q=85&auto=format&fit=crop',
       link: '/collection?category=jacket',
     },
-    {
-      id: 'bags',
-      title: 'Bags',
-      imageUrl: 'https://images.unsplash.com/photo-1594223274512-ad4803739b7c?w=900&q=85&auto=format&fit=crop',
-      link: '/collection?category=bags',
-    },
-    {
-      id: 'accessories',
-      title: 'Accessories',
-      imageUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=900&q=85&auto=format&fit=crop',
-      link: '/collection?category=accessories',
-    },
-    {
-      id: 'bottoms',
-      title: 'Bottoms',
-      imageUrl: 'https://images.unsplash.com/photo-1516826957135-700dedea698c?w=900&q=85&auto=format&fit=crop',
-      link: '/collection?category=bottoms',
-    },
   ],
 };
 
@@ -74,7 +58,7 @@ function normalizeHero(hero = {}) {
 
 function normalizeCollections(collections = []) {
   const incoming = Array.isArray(collections) ? collections : [];
-  return DEFAULT_HOME_CONTENT.collections.map((fallback) => {
+  return DEFAULT_HOME_CONTENT.collections.slice(0, HOME_COLLECTION_LIMIT).map((fallback) => {
     const item = incoming.find((candidate) => candidate && candidate.id === fallback.id) || {};
 
     return {

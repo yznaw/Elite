@@ -64,9 +64,9 @@ router.post('/', asyncHandler(async (req, res) => {
       ],
     );
 
-    await replaceProducts(client, tenant.id, saved.rows[0].id, req.body.productIds || []);
+    const productIds = await replaceProducts(client, tenant.id, saved.rows[0].id, req.body.productIds || []);
     await client.query('COMMIT');
-    created(res, mapCollection({ ...saved.rows[0], image_url: req.body.imageUrl || null, product_ids: req.body.productIds || [] }), 'Collection saved.');
+    created(res, mapCollection({ ...saved.rows[0], image_url: req.body.imageUrl || null, product_ids: productIds }), 'Collection saved.');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -110,12 +110,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       ],
     );
 
-    if (Array.isArray(req.body.productIds)) {
-      await replaceProducts(client, tenant.id, req.params.id, req.body.productIds);
-    }
-
     const ids = Array.isArray(req.body.productIds)
-      ? req.body.productIds
+      ? await replaceProducts(client, tenant.id, req.params.id, req.body.productIds)
       : (await client.query('SELECT product_id::text FROM collection_products WHERE collection_id = $1 ORDER BY sort_order', [req.params.id])).rows.map((r) => r.product_id);
 
     await client.query('COMMIT');
@@ -145,8 +141,9 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 
 async function replaceProducts(client, tenantId, collectionId, productIds) {
   await client.query('DELETE FROM collection_products WHERE collection_id = $1', [collectionId]);
+  const validProductIds = await filterExistingProductIds(client, tenantId, productIds);
 
-  for (const [index, productId] of productIds.entries()) {
+  for (const [index, productId] of validProductIds.entries()) {
     await client.query(
       `
         INSERT INTO collection_products (tenant_id, collection_id, product_id, sort_order)
@@ -156,6 +153,25 @@ async function replaceProducts(client, tenantId, collectionId, productIds) {
       [tenantId, collectionId, productId, index],
     );
   }
+
+  return validProductIds;
+}
+
+async function filterExistingProductIds(client, tenantId, productIds) {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const ids = [...new Set((Array.isArray(productIds) ? productIds : []).filter((id) => uuidPattern.test(String(id))))];
+  if (ids.length === 0) return [];
+
+  const result = await client.query(
+    `
+      SELECT id::text
+      FROM products
+      WHERE tenant_id = $1 AND id = ANY($2::uuid[]) AND status <> 'archived'
+    `,
+    [tenantId, ids],
+  );
+  const existing = new Set(result.rows.map((row) => row.id));
+  return ids.filter((id) => existing.has(id));
 }
 
 module.exports = router;

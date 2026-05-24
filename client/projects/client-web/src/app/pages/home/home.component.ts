@@ -18,6 +18,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { I18nService } from '../../services/i18n.service';
 import { HomeContentService } from '../../services/home-content.service';
+import { HomeCollectionTileContent } from '../../models/home-content.model';
 
 interface MetaCard {
   id: number;
@@ -73,17 +74,12 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private isDraggingModel = false;
   private lastPointerX = 0;
   private modelLoadToken = 0;
-  private scrollFrame = 0;
   private readonly handleModelPointerDown = (event: PointerEvent): void => this.onModelPointerDown(event);
   private readonly handleModelPointerMove = (event: PointerEvent): void => this.onModelPointerMove(event);
   private readonly handleModelPointerUp = (event: PointerEvent): void => this.onModelPointerUp(event);
-  private readonly handleScroll = (): void => this.queueHeroScroll();
   private readonly leatherMaterials: THREE.MeshStandardMaterial[] = [];
 
-  @ViewChild('heroSection') private heroSection?: ElementRef<HTMLElement>;
   @ViewChild('heroCanvas') private heroCanvas?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('heroShell') private heroShell?: ElementRef<HTMLElement>;
-  @ViewChild('heroVisual') private heroVisual?: ElementRef<HTMLElement>;
 
   readonly metaVisible = signal(false);
   readonly modelLoaded = signal(false);
@@ -91,6 +87,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly selectedModelId = signal('heritage-mule');
   readonly selectedLeatherColor = signal('cognac');
   readonly contentData = this.homeContent.contentData;
+  readonly layoutSections = this.homeContent.layoutSections;
 
   readonly heroModels: HeroModelOption[] = [
     {
@@ -174,6 +171,10 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     window.scrollTo(0, 0);
   }
 
+  goToCollectionTile(tile: HomeCollectionTileContent): void {
+    this.goToContentLink(this.collectionTileRoute(tile));
+  }
+
   selectLeatherColor(id: string): void {
     this.selectedLeatherColor.set(id);
     this.applyLeatherColor(id);
@@ -195,6 +196,40 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     const currentIndex = this.heroModels.findIndex((model) => model.id === this.selectedModelId());
     const nextIndex = (currentIndex + direction + this.heroModels.length) % this.heroModels.length;
     this.selectHeroModel(this.heroModels[nextIndex].id);
+  }
+
+  private collectionTileRoute(tile: HomeCollectionTileContent): string {
+    const link = tile.link?.trim();
+    if (link && /^https?:\/\//i.test(link)) return link;
+
+    const fallbackHandle = this.collectionHandle(tile.id || tile.title);
+    if (!link) return `/collection/${fallbackHandle}`;
+
+    try {
+      const url = new URL(link, window.location.origin);
+      const detailMatch = url.pathname.match(/^\/collection\/([^/?#]+)/);
+      if (detailMatch?.[1]) return `/collection/${detailMatch[1]}`;
+
+      if (url.pathname === '/collection') {
+        const collectionKey = url.searchParams.get('collection');
+        if (collectionKey) return `/collection/${this.collectionHandle(collectionKey)}`;
+
+        const key = tile.title || tile.id || url.searchParams.get('category') || fallbackHandle;
+        return `/collection/${this.collectionHandle(key)}`;
+      }
+    } catch {
+      return `/collection/${fallbackHandle}`;
+    }
+
+    return link;
+  }
+
+  private collectionHandle(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'collection';
   }
 
   private initHeroModel(): void {
@@ -242,7 +277,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.addHeroLighting(scene);
     this.addHeroGround(scene);
     this.bindHeroResize(host);
-    this.bindHeroScroll();
     this.bindModelDrag(canvas);
     this.loadHeroModel(scene, controls);
     this.animateHero();
@@ -330,49 +364,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private bindHeroScroll(): void {
-    window.addEventListener('scroll', this.handleScroll, { passive: true });
-    window.addEventListener('resize', this.handleScroll, { passive: true });
-    this.queueHeroScroll();
-  }
-
-  private queueHeroScroll(): void {
-    if (this.scrollFrame) return;
-
-    this.scrollFrame = window.requestAnimationFrame(() => {
-      this.scrollFrame = 0;
-      const hero = this.heroSection?.nativeElement;
-      const shell = this.heroShell?.nativeElement;
-      const visual = this.heroVisual?.nativeElement;
-      if (!hero || !shell || !visual) return;
-
-      const viewport = Math.max(window.innerHeight, 1);
-      const width = Math.max(window.innerWidth, 1);
-      const heroTop = hero.getBoundingClientRect().top + window.scrollY;
-      const scrollDistance = Math.max(hero.offsetHeight - viewport, viewport * 0.72);
-      const progress = Math.min(Math.max((window.scrollY - heroTop) / scrollDistance, 0), 1);
-      const maxShift = width <= 560
-        ? Math.min(width * 0.12, 54)
-        : width <= 920
-          ? Math.min(width * 0.22, 180)
-          : Math.min(width * 0.28, 360);
-      const shiftY = viewport * 0.04 * progress;
-      const scale = 1 - progress * 0.06;
-
-      const scrollProperties = {
-        '--hero-scroll-progress': progress.toFixed(4),
-        '--hero-shift-x': `${(maxShift * progress).toFixed(2)}px`,
-        '--hero-shift-y': `${shiftY.toFixed(2)}px`,
-        '--hero-scale': scale.toFixed(4),
-      };
-
-      Object.entries(scrollProperties).forEach(([property, value]) => {
-        shell.style.setProperty(property, value);
-        visual.style.setProperty(property, value);
-      });
-    });
-  }
-
   private loadHeroModel(scene: THREE.Scene, controls: OrbitControls): void {
     const selectedModel = this.activeHeroModel();
     const loadToken = ++this.modelLoadToken;
@@ -450,8 +441,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     const maxAxis = Math.max(size.x, size.y, size.z, 1);
     const hostWidth = this.heroCanvas?.nativeElement.parentElement?.clientWidth ?? 0;
     const isCompact = hostWidth < 560;
-    const scale = (isCompact ? 3.85 : 6.65) / maxAxis;
-    const yOffset = isCompact ? -0.18 : -0.34;
+    const scale = (isCompact ? 5.15 : 6.65) / maxAxis;
+    const yOffset = isCompact ? 0.08 : -0.34;
     const defaultYaw = -Math.PI / 2 + 0.34;
     const pivot = new THREE.Group();
     const centeredModel = new THREE.Group();
@@ -465,7 +456,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     pivot.rotation.y = defaultYaw;
     this.modelYaw = defaultYaw;
 
-    controls.target.set(0, yOffset, 0);
+    controls.target.set(0, isCompact ? 0.16 : yOffset, 0);
     controls.update();
 
     return pivot;
@@ -491,9 +482,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private destroyHeroModel(): void {
     if (this.animationFrame) window.cancelAnimationFrame(this.animationFrame);
-    if (this.scrollFrame) window.cancelAnimationFrame(this.scrollFrame);
-    window.removeEventListener('scroll', this.handleScroll);
-    window.removeEventListener('resize', this.handleScroll);
     this.heroCanvas?.nativeElement.removeEventListener('pointerdown', this.handleModelPointerDown);
     window.removeEventListener('pointermove', this.handleModelPointerMove);
     window.removeEventListener('pointerup', this.handleModelPointerUp);

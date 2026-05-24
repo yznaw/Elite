@@ -610,15 +610,43 @@ button:focus-visible {
 
 @media (max-width: 759px) {
   .product-page {
+    padding-top: 92px;
     padding-bottom: 84px;
   }
 
   .gallery-frame {
-    min-height: 340px;
+    min-height: min(340px, 88vw);
+  }
+
+  .thumb-strip {
+    grid-auto-flow: column;
+    grid-auto-columns: 74px;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .thumb-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .details-panel h1 {
+    font-size: clamp(32px, 12vw, 44px);
+    line-height: 1;
   }
 
   .attribute-grid {
     grid-template-columns: 1fr;
+  }
+
+  .section-label,
+  .qty-row {
+    align-items: flex-start;
+  }
+
+  .trust-row {
+    justify-content: flex-start;
   }
 
   .sticky-atc {

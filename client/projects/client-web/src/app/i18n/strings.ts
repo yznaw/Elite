@@ -152,6 +152,7 @@ const EN = {
   'collection.quickAdd': 'Add to Cart',
   'collection.quickAdd.added': 'Added',
   'collection.quickAdd.size': 'Size',
+  'collection.buyNow': 'Buy Now',
 
   'collection.style.all': 'All',
   'collection.style.oxford': 'Oxford',
@@ -512,6 +513,7 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.quickAdd': 'أضف إلى السلة',
   'collection.quickAdd.added': 'أُضيف',
   'collection.quickAdd.size': 'المقاس',
+  'collection.buyNow': 'اشترِ الآن',
 
   'collection.style.all': 'الكل',
   'collection.style.oxford': 'أوكسفورد',

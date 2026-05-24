@@ -1,7 +1,9 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { ProductsService } from '../../services/products.service';
 import { Product } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
@@ -38,6 +40,29 @@ interface FilterGroup {
 
 type SelectedFilters = Record<FilterGroupId, string[]>;
 
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+interface StorefrontCollection {
+  id: string;
+  handle: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  productIds: string[];
+}
+
+interface RefColor {
+  id: string;
+  name_en: string;
+  name_ar: string;
+  hex: string;
+  sort_order: number;
+}
+
 @Component({
   selector: 'cw-collection',
   standalone: true,
@@ -47,15 +72,23 @@ type SelectedFilters = Record<FilterGroupId, string[]>;
 })
 export class CollectionComponent implements OnInit {
   private readonly products = inject(ProductsService);
+  private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly i18n = inject(I18nService);
   private readonly cart = inject(CartService);
+  private readonly apiBase = this.resolveApiBase();
   private addedTimer: number | undefined;
 
   readonly sortOptions = SORT_OPTIONS;
   readonly sort = signal<SortOption>('Featured');
   readonly hovered = signal<string | null>(null);
   readonly addedProductId = signal<string | null>(null);
+  readonly collections = signal<StorefrontCollection[]>([]);
+  readonly collectionsLoaded = signal(false);
+  readonly activeCollectionKey = signal<string | null>(null);
+  readonly colorHexByName = signal<Record<string, string>>({});
+  readonly filtersOpen = signal(false);
   readonly selectedSizes = signal<Record<string, number>>({});
   readonly selectedFilters = signal<SelectedFilters>(this.emptySelectedFilters());
 
@@ -67,9 +100,13 @@ export class CollectionComponent implements OnInit {
   readonly productTag = (value: string): string => this.i18n.productTag(value);
 
   readonly allProducts = computed<Product[]>(() => this.products.getAll());
+  readonly activeCollection = computed(() => (
+    this.findCollection(this.activeCollectionKey()) ?? null
+  ));
+  readonly isCollectionLanding = computed(() => !this.activeCollectionKey());
 
   readonly filterGroups = computed<FilterGroup[]>(() => {
-    const products = this.allProducts();
+    const products = this.collectionScopedProducts();
     const groups: FilterGroup[] = [
       {
         id: 'category',
@@ -122,7 +159,7 @@ export class CollectionComponent implements OnInit {
 
   readonly filtered = computed<Product[]>(() => {
     const selected = this.selectedFilters();
-    let list = this.allProducts().filter((product) => this.matchesFilters(product, selected));
+    let list = this.collectionScopedProducts().filter((product) => this.matchesFilters(product, selected));
     const so = this.sort();
 
     if (so === 'Price: Low–High') list = [...list].sort((a, b) => a.price - b.price);
@@ -133,6 +170,13 @@ export class CollectionComponent implements OnInit {
 
   ngOnInit(): void {
     void this.products.refresh();
+    void this.loadCollections();
+    void this.loadReferenceColors();
+    this.route.paramMap.subscribe((params) => {
+      this.activeCollectionKey.set(params.get('collection'));
+      this.selectedFilters.set(this.emptySelectedFilters());
+      this.filtersOpen.set(false);
+    });
   }
 
   goToProduct(p: Product): void {
@@ -142,30 +186,55 @@ export class CollectionComponent implements OnInit {
 
   setSort(s: SortOption): void { this.sort.set(s); }
 
+  openFilters(): void {
+    this.filtersOpen.set(true);
+  }
+
+  closeFilters(): void {
+    this.filtersOpen.set(false);
+  }
+
+  selectCollection(collection: StorefrontCollection | null): void {
+    this.selectedFilters.set(this.emptySelectedFilters());
+    const route = collection
+      ? ['/collection', collection.handle || collection.id]
+      : ['/collection'];
+    void this.router.navigate(route);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   selectSize(product: Product, size: number): void {
     this.selectedSizes.update((sizes) => ({ ...sizes, [product.id]: size }));
   }
 
   addToCart(product: Product): void {
-    const size = this.selectedSize(product);
-
-    this.cart.add({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      image: product.image,
-      leather: product.leather,
-      size,
-      qty: 1,
-    });
+    this.cart.add(this.cartItem(product));
 
     this.addedProductId.set(product.id);
     if (this.addedTimer) window.clearTimeout(this.addedTimer);
     this.addedTimer = window.setTimeout(() => this.addedProductId.set(null), 1800);
   }
 
+  buyNow(product: Product): void {
+    this.cart.add(this.cartItem(product));
+    this.cart.closeDrawer();
+    void this.router.navigate(['/checkout']);
+    window.scrollTo(0, 0);
+  }
+
   selectedSize(product: Product): number {
     return this.selectedSizes()[product.id] || product.sizes[0] || 40;
+  }
+
+  productColorNames(product: Product): string[] {
+    return this.productColors(product);
+  }
+
+  colorHex(name: string): string {
+    const value = name.trim();
+    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) return value;
+
+    return this.colorHexByName()[value.toLowerCase()] ?? '#d8d2c8';
   }
 
   toggleFilter(groupId: FilterGroupId, value: string): void {
@@ -186,6 +255,14 @@ export class CollectionComponent implements OnInit {
   clearFilters(): void {
     this.selectedFilters.set(this.emptySelectedFilters());
     this.sort.set('Featured');
+    this.filtersOpen.set(false);
+  }
+
+  showAllCollections(): void {
+    this.selectedFilters.set(this.emptySelectedFilters());
+    this.sort.set('Featured');
+    void this.router.navigate(['/collection']);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   sortLabel(value: SortOption): string {
@@ -216,6 +293,30 @@ export class CollectionComponent implements OnInit {
       && this.matchesTextFilter(selected.brand, this.compact([product.brand]))
       && this.matchesTextFilter(selected.tag, this.compact([product.tag]))
       && this.matchesPriceFilter(selected.price, product.price);
+  }
+
+  private cartItem(product: Product) {
+    return {
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      leather: product.leather,
+      size: this.selectedSize(product),
+      qty: 1,
+    };
+  }
+
+  private collectionScopedProducts(): Product[] {
+    const collection = this.activeCollection();
+    if (!collection) return this.allProducts();
+    const ids = new Set(collection.productIds);
+    return this.allProducts().filter((product) => ids.has(product.id));
+  }
+
+  private findCollection(key: string | null): StorefrontCollection | undefined {
+    if (!key) return undefined;
+    return this.collections().find((collection) => collection.id === key || collection.handle === key);
   }
 
   private matchesTextFilter(selected: string[], values: string[]): boolean {
@@ -311,7 +412,7 @@ export class CollectionComponent implements OnInit {
   }
 
   private compact(values: Array<string | undefined | null>): string[] {
-    return values.map((value) => String(value || '').trim()).filter(Boolean);
+    return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
   }
 
   private emptySelectedFilters(): SelectedFilters {
@@ -325,5 +426,59 @@ export class CollectionComponent implements OnInit {
       brand: [],
       tag: [],
     };
+  }
+
+  private async loadCollections(): Promise<void> {
+    this.collectionsLoaded.set(false);
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<StorefrontCollection[]>>(`${this.apiBase}/collections?limit=12`),
+      );
+      const collections = Array.isArray(res.data)
+        ? res.data.map((collection) => ({
+          ...collection,
+          imageUrl: this.resolveMediaUrl(collection.imageUrl),
+          productIds: Array.isArray(collection.productIds) ? collection.productIds : [],
+        }))
+        : [];
+      this.collections.set(collections);
+    } catch {
+      this.collections.set([]);
+    } finally {
+      this.collectionsLoaded.set(true);
+    }
+  }
+
+  private async loadReferenceColors(): Promise<void> {
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<RefColor[]>>(`${this.apiBase}/ref/colors`),
+      );
+      const colors = Array.isArray(res.data) ? res.data : [];
+      this.colorHexByName.set(colors.reduce<Record<string, string>>((map, color) => {
+        const name = String(color.name_en || '').trim().toLowerCase();
+        const hex = String(color.hex || '').trim();
+        if (name && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex)) {
+          map[name] = hex;
+        }
+        return map;
+      }, {}));
+    } catch {
+      this.colorHexByName.set({});
+    }
+  }
+
+  private resolveApiBase(): string {
+    const { hostname, protocol } = window.location;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
+  }
+
+  private resolveMediaUrl(url: string | null): string {
+    const value = (url || '').trim();
+    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
+    if (!value.startsWith('/uploads/')) return value;
+
+    return `${this.apiBase.replace(/\/api\/?$/, '')}${value}`;
   }
 }

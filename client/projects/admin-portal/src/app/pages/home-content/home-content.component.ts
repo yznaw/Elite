@@ -7,13 +7,7 @@ import { ApiClient } from '../../services/api-client.service';
 import { MediaUploadService } from '../../services/media-upload.service';
 import { ToastService } from '../../services/toast.service';
 
-type HomeCollectionTileId =
-  | 'footwear'
-  | 'headwear'
-  | 'jacket'
-  | 'bags'
-  | 'accessories'
-  | 'bottoms';
+const HOME_COLLECTION_LIMIT = 3;
 
 interface HomeDiscountHeroContent {
   imageUrl: string;
@@ -25,7 +19,7 @@ interface HomeDiscountHeroContent {
 }
 
 interface HomeCollectionTileContent {
-  id: HomeCollectionTileId;
+  id: string;
   title: string;
   imageUrl: string;
   link: string;
@@ -65,24 +59,6 @@ const DEFAULT_HOME_CONTENT: HomeContentData = {
       title: 'Jacket',
       imageUrl: 'https://images.unsplash.com/photo-1520975682031-ae4edb553dcc?w=900&q=85&auto=format&fit=crop',
       link: '/collection?category=jacket',
-    },
-    {
-      id: 'bags',
-      title: 'Bags',
-      imageUrl: 'https://images.unsplash.com/photo-1594223274512-ad4803739b7c?w=900&q=85&auto=format&fit=crop',
-      link: '/collection?category=bags',
-    },
-    {
-      id: 'accessories',
-      title: 'Accessories',
-      imageUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=900&q=85&auto=format&fit=crop',
-      link: '/collection?category=accessories',
-    },
-    {
-      id: 'bottoms',
-      title: 'Bottoms',
-      imageUrl: 'https://images.unsplash.com/photo-1516826957135-700dedea698c?w=900&q=85&auto=format&fit=crop',
-      link: '/collection?category=bottoms',
     },
   ],
 };
@@ -188,7 +164,7 @@ function cloneContent(content: HomeContentData): HomeContentData {
         <div class="editor-card__head">
           <div>
             <p>Featured Collections Grid</p>
-            <h2>Manage each asymmetrical tile</h2>
+            <h2>Manage the three home tiles</h2>
           </div>
           <span class="hint">Images, titles, and collection links update the storefront grid.</span>
         </div>
@@ -232,12 +208,12 @@ function cloneContent(content: HomeContentData): HomeContentData {
 
         <div class="grid-preview-head">
           <p>Live Grid Preview</p>
-          <span>Same asymmetrical composition used on the customer home page.</span>
+          <span>Same three-tile composition used on the customer home page.</span>
         </div>
 
         <div class="preview-collection-grid">
           @for (tile of content().collections; track tile.id) {
-            <div [class]="'preview-collection-tile preview-tile-' + tile.id">
+            <div class="preview-collection-tile">
               <img [src]="tile.imageUrl" [alt]="tile.title" />
               <span class="preview-overlay"></span>
               <strong>{{ tile.title }}</strong>
@@ -613,19 +589,11 @@ function cloneContent(content: HomeContentData): HomeContentData {
 
       .preview-collection-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        grid-template-rows: repeat(4, 106px);
       }
 
       .preview-collection-tile {
-        min-height: 0;
+        min-height: 318px;
       }
-
-      .preview-tile-footwear { grid-column: 1; grid-row: 1 / 3; }
-      .preview-tile-headwear { grid-column: 1; grid-row: 3 / 5; }
-      .preview-tile-jacket { grid-column: 2; grid-row: 1 / 4; }
-      .preview-tile-bags { grid-column: 2; grid-row: 4 / 5; }
-      .preview-tile-accessories { grid-column: 3; grid-row: 1 / 2; }
-      .preview-tile-bottoms { grid-column: 3; grid-row: 2 / 5; }
     }
   `],
 })
@@ -662,7 +630,7 @@ export class HomeContentComponent implements OnInit {
   }
 
   updateCollection<K extends keyof Omit<HomeCollectionTileContent, 'id'>>(
-    id: HomeCollectionTileId,
+    id: string,
     key: K,
     value: HomeCollectionTileContent[K],
   ): void {
@@ -680,7 +648,7 @@ export class HomeContentComponent implements OnInit {
     this.uploadImage('hero', event, (url) => this.updateHero('imageUrl', url));
   }
 
-  uploadCollectionImage(id: HomeCollectionTileId, event: Event): void {
+  uploadCollectionImage(id: string, event: Event): void {
     this.uploadImage(id, event, (url) => this.updateCollection(id, 'imageUrl', url));
   }
 
@@ -781,7 +749,7 @@ export class HomeContentComponent implements OnInit {
   private normalizeContentImages(data: HomeContentData): HomeContentData {
     const next = cloneContent(data);
     next.hero.imageUrl = this.resolveMediaUrl(next.hero.imageUrl);
-    next.collections = next.collections.map((tile) => ({
+    next.collections = next.collections.slice(0, HOME_COLLECTION_LIMIT).map((tile) => ({
       ...tile,
       imageUrl: this.resolveMediaUrl(tile.imageUrl),
     }));

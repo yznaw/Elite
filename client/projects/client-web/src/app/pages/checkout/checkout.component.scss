@@ -1,5 +1,27 @@
 :host { display: block; }
 
+@media (max-width: 899px) {
+  :host ::ng-deep .checkout-grid {
+    padding: 24px 14px 58px !important;
+    gap: 22px !important;
+  }
+
+  :host ::ng-deep .checkout-grid .glass {
+    padding: 20px 16px !important;
+    position: static !important;
+  }
+
+  :host ::ng-deep .anim-fade-up[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  :host ::ng-deep .step-indicator + span {
+    max-width: 84px;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+}
+
 @media (min-width: 900px) {
   .checkout-grid { grid-template-columns: 1fr 420px !important; }
 }

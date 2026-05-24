@@ -8,6 +8,13 @@ export const routes: Routes = [
       import('./pages/home/home.component').then((m) => m.HomeComponent),
   },
   {
+    path: 'collection/:collection',
+    loadComponent: () =>
+      import('./pages/collection/collection.component').then(
+        (m) => m.CollectionComponent,
+      ),
+  },
+  {
     path: 'collection',
     loadComponent: () =>
       import('./pages/collection/collection.component').then(

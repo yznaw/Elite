@@ -8,6 +8,7 @@ const PgSimple = require('connect-pg-simple')(session);
 const routes = require('./routes');
 const db = require('./db/client');
 const { ensureDefaultTenant } = require('./db/tenant');
+const { ensureReferenceSchema } = require('./db/reference-schema');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 
 const app = express();
@@ -37,8 +38,8 @@ app.use(
   })
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('dev'));
 
 // ─── Sessions (cookie + Postgres-backed store) ───────────────────────────────
@@ -85,6 +86,13 @@ app.use((req, res) => {
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, _next) => {
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({
+      success: false,
+      message: 'Request body is too large. Upload images through the media uploader instead of saving large inline data URLs.',
+    });
+  }
+
   // Friendly multer errors — file too big, wrong type, etc.
   if (err && err.name === 'MulterError') {
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -111,7 +119,8 @@ async function bootstrap() {
   if (process.env.DATABASE_URL) {
     const client = await db.pool.connect();
     try {
-      await ensureDefaultTenant(client);
+      const tenant = await ensureDefaultTenant(client);
+      await ensureReferenceSchema(client, tenant.id);
     } catch (err) {
       console.warn('Tenant bootstrap failed (the server will still start):', err.message);
     } finally {

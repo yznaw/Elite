@@ -1,5 +1,26 @@
 :host { display: block; }
 
+@media (max-width: 767px) {
+  :host ::ng-deep > div {
+    padding-top: 72px !important;
+  }
+
+  :host ::ng-deep > div > div:first-child {
+    height: auto !important;
+    min-height: 420px !important;
+    padding: 88px 0 54px !important;
+  }
+
+  .story-row {
+    gap: 22px !important;
+    margin-bottom: 52px !important;
+  }
+
+  .story-row h2 {
+    font-size: clamp(26px, 9vw, 34px) !important;
+  }
+}
+
 @media (min-width: 768px) {
   .story-row { grid-template-columns: 1fr 1fr !important; align-items: center; }
   .story-row-right > div:first-child { order: 2; }
