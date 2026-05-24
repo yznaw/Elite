@@ -15,6 +15,7 @@ export interface Product {
   sizes: number[];
   image: string;
   images?: string[];
+  relatedProductIds?: string[];
 }
 
 export interface CartItem {

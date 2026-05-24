@@ -315,7 +315,7 @@ interface NavLink {
 
     .mobile-menu {
       position: fixed;
-      inset: 12px;
+      inset: 10px;
       z-index: 90;
       display: flex;
       flex-direction: column;
@@ -324,7 +324,7 @@ interface NavLink {
       border-radius: 24px;
       background:
         linear-gradient(135deg, rgba(255, 255, 255, 0.11), transparent 46%),
-        var(--green-2, #036350);
+        var(--green-2, #004538);
       box-shadow: 0 24px 70px rgba(3, 99, 80, 0.28);
       animation: fadeIn 0.24s ease;
     }

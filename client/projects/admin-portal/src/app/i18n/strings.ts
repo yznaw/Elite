@@ -207,6 +207,8 @@ const EN = {
   'product.fact.id': 'Product ID',
 
   'product.section.basics': 'Basics',
+  'product.related.label': 'You may also like',
+  'product.related.sub': 'Choose the exact products shown on this product page.',
   'product.section.variants': 'Variants',
   'product.section.media': 'Media',
   'product.section.gallery': 'Image Gallery',
@@ -941,6 +943,8 @@ const AR: Record<keyof typeof EN, string> = {
   'product.fact.id': 'معرّف المنتج',
 
   'product.section.basics': 'البيانات الأساسية',
+  'product.related.label': 'قد يعجبك أيضاً',
+  'product.related.sub': 'اختر المنتجات التي تظهر في صفحة هذا المنتج.',
   'product.section.variants': 'المتغيّرات (المقاس واللون والخامة)',
   'product.section.media': 'الوسائط والنماذج',
   'product.section.gallery': 'معرض صور المنتج',

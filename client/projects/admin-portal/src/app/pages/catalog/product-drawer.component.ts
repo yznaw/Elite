@@ -19,6 +19,7 @@ import { ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
   name: string; sku: string; brand: string; collectionIds: string[];
+  relatedProductIds: string[];
   price: number; stock: number; hidden: boolean;
   enDesc: string; arDesc: string;
   metaTitle: string; metaDesc: string; slug: string;
@@ -209,6 +210,32 @@ function readPreview(file: File): Promise<string> {
                   <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;"/>
                   <span class="small">{{ c.title }}</span>
                 </label>
+              }
+            </div>
+          </div>
+
+          <div class="mb-16">
+            <label class="lbl">{{ t('product.related.label') }}</label>
+            <div class="muted small mb-8">{{ t('product.related.sub') }}</div>
+            <div class="related-picker">
+              @for (p of relatedOptions(); track p.id) {
+                <button
+                  type="button"
+                  class="related-option"
+                  [class.selected]="form().relatedProductIds.includes(p.id)"
+                  (click)="toggleRelatedProduct(p.id)"
+                >
+                  <span class="related-thumb">
+                    @if (productThumb(p)) {
+                      <img [src]="productThumb(p)" [alt]="p.name" (error)="onImgError($event)" />
+                    }
+                  </span>
+                  <span class="related-copy">
+                    <strong>{{ p.name }}</strong>
+                    <small>{{ p.sku }} · QAR {{ p.price.toLocaleString() }}</small>
+                  </span>
+                  <span class="related-check">{{ form().relatedProductIds.includes(p.id) ? '✓' : '+' }}</span>
+                </button>
               }
             </div>
           </div>
@@ -840,6 +867,70 @@ function readPreview(file: File): Promise<string> {
 
     /* Generate sizes row */
     .gen-sizes-wrap { display: flex; gap: 4px; align-items: center; }
+    .related-picker {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+      max-height: 250px;
+      overflow: auto;
+      padding: 2px;
+    }
+    .related-option {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 24px;
+      align-items: center;
+      gap: 10px;
+      min-height: 58px;
+      padding: 7px;
+      border: 1px solid var(--border-2);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--ink);
+      cursor: pointer;
+      text-align: start;
+      transition: border-color 0.14s, background 0.14s;
+    }
+    .related-option:hover,
+    .related-option.selected {
+      border-color: var(--gold);
+      background: var(--gold-3);
+    }
+    .related-thumb {
+      width: 42px;
+      height: 42px;
+      overflow: hidden;
+      border-radius: 6px;
+      background: var(--bg-2);
+    }
+    .related-thumb img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+    .related-copy {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+    .related-copy strong,
+    .related-copy small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .related-copy strong { font-size: 12px; }
+    .related-copy small { color: var(--muted); font-size: 10px; }
+    .related-check {
+      display: inline-grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--green);
+      font-weight: 800;
+    }
     @media (max-width: 720px) {
       .variants-table .vt-head { display: none; }
       .variants-table .vt-row {
@@ -1004,6 +1095,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       metaTitle: '', metaDesc: '', slug: '',
       variants: [],
       images: [],
+      relatedProductIds: [],
     };
   }
 
@@ -1023,6 +1115,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       slug: p.name.toLowerCase().replace(/\s+/g, '-'),
       variants: (p.variants ?? []).map(v => ({ ...v })),
       images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
+      relatedProductIds: [...(p.relatedProductIds ?? [])],
     };
   }
 
@@ -1309,6 +1402,20 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.set('collectionIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   }
 
+  relatedOptions(): Product[] {
+    const currentId = this.product?.id;
+    return this._products().filter((product) => product.id !== currentId && !product.id.startsWith('P-NEW-'));
+  }
+
+  productThumb(product: Product): string {
+    return product.images?.[0] || product.image || '';
+  }
+
+  toggleRelatedProduct(id: string): void {
+    const ids = this.form().relatedProductIds;
+    this.set('relatedProductIds', ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]);
+  }
+
   private scheduleAutoSave(): void {
     if (!this.dirty()) {
       try { localStorage.removeItem(this.draftKey); } catch {}
@@ -1375,6 +1482,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.views3d = saved.views3d;
       this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
       this.product.images = [...(saved.images ?? f.images)];
+      this.product.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
       // Keep the legacy `image` field in sync with images[0] so the catalog
       // grid, dashboard heatmap, and order rows use the new primary.
       this.product.image = saved.image || this.product.images?.[0] || this.product.image;

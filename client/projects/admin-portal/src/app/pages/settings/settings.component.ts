@@ -49,9 +49,6 @@ type Tab = 'general' | 'team' | 'integrations';
                 <label class="lbl">{{ t('settings.currency') }}</label>
                 <select class="inp" [ngModel]="currency()" (ngModelChange)="currency.set($event)">
                   <option value="QAR">QAR — Qatari Riyal</option>
-                  <option value="SAR">SAR — Saudi Riyal</option>
-                  <option value="AED">AED — UAE Dirham</option>
-                  <option value="USD">USD — US Dollar</option>
                 </select>
               </div>
               <div>

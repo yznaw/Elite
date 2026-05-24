@@ -19,7 +19,7 @@ export class I18nService {
     return value;
   };
 
-  readonly price = (value: number, currencyKey = 'common.currency.sar'): string => {
+  readonly price = (value: number, currencyKey = 'common.currency.qar'): string => {
     const locale = this.locale.locale();
     const formatted = value.toLocaleString(locale === 'ar' ? 'ar-SA' : 'en-SA');
     const currency = this.t(currencyKey);

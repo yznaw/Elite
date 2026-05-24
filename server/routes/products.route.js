@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
+const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 
 const router = Router();
 
@@ -28,6 +29,7 @@ function mapRow(row) {
     materials,
     image,
     images,
+    relatedProductIds: row.related_product_ids || [],
   };
 }
 
@@ -35,6 +37,7 @@ router.get('/', async (_req, res, next) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    await ensureProductRecommendationsSchema(client);
     const result = await client.query(
       `
         SELECT
@@ -61,13 +64,28 @@ router.get('/', async (_req, res, next) => {
             ARRAY[]::text[]
           ) AS materials,
           COALESCE(
+            (
+              SELECT COALESCE(m.preview_url, m.storage_url)
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role = 'gallery'
+              ORDER BY
+                CASE
+                  WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
+                    OR m.metadata ? 'storagePath'
+                  THEN 0
+                  ELSE 1
+                END,
+                ml.sort_order
+              LIMIT 1
+            ),
             primary_media.preview_url,
             primary_media.storage_url,
             (
               SELECT COALESCE(m.preview_url, m.storage_url)
               FROM media_links ml
               JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+              WHERE ml.product_id = p.id AND ml.role = 'primary'
               ORDER BY ml.sort_order
               LIMIT 1
             )
@@ -76,19 +94,44 @@ router.get('/', async (_req, res, next) => {
             ARRAY(
               SELECT url
               FROM (
-                SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, -1 AS sort_order
-                WHERE primary_media.id IS NOT NULL
-                UNION
-                SELECT COALESCE(m.preview_url, m.storage_url) AS url, ml.sort_order
-                FROM media_links ml
-                JOIN media_assets m ON m.id = ml.media_id
-                WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
-              ) product_media
-              WHERE url IS NOT NULL AND url <> ''
-              ORDER BY sort_order
+                SELECT DISTINCT ON (url) url, role_rank, sort_order
+                FROM (
+                  SELECT
+                    COALESCE(m.preview_url, m.storage_url) AS url,
+                    CASE
+                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
+                        OR m.metadata ? 'storagePath'
+                      THEN 0
+                      ELSE 1
+                    END AS role_rank,
+                    ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
+                  UNION ALL
+                  SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, 2 AS role_rank, 0 AS sort_order
+                  WHERE primary_media.id IS NOT NULL
+                  UNION ALL
+                  SELECT COALESCE(m.preview_url, m.storage_url) AS url, 2 AS role_rank, ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'primary'
+                ) product_media
+                WHERE url IS NOT NULL AND url <> ''
+                ORDER BY url, role_rank, sort_order
+              ) deduped_product_media
+              ORDER BY role_rank, sort_order
             ),
             ARRAY[]::text[]
-          ) AS images
+          ) AS images,
+          COALESCE((
+            SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
+            FROM product_recommendations pr
+            JOIN products rp ON rp.id = pr.recommended_product_id
+            WHERE pr.tenant_id = p.tenant_id
+              AND pr.product_id = p.id
+              AND rp.status = 'active'
+          ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -115,6 +158,7 @@ router.get('/:id', async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    await ensureProductRecommendationsSchema(client);
     const result = await client.query(
       `
         SELECT
@@ -141,13 +185,28 @@ router.get('/:id', async (req, res, next) => {
             ARRAY[]::text[]
           ) AS materials,
           COALESCE(
+            (
+              SELECT COALESCE(m.preview_url, m.storage_url)
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role = 'gallery'
+              ORDER BY
+                CASE
+                  WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
+                    OR m.metadata ? 'storagePath'
+                  THEN 0
+                  ELSE 1
+                END,
+                ml.sort_order
+              LIMIT 1
+            ),
             primary_media.preview_url,
             primary_media.storage_url,
             (
               SELECT COALESCE(m.preview_url, m.storage_url)
               FROM media_links ml
               JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+              WHERE ml.product_id = p.id AND ml.role = 'primary'
               ORDER BY ml.sort_order
               LIMIT 1
             )
@@ -156,19 +215,44 @@ router.get('/:id', async (req, res, next) => {
             ARRAY(
               SELECT url
               FROM (
-                SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, -1 AS sort_order
-                WHERE primary_media.id IS NOT NULL
-                UNION
-                SELECT COALESCE(m.preview_url, m.storage_url) AS url, ml.sort_order
-                FROM media_links ml
-                JOIN media_assets m ON m.id = ml.media_id
-                WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
-              ) product_media
-              WHERE url IS NOT NULL AND url <> ''
-              ORDER BY sort_order
+                SELECT DISTINCT ON (url) url, role_rank, sort_order
+                FROM (
+                  SELECT
+                    COALESCE(m.preview_url, m.storage_url) AS url,
+                    CASE
+                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
+                        OR m.metadata ? 'storagePath'
+                      THEN 0
+                      ELSE 1
+                    END AS role_rank,
+                    ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
+                  UNION ALL
+                  SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, 2 AS role_rank, 0 AS sort_order
+                  WHERE primary_media.id IS NOT NULL
+                  UNION ALL
+                  SELECT COALESCE(m.preview_url, m.storage_url) AS url, 2 AS role_rank, ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'primary'
+                ) product_media
+                WHERE url IS NOT NULL AND url <> ''
+                ORDER BY url, role_rank, sort_order
+              ) deduped_product_media
+              ORDER BY role_rank, sort_order
             ),
             ARRAY[]::text[]
-          ) AS images
+          ) AS images,
+          COALESCE((
+            SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
+            FROM product_recommendations pr
+            JOIN products rp ON rp.id = pr.recommended_product_id
+            WHERE pr.tenant_id = p.tenant_id
+              AND pr.product_id = p.id
+              AND rp.status = 'active'
+          ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id

@@ -60,7 +60,7 @@ export class ProductsService {
     )
       .then((res) => {
         if (Array.isArray(res.data) && res.data.length > 0) {
-          this._products.set(res.data);
+          this._products.set(res.data.map((product) => this.normalizeProductImages(product)));
         }
         return this._products();
       })
@@ -69,9 +69,30 @@ export class ProductsService {
     return this.loadPromise;
   }
 
+  private normalizeProductImages(product: Product): Product {
+    const images = Array.isArray(product.images)
+      ? product.images.map((image) => this.resolveMediaUrl(image)).filter(Boolean)
+      : [];
+    const image = this.resolveMediaUrl(product.image) || images[0] || product.image;
+
+    return {
+      ...product,
+      image,
+      images: images.length ? [...new Set([image, ...images])] : product.images,
+    };
+  }
+
   private resolveApiBase(): string {
     const { hostname, protocol } = window.location;
     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
     return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
+  }
+
+  private resolveMediaUrl(url: string | undefined): string {
+    const value = (url || '').trim();
+    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
+    if (!value.startsWith('/uploads/')) return value;
+
+    return `${this.apiBase.replace(/\/api\/?$/, '')}${value}`;
   }
 }

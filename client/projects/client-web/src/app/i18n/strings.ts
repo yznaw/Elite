@@ -49,7 +49,6 @@ const EN = {
   'common.loading': 'Loading',
   'common.scroll': 'Scroll',
   'common.dragRotate': 'Drag · Rotate · Explore',
-  'common.currency.sar': 'SAR',
   'common.currency.qar': 'QAR',
   'common.dot': '·',
 
@@ -186,7 +185,6 @@ const EN = {
   'product.aria.viewImage': 'View image {index}',
   'product.aria.decreaseQty': 'Decrease quantity',
   'product.aria.increaseQty': 'Increase quantity',
-  'product.reviews': 'reviews',
   'product.handcraftedSuffix': 'Handcrafted in Doha',
   'product.dutiesIncluded': '· Duties included',
   'product.descriptionTemplate': 'A statement of understated authority. The {name} is individually shaped on a hand-carved wooden last, requiring 48 hours of continuous attention from a single master artisan. Limited to 40 pairs per season.',
@@ -200,17 +198,18 @@ const EN = {
 
   'product.size.label': 'Select Size (EU)',
   'product.size.guide': 'Size Guide',
-  'product.size.required': '↑ Please select a size to continue',
+  'product.size.choose': 'Choose size',
   'product.qty': 'Qty',
 
-  'product.cta.reserve': 'Reserve This Pair',
+  'product.cta.addToCart': 'Add to Cart',
+  'product.cta.buyNow': 'Buy Now',
   'product.cta.added': 'Added to Selection',
-  'product.cta.advisor': 'Speak with a Client Advisor',
-  'product.cta.advisorMsg': 'A client advisor will contact you within 2 hours.',
 
   'product.trust.delivery': 'Free Express Delivery',
   'product.trust.certificate': 'Certificate Included',
   'product.trust.returns': '30-Day Returns',
+  'product.related.kicker': 'Curated Pairings',
+  'product.related.title': 'You may also like',
 
   'product.accordion.material': 'Material & Care',
   'product.accordion.material.body': 'Crafted from hand-selected full-grain camel leather sourced exclusively from Doha tanneries. The leather is treated with natural oils to achieve its distinctive supple hand. Clean with a soft, dry cloth. Condition monthly with our complimentary leather balm. Store in the included cedar shoe trees.',
@@ -219,7 +218,8 @@ const EN = {
   'product.accordion.sizing': 'Sizing & Fit',
   'product.accordion.sizing.body': 'Our shoes are sized in EU measurements and run true to size. If you are between sizes, we recommend sizing up. Bespoke last modifications are available at no additional charge for returning clients. A complimentary sizing kit can be dispatched to your address upon request.',
 
-  'product.sticky.reserve': 'Reserve · {price}',
+  'product.sticky.addToCart': 'Add to Cart',
+  'product.sticky.buyNow': 'Buy Now',
   'product.sticky.added': '✓ Added',
 
   // ─────────────────────────────────────────────────────────────────────
@@ -418,7 +418,6 @@ const AR: Record<keyof typeof EN, string> = {
   'common.loading': 'جارٍ التحميل',
   'common.scroll': 'مرّر',
   'common.dragRotate': 'اسحب · دوّر · استكشف',
-  'common.currency.sar': 'ر.س',
   'common.currency.qar': 'ر.ق',
   'common.dot': '·',
 
@@ -545,7 +544,6 @@ const AR: Record<keyof typeof EN, string> = {
   'product.aria.viewImage': 'عرض الصورة {index}',
   'product.aria.decreaseQty': 'تقليل الكمية',
   'product.aria.increaseQty': 'زيادة الكمية',
-  'product.reviews': 'تقييم',
   'product.handcraftedSuffix': 'صناعة يدوية في الدوحة',
   'product.dutiesIncluded': '· الرسوم مشمولة',
   'product.descriptionTemplate': 'بيان من السلطة الهادئة. يُشكَّل {name} على قالب خشبي محفور يدوياً، ويتطلب 48 ساعة من الانتباه المتواصل لحرفي ماهر واحد. محدود بـ 40 زوجاً في الموسم.',
@@ -559,17 +557,18 @@ const AR: Record<keyof typeof EN, string> = {
 
   'product.size.label': 'اختر المقاس (EU)',
   'product.size.guide': 'دليل المقاسات',
-  'product.size.required': '↑ اختر مقاساً للمتابعة',
+  'product.size.choose': 'اختر المقاس',
   'product.qty': 'الكمية',
 
-  'product.cta.reserve': 'احجز هذا الزوج',
+  'product.cta.addToCart': 'أضف إلى السلة',
+  'product.cta.buyNow': 'اشترِ الآن',
   'product.cta.added': 'أُضيف إلى الاختيارات',
-  'product.cta.advisor': 'تحدّث مع مستشار العملاء',
-  'product.cta.advisorMsg': 'سيتواصل معك مستشار العملاء خلال ساعتين.',
 
   'product.trust.delivery': 'توصيل سريع مجاني',
   'product.trust.certificate': 'شهادة مرفقة',
   'product.trust.returns': 'إرجاع خلال 30 يوماً',
+  'product.related.kicker': 'اختيارات منسّقة',
+  'product.related.title': 'قد يعجبك أيضاً',
 
   'product.accordion.material': 'المواد والعناية',
   'product.accordion.material.body': 'مصنوع من جلد الجمل الكامل الحبيبات المُختار يدوياً والمستورد حصرياً من مدابغ الدوحة. يُعالَج الجلد بالزيوت الطبيعية للحصول على ملمسه المميز الناعم. نظّفه بقطعة قماش جافة وناعمة. عالجه شهرياً بمرهم الجلد المرفق. احفظه باستخدام قوالب الأرز المرفقة.',
@@ -578,7 +577,8 @@ const AR: Record<keyof typeof EN, string> = {
   'product.accordion.sizing': 'المقاسات والملاءمة',
   'product.accordion.sizing.body': 'أحذيتنا مقاسة بالمقاييس الأوروبية وتأتي بمقاساتها الفعلية. إذا كنت بين مقاسين، نوصي باختيار المقاس الأكبر. تعديلات القوالب على الطلب متاحة بدون رسوم إضافية للعملاء العائدين. يمكن إرسال طقم قياس مجاني إلى عنوانك عند الطلب.',
 
-  'product.sticky.reserve': 'احجز · {price}',
+  'product.sticky.addToCart': 'أضف إلى السلة',
+  'product.sticky.buyNow': 'اشترِ الآن',
   'product.sticky.added': '✓ أُضيف',
 
   // Checkout

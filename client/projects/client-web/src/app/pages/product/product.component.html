@@ -73,11 +73,6 @@
         </div>
 
         <article class="details-panel">
-          <div class="review-row">
-            <span aria-hidden="true">★★★★★</span>
-            <small>48 {{ t('product.reviews') }}</small>
-          </div>
-
           <h1>{{ productName(p) }}</h1>
           <p class="descriptor">
             {{ productLeather(p.leather) }} · {{ t('product.handcraftedSuffix') }}
@@ -106,22 +101,71 @@
               <span>{{ t('product.size.label') }}</span>
               <button type="button">{{ t('product.size.guide') }}</button>
             </div>
+
+            <button
+              type="button"
+              class="mobile-size-trigger"
+              (click)="openSizePicker()"
+              [attr.aria-expanded]="sizePickerOpen()"
+            >
+              <span>{{ t('product.size.choose') }}</span>
+              <strong>EU {{ selectedSize() ?? '—' }}</strong>
+            </button>
+
             <div class="size-options">
               @for (s of p.sizes; track s) {
                 <button
                   type="button"
                   class="size-btn"
                   [class.active]="selectedSize() === s"
+                  [attr.aria-pressed]="selectedSize() === s"
                   (click)="selectSize(s)"
                 >
-                  {{ s }}
+                  <span class="size-value">{{ s }}</span>
+                  <span class="size-state" aria-hidden="true">
+                    {{ selectedSize() === s ? '✓' : '' }}
+                  </span>
                 </button>
               }
             </div>
-            @if (selectedSize() == null) {
-              <p class="required-note">{{ t('product.size.required') }}</p>
-            }
           </div>
+
+          @if (sizePickerOpen()) {
+            <div class="size-sheet" role="dialog" aria-modal="true" [attr.aria-label]="t('product.size.label')">
+              <button
+                type="button"
+                class="size-sheet-backdrop"
+                (click)="closeSizePicker()"
+                [attr.aria-label]="t('common.close')"
+              ></button>
+              <div class="size-sheet-panel">
+                <div class="size-sheet-head">
+                  <div>
+                    <span>{{ t('product.size.choose') }}</span>
+                    <strong>{{ t('product.size.label') }}</strong>
+                  </div>
+                  <button type="button" class="size-sheet-close" (click)="closeSizePicker()" [attr.aria-label]="t('common.close')">×</button>
+                </div>
+
+                <div class="size-list">
+                  @for (s of p.sizes; track s) {
+                    <button
+                      type="button"
+                      class="size-btn"
+                      [class.active]="selectedSize() === s"
+                      [attr.aria-pressed]="selectedSize() === s"
+                      (click)="selectSize(s)"
+                    >
+                      <span class="size-value">{{ s }}</span>
+                      <span class="size-state" aria-hidden="true">
+                        {{ selectedSize() === s ? '✓' : '' }}
+                      </span>
+                    </button>
+                  }
+                </div>
+              </div>
+            </div>
+          }
 
           <div class="qty-row">
             <span>{{ t('product.qty') }}</span>
@@ -133,16 +177,17 @@
           </div>
 
           <div class="cta-stack">
-            <button type="button" class="reserve-btn" (click)="add()">
+            <button type="button" class="add-cart-btn" (click)="add()">
               @if (addedFeedback()) {
                 <span>✓ {{ t('product.cta.added') }}</span>
               } @else {
-                <span>{{ t('product.cta.reserve') }}</span>
+                <span>{{ t('product.cta.addToCart') }}</span>
                 <small>{{ price(p.price * qty()) }}</small>
               }
             </button>
-            <button type="button" class="advisor-btn" (click)="speakToAdvisor()">
-              {{ t('product.cta.advisor') }}
+            <button type="button" class="buy-now-btn" (click)="buyNow()">
+              <span>{{ t('product.cta.buyNow') }}</span>
+              <small>{{ price(p.price * qty()) }}</small>
             </button>
           </div>
 
@@ -167,15 +212,44 @@
           </div>
         </article>
       </section>
+
+      @if (recommendedProducts().length > 0) {
+        <section class="related-section" aria-labelledby="related-title">
+          <div class="related-head">
+            <p>{{ t('product.related.kicker') }}</p>
+            <h2 id="related-title">{{ t('product.related.title') }}</h2>
+          </div>
+
+          <div class="related-grid">
+            @for (item of recommendedProducts(); track item.id) {
+              <article class="related-card">
+                <button type="button" class="related-link" (click)="goToProduct(item)">
+                  <span class="related-image">
+                    <img [src]="item.image" [alt]="productName(item)" (error)="onImgError($event)" />
+                  </span>
+                  <span class="related-copy">
+                    <span class="related-name">{{ productName(item) }}</span>
+                    <span class="related-meta">{{ productLeather(item.leather) }}</span>
+                    <span class="related-price">{{ price(item.price) }}</span>
+                  </span>
+                </button>
+              </article>
+            }
+          </div>
+        </section>
+      }
     </div>
 
     <div class="sticky-atc" id="sticky-atc">
-      <button type="button" class="reserve-btn" (click)="add()">
+      <button type="button" class="add-cart-btn" (click)="add()">
         @if (addedFeedback()) {
           <ng-container>{{ t('product.sticky.added') }}</ng-container>
         } @else {
-          <ng-container>{{ t('product.sticky.reserve', { price: price(p.price * qty()) }) }}</ng-container>
+          <ng-container>{{ t('product.sticky.addToCart') }}</ng-container>
         }
+      </button>
+      <button type="button" class="buy-now-btn" (click)="buyNow()">
+        {{ t('product.sticky.buyNow') }}
       </button>
     </div>
   </main>

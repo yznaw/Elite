@@ -29,7 +29,6 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly productsSvc = inject(ProductsService);
   private readonly i18n = inject(I18nService);
 
-  private galleryTimer: number | undefined;
   private feedbackTimer: number | undefined;
 
   readonly accordions: Accordion[] = [
@@ -57,6 +56,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly addedFeedback = signal(false);
   readonly wishlisted = signal(false);
   readonly qty = signal(1);
+  readonly sizePickerOpen = signal(false);
 
   readonly gallery = computed(() => {
     const p = this.product();
@@ -78,6 +78,15 @@ export class ProductComponent implements OnInit, OnDestroy {
     ];
   });
 
+  readonly recommendedProducts = computed(() => {
+    const p = this.product();
+    if (!p?.relatedProductIds?.length) return [];
+    return p.relatedProductIds
+      .map((id) => this.productsSvc.getById(id))
+      .filter((item): item is Product => item != null && item.id !== p.id)
+      .slice(0, 4);
+  });
+
   readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
   readonly productName = (product: Product): string => this.i18n.productName(product);
@@ -88,21 +97,29 @@ export class ProductComponent implements OnInit, OnDestroy {
     const idParam = this.route.snapshot.paramMap.get('id');
     await this.productsSvc.refresh();
     const p = idParam ? this.productsSvc.getById(idParam) : undefined;
-    this.product.set(p ?? this.productsSvc.getAll()[0]);
+    const nextProduct = p ?? this.productsSvc.getAll()[0];
+    this.product.set(nextProduct);
     this.galleryIdx.set(0);
-
-    this.galleryTimer = window.setInterval(() => {
-      this.galleryIdx.update((i) => (i + 1) % this.gallery().length);
-    }, 5000);
+    this.selectedSize.set(nextProduct?.sizes[0] ?? null);
+    this.sizePickerOpen.set(false);
   }
 
   ngOnDestroy(): void {
-    if (this.galleryTimer) clearInterval(this.galleryTimer);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
   }
 
   goCollection(): void {
     void this.router.navigate(['/collection']);
+  }
+
+  goToProduct(nextProduct: Product): void {
+    this.product.set(nextProduct);
+    this.galleryIdx.set(0);
+    this.selectedSize.set(nextProduct.sizes[0] ?? null);
+    this.qty.set(1);
+    this.sizePickerOpen.set(false);
+    void this.router.navigate(['/product', nextProduct.id]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   setGalleryIdx(i: number): void {
@@ -117,6 +134,15 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   selectSize(s: number): void {
     this.selectedSize.set(s);
+    this.sizePickerOpen.set(false);
+  }
+
+  openSizePicker(): void {
+    this.sizePickerOpen.set(true);
+  }
+
+  closeSizePicker(): void {
+    this.sizePickerOpen.set(false);
   }
 
   decQty(): void { this.qty.update((q) => Math.max(1, q - 1)); }
@@ -133,28 +159,19 @@ export class ProductComponent implements OnInit, OnDestroy {
   add(): void {
     const p = this.product();
     if (!p) return;
-    const size = this.selectedSize();
-    if (size == null) {
-      const el = document.getElementById('size-section');
-      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      return;
-    }
-    this.cart.add({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      image: this.gallery()[this.galleryIdx()] ?? p.image,
-      leather: p.leather,
-      size,
-      qty: this.qty(),
-    });
+    this.cart.add(this.cartItem(p));
     this.addedFeedback.set(true);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     this.feedbackTimer = window.setTimeout(() => this.addedFeedback.set(false), 2200);
   }
 
-  speakToAdvisor(): void {
-    alert(this.t('product.cta.advisorMsg'));
+  buyNow(): void {
+    const p = this.product();
+    if (!p) return;
+    this.cart.add(this.cartItem(p));
+    this.cart.closeDrawer();
+    void this.router.navigate(['/checkout']);
+    window.scrollTo(0, 0);
   }
 
   onImgError(e: Event): void {
@@ -164,5 +181,17 @@ export class ProductComponent implements OnInit, OnDestroy {
       return;
     }
     img.style.display = 'none';
+  }
+
+  private cartItem(p: Product) {
+    return {
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      image: this.gallery()[this.galleryIdx()] ?? p.image,
+      leather: p.leather,
+      size: this.selectedSize() ?? p.sizes[0] ?? 40,
+      qty: this.qty(),
+    };
   }
 }

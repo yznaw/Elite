@@ -4,6 +4,7 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, slugify, toCents, validationError } = require('./lib');
 const { upload } = require('../middleware/upload');
 const { storage } = require('../lib/storage');
+const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 
 const router = Router();
 
@@ -109,6 +110,43 @@ async function replaceImages(client, tenantId, productId, images) {
   );
 }
 
+async function replaceRecommendations(client, tenantId, productId, relatedProductIds) {
+  await ensureProductRecommendationsSchema(client);
+  const ids = [...new Set((Array.isArray(relatedProductIds) ? relatedProductIds : [])
+    .map((id) => String(id || '').trim())
+    .filter((id) => id && id !== productId))];
+
+  await client.query('DELETE FROM product_recommendations WHERE tenant_id = $1 AND product_id = $2', [tenantId, productId]);
+  if (ids.length === 0) return [];
+
+  const valid = await client.query(
+    `
+      SELECT id
+      FROM products
+      WHERE tenant_id = $1
+        AND status <> 'archived'
+        AND id = ANY($2::uuid[])
+      ORDER BY array_position($2::uuid[], id)
+    `,
+    [tenantId, ids],
+  );
+  const validIds = valid.rows.map((row) => row.id);
+
+  for (const [index, recommendedProductId] of validIds.entries()) {
+    await client.query(
+      `
+        INSERT INTO product_recommendations (tenant_id, product_id, recommended_product_id, sort_order)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (product_id, recommended_product_id) DO UPDATE
+        SET sort_order = EXCLUDED.sort_order
+      `,
+      [tenantId, productId, recommendedProductId, index],
+    );
+  }
+
+  return validIds;
+}
+
 function mapAdminProduct(row) {
   return {
     id: row.id,
@@ -123,10 +161,12 @@ function mapAdminProduct(row) {
     image: row.image || '',
     images: row.images || [],
     variants: row.variants || [],
+    relatedProductIds: row.related_product_ids || [],
   };
 }
 
 async function loadAdminProduct(client, tenantId, productId) {
+  await ensureProductRecommendationsSchema(client);
   const result = await client.query(
     `
       SELECT
@@ -151,7 +191,15 @@ async function loadAdminProduct(client, tenantId, productId) {
           FROM media_links ml
           JOIN media_assets m ON m.id = ml.media_id
           WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
-        ), ARRAY[]::text[]) AS images
+        ), ARRAY[]::text[]) AS images,
+        COALESCE((
+          SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
+          FROM product_recommendations pr
+          JOIN products rp ON rp.id = pr.recommended_product_id
+          WHERE pr.tenant_id = p.tenant_id
+            AND pr.product_id = p.id
+            AND rp.status <> 'archived'
+        ), ARRAY[]::uuid[]) AS related_product_ids
       FROM products p
       LEFT JOIN product_variants pv ON pv.product_id = p.id
       LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -170,6 +218,7 @@ async function upsertProduct(client, tenant, product) {
   const currency = product.currency || tenant.currency;
   const status = product.hidden ? 'hidden' : 'active';
   const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  const hasRelatedProductIds = Object.prototype.hasOwnProperty.call(product, 'relatedProductIds');
   const description = {
     en: String(product.enDesc || '').trim(),
     ar: String(product.arDesc || '').trim(),
@@ -237,6 +286,9 @@ async function upsertProduct(client, tenant, product) {
   const saved = upserted.rows[0];
   await replaceVariants(client, tenant.id, saved.id, Array.isArray(product.variants) ? product.variants : []);
   await replaceImages(client, tenant.id, saved.id, images);
+  if (hasRelatedProductIds) {
+    await replaceRecommendations(client, tenant.id, saved.id, product.relatedProductIds);
+  }
   return { ...saved, tenantId: tenant.id, imageCount: images.length };
 }
 
@@ -244,6 +296,7 @@ router.get('/', asyncHandler(async (_req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    await ensureProductRecommendationsSchema(client);
     const result = await client.query(
       `
         SELECT
@@ -268,7 +321,15 @@ router.get('/', asyncHandler(async (_req, res) => {
             FROM media_links ml
             JOIN media_assets m ON m.id = ml.media_id
             WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
-          ), ARRAY[]::text[]) AS images
+          ), ARRAY[]::text[]) AS images,
+          COALESCE((
+            SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
+            FROM product_recommendations pr
+            JOIN products rp ON rp.id = pr.recommended_product_id
+            WHERE pr.tenant_id = p.tenant_id
+              AND pr.product_id = p.id
+              AND rp.status <> 'archived'
+          ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -289,9 +350,20 @@ router.get('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    await ensureProductRecommendationsSchema(client);
     const result = await client.query(
       `
-        SELECT p.*, COALESCE(primary_media.preview_url, primary_media.storage_url, '') AS image
+        SELECT
+          p.*,
+          COALESCE(primary_media.preview_url, primary_media.storage_url, '') AS image,
+          COALESCE((
+            SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
+            FROM product_recommendations pr
+            JOIN products rp ON rp.id = pr.recommended_product_id
+            WHERE pr.tenant_id = p.tenant_id
+              AND pr.product_id = p.id
+              AND rp.status <> 'archived'
+          ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status <> 'archived'
@@ -352,6 +424,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       id: req.params.id,
       variants: req.body.variants,
       images: req.body.images,
+      relatedProductIds: req.body.relatedProductIds,
       has3d: req.body.has3d ?? existing.has_3d,
       views3d: req.body.views3d ?? existing.views_3d,
     };
@@ -499,10 +572,9 @@ router.post(
         sortOrder += 1;
       }
 
-      // If the product had no primary image yet, promote the first uploaded
-      // file to primary so list/heatmap thumbs work immediately.
-      const primaryCheck = await client.query('SELECT primary_media_id FROM products WHERE id = $1', [productId]);
-      if (!primaryCheck.rows[0].primary_media_id && newMediaIds.length > 0) {
+      // Promote the first uploaded file so the storefront API and admin list
+      // show the catalog upload immediately instead of an older seed image.
+      if (newMediaIds.length > 0) {
         await client.query('UPDATE products SET primary_media_id = $1 WHERE id = $2', [newMediaIds[0], productId]);
       }
 
@@ -513,7 +585,14 @@ router.post(
           FROM media_links ml
           JOIN media_assets m ON m.id = ml.media_id
           WHERE ml.product_id = $1 AND ml.role IN ('gallery', 'primary')
-          ORDER BY ml.sort_order
+          ORDER BY
+            CASE
+              WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
+                OR m.metadata ? 'storagePath'
+              THEN 0
+              ELSE 1
+            END,
+            ml.sort_order
         `,
         [productId],
       );
