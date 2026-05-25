@@ -130,11 +130,13 @@ The hero exposes three circular radio-style leather color controls under the mod
 
 | ID | Label | Hex |
 |---|---|---|
-| `cognac` | Cognac | `#754c31` |
-| `espresso` | Espresso | `#684130` |
-| `sand` | Sand | `#9d6e3c` |
+| `cognac` | Cognac | `#5f3423` |
+| `espresso` | Espresso | `#4e2c22` |
+| `sand` | Sand | `#8f6337` |
 
 Color switching is handled in the component without reloading the model. The swatch colors are sampled from the product reference photo. During model preparation, leather `MeshStandardMaterial` instances are stored in `leatherMaterials`; this includes the original model's `Material` surface and the optimized models' `Outer_leather` materials. Non-switching details use fixed reference colors: tan footbeds, dark stitches, and darker buckle/trim.
+
+For a more photographic read, the viewer uses a PMREM `RoomEnvironment` for studio reflections and material-specific roughness/env-map settings: leather keeps a soft highlight, footbeds stay matte, stitching is dry and dark, and buckle/trim has a slightly stronger reflection.
 
 ```typescript
 selectLeatherColor(id: string): void {

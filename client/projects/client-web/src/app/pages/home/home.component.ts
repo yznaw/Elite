@@ -14,6 +14,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { I18nService } from '../../services/i18n.service';
@@ -65,6 +66,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
   private animationFrame = 0;
   private renderer?: THREE.WebGLRenderer;
+  private environmentRenderTarget?: THREE.WebGLRenderTarget;
   private scene?: THREE.Scene;
   private camera?: THREE.PerspectiveCamera;
   private controls?: OrbitControls;
@@ -78,11 +80,11 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private swipeStartAt = 0;
   private modelLoadToken = 0;
   private readonly referenceMaterialColors = {
-    leather: 0x754c31,
-    leatherDeep: 0x684130,
-    footbed: 0x9d6e3c,
-    stitch: 0x5a3524,
-    buckle: 0x5e3b2c,
+    leather: 0x5f3423,
+    leatherDeep: 0x4e2c22,
+    footbed: 0x8f6337,
+    stitch: 0x3f2419,
+    buckle: 0x4b2d23,
   };
   private readonly handleModelPointerDown = (event: PointerEvent): void => this.onModelPointerDown(event);
   private readonly handleModelPointerMove = (event: PointerEvent): void => this.onModelPointerMove(event);
@@ -139,9 +141,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   );
 
   readonly leatherColors: LeatherColorOption[] = [
-    { id: 'cognac', nameKey: 'home.leatherColor.cognac', color: 0x754c31, swatch: '#754c31' },
-    { id: 'espresso', nameKey: 'home.leatherColor.espresso', color: 0x684130, swatch: '#684130' },
-    { id: 'sand', nameKey: 'home.leatherColor.sand', color: 0x9d6e3c, swatch: '#9d6e3c' },
+    { id: 'cognac', nameKey: 'home.leatherColor.cognac', color: 0x5f3423, swatch: '#5f3423' },
+    { id: 'espresso', nameKey: 'home.leatherColor.espresso', color: 0x4e2c22, swatch: '#4e2c22' },
+    { id: 'sand', nameKey: 'home.leatherColor.sand', color: 0x8f6337, swatch: '#8f6337' },
   ];
 
   readonly metaCards: MetaCard[] = [
@@ -269,7 +271,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMappingExposure = 0.78;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -293,6 +295,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.controls = controls;
 
     this.addHeroLighting(scene);
+    this.addHeroEnvironment(scene, renderer);
     this.addHeroGround(scene);
     this.bindHeroResize(host);
     this.bindModelDrag(canvas);
@@ -301,29 +304,39 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private addHeroLighting(scene: THREE.Scene): void {
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xd8c3a2, 1.65));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xcaa77a, 0.74));
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
-    keyLight.position.set(3.8, 5.8, 4.2);
+    const keyLight = new THREE.DirectionalLight(0xfffbf2, 1.62);
+    keyLight.position.set(3.6, 5.4, 4.6);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(2048, 2048);
     keyLight.shadow.camera.near = 0.5;
     keyLight.shadow.camera.far = 18;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xf4dfb7, 1.25);
-    fillLight.position.set(-4.2, 2.4, 2.2);
+    const fillLight = new THREE.DirectionalLight(0xf4dfb7, 0.24);
+    fillLight.position.set(-4.2, 2.2, 2.6);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xffffff, 1.9);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.72);
     rimLight.position.set(-2.6, 3.8, -3.8);
     scene.add(rimLight);
+  }
+
+  private addHeroEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const roomEnvironment = new RoomEnvironment();
+
+    this.environmentRenderTarget = pmremGenerator.fromScene(roomEnvironment, 0.015);
+    scene.environment = this.environmentRenderTarget.texture;
+    roomEnvironment.dispose();
+    pmremGenerator.dispose();
   }
 
   private addHeroGround(scene: THREE.Scene): void {
     const shadow = new THREE.Mesh(
       new THREE.CircleGeometry(2.85, 96),
-      new THREE.ShadowMaterial({ color: 0x6c5230, opacity: 0.16 }),
+      new THREE.ShadowMaterial({ color: 0x3a281a, opacity: 0.26 }),
     );
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = -0.72;
@@ -449,23 +462,28 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       materials.forEach((material) => {
         if (material instanceof THREE.MeshStandardMaterial) {
           if (this.isLeatherMaterial(material)) {
+            this.configureLeatherMaterial(material);
             this.leatherMaterials.push(material);
           } else {
             this.applyReferenceMaterialColor(material);
           }
-
-          material.metalness = 0;
-          material.roughness = Math.max(material.roughness, 0.72);
         }
 
         material.needsUpdate = true;
-        if ('envMapIntensity' in material) {
-          material.envMapIntensity = 0.8;
-        }
       });
     });
 
     this.applyLeatherColor(this.selectedLeatherColor());
+  }
+
+  private configureLeatherMaterial(material: THREE.MeshStandardMaterial): void {
+    material.metalness = 0;
+    material.roughness = material.map ? 0.92 : 0.86;
+    material.envMapIntensity = 0.18;
+
+    if (material.normalMap) {
+      material.normalScale.set(0.55, 0.55);
+    }
   }
 
   private applyReferenceMaterialColor(material: THREE.MeshStandardMaterial): void {
@@ -473,22 +491,41 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (materialName === 'material.001' || materialName.includes('inner_lining')) {
       material.color.set(this.referenceMaterialColors.footbed);
+      material.metalness = 0;
+      material.roughness = 0.95;
+      material.envMapIntensity = 0.1;
+      if (material.normalMap) material.normalScale.set(0.34, 0.34);
       return;
     }
 
     if (materialName.includes('stitch')) {
       material.color.set(this.referenceMaterialColors.stitch);
+      material.metalness = 0;
+      material.roughness = 0.97;
+      material.envMapIntensity = 0.08;
+      if (material.normalMap) material.normalScale.set(0.42, 0.42);
       return;
     }
 
     if (materialName.includes('backle') || materialName.includes('buckle') || materialName.includes('metal')) {
       material.color.set(this.referenceMaterialColors.buckle);
+      material.metalness = 0.05;
+      material.roughness = 0.68;
+      material.envMapIntensity = 0.32;
       return;
     }
 
     if (materialName.includes('rubber')) {
       material.color.set(this.referenceMaterialColors.leatherDeep);
+      material.metalness = 0;
+      material.roughness = 0.88;
+      material.envMapIntensity = 0.12;
+      return;
     }
+
+    material.metalness = 0;
+    material.roughness = Math.max(material.roughness, 0.82);
+    material.envMapIntensity = 0.18;
   }
 
   private isLeatherMaterial(material: THREE.MeshStandardMaterial): boolean {
@@ -552,8 +589,11 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resizeObserver?.disconnect();
     this.controls?.dispose();
     this.dracoLoader?.dispose();
+    this.environmentRenderTarget?.dispose();
+    this.environmentRenderTarget = undefined;
 
     this.clearCurrentModel();
+    if (this.scene) this.scene.environment = null;
     if (this.scene) this.disposeObject(this.scene);
 
     this.renderer?.dispose();
