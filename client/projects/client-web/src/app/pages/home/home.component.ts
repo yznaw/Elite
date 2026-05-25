@@ -85,7 +85,11 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     footbed: 0x8f6337,
     stitch: 0x3f2419,
     buckle: 0x4b2d23,
+    sole: 0x8d7135,
   };
+  private leatherGrainTexture?: THREE.CanvasTexture;
+  private footbedGrainTexture?: THREE.CanvasTexture;
+  private soleGrainTexture?: THREE.CanvasTexture;
   private readonly handleModelPointerDown = (event: PointerEvent): void => this.onModelPointerDown(event);
   private readonly handleModelPointerMove = (event: PointerEvent): void => this.onModelPointerMove(event);
   private readonly handleModelPointerUp = (event: PointerEvent): void => this.onModelPointerUp(event);
@@ -480,6 +484,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     material.metalness = 0;
     material.roughness = material.map ? 0.92 : 0.86;
     material.envMapIntensity = 0.18;
+    material.map ??= this.getLeatherGrainTexture();
 
     if (material.normalMap) {
       material.normalScale.set(0.55, 0.55);
@@ -494,6 +499,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       material.metalness = 0;
       material.roughness = 0.95;
       material.envMapIntensity = 0.1;
+      material.map ??= this.getFootbedGrainTexture();
       if (material.normalMap) material.normalScale.set(0.34, 0.34);
       return;
     }
@@ -516,16 +522,158 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (materialName.includes('rubber')) {
-      material.color.set(this.referenceMaterialColors.leatherDeep);
+      material.color.set(this.referenceMaterialColors.sole);
       material.metalness = 0;
       material.roughness = 0.88;
       material.envMapIntensity = 0.12;
+      material.map ??= this.getSoleGrainTexture();
       return;
     }
 
     material.metalness = 0;
     material.roughness = Math.max(material.roughness, 0.82);
     material.envMapIntensity = 0.18;
+  }
+
+  private getLeatherGrainTexture(): THREE.CanvasTexture {
+    this.leatherGrainTexture ??= this.createGrainTexture({
+      base: [214, 199, 184],
+      noise: 38,
+      grainLines: 1500,
+      pores: 3800,
+      lineAlpha: 0.17,
+      poreAlpha: 0.12,
+      seed: 19,
+    });
+
+    return this.leatherGrainTexture;
+  }
+
+  private getFootbedGrainTexture(): THREE.CanvasTexture {
+    this.footbedGrainTexture ??= this.createGrainTexture({
+      base: [226, 197, 150],
+      noise: 22,
+      grainLines: 520,
+      pores: 1800,
+      lineAlpha: 0.08,
+      poreAlpha: 0.08,
+      seed: 43,
+    });
+
+    return this.footbedGrainTexture;
+  }
+
+  private getSoleGrainTexture(): THREE.CanvasTexture {
+    this.soleGrainTexture ??= this.createGrainTexture({
+      base: [192, 159, 91],
+      noise: 18,
+      grainLines: 260,
+      pores: 1100,
+      lineAlpha: 0.05,
+      poreAlpha: 0.06,
+      seed: 71,
+    });
+
+    return this.soleGrainTexture;
+  }
+
+  private createGrainTexture(config: {
+    base: [number, number, number];
+    noise: number;
+    grainLines: number;
+    pores: number;
+    lineAlpha: number;
+    poreAlpha: number;
+    seed: number;
+  }): THREE.CanvasTexture {
+    const size = 768;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    const random = this.createSeededRandom(config.seed);
+    const image = context.createImageData(size, size);
+    const [baseR, baseG, baseB] = config.base;
+
+    for (let i = 0; i < image.data.length; i += 4) {
+      const variation = (random() - 0.5) * config.noise;
+      image.data[i] = this.clampColor(baseR + variation);
+      image.data[i + 1] = this.clampColor(baseG + variation);
+      image.data[i + 2] = this.clampColor(baseB + variation);
+      image.data[i + 3] = 255;
+    }
+
+    context.putImageData(image, 0, 0);
+    context.globalCompositeOperation = 'multiply';
+
+    for (let i = 0; i < config.grainLines; i++) {
+      const x = random() * size;
+      const y = random() * size;
+      const length = 10 + random() * 52;
+      const curve = (random() - 0.5) * 20;
+      const angle = -0.45 + random() * 0.9;
+      context.strokeStyle = `rgba(72, 42, 28, ${config.lineAlpha * random()})`;
+      context.lineWidth = 0.35 + random() * 1.2;
+      context.beginPath();
+      context.moveTo(x, y);
+      context.quadraticCurveTo(
+        x + Math.cos(angle) * length * 0.5,
+        y + Math.sin(angle) * length * 0.5 + curve,
+        x + Math.cos(angle) * length,
+        y + Math.sin(angle) * length,
+      );
+      context.stroke();
+    }
+
+    for (let i = 0; i < config.pores; i++) {
+      const radius = 0.35 + random() * 1.25;
+      context.fillStyle = `rgba(62, 36, 23, ${config.poreAlpha * random()})`;
+      context.beginPath();
+      context.ellipse(random() * size, random() * size, radius * (1 + random()), radius, random() * Math.PI, 0, Math.PI * 2);
+      context.fill();
+    }
+
+    context.globalCompositeOperation = 'screen';
+    for (let i = 0; i < Math.round(config.grainLines * 0.22); i++) {
+      const x = random() * size;
+      const y = random() * size;
+      const length = 8 + random() * 38;
+      const angle = -0.35 + random() * 0.7;
+      context.strokeStyle = `rgba(255, 236, 208, ${0.03 + random() * 0.08})`;
+      context.lineWidth = 0.3 + random() * 0.7;
+      context.beginPath();
+      context.moveTo(x, y);
+      context.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+      context.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2.35, 2.35);
+    texture.anisotropy = 4;
+    texture.needsUpdate = true;
+
+    return texture;
+  }
+
+  private createSeededRandom(seed: number): () => number {
+    let state = seed;
+
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+  }
+
+  private clampColor(value: number): number {
+    return Math.max(0, Math.min(255, Math.round(value)));
   }
 
   private isLeatherMaterial(material: THREE.MeshStandardMaterial): boolean {
@@ -591,12 +739,22 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dracoLoader?.dispose();
     this.environmentRenderTarget?.dispose();
     this.environmentRenderTarget = undefined;
+    this.disposeProceduralTextures();
 
     this.clearCurrentModel();
     if (this.scene) this.scene.environment = null;
     if (this.scene) this.disposeObject(this.scene);
 
     this.renderer?.dispose();
+  }
+
+  private disposeProceduralTextures(): void {
+    this.leatherGrainTexture?.dispose();
+    this.footbedGrainTexture?.dispose();
+    this.soleGrainTexture?.dispose();
+    this.leatherGrainTexture = undefined;
+    this.footbedGrainTexture = undefined;
+    this.soleGrainTexture = undefined;
   }
 
   private clearCurrentModel(): void {

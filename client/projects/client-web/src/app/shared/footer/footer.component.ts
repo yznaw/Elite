@@ -18,22 +18,23 @@ interface FooterColumn {
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <footer style="border-top: 1px solid var(--border); padding: 48px 24px 32px; background: var(--surface);">
-      <div style="max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 40px;">
-        <div>
-          <div style="font-family: var(--ff-serif); font-size: 20px; letter-spacing: 0.15em; color: var(--gold); margin-bottom: 6px;">{{ t('brand.name') }}</div>
-          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; margin-bottom: 16px;">{{ t('brand.tagline') }}</div>
-          <p style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted); line-height: 1.8; max-width: 220px;">
+    <footer id="site-footer" class="site-footer">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a routerLink="/" class="footer-logo-link" [attr.aria-label]="t('brand.name')">
+            <img class="footer-logo" src="assets/brand/elite-logo-green.png" [alt]="t('brand.name')" loading="lazy" />
+          </a>
+          <div class="footer-tagline">{{ t('brand.tagline') }}</div>
+          <p>
             {{ t('footer.tagline') }}
           </p>
         </div>
 
         @for (col of columns; track col.titleKey) {
-          <div>
-            <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--gold); margin-bottom: 16px;">{{ t(col.titleKey) }}</div>
+          <div class="footer-column">
+            <div class="footer-column-title">{{ t(col.titleKey) }}</div>
             @for (l of col.links; track l.labelKey) {
-              <a [routerLink]="l.path"
-                style="display: block; text-decoration: none; font-family: var(--ff-sans); font-size: 12px; color: var(--muted); text-align: left; padding: 4px 0; letter-spacing: 0.04em; transition: color 0.2s;">
+              <a [routerLink]="l.path" class="footer-link">
                 {{ t(l.labelKey) }}
               </a>
             }
@@ -41,18 +42,176 @@ interface FooterColumn {
         }
       </div>
 
-      <div class="divider" style="max-width: 1200px; margin: 32px auto 24px;"></div>
+      <div class="divider footer-divider"></div>
 
-      <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-        <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;">
+      <div class="footer-bottom">
+        <p>
           {{ t('footer.copyright') }}
         </p>
-        <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;">
+        <p>
           {{ t('footer.cities') }}
         </p>
       </div>
     </footer>
   `,
+  styles: [`
+    .site-footer {
+      border-top: 1px solid var(--border);
+      padding: 52px 24px 32px;
+      background:
+        linear-gradient(180deg, rgba(255, 250, 240, 0.38), transparent 42%),
+        var(--surface);
+    }
+
+    .footer-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(260px, 1.15fr) repeat(3, minmax(150px, 0.75fr));
+      gap: 42px;
+      align-items: start;
+    }
+
+    .footer-brand {
+      max-width: 300px;
+    }
+
+    .footer-logo-link {
+      width: fit-content;
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 10px;
+      text-decoration: none;
+    }
+
+    .footer-logo {
+      display: block;
+      width: 132px;
+      height: auto;
+    }
+
+    .footer-tagline {
+      position: relative;
+      width: fit-content;
+      margin-bottom: 18px;
+      padding-top: 12px;
+      color: var(--muted);
+      font-family: var(--ff-sans);
+      font-size: 9px;
+      line-height: 1;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .footer-tagline::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 48px;
+      height: 1px;
+      background: var(--gold);
+    }
+
+    .footer-brand p,
+    .footer-bottom p {
+      color: var(--muted);
+      font-family: var(--ff-sans);
+    }
+
+    .footer-brand p {
+      max-width: 240px;
+      font-size: 11px;
+      line-height: 1.8;
+    }
+
+    .footer-column-title {
+      margin-bottom: 16px;
+      color: var(--gold);
+      font-family: var(--ff-sans);
+      font-size: 9px;
+      line-height: 1;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .footer-link {
+      display: block;
+      width: fit-content;
+      padding: 4px 0;
+      color: var(--muted);
+      font-family: var(--ff-sans);
+      font-size: 12px;
+      line-height: 1.45;
+      letter-spacing: 0;
+      text-align: start;
+      text-decoration: none;
+      transition: color 0.2s ease, transform 0.2s ease;
+    }
+
+    .footer-link:hover {
+      color: var(--green-2);
+      transform: translateX(2px);
+    }
+
+    .footer-divider {
+      max-width: 1200px;
+      margin: 34px auto 24px;
+    }
+
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .footer-bottom p {
+      font-size: 10px;
+      line-height: 1.4;
+      letter-spacing: 0;
+    }
+
+    :host-context(html[dir='rtl']) .footer-tagline::before {
+      right: 0;
+      left: auto;
+    }
+
+    :host-context(html[dir='rtl']) .footer-link:hover {
+      transform: translateX(-2px);
+    }
+
+    @media (max-width: 860px) {
+      .footer-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .footer-brand {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .site-footer {
+        padding: 42px 20px 28px;
+      }
+
+      .footer-grid {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      .footer-logo {
+        width: 118px;
+      }
+
+      .footer-bottom {
+        flex-direction: column;
+      }
+    }
+  `],
 })
 export class FooterComponent {
   private readonly i18n = inject(I18nService);

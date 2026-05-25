@@ -18,8 +18,12 @@ interface NavLink {
   template: `
     <nav class="nav-shell" [class.is-scrolled]="scrolled()" [attr.aria-label]="t('nav.menu')">
       <a routerLink="/" class="brand-link" [attr.aria-label]="t('brand.name')">
-        <span class="brand-mark">{{ t('brand.name') }}</span>
-        <span class="brand-subtitle">{{ t('brand.tagline') }}</span>
+        <span class="brand-logo-wrap">
+          <img class="brand-logo" src="assets/brand/elite-logo-cream.png" [alt]="t('brand.name')" />
+        </span>
+        <span class="brand-copy">
+          <span class="brand-subtitle">{{ t('brand.tagline') }}</span>
+        </span>
       </a>
 
       <div class="desktop-nav" [attr.aria-label]="t('nav.menu')">
@@ -69,7 +73,10 @@ interface NavLink {
       <div class="mobile-menu">
         <button type="button" class="mobile-close" (click)="menuOpen.set(false)" [attr.aria-label]="t('nav.closeMenu')">×</button>
 
-        <div class="mobile-kicker">{{ t('nav.menu') }}</div>
+        <a routerLink="/" class="mobile-brand" (click)="menuOpen.set(false)" [attr.aria-label]="t('brand.name')">
+          <img src="assets/brand/elite-logo-cream.png" [alt]="t('brand.name')" />
+          <span>{{ t('brand.tagline') }}</span>
+        </a>
 
         @for (l of links; track l.path; let i = $index) {
           <a
@@ -115,7 +122,7 @@ interface NavLink {
       width: min(1180px, calc(100vw - 32px));
       min-height: 66px;
       display: grid;
-      grid-template-columns: minmax(178px, 0.84fr) auto minmax(92px, 0.84fr);
+      grid-template-columns: minmax(248px, 0.9fr) auto minmax(92px, 0.9fr);
       align-items: center;
       gap: 22px;
       padding: 10px 12px 10px 24px;
@@ -139,30 +146,52 @@ interface NavLink {
 
     .brand-link {
       display: inline-flex;
-      flex-direction: column;
+      align-items: center;
+      gap: 13px;
       justify-self: start;
       min-width: 0;
       text-decoration: none;
     }
 
-    .brand-mark {
-      color: #fffaf0;
-      font-family: var(--ff-serif);
-      font-size: 18px;
-      font-weight: 400;
-      line-height: 1;
-      letter-spacing: 0.18em;
+    .brand-logo-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      width: 92px;
+      min-height: 40px;
+    }
+
+    .brand-logo {
+      display: block;
+      width: 100%;
+      height: auto;
+      filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.12));
+    }
+
+    .brand-copy {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      padding-left: 13px;
+      border-left: 1px solid rgba(255, 250, 240, 0.2);
     }
 
     .brand-subtitle {
-      margin-top: 4px;
       color: rgba(255, 250, 240, 0.62);
       font-family: var(--ff-sans);
       font-size: 8px;
       line-height: 1;
-      letter-spacing: 0.3em;
+      letter-spacing: 0;
       text-transform: uppercase;
       white-space: nowrap;
+    }
+
+    :host-context(html[dir='rtl']) .brand-copy {
+      padding-right: 13px;
+      padding-left: 0;
+      border-right: 1px solid rgba(255, 250, 240, 0.2);
+      border-left: 0;
     }
 
     .desktop-nav {
@@ -344,12 +373,26 @@ interface NavLink {
       line-height: 1;
     }
 
-    .mobile-kicker {
-      margin-bottom: 36px;
+    .mobile-brand {
+      width: fit-content;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 34px;
+      text-decoration: none;
+    }
+
+    .mobile-brand img {
+      width: 112px;
+      height: auto;
+      filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.13));
+    }
+
+    .mobile-brand span {
       color: rgba(255, 250, 240, 0.58);
       font-family: var(--ff-sans);
       font-size: 10px;
-      letter-spacing: 0.32em;
+      letter-spacing: 0;
       text-transform: uppercase;
     }
 
@@ -408,6 +451,10 @@ interface NavLink {
       .menu-btn {
         display: inline-flex;
       }
+
+      .brand-copy {
+        display: none;
+      }
     }
 
     @media (max-width: 560px) {
@@ -423,15 +470,13 @@ interface NavLink {
         top: 8px;
       }
 
-      .brand-mark {
-        font-size: 17px;
+      .brand-logo-wrap {
+        width: 82px;
+        min-height: 36px;
       }
 
-      .brand-subtitle {
-        max-width: 150px;
-        overflow: hidden;
-        letter-spacing: 0.22em;
-        text-overflow: ellipsis;
+      .brand-link {
+        gap: 10px;
       }
 
       .icon-btn {

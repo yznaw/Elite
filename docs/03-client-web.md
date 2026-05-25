@@ -138,6 +138,8 @@ Color switching is handled in the component without reloading the model. The swa
 
 For a more photographic read, the viewer uses a PMREM `RoomEnvironment` for studio reflections and material-specific roughness/env-map settings: leather keeps a soft highlight, footbeds stay matte, stitching is dry and dark, and buckle/trim has a slightly stronger reflection.
 
+Because the optimized GLBs do not include a true base-color leather texture, the viewer adds lightweight procedural grain maps at runtime for leather, footbed, and sole materials. These maps add pores, darker valleys, and slight worn highlights while preserving the GLB normal and roughness maps.
+
 ```typescript
 selectLeatherColor(id: string): void {
   this.selectedLeatherColor.set(id);
