@@ -77,6 +77,13 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private swipeStartY = 0;
   private swipeStartAt = 0;
   private modelLoadToken = 0;
+  private readonly referenceMaterialColors = {
+    leather: 0x754c31,
+    leatherDeep: 0x684130,
+    footbed: 0x9d6e3c,
+    stitch: 0x5a3524,
+    buckle: 0x5e3b2c,
+  };
   private readonly handleModelPointerDown = (event: PointerEvent): void => this.onModelPointerDown(event);
   private readonly handleModelPointerMove = (event: PointerEvent): void => this.onModelPointerMove(event);
   private readonly handleModelPointerUp = (event: PointerEvent): void => this.onModelPointerUp(event);
@@ -132,9 +139,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   );
 
   readonly leatherColors: LeatherColorOption[] = [
-    { id: 'cognac', nameKey: 'home.leatherColor.cognac', color: 0x7b4b2b, swatch: '#7b4b2b' },
-    { id: 'espresso', nameKey: 'home.leatherColor.espresso', color: 0x2e1b12, swatch: '#2e1b12' },
-    { id: 'sand', nameKey: 'home.leatherColor.sand', color: 0xb98d54, swatch: '#b98d54' },
+    { id: 'cognac', nameKey: 'home.leatherColor.cognac', color: 0x754c31, swatch: '#754c31' },
+    { id: 'espresso', nameKey: 'home.leatherColor.espresso', color: 0x684130, swatch: '#684130' },
+    { id: 'sand', nameKey: 'home.leatherColor.sand', color: 0x9d6e3c, swatch: '#9d6e3c' },
   ];
 
   readonly metaCards: MetaCard[] = [
@@ -443,8 +450,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
         if (material instanceof THREE.MeshStandardMaterial) {
           if (this.isLeatherMaterial(material)) {
             this.leatherMaterials.push(material);
-          } else if (material.name === 'Material.001') {
-            material.color.set(0xc8b897);
+          } else {
+            this.applyReferenceMaterialColor(material);
           }
 
           material.metalness = 0;
@@ -459,6 +466,29 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.applyLeatherColor(this.selectedLeatherColor());
+  }
+
+  private applyReferenceMaterialColor(material: THREE.MeshStandardMaterial): void {
+    const materialName = material.name.trim().toLowerCase();
+
+    if (materialName === 'material.001' || materialName.includes('inner_lining')) {
+      material.color.set(this.referenceMaterialColors.footbed);
+      return;
+    }
+
+    if (materialName.includes('stitch')) {
+      material.color.set(this.referenceMaterialColors.stitch);
+      return;
+    }
+
+    if (materialName.includes('backle') || materialName.includes('buckle') || materialName.includes('metal')) {
+      material.color.set(this.referenceMaterialColors.buckle);
+      return;
+    }
+
+    if (materialName.includes('rubber')) {
+      material.color.set(this.referenceMaterialColors.leatherDeep);
+    }
   }
 
   private isLeatherMaterial(material: THREE.MeshStandardMaterial): boolean {
