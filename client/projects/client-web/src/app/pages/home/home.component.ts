@@ -73,6 +73,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private modelYaw = 0;
   private isDraggingModel = false;
   private lastPointerX = 0;
+  private swipeStartX = 0;
+  private swipeStartY = 0;
+  private swipeStartAt = 0;
   private modelLoadToken = 0;
   private readonly handleModelPointerDown = (event: PointerEvent): void => this.onModelPointerDown(event);
   private readonly handleModelPointerMove = (event: PointerEvent): void => this.onModelPointerMove(event);
@@ -84,35 +87,43 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly metaVisible = signal(false);
   readonly modelLoaded = signal(false);
   readonly modelLoadFailed = signal(false);
-  readonly selectedModelId = signal('heritage-mule');
+  readonly selectedModelId = signal('original');
   readonly selectedLeatherColor = signal('cognac');
   readonly contentData = this.homeContent.contentData;
   readonly layoutSections = this.homeContent.layoutSections;
 
   readonly heroModels: HeroModelOption[] = [
     {
-      id: 'heritage-mule',
+      id: 'original',
       index: '01',
-      eyebrowKey: 'home.hero.heritageMule.eyebrow',
-      titleKey: 'home.hero.heritageMule.title',
-      subtitleKey: 'home.hero.heritageMule.subtitle',
+      eyebrowKey: 'home.hero.original.eyebrow',
+      titleKey: 'home.hero.original.title',
+      subtitleKey: 'home.hero.original.subtitle',
       url: '/assets/models/latest-brown-v2.glb',
     },
     {
-      id: 'majlis-slide',
+      id: 'or9',
       index: '02',
-      eyebrowKey: 'home.hero.majlisSlide.eyebrow',
-      titleKey: 'home.hero.majlisSlide.title',
-      subtitleKey: 'home.hero.majlisSlide.subtitle',
-      url: '/assets/models/latest-brown-v2.glb',
+      eyebrowKey: 'home.hero.or9.eyebrow',
+      titleKey: 'home.hero.or9.title',
+      subtitleKey: 'home.hero.or9.subtitle',
+      url: '/assets/models/or9.glb',
     },
     {
-      id: 'atelier-form',
+      id: 'or4',
       index: '03',
-      eyebrowKey: 'home.hero.atelierForm.eyebrow',
-      titleKey: 'home.hero.atelierForm.title',
-      subtitleKey: 'home.hero.atelierForm.subtitle',
-      url: '/assets/models/latest-brown-v2.glb',
+      eyebrowKey: 'home.hero.or4.eyebrow',
+      titleKey: 'home.hero.or4.title',
+      subtitleKey: 'home.hero.or4.subtitle',
+      url: '/assets/models/or4.glb',
+    },
+    {
+      id: 'or8',
+      index: '04',
+      eyebrowKey: 'home.hero.or8.eyebrow',
+      titleKey: 'home.hero.or8.title',
+      subtitleKey: 'home.hero.or8.subtitle',
+      url: '/assets/models/or8.glb',
     },
   ];
 
@@ -342,6 +353,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.isDraggingModel = true;
     this.lastPointerX = event.clientX;
+    this.swipeStartX = event.clientX;
+    this.swipeStartY = event.clientY;
+    this.swipeStartAt = window.performance.now();
     this.heroCanvas?.nativeElement.setPointerCapture?.(event.pointerId);
   }
 
@@ -358,10 +372,22 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.isDraggingModel) return;
 
     this.isDraggingModel = false;
+    this.selectSwipedHeroModel(event);
     const canvas = this.heroCanvas?.nativeElement;
     if (canvas?.hasPointerCapture?.(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
     }
+  }
+
+  private selectSwipedHeroModel(event: PointerEvent): void {
+    const deltaX = event.clientX - this.swipeStartX;
+    const deltaY = event.clientY - this.swipeStartY;
+    const elapsed = window.performance.now() - this.swipeStartAt;
+    const isSwipe = Math.abs(deltaX) > 90 && Math.abs(deltaY) < 52 && elapsed < 700;
+
+    if (!isSwipe) return;
+
+    this.ngZone.run(() => this.selectAdjacentHeroModel(deltaX < 0 ? 1 : -1));
   }
 
   private loadHeroModel(scene: THREE.Scene, controls: OrbitControls): void {
@@ -414,12 +440,13 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       materials.forEach((material) => {
-        if (material instanceof THREE.MeshStandardMaterial && !material.map) {
-          if (material.name === 'Material') {
+        if (material instanceof THREE.MeshStandardMaterial) {
+          if (this.isLeatherMaterial(material)) {
             this.leatherMaterials.push(material);
           } else if (material.name === 'Material.001') {
             material.color.set(0xc8b897);
           }
+
           material.metalness = 0;
           material.roughness = Math.max(material.roughness, 0.72);
         }
@@ -432,6 +459,12 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.applyLeatherColor(this.selectedLeatherColor());
+  }
+
+  private isLeatherMaterial(material: THREE.MeshStandardMaterial): boolean {
+    const materialName = material.name.trim().toLowerCase();
+
+    return materialName === 'material' || materialName.includes('outer_leather') || materialName.includes('leather');
   }
 
   private frameModel(model: THREE.Object3D, controls: OrbitControls): THREE.Object3D {

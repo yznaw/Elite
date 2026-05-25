@@ -37,6 +37,11 @@
                   </div>
                 }
 
+                <div class="model-badge" aria-live="polite">
+                  <span>{{ activeHeroModel().index }} / {{ heroModels.length }}</span>
+                  <span>{{ t(activeHeroModel().titleKey) }}</span>
+                </div>
+
                 <div
                   class="model-switcher"
                   role="radiogroup"
@@ -64,6 +69,21 @@
                 </div>
 
                 <div class="model-controls">
+                  <div class="model-tabs" role="tablist" [attr.aria-label]="t('home.model.switch')">
+                    @for (model of heroModels; track model.id) {
+                      <button
+                        type="button"
+                        role="tab"
+                        [class.is-active]="selectedModelId() === model.id"
+                        [attr.aria-selected]="selectedModelId() === model.id"
+                        [attr.aria-label]="t('home.model.showNamed', { name: t(model.titleKey) })"
+                        (click)="selectHeroModel(model.id)"
+                      >
+                        {{ t(model.titleKey) }}
+                      </button>
+                    }
+                  </div>
+
                   <div
                     class="model-colors"
                     role="radiogroup"

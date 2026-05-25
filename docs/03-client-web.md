@@ -75,9 +75,10 @@ The home page hero uses a first-party Three.js model viewer instead of an embedd
 | File | Purpose |
 |---|---|
 | `projects/client-web/src/app/pages/home/home.component.ts` | Three.js scene setup, model-slot carousel, GLB loading, color switching, animation, cleanup |
-| `projects/client-web/src/app/pages/home/home.component.html` | Centered hero canvas, dynamic model heading, loading/error states, side model arrows, circular color radio controls |
-| `projects/client-web/src/app/pages/home/home.component.scss` | Full-screen white product-view layout, title area, side arrow controls, circular color controls, scroll transition, responsive framing |
-| `projects/client-web/src/assets/models/latest-brown-v2.glb` | Local GLB product model |
+| `projects/client-web/src/app/pages/home/home.component.html` | Centered hero canvas, dynamic model heading, loading/error states, side model arrows, labeled model tabs, circular color radio controls |
+| `projects/client-web/src/app/pages/home/home.component.scss` | Full-screen white product-view layout, title area, side arrow controls, labeled model tabs, circular color controls, scroll transition, responsive framing |
+| `projects/client-web/src/assets/models/latest-brown-v2.glb` | Original local GLB product model |
+| `projects/client-web/src/assets/models/or{4,8,9}.glb` | Additional local GLB product models |
 | `projects/client-web/src/assets/draco/` | Local Draco decoder files required by the compressed GLB |
 
 ### Dependencies
@@ -99,8 +100,8 @@ loader.setDRACOLoader(dracoLoader);
 ### Runtime Behavior
 
 - The canvas is initialized in `ngAfterViewInit()` and runs outside Angular via `NgZone.runOutsideAngular()`.
-- `GLTFLoader` loads `/assets/models/latest-brown-v2.glb`.
-- The camera stays fixed in the center of the product stage. `OrbitControls` keeps damping/camera state stable, while pointer drag rotates the loaded model around a centered Three.js pivot group for manual 360-degree rotation.
+- `GLTFLoader` loads the URL for the active `heroModels` slot.
+- The camera stays fixed in the center of the product stage. `OrbitControls` keeps damping/camera state stable, while pointer drag rotates the loaded model around a centered Three.js pivot group for manual 360-degree rotation. A quick horizontal swipe switches to the previous or next model.
 - A `ResizeObserver` keeps the renderer and camera aspect ratio aligned with the hero visual container.
 - The hero is a pinned scroll scene: the section is taller than one viewport, the model stage stays sticky, and scroll progress updates CSS variables so the model zooms/shifts before the page continues into the next section.
 - As the model shifts right during pinned scroll, a large left-side editorial title fades/slides in using the same scroll progress variables.
@@ -108,17 +109,20 @@ loader.setDRACOLoader(dracoLoader);
 
 ### Model Slots
 
-The hero exposes three 3D model slots through `heroModels`. All three currently point to the same placeholder GLB until the final two models are available.
+The hero exposes four 3D model slots through `heroModels`.
 
 | ID | Title | Current URL |
 |---|---|---|
-| `heritage-mule` | Doha Mule | `/assets/models/latest-brown-v2.glb` |
-| `majlis-slide` | Majlis Slide | `/assets/models/latest-brown-v2.glb` |
-| `atelier-form` | Nomad Sandal | `/assets/models/latest-brown-v2.glb` |
+| `original` | Original | `/assets/models/latest-brown-v2.glb` |
+| `or9` | Or9 | `/assets/models/or9.glb` |
+| `or4` | Or4 | `/assets/models/or4.glb` |
+| `or8` | Or8 | `/assets/models/or8.glb` |
 
 Each slot controls the eyebrow, title, subtitle, and GLB URL shown in the hero. To replace a placeholder later, update only that slot's `url` value and keep the file under `projects/client-web/src/assets/models/`.
 
-Model switching is exposed through left/right arrow buttons on either side of the 3D product stage. The arrows call `selectAdjacentHeroModel(-1 | 1)`, which cycles through `heroModels`, updates the heading, and reloads the selected GLB slot.
+The `or4`, `or8`, and `or9` assets are optimized GLBs using `KHR_draco_mesh_compression` for geometry and embedded WebP textures capped at 2048px so they remain small enough for GitHub.
+
+Model switching is exposed through left/right arrow buttons on either side of the 3D product stage, labeled model tabs below the stage, and horizontal swipe. The arrows and swipe call `selectAdjacentHeroModel(-1 | 1)`, which cycles through `heroModels`, updates the heading, and reloads the selected GLB slot.
 
 ### Color Options
 
@@ -130,7 +134,7 @@ The hero exposes three circular radio-style leather color controls under the mod
 | `espresso` | Espresso | `#2e1b12` |
 | `sand` | Sand | `#b98d54` |
 
-Color switching is handled in the component without reloading the model. During model preparation, the leather `MeshStandardMaterial` instances are stored in `leatherMaterials`; clicking a swatch updates their `color` and marks them for update.
+Color switching is handled in the component without reloading the model. During model preparation, leather `MeshStandardMaterial` instances are stored in `leatherMaterials`; this includes the original model's `Material` surface and the optimized models' `Outer_leather` materials. Clicking a swatch updates their `color` and marks them for update.
 
 ```typescript
 selectLeatherColor(id: string): void {
