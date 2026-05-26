@@ -23,6 +23,8 @@ export interface Product {
   image: string;
   /** Ordered gallery — the first entry is the primary image. */
   images?: string[];
+  /** Gallery image URL -> color name selected in the product drawer. */
+  imageColors?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
 }

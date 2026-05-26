@@ -25,6 +25,7 @@ interface FormShape {
   metaTitle: string; metaDesc: string; slug: string;
   variants: ProductVariant[];
   images: string[];
+  imageColors: Record<string, string>;
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -418,6 +419,21 @@ function readPreview(file: File): Promise<string> {
                     @if (i === 0) {
                       <span class="thumb-primary">{{ t('product.gallery.primary') }}</span>
                     }
+                    <div class="thumb-color">
+                      <select
+                        class="inp inp-sm"
+                        [attr.aria-label]="'Photo color'"
+                        [ngModel]="imageColor(img)"
+                        (ngModelChange)="setImageColor(img, $event)"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="$event.stopPropagation()"
+                      >
+                        <option value="">No color</option>
+                        @for (color of imageColorOptions(); track color) {
+                          <option [value]="color">{{ color }}</option>
+                        }
+                      </select>
+                    </div>
                     <div class="thumb-actions">
                       @if (i !== 0) {
                         <button class="thumb-act" type="button" (click)="setPrimaryImage(i)" [attr.aria-label]="t('product.gallery.makePrimary')" [attr.title]="t('product.gallery.makePrimary')">
@@ -706,6 +722,21 @@ function readPreview(file: File): Promise<string> {
       padding: 3px 8px;
       border-radius: 99px;
       text-transform: uppercase;
+    }
+    .thumb-color {
+      position: absolute;
+      inset-inline: 6px;
+      bottom: 6px;
+    }
+    .thumb-color .inp {
+      width: 100%;
+      height: 28px;
+      border-color: rgba(255,255,255,0.72);
+      background: rgba(255,255,255,0.94);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      font-size: 11px;
+      padding: 3px 7px;
+      cursor: pointer;
     }
     .thumb-actions {
       position: absolute;
@@ -1095,6 +1126,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       metaTitle: '', metaDesc: '', slug: '',
       variants: [],
       images: [],
+      imageColors: {},
       relatedProductIds: [],
     };
   }
@@ -1115,6 +1147,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       slug: p.name.toLowerCase().replace(/\s+/g, '-'),
       variants: (p.variants ?? []).map(v => ({ ...v })),
       images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
+      imageColors: { ...(p.imageColors ?? {}) },
       relatedProductIds: [...(p.relatedProductIds ?? [])],
     };
   }
@@ -1221,7 +1254,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
               const result = ev.result as ProductImageUploadResult;
               if (result?.images) {
                 this.set('images', result.images);
-                this.initial = { ...this.initial, images: [...result.images] };
+                const imageColors = this.pruneImageColors(this.form().imageColors, result.images);
+                this.set('imageColors', imageColors);
+                this.initial = { ...this.initial, images: [...result.images], imageColors: { ...imageColors } };
               }
               this.toast.success(
                 `${result?.uploaded ?? accepted.length} ${this.t('product.gallery.upload').toLowerCase()}`,
@@ -1252,7 +1287,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   removeImage(index: number): void {
-    this.set('images', this.form().images.filter((_, i) => i !== index));
+    const images = this.form().images.filter((_, i) => i !== index);
+    this.set('images', images);
+    this.set('imageColors', this.pruneImageColors(this.form().imageColors, images));
   }
 
   setPrimaryImage(index: number): void {
@@ -1287,6 +1324,27 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const [moved] = imgs.splice(from, 1);
     imgs.splice(targetIndex, 0, moved);
     this.set('images', imgs);
+  }
+
+  imageColor(img: string): string {
+    return this.form().imageColors[img] || '';
+  }
+
+  imageColorOptions(): string[] {
+    const variantColors = this.compact(this.form().variants.map((variant) => variant.color));
+    if (variantColors.length > 0) return variantColors;
+    return this.refColors().map((color) => color.name_en).filter(Boolean);
+  }
+
+  setImageColor(img: string, color: string): void {
+    const next = { ...this.form().imageColors };
+    const value = String(color || '').trim();
+    if (value) {
+      next[img] = value;
+    } else {
+      delete next[img];
+    }
+    this.set('imageColors', next);
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -1362,6 +1420,19 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (n === 0) return '';
     const tpl = n === 1 ? this.t('product.variants.summary.one') : this.t('product.variants.summary.many');
     return tpl.replace('{n}', String(n));
+  }
+
+  private pruneImageColors(imageColors: Record<string, string>, images: string[]): Record<string, string> {
+    const imageSet = new Set(images);
+    return Object.entries(imageColors).reduce<Record<string, string>>((map, [url, color]) => {
+      const value = String(color || '').trim();
+      if (imageSet.has(url) && value) map[url] = value;
+      return map;
+    }, {});
+  }
+
+  private compact(values: Array<string | undefined | null>): string[] {
+    return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -1482,6 +1553,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.views3d = saved.views3d;
       this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
       this.product.images = [...(saved.images ?? f.images)];
+      this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };
       this.product.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
       // Keep the legacy `image` field in sync with images[0] so the catalog
       // grid, dashboard heatmap, and order rows use the new primary.

@@ -129,7 +129,7 @@
                   <button type="button" class="product-link" (click)="goToProduct(p)">
                     <span class="product-image-wrap">
                       <img
-                        [src]="p.image"
+                        [src]="selectedProductImage(p)"
                         [alt]="productName(p)"
                         (error)="onImgError($event)"
                       />
@@ -144,9 +144,15 @@
                           @for (color of productColorNames(p); track color) {
                             <span
                               class="product-color-swatch"
+                              role="button"
+                              tabindex="0"
+                              [class.is-selected]="selectedProductColor(p) === color"
                               [style.background]="colorHex(color)"
                               [attr.title]="color"
                               [attr.aria-label]="color"
+                              [attr.aria-pressed]="selectedProductColor(p) === color"
+                              (click)="selectProductColor(p, color, $event)"
+                              (keydown)="onProductColorKeydown(p, color, $event)"
                             ></span>
                           }
                         </span>

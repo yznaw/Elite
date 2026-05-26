@@ -17,6 +17,7 @@ export interface SaveProductPayload {
   slug: string;
   variants: ProductVariant[];
   images: string[];
+  imageColors: Record<string, string>;
   relatedProductIds: string[];
   has3d: boolean;
   views3d: number;

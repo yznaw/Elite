@@ -6,6 +6,7 @@ const session = require('express-session');
 const PgSimple = require('connect-pg-simple')(session);
 
 const routes = require('./routes');
+const nboxWebhookRouter = require('./routes/nbox-webhook.route');
 const db = require('./db/client');
 const { ensureDefaultTenant } = require('./db/tenant');
 const { ensureReferenceSchema } = require('./db/reference-schema');
@@ -39,7 +40,11 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '10mb' }));
+function captureRawBody(req, _res, buf) {
+  if (buf && buf.length > 0) req.rawBody = Buffer.from(buf);
+}
+
+app.use(express.json({ limit: '10mb', verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('dev'));
 
@@ -78,6 +83,7 @@ app.use(
 );
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
+app.use('/webhooks/nbox', nboxWebhookRouter);
 app.use('/api', routes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────

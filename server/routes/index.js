@@ -18,6 +18,7 @@ const refRouter = require('./ref.route');
 const contactRouter = require('./contact.route');
 const cartsRouter = require('./carts.route');
 const storefrontContentRouter = require('./storefront-content.route');
+const nboxWebhookRouter = require('./nbox-webhook.route');
 const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
@@ -32,6 +33,7 @@ router.use('/ref', refRouter);
 router.use('/contact', contactRouter);
 router.use('/carts', cartsRouter);
 router.use('/storefront-content', storefrontContentRouter.publicRouter);
+router.use('/webhooks/nbox', nboxWebhookRouter);
 
 // ─── Admin routes — require an authenticated session ────────────────────────
 const admin = Router();

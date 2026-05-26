@@ -7,12 +7,56 @@ const router = Router();
 
 const DEFAULT_IMAGE =
   'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=85&auto=format&fit=crop';
+const COLOR_IMAGES_SELECT = `
+          COALESCE(
+            (
+              SELECT jsonb_object_agg(color_key, url)
+              FROM (
+                SELECT DISTINCT ON (color_key)
+                  color_key,
+                  url
+                FROM (
+                  SELECT
+                    lower(trim(COALESCE(
+                      NULLIF(trim(m.metadata->>'color'), ''),
+                      linked_variant.color,
+                      sku_variant.color
+                    ))) AS color_key,
+                    COALESCE(m.preview_url, m.storage_url) AS url,
+                    CASE
+                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
+                        OR m.metadata ? 'storagePath'
+                      THEN 0
+                      ELSE 1
+                    END AS role_rank,
+                    ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  LEFT JOIN product_variants linked_variant ON linked_variant.id = ml.variant_id
+                  LEFT JOIN product_variants sku_variant ON sku_variant.product_id = p.id AND sku_variant.sku = m.metadata->>'variantSku'
+                  WHERE ml.role IN ('gallery', 'primary')
+                    AND (ml.product_id = p.id OR linked_variant.product_id = p.id)
+                ) color_media
+                WHERE color_key IS NOT NULL AND color_key <> '' AND url IS NOT NULL AND url <> ''
+                ORDER BY color_key, role_rank, sort_order
+              ) first_color_media
+            ),
+            '{}'::jsonb
+          ) AS color_images`;
 
 function mapRow(row) {
   const sizes = Array.isArray(row.sizes) ? row.sizes.filter(Boolean) : [];
   const colors = Array.isArray(row.colors) ? row.colors.filter(Boolean) : [];
   const materials = Array.isArray(row.materials) ? row.materials.filter(Boolean) : [];
   const media = Array.isArray(row.images) ? row.images.filter(Boolean) : [];
+  const colorImages = row.color_images && typeof row.color_images === 'object'
+    ? Object.entries(row.color_images).reduce((map, [color, url]) => {
+      const key = String(color || '').trim().toLowerCase();
+      const imageUrl = String(url || '').trim();
+      if (key && imageUrl) map[key] = imageUrl;
+      return map;
+    }, {})
+    : {};
   const image = row.image || media[0] || DEFAULT_IMAGE;
   const images = [...new Set([image, ...media])];
 
@@ -29,6 +73,7 @@ function mapRow(row) {
     materials,
     image,
     images,
+    colorImages,
     relatedProductIds: row.related_product_ids || [],
   };
 }
@@ -124,6 +169,7 @@ router.get('/', async (_req, res, next) => {
             ),
             ARRAY[]::text[]
           ) AS images,
+          ${COLOR_IMAGES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -245,6 +291,7 @@ router.get('/:id', async (req, res, next) => {
             ),
             ARRAY[]::text[]
           ) AS images,
+          ${COLOR_IMAGES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr

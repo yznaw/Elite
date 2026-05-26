@@ -74,12 +74,23 @@ export class ProductsService {
       ? product.images.map((image) => this.resolveMediaUrl(image)).filter(Boolean)
       : [];
     const image = this.resolveMediaUrl(product.image) || images[0] || product.image;
+    const colorImages = this.normalizeColorImages(product.colorImages);
 
     return {
       ...product,
       image,
       images: images.length ? [...new Set([image, ...images])] : product.images,
+      colorImages: Object.keys(colorImages).length ? colorImages : undefined,
     };
+  }
+
+  private normalizeColorImages(colorImages: Product['colorImages']): Record<string, string> {
+    return Object.entries(colorImages || {}).reduce<Record<string, string>>((map, [color, url]) => {
+      const key = String(color || '').trim().toLowerCase();
+      const image = this.resolveMediaUrl(String(url || ''));
+      if (key && image) map[key] = image;
+      return map;
+    }, {});
   }
 
   private resolveApiBase(): string {

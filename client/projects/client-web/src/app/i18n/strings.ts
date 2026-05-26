@@ -90,7 +90,7 @@ const EN = {
   'footer.link.careGuide': 'Care Guide',
   'footer.link.returns': 'Returns',
   'footer.copyright': '© 2026 Elite Collection. All rights reserved.',
-  'footer.cities': 'Doha · Dubai · Doha',
+  'footer.cities': 'Doha',
 
   // ─────────────────────────────────────────────────────────────────────
   //  Home page
@@ -459,7 +459,7 @@ const AR: Record<keyof typeof EN, string> = {
   'footer.link.careGuide': 'دليل العناية',
   'footer.link.returns': 'الإرجاع',
   'footer.copyright': '© 2026 إيليت كولكشن. جميع الحقوق محفوظة.',
-  'footer.cities': 'الدوحة · دبي · الدوحة',
+  'footer.cities': 'الدوحة',
 
   // Home
   'home.headline.line1': 'حيث يلتقي التراث',

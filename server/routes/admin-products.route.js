@@ -7,6 +7,26 @@ const { storage } = require('../lib/storage');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 
 const router = Router();
+const IMAGE_COLORS_SELECT = `
+        COALESCE((
+          SELECT jsonb_object_agg(url, color)
+          FROM (
+            SELECT DISTINCT ON (url)
+              url,
+              color
+            FROM (
+              SELECT
+                COALESCE(m.preview_url, m.storage_url) AS url,
+                trim(m.metadata->>'color') AS color,
+                ml.sort_order
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+            ) gallery_colors
+            WHERE url IS NOT NULL AND url <> '' AND color IS NOT NULL AND color <> ''
+            ORDER BY url, sort_order
+          ) unique_gallery_colors
+        ), '{}'::jsonb) AS image_colors`;
 
 function validateProduct(body) {
   const errors = [];
@@ -86,14 +106,37 @@ async function findOrCreateImageAsset(client, tenantId, url, index) {
   return inserted.rows[0].id;
 }
 
-async function replaceImages(client, tenantId, productId, images) {
+function normalizeImageColors(imageColors) {
+  if (!imageColors || typeof imageColors !== 'object' || Array.isArray(imageColors)) return {};
+  return Object.entries(imageColors).reduce((map, [url, color]) => {
+    const key = String(url || '').trim();
+    const value = String(color || '').trim();
+    if (key && value) map[key] = value;
+    return map;
+  }, {});
+}
+
+async function replaceImages(client, tenantId, productId, images, imageColors = {}) {
   const urls = [...new Set((Array.isArray(images) ? images : []).map((url) => String(url || '').trim()).filter(Boolean))];
+  const colorsByUrl = normalizeImageColors(imageColors);
 
   await client.query("DELETE FROM media_links WHERE tenant_id = $1 AND product_id = $2 AND role IN ('gallery', 'primary')", [tenantId, productId]);
 
   const mediaIds = [];
   for (const [index, url] of urls.entries()) {
     const mediaId = await findOrCreateImageAsset(client, tenantId, url, index);
+    const color = colorsByUrl[url] || '';
+    if (color) {
+      await client.query(
+        'UPDATE media_assets SET metadata = metadata || $3::jsonb WHERE tenant_id = $1 AND id = $2',
+        [tenantId, mediaId, JSON.stringify({ color })],
+      );
+    } else {
+      await client.query(
+        "UPDATE media_assets SET metadata = metadata - 'color' WHERE tenant_id = $1 AND id = $2",
+        [tenantId, mediaId],
+      );
+    }
     mediaIds.push(mediaId);
     await client.query(
       `
@@ -160,6 +203,7 @@ function mapAdminProduct(row) {
     hidden: row.status === 'hidden',
     image: row.image || '',
     images: row.images || [],
+    imageColors: normalizeImageColors(row.image_colors),
     variants: row.variants || [],
     relatedProductIds: row.related_product_ids || [],
   };
@@ -192,6 +236,7 @@ async function loadAdminProduct(client, tenantId, productId) {
           JOIN media_assets m ON m.id = ml.media_id
           WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
         ), ARRAY[]::text[]) AS images,
+        ${IMAGE_COLORS_SELECT},
         COALESCE((
           SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
           FROM product_recommendations pr
@@ -218,6 +263,7 @@ async function upsertProduct(client, tenant, product) {
   const currency = product.currency || tenant.currency;
   const status = product.hidden ? 'hidden' : 'active';
   const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  const imageColors = normalizeImageColors(product.imageColors);
   const hasRelatedProductIds = Object.prototype.hasOwnProperty.call(product, 'relatedProductIds');
   const description = {
     en: String(product.enDesc || '').trim(),
@@ -285,7 +331,7 @@ async function upsertProduct(client, tenant, product) {
 
   const saved = upserted.rows[0];
   await replaceVariants(client, tenant.id, saved.id, Array.isArray(product.variants) ? product.variants : []);
-  await replaceImages(client, tenant.id, saved.id, images);
+  await replaceImages(client, tenant.id, saved.id, images, imageColors);
   if (hasRelatedProductIds) {
     await replaceRecommendations(client, tenant.id, saved.id, product.relatedProductIds);
   }
@@ -322,6 +368,7 @@ router.get('/', asyncHandler(async (_req, res) => {
             JOIN media_assets m ON m.id = ml.media_id
             WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
           ), ARRAY[]::text[]) AS images,
+          ${IMAGE_COLORS_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -356,6 +403,27 @@ router.get('/:id', asyncHandler(async (req, res) => {
         SELECT
           p.*,
           COALESCE(primary_media.preview_url, primary_media.storage_url, '') AS image,
+          COALESCE(
+            jsonb_agg(
+              DISTINCT jsonb_build_object(
+                'id', pv.id,
+                'sku', pv.sku,
+                'size', pv.size,
+                'color', pv.color,
+                'material', pv.material,
+                'price', round(pv.price_cents / 100.0),
+                'stock', pv.stock_quantity
+              )
+            ) FILTER (WHERE pv.id IS NOT NULL),
+            '[]'::jsonb
+          ) AS variants,
+          COALESCE((
+            SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
+            FROM media_links ml
+            JOIN media_assets m ON m.id = ml.media_id
+            WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+          ), ARRAY[]::text[]) AS images,
+          ${IMAGE_COLORS_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -365,8 +433,10 @@ router.get('/:id', asyncHandler(async (req, res) => {
               AND rp.status <> 'archived'
           ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
+        LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status <> 'archived'
+        GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
       `,
       [tenant.id, req.params.id],
     );

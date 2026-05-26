@@ -90,6 +90,7 @@ export class CollectionComponent implements OnInit {
   readonly colorHexByName = signal<Record<string, string>>({});
   readonly filtersOpen = signal(false);
   readonly selectedSizes = signal<Record<string, number>>({});
+  readonly selectedColors = signal<Record<string, string>>({});
   readonly selectedFilters = signal<SelectedFilters>(this.emptySelectedFilters());
 
   readonly t = (key: string): string => this.i18n.t(key);
@@ -207,6 +208,17 @@ export class CollectionComponent implements OnInit {
     this.selectedSizes.update((sizes) => ({ ...sizes, [product.id]: size }));
   }
 
+  selectProductColor(product: Product, color: string, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    this.selectedColors.update((colors) => ({ ...colors, [product.id]: color }));
+  }
+
+  onProductColorKeydown(product: Product, color: string, event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    this.selectProductColor(product, color, event);
+  }
+
   addToCart(product: Product): void {
     this.cart.add(this.cartItem(product));
 
@@ -224,6 +236,17 @@ export class CollectionComponent implements OnInit {
 
   selectedSize(product: Product): number {
     return this.selectedSizes()[product.id] || product.sizes[0] || 40;
+  }
+
+  selectedProductColor(product: Product): string | null {
+    return this.selectedColors()[product.id] || null;
+  }
+
+  selectedProductImage(product: Product): string {
+    const selectedColor = this.selectedProductColor(product);
+    if (!selectedColor) return product.image;
+
+    return this.productImageForColor(product, selectedColor) || product.image;
   }
 
   productColorNames(product: Product): string[] {
@@ -300,7 +323,7 @@ export class CollectionComponent implements OnInit {
       id: product.id,
       name: product.name,
       price: product.price,
-      image: product.image,
+      image: this.selectedProductImage(product),
       leather: product.leather,
       size: this.selectedSize(product),
       qty: 1,
@@ -401,6 +424,21 @@ export class CollectionComponent implements OnInit {
 
   private productColors(product: Product): string[] {
     return this.compact([product.color, ...(product.colors || [])]);
+  }
+
+  private productImageForColor(product: Product, color: string): string | null {
+    const key = this.colorKey(color);
+    const mappedImage = product.colorImages?.[key];
+    if (mappedImage) return mappedImage;
+
+    const colors = this.productColors(product);
+    const images = product.images || [];
+    const colorIndex = colors.findIndex((item) => this.colorKey(item) === key);
+    return colorIndex >= 0 && images.length >= colors.length ? images[colorIndex] || null : null;
+  }
+
+  private colorKey(value: string): string {
+    return String(value || '').trim().toLowerCase();
   }
 
   private productLeathers(product: Product): string[] {
