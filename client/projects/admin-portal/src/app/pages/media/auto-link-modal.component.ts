@@ -1,8 +1,13 @@
 import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
-import { suggestProduct, Suggestion } from '../../data/mock';
-import { MediaFile } from '../../models';
+import { MediaFile, Product } from '../../models';
+
+interface Suggestion {
+  product: Product;
+  conf: 'high' | 'medium' | 'low';
+  why: string;
+}
 
 interface Candidate { media: MediaFile; suggestion: Suggestion; }
 export interface LinkPair { mediaId: string; productId: string; }
@@ -93,6 +98,7 @@ export interface LinkPair { mediaId: string; productId: string; }
 })
 export class AutoLinkModalComponent implements OnInit, OnDestroy {
   @Input({ required: true }) media: MediaFile[] = [];
+  @Input() products: Product[] = [];
   @Output() closed = new EventEmitter<void>();
   @Output() apply = new EventEmitter<LinkPair[]>();
 
@@ -114,7 +120,7 @@ export class AutoLinkModalComponent implements OnInit, OnDestroy {
   readonly candidates = computed<Candidate[]>(() => {
     return this.media
       .filter((m) => !m.linkedTo)
-      .map((m) => ({ media: m, suggestion: suggestProduct(m) }))
+      .map((m) => ({ media: m, suggestion: this.suggestProduct(m) }))
       .filter((c): c is Candidate => c.suggestion !== null);
   });
 
@@ -142,4 +148,18 @@ export class AutoLinkModalComponent implements OnInit, OnDestroy {
   }
 
   onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
+
+  private suggestProduct(media: MediaFile): Suggestion | null {
+    const name = media.name.toUpperCase();
+    const exact = this.products.find((product) => product.sku && name.includes(product.sku.toUpperCase()));
+    if (exact) return { product: exact, conf: 'high', why: `Filename contains SKU ${exact.sku}` };
+
+    const prefix = this.products.find((product) => {
+      const skuPrefix = product.sku?.split('-').slice(0, 2).join('-').toUpperCase();
+      return skuPrefix && name.includes(skuPrefix);
+    });
+    if (prefix) return { product: prefix, conf: 'medium', why: 'Filename contains SKU prefix' };
+
+    return null;
+  }
 }

@@ -1,8 +1,13 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
-import { fmtBytes, MediaFile } from '../../models';
-import { PRODUCTS, suggestProduct, Suggestion } from '../../data/mock';
+import { fmtBytes, MediaFile, Product } from '../../models';
+
+interface Suggestion {
+  product: Product;
+  conf: 'high' | 'medium' | 'low';
+  why: string;
+}
 
 @Component({
   selector: 'ap-media-card',
@@ -46,12 +51,13 @@ import { PRODUCTS, suggestProduct, Suggestion } from '../../data/mock';
 })
 export class MediaCardComponent {
   @Input({ required: true }) media!: MediaFile;
+  @Input() products: Product[] = [];
   @Input() selected = false;
   @Output() clicked = new EventEmitter<void>();
 
-  get linkedProduct() { return PRODUCTS.find((p) => p.id === this.media.linkedTo); }
+  get linkedProduct() { return this.products.find((p) => p.id === this.media.linkedTo); }
   get suggestion(): Suggestion | null {
-    return this.linkedProduct ? null : suggestProduct(this.media);
+    return this.linkedProduct ? null : this.suggestProduct(this.media);
   }
   get size(): string { return fmtBytes(this.media.size); }
 
@@ -61,4 +67,18 @@ export class MediaCardComponent {
   }
 
   onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
+
+  private suggestProduct(media: MediaFile): Suggestion | null {
+    const name = media.name.toUpperCase();
+    const exact = this.products.find((product) => product.sku && name.includes(product.sku.toUpperCase()));
+    if (exact) return { product: exact, conf: 'high', why: `Filename contains SKU ${exact.sku}` };
+
+    const prefix = this.products.find((product) => {
+      const skuPrefix = product.sku?.split('-').slice(0, 2).join('-').toUpperCase();
+      return skuPrefix && name.includes(skuPrefix);
+    });
+    if (prefix) return { product: prefix, conf: 'medium', why: 'Filename contains SKU prefix' };
+
+    return null;
+  }
 }

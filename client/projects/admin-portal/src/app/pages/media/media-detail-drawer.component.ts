@@ -4,8 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { ConfirmService } from '../../services/confirm.service';
-import { extractSkuFromName, PRODUCTS, suggestProduct } from '../../data/mock';
-import { fmtBytes, MediaFile } from '../../models';
+import { fmtBytes, MediaFile, Product } from '../../models';
+
+interface Suggestion {
+  product: Product;
+  conf: 'high' | 'medium' | 'low';
+  why: string;
+}
 
 @Component({
   selector: 'ap-media-detail-drawer',
@@ -140,6 +145,7 @@ export class MediaDetailDrawerComponent {
   }
   get media(): MediaFile { return this._media; }
   private _media!: MediaFile;
+  @Input() products: Product[] = [];
 
   @Output() closed = new EventEmitter<void>();
   @Output() update = new EventEmitter<MediaFile>();
@@ -147,13 +153,12 @@ export class MediaDetailDrawerComponent {
 
   private readonly confirm = inject(ConfirmService);
 
-  readonly products = PRODUCTS;
   readonly linkSel = signal<string>('');
 
-  get linkedProduct() { return PRODUCTS.find((p) => p.id === this._media.linkedTo); }
-  get suggestion() { return this.linkedProduct ? null : suggestProduct(this._media); }
+  get linkedProduct() { return this.products.find((p) => p.id === this._media.linkedTo); }
+  get suggestion(): Suggestion | null { return this.linkedProduct ? null : this.suggestProduct(this._media); }
   get size(): string { return fmtBytes(this._media.size); }
-  get detectedSku(): string | null { return extractSkuFromName(this._media.name); }
+  get detectedSku(): string | null { return this.extractSkuFromName(this._media.name); }
   get dirty(): () => boolean { return () => this.linkSel() !== (this._media.linkedTo || ''); }
 
   acceptSuggestion(): void {
@@ -182,4 +187,23 @@ export class MediaDetailDrawerComponent {
 
   firstName(name: string): string { return name.split(' ')[0] || name; }
   onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
+
+  private extractSkuFromName(name: string): string | null {
+    const upper = name.toUpperCase();
+    return this.products.find((product) => product.sku && upper.includes(product.sku.toUpperCase()))?.sku || null;
+  }
+
+  private suggestProduct(media: MediaFile): Suggestion | null {
+    const name = media.name.toUpperCase();
+    const exact = this.products.find((product) => product.sku && name.includes(product.sku.toUpperCase()));
+    if (exact) return { product: exact, conf: 'high', why: `Filename contains SKU ${exact.sku}` };
+
+    const prefix = this.products.find((product) => {
+      const skuPrefix = product.sku?.split('-').slice(0, 2).join('-').toUpperCase();
+      return skuPrefix && name.includes(skuPrefix);
+    });
+    if (prefix) return { product: prefix, conf: 'medium', why: 'Filename contains SKU prefix' };
+
+    return null;
+  }
 }

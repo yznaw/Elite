@@ -17,7 +17,7 @@ const crypto = require('node:crypto');
 
 class DiskStorage {
   constructor(options = {}) {
-    this.uploadsDir = options.uploadsDir || path.resolve(__dirname, '..', 'uploads');
+    this.uploadsDir = options.uploadsDir ? path.resolve(options.uploadsDir) : path.resolve(__dirname, '..', 'uploads');
     this.publicBase = options.publicBase || '/uploads';
     if (!fs.existsSync(this.uploadsDir)) {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
@@ -83,7 +83,15 @@ const driver = (process.env.STORAGE_DRIVER || 'disk').toLowerCase();
 
 let instance;
 if (driver === 'disk') {
-  instance = new DiskStorage();
+  instance = new DiskStorage({
+    uploadsDir: process.env.UPLOADS_DIR,
+    publicBase: process.env.UPLOADS_PUBLIC_BASE,
+  });
+  if (process.env.NODE_ENV === 'production' && !process.env.UPLOADS_DIR) {
+    console.warn(
+      'STORAGE_DRIVER=disk in production without UPLOADS_DIR. Set UPLOADS_DIR to a shared persistent volume, or uploaded media will not be shared across instances.',
+    );
+  }
 } else {
   // Future: 's3' / 'supabase' / 'r2' adapters live here.
   throw new Error(`Unknown STORAGE_DRIVER: ${driver}. Supported: disk.`);

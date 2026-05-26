@@ -12,10 +12,10 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminProductsService } from '../../services/admin-products.service';
+import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
-import { MEDIA_INIT, COLLECTIONS } from '../../data/mock';
-import { ME, Product, ProductVariant } from '../../models';
+import { Collection, ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
   name: string; sku: string; brand: string; collectionIds: string[];
@@ -996,6 +996,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this._currentId.set(id);
     this.resetForCurrent();
   }
+  @Input() collections: Collection[] = [];
 
   /** Reactive view onto the inputs (template-friendly — same data as the
       `products` input setter, but readable as a signal).  Don't reuse the
@@ -1013,6 +1014,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly productsApi = inject(AdminProductsService);
+  private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly refApi = inject(AdminRefService);
   private readonly uploads = inject(MediaUploadService);
 
@@ -1021,8 +1023,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly refSizeSets  = signal<RefSizeSet[]>([]);
 
   readonly t = (k: string): string => this.i18n.t(k);
-
-  readonly collections = COLLECTIONS.filter(c => !c.hidden);
 
   /** Initial form snapshot — re-set whenever `currentId` changes. */
   private initial!: FormShape;
@@ -1063,7 +1063,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private syncTimer: number | undefined;
 
   get linkedMediaCount(): number {
-    return MEDIA_INIT.filter((m) => m.linkedTo === this.product?.id).length;
+    return this.form().images.length;
   }
 
   get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
@@ -1136,7 +1136,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       name: p.name,
       sku: p.sku,
       brand: p.brand,
-      collectionIds: COLLECTIONS.filter(c => c.productIds.includes(p.id)).map(c => c.id),
+      collectionIds: this.collections.filter(c => c.productIds.includes(p.id)).map(c => c.id),
       price: p.price,
       stock: p.stock,
       hidden: p.hidden,
@@ -1512,6 +1512,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
     try {
       const f = this.form();
+      const previousId = this.product.id;
       const payload = {
         ...f,
         has3d: this.product.has3d,
@@ -1528,20 +1529,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.draftRestoredAt.set(null);
       this.initial = { ...this.form() };
 
-      // Update the actual mock collections for the sake of the prototype
-      this.collections.forEach(c => {
-        const wasInCol = c.productIds.includes(this.product.id);
-        const shouldBeInCol = this.form().collectionIds.includes(c.id);
-        if (shouldBeInCol && !wasInCol) {
-          c.productIds.push(this.product.id);
-        } else if (!shouldBeInCol && wasInCol) {
-          c.productIds = c.productIds.filter(id => id !== this.product.id);
-        }
-      });
+      await this.syncCollections(previousId, saved.id, this.form().collectionIds);
 
-      // Persist editable fields back on the underlying product (mock-only
-      // mutation so the current mock catalog reflects the saved API state.
-      const previousId = this.product.id;
+      // Persist editable fields back on the underlying product so the current
+      // catalog reflects the saved API state.
       this.product.id = saved.id;
       this.product.name = saved.name;
       this.product.sku = saved.sku;
@@ -1586,6 +1577,24 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     try { localStorage.removeItem(this.draftKey); } catch {}
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
+  }
+
+  private async syncCollections(previousProductId: string, savedProductId: string, selectedCollectionIds: string[]): Promise<void> {
+    const selected = new Set(selectedCollectionIds);
+    const updates = this.collections
+      .filter((collection) => !collection.id.startsWith('COL-NEW-'))
+      .map(async (collection) => {
+        const ids = collection.productIds.filter((id) => id !== previousProductId && id !== savedProductId);
+        const shouldInclude = selected.has(collection.id);
+        const nextIds = shouldInclude ? [...ids, savedProductId] : ids;
+        const wasIncluded = collection.productIds.includes(previousProductId) || collection.productIds.includes(savedProductId);
+        if (wasIncluded === shouldInclude && nextIds.length === collection.productIds.length) return;
+
+        const saved = await this.collectionsApi.update(collection.id, { productIds: nextIds });
+        collection.productIds = [...saved.productIds];
+      });
+
+    await Promise.all(updates);
   }
 
   async onDelete(): Promise<void> {

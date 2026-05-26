@@ -1,10 +1,8 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { StorefrontBlock } from '../models';
 import { ApiClient } from './api-client.service';
 
-const DRAFT_KEY     = 'elite:storefront:draft';
-const PUBLISHED_KEY = 'elite:storefront:published';
 const PREVIEW_TOKEN = 'elite-admin:preview-token';
 
 interface Snapshot {
@@ -27,15 +25,14 @@ export const HOME_LAYOUT_BLOCKS: StorefrontBlock[] = [
  *             reload doesn't lose work. Read by the customer-web in preview mode.
  * Published — the version shoppers see. Updated by `publish()`.
  *
- * In production this would be backed by API calls (POST /api/storefront/draft,
- * POST /api/storefront/publish). The signal API stays the same — just swap the
- * localStorage reads/writes for HTTP calls.
+ * Persistence is backend-only so every admin device sees the same draft and
+ * published home layout.
  */
 @Injectable({ providedIn: 'root' })
 export class StorefrontService {
   private readonly api = inject(ApiClient);
-  private readonly _draft = signal<Snapshot | null>(this.load(DRAFT_KEY));
-  private readonly _published = signal<Snapshot | null>(this.load(PUBLISHED_KEY));
+  private readonly _draft = signal<Snapshot | null>(null);
+  private readonly _published = signal<Snapshot | null>(null);
 
   readonly draft = this._draft.asReadonly();
   readonly published = this._published.asReadonly();
@@ -48,26 +45,7 @@ export class StorefrontService {
     return JSON.stringify(d.blocks) !== JSON.stringify(p.blocks);
   });
 
-  constructor() {
-    // Persist draft to localStorage automatically.
-    effect(() => {
-      const d = this._draft();
-      try {
-        if (d) localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
-        else localStorage.removeItem(DRAFT_KEY);
-      } catch {}
-    });
-    // Persist published to localStorage automatically.
-    effect(() => {
-      const p = this._published();
-      try {
-        if (p) localStorage.setItem(PUBLISHED_KEY, JSON.stringify(p));
-        else localStorage.removeItem(PUBLISHED_KEY);
-      } catch {}
-    });
-  }
-
-  /** Save a draft snapshot — call after every edit. */
+  /** Update the in-memory draft immediately; callers persist with saveDraftRemote. */
   saveDraft(blocks: StorefrontBlock[]): void {
     this._draft.set({ blocks, savedAt: new Date().toISOString() });
   }
@@ -87,7 +65,7 @@ export class StorefrontService {
     return snapshot;
   }
 
-  /** Promote draft → published. Customer-web reads from the published key. */
+  /** Promote the in-memory draft; production persistence goes through publishRemote. */
   publish(): Snapshot | null {
     const d = this._draft();
     if (!d) return null;
@@ -146,21 +124,5 @@ export class StorefrontService {
   reset(): void {
     this._draft.set(null);
     this._published.set(null);
-  }
-
-  private load(key: string): Snapshot | null {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as Snapshot;
-      if (
-        parsed
-        && Array.isArray(parsed.blocks)
-        && (typeof parsed.savedAt === 'string' || parsed.savedAt === null)
-      ) return parsed;
-      return null;
-    } catch {
-      return null;
-    }
   }
 }

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ConfirmService } from '../../services/confirm.service';
@@ -223,7 +223,7 @@ import { HomeContentComponent } from '../home-content/home-content.component';
     }
   `],
 })
-export class StorefrontComponent implements OnInit {
+export class StorefrontComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
@@ -234,11 +234,15 @@ export class StorefrontComponent implements OnInit {
   readonly draggingId = signal<string | null>(null);
   readonly dropTargetId = signal<string | null>(null);
   readonly publishing = signal(false);
+  readonly draftLoaded = signal(false);
   readonly visibleCount = computed(() => this.blocks().filter((block) => block.visible).length);
+  private draftSaveTimer: number | undefined;
 
   constructor() {
     effect(() => {
+      if (!this.draftLoaded()) return;
       this.storefront.saveDraft(this.blocks());
+      this.scheduleDraftSave();
     });
   }
 
@@ -246,9 +250,15 @@ export class StorefrontComponent implements OnInit {
     try {
       const draft = await this.storefront.loadDraft();
       this.blocks.set(this.normalizeBlocks(draft?.blocks));
+      this.draftLoaded.set(true);
     } catch {
-      this.toast.warning('Using local layout', 'The saved storefront layout could not be loaded.');
+      this.draftLoaded.set(true);
+      this.toast.warning('Using default layout', 'The saved storefront layout could not be loaded.');
     }
+  }
+
+  ngOnDestroy(): void {
+    if (this.draftSaveTimer) window.clearTimeout(this.draftSaveTimer);
   }
 
   toggleVisible(id: string): void {
@@ -342,5 +352,12 @@ export class StorefrontComponent implements OnInit {
       .map((block) => ({ ...block }));
 
     return [...ordered, ...missing];
+  }
+
+  private scheduleDraftSave(): void {
+    if (this.draftSaveTimer) window.clearTimeout(this.draftSaveTimer);
+    this.draftSaveTimer = window.setTimeout(() => {
+      void this.storefront.saveDraftRemote(this.normalizeBlocks(this.blocks())).catch(() => undefined);
+    }, 600);
   }
 }

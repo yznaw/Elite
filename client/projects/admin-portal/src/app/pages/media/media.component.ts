@@ -10,8 +10,9 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminMediaService } from '../../services/admin-media.service';
+import { AdminProductsService } from '../../services/admin-products.service';
 import { MediaUploadService } from '../../services/media-upload.service';
-import { fmtBytes, MediaFile } from '../../models';
+import { fmtBytes, MediaFile, Product } from '../../models';
 
 type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
 
@@ -143,7 +144,7 @@ interface PendingUpload {
       } @else {
         <div class="media-grid">
           @for (m of pagedMedia(); track m.id) {
-            <ap-media-card [media]="m" [selected]="active()?.id === m.id" (clicked)="active.set(m)"/>
+            <ap-media-card [media]="m" [products]="products()" [selected]="active()?.id === m.id" (clicked)="active.set(m)"/>
           }
         </div>
 
@@ -160,6 +161,7 @@ interface PendingUpload {
 
     @if (active(); as m) {
       <ap-media-detail-drawer [media]="m"
+        [products]="products()"
         (closed)="active.set(null)"
         (update)="onUpdate($event)"
         (delete)="onDelete($event)"/>
@@ -167,6 +169,7 @@ interface PendingUpload {
 
     @if (autoLinking()) {
       <ap-auto-link-modal [media]="media()"
+        [products]="products()"
         (closed)="autoLinking.set(false)"
         (apply)="applyAutoLink($event)"/>
     }
@@ -261,11 +264,13 @@ export class MediaComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly mediaApi = inject(AdminMediaService);
+  private readonly productsApi = inject(AdminProductsService);
   private readonly uploads = inject(MediaUploadService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly media = signal<MediaFile[]>([]);
+  readonly products = signal<Product[]>([]);
   readonly filter = signal<FilterKey>('all');
   readonly active = signal<MediaFile | null>(null);
   readonly autoLinking = signal(false);
@@ -281,7 +286,12 @@ export class MediaComponent implements OnInit {
 
   private async refresh(): Promise<void> {
     try {
-      this.media.set(await this.mediaApi.list());
+      const [media, products] = await Promise.all([
+        this.mediaApi.list(),
+        this.productsApi.list().catch(() => [] as Product[]),
+      ]);
+      this.media.set(media);
+      this.products.set(products);
     } catch {
       this.media.set([]);
     }

@@ -12,6 +12,55 @@ async function loadCart(client, cartId) {
   return { ...cart.rows[0], items: items.rows };
 }
 
+function cartSessionId(req) {
+  return req.session?.user?.id
+    ? `admin-user:${req.session.user.id}`
+    : `session:${req.sessionID}`;
+}
+
+async function ensureSessionCart(client, req) {
+  const tenant = await ensureDefaultTenant(client);
+  const result = await client.query(
+    `
+      INSERT INTO carts (tenant_id, session_id, currency, expires_at)
+      VALUES ($1, $2, $3, now() + interval '30 days')
+      ON CONFLICT (tenant_id, session_id) WHERE session_id IS NOT NULL AND status = 'active'
+      DO UPDATE SET updated_at = now(), expires_at = now() + interval '30 days'
+      RETURNING *
+    `,
+    [tenant.id, cartSessionId(req), tenant.currency],
+  );
+  return result.rows[0];
+}
+
+function mapPublicCart(cart) {
+  return {
+    id: cart.id,
+    subtotal: fromCents(cart.subtotal_cents || 0),
+    items: (cart.items || []).map((item) => ({
+      id: String(item.product_id),
+      name: item.product_name,
+      price: fromCents(item.unit_price_cents),
+      image: item.metadata?.image || '',
+      leather: item.metadata?.leather || '',
+      size: Number(item.size) || 0,
+      qty: Number(item.quantity) || 1,
+    })),
+  };
+}
+
+async function refreshCartSubtotal(client, cartId) {
+  await client.query(
+    `
+      UPDATE carts
+      SET subtotal_cents = COALESCE((SELECT sum(quantity * unit_price_cents) FROM cart_items WHERE cart_id = $1), 0),
+          updated_at = now()
+      WHERE id = $1
+    `,
+    [cartId],
+  );
+}
+
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -94,6 +143,113 @@ router.post('/', asyncHandler(async (req, res) => {
       [tenant.id, req.body.customerId || null, req.body.sessionId || null, req.body.currency || tenant.currency],
     );
     created(res, result.rows[0], 'Cart ready.');
+  } finally {
+    client.release();
+  }
+}));
+
+router.get('/current', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const cart = await ensureSessionCart(client, req);
+    ok(res, mapPublicCart(await loadCart(client, cart.id)), 'Cart retrieved.');
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/current/items', asyncHandler(async (req, res) => {
+  if (!isUuid(req.body.productId || req.body.id)) {
+    return validationError(res, ['Product id must be a persisted product UUID.']);
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cart = await ensureSessionCart(client, req);
+    const productId = req.body.productId || req.body.id;
+    const qty = Math.max(1, Number.parseInt(req.body.quantity || req.body.qty, 10) || 1);
+    const size = req.body.size == null ? null : String(req.body.size);
+
+    await client.query(
+      `
+        INSERT INTO cart_items (
+          cart_id, product_id, variant_id, product_name, sku, size,
+          quantity, unit_price_cents, currency, metadata
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+        ON CONFLICT (cart_id, product_id, variant_id, size)
+        DO UPDATE SET
+          quantity = cart_items.quantity + EXCLUDED.quantity,
+          unit_price_cents = EXCLUDED.unit_price_cents,
+          product_name = EXCLUDED.product_name,
+          metadata = cart_items.metadata || EXCLUDED.metadata,
+          updated_at = now()
+      `,
+      [
+        cart.id,
+        productId,
+        isUuid(req.body.variantId) ? req.body.variantId : null,
+        String(req.body.name || 'Item'),
+        String(req.body.sku || productId),
+        size,
+        qty,
+        toCents(req.body.price),
+        cart.currency,
+        JSON.stringify({
+          image: req.body.image || null,
+          leather: req.body.leather || null,
+        }),
+      ],
+    );
+    await refreshCartSubtotal(client, cart.id);
+    await client.query('COMMIT');
+    ok(res, mapPublicCart(await loadCart(client, cart.id)), 'Cart item saved.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+router.delete('/current/items/:productId', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cart = await ensureSessionCart(client, req);
+    const size = req.query.size == null ? null : String(req.query.size);
+    await client.query(
+      `
+        DELETE FROM cart_items
+        WHERE cart_id = $1
+          AND product_id = $2
+          AND ($3::text IS NULL OR size = $3)
+      `,
+      [cart.id, req.params.productId, size],
+    );
+    await refreshCartSubtotal(client, cart.id);
+    await client.query('COMMIT');
+    ok(res, mapPublicCart(await loadCart(client, cart.id)), 'Cart item removed.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+router.delete('/current/items', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cart = await ensureSessionCart(client, req);
+    await client.query('DELETE FROM cart_items WHERE cart_id = $1', [cart.id]);
+    await refreshCartSubtotal(client, cart.id);
+    await client.query('COMMIT');
+    ok(res, mapPublicCart(await loadCart(client, cart.id)), 'Cart cleared.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }

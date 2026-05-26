@@ -11,8 +11,8 @@ import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
 import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
-import { COLLECTIONS } from '../../data/mock';
-import { Product, QAR } from '../../models';
+import { AdminCollectionsService } from '../../services/admin-collections.service';
+import { Collection, Product, QAR } from '../../models';
 
 type SortKey = 'name-az' | 'name-za' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'newest';
 type ViewMode = 'grid' | 'list';
@@ -103,7 +103,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               <label class="fp-label">Collection</label>
               <select class="inp inp-sm" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event)">
                 <option value="All">All collections</option>
-                @for (c of collections; track c.id) {
+                @for (c of collections(); track c.id) {
                   <option [value]="c.id">{{ c.title }}</option>
                 }
               </select>
@@ -377,6 +377,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     @if (activeId(); as id) {
       <ap-product-drawer
         [products]="paged()"
+        [collections]="collections()"
         [currentId]="id"
         (closed)="onDrawerClosed()"
         (currentIdChange)="activeId.set($event)"
@@ -548,22 +549,25 @@ export class CatalogComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly productsApi = inject(AdminProductsService);
+  private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly refApi = inject(AdminRefService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
-  readonly collections = COLLECTIONS.filter(c => !c.hidden);
+  readonly collections = signal<Collection[]>([]);
 
   private readonly _products = signal<Product[]>([]);
   readonly loading = signal(true);
 
   async ngOnInit(): Promise<void> {
     try {
-      const [list, colors] = await Promise.all([
+      const [list, collections, colors] = await Promise.all([
         this.productsApi.list(),
+        this.collectionsApi.list().catch(() => [] as Collection[]),
         this.refApi.getColors().catch(() => [] as RefColor[]),
       ]);
       this._products.set(list);
+      this.collections.set(collections.filter((collection) => !collection.hidden));
       this.refColors.set(colors);
     } catch {
       this._products.set([]);
@@ -646,7 +650,7 @@ export class CatalogComponent implements OnInit {
       if (status === 'hidden' && !p.hidden) return false;
 
       if (colId !== 'All') {
-        const col = COLLECTIONS.find(c => c.id === colId);
+        const col = this.collections().find(c => c.id === colId);
         if (col && !col.productIds.includes(p.id)) return false;
       }
 
@@ -711,7 +715,7 @@ export class CatalogComponent implements OnInit {
   });
 
   collectionLabel(): string {
-    const c = COLLECTIONS.find(x => x.id === this.collectionId());
+    const c = this.collections().find(x => x.id === this.collectionId());
     return c?.title ?? this.collectionId();
   }
 
