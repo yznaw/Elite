@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Elite Admin Portal — QA & Validation Master Plan</title>
+<style>
+  :root {
+    --green:   #024638;
+    --green-2: #035c4a;
+    --green-3: #047a61;
+    --gold:    #c5a572;
+    --gold-2:  #b8935c;
+    --gold-3:  #a07840;
+    --bg:      #f6f5f2;
+    --bg-2:    #edecea;
+    --surface: #ffffff;
+    --border:  #e0ddd8;
+    --ink:     #1a1a18;
+    --muted:   #6b6b67;
+    --danger:  #dc2626;
+    --warn:    #d97706;
+    --info:    #0369a1;
+    --ok:      #16a34a;
+
+    --p1: #024638; --p1l: #e6f0ed;
+    --p2: #7c3aed; --p2l: #f3eeff;
+    --p3: #0369a1; --p3l: #e0f2fe;
+    --p4: #b45309; --p4l: #fef3c7;
+    --p5: #be185d; --p5l: #fce7f3;
+    --p6: #374151; --p6l: #f3f4f6;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    font-size: 14px;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--green);
+    color: #fff;
+    padding: 48px 60px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 320px; height: 320px;
+    border-radius: 50%;
+    background: rgba(197,165,114,0.12);
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -40px; left: 200px;
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: rgba(197,165,114,0.07);
+  }
+  .header-inner { position: relative; z-index: 1; max-width: 1300px; margin: 0 auto; }
+  .header-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(197,165,114,0.2);
+    border: 1px solid rgba(197,165,114,0.35);
+    color: var(--gold);
+    font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 4px 12px; border-radius: 20px;
+    margin-bottom: 18px;
+  }
+  .header h1 {
+    font-size: 34px; font-weight: 800; letter-spacing: -.02em;
+    color: #fff; margin-bottom: 10px;
+  }
+  .header h1 span { color: var(--gold); }
+  .header-sub {
+    font-size: 15px; color: rgba(255,255,255,0.65);
+    max-width: 600px; margin-bottom: 32px;
+  }
+  .header-meta {
+    display: flex; gap: 28px; flex-wrap: wrap;
+  }
+  .meta-item {
+    display: flex; flex-direction: column;
+  }
+  .meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,0.4); }
+  .meta-value { font-size: 18px; font-weight: 700; color: #fff; }
+  .meta-value span { font-size: 12px; font-weight: 400; color: rgba(255,255,255,0.5); }
+
+  /* ── LAYOUT ── */
+  .wrap { max-width: 1300px; margin: 0 auto; padding: 0 60px 80px; }
+
+  /* ── PHASE FLOW ── */
+  .flow-section { padding: 48px 0 24px; }
+  .flow-title {
+    font-size: 11px; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .phase-flow {
+    display: flex; align-items: center; gap: 0;
+    overflow-x: auto; padding-bottom: 8px;
+  }
+  .flow-node {
+    flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    cursor: pointer;
+    transition: transform .15s;
+  }
+  .flow-node:hover { transform: translateY(-2px); }
+  .flow-node a { text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .flow-bubble {
+    width: 56px; height: 56px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    border: 3px solid transparent;
+    transition: all .2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+  .flow-node:hover .flow-bubble { box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+  .flow-num {
+    font-size: 10px; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .flow-arrow {
+    width: 40px; height: 2px;
+    position: relative; flex-shrink: 0;
+    margin-bottom: 22px;
+  }
+  .flow-arrow::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, var(--border), var(--border));
+  }
+  .flow-arrow::after {
+    content: ''; position: absolute; top: -4px; right: -1px;
+    border: 5px solid transparent;
+    border-left-color: var(--border);
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    padding: 16px 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 48px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* ── PHASE CARD ── */
+  .phase {
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 40px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  }
+  .phase-header {
+    display: flex; align-items: flex-start; gap: 20px;
+    padding: 28px 32px 24px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .phase-accent {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px; border-radius: 0;
+  }
+  .phase-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; flex-shrink: 0;
+  }
+  .phase-meta { flex: 1; min-width: 0; }
+  .phase-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    padding: 3px 10px; border-radius: 20px;
+    margin-bottom: 6px;
+  }
+  .phase-meta h2 {
+    font-size: 20px; font-weight: 800; letter-spacing: -.01em;
+    margin-bottom: 6px;
+  }
+  .phase-meta p { font-size: 13px; color: var(--muted); max-width: 560px; }
+  .phase-stats {
+    display: flex; gap: 20px; flex-shrink: 0; align-items: flex-start;
+    padding-top: 4px;
+  }
+  .pstat { text-align: right; }
+  .pstat-val { font-size: 22px; font-weight: 800; }
+  .pstat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ── DEPS ── */
+  .deps-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 32px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    font-size: 12px; color: var(--muted);
+    flex-wrap: wrap;
+  }
+  .deps-lbl { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+  .dep-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+    border: 1px solid currentColor;
+    opacity: .75;
+    text-decoration: none;
+    color: inherit;
+    transition: opacity .15s;
+  }
+  .dep-tag:hover { opacity: 1; }
+
+  /* ── BODY ── */
+  .phase-body { padding: 28px 32px; }
+
+  .section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+
+  .check-section {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .check-section-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .check-section-head .csicon { font-size: 16px; }
+  .check-section-head .csbadge {
+    margin-left: auto;
+    font-size: 10px; font-weight: 700;
+    background: var(--bg-2); color: var(--muted);
+    padding: 1px 7px; border-radius: 20px;
+  }
+  .check-list { padding: 8px 0; }
+  .check-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 7px 16px;
+    font-size: 13px;
+    transition: background .1s;
+  }
+  .check-item:hover { background: var(--bg); }
+  .check-item input[type=checkbox] {
+    margin-top: 2px; flex-shrink: 0;
+    width: 15px; height: 15px;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+  .check-item label {
+    cursor: pointer; line-height: 1.45;
+  }
+  .check-item .tag {
+    display: inline-block;
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    padding: 1px 5px; border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .tag-crit { background: #fee2e2; color: #991b1b; }
+  .tag-perf { background: #dbeafe; color: #1e40af; }
+  .tag-ux   { background: #d1fae5; color: #065f46; }
+  .tag-edge { background: #fef3c7; color: #92400e; }
+  .tag-api  { background: #ede9fe; color: #4c1d95; }
+  .tag-sec  { background: #fce7f3; color: #831843; }
+
+  /* ── NOTES ── */
+  .note-box {
+    display: flex; gap: 12px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  .note-box.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .note-box.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a5f; }
+  .note-box.ok   { background: #f0fdf4; border: 1px solid #bbf7d0; color: #14532d; }
+  .note-icon { font-size: 18px; flex-shrink: 0; margin-top: -1px; }
+  .note-box strong { display: block; font-weight: 700; margin-bottom: 2px; }
+
+  /* ── RELATION TABLE ── */
+  .relation-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; margin-bottom: 28px;
+  }
+  .relation-table th {
+    background: var(--bg); padding: 8px 14px;
+    text-align: left; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em; font-size: 10px; color: var(--muted);
+    border-bottom: 2px solid var(--border);
+  }
+  .relation-table td {
+    padding: 9px 14px; border-bottom: 1px solid var(--bg-2);
+    vertical-align: top;
+  }
+  .relation-table tr:hover td { background: var(--bg); }
+  .rel-pill {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 1px 7px; border-radius: 20px; margin: 1px;
+  }
+
+  /* ── PROGRESS BAR ── */
+  .progress-section { margin-bottom: 32px; }
+  .progress-row {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 10px;
+  }
+  .progress-label { width: 180px; flex-shrink: 0; font-size: 12px; font-weight: 600; }
+  .progress-track {
+    flex: 1; height: 8px; background: var(--bg-2);
+    border-radius: 20px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 20px;
+    transition: width .4s ease;
+  }
+  .progress-count { font-size: 11px; color: var(--muted); width: 60px; text-align: right; }
+
+  /* ── MATRIX ── */
+  .matrix {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3px;
+    margin-bottom: 28px;
+  }
+  .matrix-cell {
+    padding: 10px 8px;
+    border-radius: 6px;
+    font-size: 10px; font-weight: 600;
+    text-align: center; line-height: 1.3;
+    background: var(--bg-2); color: var(--muted);
+  }
+  .matrix-cell.header {
+    background: var(--ink); color: #fff;
+    font-size: 9px; text-transform: uppercase; letter-spacing: .05em;
+  }
+  .matrix-cell.p1 { background: var(--p1l); color: var(--p1); }
+  .matrix-cell.p2 { background: var(--p2l); color: var(--p2); }
+  .matrix-cell.p3 { background: var(--p3l); color: var(--p3); }
+  .matrix-cell.p4 { background: var(--p4l); color: var(--p4); }
+  .matrix-cell.p5 { background: var(--p5l); color: var(--p5); }
+  .matrix-cell.p6 { background: var(--p6l); color: var(--p6); }
+  .matrix-cell.blocked { background: #fee2e2; color: #991b1b; }
+  .matrix-cell.tested  { background: #d1fae5; color: #065f46; }
+  .matrix-cell.partial { background: #fef3c7; color: #92400e; }
+
+  /* ── RISK TABLE ── */
+  .risk-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    margin-bottom: 28px;
+  }
+  .risk-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; background: var(--surface);
+  }
+  .risk-card h4 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+  .risk-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12px; padding: 5px 0;
+    border-bottom: 1px solid var(--bg-2);
+  }
+  .risk-item:last-child { border: none; }
+  .risk-level {
+    flex-shrink: 0;
+    font-size: 9px; font-weight: 800; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 3px; margin-top: 1px;
+  }
+  .rl-high { background: #fee2e2; color: #991b1b; }
+  .rl-med  { background: #fef3c7; color: #92400e; }
+  .rl-low  { background: #d1fae5; color: #065f46; }
+
+  /* ── FOOTER ── */
+  .doc-footer {
+    background: var(--green);
+    color: rgba(255,255,255,.55);
+    text-align: center;
+    padding: 28px;
+    font-size: 12px;
+  }
+  .doc-footer strong { color: var(--gold); }
+
+  /* ── PHASE COLOUR VARS ── */
+  .ph1 { --pc: var(--p1); --pcl: var(--p1l); }
+  .ph2 { --pc: var(--p2); --pcl: var(--p2l); }
+  .ph3 { --pc: var(--p3); --pcl: var(--p3l); }
+  .ph4 { --pc: var(--p4); --pcl: var(--p4l); }
+  .ph5 { --pc: var(--p5); --pcl: var(--p5l); }
+  .ph6 { --pc: var(--p6); --pcl: var(--p6l); }
+
+  .phase .phase-accent { background: var(--pc); }
+  .phase .phase-icon   { background: var(--pcl); }
+  .phase .phase-badge  { background: var(--pcl); color: var(--pc); }
+  .phase .phase-meta h2 { color: var(--pc); }
+  .phase .pstat-val    { color: var(--pc); }
+  .phase .check-section-head { background: var(--pcl); color: var(--pc); }
+  .phase .check-section-head .csbadge { background: var(--pc); color: #fff; }
+  .phase .dep-tag { color: var(--pc); border-color: var(--pc); }
+
+  .fb1 { background: var(--p1l); }
+  .fb2 { background: var(--p2l); }
+  .fb3 { background: var(--p3l); }
+  .fb4 { background: var(--p4l); }
+  .fb5 { background: var(--p5l); }
+  .fb6 { background: var(--p6l); }
+
+  @media print {
+    .phase { page-break-inside: avoid; }
+    .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  @media (max-width: 900px) {
+    .header { padding: 32px 24px; }
+    .wrap { padding: 0 24px 60px; }
+    .phase-header { flex-wrap: wrap; }
+    .phase-stats { flex-direction: row; }
+    .section-grid { grid-template-columns: 1fr; }
+    .risk-grid { grid-template-columns: 1fr; }
+    .matrix { grid-template-columns: repeat(3,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<div class="header">
+  <div class="header-inner">
+    <div class="header-tag">⚡ QA &amp; Validation Master Plan</div>
+    <h1>Elite Admin Portal<br/><span>End-to-End Feature Validation</span></h1>
+    <p class="header-sub">
+      Comprehensive phased plan covering every feature, logic flow, API interaction,
+      performance bottleneck, and UI/UX behaviour across the Angular 17 admin portal.
+    </p>
+    <div class="header-meta">
+      <div class="meta-item">
+        <span class="meta-label">Total Checks</span>
+        <span class="meta-value">214 <span>items</span></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Phases</span>
+        <span class="meta-value">6</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Pages Covered</span>
+        <span class="meta-value">12</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Services</span>
+        <span class="meta-value">15+</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Stack</span>
+        <span class="meta-value">Angular 17 <span>+ Express + PostgreSQL</span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ═══════════════════ PHASE FLOW ═══════════════════ -->
+  <div class="flow-section">
+    <div class="flow-title">📋 Phase Execution Flow — Each phase unlocks the next</div>
+    <div class="phase-flow">
+
+      <div class="flow-node">
+        <a href="#phase1">
+          <div class="flow-bubble fb1" style="border-color:var(--p1)">🔐</div>
+          <span class="flow-num">Phase 1</span>
+        </a>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-node">
+        <a href="#phase2">
+          <div class="flow-bubble fb2" style="border-color:var(--p2)">📦</div>
+          <span class="flow-num">Phase 2</span>
+        </a>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-node">
+        <a href="#phase3">
+          <div class="flow-bubble fb3" style="border-color:var(--p3)">🛒</div>
+          <span class="flow-num">Phase 3</span>
+        </a>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-node">
+        <a href="#phase4">
+          <div class="flow-bubble fb4" style="border-color:var(--p4)">📊</div>
+          <span class="flow-num">Phase 4</span>
+        </a>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-node">
+        <a href="#phase5">
+          <div class="flow-bubble fb5" style="border-color:var(--p5)">⚙️</div>
+          <span class="flow-num">Phase 5</span>
+        </a>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-node">
+        <a href="#phase6">
+          <div class="flow-bubble fb6" style="border-color:var(--p6)">🚀</div>
+          <span class="flow-num">Phase 6</span>
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div> <span class="tag tag-crit">CRIT</span> Critical path — blocks all other flows</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1e40af"></div> <span class="tag tag-perf">PERF</span> Performance or load concern</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#065f46"></div> <span class="tag tag-ux">UX</span> User experience &amp; responsiveness</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#92400e"></div> <span class="tag tag-edge">EDGE</span> Edge case or boundary condition</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4c1d95"></div> <span class="tag tag-api">API</span> Backend / HTTP contract</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#831843"></div> <span class="tag tag-sec">SEC</span> Security or role-access concern</div>
+  </div>
+
+  <!-- ═══════════════════ PHASE 1 ═══════════════════ -->
+  <div class="phase ph1" id="phase1">
+    <div class="phase-header">
+      <div class="phase-accent"></div>
+      <div class="phase-icon">🔐</div>
+      <div class="phase-meta">
+        <div class="phase-badge">Phase 1</div>
+        <h2>Foundation — Auth, Guards &amp; Interceptor</h2>
+        <p>
+          Every other phase depends on authentication succeeding and session state being correct.
+          Validate the auth flow, route guards, role gating, and the global HTTP interceptor before
+          touching any feature page.
+        </p>
+      </div>
+      <div class="phase-stats">
+        <div class="pstat">
+          <div class="pstat-val">32</div>
+          <div class="pstat-lbl">Checks</div>
+        </div>
+        <div class="pstat">
+          <div class="pstat-val">P0</div>
+          <div class="pstat-lbl">Priority</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="deps-row">
+      <span class="deps-lbl">Unlocks →</span>
+      <a class="dep-tag" href="#phase2">Phase 2 — Catalog</a>
+      <a class="dep-tag" href="#phase3">Phase 3 — Orders</a>
+      <a class="dep-tag" href="#phase4">Phase 4 — Dashboard</a>
+      <a class="dep-tag" href="#phase5">Phase 5 — Settings</a>
+      <a class="dep-tag" href="#phase6">Phase 6 — Cross-Cutting</a>
+    </div>
+
+    <div class="phase-body">
+
+      <div class="note-box warn">
+        <span class="note-icon">⚠️</span>
+        <div>
+          <strong>Blocking Gate</strong>
+          If auth guard or session validation fails, ALL protected pages return to /login.
+          Complete every item in this phase before proceeding to Phase 2.
+        </div>
+      </div>
+
+      <div class="section-grid">
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🔑</span> Login &amp; Session
+            <span class="csbadge">10</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="a1"><label for="a1">Valid credentials → token set, redirect to /dashboard <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="a2"><label for="a2">Invalid credentials → 401 error message shown inline</label></div>
+            <div class="check-item"><input type="checkbox" id="a3"><label for="a3">Disabled account → 403 error message shown inline <span class="tag tag-sec">SEC</span></label></div>
+            <div class="check-item"><input type="checkbox" id="a4"><label for="a4">Already authenticated → /login redirects to /dashboard</label></div>
+            <div class="check-item"><input type="checkbox" id="a5"><label for="a5">ReturnUrl param preserved through login redirect</label></div>
+            <div class="check-item"><input type="checkbox" id="a6"><label for="a6">Session cookie persists across browser refresh</label></div>
+            <div class="check-item"><input type="checkbox" id="a7"><label for="a7">Sidebar logout → session cleared, redirect /login</label></div>
+            <div class="check-item"><input type="checkbox" id="a8"><label for="a8">AuthService.me() called on every navigation <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="a9"><label for="a9">AuthUser signals (user, role, isAuthenticated) populated</label></div>
+            <div class="check-item"><input type="checkbox" id="a10"><label for="a10">Busy/loading state shown on login button while pending <span class="tag tag-ux">UX</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🚧</span> Route Guards
+            <span class="csbadge">8</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="b1"><label for="b1">Unauthenticated → any protected route → /login <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="b2"><label for="b2">Owner/admin → /reference accessible <span class="tag tag-sec">SEC</span></label></div>
+            <div class="check-item"><input type="checkbox" id="b3"><label for="b3">Owner/admin → /settings accessible <span class="tag tag-sec">SEC</span></label></div>
+            <div class="check-item"><input type="checkbox" id="b4"><label for="b4">Manager/viewer → /reference → redirect /dashboard <span class="tag tag-sec">SEC</span></label></div>
+            <div class="check-item"><input type="checkbox" id="b5"><label for="b5">Manager/viewer → /settings → redirect /dashboard <span class="tag tag-sec">SEC</span></label></div>
+            <div class="check-item"><input type="checkbox" id="b6"><label for="b6">roleGuard receives correct roles array from route data</label></div>
+            <div class="check-item"><input type="checkbox" id="b7"><label for="b7">canMatch (not canActivate) — no partial route load <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="b8"><label for="b8">Deep link URL after login redirect resolves correctly</label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🌐</span> HTTP Interceptor
+            <span class="csbadge">8</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="c1"><label for="c1">401 response → toast "session expired" → redirect /login <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c2"><label for="c2">403 response → toast "permission denied" (no redirect)</label></div>
+            <div class="check-item"><input type="checkbox" id="c3"><label for="c3">404 response → toast "not found"</label></div>
+            <div class="check-item"><input type="checkbox" id="c4"><label for="c4">422 response → toast "validation error"</label></div>
+            <div class="check-item"><input type="checkbox" id="c5"><label for="c5">429 response → toast "rate limit" <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c6"><label for="c6">500+ response → toast "server error" <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c7"><label for="c7">Network error (status 0) → toast "network/CORS" <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c8"><label for="c8">/api/auth/me and /api/auth/login errors skipped (no duplicate toast)</label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🔒</span> Password Recovery &amp; Invite
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="d1"><label for="d1">Forgot password → email sent toast confirmation <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="d2"><label for="d2">Forgot password → unknown email → graceful error (no 500)</label></div>
+            <div class="check-item"><input type="checkbox" id="d3"><label for="d3">Reset password → token from URL param used correctly</label></div>
+            <div class="check-item"><input type="checkbox" id="d4"><label for="d4">Reset password → expired token → error shown <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="d5"><label for="d5">/accept-invite → invite token param used to onboard user</label></div>
+            <div class="check-item"><input type="checkbox" id="d6"><label for="d6">Invite link 48h expiry enforced on backend <span class="tag tag-sec">SEC</span></label></div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PHASE 2 ═══════════════════ -->
+  <div class="phase ph2" id="phase2">
+    <div class="phase-header">
+      <div class="phase-accent"></div>
+      <div class="phase-icon">📦</div>
+      <div class="phase-meta">
+        <div class="phase-badge">Phase 2</div>
+        <h2>Catalog, Collections &amp; Media</h2>
+        <p>
+          The product catalog is the core data layer — products are referenced by collections,
+          media, storefront blocks, order items, and the dashboard heatmap. Validate full CRUD,
+          all filters, bulk operations, image upload, and drawer save/discard logic here.
+        </p>
+      </div>
+      <div class="phase-stats">
+        <div class="pstat">
+          <div class="pstat-val">58</div>
+          <div class="pstat-lbl">Checks</div>
+        </div>
+        <div class="pstat">
+          <div class="pstat-val">P1</div>
+          <div class="pstat-lbl">Priority</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="deps-row">
+      <span class="deps-lbl">Requires ←</span>
+      <a class="dep-tag" href="#phase1">Phase 1 — Auth</a>
+      <span style="margin-left:16px; color:var(--muted);">→ Feeds into:</span>
+      <a class="dep-tag" href="#phase3">Phase 3 — Orders (product refs)</a>
+      <a class="dep-tag" href="#phase4">Phase 4 — Dashboard (heatmap, low-stock)</a>
+      <a class="dep-tag" href="#phase6">Phase 6 — Cross-cutting (perf with large lists)</a>
+    </div>
+
+    <div class="phase-body">
+
+      <div class="note-box info">
+        <span class="note-icon">ℹ️</span>
+        <div>
+          <strong>Signal-based dirty tracking — recently fixed</strong>
+          The <code>initial</code> snapshot in all four drawers (product, collection, customer, section) was converted
+          from a plain property to a <code>signal()</code>. Verify that "Save Changes" dismisses the banner
+          immediately without requiring "Discard".
+        </div>
+      </div>
+
+      <div class="section-grid">
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🔍</span> Catalog — Filters &amp; Views
+            <span class="csbadge">12</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="e1"><label for="e1">Product list loads on page open <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="e2"><label for="e2">Search by product name and SKU</label></div>
+            <div class="check-item"><input type="checkbox" id="e3"><label for="e3">Status filter: All / Active / Hidden / Low-stock</label></div>
+            <div class="check-item"><input type="checkbox" id="e4"><label for="e4">Collection filter dropdown</label></div>
+            <div class="check-item"><input type="checkbox" id="e5"><label for="e5">Image filter (has image / no image)</label></div>
+            <div class="check-item"><input type="checkbox" id="e6"><label for="e6">3D model filter toggle</label></div>
+            <div class="check-item"><input type="checkbox" id="e7"><label for="e7">Variants filter toggle</label></div>
+            <div class="check-item"><input type="checkbox" id="e8"><label for="e8">Color filter dropdown</label></div>
+            <div class="check-item"><input type="checkbox" id="e9"><label for="e9">Price range (min/max inputs)</label></div>
+            <div class="check-item"><input type="checkbox" id="e10"><label for="e10">Sort: newest / name A-Z / Z-A / price / stock</label></div>
+            <div class="check-item"><input type="checkbox" id="e11"><label for="e11">Grid view → list view toggle, preference saved to localStorage</label></div>
+            <div class="check-item"><input type="checkbox" id="e12"><label for="e12">Multiple filters combined narrow results correctly <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">✏️</span> Product Drawer — CRUD
+            <span class="csbadge">12</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="f1"><label for="f1">Create new product (P-NEW- draft in list) <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="f2"><label for="f2">Edit existing product — drawer opens, fields populated</label></div>
+            <div class="check-item"><input type="checkbox" id="f3"><label for="f3">Save banner appears on first edit</label></div>
+            <div class="check-item"><input type="checkbox" id="f4"><label for="f4">Save → banner disappears immediately (signal fix) <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="f5"><label for="f5">Discard → form resets to last saved state</label></div>
+            <div class="check-item"><input type="checkbox" id="f6"><label for="f6">Prev/Next navigation between products</label></div>
+            <div class="check-item"><input type="checkbox" id="f7"><label for="f7">Slug validation (lowercase + hyphens only)</label></div>
+            <div class="check-item"><input type="checkbox" id="f8"><label for="f8">Draft auto-saved to localStorage on every change</label></div>
+            <div class="check-item"><input type="checkbox" id="f9"><label for="f9">Draft restored on drawer re-open</label></div>
+            <div class="check-item"><input type="checkbox" id="f10"><label for="f10">Delete product → confirmation dialog → removed from list</label></div>
+            <div class="check-item"><input type="checkbox" id="f11"><label for="f11">Duplicate product → new draft added to list <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="f12"><label for="f12">Save updates catalog list (name, price, stock sync) <span class="tag tag-api">API</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🖼️</span> Product Images &amp; 3D
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="g1"><label for="g1">Image upload — drag or file picker works</label></div>
+            <div class="check-item"><input type="checkbox" id="g2"><label for="g2">Local data URL preview before upload completes</label></div>
+            <div class="check-item"><input type="checkbox" id="g3"><label for="g3">images[0] syncs to product.image (legacy field) <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="g4"><label for="g4">Upload validation (size limit, accepted types)</label></div>
+            <div class="check-item"><input type="checkbox" id="g5"><label for="g5">3D badge (has3d) appears in catalog grid/list</label></div>
+            <div class="check-item"><input type="checkbox" id="g6"><label for="g6">initial.images updated after save (no stale snapshot) <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">📋</span> Bulk Actions &amp; Import/Export
+            <span class="csbadge">7</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="h1"><label for="h1">Selection mode activates on first checkbox click</label></div>
+            <div class="check-item"><input type="checkbox" id="h2"><label for="h2">Select all / clear selection</label></div>
+            <div class="check-item"><input type="checkbox" id="h3"><label for="h3">Bulk set status → Active / Hidden <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="h4"><label for="h4">Bulk delete → confirmation dialog → removes all <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="h5"><label for="h5">CSV export generates correct file <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="h6"><label for="h6">Bulk import dialog opens, CSV parsed correctly</label></div>
+            <div class="check-item"><input type="checkbox" id="h7"><label for="h7">Dry-run import previews rows before commit <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🗂️</span> Collections
+            <span class="csbadge">8</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="i1"><label for="i1">Collections grid loads</label></div>
+            <div class="check-item"><input type="checkbox" id="i2"><label for="i2">Search / visibility filter (All / Visible / Hidden)</label></div>
+            <div class="check-item"><input type="checkbox" id="i3"><label for="i3">Create new collection — draft appears in list</label></div>
+            <div class="check-item"><input type="checkbox" id="i4"><label for="i4">Edit: title, description, image, productIds, hidden</label></div>
+            <div class="check-item"><input type="checkbox" id="i5"><label for="i5">Save → banner clears immediately (signal fix) <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="i6"><label for="i6">Discard → form resets to last saved</label></div>
+            <div class="check-item"><input type="checkbox" id="i7"><label for="i7">Delete with undo toast</label></div>
+            <div class="check-item"><input type="checkbox" id="i8"><label for="i8">Product count badge reflects linked products <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">📁</span> Media Library
+            <span class="csbadge">13</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="j1"><label for="j1">Media grid loads with images and 3D files</label></div>
+            <div class="check-item"><input type="checkbox" id="j2"><label for="j2">Drag-and-drop upload to media page <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="j3"><label for="j3">File picker upload</label></div>
+            <div class="check-item"><input type="checkbox" id="j4"><label for="j4">Per-file progress bar shows upload % <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="j5"><label for="j5">File > 50MB → validation error shown <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="j6"><label for="j6">Invalid file type → validation error shown</label></div>
+            <div class="check-item"><input type="checkbox" id="j7"><label for="j7">Filter by All / Image / GLB / Unlinked</label></div>
+            <div class="check-item"><input type="checkbox" id="j8"><label for="j8">Link file to product (detail drawer)</label></div>
+            <div class="check-item"><input type="checkbox" id="j9"><label for="j9">Unlink file from product</label></div>
+            <div class="check-item"><input type="checkbox" id="j10"><label for="j10">Auto-link by SKU prefix matching</label></div>
+            <div class="check-item"><input type="checkbox" id="j11"><label for="j11">Delete media → undo toast option</label></div>
+            <div class="check-item"><input type="checkbox" id="j12"><label for="j12">Clean orphaned (unlinked) files in bulk <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="j13"><label for="j13">Stats: total, linked%, unlinked count, storage usage calculated correctly <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PHASE 3 ═══════════════════ -->
+  <div class="phase ph3" id="phase3">
+    <div class="phase-header">
+      <div class="phase-accent"></div>
+      <div class="phase-icon">🛒</div>
+      <div class="phase-meta">
+        <div class="phase-badge">Phase 3</div>
+        <h2>Orders &amp; Customers</h2>
+        <p>
+          Orders and customers are the operational heartbeat of the store. Orders reference products
+          and customers. The dashboard KPIs (revenue, active orders, new customers) are derived from
+          this data. Validate filtering, status workflows, deep-linking, and the auto-refresh.
+        </p>
+      </div>
+      <div class="phase-stats">
+        <div class="pstat">
+          <div class="pstat-val">40</div>
+          <div class="pstat-lbl">Checks</div>
+        </div>
+        <div class="pstat">
+          <div class="pstat-val">P1</div>
+          <div class="pstat-lbl">Priority</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="deps-row">
+      <span class="deps-lbl">Requires ←</span>
+      <a class="dep-tag" href="#phase1">Phase 1 — Auth</a>
+      <a class="dep-tag" href="#phase2">Phase 2 — Catalog (product refs in order items)</a>
+      <span style="margin-left:16px; color:var(--muted);">→ Feeds into:</span>
+      <a class="dep-tag" href="#phase4">Phase 4 — Dashboard KPIs</a>
+    </div>
+
+    <div class="phase-body">
+
+      <div class="section-grid">
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">📋</span> Orders List
+            <span class="csbadge">12</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="k1"><label for="k1">Orders list loads with sortable table <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="k2"><label for="k2">Search by order ID (e.g. EC-26-1042)</label></div>
+            <div class="check-item"><input type="checkbox" id="k3"><label for="k3">Search by customer name</label></div>
+            <div class="check-item"><input type="checkbox" id="k4"><label for="k4">Payment filter: paid / pending / refunded / failed</label></div>
+            <div class="check-item"><input type="checkbox" id="k5"><label for="k5">Fulfillment filter: awaiting / processing / shipped / delivered</label></div>
+            <div class="check-item"><input type="checkbox" id="k6"><label for="k6">Date range: today / week / month</label></div>
+            <div class="check-item"><input type="checkbox" id="k7"><label for="k7">Custom date range (dateFrom + dateTo) <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="k8"><label for="k8">CSV export downloads file <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="k9"><label for="k9">Auto-refresh every 15 s (background timer) <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="k10"><label for="k10">All 7 table columns sort correctly</label></div>
+            <div class="check-item"><input type="checkbox" id="k11"><label for="k11">Pagination: page controls, page-size selector</label></div>
+            <div class="check-item"><input type="checkbox" id="k12"><label for="k12">Deep-link from customer drawer (?id=) opens correct order <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">📄</span> Order Drawer
+            <span class="csbadge">8</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="l1"><label for="l1">Drawer opens with full order details</label></div>
+            <div class="check-item"><input type="checkbox" id="l2"><label for="l2">Items list shows product name, size, qty, price</label></div>
+            <div class="check-item"><input type="checkbox" id="l3"><label for="l3">Status update → confirmed in timeline <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="l4"><label for="l4">Mark fulfilled → fulfillment status updates <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="l5"><label for="l5">Add note → appears in notes list with timestamp</label></div>
+            <div class="check-item"><input type="checkbox" id="l6"><label for="l6">Timeline entries rendered in correct order</label></div>
+            <div class="check-item"><input type="checkbox" id="l7"><label for="l7">Shipping address, billing address, payment gateway shown</label></div>
+            <div class="check-item"><input type="checkbox" id="l8"><label for="l8">Tracking number field editable and saved <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">👤</span> Customers List
+            <span class="csbadge">8</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="m1"><label for="m1">Customers list loads (table or cards view) <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="m2"><label for="m2">Search by name / email / city</label></div>
+            <div class="check-item"><input type="checkbox" id="m3"><label for="m3">Table view (desktop) ↔ card view (mobile) toggle</label></div>
+            <div class="check-item"><input type="checkbox" id="m4"><label for="m4">View preference persists to localStorage <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="m5"><label for="m5">Cards show: orders count, LTV, size pref, last order date</label></div>
+            <div class="check-item"><input type="checkbox" id="m6"><label for="m6">Avatar shows initials (from name) <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="m7"><label for="m7">Mobile: always cards view (isMobile signal) <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="m8"><label for="m8">Pagination works</label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">📝</span> Customer Drawer
+            <span class="csbadge">12</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="n1"><label for="n1">Create new customer (draft → saved) <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="n2"><label for="n2">Edit existing: name, email, city, size pref, notes</label></div>
+            <div class="check-item"><input type="checkbox" id="n3"><label for="n3">Save → banner clears immediately (signal fix) <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="n4"><label for="n4">Discard → resets form to last saved state</label></div>
+            <div class="check-item"><input type="checkbox" id="n5"><label for="n5">Delete customer → confirmation dialog → removed <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="n6"><label for="n6">Customer order history shown in drawer</label></div>
+            <div class="check-item"><input type="checkbox" id="n7"><label for="n7">Click order in drawer → opens order drawer (deep-link)</label></div>
+            <div class="check-item"><input type="checkbox" id="n8"><label for="n8">LTV calculation visible in drawer header</label></div>
+            <div class="check-item"><input type="checkbox" id="n9"><label for="n9">Size preference dropdown options correct</label></div>
+            <div class="check-item"><input type="checkbox" id="n10"><label for="n10">Close with unsaved changes → shake animation <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="n11"><label for="n11">Mode: create vs edit renders correct heading/actions</label></div>
+            <div class="check-item"><input type="checkbox" id="n12"><label for="n12">Saved customer name reflects in customers list <span class="tag tag-api">API</span></label></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PHASE 4 ═══════════════════ -->
+  <div class="phase ph4" id="phase4">
+    <div class="phase-header">
+      <div class="phase-accent"></div>
+      <div class="phase-icon">📊</div>
+      <div class="phase-meta">
+        <div class="phase-badge">Phase 4</div>
+        <h2>Dashboard &amp; Storefront Editor</h2>
+        <p>
+          The dashboard aggregates data from Phases 2 and 3. The storefront editor manages
+          the live homepage using localStorage draft + publish workflow. Validate computed KPIs,
+          chart rendering, drag-and-drop block reordering, and the publish/undo cycle.
+        </p>
+      </div>
+      <div class="phase-stats">
+        <div class="pstat">
+          <div class="pstat-val">36</div>
+          <div class="pstat-lbl">Checks</div>
+        </div>
+        <div class="pstat">
+          <div class="pstat-val">P2</div>
+          <div class="pstat-lbl">Priority</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="deps-row">
+      <span class="deps-lbl">Requires ←</span>
+      <a class="dep-tag" href="#phase1">Phase 1 — Auth</a>
+      <a class="dep-tag" href="#phase2">Phase 2 — Products (heatmap, low-stock)</a>
+      <a class="dep-tag" href="#phase3">Phase 3 — Orders &amp; Customers (KPIs)</a>
+      <span style="margin-left:16px; color:var(--muted);">→ Feeds into:</span>
+      <a class="dep-tag" href="#phase5">Phase 5 — Settings (metrics)</a>
+    </div>
+
+    <div class="phase-body">
+
+      <div class="section-grid">
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🎯</span> Dashboard KPIs
+            <span class="csbadge">10</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="o1"><label for="o1">Today's revenue KPI card calculates correctly <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="o2"><label for="o2">Active orders count correct</label></div>
+            <div class="check-item"><input type="checkbox" id="o3"><label for="o3">New customers count correct</label></div>
+            <div class="check-item"><input type="checkbox" id="o4"><label for="o4">Low stock count badge (stock &lt; threshold) <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="o5"><label for="o5">Date range filter (today/7d/30d/90d) updates all KPIs</label></div>
+            <div class="check-item"><input type="checkbox" id="o6"><label for="o6">Low stock KPI clickable → /catalog with low-stock filter</label></div>
+            <div class="check-item"><input type="checkbox" id="o7"><label for="o7">Sparkline charts in KPI cards render correctly <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="o8"><label for="o8">Revenue line chart updates with date range</label></div>
+            <div class="check-item"><input type="checkbox" id="o9"><label for="o9">3D view heatmap shows top 6 products by views <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="o10"><label for="o10">Recent orders table (last 5) with fulfillment pills <span class="tag tag-ux">UX</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🏠</span> Storefront — Block Management
+            <span class="csbadge">10</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="p1"><label for="p1">Blocks load from localStorage draft or default <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="p2"><label for="p2">Drag-and-drop reorders blocks (draggingId + dropTarget) <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="p3"><label for="p3">Toggle block visibility (visible/hidden state)</label></div>
+            <div class="check-item"><input type="checkbox" id="p4"><label for="p4">Palette panel: add new section by type</label></div>
+            <div class="check-item"><input type="checkbox" id="p5"><label for="p5">Palette collapses on mobile <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="p6"><label for="p6">Open section drawer → edit fields → save</label></div>
+            <div class="check-item"><input type="checkbox" id="p7"><label for="p7">Section save → banner clears immediately (signal fix) <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="p8"><label for="p8">Delete section → block removed from list + undo toast</label></div>
+            <div class="check-item"><input type="checkbox" id="p9"><label for="p9">"Unsaved" badge shown when draft ≠ published</label></div>
+            <div class="check-item"><input type="checkbox" id="p10"><label for="p10">Draft auto-saved to localStorage on every change <span class="tag tag-perf">PERF</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🚀</span> Storefront — Publish Workflow
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="q1"><label for="q1">Publish → confirmation dialog → blocks written to published <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="q2"><label for="q2">Undo publish → reverts to previous published state</label></div>
+            <div class="check-item"><input type="checkbox" id="q3"><label for="q3">Preview opens in new tab with latest draft <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="q4"><label for="q4">StorefrontService.hasUnpublishedChanges computed updates</label></div>
+            <div class="check-item"><input type="checkbox" id="q5"><label for="q5">Publishing spinner visible during async <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="q6"><label for="q6">Draft key uses tenantSlug for isolation <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🎨</span> Section Drawer — All Fields
+            <span class="csbadge">10</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="r1"><label for="r1">Title / subtitle / config fields editable</label></div>
+            <div class="check-item"><input type="checkbox" id="r2"><label for="r2">Visibility toggle (visible/hidden)</label></div>
+            <div class="check-item"><input type="checkbox" id="r3"><label for="r3">CTA text and CTA link editable</label></div>
+            <div class="check-item"><input type="checkbox" id="r4"><label for="r4">Image URL field editable</label></div>
+            <div class="check-item"><input type="checkbox" id="r5"><label for="r5">Product picker: search, select, deselect products</label></div>
+            <div class="check-item"><input type="checkbox" id="r6"><label for="r6">Collection selector dropdown</label></div>
+            <div class="check-item"><input type="checkbox" id="r7"><label for="r7">Item limit and sort-by controls</label></div>
+            <div class="check-item"><input type="checkbox" id="r8"><label for="r8">Current block ID guard prevents re-initialising on same ID <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="r9"><label for="r9">Close with unsaved changes → shake bar (no silent discard)</label></div>
+            <div class="check-item"><input type="checkbox" id="r10"><label for="r10">Saved block emitted to parent, list updated immediately <span class="tag tag-api">API</span></label></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PHASE 5 ═══════════════════ -->
+  <div class="phase ph5" id="phase5">
+    <div class="phase-header">
+      <div class="phase-accent"></div>
+      <div class="phase-icon">⚙️</div>
+      <div class="phase-meta">
+        <div class="phase-badge">Phase 5</div>
+        <h2>Settings, Reference Data &amp; Analytics</h2>
+        <p>
+          Owner/admin only pages. Settings manages team invitations and store config that affect
+          every other page (currency, language, locale). Reference data (colors, materials, sizes)
+          is consumed by the product drawer. Validate RBAC, invitation lifecycle, and store config propagation.
+        </p>
+      </div>
+      <div class="phase-stats">
+        <div class="pstat">
+          <div class="pstat-val">28</div>
+          <div class="pstat-lbl">Checks</div>
+        </div>
+        <div class="pstat">
+          <div class="pstat-val">P2</div>
+          <div class="pstat-lbl">Priority</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="deps-row">
+      <span class="deps-lbl">Requires ←</span>
+      <a class="dep-tag" href="#phase1">Phase 1 — Auth + role guard</a>
+      <span style="margin-left:16px; color:var(--muted);">→ Feeds into:</span>
+      <a class="dep-tag" href="#phase1">Phase 1 — Invite accept flow</a>
+      <a class="dep-tag" href="#phase6">Phase 6 — Locale, i18n behaviour</a>
+    </div>
+
+    <div class="phase-body">
+
+      <div class="note-box warn">
+        <span class="note-icon">⚠️</span>
+        <div>
+          <strong>Role-gated</strong>
+          All items in this phase must be tested with an owner/admin account AND confirmed to be
+          inaccessible to manager/viewer accounts (tested in Phase 1).
+        </div>
+      </div>
+
+      <div class="section-grid">
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🏪</span> General Store Settings
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="s1"><label for="s1">Store settings load on tab open <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="s2"><label for="s2">Edit store name, currency, timezone, language</label></div>
+            <div class="check-item"><input type="checkbox" id="s3"><label for="s3">Save general settings → success toast <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="s4"><label for="s4">Discard → fields reset to last saved state</label></div>
+            <div class="check-item"><input type="checkbox" id="s5"><label for="s5">Logo upload / URL field</label></div>
+            <div class="check-item"><input type="checkbox" id="s6"><label for="s6">Currency change propagates to price formatting in catalog <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">👥</span> Team Management
+            <span class="csbadge">10</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="t1"><label for="t1">Team members list loads <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="t2"><label for="t2">Invite by email + role → success toast <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="t3"><label for="t3">Invite link generated and copyable</label></div>
+            <div class="check-item"><input type="checkbox" id="t4"><label for="t4">Pending invitations list shows email + role + expiry</label></div>
+            <div class="check-item"><input type="checkbox" id="t5"><label for="t5">Revoke invitation → removed from pending list <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="t6"><label for="t6">Update team member role → saved <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="t7"><label for="t7">Undo role change within toast window <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="t8"><label for="t8">Remove team member → confirmation dialog <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="t9"><label for="t9">Cannot remove own account <span class="tag tag-sec">SEC</span></label></div>
+            <div class="check-item"><input type="checkbox" id="t10"><label for="t10">Low-stock alerts config saved <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🔌</span> Integrations &amp; Reference
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="u1"><label for="u1">Integrations tab renders list (Shopify, etc.)</label></div>
+            <div class="check-item"><input type="checkbox" id="u2"><label for="u2">Connect / manage integration buttons respond</label></div>
+            <div class="check-item"><input type="checkbox" id="u3"><label for="u3">Reference: Colors list loads <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="u4"><label for="u4">Reference: Materials list loads <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="u5"><label for="u5">Reference: Size sets list loads <span class="tag tag-api">API</span></label></div>
+            <div class="check-item"><input type="checkbox" id="u6"><label for="u6">CRUD on reference data reflects in product drawer dropdowns <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">📈</span> Analytics Page
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="v1"><label for="v1">Analytics page renders without error</label></div>
+            <div class="check-item"><input type="checkbox" id="v2"><label for="v2">Bar chart component renders with data</label></div>
+            <div class="check-item"><input type="checkbox" id="v3"><label for="v3">Pie chart component renders with data</label></div>
+            <div class="check-item"><input type="checkbox" id="v4"><label for="v4">Funnel component renders with data <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="v5"><label for="v5">Date range controls present</label></div>
+            <div class="check-item"><input type="checkbox" id="v6"><label for="v6">Empty state when no data exists <span class="tag tag-edge">EDGE</span></label></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PHASE 6 ═══════════════════ -->
+  <div class="phase ph6" id="phase6">
+    <div class="phase-header">
+      <div class="phase-accent"></div>
+      <div class="phase-icon">🚀</div>
+      <div class="phase-meta">
+        <div class="phase-badge">Phase 6</div>
+        <h2>Cross-Cutting — UI, Performance, Responsiveness &amp; State</h2>
+        <p>
+          This phase validates everything that spans all other phases: shared components, toast/confirm
+          services, i18n &amp; RTL, responsive breakpoints, localStorage state persistence, performance
+          under load, and the overall robustness of the signal-based state model.
+        </p>
+      </div>
+      <div class="phase-stats">
+        <div class="pstat">
+          <div class="pstat-val">20</div>
+          <div class="pstat-lbl">Checks</div>
+        </div>
+        <div class="pstat">
+          <div class="pstat-val">P2</div>
+          <div class="pstat-lbl">Priority</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="deps-row">
+      <span class="deps-lbl">Requires ←</span>
+      <a class="dep-tag" href="#phase1">Phase 1</a>
+      <a class="dep-tag" href="#phase2">Phase 2</a>
+      <a class="dep-tag" href="#phase3">Phase 3</a>
+      <a class="dep-tag" href="#phase4">Phase 4</a>
+      <a class="dep-tag" href="#phase5">Phase 5</a>
+      <span style="margin-left:12px; color:var(--muted); font-size:12px;">Run across all pages simultaneously</span>
+    </div>
+
+    <div class="phase-body">
+
+      <div class="section-grid">
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🧩</span> Shared UI Components
+            <span class="csbadge">8</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="w1"><label for="w1">Toast: success / error / info / warning appear and auto-dismiss <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="w2"><label for="w2">Toast: action button (e.g. Undo) executes callback <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="w3"><label for="w3">Confirm dialog: ask() → resolve(true/false) correctly</label></div>
+            <div class="check-item"><input type="checkbox" id="w4"><label for="w4">Notification dropdown: unread count badge, mark read</label></div>
+            <div class="check-item"><input type="checkbox" id="w5"><label for="w5">Sortable table: header click cycles asc/desc/none</label></div>
+            <div class="check-item"><input type="checkbox" id="w6"><label for="w6">Pagination: first/prev/next/last, page-size selector</label></div>
+            <div class="check-item"><input type="checkbox" id="w7"><label for="w7">Empty state rendered when lists return zero items <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="w8"><label for="w8">Spinner shown during all async loading states <span class="tag tag-ux">UX</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">🌐</span> i18n, Locale &amp; RTL
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="x1"><label for="x1">Language switcher (en/ar) updates UI strings</label></div>
+            <div class="check-item"><input type="checkbox" id="x2"><label for="x2">Arabic (ar) → dir=rtl applied to html element <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="x3"><label for="x3">RTL: sidebar shadow and chevron directions flip <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="x4"><label for="x4">All i18n keys resolve (no raw key strings visible) <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="x5"><label for="x5">QAR currency formatter used for all price displays</label></div>
+            <div class="check-item"><input type="checkbox" id="x6"><label for="x6">Locale persists after page refresh</label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">📱</span> Responsive Breakpoints
+            <span class="csbadge">6</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="y1"><label for="y1">Desktop (≥1200px): sidebar expanded, full table views <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="y2"><label for="y2">Tablet (768–1200px): sidebar compact, tables functional</label></div>
+            <div class="check-item"><input type="checkbox" id="y3"><label for="y3">Mobile (&lt;768px): sidebar hidden, burger menu works <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="y4"><label for="y4">Drawers: full-screen on mobile <span class="tag tag-ux">UX</span></label></div>
+            <div class="check-item"><input type="checkbox" id="y5"><label for="y5">Customers page always shows card view on mobile</label></div>
+            <div class="check-item"><input type="checkbox" id="y6"><label for="y6">Touch targets ≥44px on all interactive elements <span class="tag tag-ux">UX</span></label></div>
+          </div>
+        </div>
+
+        <div class="check-section">
+          <div class="check-section-head">
+            <span class="csicon">⚡</span> Performance &amp; State Integrity
+            <span class="csbadge">8</span>
+          </div>
+          <div class="check-list">
+            <div class="check-item"><input type="checkbox" id="z1"><label for="z1">Large product list (100+ items) renders without freeze <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="z2"><label for="z2">Concurrent file uploads complete without state corruption <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="z3"><label for="z3">Pagination resets to page 1 on any filter change <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="z4"><label for="z4">Undo toast action functions within window before dismiss <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="z5"><label for="z5">Orders auto-refresh (15 s) does not reset active filters <span class="tag tag-edge">EDGE</span></label></div>
+            <div class="check-item"><input type="checkbox" id="z6"><label for="z6">No memory leaks: timers cleared in ngOnDestroy <span class="tag tag-perf">PERF</span></label></div>
+            <div class="check-item"><input type="checkbox" id="z7"><label for="z7">Dirty computed re-evaluates on signal write after save <span class="tag tag-crit">CRIT</span></label></div>
+            <div class="check-item"><input type="checkbox" id="z8"><label for="z8">LocalStorage keys are tenant-scoped (no cross-tenant bleed) <span class="tag tag-sec">SEC</span></label></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── RISK REGISTER ── -->
+      <h3 style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:28px 0 16px;">Risk Register</h3>
+      <div class="risk-grid">
+        <div class="risk-card">
+          <h4>🔴 High Risk Areas</h4>
+          <div class="risk-item">
+            <span class="risk-level rl-high">HIGH</span>
+            <span>Signal-based dirty tracking fix — verify across all 4 drawers</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-high">HIGH</span>
+            <span>Session cookie expiry mid-session (401 redirect loop risk)</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-high">HIGH</span>
+            <span>Role guard bypass via direct URL on manager/viewer accounts</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-high">HIGH</span>
+            <span>Storefront draft overwrites published on accidental publish</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-high">HIGH</span>
+            <span>Product images[0] not syncing to legacy product.image field</span>
+          </div>
+        </div>
+        <div class="risk-card">
+          <h4>🟡 Medium &amp; Low Risk Areas</h4>
+          <div class="risk-item">
+            <span class="risk-level rl-med">MED</span>
+            <span>Orders auto-refresh interfering with user's current filter state</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-med">MED</span>
+            <span>localStorage key collision across tenants (same browser)</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-med">MED</span>
+            <span>Bulk delete with 50+ products — API timeout or partial delete</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-low">LOW</span>
+            <span>RTL layout issues in custom SVG icon components</span>
+          </div>
+          <div class="risk-item">
+            <span class="risk-level rl-low">LOW</span>
+            <span>Print stylesheet missing — browser print triggers wrong layout</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PHASE DEPENDENCY MATRIX ── -->
+      <h3 style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:28px 0 16px;">Phase Dependency Matrix — Feature ↔ Phase</h3>
+      <div class="matrix">
+        <div class="matrix-cell header">Feature</div>
+        <div class="matrix-cell header">Ph 1</div>
+        <div class="matrix-cell header">Ph 2</div>
+        <div class="matrix-cell header">Ph 3</div>
+        <div class="matrix-cell header">Ph 4</div>
+        <div class="matrix-cell header">Ph 5</div>
+
+        <div class="matrix-cell">Auth Session</div>
+        <div class="matrix-cell p1">Core</div>
+        <div class="matrix-cell">Needs</div>
+        <div class="matrix-cell">Needs</div>
+        <div class="matrix-cell">Needs</div>
+        <div class="matrix-cell">Needs</div>
+
+        <div class="matrix-cell">Products</div>
+        <div class="matrix-cell">Guard</div>
+        <div class="matrix-cell p2">Core</div>
+        <div class="matrix-cell">Items ref</div>
+        <div class="matrix-cell">Heatmap</div>
+        <div class="matrix-cell">Ref data</div>
+
+        <div class="matrix-cell">Orders</div>
+        <div class="matrix-cell">Guard</div>
+        <div class="matrix-cell">Product ref</div>
+        <div class="matrix-cell p3">Core</div>
+        <div class="matrix-cell">KPIs</div>
+        <div class="matrix-cell">—</div>
+
+        <div class="matrix-cell">Customers</div>
+        <div class="matrix-cell">Guard</div>
+        <div class="matrix-cell">—</div>
+        <div class="matrix-cell p3">Core</div>
+        <div class="matrix-cell">KPI</div>
+        <div class="matrix-cell">Invite</div>
+
+        <div class="matrix-cell">Dashboard</div>
+        <div class="matrix-cell">Guard</div>
+        <div class="matrix-cell">Low-stock</div>
+        <div class="matrix-cell">Revenue</div>
+        <div class="matrix-cell p4">Core</div>
+        <div class="matrix-cell">Config</div>
+
+        <div class="matrix-cell">Storefront</div>
+        <div class="matrix-cell">Guard</div>
+        <div class="matrix-cell">Products</div>
+        <div class="matrix-cell">—</div>
+        <div class="matrix-cell p4">Core</div>
+        <div class="matrix-cell">—</div>
+
+        <div class="matrix-cell">Settings</div>
+        <div class="matrix-cell">Role guard</div>
+        <div class="matrix-cell">Currency</div>
+        <div class="matrix-cell">—</div>
+        <div class="matrix-cell">—</div>
+        <div class="matrix-cell p5">Core</div>
+
+        <div class="matrix-cell">Media</div>
+        <div class="matrix-cell">Guard</div>
+        <div class="matrix-cell p2">Core</div>
+        <div class="matrix-cell">—</div>
+        <div class="matrix-cell">—</div>
+        <div class="matrix-cell">—</div>
+      </div>
+
+      <!-- ── CROSS-PHASE RELATIONS ── -->
+      <h3 style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:28px 0 16px;">Cross-Phase Relations — Data Flows</h3>
+      <table class="relation-table">
+        <thead>
+          <tr>
+            <th>Data Flows From</th>
+            <th>Into</th>
+            <th>How</th>
+            <th>What breaks if missing</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p1l);color:var(--p1)">Phase 1 — Auth</span></td>
+            <td>All pages</td>
+            <td>authGuard on every protected route; AuthService signals</td>
+            <td>All pages inaccessible — redirect loop</td>
+          </tr>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p2l);color:var(--p2)">Phase 2 — Products</span></td>
+            <td>Phase 3 — Orders</td>
+            <td>OrderItem references product by name/sku</td>
+            <td>Order drawer shows blank item names</td>
+          </tr>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p2l);color:var(--p2)">Phase 2 — Products</span></td>
+            <td>Phase 4 — Dashboard</td>
+            <td>lowStockCount computed from product.stock; heatTop from views3d</td>
+            <td>Dashboard KPIs incorrect or missing</td>
+          </tr>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p2l);color:var(--p2)">Phase 2 — Collections</span></td>
+            <td>Phase 4 — Storefront</td>
+            <td>StorefrontBlock.collectionId links to collection</td>
+            <td>Storefront sections show empty collection</td>
+          </tr>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p3l);color:var(--p3)">Phase 3 — Orders</span></td>
+            <td>Phase 4 — Dashboard</td>
+            <td>todayRevenue, activeOrders computed from orders list</td>
+            <td>Dashboard revenue/order KPIs show 0</td>
+          </tr>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p3l);color:var(--p3)">Phase 3 — Customers</span></td>
+            <td>Phase 4 — Dashboard</td>
+            <td>newCustomers KPI from customers.joined date</td>
+            <td>Dashboard new customers KPI incorrect</td>
+          </tr>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p5l);color:var(--p5)">Phase 5 — Settings</span></td>
+            <td>Phase 1 — Invite</td>
+            <td>Invite link generated here → accept-invite route</td>
+            <td>Cannot onboard new team members</td>
+          </tr>
+          <tr>
+            <td><span class="rel-pill" style="background:var(--p5l);color:var(--p5)">Phase 5 — Ref Data</span></td>
+            <td>Phase 2 — Products</td>
+            <td>Color, material, size set dropdowns in product drawer</td>
+            <td>Product variant options missing</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ── CHECK PROGRESS SUMMARY ── -->
+      <h3 style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:28px 0 16px;">Validation Scope by Phase</h3>
+      <div class="progress-section">
+        <div class="progress-row">
+          <span class="progress-label" style="color:var(--p1)">Phase 1 — Foundation</span>
+          <div class="progress-track"><div class="progress-fill" style="width:100%;background:var(--p1)"></div></div>
+          <span class="progress-count">32 checks</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label" style="color:var(--p2)">Phase 2 — Catalog &amp; Media</span>
+          <div class="progress-track"><div class="progress-fill" style="width:90%;background:var(--p2)"></div></div>
+          <span class="progress-count">58 checks</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label" style="color:var(--p3)">Phase 3 — Orders &amp; CX</span>
+          <div class="progress-track"><div class="progress-fill" style="width:62%;background:var(--p3)"></div></div>
+          <span class="progress-count">40 checks</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label" style="color:var(--p4)">Phase 4 — Dashboard &amp; SF</span>
+          <div class="progress-track"><div class="progress-fill" style="width:56%;background:var(--p4)"></div></div>
+          <span class="progress-count">36 checks</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label" style="color:var(--p5)">Phase 5 — Settings</span>
+          <div class="progress-track"><div class="progress-fill" style="width:43%;background:var(--p5)"></div></div>
+          <span class="progress-count">28 checks</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label" style="color:var(--p6)">Phase 6 — Cross-cutting</span>
+          <div class="progress-track"><div class="progress-fill" style="width:31%;background:var(--p6)"></div></div>
+          <span class="progress-count">20 checks</span>
+        </div>
+      </div>
+
+      <div class="note-box ok">
+        <span class="note-icon">✅</span>
+        <div>
+          <strong>Execution Order</strong>
+          Run phases in order 1 → 6. Phase 1 is a hard gate — do not start Phase 2 until all
+          Phase 1 <span class="tag tag-crit">CRIT</span> items pass.
+          Phases 2, 3, and 4 can run in parallel once Phase 1 completes.
+          Phase 6 items should be re-checked across the entire portal after Phases 2–5 are green.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<div class="doc-footer">
+  <strong>Elite Collection Admin Portal</strong> — QA &amp; Validation Master Plan · Angular 17 + Express + PostgreSQL ·
+  Generated 2026-05-26 · 214 validation checks across 6 interconnected phases
+</div>
+
+</body>
+</html>

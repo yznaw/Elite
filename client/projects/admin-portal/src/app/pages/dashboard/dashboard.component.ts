@@ -11,11 +11,12 @@ import { AdminOrdersService } from '../../services/admin-orders.service';
 import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminCustomersService } from '../../services/admin-customers.service';
 import { Order, Product, QAR } from '../../models';
+import { IconComponent } from '../../shared/icons/icon.component';
 
 @Component({
   selector: 'ap-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent],
+  imports: [CommonModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent],
   styles: [`
     .range-bar { display: flex; align-items: center; gap: 10px; }
     .range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; }

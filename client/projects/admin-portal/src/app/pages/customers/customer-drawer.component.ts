@@ -278,16 +278,16 @@ export class CustomerDrawerComponent implements OnInit {
   readonly QAR = QAR;
   readonly fulfillment = fulfillmentPillKind;
 
-  private initial!: FormShape;
+  private readonly initial = signal<FormShape>(this.makeEmptyForm());
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly saveState = signal<SaveState>('idle');
   readonly shakeSaveBar = signal(false);
 
-  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
+  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
   ngOnInit(): void {
-    this.initial = this.makeFormFromCustomer(this.customer);
-    this.form.set({ ...this.initial });
+    this.initial.set(this.makeFormFromCustomer(this.customer));
+    this.form.set({ ...this.initial() });
   }
 
   set<K extends keyof FormShape>(k: K, v: FormShape[K]): void {
@@ -324,7 +324,7 @@ export class CustomerDrawerComponent implements OnInit {
       this.customer.city = f.city;
       this.customer.sizePref = f.sizePref;
       this.customer.notes = f.notes;
-      this.initial = { ...f };
+      this.initial.set({ ...f });
       this.saveState.set('saved');
       const titleKey = this.mode === 'create'
         ? 'customerDrawer.toast.created.title'
@@ -337,7 +337,7 @@ export class CustomerDrawerComponent implements OnInit {
 
   discard(): void {
     if (!this.dirty()) return;
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
   }
 

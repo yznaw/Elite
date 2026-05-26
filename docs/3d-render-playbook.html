@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>3D Render Playbook — Elite Collection</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --ink:#1a1108;
+  --ink2:#4a3522;
+  --gold:#c8903a;
+  --gold-light:#e8b96a;
+  --cream:#faf6f0;
+  --warm:#f3ece2;
+  --card:#ffffff;
+  --border:#e8dfd2;
+  --code-bg:#141008;
+  --code-text:#d4c4a8;
+  --green:#4a8a5a;
+  --red:#9a3a2a;
+  --blue:#3a6a9a;
+}
+
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--cream);
+  color:var(--ink);
+  line-height:1.65;
+  font-size:14px;
+}
+
+/* ── COVER ── */
+.cover{
+  background:var(--ink);
+  color:#fff;
+  padding:80px 48px 64px;
+  position:relative;
+  overflow:hidden;
+}
+.cover::before{
+  content:'';
+  position:absolute;
+  top:-120px;right:-120px;
+  width:480px;height:480px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(200,144,58,.25),transparent 70%);
+}
+.cover-eyebrow{
+  font-size:11px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--gold-light);margin-bottom:20px;
+}
+.cover h1{
+  font-size:clamp(32px,5vw,54px);
+  font-weight:800;letter-spacing:-1.5px;
+  line-height:1.1;margin-bottom:20px;
+}
+.cover h1 span{color:var(--gold);}
+.cover-sub{
+  font-size:16px;color:rgba(255,255,255,.65);
+  max-width:560px;margin-bottom:40px;
+}
+.cover-meta{
+  display:flex;gap:32px;flex-wrap:wrap;
+  font-size:12px;color:rgba(255,255,255,.4);
+  letter-spacing:.5px;
+}
+.cover-meta strong{color:var(--gold-light);}
+
+/* ── LAYOUT ── */
+.page{max-width:1100px;margin:0 auto;padding:0 24px;}
+
+/* ── TOC ── */
+.toc{
+  background:var(--ink);color:#fff;
+  padding:32px 40px;
+}
+.toc h2{
+  font-size:11px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--gold);margin-bottom:20px;
+}
+.toc-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:8px 32px;
+}
+.toc a{
+  color:rgba(255,255,255,.7);text-decoration:none;
+  font-size:13px;padding:4px 0;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  display:flex;align-items:center;gap:8px;
+  transition:color .2s;
+}
+.toc a:hover{color:var(--gold-light);}
+.toc-num{
+  color:var(--gold);font-weight:700;
+  font-size:11px;min-width:20px;
+}
+
+/* ── SECTIONS ── */
+.section{padding:64px 0;border-bottom:1px solid var(--border);}
+.section:last-child{border-bottom:none;}
+
+.section-eyebrow{
+  font-size:10px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--gold);margin-bottom:10px;
+}
+.section-title{
+  font-size:clamp(22px,3vw,32px);font-weight:800;
+  letter-spacing:-0.5px;margin-bottom:8px;
+}
+.section-sub{
+  font-size:14px;color:var(--ink2);max-width:640px;margin-bottom:40px;
+}
+
+h3{font-size:16px;font-weight:700;margin:32px 0 12px;}
+h4{font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin:24px 0 8px;}
+
+p{margin-bottom:12px;color:var(--ink2);}
+
+/* ── CARDS ── */
+.grid-2{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+
+.card{
+  background:var(--card);
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:0 2px 12px rgba(0,0,0,.06);
+  border:1px solid var(--border);
+}
+
+.card-head{
+  padding:18px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;gap:14px;
+}
+.card-icon{
+  width:40px;height:40px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;flex-shrink:0;
+}
+.card-title{font-size:14px;font-weight:700;}
+.card-desc{font-size:12px;color:var(--ink2);margin-top:2px;}
+.card-body{padding:16px 20px;}
+
+/* ── RULE BLOCKS ── */
+.rule{
+  background:var(--card);border-radius:12px;
+  padding:20px;margin-bottom:12px;
+  border-left:4px solid var(--gold);
+  box-shadow:0 1px 6px rgba(0,0,0,.05);
+}
+.rule-title{font-size:13px;font-weight:700;margin-bottom:6px;}
+.rule p{font-size:13px;margin:0;}
+
+.rule.danger{border-left-color:var(--red);}
+.rule.good{border-left-color:var(--green);}
+.rule.info{border-left-color:var(--blue);}
+
+/* ── CODE ── */
+pre,code{
+  font-family:'SF Mono','Fira Code','Cascadia Code',monospace;
+}
+pre{
+  background:var(--code-bg);
+  color:var(--code-text);
+  padding:20px 24px;
+  border-radius:12px;
+  overflow-x:auto;
+  font-size:12.5px;
+  line-height:1.75;
+  margin:12px 0 20px;
+  border:1px solid rgba(255,255,255,.06);
+}
+code{
+  background:rgba(200,144,58,.12);
+  color:var(--gold);
+  padding:2px 6px;border-radius:4px;
+  font-size:12px;
+}
+pre code{background:none;color:inherit;padding:0;}
+
+.k{color:#e0a060;} /* keyword */
+.s{color:#80c070;} /* string / value */
+.c{color:#608060;} /* comment */
+.n{color:#60a0d0;} /* number */
+.p{color:#c0a0e0;} /* property */
+.hl{color:#f0d080;font-weight:700;} /* highlight */
+
+/* ── TABLES ── */
+table{
+  width:100%;border-collapse:collapse;
+  background:var(--card);border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 2px 8px rgba(0,0,0,.06);
+  margin:16px 0;
+}
+th{
+  background:var(--ink);color:var(--gold-light);
+  text-align:left;padding:12px 16px;
+  font-size:11px;text-transform:uppercase;letter-spacing:1px;
+}
+td{
+  padding:11px 16px;
+  border-bottom:1px solid var(--border);
+  font-size:13px;vertical-align:top;
+}
+tr:last-child td{border-bottom:none;}
+tr:nth-child(even) td{background:var(--warm);}
+
+/* ── SWATCHES ── */
+.swatch-row{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0;}
+.swatch-item{
+  display:flex;align-items:center;gap:10px;
+  background:var(--card);border-radius:10px;
+  padding:10px 14px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  border:1px solid var(--border);
+}
+.swatch-dot{
+  width:36px;height:36px;border-radius:50%;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.15);
+  flex-shrink:0;
+}
+.swatch-label{font-size:12px;font-weight:600;}
+.swatch-hex{font-family:monospace;font-size:11px;color:var(--ink2);}
+
+/* ── SCALE BARS ── */
+.scale-bar{
+  display:flex;align-items:center;gap:12px;margin:8px 0;
+  font-size:12px;
+}
+.scale-label{width:140px;color:var(--ink2);flex-shrink:0;}
+.scale-track{
+  flex:1;height:8px;border-radius:4px;
+  background:linear-gradient(to right,#1a1108,#f0d080);
+  position:relative;
+}
+.scale-thumb{
+  position:absolute;top:50%;transform:translate(-50%,-50%);
+  width:14px;height:14px;border-radius:50%;
+  background:#fff;border:2px solid var(--gold);
+  box-shadow:0 1px 4px rgba(0,0,0,.3);
+}
+.scale-val{
+  font-family:monospace;font-size:11px;font-weight:700;
+  color:var(--gold);width:36px;text-align:right;
+}
+
+/* ── TIPS ── */
+.tip{
+  background:#fffbf0;border-left:3px solid var(--gold);
+  padding:12px 16px;border-radius:0 8px 8px 0;
+  font-size:13px;color:#5a4020;margin:12px 0;
+}
+.tip strong{color:var(--gold);}
+
+.warn{
+  background:#fff8f5;border-left:3px solid var(--red);
+  padding:12px 16px;border-radius:0 8px 8px 0;
+  font-size:13px;color:#5a2010;margin:12px 0;
+}
+
+.good-block{
+  background:#f5fdf7;border-left:3px solid var(--green);
+  padding:12px 16px;border-radius:0 8px 8px 0;
+  font-size:13px;color:#1a4020;margin:12px 0;
+}
+
+/* ── CHECKLIST ── */
+.checklist{list-style:none;margin:12px 0;}
+.checklist li{
+  padding:8px 12px 8px 36px;
+  position:relative;font-size:13px;
+  border-bottom:1px solid var(--border);
+}
+.checklist li:last-child{border-bottom:none;}
+.checklist li::before{
+  content:'□';position:absolute;left:10px;
+  color:var(--gold);font-size:14px;
+}
+
+/* ── BADGE ── */
+.badge{
+  display:inline-block;padding:3px 10px;border-radius:20px;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+}
+.badge-gold{background:rgba(200,144,58,.15);color:var(--gold);}
+.badge-red{background:rgba(154,58,42,.12);color:var(--red);}
+.badge-green{background:rgba(74,138,90,.12);color:var(--green);}
+
+/* ── DIVIDER ── */
+.divider{
+  height:1px;background:var(--border);
+  margin:32px 0;
+}
+
+/* ── PRINT ── */
+@media print{
+  .cover{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  pre{white-space:pre-wrap;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     COVER
+═══════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="page">
+    <div class="cover-eyebrow">Elite Collection · Senior 3D Render Specialist Playbook</div>
+    <h1>The <span>3D Leather</span><br>Render Playbook</h1>
+    <p class="cover-sub">A complete practitioner's guide to making web-based Three.js product renders look like studio photography — covering PBR materials, leather textures, lighting theory, color science, and production workflow.</p>
+    <div class="cover-meta">
+      <div><strong>Stack</strong> Three.js · WebGL · Angular 17</div>
+      <div><strong>File</strong> home.component.ts</div>
+      <div><strong>Date</strong> 2026-05-26</div>
+      <div><strong>Level</strong> Senior / Production</div>
+    </div>
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <div class="page">
+    <h2>Contents</h2>
+    <div class="toc-grid">
+      <a href="#s1"><span class="toc-num">01</span>PBR Material Model</a>
+      <a href="#s2"><span class="toc-num">02</span>Leather Material Rules</a>
+      <a href="#s3"><span class="toc-num">03</span>Lighting Architecture</a>
+      <a href="#s4"><span class="toc-num">04</span>Color Science</a>
+      <a href="#s5"><span class="toc-num">05</span>Procedural Textures</a>
+      <a href="#s6"><span class="toc-num">06</span>Tone Mapping</a>
+      <a href="#s7"><span class="toc-num">07</span>GLB Export Pipeline</a>
+      <a href="#s8"><span class="toc-num">08</span>Your Live Config</a>
+      <a href="#s9"><span class="toc-num">09</span>Common Problems & Fixes</a>
+      <a href="#s10"><span class="toc-num">10</span>Production Checklist</a>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+<!-- ═══════════════════════════════════════════════
+     01 — PBR MATERIAL MODEL
+═══════════════════════════════════════════════ -->
+<section class="section" id="s1">
+  <div class="section-eyebrow">Chapter 01</div>
+  <div class="section-title">PBR Material Model</div>
+  <p class="section-sub">Physically Based Rendering (PBR) is the foundation of realistic 3D. Understanding each property gives you exact control over how light interacts with every surface.</p>
+
+  <div class="grid-2">
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1a1108;">🎨</div>
+        <div>
+          <div class="card-title">color / baseColor</div>
+          <div class="card-desc">The raw albedo — what color the surface IS before any light hits it</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p>This is not the final rendered color — it is multiplied by lighting. A pure white color (<code>#ffffff</code>) reflects 100% of incoming light. A pure black (<code>#000000</code>) absorbs everything.</p>
+        <div class="tip"><strong>Rule:</strong> Never use pure white or pure black as a material color in PBR — they are physically impossible for real surfaces. Keep within <code>#111111</code>–<code>#eeeeee</code>.</div>
+        <pre><span class="p">material</span>.<span class="p">color</span>.<span class="k">set</span>(<span class="s">0xa06941</span>); <span class="c">// warm cognac leather</span></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#2a1a0a;">🪨</div>
+        <div>
+          <div class="card-title">roughness</div>
+          <div class="card-desc">Controls how microscopically smooth or jagged the surface is</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p><strong>0.0</strong> = perfect mirror (chrome). <strong>1.0</strong> = fully diffuse (chalk). This is the single most important property for leather realism.</p>
+        <div class="scale-bar">
+          <div class="scale-label">Mirror</div>
+          <div class="scale-track" style="background:linear-gradient(to right,#a8d8f8,#c8903a,#4a2a1a);">
+            <div class="scale-thumb" style="left:82%;"></div>
+          </div>
+          <div class="scale-val">0.82</div>
+        </div>
+        <table style="margin:8px 0;">
+          <thead><tr><th>Value</th><th>Looks Like</th></tr></thead>
+          <tbody>
+            <tr><td><code>0.0–0.2</code></td><td>Mirror, polished metal, patent leather</td></tr>
+            <tr><td><code>0.3–0.5</code></td><td>Polished leather, lacquered wood</td></tr>
+            <tr><td><code>0.6–0.75</code></td><td>Semi-gloss leather, smooth skin</td></tr>
+            <tr><td><code>0.76–0.88</code></td><td><strong>Natural leather — target zone</strong></td></tr>
+            <tr><td><code>0.89–0.95</code></td><td>Rough suede, worn leather</td></tr>
+            <tr><td><code>0.96–1.0</code></td><td>Chalk, unfinished concrete</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1a1a2a;">⚡</div>
+        <div>
+          <div class="card-title">metalness</div>
+          <div class="card-desc">Is the surface a conductor (metal) or insulator (everything else)?</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p>Real-world PBR uses only two values: <strong>0</strong> (non-metal) or <strong>1</strong> (pure metal). Fractional values are for surfaces that are partially metallic, like brushed anodised aluminium.</p>
+        <div class="warn"><strong>Never</strong> set metalness above 0.05 for leather, rubber, or plastic. It produces physically incorrect renders and makes them look like painted chrome.</div>
+        <pre><span class="p">material</span>.<span class="p">metalness</span> = <span class="n">0</span>; <span class="c">// leather is always 0</span></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#0a1a0a;">🌍</div>
+        <div>
+          <div class="card-title">envMapIntensity</div>
+          <div class="card-desc">How much the IBL environment (HDRI/RoomEnvironment) reflects in the surface</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p>Even with <code>roughness = 1.0</code>, the IBL still provides diffuse ambient fill. This property scales how visible those reflections are as specular highlights.</p>
+        <table style="margin:8px 0;">
+          <thead><tr><th>Value</th><th>Effect on Leather</th></tr></thead>
+          <tbody>
+            <tr><td><code>0</code></td><td>Zero IBL reflection — only directional lights</td></tr>
+            <tr><td><code>0.1–0.25</code></td><td>Subtle ambient sheen — most leather products</td></tr>
+            <tr><td><code>0.3–0.5</code></td><td>Visible IBL — polished or oiled leather</td></tr>
+            <tr><td><code>0.5+</code></td><td>Too reflective for natural leather</td></tr>
+          </tbody>
+        </table>
+        <div class="tip">For your sandal: <strong>0.18–0.25</strong> is the sweet spot. Gives warmth without looking wet.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1a0a1a;">🗻</div>
+        <div>
+          <div class="card-title">normalMap / normalScale</div>
+          <div class="card-desc">Simulates surface micro-geometry (bumps, grain) without adding polygons</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p>A normal map stores surface angle data as RGB colors (X=R, Y=G, Z=B). Three.js uses <code>normalScale</code> as a <code>Vector2</code> to control intensity.</p>
+        <pre><span class="p">material</span>.<span class="p">normalScale</span>.<span class="k">set</span>(<span class="n">0.55</span>, <span class="n">0.55</span>);
+<span class="c">// 0 = flat, 1 = full baked depth</span>
+<span class="c">// leather: 0.4–0.7 is natural</span>
+<span class="c">// higher = looks embossed / artificial</span></pre>
+        <div class="tip">If the baked GLB normals look too strong at 1.0, pull <code>normalScale</code> down to 0.4–0.6 rather than removing the map entirely.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#0a1a1a;">🗺️</div>
+        <div>
+          <div class="card-title">roughnessMap / metalnessMap</div>
+          <div class="card-desc">Texture maps that vary roughness/metalness per-pixel across the surface</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p>GLB files often bake roughness maps inside. They can override your code-set <code>roughness</code> value per-pixel. This is why clearing them gives you full control.</p>
+        <pre><span class="c">// Force full control — override baked maps</span>
+<span class="p">material</span>.<span class="p">roughnessMap</span>  = <span class="k">null</span>;
+<span class="p">material</span>.<span class="p">metalnessMap</span>  = <span class="k">null</span>;
+<span class="p">material</span>.<span class="p">roughness</span>    = <span class="n">0.82</span>; <span class="c">// now guaranteed</span></pre>
+        <div class="warn">If you set <code>roughness = 0.82</code> but the material still looks glossy, a baked <code>roughnessMap</code> from the GLB is likely overriding it.</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     02 — LEATHER MATERIAL RULES
+═══════════════════════════════════════════════ -->
+<section class="section" id="s2">
+  <div class="section-eyebrow">Chapter 02</div>
+  <div class="section-title">Leather Material Rules</div>
+  <p class="section-sub">Leather is one of the hardest materials to replicate in 3D. These are the non-negotiable rules derived from studying real leather under studio conditions.</p>
+
+  <h3>The 7 Laws of Realistic Leather</h3>
+
+  <div class="rule good">
+    <div class="rule-title">Law 1 — Roughness is between 0.76 and 0.88 for new leather</div>
+    <p>Polished calfskin sits around 0.76. Full-grain camel leather is around 0.82. Worn or suede leather reaches 0.92+. Never go below 0.6 unless it is patent leather.</p>
+  </div>
+
+  <div class="rule good">
+    <div class="rule-title">Law 2 — Metalness is always 0</div>
+    <p>Leather is an organic insulator. Any metalness above 0 will produce specular color shift (tinted highlights) which makes it look like metallic paint. Zero, always.</p>
+  </div>
+
+  <div class="rule good">
+    <div class="rule-title">Law 3 — The color you set is NOT the color you see</div>
+    <p>The rendered leather color is your <code>baseColor</code> multiplied by all incoming light. Under a warm key light your <code>#A06941</code> cognac may render lighter and more orange. Always judge color under your actual scene lighting, not in isolation.</p>
+  </div>
+
+  <div class="rule good">
+    <div class="rule-title">Law 4 — Grain texture multiplied, not added</div>
+    <p>Real leather grain darkens valleys and brightens ridges. A <code>multiply</code> composite operation on a procedural grain texture is physically correct — it preserves the base color while adding surface variation.</p>
+  </div>
+
+  <div class="rule good">
+    <div class="rule-title">Law 5 — Different parts of the sandal are different leathers</div>
+    <p>Upper strap, insole, and midsole are all different finishes and should have different roughness values. Upper strap (~0.82) is smoother and more finished than the footbed (~0.95) which has a more natural, unfinished look.</p>
+  </div>
+
+  <div class="rule danger">
+    <div class="rule-title">Law 6 — Never use roughnessMap + a baked GLB without clearing it first</div>
+    <p>If the 3D artist baked a roughness map into the GLB, it will override your code values per pixel. Clear it with <code>material.roughnessMap = null</code> before setting <code>roughness</code> numerically, or you will fight the file all session.</p>
+  </div>
+
+  <div class="rule danger">
+    <div class="rule-title">Law 7 — IBL environment must be warm-tinted for leather to look right</div>
+    <p>A neutral white HDRI environment creates cold, grey shadows on brown leather. Use a warm RoomEnvironment or warm-tinted hemisphere light. Cold ambient fill is the #1 cause of leather looking "3D-ish" instead of photographic.</p>
+  </div>
+
+  <h3>Leather Part Reference Values</h3>
+  <table>
+    <thead>
+      <tr><th>Part</th><th>roughness</th><th>metalness</th><th>envMapIntensity</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Upper strap (finished)</strong></td><td>0.78–0.86</td><td>0</td><td>0.15–0.25</td><td>Polished grain surface, slight sheen from finishing wax</td></tr>
+      <tr><td><strong>Insole / footbed</strong></td><td>0.93–0.97</td><td>0</td><td>0–0.08</td><td>Unfinished inner leather, absorbs light almost entirely</td></tr>
+      <tr><td><strong>Midsole (platform side)</strong></td><td>0.88–0.95</td><td>0</td><td>0–0.10</td><td>Burnished edge leather, matte with slight depth</td></tr>
+      <tr><td><strong>Outsole / rubber</strong></td><td>0.85–0.92</td><td>0</td><td>0</td><td>Gum rubber — zero reflection, uniform diffuse</td></tr>
+      <tr><td><strong>Buckle (matte plastic/leather)</strong></td><td>0.90–0.97</td><td>0–0.02</td><td>0–0.08</td><td>Moulded accent — needs to contrast against shiny strap</td></tr>
+      <tr><td><strong>Stitching thread</strong></td><td>0.97–1.0</td><td>0</td><td>0</td><td>Cotton/polyester thread is maximally diffuse</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     03 — LIGHTING ARCHITECTURE
+═══════════════════════════════════════════════ -->
+<section class="section" id="s3">
+  <div class="section-eyebrow">Chapter 03</div>
+  <div class="section-title">Lighting Architecture</div>
+  <p class="section-sub">Studio photography uses 3–4 light sources. Your 3D scene should mirror this. Every light has a job — if you remove one the render breaks.</p>
+
+  <h3>The 4-Light Studio Rig (your current setup)</h3>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#fffbf2;border:1px solid #ddd;">☀️</div>
+        <div>
+          <div class="card-title">Key Light — DirectionalLight</div>
+          <div class="card-desc">The main studio light. Creates primary shadows and highlights.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <pre><span class="k">new</span> THREE.<span class="p">DirectionalLight</span>(<span class="s">0xfffbf2</span>, <span class="n">2.0</span>)
+position.<span class="k">set</span>(<span class="n">3.6</span>, <span class="n">5.4</span>, <span class="n">4.6</span>) <span class="c">// upper-right-front</span>
+castShadow = <span class="k">true</span></pre>
+        <p><strong>Job:</strong> Defines the main light direction. Warm white <code>#FFFBF2</code> replicates studio tungsten. Position is upper-right so shadows fall left — matches product photography convention.</p>
+        <div class="tip">Intensity 1.8–2.2 for leather. Lower if the highlight is blowing out. Higher if the shoe looks flat.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#f4dfb7;border:1px solid #ddd;">🌤️</div>
+        <div>
+          <div class="card-title">Fill Light — DirectionalLight</div>
+          <div class="card-desc">Softens the shadow side so it isn't pure black.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <pre><span class="k">new</span> THREE.<span class="p">DirectionalLight</span>(<span class="s">0xf4dfb7</span>, <span class="n">0.38</span>)
+position.<span class="k">set</span>(<span class="n">-4.2</span>, <span class="n">2.2</span>, <span class="n">2.6</span>) <span class="c">// left side</span></pre>
+        <p><strong>Job:</strong> Without this, the shadow side of the shoe goes pitch black. A warm golden fill (<code>#F4DFB7</code>) keeps shadow areas readable and warm.</p>
+        <div class="tip">Fill ratio = fill / key intensity. 0.38 / 2.0 = ~1:5 ratio. Studio photography typically uses 1:4–1:6. Never go above 1:2 or you lose all shadow depth.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#e8f0ff;border:1px solid #ddd;">💡</div>
+        <div>
+          <div class="card-title">Rim Light — DirectionalLight</div>
+          <div class="card-desc">Separates the subject from the background with an edge highlight.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <pre><span class="k">new</span> THREE.<span class="p">DirectionalLight</span>(<span class="s">0xffffff</span>, <span class="n">0.72</span>)
+position.<span class="k">set</span>(<span class="n">-2.6</span>, <span class="n">3.8</span>, <span class="n">-3.8</span>) <span class="c">// back-left</span></pre>
+        <p><strong>Job:</strong> Back-left position catches the rear edges of the sandal — the strap curves and the platform edge — with a bright line that makes the shoe pop off the white background.</p>
+        <div class="tip">Cool white rim light against warm key light creates depth contrast. Keep intensity 0.5–0.85.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:linear-gradient(to bottom,#fff5e8,#caa77a);border:1px solid #ddd;">🌈</div>
+        <div>
+          <div class="card-title">Hemisphere Light — Ambient Fill</div>
+          <div class="card-desc">Simulates sky bounce — the most important "invisible" light.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <pre><span class="k">new</span> THREE.<span class="p">HemisphereLight</span>(
+  <span class="s">0xfff5e8</span>, <span class="c">// sky color (top-down warm fill)</span>
+  <span class="s">0xcaa77a</span>, <span class="c">// ground bounce (warm tan from below)</span>
+  <span class="n">1.1</span>       <span class="c">// intensity</span>
+)</pre>
+        <p><strong>Job:</strong> Simulates ambient environment — skylight from above and ground bounce from below. Without this, any surface not facing a directional light goes completely black.</p>
+        <div class="warn">Do not use a neutral grey hemisphere light on brown leather — it creates cold, lifeless shadows. Always warm both sky and ground colors.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>IBL — Image Based Lighting</h3>
+  <p>The <code>RoomEnvironment</code> generates a PMREM (Pre-filtered Mip-mapped Radiance Environment Map) that adds physically correct ambient reflections. Even with <code>envMapIntensity = 0</code> on materials, assigning it to <code>scene.environment</code> provides better diffuse shading than hemisphere light alone.</p>
+
+  <pre><span class="c">// Generate and assign IBL</span>
+<span class="k">const</span> pmrem = <span class="k">new</span> THREE.<span class="p">PMREMGenerator</span>(renderer);
+<span class="k">const</span> roomEnv = <span class="k">new</span> THREE.<span class="p">RoomEnvironment</span>();
+<span class="p">scene</span>.<span class="p">environment</span> = pmrem.<span class="k">fromScene</span>(roomEnv, <span class="n">0.015</span>).texture;
+<span class="c">// 0.015 = environment blur — higher = softer/more diffuse reflections</span></pre>
+
+  <h3>Light Intensity Reference</h3>
+  <table>
+    <thead><tr><th>Situation</th><th>Key</th><th>Fill</th><th>Rim</th><th>Hemisphere</th><th>Exposure</th></tr></thead>
+    <tbody>
+      <tr><td>Too dark overall</td><td>↑ raise</td><td>—</td><td>—</td><td>↑ raise</td><td>↑ raise</td></tr>
+      <tr><td>Shadows too dark</td><td>—</td><td>↑ raise</td><td>—</td><td>↑ raise</td><td>—</td></tr>
+      <tr><td>Too flat, no depth</td><td>↑ raise</td><td>↓ lower</td><td>↑ raise</td><td>↓ lower</td><td>—</td></tr>
+      <tr><td>Highlights blown out</td><td>↓ lower</td><td>—</td><td>↓ lower</td><td>—</td><td>↓ lower</td></tr>
+      <tr><td>Looks too cold/blue</td><td>warm color</td><td>warm color</td><td>—</td><td>warm sky</td><td>—</td></tr>
+      <tr><td>Looks plastic/fake</td><td>—</td><td>—</td><td>—</td><td>—</td><td>↑ roughness</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     04 — COLOR SCIENCE
+═══════════════════════════════════════════════ -->
+<section class="section" id="s4">
+  <div class="section-eyebrow">Chapter 04</div>
+  <div class="section-title">Color Science for 3D</div>
+  <p class="section-sub">Color in 3D is not the same as color in Photoshop. Lighting, tone mapping, and color spaces all transform your hex values before they reach the screen.</p>
+
+  <h3>Color Space — The Most Common Mistake</h3>
+  <div class="rule danger">
+    <div class="rule-title">Always set outputColorSpace to SRGBColorSpace</div>
+    <p>Three.js works in linear light internally. Without SRGB output, colors look washed out and oversaturated in shadows. This single line fixes ~30% of "why does it look wrong" questions.</p>
+  </div>
+  <pre><span class="p">renderer</span>.<span class="p">outputColorSpace</span> = THREE.<span class="p">SRGBColorSpace</span>; <span class="c">// mandatory</span></pre>
+
+  <h3>How Lighting Changes Your Hex Value</h3>
+  <table>
+    <thead><tr><th>Your Color</th><th>Under warm key light</th><th>In shadow (fill only)</th><th>Perceived difference</th></tr></thead>
+    <tbody>
+      <tr><td><span style="color:#a06941">■</span> <code>#A06941</code> (cognac)</td><td>Appears warmer, more orange</td><td>Appears darker, more brown</td><td>Can look like 2 different colors</td></tr>
+      <tr><td><span style="color:#7a4a2c">■</span> <code>#7A4A2C</code> (midsole)</td><td>Lifts to medium brown</td><td>Drops to near-black</td><td>Large perceived range</td></tr>
+      <tr><td><span style="color:#be7635">■</span> <code>#BE7635</code> (footbed)</td><td>Appears bright amber</td><td>Appears medium tan</td><td>Reads as different material</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip"><strong>Trick:</strong> To judge your actual material color, temporarily set all light intensities to 1.0 and exposure to 1.0. Then tune the hex values. Restore lighting after.</div>
+
+  <h3>Warm vs Cool Color Bias</h3>
+  <p>Brown leather under warm (yellow/orange) light looks rich and natural. Under cool (blue) light the same leather looks desaturated and artificial. Your key light <code>#FFFBF2</code> has a slight warm bias — this is intentional and matches studio tungsten.</p>
+
+  <h3>Current Color Palette</h3>
+  <div class="swatch-row">
+    <div class="swatch-item"><div class="swatch-dot" style="background:#a06941;"></div><div><div class="swatch-label">Upper Leather</div><div class="swatch-hex">#A06941</div></div></div>
+    <div class="swatch-item"><div class="swatch-dot" style="background:#be7635;"></div><div><div class="swatch-label">Footbed</div><div class="swatch-hex">#BE7635</div></div></div>
+    <div class="swatch-item"><div class="swatch-dot" style="background:#523120;"></div><div><div class="swatch-label">Buckle</div><div class="swatch-hex">#523120</div></div></div>
+    <div class="swatch-item"><div class="swatch-dot" style="background:#7a4a2c;"></div><div><div class="swatch-label">Midsole</div><div class="swatch-hex">#7A4A2C</div></div></div>
+    <div class="swatch-item"><div class="swatch-dot" style="background:#9b6d3d;"></div><div><div class="swatch-label">Outsole</div><div class="swatch-hex">#9B6D3D</div></div></div>
+    <div class="swatch-item"><div class="swatch-dot" style="background:#3f2419;"></div><div><div class="swatch-label">Stitch</div><div class="swatch-hex">#3F2419</div></div></div>
+  </div>
+
+  <h3>Hex → Three.js Conversion</h3>
+  <pre><span class="c">// All of these are identical ways to set color in Three.js</span>
+<span class="p">material</span>.<span class="p">color</span>.<span class="k">set</span>(<span class="s">0xa06941</span>);    <span class="c">// hex number (most common)</span>
+<span class="p">material</span>.<span class="p">color</span>.<span class="k">set</span>(<span class="s">'#a06941'</span>);   <span class="c">// CSS string</span>
+<span class="p">material</span>.<span class="p">color</span>.<span class="k">setRGB</span>(<span class="n">0.627</span>, <span class="n">0.412</span>, <span class="n">0.255</span>); <span class="c">// normalized 0–1</span>
+<span class="p">material</span>.<span class="p">color</span>.<span class="k">setStyle</span>(<span class="s">'rgb(160,105,65)'</span>); <span class="c">// CSS rgb()</span>
+
+<span class="c">// Convert hex #A06941 to 0x notation:</span>
+<span class="c">// Remove # → A06941 → prefix 0x → 0xa06941</span></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     05 — PROCEDURAL TEXTURES
+═══════════════════════════════════════════════ -->
+<section class="section" id="s5">
+  <div class="section-eyebrow">Chapter 05</div>
+  <div class="section-title">Procedural Leather Textures</div>
+  <p class="section-sub">Your component generates leather grain programmatically using Canvas 2D. This removes any dependency on texture files and gives you full code control.</p>
+
+  <h3>How the Grain Texture Works</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#2a1a0a;">🎲</div>
+        <div><div class="card-title">Layer 1 — Noise Base</div><div class="card-desc">Per-pixel random variation over the base color</div></div>
+      </div>
+      <div class="card-body">
+        <pre><span class="c">// Seeded random so grain is consistent on reload</span>
+<span class="k">const</span> variation = (random() - <span class="n">0.5</span>) * config.noise;
+image.data[i]   = clamp(baseR + variation);
+image.data[i+1] = clamp(baseG + variation);</pre>
+        <p><strong>noise:</strong> Controls how much the pixel-level color varies. 38 for leather (visible grain), 22 for footbed (smoother).</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1a2a1a;">〰️</div>
+        <div><div class="card-title">Layer 2 — Grain Lines</div><div class="card-desc">Curved brushstroke-like lines simulating leather fibres</div></div>
+      </div>
+      <div class="card-body">
+        <pre>context.<span class="p">globalCompositeOperation</span> = <span class="s">'multiply'</span>;
+<span class="c">// Quadratic Bézier curves at slight angles</span>
+<span class="c">// grainLines: 1500 = dense (upper leather)</span>
+<span class="c">// grainLines: 520  = sparse (footbed)</span></pre>
+        <p>Multiply blending darkens only grain valleys — matching how real leather grain catches shadows.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1a1a2a;">⚫</div>
+        <div><div class="card-title">Layer 3 — Pores</div><div class="card-desc">Small dark ellipses simulating leather pore structure</div></div>
+      </div>
+      <div class="card-body">
+        <pre><span class="c">// Randomised ellipses at varying angles</span>
+context.<span class="k">ellipse</span>(x, y, rx, ry, angle, <span class="n">0</span>, Math.PI*<span class="n">2</span>);
+<span class="c">// pores: 3800 for leather, 1800 for footbed</span>
+<span class="c">// poreAlpha: 0.12 → subtle, not spotty</span></pre>
+        <p>Higher pore count = more visible grain texture. Camel leather has larger, sparser pores than calfskin.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#2a2a1a;">✨</div>
+        <div><div class="card-title">Layer 4 — Highlight Lines</div><div class="card-desc">Screen-mode bright lines simulating leather ridge catches</div></div>
+      </div>
+      <div class="card-body">
+        <pre>context.<span class="p">globalCompositeOperation</span> = <span class="s">'screen'</span>;
+<span class="c">// 22% of grain line count</span>
+<span class="c">// rgba(255,236,208,...) warm white highlights</span>
+<span class="c">// Very subtle: 0.03–0.11 alpha range</span></pre>
+        <p>Screen mode brightens ridge tops, completing the illusion of real leather grain depth.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Texture Configuration Reference</h3>
+  <table>
+    <thead><tr><th>Config Key</th><th>Leather</th><th>Footbed</th><th>Sole</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td><code>base</code></td><td>[210,185,158]</td><td>[226,197,150]</td><td>[235,210,168]</td><td>Neutral color of the texture map. Multiply blends over material color.</td></tr>
+      <tr><td><code>noise</code></td><td>38</td><td>22</td><td>18</td><td>Pixel-level color variation. Higher = more mottled.</td></tr>
+      <tr><td><code>grainLines</code></td><td>1500</td><td>520</td><td>260</td><td>Number of curved grain fibre lines. Higher = denser grain.</td></tr>
+      <tr><td><code>pores</code></td><td>3800</td><td>1800</td><td>1100</td><td>Number of pore dots. Higher = more visible pore structure.</td></tr>
+      <tr><td><code>lineAlpha</code></td><td>0.17</td><td>0.08</td><td>0.05</td><td>Max opacity of dark grain lines. Lower = subtler.</td></tr>
+      <tr><td><code>poreAlpha</code></td><td>0.12</td><td>0.08</td><td>0.06</td><td>Max opacity of pore dots.</td></tr>
+      <tr><td><code>seed</code></td><td>19</td><td>43</td><td>71</td><td>Random seed — change to get different grain pattern with same stats.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Texture Settings (Three.js)</h3>
+  <pre><span class="p">texture</span>.<span class="p">colorSpace</span> = THREE.<span class="p">SRGBColorSpace</span>; <span class="c">// match renderer output</span>
+<span class="p">texture</span>.<span class="p">wrapS</span> = <span class="p">texture</span>.<span class="p">wrapT</span> = THREE.<span class="p">RepeatWrapping</span>; <span class="c">// tile it</span>
+<span class="p">texture</span>.<span class="p">repeat</span>.<span class="k">set</span>(<span class="n">2.35</span>, <span class="n">2.35</span>);  <span class="c">// tile density — higher = finer grain</span>
+<span class="p">texture</span>.<span class="p">anisotropy</span> = <span class="n">4</span>;           <span class="c">// sharper at glancing angles</span>
+<span class="p">texture</span>.<span class="p">needsUpdate</span> = <span class="k">true</span>;</pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     06 — TONE MAPPING
+═══════════════════════════════════════════════ -->
+<section class="section" id="s6">
+  <div class="section-eyebrow">Chapter 06</div>
+  <div class="section-title">Tone Mapping</div>
+  <p class="section-sub">Tone mapping converts HDR linear light values to the limited 0–1 SDR range of a screen. Choosing the right operator and exposure dramatically affects the final look.</p>
+
+  <h3>Tone Mapping Operators</h3>
+  <table>
+    <thead><tr><th>Operator</th><th>Look</th><th>Best For</th></tr></thead>
+    <tbody>
+      <tr><td><code>LinearToneMapping</code></td><td>No processing — raw linear values</td><td>Debug only — looks washed out</td></tr>
+      <tr><td><code>ReinhardToneMapping</code></td><td>Soft roll-off, preserves hues</td><td>Neutral product renders</td></tr>
+      <tr><td><strong><code>ACESFilmicToneMapping</code></strong></td><td><strong>Cinematic — warm shadows, rich highlights</strong></td><td><strong>Leather / luxury products ← YOUR CHOICE</strong></td></tr>
+      <tr><td><code>CineonToneMapping</code></td><td>Film-print look, warm contrast</td><td>Vintage / editorial feel</td></tr>
+      <tr><td><code>AgXToneMapping</code></td><td>Neutral, preserves hue under exposure</td><td>Clinical product renders</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Exposure Scale</h3>
+  <pre><span class="p">renderer</span>.<span class="p">toneMappingExposure</span> = <span class="n">1.05</span>;
+<span class="c">// This is a MULTIPLIER on the entire scene's light energy
+// 0.70 → dark studio    0.85 → normal    1.05 → bright/airy    1.30 → overexposed</span></pre>
+
+  <div class="tip"><strong>Technique:</strong> Set exposure last, after all colors and lights are dialed in. It's the master brightness knob — one number fixes overall darkness/brightness without touching individual lights.</div>
+
+  <table>
+    <thead><tr><th>Exposure Value</th><th>Visual Result</th><th>When to Use</th></tr></thead>
+    <tbody>
+      <tr><td>0.70–0.80</td><td>Dramatic dark studio</td><td>Dark background, moody editorial</td></tr>
+      <tr><td>0.85–0.95</td><td>Neutral studio</td><td>Balanced product photography feel</td></tr>
+      <tr><td><strong>1.00–1.10</strong></td><td><strong>Bright airy studio</strong></td><td><strong>White background luxury e-commerce ← YOUR TARGET</strong></td></tr>
+      <tr><td>1.10–1.25</td><td>High-key / overexposed</td><td>Fashion editorial, summer vibe</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     07 — GLB EXPORT PIPELINE
+═══════════════════════════════════════════════ -->
+<section class="section" id="s7">
+  <div class="section-eyebrow">Chapter 07</div>
+  <div class="section-title">GLB Export Pipeline</div>
+  <p class="section-sub">The quality of your 3D render starts in the modelling software, not in the code. These are the rules for exporting GLB files that work well with your Three.js renderer.</p>
+
+  <h3>Blender Export Settings (Recommended)</h3>
+  <pre><span class="c"># File → Export → glTF 2.0 (.glb/.gltf)</span>
+
+Format: <span class="s">GLB (binary)</span>
+Include:
+  ✓ Selected Objects
+  ✓ Apply Modifiers
+  ✓ UVs
+  ✓ Normals
+  ✓ Tangents              <span class="c"># needed for correct normal maps</span>
+  ✗ Vertex Colors         <span class="c"># skip — use material colors instead</span>
+
+Transform:
+  ✓ Y Up                  <span class="c"># Three.js uses Y-up</span>
+
+Geometry:
+  ✓ Apply Modifiers
+  ✗ Loose Edges / Points
+
+Compression:
+  ✓ Draco Mesh Compression  <span class="c"># reduces file size ~70%</span>
+  Compression Level: 6      <span class="c"># balanced quality/size</span></pre>
+
+  <h3>Material Naming Convention</h3>
+  <p>Your code detects materials by name. These names must be set in the 3D modelling software before export:</p>
+  <table>
+    <thead><tr><th>Material Name in Blender</th><th>Detected As</th><th>Color Applied</th></tr></thead>
+    <tbody>
+      <tr><td><code>Material</code> or <code>outer_leather</code></td><td>Upper leather strap</td><td><code>referenceMaterialColors.leather</code></td></tr>
+      <tr><td><code>Material.001</code> or <code>inner_lining</code></td><td>Insole / footbed</td><td><code>referenceMaterialColors.footbed</code></td></tr>
+      <tr><td><code>stitch</code> or <code>*stitch*</code></td><td>Stitching</td><td><code>referenceMaterialColors.stitch</code></td></tr>
+      <tr><td><code>buckle</code> / <code>backle</code> / <code>metal</code></td><td>Buckle</td><td><code>referenceMaterialColors.buckle</code></td></tr>
+      <tr><td><code>midsole</code> / <code>platform</code> / <code>mid_sole</code></td><td>Side platform</td><td><code>referenceMaterialColors.midsole</code></td></tr>
+      <tr><td><code>rubber</code> / <code>outsole</code> / <code>tread</code></td><td>Bottom sole</td><td><code>referenceMaterialColors.sole</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="warn"><strong>Critical:</strong> If a material name doesn't match any pattern above, it falls through to the default handler which applies a high roughness but no color override. Always name your materials before export.</div>
+
+  <h3>Adding a New GLB Model to the Website</h3>
+  <pre><span class="c">// STEP 1 — Place the GLB file</span>
+client/projects/client-web/src/assets/models/<span class="hl">your-model.glb</span>
+
+<span class="c">// STEP 2 — Add to heroModels array (~line 109)</span>
+{
+  id:          <span class="s">'your-id'</span>,
+  index:       <span class="s">'05'</span>,
+  eyebrowKey:  <span class="s">'home.hero.yourid.eyebrow'</span>,
+  titleKey:    <span class="s">'home.hero.yourid.title'</span>,
+  subtitleKey: <span class="s">'home.hero.yourid.subtitle'</span>,
+  url:         <span class="s">'/assets/models/your-model.glb'</span>,
+},
+
+<span class="c">// STEP 3 — Add i18n strings (strings.ts)</span>
+<span class="s">'home.hero.yourid.eyebrow'</span>:  <span class="s">'3D Model'</span>,
+<span class="s">'home.hero.yourid.title'</span>:    <span class="s">'Model Name'</span>,
+<span class="s">'home.hero.yourid.subtitle'</span>: <span class="s">'Short description.'</span>,
+
+<span class="c">// STEP 4 — Add Arabic translations too</span>
+<span class="c">// (in the AR section of strings.ts)</span></pre>
+
+  <h3>Optimising GLB File Size</h3>
+  <table>
+    <thead><tr><th>Technique</th><th>Tool</th><th>Size Reduction</th></tr></thead>
+    <tbody>
+      <tr><td>Draco compression</td><td>Blender export / gltfpack</td><td>60–75%</td></tr>
+      <tr><td>Merge materials with same properties</td><td>Blender</td><td>10–30%</td></tr>
+      <tr><td>Remove unused UV maps</td><td>Blender</td><td>5–15%</td></tr>
+      <tr><td>Decimate geometry (reduce polygons)</td><td>Blender modifier</td><td>20–50%</td></tr>
+      <tr><td>Remove baked textures (use code colors)</td><td>Blender material editor</td><td>30–60%</td></tr>
+    </tbody>
+  </table>
+  <div class="tip">Target: each GLB under 1.5 MB for fast initial load. Under 800 KB is excellent. Your DRACO loader is already configured — just enable Draco on export.</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     08 — YOUR LIVE CONFIG
+═══════════════════════════════════════════════ -->
+<section class="section" id="s8">
+  <div class="section-eyebrow">Chapter 08</div>
+  <div class="section-title">Your Live Configuration</div>
+  <p class="section-sub">Every tunable value in your current home.component.ts with its line number and what it controls.</p>
+
+  <h3>Quick-Edit Reference</h3>
+  <pre><span class="c">// ─── FILE: home.component.ts ─────────────────────────────────────
+
+// ── MATERIAL COLORS (~line 82) ──
+</span>private readonly referenceMaterialColors = {
+  <span class="hl">leather:  0xa06941</span>,  <span class="c">// upper strap — change this to repaint the shoe</span>
+  footbed:  0xbe7635,  <span class="c">// insole / footbed</span>
+  stitch:   0x3f2419,  <span class="c">// stitching thread</span>
+  buckle:   0x523120,  <span class="c">// decorative buckle</span>
+  midsole:  0x7a4a2c,  <span class="c">// side platform</span>
+  sole:     0x9b6d3d,  <span class="c">// bottom outsole</span>
+};
+
+<span class="c">// ── LEATHER SHEEN (~line 486) ──</span>
+material.roughness      = <span class="hl">0.82</span>;   <span class="c">// 0.76–0.88 = natural leather range</span>
+material.envMapIntensity = <span class="hl">0.22</span>;  <span class="c">// 0 = matte, 0.5 = oiled leather</span>
+material.metalnessMap   = <span class="k">null</span>;   <span class="c">// override baked GLB maps</span>
+material.roughnessMap   = <span class="k">null</span>;
+
+<span class="c">// ── LIGHTING (~line 313) ──</span>
+<span class="k">new</span> THREE.HemisphereLight(<span class="s">0xfff5e8</span>, <span class="s">0xcaa77a</span>, <span class="hl">1.1</span>);
+<span class="k">new</span> THREE.DirectionalLight(<span class="s">0xfffbf2</span>, <span class="hl">2.0</span>);   <span class="c">// key</span>
+<span class="k">new</span> THREE.DirectionalLight(<span class="s">0xf4dfb7</span>, <span class="hl">0.38</span>);  <span class="c">// fill</span>
+<span class="k">new</span> THREE.DirectionalLight(<span class="s">0xffffff</span>, <span class="hl">0.72</span>);  <span class="c">// rim</span>
+
+<span class="c">// ── EXPOSURE (~line 281) ──</span>
+renderer.toneMappingExposure = <span class="hl">1.05</span>;  <span class="c">// raise to brighten everything</span>
+
+<span class="c">// ── UI SWATCHES (~line 148) ──</span>
+{ id: <span class="s">'cognac'</span>,   color: <span class="s">0xa06941</span>, swatch: <span class="s">'#a06941'</span> },
+{ id: <span class="s">'espresso'</span>, color: <span class="s">0x4e2c22</span>, swatch: <span class="s">'#4e2c22'</span> },
+{ id: <span class="s">'sand'</span>,     color: <span class="s">0x8f6337</span>, swatch: <span class="s">'#8f6337'</span> },
+{ id: <span class="s">'walnut'</span>,   color: <span class="s">0x653d29</span>, swatch: <span class="s">'#653d29'</span> },
+{ id: <span class="s">'hazel'</span>,    color: <span class="s">0x79533c</span>, swatch: <span class="s">'#79533c'</span> },</pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     09 — COMMON PROBLEMS & FIXES
+═══════════════════════════════════════════════ -->
+<section class="section" id="s9">
+  <div class="section-eyebrow">Chapter 09</div>
+  <div class="section-title">Common Problems &amp; Fixes</div>
+  <p class="section-sub">Every problem you have encountered and the exact fix for each one.</p>
+
+  <div class="grid-2">
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#2a1010;">🌑</div>
+        <div><div class="card-title">Model looks too dark</div><div class="card-desc">Underexposed, shadow areas are black</div></div>
+      </div>
+      <div class="card-body">
+        <p><strong>Causes (in order of likelihood):</strong></p>
+        <ol style="padding-left:18px;font-size:13px;color:var(--ink2);">
+          <li>Exposure too low — raise <code>toneMappingExposure</code></li>
+          <li>Hemisphere light too dim — raise intensity above 1.0</li>
+          <li>IBL removed from scene — restore <code>scene.environment</code></li>
+          <li>Colors set too dark — the hex value itself is too dark</li>
+        </ol>
+        <pre><span class="c">// Quick fix</span>
+renderer.toneMappingExposure = <span class="n">1.05</span>; <span class="c">// was 0.78</span>
+<span class="k">new</span> HemisphereLight(..., ..., <span class="n">1.1</span>);  <span class="c">// was 0.74</span></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#2a1a0a;">✨</div>
+        <div><div class="card-title">Model looks too glossy / reflective</div><div class="card-desc">Specular highlights too strong, looks wet</div></div>
+      </div>
+      <div class="card-body">
+        <p><strong>Causes:</strong></p>
+        <ol style="padding-left:18px;font-size:13px;color:var(--ink2);">
+          <li>Roughness too low — raise toward 0.88+</li>
+          <li>envMapIntensity too high — lower toward 0–0.15</li>
+          <li>roughnessMap from GLB lowering roughness in patches</li>
+          <li>metalness > 0 — set to 0</li>
+        </ol>
+        <pre><span class="p">material</span>.<span class="p">roughness</span>      = <span class="n">0.88</span>; <span class="c">// raise</span>
+<span class="p">material</span>.<span class="p">roughnessMap</span>   = <span class="k">null</span>; <span class="c">// clear baked map</span>
+<span class="p">material</span>.<span class="p">envMapIntensity</span> = <span class="n">0.12</span>; <span class="c">// lower</span></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1a1a2a;">🎨</div>
+        <div><div class="card-title">Colors look wrong / too different from photo</div><div class="card-desc">Hex value doesn't match what renders on screen</div></div>
+      </div>
+      <div class="card-body">
+        <p><strong>Causes:</strong></p>
+        <ol style="padding-left:18px;font-size:13px;color:var(--ink2);">
+          <li>outputColorSpace not set to SRGBColorSpace</li>
+          <li>Warm key light tinting the color orange</li>
+          <li>Exposure multiplying the color lighter</li>
+          <li>Grain texture multiply-blending shifting the color</li>
+        </ol>
+        <pre><span class="p">renderer</span>.<span class="p">outputColorSpace</span> = THREE.<span class="p">SRGBColorSpace</span>;
+<span class="c">// If still wrong: temporarily set exposure 1.0
+// and all light intensities to 1.0, then tune hex</span></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#0a2a1a;">📦</div>
+        <div><div class="card-title">Material color not changing after code edit</div><div class="card-desc">Updated hex but the model still shows old color</div></div>
+      </div>
+      <div class="card-body">
+        <p><strong>Causes:</strong></p>
+        <ol style="padding-left:18px;font-size:13px;color:var(--ink2);">
+          <li>Missing <code>material.needsUpdate = true</code> after change</li>
+          <li>GLB has a baked color texture (<code>material.map</code>) overriding <code>material.color</code></li>
+          <li>Material name doesn't match detection patterns in code</li>
+        </ol>
+        <pre><span class="p">material</span>.<span class="p">color</span>.<span class="k">set</span>(newColor);
+<span class="p">material</span>.<span class="p">needsUpdate</span> = <span class="k">true</span>; <span class="c">← required</span>
+
+<span class="c">// If baked texture overrides color:</span>
+<span class="p">material</span>.<span class="p">map</span> = <span class="k">null</span>; <span class="c">// clears the baked albedo</span></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1a0a2a;">🥶</div>
+        <div><div class="card-title">Leather looks cold / grey / plastic</div><div class="card-desc">Correct color but wrong "feel"</div></div>
+      </div>
+      <div class="card-body">
+        <p><strong>Causes:</strong></p>
+        <ol style="padding-left:18px;font-size:13px;color:var(--ink2);">
+          <li>Hemisphere light sky color is white/grey — make it warm</li>
+          <li>Key light color is pure white — shift to <code>#FFFBF2</code></li>
+          <li>No fill light — shadows go cold grey</li>
+          <li>IBL RoomEnvironment too neutral</li>
+        </ol>
+        <pre><span class="c">// Warm hemisphere — fixes cold shadow problem</span>
+<span class="k">new</span> HemisphereLight(
+  <span class="s">0xfff5e8</span>, <span class="c">// warm sky (not 0xffffff)</span>
+  <span class="s">0xcaa77a</span>, <span class="c">// tan ground bounce</span>
+  <span class="n">1.1</span>
+);</pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#2a0a0a;">🔤</div>
+        <div><div class="card-title">New model material not picking up color</div><div class="card-desc">Added a new GLB but materials ignore code colors</div></div>
+      </div>
+      <div class="card-body">
+        <p><strong>Causes:</strong></p>
+        <ol style="padding-left:18px;font-size:13px;color:var(--ink2);">
+          <li>Material name in GLB doesn't match any detection pattern</li>
+          <li>Material is not <code>MeshStandardMaterial</code> type — must convert in Blender</li>
+          <li>Material has a baked albedo texture that overrides <code>color</code></li>
+        </ol>
+        <pre><span class="c">// Debug: log all material names on load</span>
+model.<span class="k">traverse</span>(child => {
+  <span class="k">if</span> (child <span class="k">instanceof</span> THREE.Mesh) {
+    <span class="k">const</span> mats = Array.isArray(child.material)
+      ? child.material : [child.material];
+    mats.<span class="k">forEach</span>(m => console.<span class="k">log</span>(m.name));
+  }
+});</pre>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     10 — PRODUCTION CHECKLIST
+═══════════════════════════════════════════════ -->
+<section class="section" id="s10">
+  <div class="section-eyebrow">Chapter 10</div>
+  <div class="section-title">Production Checklist</div>
+  <p class="section-sub">Run through this before considering any 3D model or material change complete.</p>
+
+  <div class="grid-2">
+
+    <div>
+      <h3>Renderer Setup</h3>
+      <ul class="checklist">
+        <li><code>outputColorSpace = SRGBColorSpace</code> is set</li>
+        <li><code>toneMapping = ACESFilmicToneMapping</code></li>
+        <li><code>toneMappingExposure</code> is between 0.85–1.15</li>
+        <li><code>shadowMap.enabled = true</code></li>
+        <li><code>pixelRatio</code> capped at 2 (performance)</li>
+        <li>Canvas resizes correctly with <code>ResizeObserver</code></li>
+      </ul>
+
+      <h3>Materials</h3>
+      <ul class="checklist">
+        <li>All leather parts: <code>metalness = 0</code></li>
+        <li>Upper leather: <code>roughness</code> between 0.76–0.88</li>
+        <li>Footbed: <code>roughness</code> above 0.93</li>
+        <li>Buckle: <code>roughness</code> above 0.90</li>
+        <li><code>roughnessMap = null</code> to override GLB baked maps</li>
+        <li><code>material.needsUpdate = true</code> after any change</li>
+        <li>All material names checked in console log</li>
+      </ul>
+
+      <h3>Lighting</h3>
+      <ul class="checklist">
+        <li>Key light: warm white, intensity 1.6–2.2</li>
+        <li>Fill light: warm gold, intensity 0.3–0.5</li>
+        <li>Rim light: white, intensity 0.6–0.9, back position</li>
+        <li>Hemisphere: warm sky AND warm ground colors</li>
+        <li>IBL (<code>scene.environment</code>) is assigned</li>
+        <li>Key light has <code>castShadow = true</code></li>
+        <li>Shadow map size ≥ 1024 (2048 for production)</li>
+      </ul>
+    </div>
+
+    <div>
+      <h3>GLB File</h3>
+      <ul class="checklist">
+        <li>Exported with Draco compression enabled</li>
+        <li>File size under 1.5 MB</li>
+        <li>All material names match detection patterns</li>
+        <li>Materials are <code>MeshStandardMaterial</code> type in Blender (Principled BSDF)</li>
+        <li>Y-up coordinate system selected in export</li>
+        <li>DRACOLoader decoder path set to <code>/assets/draco/</code></li>
+        <li>Model loads and traversal runs without errors</li>
+      </ul>
+
+      <h3>Color Accuracy</h3>
+      <ul class="checklist">
+        <li>Color compared against product photography, not against hex swatch</li>
+        <li>Checked on both light and dark monitors</li>
+        <li>Leather swatch <code>color</code> and <code>swatch</code> fields both updated</li>
+        <li>Arabic and English i18n strings added for new swatches</li>
+        <li>Default selected color (<code>cognac</code>) matches product photography baseline</li>
+      </ul>
+
+      <h3>Performance</h3>
+      <ul class="checklist">
+        <li>Animation runs with <code>requestAnimationFrame</code></li>
+        <li>Frame cancelled in <code>ngOnDestroy</code></li>
+        <li>ResizeObserver disconnected on destroy</li>
+        <li>Textures disposed on model clear</li>
+        <li>Only one DRACO loader instance per load cycle</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="divider"></div>
+
+  <h3>The One-Line Fix for Each Situation</h3>
+  <table>
+    <thead><tr><th>Problem</th><th>Single Line Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Too dark</td><td><code>renderer.toneMappingExposure = 1.1</code></td></tr>
+      <tr><td>Too glossy</td><td><code>material.roughness = 0.88; material.roughnessMap = null</code></td></tr>
+      <tr><td>Too matte / flat</td><td><code>material.roughness = 0.78; material.envMapIntensity = 0.2</code></td></tr>
+      <tr><td>Cold grey shadows</td><td><code>new HemisphereLight(0xfff5e8, 0xcaa77a, 1.1)</code></td></tr>
+      <tr><td>Highlights blown out</td><td><code>keyLight.intensity = 1.6</code></td></tr>
+      <tr><td>Color wrong</td><td><code>renderer.outputColorSpace = THREE.SRGBColorSpace</code></td></tr>
+      <tr><td>Material not updating</td><td><code>material.needsUpdate = true</code></td></tr>
+      <tr><td>Looks plastic</td><td><code>material.roughnessMap = null; material.roughness = 0.85</code></td></tr>
+    </tbody>
+  </table>
+
+</section>
+
+</div><!-- /page -->
+
+<div style="background:var(--ink);color:rgba(255,255,255,.4);padding:32px 48px;font-size:12px;margin-top:40px;">
+  <div class="page" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+    <div>Elite Collection · 3D Render Playbook · Senior Specialist Edition</div>
+    <div>home.component.ts · Three.js · WebGL · Angular 17</div>
+    <div>Generated 2026-05-26</div>
+  </div>
+</div>
+
+</body>
+</html>

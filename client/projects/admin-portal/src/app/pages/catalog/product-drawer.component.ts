@@ -924,7 +924,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly collections = COLLECTIONS.filter(c => !c.hidden);
 
   /** Initial form snapshot — re-set whenever `currentId` changes. */
-  private initial!: FormShape;
+  private readonly initial = signal<FormShape>(this.makeEmptyForm());
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly draftRestoredAt = signal<string | null>(null);
   readonly saveState = signal<SaveState>('idle');
@@ -941,7 +941,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return idx >= 0 && idx < this._products().length - 1;
   });
 
-  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
+  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
   readonly slugError = computed(() => {
     const s = this.form().slug;
@@ -975,7 +975,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
 
   ngOnInit(): void {
-    if (!this.initial) this.resetForCurrent();
+    if (!this.initial()) this.resetForCurrent();
     // Load reference lists in the background — non-blocking
     Promise.all([
       this.refApi.getColors(),
@@ -1002,8 +1002,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const p = this.product;
     if (!p) return;
 
-    this.initial = this.makeFormFromProduct(p);
-    this.form.set({ ...this.initial });
+    this.initial.set(this.makeFormFromProduct(p));
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
     this.lastSavedAt.set(null);
     this.draftRestoredAt.set(null);
@@ -1156,7 +1156,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
               const result = ev.result as ProductImageUploadResult;
               if (result?.images) {
                 this.set('images', result.images);
-                this.initial = { ...this.initial, images: [...result.images] };
+                this.initial.set({ ...this.initial(), images: [...result.images] });
               }
               this.toast.success(
                 `${result?.uploaded ?? accepted.length} ${this.t('product.gallery.upload').toLowerCase()}`,
@@ -1376,7 +1376,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.lastSavedAt.set(ts);
       try { localStorage.removeItem(this.draftKey); } catch {}
       this.draftRestoredAt.set(null);
-      this.initial = { ...this.form() };
+      this.initial.set({ ...this.form() });
 
       // Update the actual mock collections for the sake of the prototype
       this.collections.forEach(c => {
@@ -1422,7 +1422,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     try { localStorage.removeItem(this.draftKey); } catch {}
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
@@ -1430,7 +1430,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   discardDraft(): void {
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     try { localStorage.removeItem(this.draftKey); } catch {}
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');

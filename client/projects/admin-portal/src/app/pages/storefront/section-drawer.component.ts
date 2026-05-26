@@ -385,10 +385,10 @@ interface FormShape extends StorefrontBlock {
 export class SectionDrawerComponent implements OnInit, OnDestroy {
   /** The block being edited. Setter swaps state cleanly. */
   @Input({ required: true }) set block(b: StorefrontBlock) {
-    if (this._currentBlockId === b.id && this.initial) return;
+    if (this._currentBlockId === b.id && this.initial()) return;
     this._currentBlockId = b.id;
-    this.initial = this.normalize(b);
-    this.form.set({ ...this.initial });
+    this.initial.set(this.normalize(b));
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
   }
 
@@ -408,13 +408,13 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
   readonly collections = COLLECTIONS.filter(c => !c.hidden);
 
   private _currentBlockId = '';
-  private initial!: FormShape;
+  private readonly initial = signal<FormShape>(this.makeEmptyForm());
 
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly saveState = signal<SaveState>('idle');
   readonly shakeSaveBar = signal(false);
 
-  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
+  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
   private feedbackTimer: number | undefined;
 
@@ -484,7 +484,7 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
     this.saveState.set('saving');
     setTimeout(() => {
       const snapshot = { ...this.form() };
-      this.initial = { ...snapshot };
+      this.initial.set({ ...snapshot });
       this.saveState.set('saved');
       this.toast.success(this.t('storefront.toast.saved.title'), snapshot.title || snapshot.type);
       this.saved.emit(snapshot);
@@ -498,7 +498,7 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
     this.toast.info(this.t('product.toast.discarded.title'), this.t('product.toast.discarded.sub'));
   }
