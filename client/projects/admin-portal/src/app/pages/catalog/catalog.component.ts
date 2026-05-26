@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
@@ -16,7 +17,7 @@ import { Product, QAR } from '../../models';
 
 type SortKey = 'name-az' | 'name-za' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'newest';
 type ViewMode = 'grid' | 'list';
-type StatusFilter = 'all' | 'active' | 'hidden';
+type StatusFilter = 'all' | 'active' | 'hidden' | 'low-stock';
 type ImageFilter = 'all' | 'has-images' | 'no-images';
 type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
@@ -39,9 +40,13 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
           <!-- Status quick-filter pills -->
           <div class="status-pills">
-            <button class="status-pill" [class.active]="statusFilter() === 'all'"    (click)="statusFilter.set('all')">All</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'active'" (click)="statusFilter.set('active')">Active</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'hidden'" (click)="statusFilter.set('hidden')">Hidden</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'all'"       (click)="statusFilter.set('all')">All</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'active'"    (click)="statusFilter.set('active')">Active</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'hidden'"    (click)="statusFilter.set('hidden')">Hidden</button>
+            <button class="status-pill warn" [class.active]="statusFilter() === 'low-stock'" (click)="statusFilter.set('low-stock')">
+              <ap-icon name="warning" [size]="11"/> Low Stock
+              @if (lowStockCount() > 0) { <span class="ls-badge">{{ lowStockCount() }}</span> }
+            </button>
           </div>
 
           <!-- Right-side controls -->
@@ -79,6 +84,11 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
                     (click)="toggleSelectionMode()">
               <ap-icon name="check" [size]="13"/> {{ selectionMode() ? 'Cancel' : 'Select' }}
+            </button>
+
+            <!-- Export CSV -->
+            <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0">
+              <ap-icon name="arrowDn" [size]="14"/> Export
             </button>
 
             <!-- Bulk import -->
@@ -381,6 +391,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
         (closed)="onDrawerClosed()"
         (currentIdChange)="activeId.set($event)"
         (deleted)="onDeleted($event)"
+        (duplicated)="onDuplicated($event)"
       />
     }
   `,
@@ -400,6 +411,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       cursor: pointer; color: var(--muted); transition: all 0.13s;
     }
     .status-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .status-pill.warn { display: flex; align-items: center; gap: 4px; }
+    .status-pill.warn.active { color: var(--warning, #f59e0b); }
+    .ls-badge { background: var(--warning, #f59e0b); color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 0 5px; line-height: 16px; }
     .top-actions {
       display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-inline-start: auto;
     }
@@ -547,6 +561,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 export class CatalogComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
   private readonly productsApi = inject(AdminProductsService);
   private readonly refApi = inject(AdminRefService);
   readonly t = (k: string): string => this.i18n.t(k);
@@ -570,6 +585,8 @@ export class CatalogComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+    const stockParam = this.route.snapshot.queryParamMap.get('stock');
+    if (stockParam === 'low') this.statusFilter.set('low-stock');
   }
 
   // ── Filter / sort / view state ────────────────────────────────────────────
@@ -593,6 +610,10 @@ export class CatalogComponent implements OnInit {
 
   readonly activeId        = signal<string | null>(null);
   readonly showBulkImport  = signal(false);
+
+  readonly lowStockCount = computed(() =>
+    this._products().filter(p => p.stock > 0 && p.stock <= 5).length,
+  );
   readonly selectionMode   = signal(false);
   readonly selectedIds     = signal(new Set<string>());
   readonly confirmingDelete = signal(false);
@@ -644,6 +665,7 @@ export class CatalogComponent implements OnInit {
     let list = this._products().filter(p => {
       if (status === 'active' && p.hidden) return false;
       if (status === 'hidden' && !p.hidden) return false;
+      if (status === 'low-stock' && !(p.stock > 0 && p.stock <= 5)) return false;
 
       if (colId !== 'All') {
         const col = COLLECTIONS.find(c => c.id === colId);
@@ -864,6 +886,37 @@ export class CatalogComponent implements OnInit {
       this._products.set(list);
       this.toast.success('Bulk import complete', 'Product catalog refreshed.');
     } catch { /* silent */ }
+  }
+
+  exportCsv(): void {
+    const products = this.filtered();
+    if (products.length === 0) return;
+    const rows = [
+      'SKU,Name,Brand,Price (QAR),Stock,Status,3D,Variants',
+      ...products.map(p => [
+        `"${p.sku}"`,
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.brand.replace(/"/g, '""')}"`,
+        p.price,
+        p.stock,
+        p.hidden ? 'Hidden' : 'Active',
+        p.has3d ? 'Yes' : 'No',
+        p.variants?.length ?? 0,
+      ].join(',')),
+    ];
+    const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `catalog-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    this.toast.success('Catalog exported', `${products.length} products`);
+  }
+
+  onDuplicated(copy: Product): void {
+    this._products.update(all => [copy, ...all]);
+    this.activeId.set(copy.id);
   }
 
   stockLabel(p: Product): string {

@@ -24,6 +24,9 @@ export interface Product {
   /** Ordered gallery — the first entry is the primary image. */
   images?: string[];
   variants?: ProductVariant[];
+  metaTitle?: string;
+  metaDesc?: string;
+  slug?: string;
 }
 
 export interface Collection {

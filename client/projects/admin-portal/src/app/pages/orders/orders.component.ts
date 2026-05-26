@@ -21,7 +21,7 @@ import { Order, QAR } from '../../models';
   imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, PaginationComponent, OrderDrawerComponent],
   template: `
     <div class="page-fade">
-      <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
+      <div class="row gap-sm mb-16" style="flex-wrap:wrap;">
         <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
           <ap-icon name="search" [size]="14"/>
           <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
@@ -48,6 +48,28 @@ import { Order, QAR } from '../../models';
             {{ t('common.exportCsv') }}
           }
         </button>
+      </div>
+
+      <!-- Date range filter -->
+      <div class="row gap-sm mb-16" style="flex-wrap:wrap;align-items:center;">
+        <div class="date-range-pills">
+          <button class="dr-pill" [class.active]="dateRange() === 'all'"   (click)="setDateRange('all')">All time</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'today'" (click)="setDateRange('today')">Today</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'week'"  (click)="setDateRange('week')">This Week</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'month'" (click)="setDateRange('month')">This Month</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'custom'" (click)="setDateRange('custom')">Custom</button>
+        </div>
+        @if (dateRange() === 'custom') {
+          <input class="inp" type="date" style="width:auto;" [ngModel]="dateFrom()" (ngModelChange)="dateFrom.set($event); page.set(0)"/>
+          <span class="muted">–</span>
+          <input class="inp" type="date" style="width:auto;" [ngModel]="dateTo()" (ngModelChange)="dateTo.set($event); page.set(0)"/>
+        }
+        @if (dateRange() !== 'all') {
+          <span class="filter-chip">
+            {{ dateRangeLabel() }}
+            <button (click)="setDateRange('all')">×</button>
+          </span>
+        }
       </div>
 
       <div class="card">
@@ -105,6 +127,14 @@ import { Order, QAR } from '../../models';
       <ap-order-drawer [value]="o" (closed)="active.set(null)" (updated)="onOrderUpdated($event)"/>
     }
   `,
+  styles: [`
+    .date-range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
+    .dr-pill { border: none; background: none; padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; color: var(--muted); transition: all 0.13s; }
+    .dr-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .filter-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(2,70,56,.09); color: var(--green); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
+    .filter-chip button { background: none; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; opacity: .6; }
+    .filter-chip button:hover { opacity: 1; }
+  `],
 })
 export class OrdersComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
@@ -162,6 +192,9 @@ export class OrdersComponent implements OnInit, OnDestroy {
   readonly search = signal('');
   readonly paymentFilter = signal('all');
   readonly fulfillmentFilter = signal('all');
+  readonly dateRange = signal<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
+  readonly dateFrom = signal('');
+  readonly dateTo = signal('');
   readonly fulfillingId = signal<string | null>(null);
   readonly exporting = signal(false);
   readonly loading = signal(true);
@@ -174,10 +207,30 @@ export class OrdersComponent implements OnInit, OnDestroy {
     const q = this.search().toLowerCase();
     const p = this.paymentFilter();
     const f = this.fulfillmentFilter();
+    const dr = this.dateRange();
+    const today = new Date().toISOString().slice(0, 10);
+
+    let fromDate = '';
+    let toDate = today;
+    if (dr === 'today') {
+      fromDate = toDate = today;
+    } else if (dr === 'week') {
+      const d = new Date(); d.setDate(d.getDate() - d.getDay());
+      fromDate = d.toISOString().slice(0, 10);
+    } else if (dr === 'month') {
+      fromDate = today.slice(0, 8) + '01';
+    } else if (dr === 'custom') {
+      fromDate = this.dateFrom();
+      toDate = this.dateTo() || today;
+    }
+
     return this._orders().filter((o) => {
       if (p !== 'all' && o.payment !== p) return false;
       if (f !== 'all' && o.fulfillment !== f) return false;
       if (q && !(o.id.toLowerCase().includes(q) || o.customer.toLowerCase().includes(q))) return false;
+      if (fromDate && o.date < fromDate) return false;
+      if (dr !== 'all' && dr !== 'custom' && o.date > toDate) return false;
+      if (dr === 'custom' && toDate && o.date > toDate) return false;
       return true;
     });
   });
@@ -219,10 +272,33 @@ export class OrdersComponent implements OnInit, OnDestroy {
     this.active.set(updated);
   }
 
+  setDateRange(range: 'all' | 'today' | 'week' | 'month' | 'custom'): void {
+    this.dateRange.set(range);
+    this.page.set(0);
+  }
+
+  dateRangeLabel(): string {
+    switch (this.dateRange()) {
+      case 'today': return 'Today';
+      case 'week': return 'This Week';
+      case 'month': return 'This Month';
+      case 'custom': {
+        const f = this.dateFrom(); const t = this.dateTo();
+        if (f && t) return `${f} – ${t}`;
+        if (f) return `From ${f}`;
+        return 'Custom range';
+      }
+      default: return '';
+    }
+  }
+
   clearFilters(): void {
     this.search.set('');
     this.paymentFilter.set('all');
     this.fulfillmentFilter.set('all');
+    this.dateRange.set('all');
+    this.dateFrom.set('');
+    this.dateTo.set('');
     this.page.set(0);
   }
 

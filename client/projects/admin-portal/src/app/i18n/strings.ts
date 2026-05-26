@@ -498,6 +498,8 @@ const EN = {
   'dash.product': 'Product',
   'dash.amount': 'Amount',
   'dash.status': 'Status',
+  'dash.lowStock': 'Low Stock',
+  'dash.lowStock.delta': 'products need restocking',
 
   // ── Catalog product card ──
   'catalog.has3d': '✓ 3D',
@@ -1227,6 +1229,8 @@ const AR: Record<keyof typeof EN, string> = {
   'dash.product': 'القطعة',
   'dash.amount': 'القيمة',
   'dash.status': 'الحالة',
+  'dash.lowStock': 'مخزون منخفض',
+  'dash.lowStock.delta': 'قطعة تحتاج تزويداً',
 
   // ── Catalog ──
   'catalog.has3d': '✓ ثلاثي',

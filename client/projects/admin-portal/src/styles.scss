@@ -2764,3 +2764,58 @@ html[dir='rtl'] a, html[dir='rtl'] .nav-item { text-decoration: none; }
   .trigger { padding: 3px 8px 3px 3px !important; font-size: 10px !important; }
   .trigger .avatar { width: 18px !important; height: 18px !important; font-size: 8px !important; }
 }
+
+/* ── Mobile-first enhancements (hv-09) ── */
+
+/* 44×44px minimum touch targets for all interactive controls */
+@media (max-width: 1024px) {
+  .btn, .icon-btn, .x-btn, .tab, .status-pill, .dr-pill {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .btn-sm, .x-btn { min-height: 36px; min-width: 36px; }
+  input.inp, select.inp { min-height: 44px; font-size: 16px !important; }
+}
+
+/* Catalog top-bar wraps gracefully on tablet/phone */
+@media (max-width: 768px) {
+  .top-bar { flex-wrap: wrap; gap: 8px; }
+  .top-actions { flex-wrap: wrap; width: 100%; }
+  .search-box { width: 100%; }
+  .status-pills { flex-wrap: wrap; }
+}
+
+/* kpi-grid: 2 cols on tablet, 1 col on narrow phone */
+@media (max-width: 768px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 390px) {
+  .kpi-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Tables: always scrollable in their container */
+.tbl-wrap, .card .tbl, .res-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (max-width: 768px) {
+  .tbl { min-width: 600px; }
+}
+
+/* Sortable table wrapper: force scroll container */
+ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Filter panel stacks to 1 column on narrow screens */
+@media (max-width: 600px) {
+  .filter-panel-grid { grid-template-columns: 1fr !important; }
+  .fp-price, .fp-page { grid-column: span 1 !important; }
+}
+
+/* Order date range pills wrap on mobile */
+@media (max-width: 600px) {
+  .date-range-pills { flex-wrap: wrap; }
+  .dr-pill { flex: 1 1 auto; text-align: center; }
+}
+
+/* Settings grid stacks on phone */
+@media (max-width: 600px) {
+  .grid-2 { grid-template-columns: 1fr !important; }
+  .grid-3 { grid-template-columns: 1fr !important; }
+}

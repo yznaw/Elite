@@ -19,6 +19,11 @@ export const routes: Routes = [
       import('./pages/login/reset-password.component').then((m) => m.ResetPasswordComponent),
   },
   {
+    path: 'accept-invite',
+    loadComponent: () =>
+      import('./pages/accept-invite/accept-invite.component').then((m) => m.AcceptInviteComponent),
+  },
+  {
     path: '',
     canMatch: [authGuard],
     children: [

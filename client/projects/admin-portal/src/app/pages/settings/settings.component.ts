@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
@@ -9,7 +9,7 @@ import { SortableTableComponent, CellTplDirective, TableColumn } from '../../sha
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminSettingsService } from '../../services/admin-settings.service';
+import { AdminSettingsService, Invitation } from '../../services/admin-settings.service';
 import { INTEGRATIONS } from '../../data/mock';
 import { TeamMember } from '../../models';
 
@@ -18,7 +18,7 @@ type Tab = 'general' | 'team' | 'integrations';
 @Component({
   selector: 'ap-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective],
+  imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective],
   template: `
     <div class="page-fade">
       <div class="tabs">
@@ -101,26 +101,58 @@ type Tab = 'general' | 'team' | 'integrations';
             <div class="card-title mb-16">{{ t('settings.invite') }}</div>
             <div class="grid-2 mb-16">
               <div>
-                <label class="lbl">{{ t('settings.fullName') }}</label>
-                <input class="inp" placeholder="Yusuf Hamad" [ngModel]="invite().name" (ngModelChange)="setInvite('name', $event)"/>
+                <label class="lbl">{{ t('settings.email') }}</label>
+                <input class="inp" type="email" placeholder="name@elitecollection.qa" [ngModel]="invite().email" (ngModelChange)="setInvite('email', $event)"/>
               </div>
               <div>
-                <label class="lbl">{{ t('settings.email') }}</label>
-                <input class="inp" placeholder="name@elitecollection.qa" [ngModel]="invite().email" (ngModelChange)="setInvite('email', $event)"/>
+                <label class="lbl">Role</label>
+                <select class="inp" [ngModel]="invite().role" (ngModelChange)="setInvite('role', $event)">
+                  <option>Admin</option>
+                  <option>Manager</option>
+                  <option>Viewer</option>
+                </select>
               </div>
             </div>
             <div class="row gap-sm" style="flex-wrap:wrap;">
-              <select class="inp" style="width:auto;" [ngModel]="invite().role" (ngModelChange)="setInvite('role', $event)">
-                <option>Admin</option>
-                <option>Manager</option>
-                <option>Viewer</option>
-              </select>
-              <button class="btn btn-gold" [disabled]="inviting() || !canInvite()" (click)="inviteMember()">
-                @if (inviting()) { <ap-spinner [size]="12"/> {{ t('settings.sending') }} }
-                @else { {{ t('settings.sendInvitation') }} }
+              <button class="btn btn-gold" [disabled]="inviting() || !invite().email.includes('@')" (click)="sendInvite()">
+                @if (inviting()) { <ap-spinner [size]="12"/> Sending… }
+                @else { <ap-icon name="mail" [size]="14"/> Send Invitation }
               </button>
             </div>
+            @if (inviteLink()) {
+              <div class="invite-link-box">
+                <ap-icon name="link" [size]="13"/>
+                <span class="inv-email">{{ inviteLink()!.email }}</span>
+                <span class="muted small">·</span>
+                <input class="inv-link-input" [value]="inviteLink()!.link" readonly (click)="copyInviteLink()"/>
+                <button class="btn btn-outline btn-sm" (click)="copyInviteLink()">Copy link</button>
+              </div>
+              <div class="muted small" style="margin-top:4px;">Link expires in 48h. Share this with {{ inviteLink()!.email }} to set their password.</div>
+            }
           </div>
+
+          @if (pendingInvitations().length > 0) {
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Pending Invitations</div>
+                  <div class="card-sub">{{ pendingInvitations().length }} awaiting acceptance</div>
+                </div>
+              </div>
+              <div style="padding:0 0 8px;">
+                @for (inv of pendingInvitations(); track inv.id) {
+                  <div class="inv-row">
+                    <ap-icon name="mail" [size]="13" style="opacity:.4"/>
+                    <div class="inv-info">
+                      <div class="strong">{{ inv.email }}</div>
+                      <div class="muted small">{{ inv.role | titlecase }} · invited {{ inv.created_at | date:'MMM d' }}</div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" style="color:var(--danger);" (click)="revokeInvite(inv.id)">Revoke</button>
+                  </div>
+                }
+              </div>
+            </div>
+          }
 
           <div class="card">
             <div class="card-header">
@@ -188,6 +220,11 @@ type Tab = 'general' | 'team' | 'integrations';
     .inp-msg-error { font-size: 11px; color: var(--danger); margin-top: 4px; }
     .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
     .btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+    .invite-link-box { display: flex; align-items: center; gap: 8px; padding: 10px 14px; margin-top: 12px; background: rgba(2,70,56,.06); border: 1px solid rgba(2,70,56,.15); border-radius: 8px; flex-wrap: wrap; }
+    .inv-email { font-weight: 700; font-size: 13px; color: var(--green); }
+    .inv-link-input { flex: 1; min-width: 180px; border: none; background: transparent; font-size: 12px; font-family: monospace; color: var(--ink-2); cursor: pointer; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .inv-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border,#e4e4e7); }
+    .inv-info { flex: 1; }
   `],
 })
 export class SettingsComponent implements OnInit {
@@ -224,6 +261,8 @@ export class SettingsComponent implements OnInit {
   readonly team = signal<TeamMember[]>([]);
   readonly invite = signal({ name: '', email: '', role: 'Manager' as 'Admin' | 'Manager' | 'Viewer' });
   readonly inviting = signal(false);
+  readonly pendingInvitations = signal<Invitation[]>([]);
+  readonly inviteLink = signal<{ email: string; link: string } | null>(null);
 
   // ── Integrations ─────────────────────────────────────────────────────────
   readonly integrations = INTEGRATIONS;
@@ -263,7 +302,10 @@ export class SettingsComponent implements OnInit {
 
   private async loadTeam(): Promise<void> {
     try {
-      const list = await this.settingsApi.getTeam();
+      const [list, invites] = await Promise.all([
+        this.settingsApi.getTeam(),
+        this.settingsApi.getInvitations().catch(() => [] as Invitation[]),
+      ]);
       this.team.set(
         list
           .filter((m: TeamMember & { status?: string }) => m.status !== 'removed')
@@ -273,6 +315,7 @@ export class SettingsComponent implements OnInit {
             joined: String((m as any).joined || ''),
           })),
       );
+      this.pendingInvitations.set(invites);
     } catch {
       this.team.set([]);
     } finally {
@@ -327,23 +370,42 @@ export class SettingsComponent implements OnInit {
   }
 
   async inviteMember(): Promise<void> {
+    return this.sendInvite();
+  }
+
+  async sendInvite(): Promise<void> {
     const f = this.invite();
-    if (!this.canInvite() || this.inviting()) return;
+    if (!f.email.includes('@') || this.inviting()) return;
     this.inviting.set(true);
+    this.inviteLink.set(null);
     try {
-      const member = await this.settingsApi.inviteTeam({
-        name: f.name.trim(),
-        email: f.email.trim(),
-        role: f.role,
-      });
-      this.team.update((t) => [...t, { ...member, role: capitalizeRole(member.role) }]);
-      this.invite.set({ name: '', email: '', role: 'Manager' });
-      this.toast.success('Invitation sent', `${f.email} · ${f.role} role`);
+      const result = await this.settingsApi.sendInvitation({ email: f.email.trim(), role: f.role });
+      this.invite.update(v => ({ ...v, email: '' }));
+      this.inviteLink.set({ email: result.email, link: result.inviteLink });
+      const invites = await this.settingsApi.getInvitations().catch(() => this.pendingInvitations());
+      this.pendingInvitations.set(invites);
+      this.toast.success('Invitation created', `Link expires in 48h · ${result.email}`);
     } catch {
       // Global interceptor surfaces the error.
     } finally {
       this.inviting.set(false);
     }
+  }
+
+  copyInviteLink(): void {
+    const link = this.inviteLink()?.link;
+    if (!link) return;
+    navigator.clipboard.writeText(link).then(() => {
+      this.toast.success('Link copied', 'Share this with the invitee to set their password.');
+    }).catch(() => {});
+  }
+
+  async revokeInvite(id: string): Promise<void> {
+    try {
+      await this.settingsApi.revokeInvitation(id);
+      this.pendingInvitations.update(list => list.filter(i => i.id !== id));
+      this.toast.success('Invitation revoked');
+    } catch { /* Global interceptor */ }
   }
 
   async updateRole(id: string, role: 'Admin' | 'Manager' | 'Viewer'): Promise<void> {
