@@ -17,7 +17,7 @@ const EN = {
   // ─────────────────────────────────────────────────────────────────────
   //  Navigation
   // ─────────────────────────────────────────────────────────────────────
-  'nav.atelier': 'Atelier',
+  'nav.atelier': 'Home',
   'nav.collection': 'Collection',
   'nav.story': 'Our Story',
   'nav.contact': 'Contact',
@@ -29,6 +29,11 @@ const EN = {
   'nav.language': 'Language',
   'nav.lang.en': 'English',
   'nav.lang.ar': 'العربية',
+  'nav.search': 'Search',
+  'nav.searchPlaceholder': 'Search shoes, leather, style',
+  'nav.searchResults': 'results',
+  'nav.searchEmpty': 'No pieces match your search.',
+  'nav.searchHint': 'Search by name, leather, style, color, or price.',
 
   // ─────────────────────────────────────────────────────────────────────
   //  Common
@@ -75,7 +80,7 @@ const EN = {
   // ─────────────────────────────────────────────────────────────────────
   'footer.tagline': 'Handcrafted in Doha since 1962. Limited to 400 pairs per year.',
   'footer.col.collection': 'Collection',
-  'footer.col.atelier': 'Atelier',
+  'footer.col.atelier': 'Home',
   'footer.col.client': 'Client',
   'footer.link.allPieces': 'All Pieces',
   'footer.link.newArrivals': 'New Arrivals',
@@ -130,6 +135,9 @@ const EN = {
   'home.hero.or8.eyebrow': '3D Model',
   'home.hero.or8.title': 'Or8',
   'home.hero.or8.subtitle': 'A dedicated Or8 GLB view ready for swiping and close inspection.',
+  'home.hero.a1.eyebrow': '3D Model',
+  'home.hero.a1.title': 'A1',
+  'home.hero.a1.subtitle': 'A dedicated A1 GLB view ready for swiping and close inspection.',
   'home.leatherColor.cognac': 'Cognac',
   'home.leatherColor.espresso': 'Espresso',
   'home.leatherColor.sand': 'Sand',
@@ -392,7 +400,7 @@ const AR: Record<keyof typeof EN, string> = {
   'brand.heritageEstFull': 'تأسس 1962 · الدوحة، دولة قطر',
 
   // Navigation
-  'nav.atelier': 'الورشة',
+  'nav.atelier': 'الرئيسية',
   'nav.collection': 'المجموعة',
   'nav.story': 'قصتنا',
   'nav.contact': 'تواصل معنا',
@@ -404,6 +412,11 @@ const AR: Record<keyof typeof EN, string> = {
   'nav.language': 'اللغة',
   'nav.lang.en': 'English',
   'nav.lang.ar': 'العربية',
+  'nav.search': 'بحث',
+  'nav.searchPlaceholder': 'ابحث عن الأحذية أو الجلد أو الطراز',
+  'nav.searchResults': 'نتائج',
+  'nav.searchEmpty': 'لا توجد قطع تطابق بحثك.',
+  'nav.searchHint': 'ابحث بالاسم أو الجلد أو الطراز أو اللون أو السعر.',
 
   // Common
   'common.viewDetails': 'عرض التفاصيل',
@@ -444,7 +457,7 @@ const AR: Record<keyof typeof EN, string> = {
   // Footer
   'footer.tagline': 'صناعة يدوية في الدوحة منذ 1962. محدود بـ 400 زوج سنوياً.',
   'footer.col.collection': 'المجموعة',
-  'footer.col.atelier': 'الورشة',
+  'footer.col.atelier': 'الرئيسية',
   'footer.col.client': 'خدمة العملاء',
   'footer.link.allPieces': 'جميع القطع',
   'footer.link.newArrivals': 'الوصول الحديث',
@@ -497,6 +510,9 @@ const AR: Record<keyof typeof EN, string> = {
   'home.hero.or8.eyebrow': 'نموذج ثلاثي الأبعاد',
   'home.hero.or8.title': 'Or8',
   'home.hero.or8.subtitle': 'عرض مخصص لملف Or8 بصيغة GLB للتصفح والمعاينة عن قرب.',
+  'home.hero.a1.eyebrow': 'نموذج ثلاثي الأبعاد',
+  'home.hero.a1.title': 'A1',
+  'home.hero.a1.subtitle': 'عرض مخصص لملف A1 بصيغة GLB للتصفح والمعاينة عن قرب.',
   'home.leatherColor.cognac': 'كونياك',
   'home.leatherColor.espresso': 'إسبريسو',
   'home.leatherColor.sand': 'رملي',

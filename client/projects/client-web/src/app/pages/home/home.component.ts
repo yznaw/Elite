@@ -138,6 +138,14 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       subtitleKey: 'home.hero.or8.subtitle',
       url: '/assets/models/or8.glb',
     },
+    {
+      id: 'a1',
+      index: '05',
+      eyebrowKey: 'home.hero.a1.eyebrow',
+      titleKey: 'home.hero.a1.title',
+      subtitleKey: 'home.hero.a1.subtitle',
+      url: '/assets/models/a1.glb',
+    },
   ];
 
   readonly activeHeroModel = computed(

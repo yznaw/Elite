@@ -109,7 +109,7 @@ loader.setDRACOLoader(dracoLoader);
 
 ### Model Slots
 
-The hero exposes four 3D model slots through `heroModels`.
+The hero exposes five 3D model slots through `heroModels`.
 
 | ID | Title | Current URL |
 |---|---|---|
@@ -117,10 +117,11 @@ The hero exposes four 3D model slots through `heroModels`.
 | `or9` | Or9 | `/assets/models/or9.glb` |
 | `or4` | Or4 | `/assets/models/or4.glb` |
 | `or8` | Or8 | `/assets/models/or8.glb` |
+| `a1` | A1 | `/assets/models/a1.glb` |
 
 Each slot controls the eyebrow, title, subtitle, and GLB URL shown in the hero. To replace a placeholder later, update only that slot's `url` value and keep the file under `projects/client-web/src/assets/models/`.
 
-The `or4`, `or8`, and `or9` assets are optimized GLBs using `KHR_draco_mesh_compression` for geometry and embedded WebP textures capped at 2048px so they remain small enough for GitHub.
+The `a1`, `or4`, `or8`, and `or9` assets are optimized GLBs using `KHR_draco_mesh_compression` for geometry and embedded WebP textures capped at 2048px so they remain small enough for GitHub.
 
 Model switching is exposed through left/right arrow buttons on either side of the 3D product stage, labeled model tabs below the stage, and horizontal swipe. The arrows and swipe call `selectAdjacentHeroModel(-1 | 1)`, which cycles through `heroModels`, updates the heading, and reloads the selected GLB slot.
 
