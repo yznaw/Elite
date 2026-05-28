@@ -194,7 +194,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
         <div class="danger-zone mb-24">
           <div style="flex:1;min-width:0;">
-            <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">Delete Collection</div>
+            <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">{{ t('collections.section.danger.title') }}</div>
           </div>
           <button class="btn btn-danger" [disabled]="deleting()" (click)="onDelete()">
             @if (deleting()) {
@@ -384,7 +384,13 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   }
 
   saveLabel(): string {
-    return { idle: 'Save', dirty: 'Unsaved Changes', saving: 'Saving...', saved: 'Saved', error: 'Error' }[this.saveState()];
+    return {
+      idle:   this.t('product.save.idle'),
+      dirty:  this.t('product.save.dirty'),
+      saving: this.t('product.save.saving'),
+      saved:  this.t('product.save.saved'),
+      error:  this.t('product.save.error'),
+    }[this.saveState()];
   }
 
   set<K extends keyof FormShape>(k: K, v: FormShape[K]): void {
@@ -520,10 +526,10 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   async onDelete(): Promise<void> {
     if (this.deleting()) return;
     const ok = await this.confirm.ask({
-      title: 'Delete Collection?',
-      message: `Are you sure you want to delete "${this.collection.title}"?`,
-      confirmLabel: 'Delete Collection',
-      cancelLabel: 'Cancel',
+      title: this.t('collections.deleteConfirm.title'),
+      message: this.t('collections.deleteConfirm.message') + ` "${this.collection.title}".`,
+      confirmLabel: this.t('collections.deleteConfirm.confirm'),
+      cancelLabel: this.t('common.cancel'),
       variant: 'danger',
     });
     if (!ok) return;

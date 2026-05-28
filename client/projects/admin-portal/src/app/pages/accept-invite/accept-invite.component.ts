@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ApiClient } from '../../services/api-client.service';
+import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -11,44 +13,64 @@ import { firstValueFrom } from 'rxjs';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent],
   template: `
-    <div class="login-shell">
+    <div class="login-shell" [attr.dir]="locale.dir()">
       <div class="login-card">
         <div class="login-brand">
           <div class="brand-mark">EC</div>
           <div>
-            <div class="brand-name">Elite Collection</div>
-            <div class="brand-tagline">Admin Portal</div>
+            <div class="brand-name">{{ t('brand.name') }}</div>
+            <div class="brand-tagline">{{ t('brand.tagline') }}</div>
           </div>
         </div>
 
-        <h1 class="login-title">Set your password</h1>
+        <h1 class="login-title">{{ t('invite.title') }}</h1>
 
         @if (loading()) {
           <div class="row gap-sm" style="justify-content:center;padding:24px 0;">
-            <ap-spinner/> <span class="muted">Validating invitation…</span>
+            <ap-spinner/> <span class="muted">{{ t('invite.validating') }}</span>
           </div>
         } @else if (invalid()) {
           <div class="login-error">{{ errorMessage() }}</div>
-          <div class="login-foot"><a routerLink="/login" class="login-link">Back to login</a></div>
+          <div class="login-foot">
+            <a routerLink="/login" class="login-link">{{ t('login.backToLogin') }}</a>
+          </div>
         } @else if (done()) {
           <div class="success-box">
             <div class="success-icon">✓</div>
-            <div class="strong">Account created!</div>
-            <p class="muted small">You can now sign in with your email and new password.</p>
+            <div class="strong">{{ t('invite.doneTitle') }}</div>
+            <p class="muted small">{{ t('invite.doneSub') }}</p>
           </div>
-          <a routerLink="/login" class="btn btn-gold btn-block" style="margin-top:16px;">Sign in now</a>
+          <a routerLink="/login" class="btn btn-gold btn-block" style="margin-top:16px;">
+            {{ t('invite.signIn') }}
+          </a>
         } @else {
-          <p class="login-sub">Creating an account for <strong>{{ email() }}</strong> with role <strong>{{ role() }}</strong>.</p>
+          <p class="login-sub">
+            {{ t('invite.subPrefix') }} <strong>{{ email() }}</strong>
+            {{ t('invite.subMid') }} <strong>{{ role() }}</strong>.
+          </p>
 
           <form (submit)="$event.preventDefault(); submit()">
-            <label class="lbl" for="name">Your name</label>
-            <input id="name" class="inp mb-16" type="text" autocomplete="name" [ngModel]="name()" (ngModelChange)="name.set($event)" [disabled]="busy()" placeholder="Yusuf Al-Hamad"/>
+            <label class="lbl" for="name">{{ t('invite.name') }}</label>
+            <input
+              id="name" class="inp mb-16" type="text" autocomplete="name"
+              [ngModel]="name()" (ngModelChange)="name.set($event)"
+              [disabled]="busy()"
+              [placeholder]="t('invite.namePlaceholder')"
+            />
 
-            <label class="lbl" for="pw">Password</label>
-            <input id="pw" class="inp mb-16" type="password" autocomplete="new-password" [ngModel]="password()" (ngModelChange)="password.set($event)" [disabled]="busy()"/>
+            <label class="lbl" for="pw">{{ t('reset.password') }}</label>
+            <input
+              id="pw" class="inp mb-16" type="password" autocomplete="new-password"
+              [ngModel]="password()" (ngModelChange)="password.set($event)"
+              [disabled]="busy()"
+            />
 
-            <label class="lbl" for="pw2">Confirm password</label>
-            <input id="pw2" class="inp mb-16" type="password" autocomplete="new-password" [ngModel]="confirm()" (ngModelChange)="confirm.set($event)" [disabled]="busy()"/>
+            <label class="lbl" for="pw2">{{ t('reset.confirm') }}</label>
+            <input
+              id="pw2" class="inp mb-16" type="password" autocomplete="new-password"
+              [ngModel]="confirm()" (ngModelChange)="confirm.set($event)"
+              [disabled]="busy()"
+            />
 
             @if (errorMessage()) {
               <div class="login-error">{{ errorMessage() }}</div>
@@ -56,9 +78,9 @@ import { firstValueFrom } from 'rxjs';
 
             <button class="btn btn-gold btn-block" type="submit" [disabled]="busy() || !canSubmit()">
               @if (busy()) {
-                <ap-spinner [size]="12"/> Creating account…
+                <ap-spinner [size]="12"/> {{ t('invite.submitting') }}
               } @else {
-                Create account & sign in
+                {{ t('invite.submit') }}
               }
             </button>
           </form>
@@ -93,6 +115,10 @@ export class AcceptInviteComponent implements OnInit {
   private readonly api    = inject(ApiClient);
   private readonly route  = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly i18n   = inject(I18nService);
+  readonly locale         = inject(LocaleService);
+
+  readonly t = (k: string) => this.i18n.t(k);
 
   readonly loading  = signal(true);
   readonly invalid  = signal(false);
@@ -111,7 +137,7 @@ export class AcceptInviteComponent implements OnInit {
     this.token = this.route.snapshot.queryParamMap.get('token') || '';
     if (!this.token) {
       this.invalid.set(true);
-      this.errorMessage.set('Invalid invitation link.');
+      this.errorMessage.set(this.t('invite.invalidLink'));
       this.loading.set(false);
       return;
     }
@@ -123,7 +149,7 @@ export class AcceptInviteComponent implements OnInit {
       this.role.set(result.role);
     } catch {
       this.invalid.set(true);
-      this.errorMessage.set('This invitation link is invalid or has expired.');
+      this.errorMessage.set(this.t('invite.expiredLink'));
     } finally {
       this.loading.set(false);
     }
@@ -136,11 +162,11 @@ export class AcceptInviteComponent implements OnInit {
   async submit(): Promise<void> {
     if (this.busy()) return;
     if (this.password().length < 8) {
-      this.errorMessage.set('Password must be at least 8 characters.');
+      this.errorMessage.set(this.t('invite.tooShort'));
       return;
     }
     if (this.password() !== this.confirm()) {
-      this.errorMessage.set('Passwords do not match.');
+      this.errorMessage.set(this.t('invite.mismatch'));
       return;
     }
     this.errorMessage.set('');
@@ -155,7 +181,7 @@ export class AcceptInviteComponent implements OnInit {
       );
       this.done.set(true);
     } catch {
-      this.errorMessage.set('Failed to create account. The link may have expired.');
+      this.errorMessage.set(this.t('invite.failed'));
     } finally {
       this.busy.set(false);
     }

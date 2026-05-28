@@ -44,6 +44,9 @@ import { LocaleService } from '../../services/locale.service';
               name="email"
               [disabled]="busy()"
             />
+            @if (errorMessage()) {
+              <div class="login-error">{{ errorMessage() }}</div>
+            }
             <button class="btn btn-gold btn-block" type="submit" [disabled]="busy() || !email()">
               @if (busy()) {
                 <ap-spinner [size]="12"/> {{ t('forgot.submitting') }}
@@ -98,6 +101,15 @@ import { LocaleService } from '../../services/locale.service';
       margin-bottom: 6px; color: var(--ink);
     }
     .login-sub { color: var(--ink-2); font-size: 13px; margin-bottom: 24px; }
+    .login-error {
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
     .login-dev-note {
       background: var(--bg);
       border: 1px solid var(--border-2);
@@ -127,13 +139,17 @@ export class ForgotPasswordComponent {
   readonly email = signal('');
   readonly busy = signal(false);
   readonly sent = signal(false);
+  readonly errorMessage = signal('');
 
   async submit(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
+    this.errorMessage.set('');
     try {
       await this.auth.forgotPassword(this.email().trim());
       this.sent.set(true);
+    } catch {
+      this.errorMessage.set(this.t('login.unknownError'));
     } finally {
       this.busy.set(false);
     }
