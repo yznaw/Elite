@@ -175,6 +175,10 @@ const EN = {
   'collections.cover.urlPrompt': 'Cover image URL',
   'collections.cover.addUrl': 'Use image URL',
   'collections.products.dragHint': 'Drag to reorder — the storefront shows products in this order.',
+  'collections.deleteConfirm.title': 'Delete this collection?',
+  'collections.deleteConfirm.message': 'Products in this collection won\'t be deleted — only the collection is removed. This cannot be undone. Deleting:',
+  'collections.deleteConfirm.confirm': 'Delete collection',
+  'collections.section.danger.title': 'Delete Collection',
 
   // ── Product editor ──
   'product.nav.label': 'Browse products',
@@ -472,6 +476,8 @@ const EN = {
   'settings.currency': 'Currency',
   'settings.timezone': 'Timezone',
   'settings.language': 'Default Language',
+  'settings.lowStockThreshold': 'Low Stock Threshold',
+  'settings.lowStockThreshold.help': 'Products with stock below this number are flagged as low stock across the catalog and dashboard.',
   'settings.logo': 'Logo',
   'settings.invite': 'Invite Team Member',
   'settings.fullName': 'Full Name',
@@ -627,6 +633,11 @@ const EN = {
   'customerDrawer.placeholder.name': 'e.g. Khalid Al-Mansoori',
   'customerDrawer.placeholder.email': 'name@example.com',
   'customerDrawer.placeholder.city': 'Doha',
+  'customerDrawer.section.danger.title': 'Delete Customer',
+  'customerDrawer.deleteConfirm.title': 'Delete this customer?',
+  'customerDrawer.deleteConfirm.message': 'All order history for this customer will be unlinked. This cannot be undone. Deleting:',
+  'customerDrawer.deleteConfirm.confirm': 'Delete customer',
+  'customerDrawer.toast.deleted': 'Customer deleted',
 
   // ── Media auto-link modal ──
   'media.autoLink.title': 'Auto-Link by SKU',
@@ -679,6 +690,7 @@ const EN = {
   'settings.role.admin': 'Admin',
   'settings.role.manager': 'Manager',
   'settings.role.viewer': 'Viewer',
+  'settings.team.cannotRemoveSelf': 'You cannot remove your own account.',
 
   // ── Storefront palette / new section ──
   'storefront.palette.heroDesc': 'Full-bleed kicker with 3D model',
@@ -734,6 +746,24 @@ const EN = {
   'reset.mismatch': 'Passwords don\'t match.',
   'reset.tooShort': 'Password must be at least 8 characters.',
   'reset.success': 'Password updated. Please sign in.',
+
+  // ── Accept Invite ──
+  'invite.title':        'Set your password',
+  'invite.validating':   'Validating invitation…',
+  'invite.invalidLink':  'Invalid invitation link.',
+  'invite.expiredLink':  'This invitation link is invalid or has expired.',
+  'invite.doneTitle':    'Account created!',
+  'invite.doneSub':      'You can now sign in with your email and new password.',
+  'invite.signIn':       'Sign in now',
+  'invite.subPrefix':    'Creating an account for',
+  'invite.subMid':       'with role',
+  'invite.name':         'Your name',
+  'invite.namePlaceholder': 'Yusuf Al-Hamad',
+  'invite.submit':       'Create account & sign in',
+  'invite.submitting':   'Creating account…',
+  'invite.tooShort':     'Password must be at least 8 characters.',
+  'invite.mismatch':     'Passwords do not match.',
+  'invite.failed':       'Failed to create account. The link may have expired.',
 
   // ── HTTP Error Messages ──
   'error.network.title': 'Connection lost',
@@ -912,6 +942,10 @@ const AR: Record<keyof typeof EN, string> = {
   'collections.cover.urlPrompt': 'رابط صورة الغلاف',
   'collections.cover.addUrl': 'استخدام رابط صورة',
   'collections.products.dragHint': 'اسحب لإعادة الترتيب — يعرض المتجر المنتجات بنفس الترتيب.',
+  'collections.deleteConfirm.title': 'حذف هذه التشكيلة؟',
+  'collections.deleteConfirm.message': 'لن تُحذف المنتجات من المتجر — ستُزال التشكيلة فقط. لا يمكن التراجع عن هذا الإجراء. جاري حذف:',
+  'collections.deleteConfirm.confirm': 'حذف التشكيلة',
+  'collections.section.danger.title': 'حذف التشكيلة',
 
   'product.nav.label': 'تصفّح المنتجات',
   'product.prev': 'المنتج السابق',
@@ -1203,6 +1237,8 @@ const AR: Record<keyof typeof EN, string> = {
   'settings.currency': 'العملة الافتراضية',
   'settings.timezone': 'المنطقة الزمنية',
   'settings.language': 'لغة العرض الافتراضية',
+  'settings.lowStockThreshold': 'حد المخزون المنخفض',
+  'settings.lowStockThreshold.help': 'المنتجات التي يقل مخزونها عن هذا الرقم تُعلَّم كمخزون منخفض في الكتالوج ولوحة التحكم.',
   'settings.logo': 'شعار المتجر',
   'settings.invite': 'دعوة عضو لفريقك',
   'settings.fullName': 'الاسم الكامل',
@@ -1358,6 +1394,11 @@ const AR: Record<keyof typeof EN, string> = {
   'customerDrawer.placeholder.name': 'مثلاً: خالد المنصوري',
   'customerDrawer.placeholder.email': 'name@example.com',
   'customerDrawer.placeholder.city': 'الدوحة',
+  'customerDrawer.section.danger.title': 'حذف العميل',
+  'customerDrawer.deleteConfirm.title': 'حذف هذا العميل؟',
+  'customerDrawer.deleteConfirm.message': 'سيُفصل سجل الطلبات الخاص بهذا العميل. لا يمكن التراجع عن هذا الإجراء. جاري حذف:',
+  'customerDrawer.deleteConfirm.confirm': 'حذف العميل',
+  'customerDrawer.toast.deleted': 'حُذف العميل',
 
   // ── Media auto-link ──
   'media.autoLink.title': 'الربط التلقائي بالرمز التعريفي',
@@ -1410,6 +1451,7 @@ const AR: Record<keyof typeof EN, string> = {
   'settings.role.admin': 'مدير عام',
   'settings.role.manager': 'مدير قسم',
   'settings.role.viewer': 'مُشاهد فقط',
+  'settings.team.cannotRemoveSelf': 'لا يمكنك حذف حسابك الخاص.',
 
   // ── Storefront palette / new section ──
   'storefront.palette.heroDesc': 'واجهة بعرض الشاشة مع نموذج 3D تفاعلي',
@@ -1465,6 +1507,24 @@ const AR: Record<keyof typeof EN, string> = {
   'reset.mismatch': 'كلمتا المرور غير متطابقتين.',
   'reset.tooShort': 'يجب أن تكون كلمة المرور 8 أحرف على الأقل.',
   'reset.success': 'تم تحديث كلمة المرور. يُرجى تسجيل الدخول.',
+
+  // ── Accept Invite ──
+  'invite.title':        'تعيين كلمة المرور',
+  'invite.validating':   'جاري التحقق من الدعوة…',
+  'invite.invalidLink':  'رابط الدعوة غير صحيح.',
+  'invite.expiredLink':  'رابط الدعوة غير صحيح أو منتهي الصلاحية.',
+  'invite.doneTitle':    'تم إنشاء الحساب!',
+  'invite.doneSub':      'يمكنك الآن تسجيل الدخول بالبريد الإلكتروني وكلمة المرور الجديدة.',
+  'invite.signIn':       'تسجيل الدخول الآن',
+  'invite.subPrefix':    'إنشاء حساب لـ',
+  'invite.subMid':       'بصلاحية',
+  'invite.name':         'اسمك',
+  'invite.namePlaceholder': 'يوسف الحمد',
+  'invite.submit':       'إنشاء الحساب وتسجيل الدخول',
+  'invite.submitting':   'جاري الإنشاء…',
+  'invite.tooShort':     'يجب أن تكون كلمة المرور 8 أحرف على الأقل.',
+  'invite.mismatch':     'كلمتا المرور غير متطابقتين.',
+  'invite.failed':       'تعذّر إنشاء الحساب. ربما انتهت صلاحية الرابط.',
 
   // ── HTTP Error Messages ──
   'error.network.title': 'انقطع الاتصال',

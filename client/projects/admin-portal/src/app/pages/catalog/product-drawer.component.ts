@@ -14,6 +14,7 @@ import { I18nService } from '../../services/i18n.service';
 import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
+import { StorageService } from '../../services/storage.service';
 import { MEDIA_INIT, COLLECTIONS } from '../../data/mock';
 import { ME, Product, ProductVariant } from '../../models';
 
@@ -28,7 +29,6 @@ interface FormShape {
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
-const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
 
 /** Read a File as a data URL — used for the upload-row thumbnail before
     the server returns the canonical URL. Resolves to '' on non-images. */
@@ -914,6 +914,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly productsApi = inject(AdminProductsService);
   private readonly refApi = inject(AdminRefService);
   private readonly uploads = inject(MediaUploadService);
+  private readonly storage = inject(StorageService);
 
   readonly refColors   = signal<RefColor[]>([]);
   readonly refMaterials = signal<RefMaterial[]>([]);
@@ -972,7 +973,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return MEDIA_INIT.filter((m) => m.linkedTo === this.product?.id).length;
   }
 
-  get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
+  get draftBase(): string { return 'draft:' + this._currentId(); }
 
   ngOnInit(): void {
     if (!this.initial()) this.resetForCurrent();
@@ -1012,7 +1013,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
     // Try to restore a draft for this product
     try {
-      const raw = localStorage.getItem(this.draftKey);
+      const raw = this.storage.get(this.draftBase);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.savedAt) {
@@ -1339,16 +1340,14 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   private scheduleAutoSave(): void {
     if (!this.dirty()) {
-      try { localStorage.removeItem(this.draftKey); } catch {}
+      this.storage.remove(this.draftBase);
       if (this.saveState() === 'dirty') this.saveState.set('idle');
       return;
     }
     if (this.saveState() === 'idle') this.saveState.set('dirty');
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     this.autoSaveTimer = window.setTimeout(() => {
-      try {
-        localStorage.setItem(this.draftKey, JSON.stringify({ form: this.form(), savedAt: new Date().toISOString() }));
-      } catch {}
+      this.storage.set(this.draftBase, JSON.stringify({ form: this.form(), savedAt: new Date().toISOString() }));
     }, 400);
   }
 
@@ -1374,7 +1373,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.saveState.set('saved');
       const ts = new Date().toTimeString().slice(0, 5);
       this.lastSavedAt.set(ts);
-      try { localStorage.removeItem(this.draftKey); } catch {}
+      this.storage.remove(this.draftBase);
       this.draftRestoredAt.set(null);
       this.initial.set({ ...this.form() });
 
@@ -1423,7 +1422,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   async discard(): Promise<void> {
     if (!this.dirty()) return;
     this.form.set({ ...this.initial() });
-    try { localStorage.removeItem(this.draftKey); } catch {}
+    this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
     this.toast.info(this.t('product.toast.discarded.title'), this.t('product.toast.discarded.sub'));
@@ -1431,7 +1430,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   discardDraft(): void {
     this.form.set({ ...this.initial() });
-    try { localStorage.removeItem(this.draftKey); } catch {}
+    this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
   }

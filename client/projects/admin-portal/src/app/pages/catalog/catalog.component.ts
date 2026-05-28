@@ -12,6 +12,8 @@ import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
 import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
+import { StorageService } from '../../services/storage.service';
+import { StoreConfigService } from '../../services/store-config.service';
 import { COLLECTIONS } from '../../data/mock';
 import { Product, QAR } from '../../models';
 
@@ -35,15 +37,15 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
           <div class="inp-search search-box">
             <ap-icon name="search" [size]="14"/>
             <input class="inp with-icon" [placeholder]="t('catalog.search.placeholder')"
-                   [ngModel]="search()" (ngModelChange)="search.set($event)"/>
+                   [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
           </div>
 
           <!-- Status quick-filter pills -->
           <div class="status-pills">
-            <button class="status-pill" [class.active]="statusFilter() === 'all'"       (click)="statusFilter.set('all')">All</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'active'"    (click)="statusFilter.set('active')">Active</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'hidden'"    (click)="statusFilter.set('hidden')">Hidden</button>
-            <button class="status-pill warn" [class.active]="statusFilter() === 'low-stock'" (click)="statusFilter.set('low-stock')">
+            <button class="status-pill" [class.active]="statusFilter() === 'all'"       (click)="statusFilter.set('all'); page.set(0)">All</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'active'"    (click)="statusFilter.set('active'); page.set(0)">Active</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'hidden'"    (click)="statusFilter.set('hidden'); page.set(0)">Hidden</button>
+            <button class="status-pill warn" [class.active]="statusFilter() === 'low-stock'" (click)="statusFilter.set('low-stock'); page.set(0)">
               <ap-icon name="warning" [size]="11"/> Low Stock
               @if (lowStockCount() > 0) { <span class="ls-badge">{{ lowStockCount() }}</span> }
             </button>
@@ -111,7 +113,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Collection</label>
-              <select class="inp inp-sm" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event)">
+              <select class="inp inp-sm" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event); page.set(0)">
                 <option value="All">All collections</option>
                 @for (c of collections; track c.id) {
                   <option [value]="c.id">{{ c.title }}</option>
@@ -121,7 +123,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Images</label>
-              <select class="inp inp-sm" [ngModel]="imageFilter()" (ngModelChange)="imageFilter.set($event)">
+              <select class="inp inp-sm" [ngModel]="imageFilter()" (ngModelChange)="imageFilter.set($event); page.set(0)">
                 <option value="all">All</option>
                 <option value="has-images">Has images</option>
                 <option value="no-images">No images</option>
@@ -130,7 +132,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">3D Model</label>
-              <select class="inp inp-sm" [ngModel]="v3d()" (ngModelChange)="v3d.set($event)">
+              <select class="inp inp-sm" [ngModel]="v3d()" (ngModelChange)="v3d.set($event); page.set(0)">
                 <option value="All">All</option>
                 <option value="Linked">{{ t('catalog.linked') }}</option>
                 <option value="Missing">{{ t('catalog.missing') }}</option>
@@ -139,7 +141,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Variants</label>
-              <select class="inp inp-sm" [ngModel]="variantFilter()" (ngModelChange)="variantFilter.set($event)">
+              <select class="inp inp-sm" [ngModel]="variantFilter()" (ngModelChange)="variantFilter.set($event); page.set(0)">
                 <option value="all">All</option>
                 <option value="none">No variants</option>
                 <option value="few">1–4 variants</option>
@@ -149,7 +151,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Color</label>
-              <select class="inp inp-sm" [ngModel]="colorFilter()" (ngModelChange)="colorFilter.set($event)">
+              <select class="inp inp-sm" [ngModel]="colorFilter()" (ngModelChange)="colorFilter.set($event); page.set(0)">
                 <option value="all">All colors</option>
                 @for (c of refColors(); track c.id) {
                   <option [value]="c.name_en">{{ c.name_en }}</option>
@@ -161,10 +163,10 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               <label class="fp-label">Price range (QAR)</label>
               <div class="price-range">
                 <input class="inp inp-sm mono" type="number" min="0" placeholder="Min"
-                       [ngModel]="priceMin()" (ngModelChange)="priceMin.set(+$event || 0)"/>
+                       [ngModel]="priceMin()" (ngModelChange)="priceMin.set(+$event || 0); page.set(0)"/>
                 <span class="price-sep">–</span>
                 <input class="inp inp-sm mono" type="number" min="0" placeholder="Max"
-                       [ngModel]="priceMax()" (ngModelChange)="priceMax.set(+$event || 0)"/>
+                       [ngModel]="priceMax()" (ngModelChange)="priceMax.set(+$event || 0); page.set(0)"/>
               </div>
             </div>
 
@@ -564,6 +566,8 @@ export class CatalogComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly productsApi = inject(AdminProductsService);
   private readonly refApi = inject(AdminRefService);
+  private readonly storage = inject(StorageService);
+  private readonly storeConfig = inject(StoreConfigService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
@@ -601,7 +605,7 @@ export class CatalogComponent implements OnInit {
   readonly priceMax      = signal(0);
   readonly sortKey       = signal<SortKey>('newest');
   readonly viewMode      = signal<ViewMode>(
-    (localStorage.getItem('elite-catalog-view') as ViewMode) || 'grid',
+    (this.storage.get('catalog-view') as ViewMode) || 'grid',
   );
   readonly showFilters   = signal(false);
   readonly page          = signal(0);
@@ -611,16 +615,17 @@ export class CatalogComponent implements OnInit {
   readonly activeId        = signal<string | null>(null);
   readonly showBulkImport  = signal(false);
 
-  readonly lowStockCount = computed(() =>
-    this._products().filter(p => p.stock > 0 && p.stock <= 5).length,
-  );
+  readonly lowStockCount = computed(() => {
+    const t = this.storeConfig.lowStockThreshold();
+    return this._products().filter(p => p.stock > 0 && p.stock < t).length;
+  });
   readonly selectionMode   = signal(false);
   readonly selectedIds     = signal(new Set<string>());
   readonly confirmingDelete = signal(false);
 
   setView(v: ViewMode): void {
     this.viewMode.set(v);
-    localStorage.setItem('elite-catalog-view', v);
+    this.storage.set('catalog-view', v);
   }
 
   toggleFilters(): void { this.showFilters.update(v => !v); }
@@ -665,7 +670,7 @@ export class CatalogComponent implements OnInit {
     let list = this._products().filter(p => {
       if (status === 'active' && p.hidden) return false;
       if (status === 'hidden' && !p.hidden) return false;
-      if (status === 'low-stock' && !(p.stock > 0 && p.stock <= 5)) return false;
+      if (status === 'low-stock' && !(p.stock > 0 && p.stock < 8)) return false;
 
       if (colId !== 'All') {
         const col = COLLECTIONS.find(c => c.id === colId);
@@ -921,7 +926,7 @@ export class CatalogComponent implements OnInit {
 
   stockLabel(p: Product): string {
     if (p.stock === 0) return this.t('catalog.outOfStock');
-    if (p.stock < 8) return `${this.t('catalog.lowStock')} · ${p.stock}`;
+    if (p.stock < this.storeConfig.lowStockThreshold()) return `${this.t('catalog.lowStock')} · ${p.stock}`;
     return `${p.stock} ${this.t('catalog.inStock')}`;
   }
 

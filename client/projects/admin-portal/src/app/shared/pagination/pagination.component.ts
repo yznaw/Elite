@@ -23,6 +23,12 @@ import { FormsModule } from '@angular/forms';
         <span class="pg-info muted small">{{ label }}</span>
 
         <div class="pg-controls">
+          <button class="btn btn-sm btn-outline pg-btn pg-jump"
+                  [disabled]="page === 0"
+                  (click)="pageChange.emit(0)"
+                  aria-label="First page">
+            «
+          </button>
           <button class="btn btn-sm btn-outline pg-btn"
                   [disabled]="page === 0"
                   (click)="pageChange.emit(page - 1)"
@@ -35,6 +41,12 @@ import { FormsModule } from '@angular/forms';
                   (click)="pageChange.emit(page + 1)"
                   aria-label="Next page">
             <span class="pg-btn-label">Next</span> →
+          </button>
+          <button class="btn btn-sm btn-outline pg-btn pg-jump"
+                  [disabled]="page >= totalPages - 1"
+                  (click)="pageChange.emit(totalPages - 1)"
+                  aria-label="Last page">
+            »
           </button>
         </div>
       </div>
@@ -65,6 +77,7 @@ import { FormsModule } from '@angular/forms';
     }
     .pg-current { min-width: 56px; text-align: center; }
     .pg-btn { min-width: 36px; }
+    .pg-jump { min-width: 28px; padding-inline: 6px; font-size: 13px; }
 
     @media (max-width: 600px) {
       .pg-bar { gap: 10px; justify-content: space-between; }

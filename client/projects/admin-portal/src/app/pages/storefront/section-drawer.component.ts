@@ -150,8 +150,12 @@ interface FormShape extends StorefrontBlock {
                 <label class="lbl" style="margin:0;">{{ t('storefront.field.products') }}</label>
                 <span class="muted small">{{ form().productIds.length }} {{ t('storefront.field.products.selected') }}</span>
               </div>
+              <div class="inp-search" style="position:relative;margin-bottom:8px;">
+                <input class="inp" [ngModel]="productSearch()" (ngModelChange)="productSearch.set($event)"
+                       placeholder="Search by name or SKU…" style="padding-left:10px;"/>
+              </div>
               <div class="product-picker">
-                @for (p of allProducts; track p.id) {
+                @for (p of filteredProducts(); track p.id) {
                   <button class="product-chip"
                     type="button"
                     [class.selected]="isProductSelected(p.id)"
@@ -406,6 +410,15 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
 
   readonly allProducts = PRODUCTS;
   readonly collections = COLLECTIONS.filter(c => !c.hidden);
+
+  readonly productSearch = signal('');
+  readonly filteredProducts = computed(() => {
+    const q = this.productSearch().toLowerCase().trim();
+    if (!q) return this.allProducts;
+    return this.allProducts.filter(p =>
+      p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q),
+    );
+  });
 
   private _currentBlockId = '';
   private readonly initial = signal<FormShape>(this.makeEmptyForm());

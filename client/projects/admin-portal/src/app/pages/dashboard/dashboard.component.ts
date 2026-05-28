@@ -10,6 +10,7 @@ import { I18nService } from '../../services/i18n.service';
 import { AdminOrdersService } from '../../services/admin-orders.service';
 import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminCustomersService } from '../../services/admin-customers.service';
+import { StoreConfigService } from '../../services/store-config.service';
 import { Order, Product, QAR } from '../../models';
 import { IconComponent } from '../../shared/icons/icon.component';
 
@@ -160,6 +161,7 @@ export class DashboardComponent implements OnInit {
   private readonly ordersApi = inject(AdminOrdersService);
   private readonly productsApi = inject(AdminProductsService);
   private readonly customersApi = inject(AdminCustomersService);
+  private readonly storeConfig = inject(StoreConfigService);
 
   readonly t = (k: string): string => this.i18n.t(k);
   readonly QAR = QAR;
@@ -233,9 +235,12 @@ export class DashboardComponent implements OnInit {
       .reduce((sum, o) => sum + o.total, 0),
   );
 
-  readonly activeOrders = computed(
-    () => this.orders().filter((o) => o.fulfillment === 'awaiting' || o.fulfillment === 'processing').length,
-  );
+  readonly activeOrders = computed(() => {
+    const filter = this.dateFilter();
+    return this.orders().filter(
+      (o) => (o.fulfillment === 'awaiting' || o.fulfillment === 'processing') && filter(o.date),
+    ).length;
+  });
 
   readonly newCustomers = computed(() => {
     const latest = this.latestDate();
@@ -259,9 +264,10 @@ export class DashboardComponent implements OnInit {
   readonly maxViews = computed(() => this.heatTop()[0]?.views3d || 0);
   readonly topViews = computed(() => this.maxViews());
   readonly topProductName = computed(() => this.heatTop()[0]?.name || '—');
-  readonly lowStockCount = computed(() =>
-    this.products().filter(p => p.stock > 0 && p.stock <= 5).length,
-  );
+  readonly lowStockCount = computed(() => {
+    const t = this.storeConfig.lowStockThreshold();
+    return this.products().filter(p => p.stock > 0 && p.stock < t).length;
+  });
 
   readonly recentOrders = computed(() => this.orders().slice(0, 5));
 

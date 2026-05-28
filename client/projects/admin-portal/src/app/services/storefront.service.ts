@@ -1,8 +1,7 @@
-import { Injectable, computed, effect, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { StorefrontBlock } from '../models';
+import { StorageService } from './storage.service';
 
-const DRAFT_KEY     = 'elite:storefront:draft';
-const PUBLISHED_KEY = 'elite:storefront:published';
 const PREVIEW_TOKEN = 'elite-admin:preview-token';
 
 interface Snapshot {
@@ -24,8 +23,10 @@ interface Snapshot {
  */
 @Injectable({ providedIn: 'root' })
 export class StorefrontService {
-  private readonly _draft = signal<Snapshot | null>(this.load(DRAFT_KEY));
-  private readonly _published = signal<Snapshot | null>(this.load(PUBLISHED_KEY));
+  private readonly storage = inject(StorageService);
+
+  private readonly _draft = signal<Snapshot | null>(null);
+  private readonly _published = signal<Snapshot | null>(null);
 
   readonly draft = this._draft.asReadonly();
   readonly published = this._published.asReadonly();
@@ -39,21 +40,21 @@ export class StorefrontService {
   });
 
   constructor() {
+    // Load saved state using tenant-scoped keys (storage is available here).
+    this._draft.set(this.load('storefront:draft'));
+    this._published.set(this.load('storefront:published'));
+
     // Persist draft to localStorage automatically.
     effect(() => {
       const d = this._draft();
-      try {
-        if (d) localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
-        else localStorage.removeItem(DRAFT_KEY);
-      } catch {}
+      if (d) this.storage.set('storefront:draft', JSON.stringify(d));
+      else this.storage.remove('storefront:draft');
     });
     // Persist published to localStorage automatically.
     effect(() => {
       const p = this._published();
-      try {
-        if (p) localStorage.setItem(PUBLISHED_KEY, JSON.stringify(p));
-        else localStorage.removeItem(PUBLISHED_KEY);
-      } catch {}
+      if (p) this.storage.set('storefront:published', JSON.stringify(p));
+      else this.storage.remove('storefront:published');
     });
   }
 
@@ -117,9 +118,9 @@ export class StorefrontService {
     this._published.set(null);
   }
 
-  private load(key: string): Snapshot | null {
+  private load(base: string): Snapshot | null {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = this.storage.get(base);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as Snapshot;
       if (parsed && Array.isArray(parsed.blocks) && typeof parsed.savedAt === 'string') return parsed;

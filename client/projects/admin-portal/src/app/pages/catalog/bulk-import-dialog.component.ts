@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { ApiClient } from '../../services/api-client.service';
+import { StorageService } from '../../services/storage.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 
 type Step = 'upload' | 'importing' | 'results' | 'stock-results' | 'history';
@@ -480,6 +481,7 @@ export class BulkImportDialogComponent {
 
   private readonly api  = inject(ApiClient);
   private readonly zone = inject(NgZone);
+  private readonly storage = inject(StorageService);
 
   readonly step               = signal<Step>('upload');
   readonly csvFile            = signal<File | null>(null);
@@ -763,12 +765,12 @@ export class BulkImportDialogComponent {
     };
     const hist = [rec, ...this.importHistory()].slice(0, 20);
     this.importHistory.set(hist);
-    try { localStorage.setItem('elite-admin:import-history', JSON.stringify(hist)); } catch { /* quota */ }
+    this.storage.set('import-history', JSON.stringify(hist));
   }
 
   private loadHistory(): HistoryRecord[] {
     try {
-      const raw = localStorage.getItem('elite-admin:import-history');
+      const raw = this.storage.get('import-history');
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   }
@@ -781,7 +783,7 @@ export class BulkImportDialogComponent {
 
   clearHistory(): void {
     this.importHistory.set([]);
-    localStorage.removeItem('elite-admin:import-history');
+    this.storage.remove('import-history');
   }
 
   downloadHistoryReport(h: HistoryRecord): void {

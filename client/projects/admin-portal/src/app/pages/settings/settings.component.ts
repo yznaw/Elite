@@ -10,6 +10,8 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminSettingsService, Invitation } from '../../services/admin-settings.service';
+import { AuthService } from '../../services/auth.service';
+import { StoreConfigService } from '../../services/store-config.service';
 import { INTEGRATIONS } from '../../data/mock';
 import { TeamMember } from '../../models';
 
@@ -69,6 +71,12 @@ type Tab = 'general' | 'team' | 'integrations';
                   <option value="en">English</option>
                   <option value="ar">العربية</option>
                 </select>
+              </div>
+              <div>
+                <label class="lbl">{{ t('settings.lowStockThreshold') }}</label>
+                <input class="inp" type="number" min="1" max="999"
+                       [ngModel]="lowStockThreshold()" (ngModelChange)="lowStockThreshold.set(+$event)"/>
+                <div class="muted small" style="margin-top:4px;">{{ t('settings.lowStockThreshold.help') }}</div>
               </div>
             </div>
 
@@ -232,6 +240,8 @@ export class SettingsComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly settingsApi = inject(AdminSettingsService);
+  private readonly auth = inject(AuthService);
+  private readonly storeConfig = inject(StoreConfigService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
@@ -252,9 +262,10 @@ export class SettingsComponent implements OnInit {
   readonly currency  = signal('QAR');
   readonly timezone  = signal('Asia/Qatar');
   readonly language  = signal('en');
+  readonly lowStockThreshold = signal(this.storeConfig.lowStockThreshold());
 
   // Snapshot for discard
-  private _storeSnapshot = { storeName: 'Elite Collection', currency: 'QAR', timezone: 'Asia/Qatar', language: 'en' };
+  private _storeSnapshot = { storeName: 'Elite Collection', currency: 'QAR', timezone: 'Asia/Qatar', language: 'en', lowStockThreshold: 8 };
 
   // ── Team ──────────────────────────────────────────────────────────────────
   readonly loadingTeam = signal(true);
@@ -292,7 +303,7 @@ export class SettingsComponent implements OnInit {
       this.storeName.set(name);
       this.currency.set(cur);
       this.timezone.set(tz);
-      this._storeSnapshot = { storeName: name, currency: cur, timezone: tz, language: 'en' };
+      this._storeSnapshot = { storeName: name, currency: cur, timezone: tz, language: 'en', lowStockThreshold: this.storeConfig.lowStockThreshold() };
     } catch {
       // keep defaults
     } finally {
@@ -330,6 +341,7 @@ export class SettingsComponent implements OnInit {
     this.currency.set(this._storeSnapshot.currency);
     this.timezone.set(this._storeSnapshot.timezone);
     this.language.set(this._storeSnapshot.language);
+    this.lowStockThreshold.set(this._storeSnapshot.lowStockThreshold);
     this.storeNameError.set(false);
   }
 
@@ -349,11 +361,13 @@ export class SettingsComponent implements OnInit {
         timezone: this.timezone(),
         language: this.language(),
       });
+      this.storeConfig.setLowStockThreshold(this.lowStockThreshold());
       this._storeSnapshot = {
         storeName: this.storeName(),
         currency: this.currency(),
         timezone: this.timezone(),
         language: this.language(),
+        lowStockThreshold: this.lowStockThreshold(),
       };
       this.toast.success('Store settings saved', 'Changes are live across the storefront');
     } catch {
@@ -428,6 +442,10 @@ export class SettingsComponent implements OnInit {
   }
 
   async removeMember(id: string): Promise<void> {
+    if (id === this.auth.user()?.id) {
+      this.toast.error(this.t('settings.team.cannotRemoveSelf'));
+      return;
+    }
     const member = this.team().find((m) => m.id === id);
     if (!member) return;
     const ok = await this.confirm.ask({
