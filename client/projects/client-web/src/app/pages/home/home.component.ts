@@ -100,51 +100,27 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly metaVisible = signal(false);
   readonly modelLoaded = signal(false);
   readonly modelLoadFailed = signal(false);
-  readonly selectedModelId = signal('original');
+  readonly selectedModelId = signal('brown');
   readonly selectedLeatherColor = signal('cognac');
   readonly contentData = this.homeContent.contentData;
   readonly layoutSections = this.homeContent.layoutSections;
 
   readonly heroModels: HeroModelOption[] = [
     {
-      id: 'original',
+      id: 'brown',
       index: '01',
-      eyebrowKey: 'home.hero.original.eyebrow',
-      titleKey: 'home.hero.original.title',
-      subtitleKey: 'home.hero.original.subtitle',
-      url: '/assets/models/latest-brown-v2.glb',
+      eyebrowKey: 'home.hero.brown.eyebrow',
+      titleKey: 'home.hero.brown.title',
+      subtitleKey: 'home.hero.brown.subtitle',
+      url: '/assets/models/brown.glb',
     },
     {
-      id: 'or9',
+      id: 'brownArchive',
       index: '02',
-      eyebrowKey: 'home.hero.or9.eyebrow',
-      titleKey: 'home.hero.or9.title',
-      subtitleKey: 'home.hero.or9.subtitle',
-      url: '/assets/models/or9.glb',
-    },
-    {
-      id: 'or4',
-      index: '03',
-      eyebrowKey: 'home.hero.or4.eyebrow',
-      titleKey: 'home.hero.or4.title',
-      subtitleKey: 'home.hero.or4.subtitle',
-      url: '/assets/models/or4.glb',
-    },
-    {
-      id: 'or8',
-      index: '04',
-      eyebrowKey: 'home.hero.or8.eyebrow',
-      titleKey: 'home.hero.or8.title',
-      subtitleKey: 'home.hero.or8.subtitle',
-      url: '/assets/models/or8.glb',
-    },
-    {
-      id: 'a1',
-      index: '05',
-      eyebrowKey: 'home.hero.a1.eyebrow',
-      titleKey: 'home.hero.a1.title',
-      subtitleKey: 'home.hero.a1.subtitle',
-      url: '/assets/models/a1.glb',
+      eyebrowKey: 'home.hero.brownArchive.eyebrow',
+      titleKey: 'home.hero.brownArchive.title',
+      subtitleKey: 'home.hero.brownArchive.subtitle',
+      url: '/assets/models/brown.glb',
     },
   ];
 

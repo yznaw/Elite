@@ -545,9 +545,9 @@
 
 .model-tabs {
   display: inline-grid;
-  grid-template-columns: repeat(5, minmax(48px, 1fr));
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
   gap: 6px;
-  width: min(440px, calc(100vw - 48px));
+  width: min(260px, calc(100vw - 48px));
   padding: 6px;
   border: 1px solid rgba(184, 146, 74, 0.16);
   border-radius: 999px;
@@ -822,7 +822,7 @@
   }
 
   .model-tabs {
-    width: min(358px, calc(100vw - 32px));
+    width: min(240px, calc(100vw - 32px));
     gap: 4px;
     padding: 5px;
   }
