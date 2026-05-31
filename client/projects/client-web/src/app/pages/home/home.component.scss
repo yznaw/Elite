@@ -271,7 +271,7 @@
 }
 
 .hero {
-  min-height: 186svh;
+  min-height: calc(100svh + 3800px);
   position: relative;
   overflow: clip;
   display: flex;
@@ -314,7 +314,6 @@
 }
 
 .hero-shell {
-  position: sticky;
   top: 0;
   z-index: 2;
   width: min(1240px, 100%);
@@ -332,13 +331,22 @@
   z-index: 5;
   grid-column: 1;
   width: min(440px, 100%);
-  opacity: 1;
+  min-height: 330px;
   pointer-events: none;
-  transform: none;
-  transition: opacity 0.18s linear;
 }
 
-.hero-scroll-copy span {
+.hero-caption {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: min(440px, 100%);
+  opacity: 0;
+}
+
+.hero-caption.is-active {
+  opacity: 1;
+}
+
+.hero-caption span {
   display: block;
   margin-bottom: 14px;
   font-family: var(--ff-sans);
@@ -348,7 +356,7 @@
   color: var(--gold);
 }
 
-.hero-scroll-copy strong {
+.hero-caption strong {
   display: block;
   color: rgba(26, 18, 8, 0.92);
   font-size: clamp(54px, 6.8vw, 96px);
@@ -357,7 +365,7 @@
   letter-spacing: 0;
 }
 
-.hero-scroll-copy p {
+.hero-caption p {
   margin: 20px 0 0;
   font-family: var(--ff-sans);
   font-size: clamp(13px, 1.15vw, 15px);
@@ -443,95 +451,53 @@
   grid-column: 2;
   justify-self: end;
   width: min(760px, 100%);
-  min-height: clamp(560px, 74svh, 780px);
+  aspect-ratio: 1;
+  min-height: min(74svh, 760px);
   background: #fff;
   isolation: isolate;
   animation: fadeIn 0.7s ease both;
   transform: none;
 }
 
-.hero-canvas {
+.hero-photo-stack {
   position: absolute;
   inset: 0;
+  display: grid;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-photo {
+  position: absolute;
+  inset: clamp(8px, 2vw, 26px);
+  display: grid;
+  place-items: center;
+  margin: 0;
+  opacity: 0;
+  will-change: transform, opacity, filter, clip-path;
+}
+
+.hero-photo img {
   width: 100%;
   height: 100%;
   display: block;
-  opacity: 0;
-  cursor: grab;
-  transition: opacity 0.5s ease;
-  touch-action: pan-y;
+  object-fit: contain;
+  filter: contrast(1.035) saturate(1.02);
   user-select: none;
+  pointer-events: none;
 }
 
-.hero-canvas:active {
-  cursor: grabbing;
-}
-
-.hero-canvas.is-ready {
-  opacity: 1;
-}
-
-.model-state {
+.hero-photo figcaption {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  z-index: 3;
-  background: #fff;
-  font-family: var(--ff-sans);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.model-state--error {
-  color: var(--gold);
-}
-
-.model-spinner {
-  width: 24px;
-  height: 24px;
-  border: 1px solid rgba(184, 146, 74, 0.24);
-  border-top-color: var(--gold);
-  border-radius: 50%;
-  animation: rotateSlow 1s linear infinite;
-}
-
-.model-badge {
-  position: absolute;
-  right: clamp(10px, 2.2vw, 28px);
-  top: clamp(12px, 2.4vw, 28px);
-  z-index: 4;
-  display: inline-flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(184, 146, 74, 0.18);
-}
-
-.model-badge span:first-child {
+  right: clamp(8px, 2vw, 22px);
+  bottom: clamp(14px, 2.4vw, 30px);
+  color: rgba(26, 18, 8, 0.44);
   font-family: var(--ff-sans);
   font-size: 9px;
-  font-weight: 500;
   letter-spacing: 0.18em;
-  color: var(--gold);
-  text-transform: uppercase;
 }
 
-.model-badge span:last-child {
-  font-family: var(--ff-sans);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.model-controls {
+.photo-controls {
   position: absolute;
   left: 50%;
   bottom: clamp(20px, 4vh, 44px);
@@ -543,11 +509,10 @@
   transform: translateX(-50%);
 }
 
-.model-tabs {
+.photo-tabs {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  grid-template-columns: repeat(5, 38px);
   gap: 6px;
-  width: min(260px, calc(100vw - 48px));
   padding: 6px;
   border: 1px solid rgba(184, 146, 74, 0.16);
   border-radius: 999px;
@@ -556,10 +521,10 @@
   -webkit-backdrop-filter: blur(18px);
 }
 
-.model-tabs button {
-  min-width: 0;
-  min-height: 34px;
-  padding: 0 8px;
+.photo-tabs button {
+  width: 38px;
+  height: 34px;
+  padding: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -575,27 +540,27 @@
   white-space: nowrap;
 }
 
-.model-tabs button:hover,
-.model-tabs button:focus-visible {
+.photo-tabs button:hover,
+.photo-tabs button:focus-visible {
   color: rgba(26, 18, 8, 0.86);
 }
 
-.model-tabs button:focus-visible {
+.photo-tabs button:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 
-.model-tabs button.is-active {
+.photo-tabs button.is-active {
   background: rgba(184, 146, 74, 0.18);
   box-shadow: inset 0 0 0 1px rgba(184, 146, 74, 0.2);
   color: var(--gold);
 }
 
-.model-colors {
+.photo-progress {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 11px;
+  gap: 8px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.68);
   border: 1px solid rgba(184, 146, 74, 0.14);
   border-radius: 999px;
@@ -603,7 +568,24 @@
   -webkit-backdrop-filter: blur(18px);
 }
 
-.model-switcher {
+.photo-progress__item {
+  width: 26px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(26, 18, 8, 0.16);
+  transition: background 0.25s ease, transform 0.25s ease;
+}
+
+.photo-progress__item.is-seen,
+.photo-progress__item.is-active {
+  background: var(--gold);
+}
+
+.photo-progress__item.is-active {
+  transform: scaleX(1.35);
+}
+
+.photo-switcher {
   position: absolute;
   inset: 42% clamp(12px, 3.5vw, 46px) auto;
   z-index: 8;
@@ -613,7 +595,7 @@
   pointer-events: none;
 }
 
-.model-arrow {
+.photo-arrow {
   width: 54px;
   height: 54px;
   display: flex;
@@ -631,71 +613,26 @@
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease, background 0.25s ease;
 }
 
-.model-arrow:hover {
+.photo-arrow:hover {
   border-color: rgba(184, 146, 74, 0.72);
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 0 0 5px rgba(184, 146, 74, 0.12);
 }
 
-.model-arrow--prev:hover {
+.photo-arrow--prev:hover {
   transform: translateX(-2px);
 }
 
-.model-arrow--next:hover {
+.photo-arrow--next:hover {
   transform: translateX(2px);
 }
 
-.model-arrow span {
+.photo-arrow span {
   display: block;
   margin-top: -3px;
   font-family: var(--ff-serif);
   font-size: 34px;
   line-height: 1;
-}
-
-.model-index {
-  align-self: center;
-  padding: 8px 12px;
-  border: 1px solid rgba(184, 146, 74, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.58);
-  color: var(--muted);
-  font-family: var(--ff-sans);
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  pointer-events: none;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-
-.model-color {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid rgba(26, 18, 8, 0.12);
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
-}
-
-.model-color:hover,
-.model-color.is-active {
-  border-color: rgba(184, 146, 74, 0.72);
-  box-shadow: 0 0 0 5px rgba(184, 146, 74, 0.12);
-  transform: translateY(-1px);
-}
-
-.model-color span {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--swatch);
-  border: 1px solid rgba(26, 18, 8, 0.16);
-  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.28);
 }
 
 .hero-scroll {
@@ -726,7 +663,7 @@
 
 @media (max-width: 920px) {
   .hero {
-    min-height: 180svh;
+    min-height: calc(100svh + 3800px);
   }
 
   .hero-shell {
@@ -738,7 +675,7 @@
 
   .hero-visual {
     width: min(620px, 100%);
-    min-height: clamp(500px, 72svh, 680px);
+    min-height: min(72svh, 620px);
   }
 
   .hero-ring {
@@ -750,14 +687,14 @@
     width: min(320px, 100%);
   }
 
-  .hero-scroll-copy strong {
+  .hero-caption strong {
     font-size: clamp(42px, 6.8vw, 68px);
   }
 }
 
 @media (max-width: 560px) {
   .hero {
-    min-height: 118svh;
+    min-height: calc(100svh + 3800px);
     padding-right: 16px;
     padding-left: 16px;
   }
@@ -774,7 +711,7 @@
   .hero-visual {
     grid-column: 1;
     width: min(100%, 390px);
-    min-height: clamp(360px, 46svh, 430px);
+    min-height: min(46svh, 430px);
     justify-self: center;
     align-self: start;
     margin-top: -2px;
@@ -783,81 +720,66 @@
   .hero-scroll-copy {
     grid-column: 1;
     width: min(390px, 100%);
+    min-height: 214px;
     text-align: left;
     transform: none;
     align-self: start;
   }
 
-  .hero-scroll-copy span {
+  .hero-caption span {
     margin-bottom: 10px;
     letter-spacing: 0.24em;
   }
 
-  .hero-scroll-copy p {
+  .hero-caption p {
     font-size: 12px;
     line-height: 1.6;
     margin-top: 12px;
     max-width: 32ch;
   }
 
-  .hero-scroll-copy strong {
+  .hero-caption strong {
     font-size: clamp(38px, 12.8vw, 58px);
     line-height: 0.94;
   }
 
-  .model-badge {
-    top: 8px;
-    right: 8px;
-    padding: 8px 9px;
-  }
-
-  .model-badge span:first-child,
-  .model-badge span:last-child {
-    font-size: 8px;
-  }
-
-  .model-controls {
+  .photo-controls {
     bottom: 6px;
     gap: 10px;
   }
 
-  .model-tabs {
-    width: min(240px, calc(100vw - 32px));
+  .photo-tabs {
+    grid-template-columns: repeat(5, 32px);
     gap: 4px;
     padding: 5px;
   }
 
-  .model-tabs button {
-    min-height: 31px;
-    padding: 0 4px;
+  .photo-tabs button {
+    width: 32px;
+    height: 31px;
     font-size: 9px;
   }
 
-  .model-colors {
-    gap: 12px;
+  .photo-progress {
+    gap: 6px;
     padding: 8px 10px;
   }
 
-  .model-switcher {
+  .photo-progress__item {
+    width: 20px;
+  }
+
+  .photo-switcher {
     inset: 47% 2px auto;
   }
 
-  .model-arrow {
+  .photo-arrow {
     width: 42px;
     height: 42px;
   }
 
-  .model-arrow span {
+  .photo-arrow span {
     font-size: 28px;
-  }
-
-  .model-index {
-    display: none;
-  }
-
-  .model-color {
-    width: 34px;
-    height: 34px;
   }
 
   .hero-scroll {

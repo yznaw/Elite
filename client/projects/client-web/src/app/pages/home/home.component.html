@@ -3,106 +3,73 @@
     @if (section.visible) {
       @switch (section.id) {
         @case ('home-hero') {
-          <section class="hero">
+          <section #heroSection class="hero">
             <div class="hero-grain"></div>
             <div class="hero-ring hero-ring--lg"></div>
             <div class="hero-ring hero-ring--sm"></div>
 
-            <div class="hero-shell">
+            <div #heroShell class="hero-shell">
               <div class="hero-scroll-copy" aria-live="polite">
-                <span>{{ t(activeHeroModel().eyebrowKey) }}</span>
-                <strong class="serif">{{ t(activeHeroModel().titleKey) }}</strong>
-                <p>{{ t(activeHeroModel().subtitleKey) }}</p>
+                @for (photo of heroPhotos; track photo.id; let index = $index) {
+                  <div class="hero-caption" [class.is-active]="activePhotoIndex() === index">
+                    <span>{{ t(photo.eyebrowKey) }}</span>
+                    <strong class="serif">{{ t(photo.titleKey) }}</strong>
+                    <p>{{ t(photo.subtitleKey) }}</p>
+                  </div>
+                }
               </div>
 
               <div class="hero-visual">
-                <canvas
-                  #heroCanvas
-                  class="hero-canvas"
-                  role="img"
-                  [attr.aria-label]="t('home.hero.aria')"
-                  [class.is-ready]="modelLoaded()"
-                ></canvas>
-
-                @if (!modelLoaded() && !modelLoadFailed()) {
-                  <div class="model-state">
-                    <div class="model-spinner"></div>
-                    <span>{{ t('home.model.loading') }}</span>
-                  </div>
-                }
-
-                @if (modelLoadFailed()) {
-                  <div class="model-state model-state--error">
-                    <span>{{ t('home.model.unavailable') }}</span>
-                  </div>
-                }
-
-                <div class="model-badge" aria-live="polite">
-                  <span>{{ activeHeroModel().index }} / {{ heroModels.length }}</span>
-                  <span>{{ t(activeHeroModel().titleKey) }}</span>
+                <div class="hero-photo-stack" aria-live="polite">
+                  @for (photo of heroPhotos; track photo.id; let index = $index) {
+                    <figure class="hero-photo" [class.is-active]="activePhotoIndex() === index">
+                      <img [src]="photo.imageUrl" [alt]="t(photo.altKey)" />
+                      <figcaption>{{ photo.index }} / {{ heroPhotos.length }}</figcaption>
+                    </figure>
+                  }
                 </div>
 
-                <div
-                  class="model-switcher"
-                  role="radiogroup"
-                  [attr.aria-label]="t('home.model.switch')"
-                >
+                <div class="photo-switcher" role="radiogroup" [attr.aria-label]="t('home.photo.switch')">
                   <button
                     type="button"
-                    class="model-arrow model-arrow--prev"
-                    [attr.aria-label]="t('home.model.previous')"
+                    class="photo-arrow photo-arrow--prev"
+                    [attr.aria-label]="t('home.photo.previous')"
                     [title]="t('common.previous')"
-                    (click)="selectAdjacentHeroModel(-1)"
+                    (click)="selectAdjacentHeroPhoto(-1)"
                   >
                     <span aria-hidden="true">‹</span>
                   </button>
 
                   <button
                     type="button"
-                    class="model-arrow model-arrow--next"
-                    [attr.aria-label]="t('home.model.next')"
+                    class="photo-arrow photo-arrow--next"
+                    [attr.aria-label]="t('home.photo.next')"
                     [title]="t('common.next')"
-                    (click)="selectAdjacentHeroModel(1)"
+                    (click)="selectAdjacentHeroPhoto(1)"
                   >
                     <span aria-hidden="true">›</span>
                   </button>
                 </div>
 
-                <div class="model-controls">
-                  <div class="model-tabs" role="tablist" [attr.aria-label]="t('home.model.switch')">
-                    @for (model of heroModels; track model.id) {
+                <div class="photo-controls">
+                  <div class="photo-tabs" role="tablist" [attr.aria-label]="t('home.photo.switch')">
+                    @for (photo of heroPhotos; track photo.id; let index = $index) {
                       <button
                         type="button"
                         role="tab"
-                        [class.is-active]="selectedModelId() === model.id"
-                        [attr.aria-selected]="selectedModelId() === model.id"
-                        [attr.aria-label]="t('home.model.showNamed', { name: t(model.titleKey) })"
-                        (click)="selectHeroModel(model.id)"
+                        [class.is-active]="activePhotoIndex() === index"
+                        [attr.aria-selected]="activePhotoIndex() === index"
+                        [attr.aria-label]="t('home.photo.showNamed', { name: t(photo.titleKey) })"
+                        (click)="selectHeroPhoto(index)"
                       >
-                        {{ t(model.titleKey) }}
+                        {{ photo.index }}
                       </button>
                     }
                   </div>
 
-                  <div
-                    class="model-colors"
-                    role="radiogroup"
-                    [attr.aria-label]="t('home.model.chooseLeather')"
-                  >
-                    @for (option of leatherColors; track option.id) {
-                      <button
-                        type="button"
-                        class="model-color"
-                        role="radio"
-                        [class.is-active]="selectedLeatherColor() === option.id"
-                        [style.--swatch]="option.swatch"
-                        [attr.aria-label]="t('home.model.changeLeather', { name: t(option.nameKey) })"
-                        [attr.aria-checked]="selectedLeatherColor() === option.id"
-                        [title]="t(option.nameKey)"
-                        (click)="selectLeatherColor(option.id)"
-                      >
-                        <span></span>
-                      </button>
+                  <div class="photo-progress" aria-hidden="true">
+                    @for (photo of heroPhotos; track photo.id; let index = $index) {
+                      <span class="photo-progress__item" [class.is-active]="activePhotoIndex() === index"></span>
                     }
                   </div>
                 </div>

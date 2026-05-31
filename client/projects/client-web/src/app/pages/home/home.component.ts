@@ -1,7 +1,6 @@
 import {
   AfterViewInit,
   Component,
-  computed,
   ElementRef,
   NgZone,
   OnDestroy,
@@ -12,11 +11,9 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import Lenis from 'lenis';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { I18nService } from '../../services/i18n.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { HomeCollectionTileContent } from '../../models/home-content.model';
@@ -33,20 +30,14 @@ interface PromiseStat {
   labelKey: string;
 }
 
-interface LeatherColorOption {
-  id: string;
-  nameKey: string;
-  color: number;
-  swatch: string;
-}
-
-interface HeroModelOption {
+interface HeroPhoto {
   id: string;
   index: string;
   eyebrowKey: string;
   titleKey: string;
   subtitleKey: string;
-  url: string;
+  imageUrl: string;
+  altKey: string;
 }
 
 @Component({
@@ -63,75 +54,65 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly homeContent = inject(HomeContentService);
 
   private metaTimer: number | undefined;
-  private resizeObserver?: ResizeObserver;
-  private animationFrame = 0;
-  private renderer?: THREE.WebGLRenderer;
-  private environmentRenderTarget?: THREE.WebGLRenderTarget;
-  private scene?: THREE.Scene;
-  private camera?: THREE.PerspectiveCamera;
-  private controls?: OrbitControls;
-  private dracoLoader?: DRACOLoader;
-  private model?: THREE.Object3D;
-  private modelYaw = 0;
-  private isDraggingModel = false;
-  private lastPointerX = 0;
-  private swipeStartX = 0;
-  private swipeStartY = 0;
-  private swipeStartAt = 0;
-  private modelLoadToken = 0;
-  private readonly referenceMaterialColors = {
-    leather: 0x5f3423,
-    leatherDeep: 0x4e2c22,
-    footbed: 0x8f6337,
-    stitch: 0x3f2419,
-    buckle: 0x4b2d23,
-    sole: 0x8d7135,
-  };
-  private leatherGrainTexture?: THREE.CanvasTexture;
-  private footbedGrainTexture?: THREE.CanvasTexture;
-  private soleGrainTexture?: THREE.CanvasTexture;
-  private readonly handleModelPointerDown = (event: PointerEvent): void => this.onModelPointerDown(event);
-  private readonly handleModelPointerMove = (event: PointerEvent): void => this.onModelPointerMove(event);
-  private readonly handleModelPointerUp = (event: PointerEvent): void => this.onModelPointerUp(event);
-  private readonly leatherMaterials: THREE.MeshStandardMaterial[] = [];
+  private lenis?: Lenis;
+  private lenisTicker?: (time: number) => void;
+  private heroContext?: gsap.Context;
+  private heroScrollDistance = 0;
 
-  @ViewChild('heroCanvas') private heroCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('heroSection') private heroSection?: ElementRef<HTMLElement>;
+  @ViewChild('heroShell') private heroShell?: ElementRef<HTMLElement>;
 
   readonly metaVisible = signal(false);
-  readonly modelLoaded = signal(false);
-  readonly modelLoadFailed = signal(false);
-  readonly selectedModelId = signal('brown');
-  readonly selectedLeatherColor = signal('cognac');
+  readonly activePhotoIndex = signal(0);
   readonly contentData = this.homeContent.contentData;
   readonly layoutSections = this.homeContent.layoutSections;
 
-  readonly heroModels: HeroModelOption[] = [
+  readonly heroPhotos: HeroPhoto[] = [
     {
-      id: 'brown',
+      id: 'topPair',
       index: '01',
-      eyebrowKey: 'home.hero.brown.eyebrow',
-      titleKey: 'home.hero.brown.title',
-      subtitleKey: 'home.hero.brown.subtitle',
-      url: '/assets/models/brown.glb',
+      eyebrowKey: 'home.hero.photo.topPair.eyebrow',
+      titleKey: 'home.hero.photo.topPair.title',
+      subtitleKey: 'home.hero.photo.topPair.subtitle',
+      imageUrl: '/assets/hero-scroll/elite-top-pair.jpeg',
+      altKey: 'home.hero.photo.topPair.alt',
     },
     {
-      id: 'brownArchive',
+      id: 'angleSingle',
       index: '02',
-      eyebrowKey: 'home.hero.brownArchive.eyebrow',
-      titleKey: 'home.hero.brownArchive.title',
-      subtitleKey: 'home.hero.brownArchive.subtitle',
-      url: '/assets/models/brown.glb',
+      eyebrowKey: 'home.hero.photo.angleSingle.eyebrow',
+      titleKey: 'home.hero.photo.angleSingle.title',
+      subtitleKey: 'home.hero.photo.angleSingle.subtitle',
+      imageUrl: '/assets/hero-scroll/elite-angle-single.jpeg',
+      altKey: 'home.hero.photo.angleSingle.alt',
     },
-  ];
-
-  readonly activeHeroModel = computed(
-    () => this.heroModels.find((model) => model.id === this.selectedModelId()) ?? this.heroModels[0],
-  );
-
-  readonly leatherColors: LeatherColorOption[] = [
-    { id: 'cognac', nameKey: 'home.leatherColor.cognac', color: 0x5f3423, swatch: '#5f3423' },
-    { id: 'espresso', nameKey: 'home.leatherColor.espresso', color: 0x4e2c22, swatch: '#4e2c22' },
-    { id: 'sand', nameKey: 'home.leatherColor.sand', color: 0x8f6337, swatch: '#8f6337' },
+    {
+      id: 'sideSingle',
+      index: '03',
+      eyebrowKey: 'home.hero.photo.sideSingle.eyebrow',
+      titleKey: 'home.hero.photo.sideSingle.title',
+      subtitleKey: 'home.hero.photo.sideSingle.subtitle',
+      imageUrl: '/assets/hero-scroll/elite-side-single.jpeg',
+      altKey: 'home.hero.photo.sideSingle.alt',
+    },
+    {
+      id: 'frontPair',
+      index: '04',
+      eyebrowKey: 'home.hero.photo.frontPair.eyebrow',
+      titleKey: 'home.hero.photo.frontPair.title',
+      subtitleKey: 'home.hero.photo.frontPair.subtitle',
+      imageUrl: '/assets/hero-scroll/elite-front-pair.jpeg',
+      altKey: 'home.hero.photo.frontPair.alt',
+    },
+    {
+      id: 'anglePair',
+      index: '05',
+      eyebrowKey: 'home.hero.photo.anglePair.eyebrow',
+      titleKey: 'home.hero.photo.anglePair.title',
+      subtitleKey: 'home.hero.photo.anglePair.subtitle',
+      imageUrl: '/assets/hero-scroll/elite-angle-pair.jpeg',
+      altKey: 'home.hero.photo.anglePair.alt',
+    },
   ];
 
   readonly metaCards: MetaCard[] = [
@@ -155,12 +136,12 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    this.ngZone.runOutsideAngular(() => this.initHeroModel());
+    this.ngZone.runOutsideAngular(() => this.initScrollExperience());
   }
 
   ngOnDestroy(): void {
     if (this.metaTimer) clearTimeout(this.metaTimer);
-    this.destroyHeroModel();
+    this.destroyScrollExperience();
   }
 
   goTo(path: string): void {
@@ -183,27 +164,26 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.goToContentLink(this.collectionTileRoute(tile));
   }
 
-  selectLeatherColor(id: string): void {
-    this.selectedLeatherColor.set(id);
-    this.applyLeatherColor(id);
+  selectHeroPhoto(index: number): void {
+    const section = this.heroSection?.nativeElement;
+    if (!section) return;
+
+    const clampedIndex = Math.max(0, Math.min(index, this.heroPhotos.length - 1));
+    const scrollDistance = Math.max(this.heroScrollDistance || section.offsetHeight - window.innerHeight, 1);
+    const lastIndex = this.heroPhotos.length - 1;
+    const rawProgress = this.heroPhotos.length <= 1 ? 0 : clampedIndex / lastIndex;
+    const progress = clampedIndex === lastIndex ? 0.92 : rawProgress;
+    const target = section.offsetTop + scrollDistance * progress;
+
+    this.lenis?.scrollTo(target, {
+      duration: 1.05,
+      easing: (t: number) => 1 - Math.pow(1 - t, 3),
+    });
   }
 
-  selectHeroModel(id: string): void {
-    if (this.selectedModelId() === id) return;
-
-    this.selectedModelId.set(id);
-    this.modelLoaded.set(false);
-    this.modelLoadFailed.set(false);
-
-    if (this.scene && this.controls) {
-      this.loadHeroModel(this.scene, this.controls);
-    }
-  }
-
-  selectAdjacentHeroModel(direction: -1 | 1): void {
-    const currentIndex = this.heroModels.findIndex((model) => model.id === this.selectedModelId());
-    const nextIndex = (currentIndex + direction + this.heroModels.length) % this.heroModels.length;
-    this.selectHeroModel(this.heroModels[nextIndex].id);
+  selectAdjacentHeroPhoto(direction: -1 | 1): void {
+    const nextIndex = (this.activePhotoIndex() + direction + this.heroPhotos.length) % this.heroPhotos.length;
+    this.selectHeroPhoto(nextIndex);
   }
 
   private collectionTileRoute(tile: HomeCollectionTileContent): string {
@@ -240,523 +220,146 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       .replace(/^-+|-+$/g, '') || 'collection';
   }
 
-  private initHeroModel(): void {
-    const canvas = this.heroCanvas?.nativeElement;
-    const host = canvas?.parentElement;
-    if (!canvas || !host) return;
+  private initScrollExperience(): void {
+    const section = this.heroSection?.nativeElement;
+    const shell = this.heroShell?.nativeElement;
+    if (!section || !shell) return;
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xffffff);
+    gsap.registerPlugin(ScrollTrigger);
+    this.initLenis();
 
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-    camera.position.set(0, 0.38, 4.05);
+    this.heroContext = gsap.context(() => {
+      const photos = gsap.utils.toArray<HTMLElement>('.hero-photo');
+      const captions = gsap.utils.toArray<HTMLElement>('.hero-caption');
+      const progressItems = gsap.utils.toArray<HTMLElement>('.photo-progress__item');
+      const sectionDuration = Math.max(this.heroPhotos.length * 760, 3000);
+      const segment = 1.2;
+      this.heroScrollDistance = sectionDuration;
 
-    const renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: false,
-      powerPreference: 'high-performance',
-    });
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.78;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-
-    const controls = new OrbitControls(camera, canvas);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.enablePan = false;
-    controls.enableRotate = false;
-    controls.enableZoom = false;
-    controls.autoRotate = false;
-    controls.rotateSpeed = 0.82;
-    controls.minDistance = 2.35;
-    controls.maxDistance = 5.8;
-    controls.minPolarAngle = Math.PI / 3.1;
-    controls.maxPolarAngle = Math.PI / 1.95;
-    controls.target.set(0, 0, 0);
-
-    this.scene = scene;
-    this.camera = camera;
-    this.renderer = renderer;
-    this.controls = controls;
-
-    this.addHeroLighting(scene);
-    this.addHeroEnvironment(scene, renderer);
-    this.addHeroGround(scene);
-    this.bindHeroResize(host);
-    this.bindModelDrag(canvas);
-    this.loadHeroModel(scene, controls);
-    this.animateHero();
-  }
-
-  private addHeroLighting(scene: THREE.Scene): void {
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xcaa77a, 0.74));
-
-    const keyLight = new THREE.DirectionalLight(0xfffbf2, 1.62);
-    keyLight.position.set(3.6, 5.4, 4.6);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(2048, 2048);
-    keyLight.shadow.camera.near = 0.5;
-    keyLight.shadow.camera.far = 18;
-    scene.add(keyLight);
-
-    const fillLight = new THREE.DirectionalLight(0xf4dfb7, 0.24);
-    fillLight.position.set(-4.2, 2.2, 2.6);
-    scene.add(fillLight);
-
-    const rimLight = new THREE.DirectionalLight(0xffffff, 0.72);
-    rimLight.position.set(-2.6, 3.8, -3.8);
-    scene.add(rimLight);
-  }
-
-  private addHeroEnvironment(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    const roomEnvironment = new RoomEnvironment();
-
-    this.environmentRenderTarget = pmremGenerator.fromScene(roomEnvironment, 0.015);
-    scene.environment = this.environmentRenderTarget.texture;
-    roomEnvironment.dispose();
-    pmremGenerator.dispose();
-  }
-
-  private addHeroGround(scene: THREE.Scene): void {
-    const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(2.85, 96),
-      new THREE.ShadowMaterial({ color: 0x3a281a, opacity: 0.26 }),
-    );
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = -0.72;
-    shadow.receiveShadow = true;
-    scene.add(shadow);
-  }
-
-  private bindHeroResize(host: HTMLElement): void {
-    const resize = (): void => {
-      if (!this.renderer || !this.camera) return;
-
-      const width = Math.max(host.clientWidth, 1);
-      const height = Math.max(host.clientHeight, 1);
-      this.camera.aspect = width / height;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      this.renderer.setSize(width, height, false);
-    };
-
-    resize();
-    this.resizeObserver = new ResizeObserver(resize);
-    this.resizeObserver.observe(host);
-  }
-
-  private bindModelDrag(canvas: HTMLCanvasElement): void {
-    canvas.addEventListener('pointerdown', this.handleModelPointerDown);
-    window.addEventListener('pointermove', this.handleModelPointerMove, { passive: true });
-    window.addEventListener('pointerup', this.handleModelPointerUp);
-    window.addEventListener('pointercancel', this.handleModelPointerUp);
-  }
-
-  private onModelPointerDown(event: PointerEvent): void {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-
-    this.isDraggingModel = true;
-    this.lastPointerX = event.clientX;
-    this.swipeStartX = event.clientX;
-    this.swipeStartY = event.clientY;
-    this.swipeStartAt = window.performance.now();
-    this.heroCanvas?.nativeElement.setPointerCapture?.(event.pointerId);
-  }
-
-  private onModelPointerMove(event: PointerEvent): void {
-    if (!this.isDraggingModel || !this.model) return;
-
-    const deltaX = event.clientX - this.lastPointerX;
-    this.lastPointerX = event.clientX;
-    this.modelYaw += deltaX * 0.01;
-    this.model.rotation.y = this.modelYaw;
-  }
-
-  private onModelPointerUp(event: PointerEvent): void {
-    if (!this.isDraggingModel) return;
-
-    this.isDraggingModel = false;
-    this.selectSwipedHeroModel(event);
-    const canvas = this.heroCanvas?.nativeElement;
-    if (canvas?.hasPointerCapture?.(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
-    }
-  }
-
-  private selectSwipedHeroModel(event: PointerEvent): void {
-    const deltaX = event.clientX - this.swipeStartX;
-    const deltaY = event.clientY - this.swipeStartY;
-    const elapsed = window.performance.now() - this.swipeStartAt;
-    const isSwipe = Math.abs(deltaX) > 90 && Math.abs(deltaY) < 52 && elapsed < 700;
-
-    if (!isSwipe) return;
-
-    this.ngZone.run(() => this.selectAdjacentHeroModel(deltaX < 0 ? 1 : -1));
-  }
-
-  private loadHeroModel(scene: THREE.Scene, controls: OrbitControls): void {
-    const selectedModel = this.activeHeroModel();
-    const loadToken = ++this.modelLoadToken;
-
-    this.clearCurrentModel();
-    this.modelLoaded.set(false);
-    this.modelLoadFailed.set(false);
-
-    const loader = new GLTFLoader();
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath('/assets/draco/');
-    dracoLoader.setDecoderConfig({ type: 'wasm' });
-    loader.setDRACOLoader(dracoLoader);
-    this.dracoLoader = dracoLoader;
-
-    loader.load(
-      selectedModel.url,
-      (gltf) => {
-        if (loadToken !== this.modelLoadToken) {
-          this.disposeObject(gltf.scene);
-          return;
-        }
-
-        const model = gltf.scene;
-        this.prepareModel(model);
-        const pivot = this.frameModel(model, controls);
-        scene.add(pivot);
-        this.model = pivot;
-        this.ngZone.run(() => this.modelLoaded.set(true));
-      },
-      undefined,
-      () => {
-        if (loadToken === this.modelLoadToken) {
-          this.ngZone.run(() => this.modelLoadFailed.set(true));
-        }
-      },
-    );
-  }
-
-  private prepareModel(model: THREE.Object3D): void {
-    this.leatherMaterials.length = 0;
-
-    model.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-
-      child.castShadow = true;
-      child.receiveShadow = true;
-
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      materials.forEach((material) => {
-        if (material instanceof THREE.MeshStandardMaterial) {
-          if (this.isLeatherMaterial(material)) {
-            this.configureLeatherMaterial(material);
-            this.leatherMaterials.push(material);
-          } else {
-            this.applyReferenceMaterialColor(material);
-          }
-        }
-
-        material.needsUpdate = true;
+      gsap.set(photos, {
+        autoAlpha: 0,
+        scale: 0.86,
+        y: 90,
+        rotate: 4,
+        filter: 'blur(12px)',
+        clipPath: 'inset(10% 10% 10% 10% round 30px)',
       });
+      gsap.set(photos[0], {
+        autoAlpha: 1,
+        scale: 1,
+        y: 0,
+        rotate: 0,
+        filter: 'blur(0px)',
+        clipPath: 'inset(0% 0% 0% 0% round 0px)',
+      });
+      gsap.set(captions, { autoAlpha: 0, y: 18 });
+      gsap.set(captions[0], { autoAlpha: 1, y: 0 });
+
+      const timeline = gsap.timeline({
+        defaults: { ease: 'power3.inOut' },
+        scrollTrigger: {
+          trigger: section,
+          start: 'top top',
+          end: `+=${sectionDuration}`,
+          scrub: 0.85,
+          pin: shell,
+          anticipatePin: 1,
+          invalidateOnRefresh: true,
+          onUpdate: (self) => this.updateActivePhoto(self.progress, progressItems),
+        },
+      });
+
+      photos.forEach((photo, index) => {
+        const at = index * segment;
+        const drift = index % 2 === 0 ? -4 : 4;
+
+        if (index > 0) {
+          const previousPhoto = photos[index - 1];
+          const previousCaption = captions[index - 1];
+
+          timeline.to(previousPhoto, {
+            autoAlpha: 0,
+            scale: 1.08,
+            y: -74,
+            rotate: -drift,
+            filter: 'blur(12px)',
+            clipPath: 'inset(8% 8% 8% 8% round 24px)',
+            duration: 0.78,
+          }, at);
+          timeline.to(previousCaption, { autoAlpha: 0, y: -18, duration: 0.45 }, at);
+          timeline.fromTo(photo, {
+            autoAlpha: 0,
+            scale: 0.86,
+            y: 92,
+            rotate: drift,
+            filter: 'blur(14px)',
+            clipPath: 'inset(14% 12% 14% 12% round 32px)',
+          }, {
+            autoAlpha: 1,
+            scale: 1,
+            y: 0,
+            rotate: 0,
+            filter: 'blur(0px)',
+            clipPath: 'inset(0% 0% 0% 0% round 0px)',
+            duration: 0.9,
+          }, at + 0.04);
+        }
+
+        timeline.to(photo, {
+          scale: 1.035,
+          xPercent: index % 2 === 0 ? 1.2 : -1.2,
+          y: -10,
+          duration: 0.62,
+          ease: 'none',
+        }, at + 0.62);
+        timeline.to(captions[index], { autoAlpha: 1, y: 0, duration: 0.45 }, at + 0.12);
+      });
+
+      ScrollTrigger.refresh();
+    }, section);
+  }
+
+  private initLenis(): void {
+    if (this.lenis) return;
+
+    this.lenis = new Lenis({
+      lerp: 0.085,
+      wheelMultiplier: 0.92,
+      touchMultiplier: 1.08,
+      smoothWheel: true,
     });
 
-    this.applyLeatherColor(this.selectedLeatherColor());
-  }
-
-  private configureLeatherMaterial(material: THREE.MeshStandardMaterial): void {
-    material.metalness = 0;
-    material.roughness = material.map ? 0.92 : 0.86;
-    material.envMapIntensity = 0.18;
-    material.map ??= this.getLeatherGrainTexture();
-
-    if (material.normalMap) {
-      material.normalScale.set(0.55, 0.55);
-    }
-  }
-
-  private applyReferenceMaterialColor(material: THREE.MeshStandardMaterial): void {
-    const materialName = material.name.trim().toLowerCase();
-
-    if (materialName === 'material.001' || materialName.includes('inner_lining')) {
-      material.color.set(this.referenceMaterialColors.footbed);
-      material.metalness = 0;
-      material.roughness = 0.95;
-      material.envMapIntensity = 0.1;
-      material.map ??= this.getFootbedGrainTexture();
-      if (material.normalMap) material.normalScale.set(0.34, 0.34);
-      return;
-    }
-
-    if (materialName.includes('stitch')) {
-      material.color.set(this.referenceMaterialColors.stitch);
-      material.metalness = 0;
-      material.roughness = 0.97;
-      material.envMapIntensity = 0.08;
-      if (material.normalMap) material.normalScale.set(0.42, 0.42);
-      return;
-    }
-
-    if (materialName.includes('backle') || materialName.includes('buckle') || materialName.includes('metal')) {
-      material.color.set(this.referenceMaterialColors.buckle);
-      material.metalness = 0.05;
-      material.roughness = 0.68;
-      material.envMapIntensity = 0.32;
-      return;
-    }
-
-    if (materialName.includes('rubber')) {
-      material.color.set(this.referenceMaterialColors.sole);
-      material.metalness = 0;
-      material.roughness = 0.88;
-      material.envMapIntensity = 0.12;
-      material.map ??= this.getSoleGrainTexture();
-      return;
-    }
-
-    material.metalness = 0;
-    material.roughness = Math.max(material.roughness, 0.82);
-    material.envMapIntensity = 0.18;
-  }
-
-  private getLeatherGrainTexture(): THREE.CanvasTexture {
-    this.leatherGrainTexture ??= this.createGrainTexture({
-      base: [214, 199, 184],
-      noise: 38,
-      grainLines: 1500,
-      pores: 3800,
-      lineAlpha: 0.17,
-      poreAlpha: 0.12,
-      seed: 19,
-    });
-
-    return this.leatherGrainTexture;
-  }
-
-  private getFootbedGrainTexture(): THREE.CanvasTexture {
-    this.footbedGrainTexture ??= this.createGrainTexture({
-      base: [226, 197, 150],
-      noise: 22,
-      grainLines: 520,
-      pores: 1800,
-      lineAlpha: 0.08,
-      poreAlpha: 0.08,
-      seed: 43,
-    });
-
-    return this.footbedGrainTexture;
-  }
-
-  private getSoleGrainTexture(): THREE.CanvasTexture {
-    this.soleGrainTexture ??= this.createGrainTexture({
-      base: [192, 159, 91],
-      noise: 18,
-      grainLines: 260,
-      pores: 1100,
-      lineAlpha: 0.05,
-      poreAlpha: 0.06,
-      seed: 71,
-    });
-
-    return this.soleGrainTexture;
-  }
-
-  private createGrainTexture(config: {
-    base: [number, number, number];
-    noise: number;
-    grainLines: number;
-    pores: number;
-    lineAlpha: number;
-    poreAlpha: number;
-    seed: number;
-  }): THREE.CanvasTexture {
-    const size = 768;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const context = canvas.getContext('2d');
-
-    if (!context) {
-      return new THREE.CanvasTexture(canvas);
-    }
-
-    const random = this.createSeededRandom(config.seed);
-    const image = context.createImageData(size, size);
-    const [baseR, baseG, baseB] = config.base;
-
-    for (let i = 0; i < image.data.length; i += 4) {
-      const variation = (random() - 0.5) * config.noise;
-      image.data[i] = this.clampColor(baseR + variation);
-      image.data[i + 1] = this.clampColor(baseG + variation);
-      image.data[i + 2] = this.clampColor(baseB + variation);
-      image.data[i + 3] = 255;
-    }
-
-    context.putImageData(image, 0, 0);
-    context.globalCompositeOperation = 'multiply';
-
-    for (let i = 0; i < config.grainLines; i++) {
-      const x = random() * size;
-      const y = random() * size;
-      const length = 10 + random() * 52;
-      const curve = (random() - 0.5) * 20;
-      const angle = -0.45 + random() * 0.9;
-      context.strokeStyle = `rgba(72, 42, 28, ${config.lineAlpha * random()})`;
-      context.lineWidth = 0.35 + random() * 1.2;
-      context.beginPath();
-      context.moveTo(x, y);
-      context.quadraticCurveTo(
-        x + Math.cos(angle) * length * 0.5,
-        y + Math.sin(angle) * length * 0.5 + curve,
-        x + Math.cos(angle) * length,
-        y + Math.sin(angle) * length,
-      );
-      context.stroke();
-    }
-
-    for (let i = 0; i < config.pores; i++) {
-      const radius = 0.35 + random() * 1.25;
-      context.fillStyle = `rgba(62, 36, 23, ${config.poreAlpha * random()})`;
-      context.beginPath();
-      context.ellipse(random() * size, random() * size, radius * (1 + random()), radius, random() * Math.PI, 0, Math.PI * 2);
-      context.fill();
-    }
-
-    context.globalCompositeOperation = 'screen';
-    for (let i = 0; i < Math.round(config.grainLines * 0.22); i++) {
-      const x = random() * size;
-      const y = random() * size;
-      const length = 8 + random() * 38;
-      const angle = -0.35 + random() * 0.7;
-      context.strokeStyle = `rgba(255, 236, 208, ${0.03 + random() * 0.08})`;
-      context.lineWidth = 0.3 + random() * 0.7;
-      context.beginPath();
-      context.moveTo(x, y);
-      context.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
-      context.stroke();
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2.35, 2.35);
-    texture.anisotropy = 4;
-    texture.needsUpdate = true;
-
-    return texture;
-  }
-
-  private createSeededRandom(seed: number): () => number {
-    let state = seed;
-
-    return () => {
-      state = (state * 1664525 + 1013904223) >>> 0;
-      return state / 4294967296;
+    this.lenis.on('scroll', ScrollTrigger.update);
+    this.lenisTicker = (time: number): void => {
+      this.lenis?.raf(time * 1000);
     };
+
+    gsap.ticker.add(this.lenisTicker);
+    gsap.ticker.lagSmoothing(0);
   }
 
-  private clampColor(value: number): number {
-    return Math.max(0, Math.min(255, Math.round(value)));
-  }
+  private updateActivePhoto(progress: number, progressItems: HTMLElement[]): void {
+    const nextIndex = Math.min(this.heroPhotos.length - 1, Math.round(progress * (this.heroPhotos.length - 1)));
+    if (nextIndex !== this.activePhotoIndex()) {
+      this.ngZone.run(() => this.activePhotoIndex.set(nextIndex));
+    }
 
-  private isLeatherMaterial(material: THREE.MeshStandardMaterial): boolean {
-    const materialName = material.name.trim().toLowerCase();
-
-    return materialName === 'material' || materialName.includes('outer_leather') || materialName.includes('leather');
-  }
-
-  private frameModel(model: THREE.Object3D, controls: OrbitControls): THREE.Object3D {
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxAxis = Math.max(size.x, size.y, size.z, 1);
-    const hostWidth = this.heroCanvas?.nativeElement.parentElement?.clientWidth ?? 0;
-    const isCompact = hostWidth < 560;
-    const scale = (isCompact ? 5.15 : 6.65) / maxAxis;
-    const yOffset = isCompact ? 0.08 : -0.34;
-    const defaultYaw = -Math.PI / 2 + 0.34;
-    const pivot = new THREE.Group();
-    const centeredModel = new THREE.Group();
-
-    model.position.set(-center.x, -center.y, -center.z);
-    centeredModel.add(model);
-    centeredModel.scale.setScalar(scale);
-    centeredModel.position.y = yOffset;
-    centeredModel.rotation.set(-0.11, 0, 0.025);
-    pivot.add(centeredModel);
-    pivot.rotation.y = defaultYaw;
-    this.modelYaw = defaultYaw;
-
-    controls.target.set(0, isCompact ? 0.16 : yOffset, 0);
-    controls.update();
-
-    return pivot;
-  }
-
-  private applyLeatherColor(id: string): void {
-    const option = this.leatherColors.find((color) => color.id === id) ?? this.leatherColors[0];
-
-    this.leatherMaterials.forEach((material) => {
-      material.color.set(option.color);
-      material.needsUpdate = true;
+    progressItems.forEach((item, index) => {
+      item.classList.toggle('is-active', index === nextIndex);
+      item.classList.toggle('is-seen', index < nextIndex);
     });
   }
 
-  private animateHero(): void {
-    if (!this.renderer || !this.scene || !this.camera) return;
+  private destroyScrollExperience(): void {
+    this.heroContext?.revert();
+    this.heroContext = undefined;
 
-    this.animationFrame = window.requestAnimationFrame(() => this.animateHero());
+    if (this.lenisTicker) {
+      gsap.ticker.remove(this.lenisTicker);
+      this.lenisTicker = undefined;
+    }
 
-    this.controls?.update();
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  private destroyHeroModel(): void {
-    if (this.animationFrame) window.cancelAnimationFrame(this.animationFrame);
-    this.heroCanvas?.nativeElement.removeEventListener('pointerdown', this.handleModelPointerDown);
-    window.removeEventListener('pointermove', this.handleModelPointerMove);
-    window.removeEventListener('pointerup', this.handleModelPointerUp);
-    window.removeEventListener('pointercancel', this.handleModelPointerUp);
-    this.resizeObserver?.disconnect();
-    this.controls?.dispose();
-    this.dracoLoader?.dispose();
-    this.environmentRenderTarget?.dispose();
-    this.environmentRenderTarget = undefined;
-    this.disposeProceduralTextures();
-
-    this.clearCurrentModel();
-    if (this.scene) this.scene.environment = null;
-    if (this.scene) this.disposeObject(this.scene);
-
-    this.renderer?.dispose();
-  }
-
-  private disposeProceduralTextures(): void {
-    this.leatherGrainTexture?.dispose();
-    this.footbedGrainTexture?.dispose();
-    this.soleGrainTexture?.dispose();
-    this.leatherGrainTexture = undefined;
-    this.footbedGrainTexture = undefined;
-    this.soleGrainTexture = undefined;
-  }
-
-  private clearCurrentModel(): void {
-    if (!this.model) return;
-
-    this.scene?.remove(this.model);
-    this.disposeObject(this.model);
-    this.model = undefined;
-    this.leatherMaterials.length = 0;
-  }
-
-  private disposeObject(object: THREE.Object3D): void {
-    object.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-
-      child.geometry.dispose();
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      materials.forEach((material) => material.dispose());
-    });
+    this.lenis?.destroy();
+    this.lenis = undefined;
   }
 }

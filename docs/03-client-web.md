@@ -66,95 +66,59 @@ The footer is **conditionally hidden** on the checkout page using a computed sig
 
 ---
 
-## Home Page 3D Hero
+## Home Page Scroll Hero
 
-The home page hero uses a first-party Three.js model viewer instead of an embedded Sketchfab iframe.
+The home page hero uses a pinned GSAP + Lenis photo sequence instead of the previous product file viewer.
 
 ### Files
 
 | File | Purpose |
 |---|---|
-| `projects/client-web/src/app/pages/home/home.component.ts` | Three.js scene setup, model-slot carousel, GLB loading, color switching, animation, cleanup |
-| `projects/client-web/src/app/pages/home/home.component.html` | Centered hero canvas, dynamic model heading, loading/error states, side model arrows, labeled model tabs, circular color radio controls |
-| `projects/client-web/src/app/pages/home/home.component.scss` | Full-screen white product-view layout, title area, side arrow controls, labeled model tabs, circular color controls, scroll transition, responsive framing |
-| `projects/client-web/src/assets/models/brown.glb` | Compressed Brown GLB product model |
-| `projects/client-web/src/assets/draco/` | Local Draco decoder files required by the compressed GLB |
+| `projects/client-web/src/app/pages/home/home.component.ts` | Lenis setup, GSAP ScrollTrigger timeline, photo navigation, animation cleanup |
+| `projects/client-web/src/app/pages/home/home.component.html` | Pinned hero layout, stacked product photos, animated captions, arrow controls, progress tabs |
+| `projects/client-web/src/app/pages/home/home.component.scss` | Full-screen white product-view layout, responsive photo stage, progress controls, scroll framing |
+| `projects/client-web/src/assets/hero-scroll/` | Product photo sequence used in the hero scroll animation |
 
 ### Dependencies
 
-The viewer depends on:
+The hero depends on:
 
-- `three`
-- `@types/three`
-
-The GLB uses `KHR_draco_mesh_compression`, so `DRACOLoader` is configured with local decoder assets:
-
-```typescript
-const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath('/assets/draco/');
-dracoLoader.setDecoderConfig({ type: 'wasm' });
-loader.setDRACOLoader(dracoLoader);
-```
+- `gsap`
+- `lenis`
 
 ### Runtime Behavior
 
-- The canvas is initialized in `ngAfterViewInit()` and runs outside Angular via `NgZone.runOutsideAngular()`.
-- `GLTFLoader` loads the URL for the active `heroModels` slot.
-- The camera stays fixed in the center of the product stage. `OrbitControls` keeps damping/camera state stable, while pointer drag rotates the loaded model around a centered Three.js pivot group for manual 360-degree rotation. A quick horizontal swipe switches to the previous or next model.
-- A `ResizeObserver` keeps the renderer and camera aspect ratio aligned with the hero visual container.
-- The hero is a pinned scroll scene: the section is taller than one viewport, the model stage stays sticky, and scroll progress updates CSS variables so the model zooms/shifts before the page continues into the next section.
-- As the model shifts right during pinned scroll, a large left-side editorial title fades/slides in using the same scroll progress variables.
-- `ngOnDestroy()` cancels the animation frame, disconnects observers, disposes controls, disposes Draco, and disposes Three.js geometries/materials.
+- Lenis smooths page scrolling and feeds scroll frames into GSAP's ticker.
+- `ScrollTrigger` pins the hero shell while the user scrolls through the product photo sequence.
+- Each photo crossfades with scale, vertical motion, light rotation, blur, and clip-path reveal effects.
+- The caption stack animates in sync with the active photo.
+- Arrow buttons and numbered tabs call `selectHeroPhoto()` to scroll to the matching sequence point.
+- `ngOnDestroy()` reverts the GSAP context, removes the Lenis ticker, and destroys Lenis.
 
-### Model Slots
+### Photo Sequence
 
-The hero exposes two 3D model slots through `heroModels`.
+The hero exposes five product photo slots through `heroPhotos`.
 
 | ID | Title | Current URL |
 |---|---|---|
-| `brown` | Brown | `/assets/models/brown.glb` |
-| `brownArchive` | Brown 2 | `/assets/models/brown.glb` |
+| `topPair` | Top Grain | `/assets/hero-scroll/elite-top-pair.jpeg` |
+| `angleSingle` | Soft Volume | `/assets/hero-scroll/elite-angle-single.jpeg` |
+| `sideSingle` | Side Line | `/assets/hero-scroll/elite-side-single.jpeg` |
+| `frontPair` | Face Forward | `/assets/hero-scroll/elite-front-pair.jpeg` |
+| `anglePair` | Paired Form | `/assets/hero-scroll/elite-angle-pair.jpeg` |
 
-Each slot controls the eyebrow, title, subtitle, and GLB URL shown in the hero. To replace a placeholder later, update only that slot's `url` value and keep the file under `projects/client-web/src/assets/models/`.
-
-The Brown source GLB and the GLB inside `Brown.rar` are byte-identical, so both slots point at the same optimized asset. The asset uses `KHR_draco_mesh_compression` for geometry and embedded WebP textures capped at 2048px so it remains small enough for GitHub.
-
-Model switching is exposed through left/right arrow buttons on either side of the 3D product stage, labeled model tabs below the stage, and horizontal swipe. The arrows and swipe call `selectAdjacentHeroModel(-1 | 1)`, which cycles through `heroModels`, updates the heading, and reloads the selected GLB slot.
-
-### Color Options
-
-The hero exposes three circular radio-style leather color controls under the model:
-
-| ID | Label | Hex |
-|---|---|---|
-| `cognac` | Cognac | `#5f3423` |
-| `espresso` | Espresso | `#4e2c22` |
-| `sand` | Sand | `#8f6337` |
-
-Color switching is handled in the component without reloading the model. The swatch colors are sampled from the product reference photo. During model preparation, leather `MeshStandardMaterial` instances are stored in `leatherMaterials`; this includes the original model's `Material` surface and the optimized models' `Outer_leather` materials. Non-switching details use fixed reference colors: tan footbeds, dark stitches, and darker buckle/trim.
-
-For a more photographic read, the viewer uses a PMREM `RoomEnvironment` for studio reflections and material-specific roughness/env-map settings: leather keeps a soft highlight, footbeds stay matte, stitching is dry and dark, and buckle/trim has a slightly stronger reflection.
-
-Because the optimized GLBs do not include a true base-color leather texture, the viewer adds lightweight procedural grain maps at runtime for leather, footbed, and sole materials. These maps add pores, darker valleys, and slight worn highlights while preserving the GLB normal and roughness maps.
-
-```typescript
-selectLeatherColor(id: string): void {
-  this.selectedLeatherColor.set(id);
-  this.applyLeatherColor(id);
-}
-```
+Each slot controls the eyebrow, title, subtitle, image URL, and alt text shown in the hero. To replace a photo later, update that slot's `imageUrl` and keep the file under `projects/client-web/src/assets/hero-scroll/`.
 
 ### Framing and Responsive Notes
 
-The model is intentionally centered and scaled large for the desktop hero. Compact viewports use a smaller scale so the model remains visible without clipping.
+The product photos are intentionally large, centered, and unframed on a white stage. Compact viewports stack the copy above the photo stage while keeping the pinned scroll interaction.
 
-When adjusting the model:
+When adjusting the sequence:
 
-- Use `frameModel()` for scale, centered pivot setup, vertical position, and default rotation.
-- Use `bindModelDrag()` and the pointer handlers for manual 360-degree turntable rotation. The camera should remain fixed so the product does not orbit away from the center.
-- Use `queueHeroScroll()`, `.hero` height, `.hero-shell` sticky positioning, `.hero-scroll-copy`, and the shared CSS variables when changing the pinned zoom/shift/text-reveal transition.
-- Check both desktop and mobile screenshots after changing scale or rotation.
-- Keep the white canvas background; it is part of the premium product-view treatment.
+- Keep `.hero` tall enough for every photo transition.
+- Tune `sectionDuration` and `segment` in `initScrollExperience()` together so scroll pacing stays even.
+- Check both desktop and mobile screenshots after changing image sizing or pinned timing.
+- Keep the white stage background; it is part of the premium product-view treatment.
 
 ### Verification
 
@@ -168,12 +132,10 @@ npm run build:web
 Manual QA:
 
 - Open the storefront home page.
-- Confirm the GLB loads and the loading state disappears.
-- Click the left and right model arrows; each should update the heading and keep the 3D canvas active.
-- Drag the model to rotate it manually.
-- Click Cognac, Espresso, and Sand; each should change the leather color instantly.
-- Scroll down from the hero; the model should finish its zoom/right-shift transition, the large left editorial text should appear while pinned, then the featured section should begin scrolling into view.
-- Check desktop and mobile widths to ensure the product is large but not clipped.
+- Scroll through the hero and confirm each product photo transitions cleanly.
+- Click the left and right photo arrows; each should scroll to the next or previous photo.
+- Click the numbered photo tabs; each should move to the matching photo.
+- Check desktop and mobile widths to ensure captions, controls, and product images do not overlap.
 
 ---
 
