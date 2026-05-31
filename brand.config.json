@@ -42,11 +42,11 @@
         "border2": "rgba(0, 0, 0, 0.06)"
       },
       "fonts": {
-        "serif": "'Thmanyah Serif Display', Georgia, serif",
-        "sans": "'Thmanyah Sans', system-ui, sans-serif",
-        "serifText": "'Thmanyah Serif Text', Georgia, serif"
+        "serif": "'Montserrat', sans-serif",
+        "sans": "'Inter', sans-serif",
+        "serifText": "'Montserrat', sans-serif"
       },
-      "fontsSource": "self-hosted from assets/fonts/thmanyah/ (woff2)"
+      "fontsSource": "Google Fonts: Inter and Montserrat"
     },
     "adminPortal": {
       "colors": {
@@ -67,11 +67,11 @@
         "muted2": "#9ca0b3"
       },
       "fonts": {
-        "ui": "'Thmanyah Sans', system-ui, sans-serif",
-        "display": "'Thmanyah Serif Display', Georgia, serif",
-        "mono": "'SF Mono', Menlo, Monaco, Consolas, monospace"
+        "ui": "'Inter', sans-serif",
+        "display": "'Montserrat', sans-serif",
+        "mono": "'Inter', sans-serif"
       },
-      "fontsSource": "self-hosted from assets/fonts/thmanyah/ (woff2)"
+      "fontsSource": "Google Fonts: Inter and Montserrat"
     }
   },
 

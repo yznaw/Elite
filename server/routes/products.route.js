@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
+const { createRestockNotification, processRestockNotifications } = require('../lib/restock-notifications');
 
 const router = Router();
 
@@ -49,6 +50,19 @@ function mapRow(row) {
   const colors = Array.isArray(row.colors) ? row.colors.filter(Boolean) : [];
   const materials = Array.isArray(row.materials) ? row.materials.filter(Boolean) : [];
   const media = Array.isArray(row.images) ? row.images.filter(Boolean) : [];
+  const variants = Array.isArray(row.variants)
+    ? row.variants
+      .filter((variant) => variant && typeof variant === 'object')
+      .map((variant) => ({
+        id: variant.id,
+        sku: variant.sku || '',
+        size: Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
+        color: variant.color || '',
+        material: variant.material || '',
+        price: Math.round(Number(variant.price || 0)),
+        stock: Math.max(0, Number.parseInt(variant.stock, 10) || 0),
+      }))
+    : [];
   const colorImages = row.color_images && typeof row.color_images === 'object'
     ? Object.entries(row.color_images).reduce((map, [color, url]) => {
       const key = String(color || '').trim().toLowerCase();
@@ -74,8 +88,27 @@ function mapRow(row) {
     image,
     images,
     colorImages,
+    variants,
     relatedProductIds: row.related_product_ids || [],
   };
+}
+
+function variantsSelect() {
+  return `
+          COALESCE(
+            jsonb_agg(
+              DISTINCT jsonb_build_object(
+                'id', pv.id,
+                'sku', pv.sku,
+                'size', pv.size,
+                'color', pv.color,
+                'material', pv.material,
+                'price', round(pv.price_cents / 100.0),
+                'stock', pv.stock_quantity
+              )
+            ) FILTER (WHERE pv.id IS NOT NULL),
+            '[]'::jsonb
+          ) AS variants`;
 }
 
 router.get('/', async (_req, res, next) => {
@@ -108,6 +141,7 @@ router.get('/', async (_req, res, next) => {
               FILTER (WHERE pv.material IS NOT NULL AND pv.material <> ''),
             ARRAY[]::text[]
           ) AS materials,
+          ${variantsSelect()},
           COALESCE(
             (
               SELECT COALESCE(m.preview_url, m.storage_url)
@@ -230,6 +264,7 @@ router.get('/:id', async (req, res, next) => {
               FILTER (WHERE pv.material IS NOT NULL AND pv.material <> ''),
             ARRAY[]::text[]
           ) AS materials,
+          ${variantsSelect()},
           COALESCE(
             (
               SELECT COALESCE(m.preview_url, m.storage_url)
@@ -321,6 +356,71 @@ router.get('/:id', async (req, res, next) => {
       success: true,
       data: mapRow(result.rows[0]),
       message: 'Product retrieved.',
+    });
+  } catch (err) {
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/:id/restock-notifications', async (req, res, next) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const name = String(req.body.name || '').trim() || email.split('@')[0] || 'Customer';
+  const phone = String(req.body.phone || '').trim() || null;
+  const size = String(req.body.size || '').trim();
+  const color = String(req.body.color || '').trim();
+  const locale = String(req.body.locale || 'en').trim() || 'en';
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({
+      success: false,
+      message: 'A valid email address is required.',
+    });
+  }
+
+  if (!size) {
+    return res.status(400).json({
+      success: false,
+      message: 'Size is required.',
+    });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const product = await client.query(
+      `
+        SELECT id, name
+        FROM products
+        WHERE tenant_id = $1 AND id = $2 AND status = 'active'
+        LIMIT 1
+      `,
+      [tenant.id, req.params.id],
+    );
+
+    if (product.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found.',
+      });
+    }
+
+    const inserted = await createRestockNotification(client, tenant.id, {
+      productId: product.rows[0].id,
+      email,
+      name,
+      phone,
+      size,
+      color,
+      locale,
+    });
+    await processRestockNotifications(client, tenant.id, product.rows[0].id);
+
+    res.status(201).json({
+      success: true,
+      data: inserted.rows[0],
+      message: 'Restock notification saved.',
     });
   } catch (err) {
     next(err);

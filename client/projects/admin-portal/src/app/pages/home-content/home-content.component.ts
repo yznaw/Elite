@@ -26,9 +26,50 @@ interface HomeCollectionTileContent {
   ctaText?: string;
 }
 
+interface StoryHeroContent {
+  kicker: string;
+  title: string;
+  accent: string;
+  body: string;
+  imageUrl: string;
+  imageAlt: string;
+}
+
+interface StoryChapterContent {
+  id: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  imageUrl: string;
+  imageAlt: string;
+}
+
+interface StoryAtelierItemContent {
+  id: string;
+  title: string;
+  meta: string;
+}
+
+interface StoryContentData {
+  hero: StoryHeroContent;
+  chapters: StoryChapterContent[];
+  quote: {
+    text: string;
+    accent: string;
+    author: string;
+  };
+  atelier: {
+    kicker: string;
+    title: string;
+    body: string;
+    items: StoryAtelierItemContent[];
+  };
+}
+
 interface HomeContentData {
   hero: HomeDiscountHeroContent;
   collections: HomeCollectionTileContent[];
+  story: StoryContentData;
 }
 
 const DEFAULT_HOME_CONTENT: HomeContentData = {
@@ -61,6 +102,68 @@ const DEFAULT_HOME_CONTENT: HomeContentData = {
       link: '/collection?category=jacket',
     },
   ],
+  story: {
+    hero: {
+      kicker: 'Est. 1962 · Doha',
+      title: 'A House Built by Hand',
+      accent: 'and carried by craft',
+      body: 'Elite began as a small atelier serving men who wanted shoes with presence, patience, and a story in every stitch.',
+      imageUrl: 'https://images.unsplash.com/photo-1582588678413-dbf45f4823e9?w=1600&q=85&auto=format&fit=crop',
+      imageAlt: 'Handcrafted leather shoes arranged in warm atelier light',
+    },
+    chapters: [
+      {
+        id: 'origin',
+        eyebrow: '1962 · The first bench',
+        title: 'A single workbench in old Doha',
+        body: 'Our first pairs were measured by hand, cut in quiet batches, and finished for customers who cared about the feel of leather as much as the look of it.',
+        imageUrl: 'https://images.unsplash.com/photo-1582588678413-dbf45f4823e9?w=1000&q=85&auto=format&fit=crop',
+        imageAlt: 'Leather artisan working on shoe details',
+      },
+      {
+        id: 'materials',
+        eyebrow: '1978 · Material codes',
+        title: 'Leather selected like a signature',
+        body: 'As the atelier grew, the ritual stayed strict: choose the hide for character, cut for longevity, and polish until the grain carries depth.',
+        imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=1000&q=85&auto=format&fit=crop',
+        imageAlt: 'Polished formal leather shoes',
+      },
+      {
+        id: 'shape',
+        eyebrow: '1995 · The modern last',
+        title: 'Classic proportions, sharper lines',
+        body: 'We refined the last for city movement: leaner profiles, softer break-in, and a silhouette that works from majlis to evening.',
+        imageUrl: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=1000&q=85&auto=format&fit=crop',
+        imageAlt: 'Craft tools and leather details',
+      },
+      {
+        id: 'today',
+        eyebrow: 'Today · Made to endure',
+        title: 'Every pair still passes through human hands',
+        body: 'Digital tools help us serve faster, but the final judgment remains tactile: balance, edge, polish, and the quiet confidence of a pair ready to be worn.',
+        imageUrl: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=1000&q=85&auto=format&fit=crop',
+        imageAlt: 'Brown leather shoes on a minimal surface',
+      },
+    ],
+    quote: {
+      text: 'Luxury is not loud.',
+      accent: 'It is the evidence of care, repeated until it feels effortless.',
+      author: 'Elite Atelier',
+    },
+    atelier: {
+      kicker: 'Inside the atelier',
+      title: 'Many hands, one standard',
+      body: 'Each role protects a different part of the promise, from the first leather inspection to the final edge finish.',
+      items: [
+        { id: 'leather', title: 'Leather selector', meta: '30 years of material instinct' },
+        { id: 'pattern', title: 'Pattern cutter', meta: '22 years shaping the silhouette' },
+        { id: 'last', title: 'Last maker', meta: '18 years balancing comfort' },
+        { id: 'welt', title: 'Welt stitcher', meta: '25 years securing the build' },
+        { id: 'heel', title: 'Heel builder', meta: '15 years refining stance' },
+        { id: 'finish', title: 'Edge finisher', meta: '28 years of final polish' },
+      ],
+    },
+  },
 };
 
 function cloneContent(content: HomeContentData): HomeContentData {
@@ -221,6 +324,187 @@ function cloneContent(content: HomeContentData): HomeContentData {
                 <em>{{ tile.ctaText }}</em>
               }
             </div>
+          }
+        </div>
+      </section>
+
+      <section class="card editor-card story-editor">
+        <div class="editor-card__head story-editor__head">
+          <div>
+            <p>Story Page</p>
+            <h2>Editorial story builder</h2>
+          </div>
+          <span class="hint">Edit the /story page hero, images, quote, atelier cards, and chapter order.</span>
+        </div>
+
+        <div class="story-admin-grid">
+          <article class="story-admin-panel">
+            <div class="story-preview-hero">
+              <img [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt" />
+              <div>
+                <small>{{ content().story.hero.kicker }}</small>
+                <h3>{{ content().story.hero.title }}</h3>
+                <em>{{ content().story.hero.accent }}</em>
+              </div>
+            </div>
+
+            <div class="field-stack">
+              <label>
+                <span class="lbl">Hero photo</span>
+                <div class="mini-picker">
+                  <strong>{{ imageName(content().story.hero.imageUrl) }}</strong>
+                  <small>{{ uploadProgress('story-hero') }}</small>
+                  <input #storyHeroFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden />
+                  <button type="button" class="btn btn-outline btn-sm" (click)="storyHeroFile.click()" [disabled]="isUploading('story-hero')">
+                    {{ isUploading('story-hero') ? 'Uploading...' : 'Upload photo' }}
+                  </button>
+                </div>
+              </label>
+
+              <div class="two-col">
+                <label>
+                  <span class="lbl">Kicker</span>
+                  <input class="inp" [ngModel]="content().story.hero.kicker" (ngModelChange)="updateStoryHero('kicker', $event)" />
+                </label>
+                <label>
+                  <span class="lbl">Image alt text</span>
+                  <input class="inp" [ngModel]="content().story.hero.imageAlt" (ngModelChange)="updateStoryHero('imageAlt', $event)" />
+                </label>
+              </div>
+
+              <label>
+                <span class="lbl">Main title</span>
+                <input class="inp" [ngModel]="content().story.hero.title" (ngModelChange)="updateStoryHero('title', $event)" />
+              </label>
+              <label>
+                <span class="lbl">Accent line</span>
+                <input class="inp" [ngModel]="content().story.hero.accent" (ngModelChange)="updateStoryHero('accent', $event)" />
+              </label>
+              <label>
+                <span class="lbl">Intro body</span>
+                <textarea class="inp" rows="4" [ngModel]="content().story.hero.body" (ngModelChange)="updateStoryHero('body', $event)"></textarea>
+              </label>
+            </div>
+          </article>
+
+          <article class="story-admin-panel">
+            <div class="field-stack">
+              <div class="grid-preview-head story-admin-subhead">
+                <p>Quote Band</p>
+                <span>Large editorial quote between chapters and atelier.</span>
+              </div>
+              <label>
+                <span class="lbl">Quote text</span>
+                <input class="inp" [ngModel]="content().story.quote.text" (ngModelChange)="updateStoryQuote('text', $event)" />
+              </label>
+              <label>
+                <span class="lbl">Accent sentence</span>
+                <textarea class="inp" rows="3" [ngModel]="content().story.quote.accent" (ngModelChange)="updateStoryQuote('accent', $event)"></textarea>
+              </label>
+              <label>
+                <span class="lbl">Author</span>
+                <input class="inp" [ngModel]="content().story.quote.author" (ngModelChange)="updateStoryQuote('author', $event)" />
+              </label>
+
+              <div class="grid-preview-head story-admin-subhead">
+                <p>Atelier Intro</p>
+                <span>Copy shown above the craft role cards.</span>
+              </div>
+              <label>
+                <span class="lbl">Kicker</span>
+                <input class="inp" [ngModel]="content().story.atelier.kicker" (ngModelChange)="updateStoryAtelier('kicker', $event)" />
+              </label>
+              <label>
+                <span class="lbl">Title</span>
+                <input class="inp" [ngModel]="content().story.atelier.title" (ngModelChange)="updateStoryAtelier('title', $event)" />
+              </label>
+              <label>
+                <span class="lbl">Body</span>
+                <textarea class="inp" rows="3" [ngModel]="content().story.atelier.body" (ngModelChange)="updateStoryAtelier('body', $event)"></textarea>
+              </label>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid-preview-head story-admin-subhead">
+          <p>Sortable Chapters</p>
+          <span>Drag cards, or use the arrow buttons, to change the story order.</span>
+        </div>
+
+        <div class="story-chapter-editor">
+          @for (chapter of content().story.chapters; track chapter.id; let i = $index) {
+            <article
+              class="story-chapter-card"
+              draggable="true"
+              [class.dragging]="storyDraggingId() === chapter.id"
+              [class.drop-target]="storyDropTargetId() === chapter.id"
+              (dragstart)="onStoryDragStart(chapter.id)"
+              (dragover)="onStoryDragOver($event, chapter.id)"
+              (drop)="onStoryDrop($event, chapter.id)"
+              (dragend)="onStoryDragEnd()"
+            >
+              <div class="story-chapter-card__media">
+                <img [src]="chapter.imageUrl" [alt]="chapter.imageAlt" />
+                <span>{{ (i + 1).toString().padStart(2, '0') }}</span>
+              </div>
+
+              <div class="story-chapter-card__body">
+                <div class="story-card-tools">
+                  <button type="button" class="btn btn-outline btn-sm" (click)="moveStoryChapter(chapter.id, -1)" [disabled]="i === 0">Up</button>
+                  <button type="button" class="btn btn-outline btn-sm" (click)="moveStoryChapter(chapter.id, 1)" [disabled]="i === content().story.chapters.length - 1">Down</button>
+                </div>
+
+                <div class="field-stack compact">
+                  <label>
+                    <span class="lbl">Chapter photo</span>
+                    <div class="mini-picker">
+                      <strong>{{ imageName(chapter.imageUrl) }}</strong>
+                      <small>{{ uploadProgress('story-' + chapter.id) }}</small>
+                      <input #storyChapterFile type="file" accept="image/*" (change)="uploadStoryChapterImage(chapter.id, $event)" hidden />
+                      <button type="button" class="btn btn-outline btn-sm" (click)="storyChapterFile.click()" [disabled]="isUploading('story-' + chapter.id)">
+                        {{ isUploading('story-' + chapter.id) ? 'Uploading...' : 'Upload photo' }}
+                      </button>
+                    </div>
+                  </label>
+                  <label>
+                    <span class="lbl">Eyebrow</span>
+                    <input class="inp" [ngModel]="chapter.eyebrow" (ngModelChange)="updateStoryChapter(chapter.id, 'eyebrow', $event)" />
+                  </label>
+                  <label>
+                    <span class="lbl">Title</span>
+                    <input class="inp" [ngModel]="chapter.title" (ngModelChange)="updateStoryChapter(chapter.id, 'title', $event)" />
+                  </label>
+                  <label>
+                    <span class="lbl">Body</span>
+                    <textarea class="inp" rows="4" [ngModel]="chapter.body" (ngModelChange)="updateStoryChapter(chapter.id, 'body', $event)"></textarea>
+                  </label>
+                  <label>
+                    <span class="lbl">Image alt text</span>
+                    <input class="inp" [ngModel]="chapter.imageAlt" (ngModelChange)="updateStoryChapter(chapter.id, 'imageAlt', $event)" />
+                  </label>
+                </div>
+              </div>
+            </article>
+          }
+        </div>
+
+        <div class="grid-preview-head story-admin-subhead">
+          <p>Atelier Cards</p>
+          <span>Short role cards shown at the bottom of the story page.</span>
+        </div>
+
+        <div class="atelier-editor-grid">
+          @for (item of content().story.atelier.items; track item.id) {
+            <article class="atelier-editor-card">
+              <label>
+                <span class="lbl">Role title</span>
+                <input class="inp" [ngModel]="item.title" (ngModelChange)="updateStoryAtelierItem(item.id, 'title', $event)" />
+              </label>
+              <label>
+                <span class="lbl">Meta line</span>
+                <input class="inp" [ngModel]="item.meta" (ngModelChange)="updateStoryAtelierItem(item.id, 'meta', $event)" />
+              </label>
+            </article>
           }
         </div>
       </section>
@@ -561,6 +845,172 @@ function cloneContent(content: HomeContentData): HomeContentData {
       text-align: center;
     }
 
+    .story-editor {
+      display: grid;
+      gap: 18px;
+    }
+
+    .story-editor__head {
+      align-items: end;
+    }
+
+    .story-admin-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .story-admin-panel,
+    .story-chapter-card,
+    .atelier-editor-card {
+      border: 1px solid rgba(15, 23, 42, 0.1);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .story-admin-panel {
+      display: grid;
+      gap: 16px;
+      padding: 12px;
+    }
+
+    .story-preview-hero {
+      position: relative;
+      min-height: 330px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #111827;
+      isolation: isolate;
+    }
+
+    .story-preview-hero::after {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.2) 42%, rgba(17,24,39,.72));
+      content: "";
+    }
+
+    .story-preview-hero img {
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(.9) contrast(1.04);
+    }
+
+    .story-preview-hero div {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+    }
+
+    .story-preview-hero small {
+      color: #f7d99a;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .story-preview-hero h3 {
+      margin: 8px 0 2px;
+      color: #fff;
+      font-family: var(--ff-disp);
+      font-size: clamp(28px, 5vw, 46px);
+      font-weight: 650;
+      line-height: .95;
+    }
+
+    .story-preview-hero em {
+      color: #f7d99a;
+      font-family: var(--ff-disp);
+      font-size: clamp(20px, 4vw, 32px);
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    .story-admin-subhead {
+      margin-top: 2px;
+    }
+
+    .story-chapter-editor {
+      display: grid;
+      gap: 14px;
+    }
+
+    .story-chapter-card {
+      display: grid;
+      gap: 14px;
+      padding: 12px;
+      transition: border-color .16s ease, background .16s ease, opacity .16s ease, transform .16s ease;
+    }
+
+    .story-chapter-card.dragging {
+      opacity: .52;
+      transform: scale(.995);
+    }
+
+    .story-chapter-card.drop-target {
+      border-color: var(--gold);
+      background: var(--gold-3);
+    }
+
+    .story-chapter-card__media {
+      position: relative;
+      min-height: 230px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #111827;
+    }
+
+    .story-chapter-card__media img {
+      width: 100%;
+      height: 100%;
+      min-height: inherit;
+      object-fit: cover;
+    }
+
+    .story-chapter-card__media span {
+      position: absolute;
+      right: 14px;
+      bottom: 12px;
+      color: rgba(255,255,255,.8);
+      font-family: var(--ff-disp);
+      font-size: 46px;
+      font-weight: 700;
+      line-height: .82;
+    }
+
+    .story-chapter-card__body {
+      display: grid;
+      gap: 12px;
+    }
+
+    .story-card-tools {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .atelier-editor-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .atelier-editor-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .atelier-editor-card label {
+      display: grid;
+      gap: 7px;
+    }
+
     @media (min-width: 720px) {
       .home-admin__header {
         grid-template-columns: minmax(0, 1fr) auto;
@@ -574,6 +1024,16 @@ function cloneContent(content: HomeContentData): HomeContentData {
       }
 
       .preview-collection-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .story-editor__head,
+      .story-admin-grid,
+      .story-chapter-card {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .atelier-editor-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -594,6 +1054,10 @@ function cloneContent(content: HomeContentData): HomeContentData {
       .preview-collection-tile {
         min-height: 318px;
       }
+
+      .atelier-editor-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
     }
   `],
 })
@@ -606,6 +1070,8 @@ export class HomeContentComponent implements OnInit {
   readonly savedSnapshot = signal(JSON.stringify(DEFAULT_HOME_CONTENT));
   readonly saving = signal(false);
   readonly uploadState = signal<Record<string, number | 'error'>>({});
+  readonly storyDraggingId = signal<string | null>(null);
+  readonly storyDropTargetId = signal<string | null>(null);
   readonly isDirty = computed(() => JSON.stringify(this.content()) !== this.savedSnapshot());
 
   async ngOnInit(): Promise<void> {
@@ -650,6 +1116,149 @@ export class HomeContentComponent implements OnInit {
 
   uploadCollectionImage(id: string, event: Event): void {
     this.uploadImage(id, event, (url) => this.updateCollection(id, 'imageUrl', url));
+  }
+
+  updateStoryHero<K extends keyof StoryHeroContent>(key: K, value: StoryHeroContent[K]): void {
+    this.content.update((current) => ({
+      ...current,
+      story: {
+        ...current.story,
+        hero: {
+          ...current.story.hero,
+          [key]: value,
+        },
+      },
+    }));
+  }
+
+  updateStoryChapter<K extends keyof Omit<StoryChapterContent, 'id'>>(
+    id: string,
+    key: K,
+    value: StoryChapterContent[K],
+  ): void {
+    this.content.update((current) => ({
+      ...current,
+      story: {
+        ...current.story,
+        chapters: current.story.chapters.map((chapter) => (
+          chapter.id === id ? { ...chapter, [key]: value } : chapter
+        )),
+      },
+    }));
+  }
+
+  updateStoryQuote<K extends keyof StoryContentData['quote']>(key: K, value: StoryContentData['quote'][K]): void {
+    this.content.update((current) => ({
+      ...current,
+      story: {
+        ...current.story,
+        quote: {
+          ...current.story.quote,
+          [key]: value,
+        },
+      },
+    }));
+  }
+
+  updateStoryAtelier<K extends Exclude<keyof StoryContentData['atelier'], 'items'>>(
+    key: K,
+    value: StoryContentData['atelier'][K],
+  ): void {
+    this.content.update((current) => ({
+      ...current,
+      story: {
+        ...current.story,
+        atelier: {
+          ...current.story.atelier,
+          [key]: value,
+        },
+      },
+    }));
+  }
+
+  updateStoryAtelierItem<K extends keyof Omit<StoryAtelierItemContent, 'id'>>(
+    id: string,
+    key: K,
+    value: StoryAtelierItemContent[K],
+  ): void {
+    this.content.update((current) => ({
+      ...current,
+      story: {
+        ...current.story,
+        atelier: {
+          ...current.story.atelier,
+          items: current.story.atelier.items.map((item) => (
+            item.id === id ? { ...item, [key]: value } : item
+          )),
+        },
+      },
+    }));
+  }
+
+  uploadStoryHeroImage(event: Event): void {
+    this.uploadImage('story-hero', event, (url) => this.updateStoryHero('imageUrl', url));
+  }
+
+  uploadStoryChapterImage(id: string, event: Event): void {
+    this.uploadImage(`story-${id}`, event, (url) => this.updateStoryChapter(id, 'imageUrl', url));
+  }
+
+  moveStoryChapter(id: string, direction: -1 | 1): void {
+    this.content.update((current) => {
+      const chapters = [...current.story.chapters];
+      const index = chapters.findIndex((chapter) => chapter.id === id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= chapters.length) return current;
+      const [moved] = chapters.splice(index, 1);
+      chapters.splice(nextIndex, 0, moved);
+      return {
+        ...current,
+        story: {
+          ...current.story,
+          chapters,
+        },
+      };
+    });
+  }
+
+  onStoryDragStart(id: string): void {
+    this.storyDraggingId.set(id);
+  }
+
+  onStoryDragOver(event: DragEvent, id: string): void {
+    event.preventDefault();
+    this.storyDropTargetId.set(id);
+  }
+
+  onStoryDrop(event: DragEvent, id: string): void {
+    event.preventDefault();
+    const draggingId = this.storyDraggingId();
+    if (!draggingId || draggingId === id) {
+      this.onStoryDragEnd();
+      return;
+    }
+
+    this.content.update((current) => {
+      const chapters = [...current.story.chapters];
+      const fromIndex = chapters.findIndex((chapter) => chapter.id === draggingId);
+      const toIndex = chapters.findIndex((chapter) => chapter.id === id);
+      if (fromIndex === -1 || toIndex === -1) return current;
+      const [moved] = chapters.splice(fromIndex, 1);
+      chapters.splice(toIndex, 0, moved);
+      return {
+        ...current,
+        story: {
+          ...current.story,
+          chapters,
+        },
+      };
+    });
+    this.onStoryDragEnd();
+  }
+
+  onStoryDragEnd(): void {
+    this.storyDraggingId.set(null);
+    this.storyDropTargetId.set(null);
   }
 
   isUploading(key: string): boolean {
@@ -747,11 +1356,34 @@ export class HomeContentComponent implements OnInit {
   }
 
   private normalizeContentImages(data: HomeContentData): HomeContentData {
-    const next = cloneContent(data);
+    const fallback = cloneContent(DEFAULT_HOME_CONTENT);
+    const next = cloneContent({
+      ...fallback,
+      ...data,
+      hero: { ...fallback.hero, ...(data.hero || {}) },
+      collections: Array.isArray(data.collections) ? data.collections : fallback.collections,
+      story: {
+        ...fallback.story,
+        ...(data.story || {}),
+        hero: { ...fallback.story.hero, ...(data.story?.hero || {}) },
+        chapters: Array.isArray(data.story?.chapters) ? data.story.chapters : fallback.story.chapters,
+        quote: { ...fallback.story.quote, ...(data.story?.quote || {}) },
+        atelier: {
+          ...fallback.story.atelier,
+          ...(data.story?.atelier || {}),
+          items: Array.isArray(data.story?.atelier?.items) ? data.story.atelier.items : fallback.story.atelier.items,
+        },
+      },
+    });
     next.hero.imageUrl = this.resolveMediaUrl(next.hero.imageUrl);
     next.collections = next.collections.slice(0, HOME_COLLECTION_LIMIT).map((tile) => ({
       ...tile,
       imageUrl: this.resolveMediaUrl(tile.imageUrl),
+    }));
+    next.story.hero.imageUrl = this.resolveMediaUrl(next.story.hero.imageUrl);
+    next.story.chapters = next.story.chapters.map((chapter) => ({
+      ...chapter,
+      imageUrl: this.resolveMediaUrl(chapter.imageUrl),
     }));
     return next;
   }

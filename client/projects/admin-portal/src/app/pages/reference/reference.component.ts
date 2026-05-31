@@ -330,7 +330,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
       display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
     }
     .size-chip {
-      font-size: 12px; font-weight: 600; font-family: var(--ff-mono, monospace);
+      font-size: 12px; font-weight: 600; font-family: var(--ff-mono);
       background: var(--bg-2); border: 1px solid var(--border);
       border-radius: 6px; padding: 3px 10px; color: var(--ink-2);
     }

@@ -97,7 +97,7 @@ import { I18nService } from '../../services/i18n.service';
       background: var(--gold-3, var(--bg));
     }
     .rt-bold { font-weight: 700; }
-    .rt-italic { font-style: italic; font-family: serif; }
+    .rt-italic { font-style: italic; font-family: var(--ff-ui); }
     .rt-underline { text-decoration: underline; }
     .rt-sep {
       width: 1px;

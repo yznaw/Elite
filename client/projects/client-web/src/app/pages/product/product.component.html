@@ -96,6 +96,35 @@
             }
           </dl>
 
+          @if (productColorNames(p).length > 0) {
+            <div class="color-section">
+              <div class="section-label">
+                <span>{{ t('product.color.label') }}</span>
+                @if (selectedColor()) {
+                  <strong>{{ selectedColor() }}</strong>
+                }
+              </div>
+
+              <div class="color-options" [attr.aria-label]="t('product.color.label')">
+                @for (color of productColorNames(p); track color) {
+                  <button
+                    type="button"
+                    class="color-swatch"
+                    [class.is-selected]="selectedColor() === color"
+                    [style.background]="colorHex(color)"
+                    [attr.title]="color"
+                    [attr.aria-label]="t('product.color.choose', { color })"
+                    [attr.aria-pressed]="selectedColor() === color"
+                    (click)="selectProductColor(color)"
+                    (keydown)="onProductColorKeydown(color, $event)"
+                  >
+                    <span class="sr-only">{{ color }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
           <div id="size-section" class="size-section">
             <div class="section-label">
               <span>{{ t('product.size.label') }}</span>
@@ -118,6 +147,7 @@
                   type="button"
                   class="size-btn"
                   [class.active]="selectedSize() === s"
+                  [class.out-of-stock]="!sizeInStock(p, s)"
                   [attr.aria-pressed]="selectedSize() === s"
                   (click)="selectSize(s)"
                 >
@@ -153,6 +183,7 @@
                       type="button"
                       class="size-btn"
                       [class.active]="selectedSize() === s"
+                      [class.out-of-stock]="!sizeInStock(p, s)"
                       [attr.aria-pressed]="selectedSize() === s"
                       (click)="selectSize(s)"
                     >
@@ -177,19 +208,55 @@
           </div>
 
           <div class="cta-stack">
-            <button type="button" class="add-cart-btn" (click)="add()">
-              @if (addedFeedback()) {
-                <span>✓ {{ t('product.cta.added') }}</span>
-              } @else {
-                <span>{{ t('product.cta.addToCart') }}</span>
+            @if (selectedSizeInStock()) {
+              <button type="button" class="add-cart-btn" (click)="add()">
+                @if (addedFeedback()) {
+                  <span>✓ {{ t('product.cta.added') }}</span>
+                } @else {
+                  <span>{{ t('product.cta.addToCart') }}</span>
+                  <small>{{ price(p.price * qty()) }}</small>
+                }
+              </button>
+              <button type="button" class="buy-now-btn" (click)="buyNow()">
+                <span>{{ t('product.cta.buyNow') }}</span>
                 <small>{{ price(p.price * qty()) }}</small>
-              }
-            </button>
-            <button type="button" class="buy-now-btn" (click)="buyNow()">
-              <span>{{ t('product.cta.buyNow') }}</span>
-              <small>{{ price(p.price * qty()) }}</small>
-            </button>
+              </button>
+            } @else {
+              <button type="button" class="notify-btn" (click)="openRestockForm()">
+                <span>{{ t('product.restock.notify') }}</span>
+                <small>{{ t('product.restock.size', { size: selectedSize() ?? '—' }) }}</small>
+              </button>
+            }
           </div>
+
+          @if (!selectedSizeInStock()) {
+            <div class="restock-panel" [class.is-open]="restockFormOpen() || restockSubmitted()">
+              @if (restockSubmitted()) {
+                <p class="restock-success">{{ t('product.restock.success') }}</p>
+              } @else if (restockFormOpen()) {
+                <form (submit)="submitRestockRequest($event)">
+                  <label for="restock-email">{{ t('product.restock.emailLabel') }}</label>
+                  <div class="restock-form-row">
+                    <input
+                      id="restock-email"
+                      type="email"
+                      [value]="restockEmail()"
+                      (input)="onRestockEmailInput($event)"
+                      [placeholder]="t('product.restock.emailPlaceholder')"
+                      autocomplete="email"
+                      required
+                    />
+                    <button type="submit" [disabled]="restockSubmitting()">
+                      {{ restockSubmitting() ? t('product.restock.sending') : t('product.restock.submit') }}
+                    </button>
+                  </div>
+                  @if (restockError()) {
+                    <p class="restock-error">{{ restockError() }}</p>
+                  }
+                </form>
+              }
+            </div>
+          }
 
           <div class="trust-row">
             @for (trustKey of ['product.trust.delivery','product.trust.certificate','product.trust.returns']; track trustKey) {
@@ -241,16 +308,22 @@
     </div>
 
     <div class="sticky-atc" id="sticky-atc">
-      <button type="button" class="add-cart-btn" (click)="add()">
-        @if (addedFeedback()) {
-          <ng-container>{{ t('product.sticky.added') }}</ng-container>
-        } @else {
-          <ng-container>{{ t('product.sticky.addToCart') }}</ng-container>
-        }
-      </button>
-      <button type="button" class="buy-now-btn" (click)="buyNow()">
-        {{ t('product.sticky.buyNow') }}
-      </button>
+      @if (selectedSizeInStock()) {
+        <button type="button" class="add-cart-btn" (click)="add()">
+          @if (addedFeedback()) {
+            <ng-container>{{ t('product.sticky.added') }}</ng-container>
+          } @else {
+            <ng-container>{{ t('product.sticky.addToCart') }}</ng-container>
+          }
+        </button>
+        <button type="button" class="buy-now-btn" (click)="buyNow()">
+          {{ t('product.sticky.buyNow') }}
+        </button>
+      } @else {
+        <button type="button" class="notify-btn" (click)="openRestockForm()">
+          {{ t('product.restock.notify') }}
+        </button>
+      }
     </div>
   </main>
 }

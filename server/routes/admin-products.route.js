@@ -5,6 +5,7 @@ const { asyncHandler, created, notFound, ok, slugify, toCents, validationError }
 const { upload } = require('../middleware/upload');
 const { storage } = require('../lib/storage');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
+const { processRestockNotifications } = require('../lib/restock-notifications');
 
 const router = Router();
 const IMAGE_COLORS_SELECT = `
@@ -460,6 +461,7 @@ router.post('/', asyncHandler(async (req, res) => {
     const saved = await upsertProduct(client, tenant, req.body);
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
+    await processRestockNotifications(client, tenant.id, saved.id);
     created(res, product, 'Product saved.');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -502,6 +504,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     const saved = await upsertProduct(client, tenant, payload);
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
+    await processRestockNotifications(client, tenant.id, saved.id);
     ok(res, product, 'Product updated.');
   } catch (err) {
     await client.query('ROLLBACK');

@@ -75,12 +75,20 @@ export class ProductsService {
       : [];
     const image = this.resolveMediaUrl(product.image) || images[0] || product.image;
     const colorImages = this.normalizeColorImages(product.colorImages);
+    const variants = Array.isArray(product.variants)
+      ? product.variants.map((variant) => ({
+        ...variant,
+        size: Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
+        stock: Math.max(0, Number.parseInt(String(variant.stock), 10) || 0),
+      }))
+      : undefined;
 
     return {
       ...product,
       image,
       images: images.length ? [...new Set([image, ...images])] : product.images,
       colorImages: Object.keys(colorImages).length ? colorImages : undefined,
+      variants,
     };
   }
 

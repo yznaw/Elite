@@ -99,11 +99,34 @@ export class HomeContentService {
   }
 
   private normalizeContentImages(content: HomeContentData): HomeContentData {
-    const next = this.cloneContent(content);
+    const fallback = this.cloneContent(DEFAULT_HOME_CONTENT);
+    const next = this.cloneContent({
+      ...fallback,
+      ...content,
+      hero: { ...fallback.hero, ...(content.hero || {}) },
+      collections: Array.isArray(content.collections) ? content.collections : fallback.collections,
+      story: {
+        ...fallback.story,
+        ...(content.story || {}),
+        hero: { ...fallback.story.hero, ...(content.story?.hero || {}) },
+        chapters: Array.isArray(content.story?.chapters) ? content.story.chapters : fallback.story.chapters,
+        quote: { ...fallback.story.quote, ...(content.story?.quote || {}) },
+        atelier: {
+          ...fallback.story.atelier,
+          ...(content.story?.atelier || {}),
+          items: Array.isArray(content.story?.atelier?.items) ? content.story.atelier.items : fallback.story.atelier.items,
+        },
+      },
+    });
     next.hero.imageUrl = this.resolveMediaUrl(next.hero.imageUrl);
     next.collections = next.collections.slice(0, 3).map((tile) => ({
       ...tile,
       imageUrl: this.resolveMediaUrl(tile.imageUrl),
+    }));
+    next.story.hero.imageUrl = this.resolveMediaUrl(next.story.hero.imageUrl);
+    next.story.chapters = next.story.chapters.map((chapter) => ({
+      ...chapter,
+      imageUrl: this.resolveMediaUrl(chapter.imageUrl),
     }));
     return next;
   }
