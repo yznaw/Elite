@@ -2,93 +2,103 @@
   @for (section of layoutSections(); track section.id) {
     @if (section.visible) {
       @switch (section.id) {
-        @case ('home-hero') {
-          <section #heroSection class="hero">
+        @case ("home-hero") {
+          <section class="hero" aria-labelledby="home-hero-brand">
             <div class="hero-grain"></div>
             <div class="hero-ring hero-ring--lg"></div>
-            <div class="hero-ring hero-ring--sm"></div>
+            <div class="hero-aura hero-aura--left"></div>
+            <div class="hero-aura hero-aura--right"></div>
 
-            <div #heroShell class="hero-shell">
-              <div class="hero-scroll-copy" aria-live="polite">
-                @for (photo of heroPhotos; track photo.id; let index = $index) {
-                  <div class="hero-caption" [class.is-active]="activePhotoIndex() === index">
-                    <span>{{ t(photo.eyebrowKey) }}</span>
-                    <strong class="serif">{{ t(photo.titleKey) }}</strong>
-                    <p>{{ t(photo.subtitleKey) }}</p>
-                  </div>
-                }
-              </div>
-
-              <div class="hero-visual">
-                <div class="hero-photo-stack" aria-live="polite">
-                  @for (photo of heroPhotos; track photo.id; let index = $index) {
-                    <figure class="hero-photo" [class.is-active]="activePhotoIndex() === index">
-                      <img [src]="photo.imageUrl" [alt]="t(photo.altKey)" />
-                      <figcaption>{{ photo.index }} / {{ heroPhotos.length }}</figcaption>
-                    </figure>
-                  }
-                </div>
-
-                <div class="photo-switcher" role="radiogroup" [attr.aria-label]="t('home.photo.switch')">
-                  <button
-                    type="button"
-                    class="photo-arrow photo-arrow--prev"
-                    [attr.aria-label]="t('home.photo.previous')"
-                    [title]="t('common.previous')"
-                    (click)="selectAdjacentHeroPhoto(-1)"
-                  >
-                    <span aria-hidden="true">‹</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    class="photo-arrow photo-arrow--next"
-                    [attr.aria-label]="t('home.photo.next')"
-                    [title]="t('common.next')"
-                    (click)="selectAdjacentHeroPhoto(1)"
-                  >
-                    <span aria-hidden="true">›</span>
-                  </button>
-                </div>
-
-                <div class="photo-controls">
-                  <div class="photo-tabs" role="tablist" [attr.aria-label]="t('home.photo.switch')">
-                    @for (photo of heroPhotos; track photo.id; let index = $index) {
-                      <button
-                        type="button"
-                        role="tab"
-                        [class.is-active]="activePhotoIndex() === index"
-                        [attr.aria-selected]="activePhotoIndex() === index"
-                        [attr.aria-label]="t('home.photo.showNamed', { name: t(photo.titleKey) })"
-                        (click)="selectHeroPhoto(index)"
-                      >
-                        {{ photo.index }}
-                      </button>
-                    }
-                  </div>
-
-                  <div class="photo-progress" aria-hidden="true">
-                    @for (photo of heroPhotos; track photo.id; let index = $index) {
-                      <span class="photo-progress__item" [class.is-active]="activePhotoIndex() === index"></span>
-                    }
-                  </div>
-                </div>
-              </div>
-
-              <div class="hero-scroll">
-                <span>{{ t('common.scroll') }}</span>
-                <div></div>
-              </div>
+            <div class="hero-brand">
+              <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
+              <span>{{ activeHeroItem().subtitle }}</span>
             </div>
+
+            <div class="hero-stage">
+              <button
+                type="button"
+                class="hero-arrow hero-arrow--prev"
+                aria-label="Previous hero item"
+                title="Previous"
+                (click)="selectAdjacentHeroItem(-1)"
+              >
+                <span aria-hidden="true">‹</span>
+              </button>
+
+              <figure class="hero-product">
+                <img
+                  [src]="activeHeroItem().imageUrl"
+                  [alt]="activeHeroItem().alt"
+                />
+              </figure>
+
+              <button
+                type="button"
+                class="hero-arrow hero-arrow--next"
+                aria-label="Next hero item"
+                title="Next"
+                (click)="selectAdjacentHeroItem(1)"
+              >
+                <span aria-hidden="true">›</span>
+              </button>
+
+              @for (callout of heroCallouts; track callout.id) {
+                <article
+                  class="hero-callout"
+                  [ngClass]="callout.className"
+                  [style.--delay]="callout.delay"
+                >
+                  <span class="callout-line" aria-hidden="true"
+                    ><span></span
+                  ></span>
+                  <div class="callout-pill">
+                    <img [src]="callout.thumbnail" [alt]="callout.alt" />
+                    <div>
+                      <strong>{{ callout.titleAr }}</strong>
+                      <span>{{ callout.subtitleEn }}</span>
+                    </div>
+                  </div>
+                </article>
+              }
+            </div>
+
+            <div
+              class="hero-mobile-features"
+              aria-label="Product craft details"
+            >
+              @for (callout of heroCallouts; track callout.id) {
+                <article class="mobile-feature-card">
+                  <img [src]="callout.thumbnail" [alt]="callout.alt" />
+                  <div>
+                    <strong>{{ callout.titleAr }}</strong>
+                    <span>{{ callout.subtitleEn }}</span>
+                  </div>
+                </article>
+              }
+            </div>
+
+            <button
+              type="button"
+              class="hero-cta"
+              (click)="goTo('/collection')"
+            >
+              <span>تسوّق المجموعة</span>
+              <span>Shop the Collection</span>
+            </button>
           </section>
         }
 
-        @case ('home-collections') {
-          <section class="home-commerce" aria-labelledby="home-collection-title">
+        @case ("home-collections") {
+          <section
+            class="home-commerce"
+            aria-labelledby="home-collection-title"
+          >
             <div class="collection-showcase">
               <div class="collection-heading">
                 <h2 id="home-collection-title">Featured Collections</h2>
-                <p>Dare to mix and match. Explore the latest edits by category.</p>
+                <p>
+                  Dare to mix and match. Explore the latest edits by category.
+                </p>
               </div>
 
               <div class="collection-grid">
@@ -111,11 +121,14 @@
           </section>
         }
 
-        @case ('home-discount') {
+        @case ("home-discount") {
           <section class="home-commerce" aria-labelledby="home-discount-title">
             <div class="discount-hero anim-fade-up">
               <div class="discount-image">
-                <img [src]="contentData().hero.imageUrl" [alt]="contentData().hero.title" />
+                <img
+                  [src]="contentData().hero.imageUrl"
+                  [alt]="contentData().hero.title"
+                />
               </div>
 
               <div class="discount-copy">
@@ -128,7 +141,11 @@
                   <strong>{{ contentData().hero.discountText }}</strong>
                 </div>
 
-                <button type="button" class="discount-cta" (click)="goToContentLink(contentData().hero.ctaLink)">
+                <button
+                  type="button"
+                  class="discount-cta"
+                  (click)="goToContentLink(contentData().hero.ctaLink)"
+                >
                   {{ contentData().hero.ctaText }}
                 </button>
               </div>
@@ -136,90 +153,38 @@
           </section>
         }
 
-        @case ('home-promise') {
-          <section
-            style="
-              margin: 0 24px 80px;
-              padding: 60px 40px;
-              background: linear-gradient(135deg, var(--card) 0%, var(--card2) 100%);
-              border: 1px solid var(--border);
-              position: relative;
-              overflow: hidden;
-            "
-          >
-            <div
-              style="
-                position: absolute;
-                top: -40px;
-                right: -40px;
-                width: 200px;
-                height: 200px;
-                border-radius: 50%;
-                border: 1px solid rgba(201, 169, 110, 0.08);
-              "
-            ></div>
-            <div
-              style="
-                position: absolute;
-                bottom: -60px;
-                left: -20px;
-                width: 150px;
-                height: 150px;
-                border-radius: 50%;
-                border: 1px solid rgba(201, 169, 110, 0.06);
-              "
-            ></div>
-            <div style="position: relative; z-index: 1">
-              <div
-                style="
-                  font-family: var(--ff-sans);
-                  font-size: 9px;
-                  letter-spacing: 0.3em;
-                  color: var(--gold);
-                  text-transform: uppercase;
-                  margin-bottom: 16px;
-                "
-              >
-                {{ t('home.promise.kicker') }}
+        @case ("home-promise") {
+          <section class="home-commerce" aria-labelledby="home-promise-title">
+            <div class="promise-panel">
+              <div>
+                <p class="discount-kicker">{{ t("home.promise.kicker") }}</p>
+                <h2 id="home-promise-title" class="serif">
+                  {{ t("home.promise.title") }}
+                </h2>
               </div>
-              <h3
-                class="serif"
-                style="
-                  font-size: clamp(28px, 5vw, 48px);
-                  font-weight: 300;
-                  color: var(--cream);
-                  line-height: 1.15;
-                  max-width: 600px;
-                  margin-bottom: 24px;
-                "
-              >
-                {{ t('home.promise.headline.line1') }}<br />
-                <em style="color: var(--gold)">{{ t('home.promise.headline.line2') }}</em>
-              </h3>
-              <div style="display: flex; gap: 40px; flex-wrap: wrap">
-                @for (s of stats; track s.labelKey) {
-                  <div>
-                    <div
-                      class="serif"
-                      style="font-size: 32px; color: var(--gold); font-weight: 300"
-                    >
-                      {{ s.value }}
-                    </div>
-                    <div
-                      style="
-                        font-family: var(--ff-sans);
-                        font-size: 10px;
-                        letter-spacing: 0.1em;
-                        color: var(--muted);
-                        text-transform: uppercase;
-                        margin-top: 2px;
-                      "
-                    >
-                      {{ t(s.labelKey) }}
-                    </div>
-                  </div>
+
+              <div class="promise-grid">
+                @for (card of metaCards; track card.id) {
+                  <article [class.is-visible]="metaVisible()">
+                    <span>{{ card.icon }}</span>
+                    <h3>{{ t(card.labelKey) }}</h3>
+                    <p>{{ t(card.subKey) }}</p>
+                  </article>
                 }
               </div>
+            </div>
+          </section>
+        }
+
+        @case ("home-reels") {
+          <section class="home-commerce">
+            <div class="stats-grid">
+              @for (stat of stats; track stat.value) {
+                <article>
+                  <strong class="serif">{{ stat.value }}</strong>
+                  <span>{{ t(stat.labelKey) }}</span>
+                </article>
+              }
             </div>
           </section>
         }

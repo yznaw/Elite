@@ -24,7 +24,7 @@ interface StorefrontSnapshot {
 }
 
 const DEFAULT_HOME_LAYOUT: HomeLayoutSection[] = [
-  { id: 'home-hero', title: 'Scroll Hero', visible: true },
+  { id: 'home-hero', title: 'Landing Hero', visible: true },
   { id: 'home-collections', title: 'Featured Collections', visible: true },
   { id: 'home-discount', title: 'Discount Hero', visible: true },
   { id: 'home-promise', title: 'Craft Promise', visible: true },

@@ -1,19 +1,6 @@
-import {
-  AfterViewInit,
-  Component,
-  ElementRef,
-  NgZone,
-  OnDestroy,
-  OnInit,
-  ViewChild,
-  inject,
-  signal,
-} from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import Lenis from 'lenis';
-import { gsap } from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { I18nService } from '../../services/i18n.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { HomeCollectionTileContent } from '../../models/home-content.model';
@@ -30,14 +17,22 @@ interface PromiseStat {
   labelKey: string;
 }
 
-interface HeroPhoto {
+interface HeroCallout {
   id: string;
-  index: string;
-  eyebrowKey: string;
-  titleKey: string;
-  subtitleKey: string;
+  className: string;
+  delay: string;
+  titleAr: string;
+  subtitleEn: string;
+  thumbnail: string;
+  alt: string;
+}
+
+interface HeroItem {
+  id: string;
+  name: string;
+  subtitle: string;
   imageUrl: string;
-  altKey: string;
+  alt: string;
 }
 
 @Component({
@@ -47,71 +42,80 @@ interface HeroPhoto {
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss',
 })
-export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
+export class HomeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
-  private readonly ngZone = inject(NgZone);
   private readonly i18n = inject(I18nService);
   private readonly homeContent = inject(HomeContentService);
 
   private metaTimer: number | undefined;
-  private lenis?: Lenis;
-  private lenisTicker?: (time: number) => void;
-  private heroContext?: gsap.Context;
-  private heroScrollDistance = 0;
-
-  @ViewChild('heroSection') private heroSection?: ElementRef<HTMLElement>;
-  @ViewChild('heroShell') private heroShell?: ElementRef<HTMLElement>;
 
   readonly metaVisible = signal(false);
-  readonly activePhotoIndex = signal(0);
+  readonly activeHeroItemIndex = signal(0);
   readonly contentData = this.homeContent.contentData;
   readonly layoutSections = this.homeContent.layoutSections;
 
-  readonly heroPhotos: HeroPhoto[] = [
+  readonly heroItems: HeroItem[] = [
     {
-      id: 'topPair',
-      index: '01',
-      eyebrowKey: 'home.hero.photo.topPair.eyebrow',
-      titleKey: 'home.hero.photo.topPair.title',
-      subtitleKey: 'home.hero.photo.topPair.subtitle',
-      imageUrl: '/assets/hero-scroll/elite-top-pair.jpeg',
-      altKey: 'home.hero.photo.topPair.alt',
+      id: 'italian-leather',
+      name: 'Italian Leather Sandals',
+      subtitle: 'صندل جلد طبيعي / Made in Italy',
+      imageUrl: '/assets/hero-scroll/elite-angle-pair-cutout.png',
+      alt: 'Brown full-grain leather elite sandals made in Italy',
     },
     {
-      id: 'angleSingle',
-      index: '02',
-      eyebrowKey: 'home.hero.photo.angleSingle.eyebrow',
-      titleKey: 'home.hero.photo.angleSingle.title',
-      subtitleKey: 'home.hero.photo.angleSingle.subtitle',
-      imageUrl: '/assets/hero-scroll/elite-angle-single.jpeg',
-      altKey: 'home.hero.photo.angleSingle.alt',
+      id: 'signature-comfort',
+      name: 'Signature Comfort Sandals',
+      subtitle: 'راحة يومية / Italian Craft',
+      imageUrl: '/assets/hero-scroll/elite-angle-pair-cutout.png',
+      alt: 'Brown elite comfort leather sandals made in Italy',
     },
     {
-      id: 'sideSingle',
-      index: '03',
-      eyebrowKey: 'home.hero.photo.sideSingle.eyebrow',
-      titleKey: 'home.hero.photo.sideSingle.title',
-      subtitleKey: 'home.hero.photo.sideSingle.subtitle',
-      imageUrl: '/assets/hero-scroll/elite-side-single.jpeg',
-      altKey: 'home.hero.photo.sideSingle.alt',
+      id: 'handmade-profile',
+      name: 'Handmade Leather Profile',
+      subtitle: 'خياطة يدوية / Full-Grain Leather',
+      imageUrl: '/assets/hero-scroll/elite-angle-pair-cutout.png',
+      alt: 'Handmade brown full-grain leather elite sandals',
+    },
+  ];
+
+  readonly activeHeroItem = computed(() => this.heroItems[this.activeHeroItemIndex()]);
+
+  readonly heroCallouts: HeroCallout[] = [
+    {
+      id: 'strap',
+      className: 'hero-callout--strap',
+      delay: '0.34s',
+      titleAr: 'جلد عجل طبيعي',
+      subtitleEn: 'Full-Grain Leather',
+      thumbnail: '/assets/hero-scroll/elite-angle-single.jpeg',
+      alt: 'Close crop of the brown full-grain leather strap',
     },
     {
-      id: 'frontPair',
-      index: '04',
-      eyebrowKey: 'home.hero.photo.frontPair.eyebrow',
-      titleKey: 'home.hero.photo.frontPair.title',
-      subtitleKey: 'home.hero.photo.frontPair.subtitle',
-      imageUrl: '/assets/hero-scroll/elite-front-pair.jpeg',
-      altKey: 'home.hero.photo.frontPair.alt',
+      id: 'buckle',
+      className: 'hero-callout--buckle',
+      delay: '0.48s',
+      titleAr: 'إبزيم معدني فاخر',
+      subtitleEn: 'Premium Buckle',
+      thumbnail: '/assets/hero-scroll/elite-front-pair.jpeg',
+      alt: 'Close crop of the premium buckle detail',
     },
     {
-      id: 'anglePair',
-      index: '05',
-      eyebrowKey: 'home.hero.photo.anglePair.eyebrow',
-      titleKey: 'home.hero.photo.anglePair.title',
-      subtitleKey: 'home.hero.photo.anglePair.subtitle',
-      imageUrl: '/assets/hero-scroll/elite-angle-pair.jpeg',
-      altKey: 'home.hero.photo.anglePair.alt',
+      id: 'sole',
+      className: 'hero-callout--sole',
+      delay: '0.76s',
+      titleAr: 'نعل مريح',
+      subtitleEn: 'Comfort Sole',
+      thumbnail: '/assets/hero-scroll/elite-side-single.jpeg',
+      alt: 'Close crop of the comfort sole profile',
+    },
+    {
+      id: 'stitching',
+      className: 'hero-callout--stitching',
+      delay: '0.62s',
+      titleAr: 'خياطة يدوية',
+      subtitleEn: 'Hand Stitched',
+      thumbnail: '/assets/hero-scroll/elite-top-pair.jpeg',
+      alt: 'Close crop of the hand-stitched leather edge',
     },
   ];
 
@@ -135,18 +139,17 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
   }
 
-  ngAfterViewInit(): void {
-    this.ngZone.runOutsideAngular(() => this.initScrollExperience());
-  }
-
   ngOnDestroy(): void {
     if (this.metaTimer) clearTimeout(this.metaTimer);
-    this.destroyScrollExperience();
   }
 
   goTo(path: string): void {
     void this.router.navigate([path]);
     window.scrollTo(0, 0);
+  }
+
+  selectAdjacentHeroItem(direction: -1 | 1): void {
+    this.activeHeroItemIndex.update((index) => (index + direction + this.heroItems.length) % this.heroItems.length);
   }
 
   goToContentLink(link: string): void {
@@ -162,28 +165,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   goToCollectionTile(tile: HomeCollectionTileContent): void {
     this.goToContentLink(this.collectionTileRoute(tile));
-  }
-
-  selectHeroPhoto(index: number): void {
-    const section = this.heroSection?.nativeElement;
-    if (!section) return;
-
-    const clampedIndex = Math.max(0, Math.min(index, this.heroPhotos.length - 1));
-    const scrollDistance = Math.max(this.heroScrollDistance || section.offsetHeight - window.innerHeight, 1);
-    const lastIndex = this.heroPhotos.length - 1;
-    const rawProgress = this.heroPhotos.length <= 1 ? 0 : clampedIndex / lastIndex;
-    const progress = clampedIndex === lastIndex ? 0.92 : rawProgress;
-    const target = section.offsetTop + scrollDistance * progress;
-
-    this.lenis?.scrollTo(target, {
-      duration: 1.05,
-      easing: (t: number) => 1 - Math.pow(1 - t, 3),
-    });
-  }
-
-  selectAdjacentHeroPhoto(direction: -1 | 1): void {
-    const nextIndex = (this.activePhotoIndex() + direction + this.heroPhotos.length) % this.heroPhotos.length;
-    this.selectHeroPhoto(nextIndex);
   }
 
   private collectionTileRoute(tile: HomeCollectionTileContent): string {
@@ -218,148 +199,5 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'collection';
-  }
-
-  private initScrollExperience(): void {
-    const section = this.heroSection?.nativeElement;
-    const shell = this.heroShell?.nativeElement;
-    if (!section || !shell) return;
-
-    gsap.registerPlugin(ScrollTrigger);
-    this.initLenis();
-
-    this.heroContext = gsap.context(() => {
-      const photos = gsap.utils.toArray<HTMLElement>('.hero-photo');
-      const captions = gsap.utils.toArray<HTMLElement>('.hero-caption');
-      const progressItems = gsap.utils.toArray<HTMLElement>('.photo-progress__item');
-      const sectionDuration = Math.max(this.heroPhotos.length * 760, 3000);
-      const segment = 1.2;
-      this.heroScrollDistance = sectionDuration;
-
-      gsap.set(photos, {
-        autoAlpha: 0,
-        scale: 0.86,
-        y: 90,
-        rotate: 4,
-        filter: 'blur(12px)',
-        clipPath: 'inset(10% 10% 10% 10% round 30px)',
-      });
-      gsap.set(photos[0], {
-        autoAlpha: 1,
-        scale: 1,
-        y: 0,
-        rotate: 0,
-        filter: 'blur(0px)',
-        clipPath: 'inset(0% 0% 0% 0% round 0px)',
-      });
-      gsap.set(captions, { autoAlpha: 0, y: 18 });
-      gsap.set(captions[0], { autoAlpha: 1, y: 0 });
-
-      const timeline = gsap.timeline({
-        defaults: { ease: 'power3.inOut' },
-        scrollTrigger: {
-          trigger: section,
-          start: 'top top',
-          end: `+=${sectionDuration}`,
-          scrub: 0.85,
-          pin: shell,
-          anticipatePin: 1,
-          invalidateOnRefresh: true,
-          onUpdate: (self) => this.updateActivePhoto(self.progress, progressItems),
-        },
-      });
-
-      photos.forEach((photo, index) => {
-        const at = index * segment;
-        const drift = index % 2 === 0 ? -4 : 4;
-
-        if (index > 0) {
-          const previousPhoto = photos[index - 1];
-          const previousCaption = captions[index - 1];
-
-          timeline.to(previousPhoto, {
-            autoAlpha: 0,
-            scale: 1.08,
-            y: -74,
-            rotate: -drift,
-            filter: 'blur(12px)',
-            clipPath: 'inset(8% 8% 8% 8% round 24px)',
-            duration: 0.78,
-          }, at);
-          timeline.to(previousCaption, { autoAlpha: 0, y: -18, duration: 0.45 }, at);
-          timeline.fromTo(photo, {
-            autoAlpha: 0,
-            scale: 0.86,
-            y: 92,
-            rotate: drift,
-            filter: 'blur(14px)',
-            clipPath: 'inset(14% 12% 14% 12% round 32px)',
-          }, {
-            autoAlpha: 1,
-            scale: 1,
-            y: 0,
-            rotate: 0,
-            filter: 'blur(0px)',
-            clipPath: 'inset(0% 0% 0% 0% round 0px)',
-            duration: 0.9,
-          }, at + 0.04);
-        }
-
-        timeline.to(photo, {
-          scale: 1.035,
-          xPercent: index % 2 === 0 ? 1.2 : -1.2,
-          y: -10,
-          duration: 0.62,
-          ease: 'none',
-        }, at + 0.62);
-        timeline.to(captions[index], { autoAlpha: 1, y: 0, duration: 0.45 }, at + 0.12);
-      });
-
-      ScrollTrigger.refresh();
-    }, section);
-  }
-
-  private initLenis(): void {
-    if (this.lenis) return;
-
-    this.lenis = new Lenis({
-      lerp: 0.085,
-      wheelMultiplier: 0.92,
-      touchMultiplier: 1.08,
-      smoothWheel: true,
-    });
-
-    this.lenis.on('scroll', ScrollTrigger.update);
-    this.lenisTicker = (time: number): void => {
-      this.lenis?.raf(time * 1000);
-    };
-
-    gsap.ticker.add(this.lenisTicker);
-    gsap.ticker.lagSmoothing(0);
-  }
-
-  private updateActivePhoto(progress: number, progressItems: HTMLElement[]): void {
-    const nextIndex = Math.min(this.heroPhotos.length - 1, Math.round(progress * (this.heroPhotos.length - 1)));
-    if (nextIndex !== this.activePhotoIndex()) {
-      this.ngZone.run(() => this.activePhotoIndex.set(nextIndex));
-    }
-
-    progressItems.forEach((item, index) => {
-      item.classList.toggle('is-active', index === nextIndex);
-      item.classList.toggle('is-seen', index < nextIndex);
-    });
-  }
-
-  private destroyScrollExperience(): void {
-    this.heroContext?.revert();
-    this.heroContext = undefined;
-
-    if (this.lenisTicker) {
-      gsap.ticker.remove(this.lenisTicker);
-      this.lenisTicker = undefined;
-    }
-
-    this.lenis?.destroy();
-    this.lenis = undefined;
   }
 }

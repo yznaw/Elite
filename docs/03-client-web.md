@@ -66,59 +66,49 @@ The footer is **conditionally hidden** on the checkout page using a computed sig
 
 ---
 
-## Home Page Scroll Hero
+## Home Page Landing Hero
 
-The home page hero uses a pinned GSAP + Lenis photo sequence instead of the previous product file viewer.
+The home page hero is a luxury bilingual brand landing moment for élite. It uses a dominant sandal cutout on a warm cream canvas, annotated craft callouts, detail thumbnails, and a dedicated stacked mobile layout.
 
 ### Files
 
 | File | Purpose |
 |---|---|
-| `projects/client-web/src/app/pages/home/home.component.ts` | Lenis setup, GSAP ScrollTrigger timeline, photo navigation, animation cleanup |
-| `projects/client-web/src/app/pages/home/home.component.html` | Pinned hero layout, stacked product photos, animated captions, arrow controls, progress tabs |
-| `projects/client-web/src/app/pages/home/home.component.scss` | Full-screen white product-view layout, responsive photo stage, progress controls, scroll framing |
-| `projects/client-web/src/assets/hero-scroll/` | Product photo sequence used in the hero scroll animation |
-
-### Dependencies
-
-The hero depends on:
-
-- `gsap`
-- `lenis`
+| `projects/client-web/src/app/pages/home/home.component.ts` | Hero callout/detail data and ordinary home-page navigation |
+| `projects/client-web/src/app/pages/home/home.component.html` | Brand mark, main product cutout, feature callouts, detail imagery, mobile feature cards, CTA |
+| `projects/client-web/src/app/pages/home/home.component.scss` | Cream landing canvas, Claude-style local design tokens, desktop connectors, staggered load motion, mobile stack |
+| `projects/client-web/src/assets/hero-scroll/` | Source product photos plus the transparent hero cutout |
 
 ### Runtime Behavior
 
-- Lenis smooths page scrolling and feeds scroll frames into GSAP's ticker.
-- `ScrollTrigger` pins the hero shell while the user scrolls through the product photo sequence.
-- Each photo crossfades with scale, vertical motion, light rotation, blur, and clip-path reveal effects.
-- The caption stack animates in sync with the active photo.
-- Arrow buttons and numbered tabs call `selectHeroPhoto()` to scroll to the matching sequence point.
-- `ngOnDestroy()` reverts the GSAP context, removes the Lenis ticker, and destroys Lenis.
+- The main product uses `elite-angle-pair-cutout.png` so the sandal sits directly on the cream canvas.
+- Four desktop callout pills annotate strap, buckle, stitching edge, and sole with thin gold connector lines and dot endpoints.
+- Each pill includes a matching thumbnail crop and highlights its line/dot on hover.
+- Three detail cards show the embossed footbed, leather grain, and side profile in a lookbook rail.
+- Mobile hides floating callouts and uses a stacked layout: brand, product, feature cards, detail cards, CTA.
 
-### Photo Sequence
+### Hero Assets
 
-The hero exposes five product photo slots through `heroPhotos`.
+The hero uses one dominant cutout and supporting detail images.
 
-| ID | Title | Current URL |
+| Asset | Purpose |
 |---|---|---|
-| `topPair` | Top Grain | `/assets/hero-scroll/elite-top-pair.jpeg` |
-| `angleSingle` | Soft Volume | `/assets/hero-scroll/elite-angle-single.jpeg` |
-| `sideSingle` | Side Line | `/assets/hero-scroll/elite-side-single.jpeg` |
-| `frontPair` | Face Forward | `/assets/hero-scroll/elite-front-pair.jpeg` |
-| `anglePair` | Paired Form | `/assets/hero-scroll/elite-angle-pair.jpeg` |
-
-Each slot controls the eyebrow, title, subtitle, image URL, and alt text shown in the hero. To replace a photo later, update that slot's `imageUrl` and keep the file under `projects/client-web/src/assets/hero-scroll/`.
+| `/assets/hero-scroll/elite-angle-pair-cutout.png` | Main transparent hero product image |
+| `/assets/hero-scroll/elite-angle-single.jpeg` | Leather strap thumbnail and natural grain detail |
+| `/assets/hero-scroll/elite-front-pair.jpeg` | Buckle thumbnail |
+| `/assets/hero-scroll/elite-top-pair.jpeg` | Stitching thumbnail and embossed footbed detail |
+| `/assets/hero-scroll/elite-side-single.jpeg` | Comfort sole thumbnail and profile detail |
 
 ### Framing and Responsive Notes
 
-The product photos are intentionally large, centered, and unframed on a white stage. Compact viewports stack the copy above the photo stage while keeping the pinned scroll interaction.
+The product is intentionally large and centered. Desktop callouts are absolutely placed around the shoe, while mobile intentionally avoids floating labels and stacks the same content into cards.
 
-When adjusting the sequence:
+When adjusting the hero:
 
-- Keep `.hero` tall enough for every photo transition.
-- Tune `sectionDuration` and `segment` in `initScrollExperience()` together so scroll pacing stays even.
-- Check both desktop and mobile screenshots after changing image sizing or pinned timing.
-- Keep the white stage background; it is part of the premium product-view treatment.
+- Keep the hero background at `#faf7f2`.
+- Keep connector lines and pill borders on the local gold token `#b8965a`.
+- Check the desktop first viewport to ensure the CTA, lookbook rail, callouts, and product do not overlap.
+- Check mobile to ensure the order remains brand, product, feature cards, detail cards, CTA.
 
 ### Verification
 
@@ -132,10 +122,10 @@ npm run build:web
 Manual QA:
 
 - Open the storefront home page.
-- Scroll through the hero and confirm each product photo transitions cleanly.
-- Click the left and right photo arrows; each should scroll to the next or previous photo.
-- Click the numbered photo tabs; each should move to the matching photo.
-- Check desktop and mobile widths to ensure captions, controls, and product images do not overlap.
+- Confirm the main sandal appears on the cream background without a white image box.
+- Hover each desktop callout and confirm the connector line/dot highlight.
+- Confirm the CTA is visible in the first desktop viewport.
+- Check mobile widths to ensure the feature cards stack cleanly and the floating desktop callouts are hidden.
 
 ---
 
