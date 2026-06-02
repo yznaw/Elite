@@ -863,7 +863,8 @@
 
 @media (max-width: 760px) {
   .hero {
-    min-height: auto;
+    height: auto;
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -947,6 +948,7 @@
     gap: 10px;
     width: min(100%, 440px);
     margin-top: 0;
+    position: relative;
     z-index: 1;
   }
 
@@ -995,6 +997,7 @@
     left: auto;
     bottom: auto;
     width: min(100%, 360px);
+    margin-top: 2px;
     justify-self: center;
     transform: none;
     animation: mobileFadeUp 0.72s ease both 0.2s;
