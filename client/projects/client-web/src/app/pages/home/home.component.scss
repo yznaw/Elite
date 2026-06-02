@@ -889,10 +889,10 @@
   }
 
   .hero-stage {
-    min-height: clamp(250px, 68vw, 310px);
-    height: clamp(250px, 68vw, 310px);
-    margin-top: clamp(-38px, -8vw, -24px);
-    margin-bottom: 2px;
+    min-height: clamp(330px, 86vw, 390px);
+    height: clamp(330px, 86vw, 390px);
+    margin-top: clamp(-46px, -9vw, -28px);
+    margin-bottom: 8px;
     transform: none;
   }
 
@@ -902,12 +902,12 @@
   }
 
   .hero-product {
-    width: min(94vw, 390px);
-    transform: translateY(-8px);
+    width: min(86vw, 360px);
+    transform: translateY(clamp(-42px, -9vw, -24px));
   }
 
   .hero-arrow {
-    top: 43%;
+    top: 36%;
     width: 44px;
     height: 44px;
   }
