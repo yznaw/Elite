@@ -893,6 +893,7 @@
     height: clamp(330px, 86vw, 390px);
     margin-top: clamp(-46px, -9vw, -28px);
     margin-bottom: 8px;
+    place-items: start center;
     transform: none;
   }
 
@@ -903,11 +904,11 @@
 
   .hero-product {
     width: min(86vw, 360px);
-    transform: translateY(clamp(-42px, -9vw, -24px));
+    transform: none;
   }
 
   .hero-arrow {
-    top: 36%;
+    top: clamp(136px, 36vw, 158px);
     width: 44px;
     height: 44px;
   }
