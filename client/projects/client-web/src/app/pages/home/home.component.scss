@@ -958,13 +958,13 @@
   .mobile-feature-card strong,
   .mobile-feature-card span {
     display: block;
+    text-align: center;
   }
 
   .mobile-feature-card strong {
     color: var(--claude-text-primary);
     font-size: 14px;
     font-weight: 800;
-    text-align: right;
   }
 
   .mobile-feature-card span {
