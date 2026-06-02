@@ -131,6 +131,7 @@
   display: grid;
   place-items: center;
   align-self: stretch;
+  justify-self: center;
   margin-top: 0;
   transform: translateY(clamp(-82px, -7svh, -48px));
 }
