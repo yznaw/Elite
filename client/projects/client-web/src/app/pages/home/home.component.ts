@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { HomeCollectionTileContent } from '../../models/home-content.model';
 
@@ -45,6 +46,7 @@ interface HeroItem {
 export class HomeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly i18n = inject(I18nService);
+  private readonly locale = inject(LocaleService);
   private readonly homeContent = inject(HomeContentService);
 
   private metaTimer: number | undefined;
@@ -79,6 +81,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   ];
 
   readonly activeHeroItem = computed(() => this.heroItems[this.activeHeroItemIndex()]);
+  readonly heroCtaLabel = computed(() => this.locale.locale() === 'ar' ? 'تسوّق المجموعة' : 'Shop the Collection');
 
   readonly heroCallouts: HeroCallout[] = [
     {
@@ -87,7 +90,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       delay: '0.34s',
       titleAr: 'جلد عجل طبيعي',
       subtitleEn: 'Full-Grain Leather',
-      thumbnail: '/assets/hero-scroll/elite-angle-single.jpeg',
+      thumbnail: '/assets/hero-scroll/elite-angle-single.png',
       alt: 'Close crop of the brown full-grain leather strap',
     },
     {
@@ -96,7 +99,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       delay: '0.48s',
       titleAr: 'إبزيم معدني فاخر',
       subtitleEn: 'Premium Buckle',
-      thumbnail: '/assets/hero-scroll/elite-front-pair.jpeg',
+      thumbnail: '/assets/hero-scroll/elite-front-pair.png',
       alt: 'Close crop of the premium buckle detail',
     },
     {
@@ -114,7 +117,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       delay: '0.62s',
       titleAr: 'خياطة يدوية',
       subtitleEn: 'Hand Stitched',
-      thumbnail: '/assets/hero-scroll/elite-top-pair.jpeg',
+      thumbnail: '/assets/hero-scroll/elite-top-pair.png',
       alt: 'Close crop of the hand-stitched leather edge',
     },
   ];

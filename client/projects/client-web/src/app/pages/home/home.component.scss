@@ -203,7 +203,7 @@
 .hero-arrow:hover,
 .hero-arrow:focus-visible {
   border-color: rgba(184, 150, 90, 0.76);
-  color: var(--claude-crystal-green);
+  color: rgb(2 69 57);
   box-shadow: 0 24px 62px rgba(11, 111, 98, 0.16);
 }
 
@@ -423,14 +423,9 @@
   transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
 
-.hero-cta span:first-child {
+.hero-cta span {
   font-size: 12px;
   font-weight: 800;
-}
-
-.hero-cta span:last-child {
-  font-size: 9px;
-  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -894,9 +889,10 @@
   }
 
   .hero-stage {
-    min-height: auto;
-    margin-top: clamp(-58px, -12vw, -36px);
-    margin-bottom: -4px;
+    min-height: clamp(250px, 68vw, 310px);
+    height: clamp(250px, 68vw, 310px);
+    margin-top: clamp(-38px, -8vw, -24px);
+    margin-bottom: 2px;
     transform: none;
   }
 
@@ -906,11 +902,12 @@
   }
 
   .hero-product {
-    width: min(100%, 470px);
+    width: min(94vw, 390px);
+    transform: translateY(-8px);
   }
 
   .hero-arrow {
-    top: 48%;
+    top: 43%;
     width: 44px;
     height: 44px;
   }
@@ -987,7 +984,6 @@
     justify-self: center;
     transform: none;
     animation: mobileFadeUp 0.72s ease both 0.2s;
-    top : 0;
   }
 
   .hero-cta:hover,
