@@ -26,6 +26,8 @@ interface HeroCallout {
   subtitleEn: string;
   thumbnail: string;
   alt: string;
+  whiteThumbnail?: string;
+  whiteAlt?: string;
 }
 
 interface HeroItem {
@@ -50,6 +52,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly homeContent = inject(HomeContentService);
 
   private metaTimer: number | undefined;
+  private heroSwipeStart: { x: number; y: number; pointerId: number } | null = null;
 
   readonly metaVisible = signal(false);
   readonly activeHeroItemIndex = signal(0);
@@ -58,30 +61,32 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   readonly heroItems: HeroItem[] = [
     {
-      id: 'italian-leather',
-      name: 'Italian Leather Sandals',
+      id: 'brown-leather',
+      name: 'Brown Leather Sandals',
       subtitle: 'صندل جلد طبيعي / Made in Italy',
-      imageUrl: '/assets/hero-scroll/elite-angle-pair-cutout.png',
+      imageUrl: '/assets/hero-scroll/elite-hero-sandals-cutout.png',
       alt: 'Brown full-grain leather elite sandals made in Italy',
     },
     {
-      id: 'signature-comfort',
-      name: 'Signature Comfort Sandals',
-      subtitle: 'راحة يومية / Italian Craft',
-      imageUrl: '/assets/hero-scroll/elite-angle-pair-cutout.png',
-      alt: 'Brown elite comfort leather sandals made in Italy',
-    },
-    {
-      id: 'handmade-profile',
-      name: 'Handmade Leather Profile',
-      subtitle: 'خياطة يدوية / Full-Grain Leather',
-      imageUrl: '/assets/hero-scroll/elite-angle-pair-cutout.png',
-      alt: 'Handmade brown full-grain leather elite sandals',
+      id: 'white-leather',
+      name: 'White Leather Sandals',
+      subtitle: 'جلد أبيض فاخر / Italian Craft',
+      imageUrl: '/assets/hero-scroll/elite-hero-white-sandals.png',
+      alt: 'White leather elite sandals with silver buckle made in Italy',
     },
   ];
 
   readonly activeHeroItem = computed(() => this.heroItems[this.activeHeroItemIndex()]);
   readonly heroCtaLabel = computed(() => this.locale.locale() === 'ar' ? 'تسوّق المجموعة' : 'Shop the Collection');
+  readonly mobileFeatureCards = computed<HeroCallout[]>(() => {
+    if (this.activeHeroItem().id !== 'white-leather') return this.heroCallouts;
+
+    return this.heroCallouts.map((callout) => ({
+      ...callout,
+      thumbnail: callout.whiteThumbnail ?? callout.thumbnail,
+      alt: callout.whiteAlt ?? callout.alt,
+    }));
+  });
 
   readonly heroCallouts: HeroCallout[] = [
     {
@@ -92,6 +97,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       subtitleEn: 'Full-Grain Leather',
       thumbnail: '/assets/hero-scroll/elite-angle-single.png',
       alt: 'Close crop of the brown full-grain leather strap',
+      whiteThumbnail: '/assets/hero-scroll/elite-white-detail-leather.png',
+      whiteAlt: 'Close crop of the white full-grain leather texture',
     },
     {
       id: 'buckle',
@@ -101,6 +108,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       subtitleEn: 'Premium Buckle',
       thumbnail: '/assets/hero-scroll/elite-front-pair.png',
       alt: 'Close crop of the premium buckle detail',
+      whiteThumbnail: '/assets/hero-scroll/elite-white-detail-buckle.png',
+      whiteAlt: 'Close crop of the silver buckle on the white sandal',
     },
     {
       id: 'sole',
@@ -110,6 +119,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       subtitleEn: 'Comfort Sole',
       thumbnail: '/assets/hero-scroll/elite-side-single.jpeg',
       alt: 'Close crop of the comfort sole profile',
+      whiteThumbnail: '/assets/hero-scroll/elite-white-detail-brand.png',
+      whiteAlt: 'Close crop of the white sandal branded footbed',
     },
     {
       id: 'stitching',
@@ -119,6 +130,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       subtitleEn: 'Hand Stitched',
       thumbnail: '/assets/hero-scroll/elite-top-pair.png',
       alt: 'Close crop of the hand-stitched leather edge',
+      whiteThumbnail: '/assets/hero-scroll/elite-white-detail-stitching.png',
+      whiteAlt: 'Close crop of the hand-stitched edge on the white sandal',
     },
   ];
 
@@ -153,6 +166,29 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   selectAdjacentHeroItem(direction: -1 | 1): void {
     this.activeHeroItemIndex.update((index) => (index + direction + this.heroItems.length) % this.heroItems.length);
+  }
+
+  onHeroPointerDown(event: PointerEvent): void {
+    if (this.isHeroControl(event.target)) return;
+    this.heroSwipeStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+  }
+
+  onHeroPointerUp(event: PointerEvent): void {
+    const start = this.heroSwipeStart;
+    this.heroSwipeStart = null;
+    if (!start || start.pointerId !== event.pointerId || this.isHeroControl(event.target)) return;
+
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 44 || Math.abs(deltaX) < Math.abs(deltaY) * 1.4) return;
+
+    this.selectAdjacentHeroItem(deltaX < 0 ? 1 : -1);
+  }
+
+  onHeroPointerCancel(event: PointerEvent): void {
+    if (this.heroSwipeStart?.pointerId === event.pointerId) {
+      this.heroSwipeStart = null;
+    }
   }
 
   goToContentLink(link: string): void {
@@ -202,5 +238,9 @@ export class HomeComponent implements OnInit, OnDestroy {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'collection';
+  }
+
+  private isHeroControl(target: EventTarget | null): boolean {
+    return target instanceof HTMLElement && target.closest('button') !== null;
   }
 }

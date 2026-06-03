@@ -14,7 +14,12 @@
               <span>{{ activeHeroItem().subtitle }}</span>
             </div>
 
-            <div class="hero-stage">
+            <div
+              class="hero-stage"
+              (pointerdown)="onHeroPointerDown($event)"
+              (pointerup)="onHeroPointerUp($event)"
+              (pointercancel)="onHeroPointerCancel($event)"
+            >
               <button
                 type="button"
                 class="hero-arrow hero-arrow--prev"
@@ -25,7 +30,10 @@
                 <span aria-hidden="true">‹</span>
               </button>
 
-              <figure class="hero-product">
+              <figure
+                class="hero-product"
+                [class.hero-product--photo]="activeHeroItem().id === 'white-leather'"
+              >
                 <img
                   [src]="activeHeroItem().imageUrl"
                   [alt]="activeHeroItem().alt"
@@ -66,7 +74,7 @@
               class="hero-mobile-features"
               aria-label="Product craft details"
             >
-              @for (callout of heroCallouts; track callout.id) {
+              @for (callout of mobileFeatureCards(); track callout.id) {
                 <article class="mobile-feature-card">
                   <img [src]="callout.thumbnail" [alt]="callout.alt" />
                   <div>
