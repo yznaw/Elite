@@ -152,6 +152,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     void this.homeContent.refresh(true);
+    this.preloadHeroAssets();
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
   }
 
@@ -242,5 +243,21 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private isHeroControl(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && target.closest('button') !== null;
+  }
+
+  private preloadHeroAssets(): void {
+    const urls = new Set<string>();
+    this.heroItems.forEach((item) => urls.add(item.imageUrl));
+    this.heroCallouts.forEach((callout) => {
+      urls.add(callout.thumbnail);
+      if (callout.whiteThumbnail) urls.add(callout.whiteThumbnail);
+    });
+
+    urls.forEach((url) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = url;
+      void image.decode?.().catch(() => undefined);
+    });
   }
 }

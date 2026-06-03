@@ -32,12 +32,18 @@
 
               <figure
                 class="hero-product"
-                [class.hero-product--photo]="activeHeroItem().id === 'white-leather'"
+                [attr.aria-label]="activeHeroItem().alt"
               >
-                <img
-                  [src]="activeHeroItem().imageUrl"
-                  [alt]="activeHeroItem().alt"
-                />
+                @for (item of heroItems; track item.id) {
+                  <img
+                    class="hero-product__image"
+                    [class.is-active]="item.id === activeHeroItem().id"
+                    [class.hero-product__image--photo]="item.id === 'white-leather'"
+                    [src]="item.imageUrl"
+                    [alt]="item.alt"
+                    [attr.aria-hidden]="item.id === activeHeroItem().id ? null : 'true'"
+                  />
+                }
               </figure>
 
               <button
