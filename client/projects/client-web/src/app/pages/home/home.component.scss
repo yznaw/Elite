@@ -429,7 +429,7 @@
 .hero-cta {
   position: relative;
   z-index: 8;
-  align-self: end;
+  // align-self: end;
   justify-self: center;
   display: inline-flex;
   align-items: center;
@@ -889,13 +889,18 @@
 
 @media (max-width: 760px) {
   .hero {
+    --hero-mobile-x: clamp(12px, 4vw, 16px);
+    --hero-mobile-top: clamp(82px, 12svh, 96px);
+    --hero-mobile-gap: clamp(8px, 1.8svh, 16px);
+    --mobile-product-size: min(82vw, 342px, 38svh);
+
     height: auto;
     min-height: 100svh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
-    padding: 96px 16px 34px;
+    gap: var(--hero-mobile-gap);
+    padding: calc(var(--hero-mobile-top) + env(safe-area-inset-top, 0px)) var(--hero-mobile-x) calc(18px + env(safe-area-inset-bottom, 0px));
   }
 
   .hero-brand {
@@ -910,23 +915,29 @@
   }
 
   .hero-brand p {
-    font-size: 20px;
+    max-width: min(100%, 34rem);
+    font-size: clamp(16px, 5vw, 20px);
+    letter-spacing: clamp(0.06em, 0.9vw, 0.12em);
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    white-space: normal;
   }
 
   .hero-brand span {
-    max-width: 30ch;
+    max-width: min(32ch, 100%);
+    font-size: clamp(9px, 2.7vw, 10px);
     white-space: normal;
-    line-height: 1.5;
+    line-height: 1.4;
   }
 
   .hero-stage {
-    --mobile-product-size: min(82vw, 342px);
     display: block;
     flex: 0 0 auto;
     width: 100%;
-    min-height: calc(var(--mobile-product-size) + 28px);
-    height: calc(var(--mobile-product-size) + 28px);
-    margin-top: clamp(-34px, -7vw, -22px);
+    min-height: calc(var(--mobile-product-size) + clamp(10px, 2svh, 28px));
+    height: calc(var(--mobile-product-size) + clamp(10px, 2svh, 28px));
+    margin-top: clamp(-30px, -4svh, -16px);
     margin-bottom: 0;
     transform: none;
   }
@@ -950,7 +961,7 @@
   }
 
   .hero-arrow {
-    top: clamp(124px, 32vw, 150px);
+    top: calc(var(--mobile-product-size) / 2);
     width: 44px;
     height: 44px;
   }
@@ -975,11 +986,11 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    width: min(440px, calc(100vw - 32px));
+    gap: clamp(7px, 1.4svh, 10px);
+    width: min(440px, calc(100vw - (var(--hero-mobile-x) * 2)));
     max-width: 100%;
     box-sizing: border-box;
-    margin-top: -30px;
+    margin-top: clamp(-28px, -3svh, -12px);
     position: relative;
     z-index: 1;
   }
@@ -987,11 +998,11 @@
   .mobile-feature-card {
     min-width: 0;
     display: grid;
-    grid-template-rows: 64px minmax(0, 1fr);
-    gap: 9px;
+    grid-template-rows: clamp(46px, 8svh, 64px) minmax(0, 1fr);
+    gap: clamp(6px, 1.1svh, 9px);
     align-items: center;
     justify-items: center;
-    padding: 10px;
+    padding: clamp(7px, 1.2svh, 10px);
     border: 1px solid rgba(184, 150, 90, 0.28);
     border-radius: 8px;
     background:
@@ -1006,8 +1017,8 @@
   }
 
   .mobile-feature-card img {
-    width: 64px;
-    height: 64px;
+    width: clamp(46px, 8svh, 64px);
+    height: clamp(46px, 8svh, 64px);
     object-fit: cover;
     border-radius: 8px;
   }
@@ -1024,7 +1035,7 @@
 
   .mobile-feature-card strong {
     color: var(--claude-text-primary);
-    font-size: 11px;
+    font-size: clamp(9.5px, 2.6vw, 11px);
     font-weight: 800;
     line-height: 1.25;
     overflow-wrap: anywhere;
@@ -1033,9 +1044,9 @@
   .mobile-feature-card span {
     margin-top: 4px;
     color: var(--claude-text-secondary);
-    font-size: 9px;
+    font-size: clamp(7.5px, 2.2vw, 9px);
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     line-height: 1.25;
     text-transform: uppercase;
     overflow-wrap: anywhere;
@@ -1045,11 +1056,22 @@
     position: relative;
     left: auto;
     bottom: auto;
+    flex-shrink: 0;
     width: min(100%, 360px);
-    margin-top: 2px;
+    min-height: clamp(36px, 5.8svh, 40px);
+    margin-top: clamp(-2px, 0.5svh, 2px);
+    padding-inline: clamp(16px, 5vw, 20px);
     justify-self: center;
     transform: none;
     animation: mobileFadeUp 0.72s ease both 0.2s;
+  }
+
+  .hero-cta span {
+    font-size: clamp(10px, 2.8vw, 12px);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    text-align: center;
+    white-space: normal;
   }
 
   .hero-cta:hover,
@@ -1108,6 +1130,56 @@
 
   .promise-panel {
     padding: 34px 18px;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 700px) {
+  .hero {
+    --hero-mobile-top: clamp(72px, 11svh, 86px);
+    --hero-mobile-gap: clamp(6px, 1.2svh, 10px);
+    --mobile-product-size: min(76vw, 292px, 34svh);
+  }
+
+  .hero-brand p {
+    font-size: clamp(15px, 4.7vw, 18px);
+  }
+
+  .hero-brand span {
+    font-size: clamp(8px, 2.4vw, 9px);
+    line-height: 1.25;
+  }
+
+  .hero-stage {
+    min-height: calc(var(--mobile-product-size) + 8px);
+    height: calc(var(--mobile-product-size) + 8px);
+    margin-top: clamp(-22px, -3svh, -10px);
+  }
+
+  .hero-mobile-features {
+    gap: 7px;
+    margin-top: clamp(-18px, -2.2svh, -8px);
+  }
+
+  .mobile-feature-card {
+    grid-template-columns: clamp(34px, 7svh, 46px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 7px;
+    min-height: 0;
+    padding: 7px 8px;
+  }
+
+  .mobile-feature-card img {
+    width: clamp(34px, 7svh, 46px);
+    height: clamp(34px, 7svh, 46px);
+  }
+
+  .mobile-feature-card strong,
+  .mobile-feature-card span {
+    text-align: start;
+  }
+
+  .hero-cta {
+    min-height: 36px;
   }
 }
 
