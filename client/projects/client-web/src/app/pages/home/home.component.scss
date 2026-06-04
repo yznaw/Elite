@@ -990,7 +990,7 @@
     width: min(440px, calc(100vw - (var(--hero-mobile-x) * 2)));
     max-width: 100%;
     box-sizing: border-box;
-    margin-top: clamp(-28px, -3svh, -12px);
+    // margin-top: clamp(-28px, -3svh, -12px);
     position: relative;
     z-index: 1;
   }
