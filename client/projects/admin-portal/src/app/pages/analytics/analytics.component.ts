@@ -12,7 +12,7 @@ import { QAR } from '../../models';
 @Component({
   selector: 'ap-analytics',
   standalone: true,
-  imports: [CommonModule, KpiComponent, LineChartComponent, BarChartComponent, PieChartComponent, FunnelComponent],
+  imports: [CommonModule, KpiComponent, LineChartComponent, BarChartComponent, PieChartComponent, FunnelComponent, EmptyStateComponent],
   template: `
     <div class="page-fade">
       <div class="row gap-sm mb-24" style="justify-content:space-between;flex-wrap:wrap;">

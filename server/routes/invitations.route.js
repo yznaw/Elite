@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { Router } = require('express');
 const db = require('../db/client');
 const { asyncHandler, ok, validationError } = require('./lib');
