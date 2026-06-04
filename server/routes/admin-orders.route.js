@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const db = require('../db/client');
+const nbox = require('../lib/nbox');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -42,6 +43,102 @@ function mapPayment(status) {
   if (status === 'authorized') return 'pending';
   if (status === 'partially_refunded') return 'refunded';
   return status;
+}
+
+function nboxQuoteFromOrder(order) {
+  return order.metadata?.nbox?.quote || null;
+}
+
+async function bookNboxForPaidOrder(client, tenantId, orderId) {
+  const existing = await client.query(
+    "SELECT id FROM shipments WHERE tenant_id = $1 AND order_id = $2 AND carrier = 'nbox' LIMIT 1",
+    [tenantId, orderId],
+  );
+  if (existing.rowCount > 0) return null;
+
+  const orderResult = await client.query('SELECT * FROM orders WHERE tenant_id = $1 AND id = $2', [tenantId, orderId]);
+  if (orderResult.rowCount === 0) return null;
+  const order = orderResult.rows[0];
+
+  const itemResult = await client.query(
+    `
+      SELECT product_id, sku, product_name, quantity, unit_price_cents
+      FROM order_items
+      WHERE tenant_id = $1 AND order_id = $2
+      ORDER BY created_at
+    `,
+    [tenantId, orderId],
+  );
+
+  const shipment = await nbox.createShipment({
+    orderNumber: order.public_number,
+    customer: {
+      name: order.customer_name,
+      email: order.customer_email,
+      phone: order.customer_phone,
+    },
+    shippingAddress: order.shipping_address || {},
+    items: itemResult.rows.map((item) => ({
+      id: item.product_id,
+      sku: item.sku,
+      name: item.product_name,
+      qty: item.quantity,
+      price: fromCents(item.unit_price_cents),
+    })),
+    shippingQuote: nboxQuoteFromOrder(order),
+  });
+
+  await client.query(
+    `
+      INSERT INTO shipments (
+        tenant_id, order_id, carrier, service, tracking_number, tracking_url, status, address
+      )
+      VALUES ($1, $2, 'nbox', $3, $4, $5, 'processing', $6::jsonb)
+    `,
+    [
+      tenantId,
+      order.id,
+      shipment.id || nboxQuoteFromOrder(order)?.serviceName || 'NBOX',
+      shipment.trackingNumber || null,
+      shipment.trackingUrl || null,
+      JSON.stringify(order.shipping_address || {}),
+    ],
+  );
+
+  await client.query(
+    `
+      UPDATE orders
+      SET fulfillment_status = 'processing',
+          metadata = metadata || $3::jsonb
+      WHERE tenant_id = $1 AND id = $2
+    `,
+    [
+      tenantId,
+      order.id,
+      JSON.stringify({
+        nbox: {
+          quote: nboxQuoteFromOrder(order),
+          shipment,
+          bookedAt: new Date().toISOString(),
+        },
+      }),
+    ],
+  );
+
+  await client.query(
+    'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)',
+    [
+      tenantId,
+      order.id,
+      'processing',
+      shipment.trackingNumber
+        ? `NBOX shipment booked. Tracking: ${shipment.trackingNumber}`
+        : 'NBOX shipment booked.',
+      JSON.stringify({ provider: 'nbox', shipment }),
+    ],
+  );
+
+  return shipment;
 }
 
 async function loadAdminOrder(client, tenantId, id) {
@@ -175,14 +272,19 @@ router.post('/', asyncHandler(async (req, res) => {
 
 router.patch('/:id/status', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
+  let shouldBookNbox = false;
+  let updatedOrderId = null;
+  let tenantId = null;
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
+    tenantId = tenant.id;
     const trackingNumber = String(req.body.trackingNumber || '').trim();
     const order = await client.query(
       `
         UPDATE orders
         SET payment_status = COALESCE($3, payment_status),
+            paid_at = CASE WHEN $3 = 'paid' THEN COALESCE(paid_at, now()) ELSE paid_at END,
             fulfillment_status = COALESCE($4, fulfillment_status),
             status = COALESCE($5, status)
         WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)
@@ -194,6 +296,8 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
       await client.query('ROLLBACK');
       return notFound(res, 'Order not found.');
     }
+    updatedOrderId = order.rows[0].id;
+    shouldBookNbox = String(req.body.payment || '').trim().toLowerCase() === 'paid';
 
     if (trackingNumber) {
       const shipment = await client.query(
@@ -230,6 +334,23 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
       [tenant.id, order.rows[0].id, req.body.timelineKind || 'note', req.body.detail || 'Status updated'],
     );
     await client.query('COMMIT');
+    if (shouldBookNbox) {
+      try {
+        await bookNboxForPaidOrder(client, tenantId, updatedOrderId);
+      } catch (err) {
+        console.warn('NBOX booking failed after order was marked paid.', err);
+        await client.query(
+          'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)',
+          [
+            tenantId,
+            updatedOrderId,
+            'note',
+            'NBOX shipment booking failed after payment was marked paid.',
+            JSON.stringify({ provider: 'nbox', error: err.message }),
+          ],
+        );
+      }
+    }
     ok(res, await loadAdminOrder(client, tenant.id, req.params.id), 'Order status updated.');
   } catch (err) {
     await client.query('ROLLBACK');

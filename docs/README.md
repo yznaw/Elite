@@ -18,6 +18,7 @@
 | 7 | [Developer Guide](./07-dev-guide.md) | Dev Team | Local setup, conventions, how-to recipes |
 | 8 | [Database & API Implementation](./08-database-api-implementation.md) | Backend/Frontend Devs | PostgreSQL schema, endpoint map, SQL behavior, wired UI state |
 | 9 | [Nginx HTTPS](./09-nginx-https.md) | DevOps | Production Nginx reverse proxy, HTTPS termination, Certbot, and upload routing |
+| 10 | [NBOX Integration](./10-nbox-integration.md) | Backend/DevOps | Delivery quote, shipment booking, and shipment status webhook flow |
 
 ---
 
@@ -45,3 +46,4 @@
 - **Adding an API endpoint?** See [05 – API Server](./05-api-server.md).
 - **Working with database-backed features?** See [08 – Database & API Implementation](./08-database-api-implementation.md).
 - **Deploying HTTPS with Nginx?** See [09 – Nginx HTTPS](./09-nginx-https.md).
+- **Connecting NBOX delivery?** See [10 – NBOX Integration](./10-nbox-integration.md).

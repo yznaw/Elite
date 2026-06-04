@@ -101,6 +101,19 @@ SESSION_COOKIE_SAMESITE=lax      # 'none' if admin runs on a different origin in
 DEFAULT_ADMIN_EMAIL=admin@elite.local
 DEFAULT_ADMIN_PASSWORD=elite-admin
 DEFAULT_ADMIN_NAME=Yusuf Hamad
+
+# NBOX delivery integration
+NBOX_WEBHOOK_SECRET=replace-with-nbox-webhook-secret
+NBOX_API_BASE_URL=https://uat.portal.nbox.qa
+NBOX_API_TOKEN=replace-with-nbox-api-token
+NBOX_RATE_ENDPOINT=replace-with-rate-endpoint-path
+NBOX_SHIPMENT_ENDPOINT=replace-with-create-shipment-endpoint-path
+NBOX_ORIGIN_NAME=Elite Collections
+NBOX_ORIGIN_PHONE=
+NBOX_ORIGIN_EMAIL=admin@elitecollections.qa
+NBOX_ORIGIN_ADDRESS=
+NBOX_ORIGIN_CITY=Doha
+NBOX_ORIGIN_COUNTRY=QA
 ```
 
 The API expects `DATABASE_URL` to be configured before database-backed routes can work.
@@ -516,4 +529,3 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 - Admin pages still on mock data: Media, Storefront, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
 - Password reset emails: `POST /api/auth/forgot` currently logs the URL to stdout. Wire a real email transport (Resend / SES / SendGrid) and replace the `console.log` in [server/routes/auth.route.js](../server/routes/auth.route.js).
 - No automated backend test suite exists yet.
-

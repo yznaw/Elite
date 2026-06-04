@@ -101,9 +101,9 @@
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                   <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream); margin-bottom: 2px;">{{ t('checkout.delivery.title') }}</div>
-                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">{{ t('checkout.delivery.sub') }}</div>
+                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">{{ deliveryStatus() }}</div>
                 </div>
-                <span style="font-family: var(--ff-serif); font-size: 16px; color: var(--gold);">{{ t('checkout.delivery.free') }}</span>
+                <span style="font-family: var(--ff-serif); font-size: 16px; color: var(--gold);">{{ deliveryPrice() }}</span>
               </div>
             </div>
           </div>
@@ -183,7 +183,13 @@
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
             <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.delivery') }}</span>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">{{ t('checkout.summary.deliveryValue') }}</span>
+            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">
+              @if (shippingQuote()?.available) {
+                {{ deliveryFee() > 0 ? price(deliveryFee()) : t('checkout.delivery.free') }}
+              } @else {
+                {{ t('checkout.summary.deliveryValue') }}
+              }
+            </span>
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
             <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.duties') }}</span>

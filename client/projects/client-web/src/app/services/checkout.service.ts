@@ -24,9 +24,21 @@ export interface CheckoutAddress {
   country: string;
 }
 
+export interface DeliveryQuote {
+  available: boolean;
+  id?: string;
+  serviceName?: string;
+  serviceCode?: string;
+  amount: number;
+  currency: string;
+  eta?: string;
+  message?: string;
+}
+
 export interface CheckoutOrder {
   id: string;
   total: number;
+  delivery?: number;
   payment: 'pending' | 'paid' | 'failed' | 'refunded';
   fulfillment: 'awaiting' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
 }
@@ -40,16 +52,32 @@ export class CheckoutService {
     customer: CheckoutCustomer;
     shippingAddress: CheckoutAddress;
     items: CartItem[];
+    shippingQuote: DeliveryQuote;
+    payment?: {
+      provider: string;
+      method: string;
+      status: 'pending' | 'paid' | 'failed';
+    };
   }): Promise<CheckoutOrder> {
     return firstValueFrom(
       this.http.post<ApiResponse<CheckoutOrder>>(`${this.apiBase}/carts/checkout`, {
         ...payload,
-        payment: {
+        payment: payload.payment || {
           provider: 'pending_gateway',
           method: 'gateway_placeholder',
           status: 'pending',
         },
       }),
+    ).then((res) => res.data);
+  }
+
+  getDeliveryQuote(payload: {
+    customer: CheckoutCustomer;
+    shippingAddress: CheckoutAddress;
+    items: CartItem[];
+  }): Promise<DeliveryQuote> {
+    return firstValueFrom(
+      this.http.post<ApiResponse<DeliveryQuote>>(`${this.apiBase}/carts/shipping-quote`, payload),
     ).then((res) => res.data);
   }
 

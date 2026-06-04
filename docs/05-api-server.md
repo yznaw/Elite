@@ -217,6 +217,16 @@ cp server/.env.example server/.env
 | `SESSION_MAX_AGE_MS` | `43200000` | No | Session lifetime in ms (default 12 h) |
 | `SESSION_COOKIE_SECURE` | `false` | No | Set `true` in production (requires HTTPS) |
 | `SESSION_COOKIE_SAMESITE` | `lax` | No | Set `none` if admin and API are on different origins in prod |
+| `NBOX_WEBHOOK_SECRET` | — | Yes for NBOX webhooks | Secret copied from the NBOX webhook page; used to verify inbound shipment updates |
+| `NBOX_API_BASE_URL` | — | Yes for NBOX checkout | NBOX API base URL from the merchant portal |
+| `NBOX_API_TOKEN` | — | Yes for NBOX checkout | NBOX API token used for outbound quote/shipment requests |
+| `NBOX_API_KEY` | — | If provided by NBOX | Optional API key header value |
+| `NBOX_AUTH_HEADER` | `Authorization` | No | Header used for `NBOX_API_TOKEN` |
+| `NBOX_AUTH_SCHEME` | `Bearer` | No | Auth scheme prepended to `NBOX_API_TOKEN`; set empty if NBOX expects the raw token |
+| `NBOX_RATE_ENDPOINT` | — | Yes for delivery quotes | NBOX endpoint path for delivery pricing/availability |
+| `NBOX_SHIPMENT_ENDPOINT` | — | Yes for shipment booking | NBOX endpoint path for creating a shipment after payment is confirmed |
+| `NBOX_DEFAULT_ITEM_WEIGHT_GRAMS` | `1000` | No | Fallback item weight used when product weight is not available |
+| `NBOX_ORIGIN_*` | — | Yes for NBOX checkout | Pickup/origin contact and address fields sent to NBOX |
 | `DEFAULT_ADMIN_EMAIL` | `admin@elite.local` | No | Email for the auto-seeded admin user (first boot only) |
 | `DEFAULT_ADMIN_PASSWORD` | `elite-admin` | No | Password for the auto-seeded admin — **change immediately in production** |
 | `DEFAULT_ADMIN_NAME` | `Yusuf Hamad` | No | Display name for the auto-seeded admin user |
