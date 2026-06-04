@@ -126,6 +126,41 @@ app.use((err, req, res, _next) => {
 
 See `server/routes/admin-products.route.js`. Full CRUD, bulk delete, media gallery management. All endpoints require an active admin session.
 
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/products` | List all products (tenant-scoped) |
+| `GET` | `/api/admin/products/:id` | Single product with variants + images |
+| `POST` | `/api/admin/products` | Create product (upsert by SKU) |
+| `PUT` | `/api/admin/products/:id` | Replace product |
+| `PATCH` | `/api/admin/products/bulk-stock` | **Bulk stock update** — body: `{ updates: [{ sku, stock }] }`. Must be registered BEFORE `PATCH /:id` to avoid route collision. Returns `{ updated, notFound[] }`. |
+| `PATCH` | `/api/admin/products/:id` | Partial update (status, stock, SEO fields, etc.) |
+| `DELETE` | `/api/admin/products/:id` | Soft-delete (archive) |
+| `POST` | `/api/admin/products/bulk-delete` | Hard-delete multiple — body: `{ ids[] }` |
+| `POST` | `/api/admin/products/:id/duplicate` | **Duplicate product** — creates hidden copy; auto-increments SKU suffix (`-COPY`, `-COPY-2`, …); copies variants with updated SKUs. Returns the new product. |
+
+### Admin — Settings (`/api/admin/settings`)
+
+See `server/routes/admin-settings.route.js`. All endpoints require an active admin session; team/invitation write operations require owner or admin role.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/settings/store` | Get store settings (name, currency, timezone, language) |
+| `PATCH` | `/api/admin/settings/store` | Update store settings |
+| `GET` | `/api/admin/settings/team` | List admin team members |
+| `PATCH` | `/api/admin/settings/team/:id` | Update a team member (name, email, role, status) |
+| `GET` | `/api/admin/settings/invitations` | List pending (non-expired) invitations |
+| `POST` | `/api/admin/settings/invitations` | Create invitation — body: `{ email, role }`. Generates 32-byte hex token, stores SHA-256 hash, returns raw `inviteLink` URL. Token valid 48 h, single-use. |
+| `DELETE` | `/api/admin/settings/invitations/:id` | Revoke a pending invitation |
+
+### Public — Invitations (`/api/invitations`)
+
+See `server/routes/invitations.route.js`. Mounted in the **public** routes section — no auth required.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/invitations/validate?token=` | Validate an invite token — returns `{ email, role }`. Returns 404 if expired/invalid. |
+| `POST` | `/api/invitations/accept` | Accept invite — body: `{ token, password, name? }`. Creates `admin_users` row (bcrypt password), deletes invitation row. Returns `{ id, email, role }`. |
+
 ### Admin — Bulk Import (`/api/admin/bulk-import`)
 
 See `server/routes/admin-bulk-import.route.js`. CSV upload → NDJSON streaming progress. See [Bulk Import endpoint](#bulk-import-endpoint-post-apiadminbulk-import) below.
@@ -322,7 +357,9 @@ server/
 │   └── migrations/
 │       ├── 001_initial_schema.sql   ← Full schema (tenants, products, orders, …)
 │       ├── 002_password_reset_tokens.sql ← Reset tokens (SHA-256 hashed, one-shot, 30m TTL)
-│       └── 003_ref_tables.sql       ← ref_colors, ref_materials, ref_size_sets
+│       ├── 003_ref_tables.sql       ← ref_colors, ref_materials, ref_size_sets
+│       ├── 004_product_seo_fields.sql ← ADD COLUMN meta_title, meta_desc to products
+│       └── 005_team_invitations.sql ← team_invitations table (UUID PK, token_hash, 48h TTL)
 ├── middleware/
 │   ├── require-auth.js              ← requireAuth + requireRole helpers
 │   └── upload.js                    ← Shared multer config (50 MB cap, mimetype filter)
@@ -342,7 +379,8 @@ server/
     ├── admin-customers.route.js     ← Customers CRUD + order history
     ├── admin-analytics.route.js     ← KPI + chart data
     ├── admin-storefront.route.js    ← Storefront snapshots + publish
-    ├── admin-settings.route.js      ← Store settings + team
+    ├── admin-settings.route.js      ← Store settings + team + invitations CRUD
+    ├── invitations.route.js         ← Public: validate token + accept invite (creates admin_user)
     ├── products.route.js            ← Public storefront product listing
     ├── carts.route.js               ← Public storefront cart
     └── contact.route.js             ← Public contact form
@@ -361,9 +399,10 @@ Admin authentication uses **server-side sessions** (no JWT):
 ### Bulk Import endpoint (`POST /api/admin/bulk-import`)
 
 - Accepts a `multipart/form-data` CSV upload (field: `csv`, max 10 MB)
+- **Dry-run mode:** pass `?dryRun=true` (or `?dryRun=1`). The full pipeline runs inside a DB transaction that is ROLLBACKed instead of COMMITted at the end. Preview results are identical to a real import. `productId` and `imagesUploaded` are `null`/`0` in dry-run items.
 - Groups rows by **English Name** — each unique name becomes one `products` record
 - Each color row within a group → one `product_variants` row (SKU + color + price)
-- Images are downloaded from Google Drive folder links (`GOOGLE_API_KEY` env var required for folder listing)
+- Images are downloaded from Google Drive folder links (`GOOGLE_API_KEY` env var required for folder listing). Images are **skipped** in dry-run mode.
 - Streams progress as **NDJSON** (one JSON object per line, chunked transfer encoding):
   - `{ type:'start', total }` — number of unique products
   - `{ type:'processing', current, total, name, variantCount }` — before each product

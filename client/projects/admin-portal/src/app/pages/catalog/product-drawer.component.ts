@@ -15,6 +15,7 @@ import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
+import { StorageService } from '../../services/storage.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
@@ -30,7 +31,6 @@ interface FormShape {
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
-const DRAFT_KEY_PREFIX = 'elite-admin:draft:';
 
 /** Read a File as a data URL — used for the upload-row thumbnail before
     the server returns the canonical URL. Resolves to '' on non-images. */
@@ -101,6 +101,12 @@ function readPreview(file: File): Promise<string> {
               <polyline points="9 18 15 12 9 6"/>
             </svg>
           </button>
+          @if (!product.id.startsWith('P-NEW-')) {
+            <span class="head-divider" aria-hidden="true"></span>
+            <button class="head-icon-btn" (click)="duplicateProduct()" [disabled]="duplicating()" title="Duplicate product">
+              <ap-icon name="copy" [size]="14"/>
+            </button>
+          }
           <span class="head-divider" aria-hidden="true"></span>
           <button class="head-icon-btn" (click)="handleClose()" [attr.aria-label]="t('common.close')">
             <ap-icon name="x" [size]="14"/>
@@ -520,11 +526,17 @@ function readPreview(file: File): Promise<string> {
 
         <div class="mb-24">
           <label class="lbl">{{ t('product.field.metaTitle') }}</label>
-          <input class="inp mb-8" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
+          <input class="inp mb-16" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
           <label class="lbl">{{ t('product.field.metaDesc') }}</label>
-          <input class="inp mb-8" [ngModel]="form().metaDesc" (ngModelChange)="set('metaDesc', $event)"/>
+          <div class="meta-desc-wrap mb-16">
+            <textarea class="inp" rows="3" [ngModel]="form().metaDesc" (ngModelChange)="set('metaDesc', $event)" maxlength="160" style="resize:vertical;"></textarea>
+            <div class="char-counter" [class.over]="form().metaDesc.length > 160">{{ form().metaDesc.length }}/160</div>
+          </div>
           <label class="lbl">{{ t('product.field.slug') }}</label>
-          <input class="inp mono" [ngModel]="form().slug" (ngModelChange)="set('slug', $event)"/>
+          <input class="inp mono" [ngModel]="form().slug" (ngModelChange)="set('slug', $event)" [class.inp-invalid]="slugError()"/>
+          @if (slugError()) {
+            <div class="field-error mt-6">Lowercase letters, numbers, and hyphens only (e.g. my-product-name)</div>
+          }
         </div>
 
         <!-- Section: Sync -->
@@ -659,6 +671,13 @@ function readPreview(file: File): Promise<string> {
     .section-title.danger-section { color: var(--danger); }
     .section-title ap-icon { color: var(--gold); flex-shrink: 0; }
     .section-title.danger-section ap-icon { color: var(--danger); }
+
+    /* SEO meta desc + slug validation */
+    .meta-desc-wrap { position: relative; }
+    .char-counter { font-size: 11px; color: var(--muted); text-align: right; margin-top: 4px; }
+    .char-counter.over { color: var(--danger); font-weight: 600; }
+    .field-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+    .inp-invalid { border-color: var(--danger) !important; }
 
     /* Danger zone */
     .danger-zone {
@@ -1009,6 +1028,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   @Output() currentIdChange = new EventEmitter<string>();
   /** Emitted when the user confirms deletion of the current product. */
   @Output() deleted = new EventEmitter<Product>();
+  /** Emitted when a duplicate is created — carries the new product so the parent can add it. */
+  @Output() duplicated = new EventEmitter<Product>();
 
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -1017,6 +1038,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly refApi = inject(AdminRefService);
   private readonly uploads = inject(MediaUploadService);
+  private readonly storage = inject(StorageService);
 
   readonly refColors   = signal<RefColor[]>([]);
   readonly refMaterials = signal<RefMaterial[]>([]);
@@ -1025,7 +1047,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly t = (k: string): string => this.i18n.t(k);
 
   /** Initial form snapshot — re-set whenever `currentId` changes. */
-  private initial!: FormShape;
+  private readonly initial = signal<FormShape>(this.makeEmptyForm());
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly draftRestoredAt = signal<string | null>(null);
   readonly saveState = signal<SaveState>('idle');
@@ -1042,7 +1064,14 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return idx >= 0 && idx < this._products().length - 1;
   });
 
-  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
+  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
+
+  readonly slugError = computed(() => {
+    const s = this.form().slug;
+    return !!s && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
+  });
+
+  readonly duplicating = signal(false);
 
   /** Convenience: the current product object (or first as fallback). */
   get product(): Product {
@@ -1066,10 +1095,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return this.form().images.length;
   }
 
-  get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
+  get draftBase(): string { return 'draft:' + this._currentId(); }
 
   ngOnInit(): void {
-    if (!this.initial) this.resetForCurrent();
+    if (!this.initial()) this.resetForCurrent();
     // Load reference lists in the background — non-blocking
     Promise.all([
       this.refApi.getColors(),
@@ -1096,8 +1125,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const p = this.product;
     if (!p) return;
 
-    this.initial = this.makeFormFromProduct(p);
-    this.form.set({ ...this.initial });
+    this.initial.set(this.makeFormFromProduct(p));
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
     this.lastSavedAt.set(null);
     this.draftRestoredAt.set(null);
@@ -1106,7 +1135,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
     // Try to restore a draft for this product
     try {
-      const raw = localStorage.getItem(this.draftKey);
+      const raw = this.storage.get(this.draftBase);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.savedAt) {
@@ -1142,9 +1171,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       hidden: p.hidden,
       enDesc: 'Hand-stitched in our Doha atelier from full-grain camel leather. Each pair takes 48 hours of single-artisan attention. Limited to 40 pairs per season.',
       arDesc: 'مصنوع يدويًا في ورشتنا في الدوحة من جلد الجمل الكامل الحبيبات. كل زوج يستغرق 48 ساعة من الاهتمام الحرفي الواحد. محدود بـ 40 زوجًا في الموسم.',
-      metaTitle: `${p.name} · ${p.brand} · Elite Collection`,
-      metaDesc: `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
-      slug: p.name.toLowerCase().replace(/\s+/g, '-'),
+      metaTitle: p.metaTitle || `${p.name} · ${p.brand} · Elite Collection`,
+      metaDesc: p.metaDesc || `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
+      slug: p.slug || p.name.toLowerCase().replace(/\s+/g, '-'),
       variants: (p.variants ?? []).map(v => ({ ...v })),
       images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
       imageColors: { ...(p.imageColors ?? {}) },
@@ -1256,7 +1285,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
                 this.set('images', result.images);
                 const imageColors = this.pruneImageColors(this.form().imageColors, result.images);
                 this.set('imageColors', imageColors);
-                this.initial = { ...this.initial, images: [...result.images], imageColors: { ...imageColors } };
+                this.initial.set({ ...this.initial(), images: [...result.images], imageColors: { ...imageColors } });
               }
               this.toast.success(
                 `${result?.uploaded ?? accepted.length} ${this.t('product.gallery.upload').toLowerCase()}`,
@@ -1489,16 +1518,14 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   private scheduleAutoSave(): void {
     if (!this.dirty()) {
-      try { localStorage.removeItem(this.draftKey); } catch {}
+      this.storage.remove(this.draftBase);
       if (this.saveState() === 'dirty') this.saveState.set('idle');
       return;
     }
     if (this.saveState() === 'idle') this.saveState.set('dirty');
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     this.autoSaveTimer = window.setTimeout(() => {
-      try {
-        localStorage.setItem(this.draftKey, JSON.stringify({ form: this.form(), savedAt: new Date().toISOString() }));
-      } catch {}
+      this.storage.set(this.draftBase, JSON.stringify({ form: this.form(), savedAt: new Date().toISOString() }));
     }, 400);
   }
 
@@ -1525,9 +1552,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.saveState.set('saved');
       const ts = new Date().toTimeString().slice(0, 5);
       this.lastSavedAt.set(ts);
-      try { localStorage.removeItem(this.draftKey); } catch {}
+      this.storage.remove(this.draftBase);
       this.draftRestoredAt.set(null);
-      this.initial = { ...this.form() };
+      this.initial.set({ ...this.form() });
 
       await this.syncCollections(previousId, saved.id, this.form().collectionIds);
 
@@ -1565,16 +1592,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
-    this.form.set({ ...this.initial });
-    try { localStorage.removeItem(this.draftKey); } catch {}
+    this.form.set({ ...this.initial() });
+    this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
     this.toast.info(this.t('product.toast.discarded.title'), this.t('product.toast.discarded.sub'));
   }
 
   discardDraft(): void {
-    this.form.set({ ...this.initial });
-    try { localStorage.removeItem(this.draftKey); } catch {}
+    this.form.set({ ...this.initial() });
+    this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
   }
@@ -1662,6 +1689,20 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.syncing.set(false);
       this.toast.success(this.t('product.toast.syncDone.title'), `${this.product.sku}`);
     }, 1800);
+  }
+
+  async duplicateProduct(): Promise<void> {
+    if (this.duplicating()) return;
+    this.duplicating.set(true);
+    try {
+      const copy = await this.productsApi.duplicate(this.product.id);
+      this.toast.success('Product duplicated', copy.sku);
+      this.duplicated.emit(copy);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.duplicating.set(false);
+    }
   }
 
   firstName(name: string): string { return name.split(' ')[0] || name; }

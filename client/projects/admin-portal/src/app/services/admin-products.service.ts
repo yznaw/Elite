@@ -50,4 +50,12 @@ export class AdminProductsService {
   bulkDelete(ids: string[]): Promise<{ deleted: number }> {
     return firstValueFrom(this.api.post<{ deleted: number }>('/admin/products/bulk-delete', { ids }));
   }
+
+  duplicate(id: string): Promise<Product> {
+    return firstValueFrom(this.api.post<Product>(`/admin/products/${id}/duplicate`, {}));
+  }
+
+  bulkStockUpdate(updates: { sku: string; stock: number }[]): Promise<{ updated: number; notFound: string[] }> {
+    return firstValueFrom(this.api.patch<{ updated: number; notFound: string[] }>('/admin/products/bulk-stock', { updates }));
+  }
 }

@@ -27,6 +27,9 @@ export interface Product {
   imageColors?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
+  metaTitle?: string;
+  metaDesc?: string;
+  slug?: string;
 }
 
 export interface Collection {

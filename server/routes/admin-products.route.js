@@ -206,6 +206,9 @@ function mapAdminProduct(row) {
     images: row.images || [],
     imageColors: normalizeImageColors(row.image_colors),
     variants: row.variants || [],
+    metaTitle: row.meta_title || '',
+    metaDesc: row.meta_desc || '',
+    slug: row.slug || '',
     relatedProductIds: row.related_product_ids || [],
   };
 }
@@ -271,6 +274,9 @@ async function upsertProduct(client, tenant, product) {
     ar: String(product.arDesc || '').trim(),
   };
 
+  const metaTitle = String(product.metaTitle || '').trim() || null;
+  const metaDesc = String(product.metaDesc || '').trim() || null;
+
   const params = [
     tenant.id,
     sku,
@@ -284,6 +290,8 @@ async function upsertProduct(client, tenant, product) {
     Math.max(0, Number.parseInt(product.stock, 10) || 0),
     Boolean(product.has3d),
     Math.max(0, Number.parseInt(product.views3d, 10) || 0),
+    metaTitle,   // $13
+    metaDesc,    // $14
   ];
 
   const upserted = product.id
@@ -301,9 +309,11 @@ async function upsertProduct(client, tenant, product) {
             stock_quantity = $10,
             has_3d = $11,
             views_3d = $12,
+            meta_title = $13,
+            meta_desc = $14,
             updated_at = now()
-        WHERE tenant_id = $1 AND id = $13
-        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity
+        WHERE tenant_id = $1 AND id = $15
+        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       [...params, product.id],
     )
@@ -311,9 +321,10 @@ async function upsertProduct(client, tenant, product) {
       `
         INSERT INTO products (
           tenant_id, sku, brand, name, slug, status, description,
-          base_price_cents, currency, stock_quantity, has_3d, views_3d
+          base_price_cents, currency, stock_quantity, has_3d, views_3d,
+          meta_title, meta_desc
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (tenant_id, sku) DO UPDATE
         SET brand = EXCLUDED.brand,
             name = EXCLUDED.name,
@@ -324,8 +335,10 @@ async function upsertProduct(client, tenant, product) {
             currency = EXCLUDED.currency,
             stock_quantity = EXCLUDED.stock_quantity,
             has_3d = EXCLUDED.has_3d,
-            views_3d = EXCLUDED.views_3d
-        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity
+            views_3d = EXCLUDED.views_3d,
+            meta_title = EXCLUDED.meta_title,
+            meta_desc = EXCLUDED.meta_desc
+        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       params,
     );
@@ -471,6 +484,47 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 }));
 
+// PATCH /bulk-stock must be registered before PATCH /:id to avoid route collision
+router.patch('/bulk-stock', asyncHandler(async (req, res) => {
+  const updates = req.body?.updates;
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return validationError(res, ['updates must be a non-empty array of { sku, stock } objects.']);
+  }
+
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
+
+    let updated = 0;
+    const notFound = [];
+
+    for (const item of updates) {
+      const sku = String(item.sku || '').trim();
+      const stock = Math.max(0, Number.parseInt(item.stock, 10) || 0);
+      if (!sku) continue;
+
+      const result = await client.query(
+        "UPDATE products SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 AND status <> 'archived' RETURNING id",
+        [stock, tenant.id, sku],
+      );
+      if (result.rowCount === 0) {
+        notFound.push(sku);
+      } else {
+        updated += result.rowCount;
+      }
+    }
+
+    await client.query('COMMIT');
+    ok(res, { updated, notFound }, `${updated} product(s) updated.`);
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
 router.patch('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
@@ -493,6 +547,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       enDesc: req.body.enDesc ?? existing.description?.en,
       arDesc: req.body.arDesc ?? existing.description?.ar,
       slug: req.body.slug ?? existing.slug,
+      metaTitle: req.body.metaTitle ?? existing.meta_title,
+      metaDesc: req.body.metaDesc ?? existing.meta_desc,
       id: req.params.id,
       variants: req.body.variants,
       images: req.body.images,
@@ -684,5 +740,50 @@ router.post(
     }
   }),
 );
+
+router.post('/:id/duplicate', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const source = await loadAdminProduct(client, tenant.id, req.params.id);
+    if (!source) return notFound(res, 'Product not found.');
+
+    // Build unique SKU: append -COPY, or -COPY-N if collision
+    let newSku = source.sku + '-COPY';
+    const existing = await client.query(
+      "SELECT sku FROM products WHERE tenant_id = $1 AND sku LIKE $2 AND status <> 'archived'",
+      [tenant.id, source.sku + '-COPY%'],
+    );
+    if (existing.rowCount > 0) {
+      const nums = existing.rows.map(r => {
+        const m = r.sku.match(/-COPY-?(\d+)$/);
+        return m ? parseInt(m[1], 10) : 1;
+      });
+      newSku = source.sku + '-COPY-' + (Math.max(...nums) + 1);
+    }
+
+    await client.query('BEGIN');
+    const saved = await upsertProduct(client, tenant, {
+      ...source,
+      id: undefined,
+      sku: newSku,
+      slug: newSku,
+      hidden: true,
+      stock: 0,
+      variants: (source.variants || []).map(v => ({
+        ...v,
+        sku: v.sku.replace(source.sku, newSku),
+      })),
+    });
+    const product = await loadAdminProduct(client, tenant.id, saved.id);
+    await client.query('COMMIT');
+    created(res, product, 'Product duplicated.');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
 
 module.exports = router;

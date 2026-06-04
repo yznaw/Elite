@@ -32,8 +32,8 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      // Don't toast for cancelled requests or if the component already handles it
-      if (err.status === 0 && err.error instanceof ProgressEvent) {
+      // status 0 covers network failures, CORS blocks, DNS errors, and timeouts
+      if (err.status === 0) {
         toast.error(
           t('error.network.title'),
           t('error.network.sub'),

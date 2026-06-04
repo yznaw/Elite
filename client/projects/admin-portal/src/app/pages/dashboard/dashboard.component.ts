@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { KpiComponent } from '../../shared/kpi/kpi.component';
 import { LineChartComponent } from '../../shared/charts/line-chart.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
@@ -10,17 +10,40 @@ import { I18nService } from '../../services/i18n.service';
 import { AdminOrdersService } from '../../services/admin-orders.service';
 import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminCustomersService } from '../../services/admin-customers.service';
+import { StoreConfigService } from '../../services/store-config.service';
 import { Order, Product, QAR } from '../../models';
+import { IconComponent } from '../../shared/icons/icon.component';
 
 @Component({
   selector: 'ap-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent],
+  imports: [CommonModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent],
+  styles: [`
+    .range-bar { display: flex; align-items: center; gap: 10px; }
+    .range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; }
+    .range-pill {
+      border: none; background: none; padding: 5px 14px;
+      font-size: 12px; font-weight: 600; border-radius: 6px;
+      cursor: pointer; color: var(--muted); transition: all 0.13s;
+    }
+    .range-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .kpi-clickable { cursor: pointer; transition: box-shadow .15s, transform .1s; }
+    .kpi-clickable:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); }
+  `],
   template: `
     <div class="page-fade">
+      <div class="range-bar mb-16">
+        <div class="range-pills">
+          <button class="range-pill" [class.active]="dateRange() === 'today'" (click)="dateRange.set('today')">Today</button>
+          <button class="range-pill" [class.active]="dateRange() === '7d'" (click)="dateRange.set('7d')">7 Days</button>
+          <button class="range-pill" [class.active]="dateRange() === '30d'" (click)="dateRange.set('30d')">30 Days</button>
+          <button class="range-pill" [class.active]="dateRange() === '90d'" (click)="dateRange.set('90d')">90 Days</button>
+        </div>
+      </div>
+
       <div class="kpi-grid mb-24">
         <ap-kpi
-          [label]="t('dash.todayRevenue')"
+          [label]="revRangeLabel()"
           [value]="QAR(todayRevenue())"
           [delta]="(activeOrders() || 0) + ' ' + t('dash.activeOrders').toLowerCase()"
           [deltaUp]="true"
@@ -47,6 +70,19 @@ import { Order, Product, QAR } from '../../models';
           [deltaUp]="true"
           icon="cube"
           [sparkData]="viewsSpark()"/>
+        <div class="kpi kpi-clickable" (click)="goToLowStock()">
+          <div class="kpi-label">
+            <span class="kpi-icon" style="color:var(--warning,#f59e0b)"><ap-icon name="warning" [size]="14"/></span>
+            {{ t('dash.lowStock') }}
+          </div>
+          <div class="kpi-value" [style.color]="lowStockCount() > 0 ? 'var(--warning,#f59e0b)' : 'inherit'">{{ lowStockCount() }}</div>
+          <div class="row" style="justify-content:space-between;">
+            <div class="kpi-delta" [class.down]="lowStockCount() > 0" [class.up]="lowStockCount() === 0">
+              <ap-icon [name]="lowStockCount() > 0 ? 'warning' : 'check'" [size]="11"/>
+              {{ lowStockCount() > 0 ? t('dash.lowStock.delta') : 'All stocked' }}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="dashboard-charts mb-24">
@@ -121,9 +157,11 @@ import { Order, Product, QAR } from '../../models';
 })
 export class DashboardComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+  private readonly router = inject(Router);
   private readonly ordersApi = inject(AdminOrdersService);
   private readonly productsApi = inject(AdminProductsService);
   private readonly customersApi = inject(AdminCustomersService);
+  private readonly storeConfig = inject(StoreConfigService);
 
   readonly t = (k: string): string => this.i18n.t(k);
   readonly QAR = QAR;
@@ -132,6 +170,44 @@ export class DashboardComponent implements OnInit {
   readonly orders = signal<Order[]>([]);
   readonly products = signal<Product[]>([]);
   readonly customers = signal<{ id: string; joined?: string }[]>([]);
+
+  readonly dateRange = signal<'today' | '7d' | '30d' | '90d'>('30d');
+
+  readonly rangeDays = computed(() => {
+    switch (this.dateRange()) {
+      case 'today': return 1;
+      case '7d': return 7;
+      case '90d': return 90;
+      default: return 30;
+    }
+  });
+
+  readonly latestDate = computed(() => {
+    const all = this.orders();
+    if (all.length === 0) return '';
+    return all.reduce<string>((max, o) => (o.date > max ? o.date : max), all[0].date);
+  });
+
+  readonly dateFilter = computed<(date: string) => boolean>(() => {
+    const latest = this.latestDate();
+    if (!latest) return () => false;
+    const days = this.rangeDays();
+    if (days === 1) return (date: string) => date === latest;
+    const latestDate = new Date(latest);
+    const cutoff = new Date(latestDate);
+    cutoff.setDate(cutoff.getDate() - (days - 1));
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    return (date: string) => date >= cutoffStr && date <= latest;
+  });
+
+  revRangeLabel(): string {
+    switch (this.dateRange()) {
+      case 'today': return this.t('dash.todayRevenue');
+      case '7d': return 'Revenue · 7 Days';
+      case '30d': return 'Revenue · 30 Days';
+      case '90d': return 'Revenue · 90 Days';
+    }
+  }
 
   async ngOnInit(): Promise<void> {
     const [orders, products, customers] = await Promise.all([
@@ -146,35 +222,39 @@ export class DashboardComponent implements OnInit {
 
   // ── KPI computeds ────────────────────────────────────────────────────────
 
-  /** Sum of today's order totals — based on the most-recent order date in
-      the dataset so the dashboard remains useful with seed data that isn't
-      pinned to "today". */
   readonly todayRevenue = computed(() => {
-    const all = this.orders();
-    if (all.length === 0) return 0;
-    const latest = all.reduce<string>((max, o) => (o.date > max ? o.date : max), all[0].date);
-    return all
-      .filter((o) => o.date === latest && (o.payment === 'paid' || o.payment === 'refunded'))
+    const filter = this.dateFilter();
+    return this.orders()
+      .filter(o => filter(o.date) && (o.payment === 'paid' || o.payment === 'refunded'))
       .reduce((sum, o) => sum + o.total, 0);
   });
 
   readonly totalRevenue = computed(() =>
     this.orders()
-      .filter((o) => o.payment === 'paid' || o.payment === 'refunded')
+      .filter(o => this.dateFilter()(o.date) && (o.payment === 'paid' || o.payment === 'refunded'))
       .reduce((sum, o) => sum + o.total, 0),
   );
 
-  readonly activeOrders = computed(
-    () => this.orders().filter((o) => o.fulfillment === 'awaiting' || o.fulfillment === 'processing').length,
-  );
+  readonly activeOrders = computed(() => {
+    const filter = this.dateFilter();
+    return this.orders().filter(
+      (o) => (o.fulfillment === 'awaiting' || o.fulfillment === 'processing') && filter(o.date),
+    ).length;
+  });
 
   readonly newCustomers = computed(() => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 30);
-    return this.customers().filter((c) => {
+    const latest = this.latestDate();
+    const days = this.rangeDays();
+    if (!latest) return this.customers().length;
+    const latestDate = new Date(latest);
+    const cutoff = new Date(latestDate);
+    cutoff.setDate(cutoff.getDate() - (days - 1));
+    const count = this.customers().filter((c) => {
       if (!c.joined) return false;
-      return new Date(c.joined) >= cutoff;
-    }).length || this.customers().length; // fall back to total if joined dates aren't recent
+      const j = new Date(c.joined);
+      return j >= cutoff && j <= latestDate;
+    }).length;
+    return count || this.customers().length;
   });
 
   readonly heatTop = computed<Product[]>(() =>
@@ -184,17 +264,22 @@ export class DashboardComponent implements OnInit {
   readonly maxViews = computed(() => this.heatTop()[0]?.views3d || 0);
   readonly topViews = computed(() => this.maxViews());
   readonly topProductName = computed(() => this.heatTop()[0]?.name || '—');
+  readonly lowStockCount = computed(() => {
+    const t = this.storeConfig.lowStockThreshold();
+    return this.products().filter(p => p.stock > 0 && p.stock < t).length;
+  });
 
   readonly recentOrders = computed(() => this.orders().slice(0, 5));
 
   // ── Sparklines / chart data ──────────────────────────────────────────────
 
-  /** Build a per-day revenue series from the orders list, last 30 days. */
   readonly revChartData = computed(() => {
+    const days = this.rangeDays();
+    const latest = this.latestDate();
+    const latestDate = latest ? new Date(latest) : new Date();
     const buckets = new Map<string, number>();
-    const today = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(latestDate);
       d.setDate(d.getDate() - i);
       buckets.set(d.toISOString().slice(0, 10), 0);
     }
@@ -259,6 +344,8 @@ export class DashboardComponent implements OnInit {
   sizeSummary(r: Order): string {
     return r.items.length > 0 ? `EU ${r.items[0].s}` : '';
   }
+
+  goToLowStock(): void { void this.router.navigate(['/catalog'], { queryParams: { stock: 'low' } }); }
 
   onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
 }
