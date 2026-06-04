@@ -368,8 +368,8 @@ DEFAULT_TENANT_SLUG=<span class="s">elite</span>
 DEFAULT_TENANT_NAME=<span class="s">Elite</span>
 DEFAULT_CURRENCY=<span class="s">QAR</span>
 
-<span class="c"># Replace with your actual domains</span>
-CORS_ORIGINS=<span class="s">https://yourdomain.com,https://admin.yourdomain.com</span>
+<span class="c"># Elite production domains</span>
+CORS_ORIGINS=<span class="s">https://elitecollections.qa,https://www.elitecollections.qa,https://admin.elitecollections.qa</span>
 
 <span class="c"># Generate with: openssl rand -hex 32</span>
 SESSION_SECRET=<span class="v">REPLACE_WITH_64_CHAR_RANDOM_STRING</span>
@@ -382,7 +382,7 @@ SESSION_COOKIE_SAMESITE=<span class="s">lax</span>
 GOOGLE_API_KEY=<span class="s">YOUR_GOOGLE_API_KEY</span>
 
 <span class="c"># Default admin — change password immediately after first login!</span>
-DEFAULT_ADMIN_EMAIL=<span class="s">admin@yourdomain.com</span>
+DEFAULT_ADMIN_EMAIL=<span class="s">admin@elitecollections.qa</span>
 DEFAULT_ADMIN_PASSWORD=<span class="v">CHANGE_ME_IMMEDIATELY</span>
 DEFAULT_ADMIN_NAME=<span class="s">Admin</span></code></div>
       </div>
@@ -513,7 +513,7 @@ pm2 logs elite-api --lines 20  <span class="c"># check for startup errors</span>
   ════════════════════════════════════════════ -->
   <div class="section">
     <div class="sec-icon" style="background:#ECFDF5;">🌐</div>
-    <div><div class="sec-title">6 — Nginx Configuration</div><div class="sec-sub">Serve the Angular app + proxy API requests</div></div>
+    <div><div class="sec-title">6 — Nginx Configuration</div><div class="sec-sub">Serve Angular, terminate HTTPS, and proxy API requests</div></div>
     <span class="sec-badge critical">Critical</span>
     <div class="sec-line"></div>
   </div>
@@ -524,11 +524,15 @@ pm2 logs elite-api --lines 20  <span class="c"># check for startup errors</span>
       <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="ci-body">
         <div class="ci-title">Create Nginx site config for the admin portal</div>
-        <div class="ci-desc">Replace <code>admin.yourdomain.com</code> with your actual admin subdomain.</div>
+        <div class="ci-desc">Use <code>admin.elitecollections.qa</code> for the admin subdomain. Express stays private on <code>127.0.0.1:3000</code>; Nginx is the public web server.</div>
         <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code><span class="c"># /etc/nginx/sites-available/elite-admin</span>
+upstream elite_api {
+    server 127.0.0.1:3000;
+}
+
 server {
     listen 80;
-    server_name <span class="v">admin.yourdomain.com</span>;
+    server_name <span class="v">admin.elitecollections.qa</span>;
 
     root /var/www/elite/client/dist/admin-portal/browser;
     index index.html;
@@ -540,10 +544,8 @@ server {
 
     <span class="c"># Proxy all /api/* requests to the Node server</span>
     location /api/ {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://elite_api;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -580,14 +582,14 @@ sudo systemctl reload nginx</code></div>
   ════════════════════════════════════════════ -->
   <div class="section">
     <div class="sec-icon" style="background:#F0FDF4;">🔒</div>
-    <div><div class="sec-title">7 — SSL / HTTPS</div><div class="sec-sub">Free SSL certificate via Let's Encrypt (Certbot)</div></div>
+    <div><div class="sec-title">7 — SSL / HTTPS</div><div class="sec-sub">Let Nginx handle public HTTPS with Let's Encrypt</div></div>
     <span class="sec-badge critical">Critical</span>
     <div class="sec-line"></div>
   </div>
 
   <div class="callout info">
     <div class="callout-icon">ℹ️</div>
-    <div><strong>DNS must point to your server first</strong>Make sure <code>admin.yourdomain.com</code> is pointing to your server's IP in your DNS settings before running Certbot, otherwise it will fail.</div>
+    <div><strong>DNS must point to your server first</strong>Make sure <code>admin.elitecollections.qa</code> is pointing to your server's IP in your DNS settings before running Certbot, otherwise it will fail. Node does not need HTTPS certificates; Nginx terminates TLS and proxies to Express over localhost.</div>
   </div>
 
   <div class="checklist-card">
@@ -605,9 +607,9 @@ sudo systemctl reload nginx</code></div>
       <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="ci-body">
         <div class="ci-title">Install Certbot and get SSL certificate</div>
-        <div class="ci-desc">Certbot will automatically edit your Nginx config to add HTTPS and set up auto-renewal.</div>
+        <div class="ci-desc">Certbot will automatically edit your Nginx config to add HTTPS, redirect HTTP to HTTPS, and set up auto-renewal.</div>
         <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d admin.yourdomain.com
+sudo certbot --nginx -d admin.elitecollections.qa
 <span class="c"># Follow the prompts — choose to redirect HTTP → HTTPS</span></code></div>
       </div>
     </div>
@@ -615,8 +617,8 @@ sudo certbot --nginx -d admin.yourdomain.com
     <div class="check-item" data-id="ssl3" onclick="toggle(this)">
       <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="ci-body">
-        <div class="ci-title">Verify SSL is working</div>
-        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>curl -I https://admin.yourdomain.com/api/health
+        <div class="ci-title">Verify Nginx HTTPS is working</div>
+        <div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">Copy</button><code>curl -I https://admin.elitecollections.qa/api/health
 <span class="c"># Should return HTTP/2 200 with {"success":true,...}</span></code></div>
       </div>
     </div>
@@ -711,7 +713,7 @@ pm2 monit              <span class="c"># real-time CPU / memory dashboard</span>
       <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="ci-body">
         <div class="ci-title">Set up uptime monitoring (optional but recommended)</div>
-        <div class="ci-desc">Free options: UptimeRobot or BetterUptime — monitor <code>https://admin.yourdomain.com/api/health</code> and get an email/SMS if it goes down.</div>
+        <div class="ci-desc">Free options: UptimeRobot or BetterUptime — monitor <code>https://admin.elitecollections.qa/api/health</code> and get an email/SMS if it goes down.</div>
         <div class="ci-tags"><span class="ci-tag blue">UptimeRobot — free tier</span><span class="ci-tag blue">BetterUptime — free tier</span></div>
       </div>
     </div>
@@ -735,7 +737,7 @@ pm2 monit              <span class="c"># real-time CPU / memory dashboard</span>
       <div class="ci-box"><svg class="ci-check" width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5L4.5 8.5L12 1" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="ci-body">
         <div class="ci-title">Open admin portal URL — login page loads</div>
-        <div class="ci-desc">Visit <code>https://admin.yourdomain.com</code> in a private/incognito window.</div>
+        <div class="ci-desc">Visit <code>https://admin.elitecollections.qa</code> in a private/incognito window.</div>
       </div>
     </div>
 
