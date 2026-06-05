@@ -21,8 +21,7 @@ import { COLLECTIONS } from '../../data/mock';
 
 type SortKey = 'name-az' | 'name-za' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'newest';
 type ViewMode = 'grid' | 'list';
-type StatusFilter = 'all' | 'active' | 'hidden' | 'low-stock';
-type ImageFilter = 'all' | 'has-images' | 'no-images';
+type StatusFilter = 'all' | 'active' | 'hidden' | 'low-stock' | 'out-of-stock';
 type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
 @Component({
@@ -44,11 +43,15 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
           <!-- Status quick-filter pills -->
           <div class="status-pills">
-            <button class="status-pill" [class.active]="statusFilter() === 'all'"       (click)="statusFilter.set('all'); page.set(0)">All</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'active'"    (click)="statusFilter.set('active'); page.set(0)">Active</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'hidden'"    (click)="statusFilter.set('hidden'); page.set(0)">Hidden</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'all'"    (click)="statusFilter.set('all'); page.set(0)">All</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'active'" (click)="statusFilter.set('active'); page.set(0)">Active</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'hidden'" (click)="statusFilter.set('hidden'); page.set(0)">Hidden</button>
+            <button class="status-pill danger" [class.active]="statusFilter() === 'out-of-stock'" (click)="statusFilter.set('out-of-stock'); page.set(0)">
+              Out of Stock
+              @if (outOfStockCount() > 0) { <span class="ls-badge danger-badge">{{ outOfStockCount() }}</span> }
+            </button>
             <button class="status-pill warn" [class.active]="statusFilter() === 'low-stock'" (click)="statusFilter.set('low-stock'); page.set(0)">
-              <ap-icon name="warning" [size]="11"/> Low Stock
+              Low Stock
               @if (lowStockCount() > 0) { <span class="ls-badge">{{ lowStockCount() }}</span> }
             </button>
           </div>
@@ -124,30 +127,12 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             </div>
 
             <div class="fp-group">
-              <label class="fp-label">Images</label>
-              <select class="inp inp-sm" [ngModel]="imageFilter()" (ngModelChange)="imageFilter.set($event); page.set(0)">
-                <option value="all">All</option>
-                <option value="has-images">Has images</option>
-                <option value="no-images">No images</option>
-              </select>
-            </div>
-
-            <div class="fp-group">
-              <label class="fp-label">3D Model</label>
-              <select class="inp inp-sm" [ngModel]="v3d()" (ngModelChange)="v3d.set($event); page.set(0)">
-                <option value="All">All</option>
-                <option value="Linked">{{ t('catalog.linked') }}</option>
-                <option value="Missing">{{ t('catalog.missing') }}</option>
-              </select>
-            </div>
-
-            <div class="fp-group">
-              <label class="fp-label">Variants</label>
-              <select class="inp inp-sm" [ngModel]="variantFilter()" (ngModelChange)="variantFilter.set($event); page.set(0)">
-                <option value="all">All</option>
-                <option value="none">No variants</option>
-                <option value="few">1–4 variants</option>
-                <option value="many">5+ variants</option>
+              <label class="fp-label">Brand</label>
+              <select class="inp inp-sm" [ngModel]="brandFilter()" (ngModelChange)="brandFilter.set($event); page.set(0)">
+                <option value="all">All brands</option>
+                @for (b of brands(); track b) {
+                  <option [value]="b">{{ b }}</option>
+                }
               </select>
             </div>
 
@@ -158,6 +143,15 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                 @for (c of refColors(); track c.id) {
                   <option [value]="c.name_en">{{ c.name_en }}</option>
                 }
+              </select>
+            </div>
+
+            <div class="fp-group">
+              <label class="fp-label">3D Model</label>
+              <select class="inp inp-sm" [ngModel]="v3d()" (ngModelChange)="v3d.set($event); page.set(0)">
+                <option value="All">All</option>
+                <option value="Linked">{{ t('catalog.linked') }}</option>
+                <option value="Missing">{{ t('catalog.missing') }}</option>
               </select>
             </div>
 
@@ -189,17 +183,14 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               @if (collectionId() !== 'All') {
                 <span class="fchip">Collection: {{ collectionLabel() }} <button (click)="collectionId.set('All')">×</button></span>
               }
-              @if (imageFilter() !== 'all') {
-                <span class="fchip">{{ imageFilter() === 'has-images' ? 'Has images' : 'No images' }} <button (click)="imageFilter.set('all')">×</button></span>
-              }
-              @if (v3d() !== 'All') {
-                <span class="fchip">3D: {{ v3d() }} <button (click)="v3d.set('All')">×</button></span>
-              }
-              @if (variantFilter() !== 'all') {
-                <span class="fchip">Variants: {{ variantFilter() }} <button (click)="variantFilter.set('all')">×</button></span>
+              @if (brandFilter() !== 'all') {
+                <span class="fchip">Brand: {{ brandFilter() }} <button (click)="brandFilter.set('all')">×</button></span>
               }
               @if (colorFilter() !== 'all') {
                 <span class="fchip">Color: {{ colorFilter() }} <button (click)="colorFilter.set('all')">×</button></span>
+              }
+              @if (v3d() !== 'All') {
+                <span class="fchip">3D: {{ v3d() }} <button (click)="v3d.set('All')">×</button></span>
               }
               @if (priceMin() > 0 || priceMax() > 0) {
                 <span class="fchip">Price: {{ priceMin() }}–{{ priceMax() || '∞' }} QAR <button (click)="priceMin.set(0);priceMax.set(0)">×</button></span>
@@ -294,6 +285,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                     @if (p.hidden) {
                       <span class="prod-hidden-badge">○ {{ t('catalog.hidden') }}</span>
                     }
+                    @if (!p.hidden && p.stock === 0) {
+                      <span class="prod-oos-badge">Out of Stock</span>
+                    }
                   }
                 </div>
                 <div class="prod-body">
@@ -302,7 +296,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   <div class="prod-meta">
                     <span class="prod-price">{{ QAR(p.price) }}</span>
                     @if (!selectionMode()) {
-                      <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < 8" [class.out]="p.stock === 0">
+                      <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < lowStockThreshold()" [class.out]="p.stock === 0">
                         {{ stockLabel(p) }}
                       </span>
                     }
@@ -355,8 +349,8 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                 <div class="lv-c-sku hide-mobile mono small muted">{{ p.sku }}</div>
                 <div class="lv-c-price mono">{{ QAR(p.price) }}</div>
                 <div class="lv-c-stock hide-mobile">
-                  <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < 8" [class.out]="p.stock === 0">
-                    {{ p.stock }}
+                  <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < lowStockThreshold()" [class.out]="p.stock === 0">
+                    {{ p.stock === 0 ? 'Out of stock' : p.stock }}
                   </span>
                 </div>
                 <div class="lv-c-variants hide-mobile small muted">{{ p.variants?.length ?? 0 }}</div>
@@ -416,9 +410,11 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       cursor: pointer; color: var(--muted); transition: all 0.13s;
     }
     .status-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-    .status-pill.warn { display: flex; align-items: center; gap: 4px; }
-    .status-pill.warn.active { color: var(--warning, #f59e0b); }
+    .status-pill.warn, .status-pill.danger { display: flex; align-items: center; gap: 4px; }
+    .status-pill.warn.active  { color: var(--warning, #f59e0b); }
+    .status-pill.danger.active { color: var(--danger, #dc2626); }
     .ls-badge { background: var(--warning, #f59e0b); color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 0 5px; line-height: 16px; }
+    .danger-badge { background: var(--danger, #dc2626) !important; }
     .top-actions {
       display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-inline-start: auto;
     }
@@ -509,6 +505,12 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       background: rgba(239,68,68,0.92); color: #fff;
       font-size: 10px; font-weight: 700; border-radius: 6px;
       padding: 2px 7px;
+    }
+    .prod-oos-badge {
+      position: absolute; bottom: 10px; inset-inline-start: 10px;
+      background: rgba(15,23,42,0.82); color: #fff;
+      font-size: 10px; font-weight: 700; border-radius: 6px;
+      padding: 2px 7px; backdrop-filter: blur(4px);
     }
 
     /* ── List view ── */
@@ -602,10 +604,9 @@ export class CatalogComponent implements OnInit {
   // ── Filter / sort / view state ────────────────────────────────────────────
   readonly search        = signal('');
   readonly collectionId  = signal('All');
+  readonly brandFilter   = signal('all');
   readonly v3d           = signal('All');
   readonly statusFilter  = signal<StatusFilter>('all');
-  readonly imageFilter   = signal<ImageFilter>('all');
-  readonly variantFilter = signal<'all' | 'none' | 'few' | 'many'>('all');
   readonly colorFilter   = signal('all');
   readonly priceMin      = signal(0);
   readonly priceMax      = signal(0);
@@ -621,9 +622,19 @@ export class CatalogComponent implements OnInit {
   readonly activeId        = signal<string | null>(null);
   readonly showBulkImport  = signal(false);
 
-  readonly lowStockCount = computed(() => {
-    const t = this.storeConfig.lowStockThreshold();
-    return this._products().filter(p => p.stock > 0 && p.stock < t).length;
+  readonly lowStockThreshold = computed(() => this.storeConfig.lowStockThreshold());
+
+  readonly lowStockCount = computed(() =>
+    this._products().filter(p => p.stock > 0 && p.stock < this.lowStockThreshold()).length,
+  );
+
+  readonly outOfStockCount = computed(() =>
+    this._products().filter(p => !p.hidden && p.stock === 0).length,
+  );
+
+  readonly brands = computed(() => {
+    const set = new Set(this._products().map(p => p.brand).filter(Boolean));
+    return [...set].sort((a, b) => a.localeCompare(b));
   });
   readonly selectionMode   = signal(false);
   readonly selectedIds     = signal(new Set<string>());
@@ -642,9 +653,8 @@ export class CatalogComponent implements OnInit {
 
   readonly hasAdvancedFilters = computed(() =>
     this.collectionId() !== 'All' ||
-    this.imageFilter() !== 'all' ||
+    this.brandFilter() !== 'all' ||
     this.v3d() !== 'All' ||
-    this.variantFilter() !== 'all' ||
     this.colorFilter() !== 'all' ||
     this.priceMin() > 0 ||
     this.priceMax() > 0,
@@ -653,46 +663,40 @@ export class CatalogComponent implements OnInit {
   readonly activeFilterCount = computed(() => {
     let n = 0;
     if (this.collectionId() !== 'All') n++;
-    if (this.imageFilter() !== 'all') n++;
+    if (this.brandFilter() !== 'all') n++;
     if (this.v3d() !== 'All') n++;
-    if (this.variantFilter() !== 'all') n++;
     if (this.colorFilter() !== 'all') n++;
     if (this.priceMin() > 0 || this.priceMax() > 0) n++;
     return n;
   });
 
   readonly filtered = computed(() => {
-    const s      = this.search().toLowerCase();
-    const colId  = this.collectionId();
-    const v3d    = this.v3d();
-    const status = this.statusFilter();
-    const imgF   = this.imageFilter();
-    const varF   = this.variantFilter();
-    const colF   = this.colorFilter();
-    const pMin   = this.priceMin();
-    const pMax   = this.priceMax();
-    const sort   = this.sortKey();
+    const s         = this.search().toLowerCase();
+    const colId     = this.collectionId();
+    const brand     = this.brandFilter();
+    const v3d       = this.v3d();
+    const status    = this.statusFilter();
+    const colF      = this.colorFilter();
+    const pMin      = this.priceMin();
+    const pMax      = this.priceMax();
+    const sort      = this.sortKey();
+    const threshold = this.lowStockThreshold();
 
     let list = this._products().filter(p => {
-      if (status === 'active' && p.hidden) return false;
-      if (status === 'hidden' && !p.hidden) return false;
-      if (status === 'low-stock' && !(p.stock > 0 && p.stock < 8)) return false;
+      if (status === 'active'       && p.hidden) return false;
+      if (status === 'hidden'       && !p.hidden) return false;
+      if (status === 'out-of-stock' && p.stock !== 0) return false;
+      if (status === 'low-stock'    && !(p.stock > 0 && p.stock < threshold)) return false;
 
       if (colId !== 'All') {
         const col = this.collections().find(c => c.id === colId);
         if (col && !col.productIds.includes(p.id)) return false;
       }
 
-      if (v3d === 'Linked' && !p.has3d) return false;
-      if (v3d === 'Missing' && p.has3d) return false;
+      if (brand !== 'all' && p.brand !== brand) return false;
 
-      if (imgF === 'has-images' && !(p.images?.length || p.image)) return false;
-      if (imgF === 'no-images' && (p.images?.length || p.image)) return false;
-
-      const vc = p.variants?.length ?? 0;
-      if (varF === 'none' && vc > 0) return false;
-      if (varF === 'few' && (vc < 1 || vc > 4)) return false;
-      if (varF === 'many' && vc < 5) return false;
+      if (v3d === 'Linked'  && !p.has3d) return false;
+      if (v3d === 'Missing' && p.has3d)  return false;
 
       if (colF !== 'all') {
         const variantColors = p.variants?.map(v => v.color?.toLowerCase()) ?? [];
@@ -702,7 +706,7 @@ export class CatalogComponent implements OnInit {
       if (pMin > 0 && p.price < pMin) return false;
       if (pMax > 0 && p.price > pMax) return false;
 
-      if (s && !(p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s))) return false;
+      if (s && !(p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s) || p.brand.toLowerCase().includes(s))) return false;
 
       return true;
     });
@@ -843,10 +847,9 @@ export class CatalogComponent implements OnInit {
   clearFilters(): void {
     this.search.set('');
     this.collectionId.set('All');
+    this.brandFilter.set('all');
     this.v3d.set('All');
     this.statusFilter.set('all');
-    this.imageFilter.set('all');
-    this.variantFilter.set('all');
     this.colorFilter.set('all');
     this.priceMin.set(0);
     this.priceMax.set(0);
