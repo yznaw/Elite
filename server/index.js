@@ -72,16 +72,11 @@ app.use(
 );
 
 // ─── Static uploads ──────────────────────────────────────────────────────────
-// Served outside `/api` so URLs persisted in the DB (e.g. /uploads/abc.jpg)
-// can be hit directly by <img> tags from any origin behind the same host.
-app.use(
-  uploadsPublicBase,
-  express.static(uploadsDir, {
-    maxAge: '7d',
-    immutable: true,
-    fallthrough: false,
-  }),
-);
+// Served at both /uploads/ (legacy, direct host access) AND /api/uploads/
+// (via the /api proxy so admin.example.com/api/uploads/… always resolves).
+const staticOpts = { maxAge: '7d', immutable: true, fallthrough: false };
+app.use(uploadsPublicBase, express.static(uploadsDir, staticOpts));
+app.use('/api/uploads', express.static(uploadsDir, staticOpts));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/webhooks/nbox', nboxWebhookRouter);

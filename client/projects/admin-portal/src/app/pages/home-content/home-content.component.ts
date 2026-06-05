@@ -1299,7 +1299,7 @@ function cloneContent(content: HomeContentData): HomeContentData {
   `],
 })
 export class HomeContentComponent implements OnInit {
-  private readonly api = inject(ApiClient);
+  readonly api = inject(ApiClient);
   private readonly uploads = inject(MediaUploadService);
   private readonly toast = inject(ToastService);
   private readonly mediaApi = inject(AdminMediaService);
@@ -1400,7 +1400,7 @@ export class HomeContentComponent implements OnInit {
 
   /** Public wrapper so the template can call resolveMediaUrl. */
   resolveUrl(url: string): string {
-    return this.resolveMediaUrl(url);
+    return this.api.mediaUrl(url);
   }
 
   async ngOnInit(): Promise<void> {
@@ -1727,10 +1727,6 @@ export class HomeContentComponent implements OnInit {
   }
 
   private resolveMediaUrl(url: string): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.api.url('/').replace(/\/api\/?$/, '')}${value}`;
+    return this.api.mediaUrl(url);
   }
 }
