@@ -213,6 +213,9 @@ function mapAdminProduct(row) {
     imageColors: normalizeImageColors(row.image_colors),
     variants: row.variants || [],
     relatedProductIds: row.related_product_ids || [],
+    metaTitle: row.meta_title || '',
+    metaDesc: row.meta_desc || '',
+    slug: row.slug || '',
   };
 }
 
@@ -277,6 +280,9 @@ async function upsertProduct(client, tenant, product) {
     ar: String(product.arDesc || '').trim(),
   };
 
+  const metaTitle = String(product.metaTitle || '').trim() || null;
+  const metaDesc  = String(product.metaDesc  || '').trim() || null;
+
   const params = [
     tenant.id,
     sku,
@@ -290,6 +296,8 @@ async function upsertProduct(client, tenant, product) {
     Math.max(0, Number.parseInt(product.stock, 10) || 0),
     Boolean(product.has3d),
     Math.max(0, Number.parseInt(product.views3d, 10) || 0),
+    metaTitle,
+    metaDesc,
   ];
 
   const upserted = product.id
@@ -307,9 +315,11 @@ async function upsertProduct(client, tenant, product) {
             stock_quantity = $10,
             has_3d = $11,
             views_3d = $12,
+            meta_title = $13,
+            meta_desc = $14,
             updated_at = now()
-        WHERE tenant_id = $1 AND id = $13
-        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity
+        WHERE tenant_id = $1 AND id = $15
+        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       [...params, product.id],
     )
@@ -317,9 +327,10 @@ async function upsertProduct(client, tenant, product) {
       `
         INSERT INTO products (
           tenant_id, sku, brand, name, slug, status, description,
-          base_price_cents, currency, stock_quantity, has_3d, views_3d
+          base_price_cents, currency, stock_quantity, has_3d, views_3d,
+          meta_title, meta_desc
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (tenant_id, sku) DO UPDATE
         SET brand = EXCLUDED.brand,
             name = EXCLUDED.name,
@@ -330,8 +341,10 @@ async function upsertProduct(client, tenant, product) {
             currency = EXCLUDED.currency,
             stock_quantity = EXCLUDED.stock_quantity,
             has_3d = EXCLUDED.has_3d,
-            views_3d = EXCLUDED.views_3d
-        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity
+            views_3d = EXCLUDED.views_3d,
+            meta_title = EXCLUDED.meta_title,
+            meta_desc = EXCLUDED.meta_desc
+        RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       params,
     );
@@ -499,6 +512,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       enDesc: req.body.enDesc ?? existing.description?.en,
       arDesc: req.body.arDesc ?? existing.description?.ar,
       slug: req.body.slug ?? existing.slug,
+      metaTitle: req.body.metaTitle ?? existing.meta_title,
+      metaDesc: req.body.metaDesc ?? existing.meta_desc,
       id: req.params.id,
       variants: req.body.variants,
       images: req.body.images,
