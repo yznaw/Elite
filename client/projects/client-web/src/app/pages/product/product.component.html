@@ -125,77 +125,76 @@
             </div>
           }
 
-          <div id="size-section" class="size-section">
-            <div class="section-label">
-              <span>{{ t('product.size.label') }}</span>
-              <button type="button">{{ t('product.size.guide') }}</button>
-            </div>
+          @if (p.sizes && p.sizes.length > 0) {
+            <div id="size-section" class="size-section">
+              <div class="section-label">
+                <span>{{ t('product.size.label') }}</span>
+                <button type="button">{{ t('product.size.guide') }}</button>
+              </div>
 
-            <button
-              type="button"
-              class="mobile-size-trigger"
-              (click)="openSizePicker()"
-              [attr.aria-expanded]="sizePickerOpen()"
-            >
-              <span>{{ t('product.size.choose') }}</span>
-              <strong>EU {{ selectedSize() ?? '—' }}</strong>
-            </button>
-
-            <div class="size-options">
-              @for (s of p.sizes; track s) {
-                <button
-                  type="button"
-                  class="size-btn"
-                  [class.active]="selectedSize() === s"
-                  [class.out-of-stock]="!sizeInStock(p, s)"
-                  [attr.aria-pressed]="selectedSize() === s"
-                  (click)="selectSize(s)"
-                >
-                  <span class="size-value">{{ s }}</span>
-                  <span class="size-state" aria-hidden="true">
-                    {{ selectedSize() === s ? '✓' : '' }}
-                  </span>
-                </button>
-              }
-            </div>
-          </div>
-
-          @if (sizePickerOpen()) {
-            <div class="size-sheet" role="dialog" aria-modal="true" [attr.aria-label]="t('product.size.label')">
               <button
                 type="button"
-                class="size-sheet-backdrop"
-                (click)="closeSizePicker()"
-                [attr.aria-label]="t('common.close')"
-              ></button>
-              <div class="size-sheet-panel">
-                <div class="size-sheet-head">
-                  <div>
-                    <span>{{ t('product.size.choose') }}</span>
-                    <strong>{{ t('product.size.label') }}</strong>
-                  </div>
-                  <button type="button" class="size-sheet-close" (click)="closeSizePicker()" [attr.aria-label]="t('common.close')">×</button>
-                </div>
+                class="mobile-size-trigger"
+                (click)="openSizePicker()"
+                [attr.aria-expanded]="sizePickerOpen()"
+              >
+                <span>{{ t('product.size.choose') }}</span>
+                <strong>EU {{ selectedSize() ?? '—' }}</strong>
+              </button>
 
-                <div class="size-list">
-                  @for (s of p.sizes; track s) {
-                    <button
-                      type="button"
-                      class="size-btn"
-                      [class.active]="selectedSize() === s"
-                      [class.out-of-stock]="!sizeInStock(p, s)"
-                      [attr.aria-pressed]="selectedSize() === s"
-                      (click)="selectSize(s)"
-                    >
-                      <span class="size-value">{{ s }}</span>
-                      <span class="size-state" aria-hidden="true">
-                        {{ selectedSize() === s ? '✓' : '' }}
-                      </span>
-                    </button>
-                  }
-                </div>
+              <div class="size-options">
+                @for (s of p.sizes; track s) {
+                  <button
+                    type="button"
+                    class="size-btn"
+                    [class.active]="selectedSize() === s"
+                    [class.out-of-stock]="!sizeInStock(p, s)"
+                    [attr.aria-pressed]="selectedSize() === s"
+                    (click)="selectSize(s)"
+                  >
+                    <span class="size-value">{{ s }}</span>
+                    <span class="size-state" aria-hidden="true">
+                      {{ selectedSize() === s ? '✓' : '' }}
+                    </span>
+                  </button>
+                }
               </div>
             </div>
+
+            @if (sizePickerOpen()) {
+              <div class="size-sheet" role="dialog" aria-modal="true" [attr.aria-label]="t('product.size.label')">
+                <button
+                  type="button"
+                  class="size-sheet-backdrop"
+                  (click)="closeSizePicker()"
+                  [attr.aria-label]="t('common.close')"
+                ></button>
+                <div class="size-sheet-panel">
+                  <div class="size-sheet-head">
+                    <div>
+                      <span>{{ t('product.size.choose') }}</span>
+                      <strong>{{ t('product.size.label') }}</strong>
+                    </div>
+                    <button type="button" class="size-sheet-close" (click)="closeSizePicker()" [attr.aria-label]="t('common.close')">×</button>
+                  </div>
+                  <div class="size-list">
+                    @for (s of p.sizes; track s) {
+                      <button
+                        type="button"
+                        class="size-btn"
+                        [class.active]="selectedSize() === s"
+                        [class.out-of-stock]="!sizeInStock(p, s)"
+                        [attr.aria-pressed]="selectedSize() === s"
+                        (click)="selectSize(s)"
+                      >
+                        <span class="size-value">{{ s }}</span>
+                        <span class="size-state" aria-hidden="true">{{ selectedSize() === s ? '✓' : '' }}</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
           }
 
           <div class="qty-row">

@@ -119,8 +119,11 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   readonly selectedSizeInStock = computed(() => {
     const p = this.product();
+    if (!p) return false;
+    // Size-optional products (sunglasses, accessories): always in-stock check by total stock
+    if (!p.sizes?.length) return p.variants?.some(v => v.stock > 0) ?? true;
     const size = this.selectedSize();
-    if (!p || !size) return true;
+    if (!size) return true; // no size chosen yet — don't block CTA
     return this.sizeInStock(p, size);
   });
 
@@ -287,9 +290,9 @@ export class ProductComponent implements OnInit, OnDestroy {
   async submitRestockRequest(event?: Event): Promise<void> {
     event?.preventDefault();
     const p = this.product();
-    const size = this.selectedSize();
+    const size = this.selectedSize() ?? p?.sizes?.[0] ?? 0;
     const email = this.restockEmail().trim();
-    if (!p || !size || this.restockSubmitting()) return;
+    if (!p || this.restockSubmitting()) return;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       this.restockError.set(this.t('product.restock.emailError'));
       return;
@@ -322,7 +325,7 @@ export class ProductComponent implements OnInit, OnDestroy {
       price: p.price,
       image: this.gallery()[this.galleryIdx()] ?? p.image,
       leather: p.leather,
-      size: this.selectedSize() ?? p.sizes[0] ?? 40,
+      size: this.selectedSize() ?? p.sizes?.[0] ?? 0,
       qty: this.qty(),
     };
   }
