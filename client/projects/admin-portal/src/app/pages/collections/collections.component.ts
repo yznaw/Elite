@@ -122,6 +122,7 @@ export class CollectionsComponent implements OnInit {
   openNew(): void {
     const newCol: Collection = {
       id: 'COL-NEW-' + Date.now(),
+      handle: '',
       title: 'New Collection',
       description: '',
       imageUrl: null,

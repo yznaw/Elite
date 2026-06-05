@@ -42,10 +42,10 @@ export const PRODUCTS: Product[] = [
 ];
 
 export const COLLECTIONS: Collection[] = [
-  { id: 'COL-001', title: 'Summer 2026', description: 'Lightweight leathers and bright accents.', imageUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600&q=80', productIds: ['P-003', 'P-005', 'P-012'], hidden: false },
-  { id: 'COL-002', title: 'Classic Oxfords', description: 'Timeless elegance for formal occasions.', imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80', productIds: ['P-001'], hidden: false },
-  { id: 'COL-003', title: 'Street Style', description: 'Premium sneakers for everyday wear.', imageUrl: 'https://images.unsplash.com/photo-1527090526205-beaac8dc3c62?w=600&q=80', productIds: ['P-007', 'P-008', 'P-009', 'P-010', 'P-012'], hidden: false },
-  { id: 'COL-004', title: 'Winter Archive', description: 'Past season styles. Hidden from storefront.', imageUrl: null, productIds: ['P-004', 'P-006', 'P-011'], hidden: true },
+  { id: 'COL-001', handle: 'summer-2026', title: 'Summer 2026', description: 'Lightweight leathers and bright accents.', imageUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600&q=80', productIds: ['P-003', 'P-005', 'P-012'], hidden: false },
+  { id: 'COL-002', handle: 'classic-oxfords', title: 'Classic Oxfords', description: 'Timeless elegance for formal occasions.', imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80', productIds: ['P-001'], hidden: false },
+  { id: 'COL-003', handle: 'street-style', title: 'Street Style', description: 'Premium sneakers for everyday wear.', imageUrl: 'https://images.unsplash.com/photo-1527090526205-beaac8dc3c62?w=600&q=80', productIds: ['P-007', 'P-008', 'P-009', 'P-010', 'P-012'], hidden: false },
+  { id: 'COL-004', handle: 'winter-archive', title: 'Winter Archive', description: 'Past season styles. Hidden from storefront.', imageUrl: null, productIds: ['P-004', 'P-006', 'P-011'], hidden: true },
 ];
 
 export const MEDIA_INIT: MediaFile[] = [
