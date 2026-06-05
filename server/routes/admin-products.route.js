@@ -216,6 +216,9 @@ function mapAdminProduct(row) {
     metaDesc: row.meta_desc || '',
     slug: row.slug || '',
     relatedProductIds: row.related_product_ids || [],
+    metaTitle: row.meta_title || '',
+    metaDesc: row.meta_desc || '',
+    slug: row.slug || '',
   };
 }
 
