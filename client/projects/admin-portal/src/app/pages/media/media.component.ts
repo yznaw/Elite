@@ -389,9 +389,13 @@ export class MediaComponent implements OnInit {
       }
       this.media.update(all => [...imported, ...all]);
       this.gdriveOpen.set(false);
+      const linked = imported.filter(f => f.linkedTo).length;
+      const sub = linked > 0
+        ? `${linked} auto-linked by SKU match.`
+        : 'Saved to your media library.';
       this.toast.success(
         `${imported.length} image${imported.length === 1 ? '' : 's'} imported`,
-        'Saved to your media library.',
+        sub,
       );
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message || 'Import failed. Check the URL and try again.';

@@ -260,8 +260,10 @@ router.delete(
 );
 
 // ─── Google Drive import ──────────────────────────────────────────────────────
+// ─── Google Drive import ──────────────────────────────────────────────────────
 // POST /api/admin/media/gdrive  { url: "https://drive.google.com/..." }
 // Supports publicly-shared files and (with GOOGLE_DRIVE_API_KEY) folders.
+// Auto-links images to products when folder name or filename matches a SKU.
 
 function parseGDriveUrl(raw) {
   const url = (raw || '').trim();
@@ -269,9 +271,88 @@ function parseGDriveUrl(raw) {
   if (folderMatch) return { type: 'folder', id: folderMatch[1] };
   const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (fileMatch) return { type: 'file', id: fileMatch[1] };
-  // Plain ID pasted directly
   if (/^[a-zA-Z0-9_-]{25,}$/.test(url)) return { type: 'file', id: url };
   return null;
+}
+
+/**
+ * Try to find a product whose SKU matches either the folder name or the
+ * filename (without extension). Match priority:
+ *   1. Exact: folderName === SKU  (most reliable — named folder import)
+ *   2. Exact: stem(filename) === SKU
+ *   3. Contains: filename contains SKU (e.g. "EC-AMO-2026-front.jpg")
+ *   4. Prefix: first two SKU segments found in filename
+ *
+ * Returns the product UUID on a match, or null.
+ */
+async function tryAutoLink(client, tenantId, mediaId, { filename = '', folderName = '' } = {}) {
+  const stem = filename.replace(/\.[^.]+$/, '');
+  const candidates = [folderName.trim(), stem.trim()].filter(Boolean);
+
+  if (candidates.length === 0) return null;
+
+  // 1 + 2 — exact match against folder name or filename stem
+  for (const name of candidates) {
+    if (!name) continue;
+    const exact = await client.query(
+      `SELECT id FROM products
+       WHERE tenant_id = $1 AND UPPER(sku) = UPPER($2) AND status <> 'archived'
+       LIMIT 1`,
+      [tenantId, name],
+    );
+    if (exact.rowCount > 0) {
+      await linkMedia(client, tenantId, mediaId, exact.rows[0].id);
+      return exact.rows[0].id;
+    }
+  }
+
+  // 3 — filename contains the full SKU anywhere
+  const nameUpper = filename.toUpperCase();
+  const contains = await client.query(
+    `SELECT id, sku FROM products
+     WHERE tenant_id = $1 AND status <> 'archived' AND sku IS NOT NULL AND sku <> ''
+       AND $2 LIKE '%' || UPPER(sku) || '%'
+     ORDER BY length(sku) DESC
+     LIMIT 1`,
+    [tenantId, nameUpper],
+  );
+  if (contains.rowCount > 0) {
+    await linkMedia(client, tenantId, mediaId, contains.rows[0].id);
+    return contains.rows[0].id;
+  }
+
+  // 4 — first two hyphen-segments of filename match first two segments of a SKU
+  //     e.g. filename "EC-AMO-2026-front" → prefix "EC-AMO" → matches SKU "EC-AMO-2026"
+  const segments = stem.split(/[-_]/);
+  if (segments.length >= 2) {
+    const prefix = segments.slice(0, 2).join('-').toUpperCase();
+    const prefixMatch = await client.query(
+      `SELECT id FROM products
+       WHERE tenant_id = $1 AND status <> 'archived' AND sku IS NOT NULL
+         AND UPPER(sku) LIKE $2 || '%'
+       ORDER BY length(sku) DESC
+       LIMIT 1`,
+      [tenantId, prefix],
+    );
+    if (prefixMatch.rowCount > 0) {
+      await linkMedia(client, tenantId, mediaId, prefixMatch.rows[0].id);
+      return prefixMatch.rows[0].id;
+    }
+  }
+
+  return null;
+}
+
+async function linkMedia(client, tenantId, mediaId, productId) {
+  await client.query(
+    `INSERT INTO media_links (tenant_id, media_id, product_id, role, sort_order)
+     VALUES (
+       $1, $2, $3, 'gallery',
+       COALESCE((SELECT MAX(sort_order) + 1 FROM media_links WHERE product_id = $3 AND role = 'gallery'), 0)
+     )
+     ON CONFLICT DO NOTHING`,
+    [tenantId, mediaId, productId],
+  );
 }
 
 router.post(
@@ -298,10 +379,19 @@ router.post(
       const tenant = await ensureDefaultTenant(client);
       const userId = req.session?.user?.id || null;
 
-      // ── 1. Resolve the list of files to download ────────────────────────
+      // ── 1. Resolve the list of files + folder name ──────────────────────
       let files = [];
+      let folderName = '';
 
       if (parsed.type === 'folder') {
+        // Fetch folder metadata (name) for SKU matching
+        const folderMetaResp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${parsed.id}?fields=id,name&key=${apiKey}`,
+        );
+        if (folderMetaResp.ok) {
+          folderName = (await folderMetaResp.json()).name || '';
+        }
+
         const q = encodeURIComponent(`'${parsed.id}' in parents and mimeType contains 'image/' and trashed = false`);
         const listResp = await fetch(
           `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100&key=${apiKey}`,
@@ -312,7 +402,6 @@ router.post(
         }
         files = (await listResp.json()).files || [];
       } else {
-        // Single file — try to get metadata if we have an API key, else guess
         if (apiKey) {
           const metaResp = await fetch(
             `https://www.googleapis.com/drive/v3/files/${parsed.id}?fields=id,name,mimeType,size&key=${apiKey}`,
@@ -332,7 +421,7 @@ router.post(
         return ok(res, [], 'No images found.');
       }
 
-      // ── 2. Download each file and save ─────────────────────────────────
+      // ── 2. Download, save, and auto-link each file ──────────────────────
       const inserted = [];
       for (const file of files) {
         const downloadUrl = apiKey
@@ -349,32 +438,35 @@ router.post(
         if (!contentType.startsWith('image/')) continue;
 
         const buffer = Buffer.from(await fileResp.arrayBuffer());
-        const stored = await storage.save({
-          buffer,
-          filename: file.name || `gdrive-${file.id}.jpg`,
-          mimeType: contentType,
-        });
+        const filename = file.name || `gdrive-${file.id}.jpg`;
+        const stored = await storage.save({ buffer, filename, mimeType: contentType });
 
         const result = await client.query(
           `INSERT INTO media_assets
              (tenant_id, filename, kind, mime_type, size_bytes, storage_url, preview_url, uploaded_by_user_id, metadata)
            VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
           [
-            tenant.id,
-            file.name || `gdrive-${file.id}.jpg`,
-            contentType,
-            buffer.length,
-            stored.url,
-            stored.url,
-            userId,
+            tenant.id, filename, contentType, buffer.length,
+            stored.url, stored.url, userId,
             JSON.stringify({ storagePath: stored.storagePath, gdriveId: file.id }),
           ],
         );
-        inserted.push(mapMedia(result.rows[0]));
+
+        // Auto-link: folder name takes priority, then filename patterns
+        const linkedProductId = await tryAutoLink(client, tenant.id, result.rows[0].id, {
+          filename,
+          folderName,
+        });
+
+        inserted.push(mapMedia({ ...result.rows[0], product_id: linkedProductId }));
       }
 
       await client.query('COMMIT');
-      return created(res, inserted, `Imported ${inserted.length} image(s) from Google Drive.`);
+      const linked = inserted.filter(f => f.linkedTo).length;
+      const msg = linked > 0
+        ? `Imported ${inserted.length} image(s) — ${linked} auto-linked by SKU.`
+        : `Imported ${inserted.length} image(s) from Google Drive.`;
+      return created(res, inserted, msg);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
