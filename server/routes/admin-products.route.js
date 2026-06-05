@@ -212,6 +212,9 @@ function mapAdminProduct(row) {
     images: row.images || [],
     imageColors: normalizeImageColors(row.image_colors),
     variants: row.variants || [],
+    metaTitle: row.meta_title || '',
+    metaDesc: row.meta_desc || '',
+    slug: row.slug || '',
     relatedProductIds: row.related_product_ids || [],
     metaTitle: row.meta_title || '',
     metaDesc: row.meta_desc || '',
@@ -281,7 +284,7 @@ async function upsertProduct(client, tenant, product) {
   };
 
   const metaTitle = String(product.metaTitle || '').trim() || null;
-  const metaDesc  = String(product.metaDesc  || '').trim() || null;
+  const metaDesc = String(product.metaDesc || '').trim() || null;
 
   const params = [
     tenant.id,
@@ -296,8 +299,8 @@ async function upsertProduct(client, tenant, product) {
     Math.max(0, Number.parseInt(product.stock, 10) || 0),
     Boolean(product.has3d),
     Math.max(0, Number.parseInt(product.views3d, 10) || 0),
-    metaTitle,
-    metaDesc,
+    metaTitle,   // $13
+    metaDesc,    // $14
   ];
 
   const upserted = product.id
@@ -484,6 +487,47 @@ router.post('/', asyncHandler(async (req, res) => {
     created(res, product, 'Product saved.');
   } catch (err) {
     await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+// PATCH /bulk-stock must be registered before PATCH /:id to avoid route collision
+router.patch('/bulk-stock', asyncHandler(async (req, res) => {
+  const updates = req.body?.updates;
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return validationError(res, ['updates must be a non-empty array of { sku, stock } objects.']);
+  }
+
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
+
+    let updated = 0;
+    const notFound = [];
+
+    for (const item of updates) {
+      const sku = String(item.sku || '').trim();
+      const stock = Math.max(0, Number.parseInt(item.stock, 10) || 0);
+      if (!sku) continue;
+
+      const result = await client.query(
+        "UPDATE products SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 AND status <> 'archived' RETURNING id",
+        [stock, tenant.id, sku],
+      );
+      if (result.rowCount === 0) {
+        notFound.push(sku);
+      } else {
+        updated += result.rowCount;
+      }
+    }
+
+    await client.query('COMMIT');
+    ok(res, { updated, notFound }, `${updated} product(s) updated.`);
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
     throw err;
   } finally {
     client.release();
@@ -710,5 +754,50 @@ router.post(
     }
   }),
 );
+
+router.post('/:id/duplicate', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const source = await loadAdminProduct(client, tenant.id, req.params.id);
+    if (!source) return notFound(res, 'Product not found.');
+
+    // Build unique SKU: append -COPY, or -COPY-N if collision
+    let newSku = source.sku + '-COPY';
+    const existing = await client.query(
+      "SELECT sku FROM products WHERE tenant_id = $1 AND sku LIKE $2 AND status <> 'archived'",
+      [tenant.id, source.sku + '-COPY%'],
+    );
+    if (existing.rowCount > 0) {
+      const nums = existing.rows.map(r => {
+        const m = r.sku.match(/-COPY-?(\d+)$/);
+        return m ? parseInt(m[1], 10) : 1;
+      });
+      newSku = source.sku + '-COPY-' + (Math.max(...nums) + 1);
+    }
+
+    await client.query('BEGIN');
+    const saved = await upsertProduct(client, tenant, {
+      ...source,
+      id: undefined,
+      sku: newSku,
+      slug: newSku,
+      hidden: true,
+      stock: 0,
+      variants: (source.variants || []).map(v => ({
+        ...v,
+        sku: v.sku.replace(source.sku, newSku),
+      })),
+    });
+    const product = await loadAdminProduct(client, tenant.id, saved.id);
+    await client.query('COMMIT');
+    created(res, product, 'Product duplicated.');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
 
 module.exports = router;

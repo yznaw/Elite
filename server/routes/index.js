@@ -19,6 +19,7 @@ const contactRouter = require('./contact.route');
 const cartsRouter = require('./carts.route');
 const storefrontContentRouter = require('./storefront-content.route');
 const nboxWebhookRouter = require('./nbox-webhook.route');
+const invitationsRouter = require('./invitations.route');
 const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
@@ -26,6 +27,7 @@ const router = Router();
 // ─── Public routes ───────────────────────────────────────────────────────────
 router.use('/health', healthRouter);
 router.use('/auth', authRouter);
+router.use('/invitations', invitationsRouter);
 router.use('/products', productsRouter);
 router.use('/collections', collectionsRouter);
 router.use('/storefront', storefrontRouter.router);

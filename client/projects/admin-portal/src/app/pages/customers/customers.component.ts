@@ -11,10 +11,10 @@ import { PaginationComponent } from '../../shared/pagination/pagination.componen
 import { CustomerDrawerComponent } from './customer-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { AdminCustomersService } from '../../services/admin-customers.service';
+import { StorageService } from '../../services/storage.service';
 import { Customer, Order, QAR } from '../../models';
 
 type View = 'table' | 'cards';
-const VIEW_KEY = 'elite-admin:customers:view';
 const MOBILE_BP = 900;
 
 @Component({
@@ -150,6 +150,7 @@ const MOBILE_BP = 900;
         [mode]="creatingId() === c.id ? 'create' : 'edit'"
         (closed)="onDrawerClosed()"
         (saved)="onCustomerSaved($event)"
+        (deleted)="onCustomerDeleted($event)"
         (openOrder)="onOpenOrder($event)"
       />
     }
@@ -268,6 +269,7 @@ export class CustomersComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
   private readonly customersApi = inject(AdminCustomersService);
+  private readonly storage = inject(StorageService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
@@ -396,6 +398,17 @@ export class CustomersComponent implements OnInit {
     }
   }
 
+  async onCustomerDeleted(c: Customer): Promise<void> {
+    try {
+      await this.customersApi.remove(c.id);
+    } catch {
+      // Global error interceptor raises the toast.
+    }
+    this._customers.update((all) => all.filter((x) => x.id !== c.id));
+    this.active.set(null);
+    this.creatingId.set(null);
+  }
+
   onOpenOrder(o: Order): void {
     this.active.set(null);
     this.creatingId.set(null);
@@ -404,7 +417,7 @@ export class CustomersComponent implements OnInit {
 
   setView(v: View): void {
     this.view.set(v);
-    try { localStorage.setItem(VIEW_KEY, v); } catch {}
+    this.storage.set('customers:view', v);
   }
 
   initials(name: string): string {
@@ -416,10 +429,8 @@ export class CustomersComponent implements OnInit {
   }
 
   private loadView(): View {
-    try {
-      const raw = localStorage.getItem(VIEW_KEY);
-      if (raw === 'cards' || raw === 'table') return raw;
-    } catch {}
+    const raw = this.storage.get('customers:view');
+    if (raw === 'cards' || raw === 'table') return raw;
     return 'table';
   }
 }

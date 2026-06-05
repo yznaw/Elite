@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
@@ -13,10 +14,14 @@ import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { Collection, Product, QAR } from '../../models';
+import { StorageService } from '../../services/storage.service';
+import { StoreConfigService } from '../../services/store-config.service';
+import { COLLECTIONS } from '../../data/mock';
+// import { Product, QAR } from '../../models';
 
 type SortKey = 'name-az' | 'name-za' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'newest';
 type ViewMode = 'grid' | 'list';
-type StatusFilter = 'all' | 'active' | 'hidden';
+type StatusFilter = 'all' | 'active' | 'hidden' | 'low-stock';
 type ImageFilter = 'all' | 'has-images' | 'no-images';
 type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
@@ -34,14 +39,18 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
           <div class="inp-search search-box">
             <ap-icon name="search" [size]="14"/>
             <input class="inp with-icon" [placeholder]="t('catalog.search.placeholder')"
-                   [ngModel]="search()" (ngModelChange)="search.set($event)"/>
+                   [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
           </div>
 
           <!-- Status quick-filter pills -->
           <div class="status-pills">
-            <button class="status-pill" [class.active]="statusFilter() === 'all'"    (click)="statusFilter.set('all')">All</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'active'" (click)="statusFilter.set('active')">Active</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'hidden'" (click)="statusFilter.set('hidden')">Hidden</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'all'"       (click)="statusFilter.set('all'); page.set(0)">All</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'active'"    (click)="statusFilter.set('active'); page.set(0)">Active</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'hidden'"    (click)="statusFilter.set('hidden'); page.set(0)">Hidden</button>
+            <button class="status-pill warn" [class.active]="statusFilter() === 'low-stock'" (click)="statusFilter.set('low-stock'); page.set(0)">
+              <ap-icon name="warning" [size]="11"/> Low Stock
+              @if (lowStockCount() > 0) { <span class="ls-badge">{{ lowStockCount() }}</span> }
+            </button>
           </div>
 
           <!-- Right-side controls -->
@@ -81,6 +90,11 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               <ap-icon name="check" [size]="13"/> {{ selectionMode() ? 'Cancel' : 'Select' }}
             </button>
 
+            <!-- Export CSV -->
+            <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0">
+              <ap-icon name="arrowDn" [size]="14"/> Export
+            </button>
+
             <!-- Bulk import -->
             <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)">
               <ap-icon name="upload" [size]="14"/> Import
@@ -101,7 +115,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Collection</label>
-              <select class="inp inp-sm" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event)">
+              <select class="inp inp-sm" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event); page.set(0)">
                 <option value="All">All collections</option>
                 @for (c of collections(); track c.id) {
                   <option [value]="c.id">{{ c.title }}</option>
@@ -111,7 +125,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Images</label>
-              <select class="inp inp-sm" [ngModel]="imageFilter()" (ngModelChange)="imageFilter.set($event)">
+              <select class="inp inp-sm" [ngModel]="imageFilter()" (ngModelChange)="imageFilter.set($event); page.set(0)">
                 <option value="all">All</option>
                 <option value="has-images">Has images</option>
                 <option value="no-images">No images</option>
@@ -120,7 +134,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">3D Model</label>
-              <select class="inp inp-sm" [ngModel]="v3d()" (ngModelChange)="v3d.set($event)">
+              <select class="inp inp-sm" [ngModel]="v3d()" (ngModelChange)="v3d.set($event); page.set(0)">
                 <option value="All">All</option>
                 <option value="Linked">{{ t('catalog.linked') }}</option>
                 <option value="Missing">{{ t('catalog.missing') }}</option>
@@ -129,7 +143,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Variants</label>
-              <select class="inp inp-sm" [ngModel]="variantFilter()" (ngModelChange)="variantFilter.set($event)">
+              <select class="inp inp-sm" [ngModel]="variantFilter()" (ngModelChange)="variantFilter.set($event); page.set(0)">
                 <option value="all">All</option>
                 <option value="none">No variants</option>
                 <option value="few">1–4 variants</option>
@@ -139,7 +153,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <div class="fp-group">
               <label class="fp-label">Color</label>
-              <select class="inp inp-sm" [ngModel]="colorFilter()" (ngModelChange)="colorFilter.set($event)">
+              <select class="inp inp-sm" [ngModel]="colorFilter()" (ngModelChange)="colorFilter.set($event); page.set(0)">
                 <option value="all">All colors</option>
                 @for (c of refColors(); track c.id) {
                   <option [value]="c.name_en">{{ c.name_en }}</option>
@@ -151,10 +165,10 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               <label class="fp-label">Price range (QAR)</label>
               <div class="price-range">
                 <input class="inp inp-sm mono" type="number" min="0" placeholder="Min"
-                       [ngModel]="priceMin()" (ngModelChange)="priceMin.set(+$event || 0)"/>
+                       [ngModel]="priceMin()" (ngModelChange)="priceMin.set(+$event || 0); page.set(0)"/>
                 <span class="price-sep">–</span>
                 <input class="inp inp-sm mono" type="number" min="0" placeholder="Max"
-                       [ngModel]="priceMax()" (ngModelChange)="priceMax.set(+$event || 0)"/>
+                       [ngModel]="priceMax()" (ngModelChange)="priceMax.set(+$event || 0); page.set(0)"/>
               </div>
             </div>
 
@@ -382,6 +396,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
         (closed)="onDrawerClosed()"
         (currentIdChange)="activeId.set($event)"
         (deleted)="onDeleted($event)"
+        (duplicated)="onDuplicated($event)"
       />
     }
   `,
@@ -401,6 +416,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       cursor: pointer; color: var(--muted); transition: all 0.13s;
     }
     .status-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .status-pill.warn { display: flex; align-items: center; gap: 4px; }
+    .status-pill.warn.active { color: var(--warning, #f59e0b); }
+    .ls-badge { background: var(--warning, #f59e0b); color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 0 5px; line-height: 16px; }
     .top-actions {
       display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-inline-start: auto;
     }
@@ -548,9 +566,12 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 export class CatalogComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
   private readonly productsApi = inject(AdminProductsService);
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly refApi = inject(AdminRefService);
+  private readonly storage = inject(StorageService);
+  private readonly storeConfig = inject(StoreConfigService);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
@@ -574,6 +595,8 @@ export class CatalogComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+    const stockParam = this.route.snapshot.queryParamMap.get('stock');
+    if (stockParam === 'low') this.statusFilter.set('low-stock');
   }
 
   // ── Filter / sort / view state ────────────────────────────────────────────
@@ -588,7 +611,7 @@ export class CatalogComponent implements OnInit {
   readonly priceMax      = signal(0);
   readonly sortKey       = signal<SortKey>('newest');
   readonly viewMode      = signal<ViewMode>(
-    (localStorage.getItem('elite-catalog-view') as ViewMode) || 'grid',
+    (this.storage.get('catalog-view') as ViewMode) || 'grid',
   );
   readonly showFilters   = signal(false);
   readonly page          = signal(0);
@@ -597,13 +620,18 @@ export class CatalogComponent implements OnInit {
 
   readonly activeId        = signal<string | null>(null);
   readonly showBulkImport  = signal(false);
+
+  readonly lowStockCount = computed(() => {
+    const t = this.storeConfig.lowStockThreshold();
+    return this._products().filter(p => p.stock > 0 && p.stock < t).length;
+  });
   readonly selectionMode   = signal(false);
   readonly selectedIds     = signal(new Set<string>());
   readonly confirmingDelete = signal(false);
 
   setView(v: ViewMode): void {
     this.viewMode.set(v);
-    localStorage.setItem('elite-catalog-view', v);
+    this.storage.set('catalog-view', v);
   }
 
   toggleFilters(): void { this.showFilters.update(v => !v); }
@@ -648,6 +676,7 @@ export class CatalogComponent implements OnInit {
     let list = this._products().filter(p => {
       if (status === 'active' && p.hidden) return false;
       if (status === 'hidden' && !p.hidden) return false;
+      if (status === 'low-stock' && !(p.stock > 0 && p.stock < 8)) return false;
 
       if (colId !== 'All') {
         const col = this.collections().find(c => c.id === colId);
@@ -870,9 +899,40 @@ export class CatalogComponent implements OnInit {
     } catch { /* silent */ }
   }
 
+  exportCsv(): void {
+    const products = this.filtered();
+    if (products.length === 0) return;
+    const rows = [
+      'SKU,Name,Brand,Price (QAR),Stock,Status,3D,Variants',
+      ...products.map(p => [
+        `"${p.sku}"`,
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.brand.replace(/"/g, '""')}"`,
+        p.price,
+        p.stock,
+        p.hidden ? 'Hidden' : 'Active',
+        p.has3d ? 'Yes' : 'No',
+        p.variants?.length ?? 0,
+      ].join(',')),
+    ];
+    const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `catalog-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    this.toast.success('Catalog exported', `${products.length} products`);
+  }
+
+  onDuplicated(copy: Product): void {
+    this._products.update(all => [copy, ...all]);
+    this.activeId.set(copy.id);
+  }
+
   stockLabel(p: Product): string {
     if (p.stock === 0) return this.t('catalog.outOfStock');
-    if (p.stock < 8) return `${this.t('catalog.lowStock')} · ${p.stock}`;
+    if (p.stock < this.storeConfig.lowStockThreshold()) return `${this.t('catalog.lowStock')} · ${p.stock}`;
     return `${p.stock} ${this.t('catalog.inStock')}`;
   }
 

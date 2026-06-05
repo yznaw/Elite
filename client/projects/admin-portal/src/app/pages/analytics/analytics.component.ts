@@ -5,13 +5,14 @@ import { LineChartComponent } from '../../shared/charts/line-chart.component';
 import { BarChartComponent } from '../../shared/charts/bar-chart.component';
 import { PieChartComponent } from '../../shared/charts/pie-chart.component';
 import { FunnelComponent } from '../../shared/charts/funnel.component';
+import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { FUNNEL, PRODUCTS, REVENUE_30D, TRAFFIC } from '../../data/mock';
 import { QAR } from '../../models';
 
 @Component({
   selector: 'ap-analytics',
   standalone: true,
-  imports: [CommonModule, KpiComponent, LineChartComponent, BarChartComponent, PieChartComponent, FunnelComponent],
+  imports: [CommonModule, KpiComponent, LineChartComponent, BarChartComponent, PieChartComponent, FunnelComponent, EmptyStateComponent],
   template: `
     <div class="page-fade">
       <div class="row gap-sm mb-24" style="justify-content:space-between;flex-wrap:wrap;">
@@ -46,7 +47,11 @@ import { QAR } from '../../models';
             </div>
           </div>
           <div class="card-pad">
-            <ap-line-chart [data]="rev30" valueKey="sessions" secondKey="conversions" [formatY]="fmtNum"/>
+            @if (rev30.length > 0) {
+              <ap-line-chart [data]="rev30" valueKey="sessions" secondKey="conversions" [formatY]="fmtNum"/>
+            } @else {
+              <ap-empty-state icon="chart" title="No session data yet" sub="Check back once analytics are recording."/>
+            }
           </div>
         </div>
 
@@ -58,17 +63,21 @@ import { QAR } from '../../models';
             </div>
           </div>
           <div class="card-pad" style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;">
-            <ap-pie-chart [data]="traffic"/>
-            <div>
-              @for (t of traffic; track t.source) {
-                <div class="row gap-sm" style="padding:8px 0;border-bottom:1px solid var(--border-2);">
-                  <span [style.background]="t.color" style="width:10px;height:10px;border-radius:2px;flex-shrink:0;"></span>
-                  <span class="grow strong">{{ t.source }}</span>
-                  <span class="muted">{{ t.pct }}%</span>
-                  <span class="strong" style="width:60px;text-align:right;">{{ t.count.toLocaleString() }}</span>
-                </div>
-              }
-            </div>
+            @if (traffic.length > 0) {
+              <ap-pie-chart [data]="traffic"/>
+              <div>
+                @for (t of traffic; track t.source) {
+                  <div class="row gap-sm" style="padding:8px 0;border-bottom:1px solid var(--border-2);">
+                    <span [style.background]="t.color" style="width:10px;height:10px;border-radius:2px;flex-shrink:0;"></span>
+                    <span class="grow strong">{{ t.source }}</span>
+                    <span class="muted">{{ t.pct }}%</span>
+                    <span class="strong" style="width:60px;text-align:right;">{{ t.count.toLocaleString() }}</span>
+                  </div>
+                }
+              </div>
+            } @else {
+              <ap-empty-state icon="chart" title="No traffic data yet" sub="Source breakdown appears once visits are tracked."/>
+            }
           </div>
         </div>
       </div>
@@ -82,7 +91,11 @@ import { QAR } from '../../models';
             </div>
           </div>
           <div class="card-pad">
-            <ap-bar-chart [data]="topByViews"/>
+            @if (topByViews.length > 0) {
+              <ap-bar-chart [data]="topByViews"/>
+            } @else {
+              <ap-empty-state icon="cube" title="No 3D views yet" sub="Interactions appear once customers explore products."/>
+            }
           </div>
         </div>
 

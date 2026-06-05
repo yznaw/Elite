@@ -1,11 +1,21 @@
 import {
   Component, EventEmitter, Output, inject, signal, ChangeDetectionStrategy, NgZone, ElementRef, ViewChild,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { ApiClient } from '../../services/api-client.service';
+import { StorageService } from '../../services/storage.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 
-type Step = 'upload' | 'importing' | 'results';
+type Step = 'upload' | 'importing' | 'results' | 'stock-results' | 'history';
+
+interface HistoryRecord {
+  id: string;
+  ts: string;
+  filename: string;
+  summary: Summary;
+  log: LogEntry[];
+  expanded?: boolean;
+}
 
 interface LogEntry {
   name: string;
@@ -23,7 +33,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
   selector: 'ap-bulk-import-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, IconComponent],
+  imports: [CommonModule, DatePipe, IconComponent],
   template: `
     <div class="modal-overlay" (click)="onOverlayClick($event)">
       <div class="modal-panel" (click)="$event.stopPropagation()">
@@ -31,8 +41,8 @@ interface Summary { total: number; created: number; updated: number; failed: num
         <!-- Header -->
         <div class="modal-hd">
           <div>
-            <div class="modal-title">Bulk Import Products</div>
-            <div class="sub">Upload your product_list CSV — rows with the same name are grouped as color variants</div>
+            <div class="modal-title">{{ stockMode() ? 'Bulk Stock Update' : 'Bulk Import Products' }}</div>
+            <div class="sub">{{ stockMode() ? 'Upload a 2-column CSV (SKU, Stock) to update quantities' : 'Upload your product_list CSV — rows with the same name are grouped as color variants' }}</div>
           </div>
           <button class="x-btn" (click)="close()" [disabled]="step() === 'importing'">
             <ap-icon name="x" [size]="18"/>
@@ -40,8 +50,25 @@ interface Summary { total: number; created: number; updated: number; failed: num
         </div>
 
         <!-- ── UPLOAD ── -->
+        @if (step() === 'upload' || step() === 'history') {
+          <!-- Mode tabs -->
+          <div class="mode-tabs">
+            <button class="mode-tab" [class.active]="step() === 'upload' && !stockMode()" (click)="switchMode(false)">
+              <ap-icon name="upload" [size]="13"/> Product Import
+            </button>
+            <button class="mode-tab" [class.active]="step() === 'upload' && stockMode()" (click)="switchMode(true)">
+              <ap-icon name="csv" [size]="13"/> Stock Update
+            </button>
+            <button class="mode-tab" [class.active]="step() === 'history'" (click)="step.set('history')" style="margin-left:auto;">
+              <ap-icon name="clock" [size]="13"/> History @if (importHistory().length) { <span class="hist-badge">{{ importHistory().length }}</span> }
+            </button>
+          </div>
+        }
+
         @if (step() === 'upload') {
+
           <div class="modal-body">
+            @if (!stockMode()) {
             <div class="info-box">
               <div class="info-title">How it works</div>
               <div class="how-grid">
@@ -82,15 +109,63 @@ interface Summary { total: number; created: number; updated: number; failed: num
             @if (uploadError()) {
               <div class="err-banner">{{ uploadError() }}</div>
             }
+            } @else {
+            <!-- Stock import mode -->
+            <div class="info-box">
+              <div class="info-title">How it works</div>
+              <div class="how-grid">
+                <div class="how-step"><span class="how-n">1</span> CSV must have <code>SKU</code> and <code>Stock</code> columns (header row)</div>
+                <div class="how-step"><span class="how-n">2</span> Each row updates the <strong>stock quantity</strong> for that SKU</div>
+                <div class="how-step"><span class="how-n">3</span> Unmatched SKUs are listed in the result report</div>
+              </div>
+            </div>
+
+            <div class="drop-zone" [class.has-file]="csvFile()" [class.drag-over]="dragOver()"
+                 (dragover)="onDragOver($event)" (dragleave)="dragOver.set(false)" (drop)="onDrop($event)"
+                 (click)="si.click()">
+              <input #si type="file" accept=".csv,text/csv" style="display:none" (change)="onFileChange($event)"/>
+              @if (csvFile()) {
+                <div class="file-row">
+                  <ap-icon name="csv" [size]="26"/>
+                  <div>
+                    <div class="fname">{{ csvFile()!.name }}</div>
+                    <div class="sub">{{ fmtBytes(csvFile()!.size) }}</div>
+                  </div>
+                  <button class="x-btn sm" (click)="removeFile($event)"><ap-icon name="x" [size]="13"/></button>
+                </div>
+              } @else {
+                <ap-icon name="upload" [size]="30"/>
+                <div class="drop-label">Drop CSV here or click to browse</div>
+                <div class="sub">SKU, Stock · .csv only</div>
+              }
+            </div>
+
+            @if (uploadError()) {
+              <div class="err-banner">{{ uploadError() }}</div>
+            }
+            }
           </div>
 
           <div class="modal-ft">
-            <a class="btn btn-outline btn-sm" [href]="templateUrl" download>
-              <ap-icon name="arrowDn" [size]="13"/> Template
-            </a>
-            <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startImport()">
-              <ap-icon name="upload" [size]="14"/> Import Products
-            </button>
+            @if (!stockMode()) {
+              <label class="dry-run-toggle" title="Preview changes without writing to the database">
+                <input type="checkbox" [checked]="dryRun()" (change)="dryRun.set(!dryRun())"/>
+                <span>Dry run</span>
+              </label>
+              <a class="btn btn-outline btn-sm" [href]="templateUrl" download>
+                <ap-icon name="arrowDn" [size]="13"/> Template
+              </a>
+              <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startImport()">
+                <ap-icon name="upload" [size]="14"/> {{ dryRun() ? 'Preview Import' : 'Import Products' }}
+              </button>
+            } @else {
+              <button class="btn btn-outline btn-sm" (click)="downloadStockTemplate()">
+                <ap-icon name="arrowDn" [size]="13"/> Template
+              </button>
+              <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startStockImport()">
+                <ap-icon name="upload" [size]="14"/> Update Stock
+              </button>
+            }
           </div>
         }
 
@@ -151,10 +226,16 @@ interface Summary { total: number; created: number; updated: number; failed: num
 
         <!-- ── RESULTS ── -->
         @if (step() === 'results') {
+          @if (wasLastDryRun()) {
+            <div class="dry-run-banner">
+              <ap-icon name="warning" [size]="13"/>
+              <strong>Dry-Run Preview</strong> — No changes were saved. Review results below and click "Commit Import" to apply.
+            </div>
+          }
           @if (summary(); as s) {
             <div class="sum-bar">
-              <div class="chip green">{{ s.created }} created</div>
-              <div class="chip blue">{{ s.updated }} updated</div>
+              <div class="chip green">{{ s.created }} {{ wasLastDryRun() ? 'to create' : 'created' }}</div>
+              <div class="chip blue">{{ s.updated }} {{ wasLastDryRun() ? 'to update' : 'updated' }}</div>
               @if (s.failed) { <div class="chip red">{{ s.failed }} failed</div> }
               <div class="sub ml-auto">{{ s.total }} products</div>
             </div>
@@ -186,11 +267,94 @@ interface Summary { total: number; created: number; updated: number; failed: num
             </div>
           </div>
           <div class="modal-ft">
+            @if ((summary()?.failed ?? 0) > 0) {
+              <button class="btn btn-outline btn-sm" (click)="retryFailed()">
+                <ap-icon name="sync" [size]="13"/> Retry Failed ({{ summary()!.failed }})
+              </button>
+            }
             <button class="btn btn-outline" (click)="reset()">Import Another</button>
             <button class="btn btn-outline" (click)="downloadReport()">
               <ap-icon name="arrowDn" [size]="13"/> Download Report
             </button>
+            @if (wasLastDryRun()) {
+              <button class="btn btn-gold" (click)="commitDryRun()">
+                <ap-icon name="check" [size]="14"/> Commit Import
+              </button>
+            } @else {
+              <button class="btn btn-gold" (click)="done()">Done</button>
+            }
+          </div>
+        }
+
+        <!-- ── STOCK RESULTS ── -->
+        @if (step() === 'stock-results') {
+          @if (stockResult(); as r) {
+            <div class="sum-bar">
+              <div class="chip green">{{ r.updated }} updated</div>
+              @if (r.notFound.length) { <div class="chip red">{{ r.notFound.length }} not found</div> }
+              <div class="sub ml-auto">{{ r.updated + r.notFound.length }} rows processed</div>
+            </div>
+          }
+          <div class="modal-body" style="padding-top:0">
+            @if (stockResult()?.notFound?.length) {
+              <div class="err-banner">
+                <strong>Unmatched SKUs:</strong> {{ stockResult()!.notFound.join(', ') }}
+              </div>
+            } @else if (stockResult()?.updated === 0) {
+              <div class="muted small" style="text-align:center;padding:24px;">No matching SKUs found in the catalog.</div>
+            } @else {
+              <div class="muted small" style="text-align:center;padding:24px;">All rows processed successfully.</div>
+            }
+          </div>
+          <div class="modal-ft">
+            <button class="btn btn-outline" (click)="reset()">Import Another</button>
             <button class="btn btn-gold" (click)="done()">Done</button>
+          </div>
+        }
+
+        <!-- ── HISTORY ── -->
+        @if (step() === 'history') {
+          <div class="modal-body" style="padding-top:12px;">
+            @if (importHistory().length === 0) {
+              <div class="muted small" style="text-align:center;padding:40px;">No import history yet.</div>
+            } @else {
+              @for (h of importHistory(); track h.id) {
+                <div class="hist-row">
+                  <div class="hist-hd" (click)="toggleHistory(h.id)">
+                    <div class="hist-info">
+                      <div class="hist-file">{{ h.filename }}</div>
+                      <div class="sub">{{ h.ts | date:'MMM d, yyyy · HH:mm' }} · {{ h.summary.total }} products</div>
+                    </div>
+                    <div class="hist-chips">
+                      <span class="chip green sm">{{ h.summary.created }} created</span>
+                      <span class="chip blue sm">{{ h.summary.updated }} updated</span>
+                      @if (h.summary.failed) { <span class="chip red sm">{{ h.summary.failed }} failed</span> }
+                    </div>
+                    <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); downloadHistoryReport(h)">
+                      <ap-icon name="arrowDn" [size]="12"/>
+                    </button>
+                    <ap-icon [name]="h.expanded ? 'arrowUp' : 'arrowDn'" [size]="12" style="opacity:.4"/>
+                  </div>
+                  @if (h.expanded) {
+                    <div class="hist-detail">
+                      @for (e of h.log; track e.name) {
+                        <div class="log-row" [class]="'log-' + e.status">
+                          <span class="log-icon">{{ statusIcon(e.status) }}</span>
+                          <span class="log-name">{{ e.name }}</span>
+                          @if (e.error) { <span class="log-err">{{ e.error | slice:0:60 }}</span> }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            }
+          </div>
+          <div class="modal-ft">
+            @if (importHistory().length > 0) {
+              <button class="btn btn-outline btn-sm" style="color:var(--danger);" (click)="clearHistory()">Clear History</button>
+            }
+            <button class="btn btn-gold" (click)="step.set('upload')">Back to Import</button>
           </div>
         }
 
@@ -198,6 +362,10 @@ interface Summary { total: number; created: number; updated: number; failed: num
     </div>
   `,
   styles: [`
+    .mode-tabs{display:flex;gap:0;border-bottom:1px solid var(--border,#e4e4e7);padding:0 24px;flex-shrink:0;}
+    .mode-tab{border:none;background:none;cursor:pointer;padding:10px 16px;font-size:13px;font-weight:600;color:#71717a;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px;transition:color .15s,border-color .15s;}
+    .mode-tab:hover{color:#1a1a1a;}
+    .mode-tab.active{color:#1a1a1a;border-bottom-color:#c9a84c;}
     .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:24px;}
     .modal-panel{background:var(--surface,#fff);border:1px solid var(--border,#e4e4e7);border-radius:14px;width:100%;max-width:700px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.18);}
     .modal-hd{display:flex;align-items:flex-start;justify-content:space-between;padding:20px 24px 16px;border-bottom:1px solid var(--border,#e4e4e7);gap:12px;flex-shrink:0;}
@@ -288,6 +456,22 @@ interface Summary { total: number; created: number; updated: number; failed: num
     .pill-skipped{background:rgba(0,0,0,.07);color:#71717a;}
     .pill-error{background:rgba(239,68,68,.12);color:#dc2626;}
     .row-err-txt{color:#dc2626;font-size:11px;margin-top:2px;}
+
+    /* Dry-run */
+    .dry-run-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);margin-right:auto;}
+    .dry-run-toggle input{accent-color:#c9a84c;cursor:pointer;}
+    .dry-run-banner{display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.1);border-top:2px solid rgba(245,158,11,.4);padding:10px 24px;font-size:12px;color:#92400e;flex-shrink:0;}
+
+    /* History */
+    .hist-badge{background:#c9a84c;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:0 5px;line-height:16px;margin-left:4px;}
+    .hist-row{border:1px solid var(--border,#e4e4e7);border-radius:8px;overflow:hidden;flex-shrink:0;}
+    .hist-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:var(--surface-2,#fafafa);}
+    .hist-hd:hover{background:var(--bg-2,#f0f0f0);}
+    .hist-info{flex:1;min-width:0;}
+    .hist-file{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .hist-chips{display:flex;gap:4px;flex-shrink:0;}
+    .chip.sm{font-size:10px;padding:2px 7px;}
+    .hist-detail{border-top:1px solid var(--border,#e4e4e7);max-height:180px;overflow-y:auto;}
   `],
 })
 export class BulkImportDialogComponent {
@@ -297,6 +481,7 @@ export class BulkImportDialogComponent {
 
   private readonly api  = inject(ApiClient);
   private readonly zone = inject(NgZone);
+  private readonly storage = inject(StorageService);
 
   readonly step               = signal<Step>('upload');
   readonly csvFile            = signal<File | null>(null);
@@ -308,6 +493,12 @@ export class BulkImportDialogComponent {
   readonly currentVariantCount = signal(0);
   readonly log                = signal<LogEntry[]>([]);
   readonly summary            = signal<Summary | null>(null);
+  readonly stockMode          = signal(false);
+  readonly stockResult        = signal<{ updated: number; notFound: string[] } | null>(null);
+  readonly dryRun             = signal(false);
+  readonly wasLastDryRun      = signal(false);
+  readonly lastFile           = signal<File | null>(null);
+  readonly importHistory      = signal<HistoryRecord[]>(this.loadHistory());
 
   readonly pct = () => this.total() ? Math.round((this.current() / this.total()) * 100) : 0;
 
@@ -332,7 +523,16 @@ export class BulkImportDialogComponent {
     this.log.set([]); this.summary.set(null);
     this.current.set(0); this.total.set(0);
     this.currentName.set(''); this.currentVariantCount.set(0);
+    this.stockResult.set(null);
+    this.wasLastDryRun.set(false);
+    this.lastFile.set(null);
     this.step.set('upload');
+  }
+
+  switchMode(toStock: boolean): void {
+    this.stockMode.set(toStock);
+    this.csvFile.set(null);
+    this.uploadError.set('');
   }
 
   onFileChange(e: Event) {
@@ -356,6 +556,8 @@ export class BulkImportDialogComponent {
 
   async startImport() {
     const file = this.csvFile(); if (!file) return;
+    this.lastFile.set(file);
+    this.wasLastDryRun.set(this.dryRun());
     this.step.set('importing');
     this.log.set([]); this.current.set(0); this.total.set(0);
     this.currentName.set(''); this.currentVariantCount.set(0);
@@ -363,8 +565,12 @@ export class BulkImportDialogComponent {
     const form = new FormData();
     form.append('csv', file, file.name);
 
+    const url = this.dryRun()
+      ? this.api.url('/admin/bulk-import?dryRun=true')
+      : this.api.url('/admin/bulk-import');
+
     try {
-      const resp = await fetch(this.api.url('/admin/bulk-import'), {
+      const resp = await fetch(url, {
         method: 'POST', body: form, credentials: 'include',
       });
 
@@ -432,6 +638,9 @@ export class BulkImportDialogComponent {
       case 'done':
         this.summary.set(evt.summary);
         this.currentName.set(''); this.currentVariantCount.set(0);
+        if (!this.wasLastDryRun()) {
+          this.saveHistory(evt.summary);
+        }
         this.step.set('results');
         break;
     }
@@ -461,6 +670,135 @@ export class BulkImportDialogComponent {
     if (b < 1024) return `${b} B`;
     if (b < 1048576) return `${(b/1024).toFixed(1)} KB`;
     return `${(b/1048576).toFixed(1)} MB`;
+  }
+
+  downloadStockTemplate(): void {
+    const csv = '﻿SKU,Stock\n"EXAMPLE-SKU-001",50\n"EXAMPLE-SKU-002",25\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'stock-import-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async startStockImport(): Promise<void> {
+    const file = this.csvFile();
+    if (!file) return;
+    this.step.set('importing');
+    this.uploadError.set('');
+
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        this.zone.run(() => { this.uploadError.set('CSV appears empty.'); this.step.set('upload'); });
+        return;
+      }
+      const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
+      const skuIdx = header.indexOf('sku');
+      const stockIdx = header.indexOf('stock');
+      if (skuIdx < 0 || stockIdx < 0) {
+        this.zone.run(() => { this.uploadError.set('CSV must have SKU and Stock columns.'); this.step.set('upload'); });
+        return;
+      }
+      const updates = lines.slice(1).map(line => {
+        const cols = line.split(',');
+        return {
+          sku: (cols[skuIdx] ?? '').replace(/"/g, '').trim(),
+          stock: Math.max(0, parseInt((cols[stockIdx] ?? '0').replace(/"/g, '').trim(), 10) || 0),
+        };
+      }).filter(u => u.sku);
+
+      this.zone.run(() => { this.total.set(updates.length); this.current.set(updates.length); });
+
+      const resp = await fetch(this.api.url('/admin/products/bulk-stock'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ updates }),
+      });
+
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        this.zone.run(() => { this.uploadError.set(json.message || 'Stock update failed.'); this.step.set('upload'); });
+        return;
+      }
+
+      const data = json.data ?? json;
+      this.zone.run(() => {
+        this.stockResult.set({ updated: data.updated ?? 0, notFound: data.notFound ?? [] });
+        this.step.set('stock-results');
+      });
+    } catch (err: any) {
+      this.zone.run(() => { this.uploadError.set(err.message || 'Network error.'); this.step.set('upload'); });
+    }
+  }
+
+  retryFailed(): void {
+    const failedRows = this.log().filter(e => e.status === 'error' || e.status === 'skipped');
+    if (!failedRows.length) return;
+    const header = 'English Name,SKU,Status\n';
+    const rows = failedRows.map(e => `"${e.name.replace(/"/g, '""')}","",""`).join('\n');
+    const blob = new Blob(['﻿' + header + rows], { type: 'text/csv;charset=utf-8;' });
+    const fakeFile = new File([blob], `retry-${Date.now()}.csv`, { type: 'text/csv' });
+    this.csvFile.set(fakeFile);
+    this.step.set('upload');
+    this.log.set([]); this.summary.set(null);
+    this.current.set(0); this.total.set(0);
+  }
+
+  commitDryRun(): void {
+    this.dryRun.set(false);
+    this.wasLastDryRun.set(false);
+    void this.startImport();
+  }
+
+  private saveHistory(summary: Summary): void {
+    const file = this.lastFile();
+    const rec: HistoryRecord = {
+      id: Date.now().toString(36),
+      ts: new Date().toISOString(),
+      filename: file?.name ?? 'import.csv',
+      summary,
+      log: this.log(),
+    };
+    const hist = [rec, ...this.importHistory()].slice(0, 20);
+    this.importHistory.set(hist);
+    this.storage.set('import-history', JSON.stringify(hist));
+  }
+
+  private loadHistory(): HistoryRecord[] {
+    try {
+      const raw = this.storage.get('import-history');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  toggleHistory(id: string): void {
+    this.importHistory.update(hist =>
+      hist.map(h => h.id === id ? { ...h, expanded: !h.expanded } : h),
+    );
+  }
+
+  clearHistory(): void {
+    this.importHistory.set([]);
+    this.storage.remove('import-history');
+  }
+
+  downloadHistoryReport(h: HistoryRecord): void {
+    const ts = h.ts.slice(0, 16).replace('T', '_').replace(':', '-');
+    const lines: string[] = [
+      `# Import Report — ${h.filename} — ${h.ts}`,
+      `# Total: ${h.summary.total} | Created: ${h.summary.created} | Updated: ${h.summary.updated} | Failed: ${h.summary.failed}`,
+      '',
+      'Product Name,Status,Error Details',
+      ...h.log.map(e => `"${(e.name||'').replace(/"/g,'""')}","${e.status}","${(e.error||'').replace(/"/g,'""')}"`),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `import-${ts}.csv`; a.click();
+    URL.revokeObjectURL(url);
   }
 
   downloadReport(): void {

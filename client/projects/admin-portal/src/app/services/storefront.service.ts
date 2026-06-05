@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { StorefrontBlock } from '../models';
 import { ApiClient } from './api-client.service';
+import { StorageService } from './storage.service';
 
 const PREVIEW_TOKEN = 'elite-admin:preview-token';
 

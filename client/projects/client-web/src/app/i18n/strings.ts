@@ -245,6 +245,12 @@ const EN = {
   'checkout.delivery.title': 'Complimentary Express Delivery',
   'checkout.delivery.sub': '1–2 business days · Signature required',
   'checkout.delivery.free': 'Free',
+  'checkout.delivery.nbox': 'NBOX Delivery',
+  'checkout.delivery.prompt': 'Enter your delivery address to check NBOX availability',
+  'checkout.delivery.checking': 'Checking NBOX delivery availability...',
+  'checkout.delivery.checkingShort': 'Checking...',
+  'checkout.delivery.pending': 'Pending',
+  'checkout.delivery.unavailable': 'NBOX delivery is not available for this address',
 
   'checkout.gateway.title': 'Payment Gateway',
   'checkout.gateway.sub': 'Your order will be created now with payment pending. The live gateway can be connected here later without changing the order workflow.',
@@ -258,6 +264,8 @@ const EN = {
   'checkout.error.step1': 'Enter your delivery address and city to continue.',
   'checkout.error.step2': 'Review the payment step to continue.',
   'checkout.error.submit': 'We could not place the order. Please try again.',
+  'checkout.error.deliveryQuote': 'We could not check NBOX delivery. Please review the address and try again.',
+  'checkout.error.deliveryUnavailable': 'NBOX delivery is not available for this address.',
 
   'checkout.summary.title': 'Order Summary',
   'checkout.summary.empty': 'Your cart is empty',
@@ -595,6 +603,12 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.delivery.title': 'توصيل سريع مجاني',
   'checkout.delivery.sub': '1–2 يوم عمل · يتطلب التوقيع',
   'checkout.delivery.free': 'مجاني',
+  'checkout.delivery.nbox': 'توصيل NBOX',
+  'checkout.delivery.prompt': 'أدخل عنوان التوصيل للتحقق من توفر NBOX',
+  'checkout.delivery.checking': 'جارٍ التحقق من توفر توصيل NBOX...',
+  'checkout.delivery.checkingShort': 'جارٍ التحقق...',
+  'checkout.delivery.pending': 'بانتظار التحقق',
+  'checkout.delivery.unavailable': 'توصيل NBOX غير متاح لهذا العنوان',
 
   'checkout.gateway.title': 'بوابة الدفع',
   'checkout.gateway.sub': 'سيتم إنشاء الطلب الآن بحالة دفع معلّقة. يمكن ربط بوابة الدفع الفعلية هنا لاحقاً دون تغيير مسار الطلب.',
@@ -608,6 +622,8 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.error.step1': 'أدخل عنوان التوصيل والمدينة للمتابعة.',
   'checkout.error.step2': 'راجع خطوة الدفع للمتابعة.',
   'checkout.error.submit': 'تعذّر إنشاء الطلب. حاول مرة أخرى.',
+  'checkout.error.deliveryQuote': 'تعذّر التحقق من توصيل NBOX. راجع العنوان وحاول مرة أخرى.',
+  'checkout.error.deliveryUnavailable': 'توصيل NBOX غير متاح لهذا العنوان.',
 
   'checkout.summary.title': 'ملخص الطلب',
   'checkout.summary.empty': 'سلتك فارغة',

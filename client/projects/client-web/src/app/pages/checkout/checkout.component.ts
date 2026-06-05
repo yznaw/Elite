@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { CartService } from '../../services/cart.service';
 import { CheckoutService } from '../../services/checkout.service';
+import { DeliveryQuote } from '../../services/checkout.service';
 import { I18nService } from '../../services/i18n.service';
 
 const STEPS = ['checkout.step.details', 'checkout.step.delivery', 'checkout.step.payment'] as const;
@@ -37,6 +38,8 @@ export class CheckoutComponent {
   readonly placed = signal(false);
   readonly placedTotal = signal(0);
   readonly placing = signal(false);
+  readonly quoteLoading = signal(false);
+  readonly shippingQuote = signal<DeliveryQuote | null>(null);
   readonly error = signal('');
   readonly orderNumber = signal('');
 
@@ -51,7 +54,8 @@ export class CheckoutComponent {
   });
 
   readonly subtotal = computed(() => this.cart.subtotal());
-  readonly total = computed(() => (this.placed() ? this.placedTotal() : this.subtotal()));
+  readonly deliveryFee = computed(() => this.shippingQuote()?.amount || 0);
+  readonly total = computed(() => (this.placed() ? this.placedTotal() : this.subtotal() + this.deliveryFee()));
 
   readonly t = (key: string): string => this.i18n.t(key);
   readonly price = (value: number): string => this.i18n.price(value);
@@ -59,6 +63,9 @@ export class CheckoutComponent {
 
   set<K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
+    if (['phone', 'address', 'city', 'country'].includes(String(key))) {
+      this.shippingQuote.set(null);
+    }
   }
 
   inputValue(event: Event): string {
@@ -73,6 +80,10 @@ export class CheckoutComponent {
     this.error.set('');
     if (!this.isCurrentStepValid()) {
       this.error.set(this.t(`checkout.error.step${this.step()}`));
+      return;
+    }
+
+    if (this.step() === 1 && !(await this.ensureDeliveryQuote())) {
       return;
     }
 
@@ -113,12 +124,29 @@ export class CheckoutComponent {
     return this.t(keys[country] ?? country);
   }
 
+  deliveryStatus(): string {
+    if (this.quoteLoading()) return this.t('checkout.delivery.checking');
+    const quote = this.shippingQuote();
+    if (!quote) return this.t('checkout.delivery.prompt');
+    if (!quote.available) return this.t('checkout.delivery.unavailable');
+    const eta = quote.eta ? ` - ${quote.eta}` : '';
+    return `${quote.serviceName || this.t('checkout.delivery.nbox')}${eta}`;
+  }
+
+  deliveryPrice(): string {
+    if (this.quoteLoading()) return this.t('checkout.delivery.checkingShort');
+    const quote = this.shippingQuote();
+    if (!quote?.available) return this.t('checkout.delivery.pending');
+    return quote.amount > 0 ? this.price(quote.amount) : this.t('checkout.delivery.free');
+  }
+
   private async placeOrder(): Promise<void> {
     if (this.placing()) return;
     if (this.cart.items().length === 0) {
       this.error.set(this.t('checkout.error.empty'));
       return;
     }
+    if (!(await this.ensureDeliveryQuote())) return;
 
     const form = this.form();
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
@@ -139,6 +167,7 @@ export class CheckoutComponent {
           country: form.country,
         },
         items: this.cart.items(),
+        shippingQuote: this.shippingQuote()!,
       });
 
       this.placedTotal.set(order.total || this.total());
@@ -150,6 +179,46 @@ export class CheckoutComponent {
       this.error.set(this.t('checkout.error.submit'));
     } finally {
       this.placing.set(false);
+    }
+  }
+
+  private async ensureDeliveryQuote(): Promise<boolean> {
+    const existing = this.shippingQuote();
+    if (existing?.available) return true;
+    if (this.quoteLoading()) return false;
+
+    const form = this.form();
+    const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+    this.quoteLoading.set(true);
+    try {
+      const quote = await this.checkoutApi.getDeliveryQuote({
+        customer: {
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+        },
+        shippingAddress: {
+          fullName,
+          phone: form.phone.trim(),
+          line1: form.address.trim(),
+          city: form.city.trim(),
+          country: form.country,
+        },
+        items: this.cart.items(),
+      });
+      this.shippingQuote.set(quote);
+      if (!quote.available) {
+        this.error.set(quote.message || this.t('checkout.error.deliveryUnavailable'));
+        return false;
+      }
+      return true;
+    } catch {
+      this.shippingQuote.set(null);
+      this.error.set(this.t('checkout.error.deliveryQuote'));
+      return false;
+    } finally {
+      this.quoteLoading.set(false);
     }
   }
 

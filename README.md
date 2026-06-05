@@ -123,8 +123,8 @@ ng serve admin-portal --port 4300 # port 4300
 ### Building for production
 
 ```bash
-npm run build:web    # → client/dist/client-web/
-npm run build:admin  # → client/dist/admin-portal/
+npm run build:web    # → client/dist/client-web/browser/
+npm run build:admin  # → client/dist/admin-portal/browser/
 npm run build:all    # both
 ```
 
@@ -147,34 +147,58 @@ This alias is configured in `client/tsconfig.json` and resolves to `../shared/`.
 
 | App          | Domain                    |
 |--------------|---------------------------|
-| client-web   | https://website.com       |
-| admin-portal | https://admin.website.com |
+| client-web   | https://elitecollections.qa       |
+| admin-portal | https://admin.elitecollections.qa |
 
-Point each domain to its respective `dist/` build output via your web server (Nginx/Apache) or hosting platform (Vercel, Netlify, etc.).
+Point each domain to its respective `dist/` build output via your web server (Nginx/Apache) or hosting platform (Vercel, Netlify, etc.). In production, let Nginx handle HTTPS and keep Express private on `localhost:3000`; see [`docs/09-nginx-https.md`](docs/09-nginx-https.md) for the full Certbot setup.
 
 **Example Nginx config:**
 
 ```nginx
-# Main website
-server {
-  server_name website.com;
-  root /var/www/elite/client-web;
-  index index.html;
-  location / { try_files $uri $uri/ /index.html; }
+upstream elite_api {
+  server 127.0.0.1:3000;
 }
 
-# Admin subdomain
+# Main website - Certbot will add the HTTPS listen/certificate lines.
 server {
-  server_name admin.website.com;
-  root /var/www/elite/admin-portal;
+  listen 80;
+  server_name elitecollections.qa www.elitecollections.qa;
+  root /var/www/elite/client/dist/client-web/browser;
   index index.html;
+
   location / { try_files $uri $uri/ /index.html; }
+
+  location /api/ {
+    proxy_pass http://elite_api;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+
+  location /uploads/ {
+    alias /var/www/elite/server/uploads/;
+  }
 }
 
-# API proxy (both subdomains → same Express server)
+# Admin subdomain - Certbot will add the HTTPS listen/certificate lines.
 server {
-  server_name website.com admin.website.com;
-  location /api/ { proxy_pass http://localhost:3000; }
+  listen 80;
+  server_name admin.elitecollections.qa;
+  root /var/www/elite/client/dist/admin-portal/browser;
+  index index.html;
+
+  location / { try_files $uri $uri/ /index.html; }
+
+  location /api/ {
+    proxy_pass http://elite_api;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+
+  location /uploads/ {
+    alias /var/www/elite/server/uploads/;
+  }
 }
 ```
 

@@ -17,6 +17,8 @@
 | 6 | [White-Label Guide](./06-white-label-guide.md) | Dev Team | How to rebrand and resell for a new client |
 | 7 | [Developer Guide](./07-dev-guide.md) | Dev Team | Local setup, conventions, how-to recipes |
 | 8 | [Database & API Implementation](./08-database-api-implementation.md) | Backend/Frontend Devs | PostgreSQL schema, endpoint map, SQL behavior, wired UI state |
+| 9 | [Nginx HTTPS](./09-nginx-https.md) | DevOps | Production Nginx reverse proxy, HTTPS termination, Certbot, and upload routing |
+| 10 | [NBOX Integration](./10-nbox-integration.md) | Backend/DevOps | Delivery quote, shipment booking, and shipment status webhook flow |
 
 ---
 
@@ -43,3 +45,5 @@
 - **Working on the frontend?** Read [03](./03-client-web.md) or [04](./04-admin-portal.md) depending on which app you're modifying.
 - **Adding an API endpoint?** See [05 – API Server](./05-api-server.md).
 - **Working with database-backed features?** See [08 – Database & API Implementation](./08-database-api-implementation.md).
+- **Deploying HTTPS with Nginx?** See [09 – Nginx HTTPS](./09-nginx-https.md).
+- **Connecting NBOX delivery?** See [10 – NBOX Integration](./10-nbox-integration.md).

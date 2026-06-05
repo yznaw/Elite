@@ -89,13 +89,20 @@ function verifyWebhookSignature(req) {
     return { ok: false, status: 400, message: 'Missing raw webhook body.' };
   }
 
-  const digest = crypto.createHmac('sha256', secret).update(rawBody).digest();
-  const expectedHex = digest.toString('hex');
-  const expectedBase64 = digest.toString('base64');
+  const timestamp = req.get('x-nbox-timestamp');
+  const signedPayloads = [rawBody];
+  if (timestamp) {
+    signedPayloads.push(Buffer.concat([Buffer.from(`${timestamp}.`, 'utf8'), rawBody]));
+  }
+
+  const expectedSignatures = signedPayloads.flatMap((payload) => {
+    const digest = crypto.createHmac('sha256', secret).update(payload).digest();
+    return [digest.toString('hex'), digest.toString('base64')];
+  });
 
   const matched = signatureCandidates(signatureHeader).some((candidate) => {
     const normalized = candidate.toLowerCase();
-    return timingSafeStringEqual(normalized, expectedHex) || timingSafeStringEqual(candidate, expectedBase64);
+    return expectedSignatures.some((expected) => timingSafeStringEqual(normalized, expected.toLowerCase()));
   });
 
   if (!matched) {
