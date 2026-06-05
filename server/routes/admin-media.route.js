@@ -364,12 +364,13 @@ router.post(
     const parsed = parseGDriveUrl(rawUrl);
     if (!parsed) return validationError(res, ['Could not find a Google Drive file or folder ID in that URL.']);
 
-    const apiKey = process.env.GOOGLE_DRIVE_API_KEY || '';
+    // Accept either name so existing GOOGLE_API_KEY setups work out of the box.
+    const apiKey = process.env.GOOGLE_DRIVE_API_KEY || process.env.GOOGLE_API_KEY || '';
 
     if (parsed.type === 'folder' && !apiKey) {
       return validationError(res, [
-        'Importing a folder requires a GOOGLE_DRIVE_API_KEY environment variable. ' +
-        'Set it in your server .env to enable folder imports.',
+        'Importing a folder requires a Google API key. ' +
+        'Add GOOGLE_DRIVE_API_KEY or GOOGLE_API_KEY to your server .env file.',
       ]);
     }
 
