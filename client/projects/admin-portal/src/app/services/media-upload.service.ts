@@ -64,7 +64,17 @@ export class MediaUploadService {
   /** Upload images for a specific product — they're appended to the gallery
       and the first one becomes primary if the product had no thumbnail. */
   uploadProductImages(productId: string, files: File[]): Observable<UploadProgress> {
-    return this.uploadMultipart<ProductImageUploadResult>(`/admin/products/${productId}/images`, files);
+    return this.uploadMultipart<ProductImageUploadResult>(`/admin/products/${productId}/images`, files).pipe(
+      map(ev => {
+        if (ev.stage === 'done' && ev.result) {
+          const r = ev.result as ProductImageUploadResult;
+          if (r.images) {
+            return { ...ev, result: { ...r, images: r.images.map(u => this.api.mediaUrl(u)) } };
+          }
+        }
+        return ev;
+      }),
+    );
   }
 
   private uploadMultipart<T>(path: string, files: File[]): Observable<UploadProgress> {
