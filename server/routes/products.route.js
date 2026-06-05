@@ -6,7 +6,8 @@ const { createRestockNotification, processRestockNotifications } = require('../l
 
 const router = Router();
 
-const BUILT_IN_FALLBACK = '/assets/brand/elite-logo-green.png';
+// Empty string means "no image" — clients apply their own logo/placeholder fallback.
+const BUILT_IN_FALLBACK = '';
 
 async function getDefaultImage(client, tenantId) {
   try {
@@ -90,7 +91,7 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
     tag: row.tag || '',
     leather: row.leather || '',
     style: row.style || '',
-    sizes: sizes.length > 0 ? sizes.map((s) => Number(s)).filter(Number.isFinite) : [40, 41, 42, 43, 44],
+    sizes: sizes.map((s) => Number(s)).filter(Number.isFinite),
     colors,
     materials,
     image,

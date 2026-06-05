@@ -276,8 +276,14 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                 }
 
                 <div class="prod-img">
-                  <img [src]="p.image" [alt]="p.name" (error)="onImgError($event)"
-                       [style.filter]="p.hidden && !selectionMode() ? 'grayscale(0.6)' : null"/>
+                  @if (p.image) {
+                    <img [src]="p.image" [alt]="p.name" (error)="onImgError($event)"
+                         [style.filter]="p.hidden && !selectionMode() ? 'grayscale(0.6)' : null"/>
+                  } @else {
+                    <div class="prod-img-empty">
+                      <ap-icon name="catalog" [size]="32"/>
+                    </div>
+                  }
                   @if (!selectionMode()) {
                     <span class="prod-3d-badge" [class.linked]="p.has3d" [class.missing]="!p.has3d">
                       {{ p.has3d ? '✓ 3D' : '○ No 3D' }}
@@ -340,7 +346,13 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   </div>
                 }
                 <div class="lv-c-img">
-                  <img class="lv-thumb" [src]="p.image" [alt]="p.name" (error)="onImgError($event)"/>
+                  @if (p.image) {
+                    <img class="lv-thumb" [src]="p.image" [alt]="p.name" (error)="onImgError($event)"/>
+                  } @else {
+                    <div class="lv-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--bg-2);color:var(--muted);">
+                      <ap-icon name="catalog" [size]="16"/>
+                    </div>
+                  }
                 </div>
                 <div class="lv-c-name">
                   <span class="lv-name">{{ p.name }}</span>
@@ -489,6 +501,11 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     .result-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 
     /* ── Card grid (existing) ── */
+    .prod-img-empty {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-2); color: var(--muted);
+    }
     .prod-card { position: relative; cursor: pointer; transition: outline .1s; }
     .prod-card.selected { outline: 2px solid #c9a84c; outline-offset: 2px; border-radius: 10px; }
     .sel-check {
