@@ -41,6 +41,8 @@ async function loadSnapshot(client, tenantId, status) {
 }
 
 function mapBlock(row) {
+  let settings = {};
+  try { settings = (typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings) || {}; } catch {}
   return {
     id: row.block_key,
     type: row.type,
@@ -51,6 +53,7 @@ function mapBlock(row) {
     ctaText: row.cta_text || undefined,
     ctaLink: row.cta_link || undefined,
     collectionId: row.collection_id || undefined,
+    collectionIds: Array.isArray(settings.collectionIds) ? settings.collectionIds : [],
     itemLimit: row.item_limit || undefined,
     sortBy: row.sort_by || undefined,
     body: row.body || undefined,
@@ -176,7 +179,7 @@ async function insertBlocks(client, tenantId, snapshotId, blocks) {
         block.itemLimit || null,
         block.sortBy || null,
         JSON.stringify(block.body || {}),
-        JSON.stringify(block.settings || {}),
+        JSON.stringify({ ...(block.settings || {}), collectionIds: block.collectionIds || [] }),
         index,
       ],
     );

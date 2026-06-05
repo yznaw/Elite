@@ -16,6 +16,7 @@ import { AdminProductsService } from '../../services/admin-products.service';
 
 interface FormShape {
   title: string;
+  handle: string;
   description: string;
   imageUrl: string | null;
   productIds: string[];
@@ -111,6 +112,24 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         <div class="mb-24">
           <label class="lbl">{{ t('collections.drawer.name') }}</label>
           <input class="inp mb-16" [ngModel]="form().title" (ngModelChange)="set('title', $event)"/>
+
+          <label class="lbl">URL Handle <span class="muted" style="font-weight:500;">(collection path)</span></label>
+          <div class="handle-row mb-16">
+            <span class="handle-prefix">/collections/</span>
+            <input class="inp handle-inp"
+                   [ngModel]="form().handle"
+                   (ngModelChange)="setHandle($event)"
+                   placeholder="auto-generated-from-title"/>
+            @if (handleManual()) {
+              <button class="btn btn-ghost btn-sm" type="button" (click)="resetHandleToTitle()" title="Reset to auto-generated">
+                <ap-icon name="sync" [size]="12"/>
+              </button>
+            }
+          </div>
+          <div class="handle-preview mb-16">
+            <span class="muted small">Preview: </span>
+            <span class="handle-link mono small">/collections/{{ form().handle || 'your-collection-name' }}</span>
+          </div>
 
           <label class="lbl">{{ t('collections.drawer.desc') }}</label>
           <textarea class="inp mb-16" rows="3" [placeholder]="t('collections.drawer.descHolder')" [ngModel]="form().description" (ngModelChange)="set('description', $event)"></textarea>
@@ -292,6 +311,41 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
       display: block;
     }
 
+    /* URL handle field */
+    .handle-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .handle-row:focus-within { border-color: var(--green); }
+    .handle-prefix {
+      padding: 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      height: 38px;
+      display: flex;
+      align-items: center;
+    }
+    .handle-inp {
+      flex: 1;
+      border: none !important;
+      border-radius: 0 !important;
+      background: transparent;
+      font-family: var(--ff-mono, monospace);
+      font-size: 13px;
+    }
+    .handle-row button { margin: 0 6px; flex-shrink: 0; }
+    .handle-preview { padding: 4px 0; }
+    .handle-link { color: var(--green); word-break: break-all; }
+
     /* Collection products: drag-to-reorder */
     .collection-prod {
       cursor: grab;
@@ -323,8 +377,9 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private readonly productsApi = inject(AdminProductsService);
   readonly t = (k: string): string => this.i18n.t(k);
 
-  private readonly initial = signal<FormShape>({ title: '', description: '', imageUrl: null, productIds: [], hidden: false });
-  readonly form = signal<FormShape>({ title: '', description: '', imageUrl: null, productIds: [], hidden: false });
+  private readonly initial = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false });
+  readonly form = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false });
+  readonly handleManual = signal(false);
   readonly saveState = signal<SaveState>('idle');
   readonly shakeSaveBar = signal(false);
   readonly deleting = signal(false);
@@ -366,7 +421,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
 
   ngOnInit(): void {
-    if (!this.initial) this.resetForCurrent();
+    this.resetForCurrent();
     void this.loadProducts();
   }
   ngOnDestroy(): void { if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); }
@@ -384,7 +439,8 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private resetForCurrent(): void {
     const c = this.collection;
     if (!c) return;
-    this.initial.set({ title: c.title, description: c.description, imageUrl: c.imageUrl, productIds: [...c.productIds], hidden: c.hidden });
+    this.initial.set({ title: c.title, handle: c.handle || '', description: c.description, imageUrl: c.imageUrl, productIds: [...c.productIds], hidden: c.hidden });
+    this.handleManual.set(!!c.handle);
     this.form.set({ ...this.initial() });
     this.saveState.set('idle');
     try {
@@ -410,8 +466,30 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   }
 
   set<K extends keyof FormShape>(k: K, v: FormShape[K]): void {
-    this.form.update((f) => ({ ...f, [k]: v }));
+    this.form.update((f) => {
+      const next = { ...f, [k]: v };
+      if (k === 'title' && !this.handleManual()) {
+        next.handle = this.slugify(String(v));
+      }
+      return next;
+    });
     this.scheduleAutoSave();
+  }
+
+  setHandle(raw: string): void {
+    this.handleManual.set(true);
+    this.form.update((f) => ({ ...f, handle: this.slugify(raw) }));
+    this.scheduleAutoSave();
+  }
+
+  resetHandleToTitle(): void {
+    this.handleManual.set(false);
+    this.form.update((f) => ({ ...f, handle: this.slugify(f.title) }));
+    this.scheduleAutoSave();
+  }
+
+  private slugify(str: string): string {
+    return str.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
   toggle(k: 'hidden'): void { this.set(k, !this.form()[k] as never); }
@@ -504,6 +582,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     const f = this.form();
     const payload = {
       title: f.title,
+      handle: f.handle || undefined,
       description: f.description,
       imageUrl: f.imageUrl,
       productIds: f.productIds,

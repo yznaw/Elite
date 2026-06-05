@@ -8,6 +8,7 @@ const router = Router();
 function mapCollection(row) {
   return {
     id: row.id,
+    handle: row.handle || '',
     title: row.title,
     description: row.description || '',
     imageUrl: row.image_url || null,

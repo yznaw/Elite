@@ -34,6 +34,7 @@ export interface Product {
 
 export interface Collection {
   id: string;
+  handle: string;
   title: string;
   description: string;
   imageUrl: string | null;
@@ -181,6 +182,8 @@ export interface StorefrontBlock {
   imageUrl?: string;
   productIds?: string[];
   collectionId?: string;
+  /** UUIDs of featured system collections, or raw handles for manually-added ones. */
+  collectionIds?: string[];
   itemLimit?: number;
   sortBy?: 'newest' | 'bestseller' | 'price-asc' | 'price-desc' | 'manual';
   body?: string;
