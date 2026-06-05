@@ -1,6 +1,8 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { MediaCardComponent } from './media-card.component';
@@ -27,7 +29,7 @@ interface PendingUpload {
 @Component({
   selector: 'ap-media',
   standalone: true,
-  imports: [CommonModule, IconComponent, EmptyStateComponent, PaginationComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
+  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, EmptyStateComponent, PaginationComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
   template: `
     <div class="page-fade">
       <div class="grid-4 mb-24">
@@ -71,6 +73,9 @@ interface PendingUpload {
                 <ap-icon name="upload" [size]="14"/> {{ t('media.browse') }}
                 <input type="file" multiple accept="image/*,.glb,.gltf" hidden (change)="onPick($event)"/>
               </label>
+              <button class="btn btn-outline" (click)="openGDrive()">
+                <ap-icon name="link" [size]="14"/> Google Drive
+              </button>
               <button class="btn btn-gold" [disabled]="counts().unlinked === 0" (click)="autoLinking.set(true)">
                 <ap-icon name="wand" [size]="14"/>
                 {{ t('media.autoLink') }}
@@ -173,6 +178,41 @@ interface PendingUpload {
         (closed)="autoLinking.set(false)"
         (apply)="applyAutoLink($event)"/>
     }
+
+    <!-- ── Google Drive import modal ── -->
+    @if (gdriveOpen()) {
+      <div class="overlay" (click)="gdriveOpen.set(false)"></div>
+      <div class="modal gdrive-modal">
+        <div class="modal-head">
+          <div>
+            <p class="gdrive-eyebrow">Import from Google Drive</p>
+            <div class="card-title">Paste a Google Drive link</div>
+          </div>
+          <button class="x-btn" (click)="gdriveOpen.set(false)"><ap-icon name="x" [size]="14"/></button>
+        </div>
+        <div class="modal-body">
+          <div class="gdrive-info">
+            <ap-icon name="info" [size]="14"/>
+            <span>Works with publicly shared files and folders. For folders, set <code>GOOGLE_DRIVE_API_KEY</code> in your server <code>.env</code>.</span>
+          </div>
+          <label class="lbl mb-8">Google Drive URL or File ID</label>
+          <input class="inp mb-6" placeholder="https://drive.google.com/drive/folders/…"
+                 [ngModel]="gdriveUrl()" (ngModelChange)="gdriveUrl.set($event)"
+                 (keydown.enter)="importGDrive()" [disabled]="gdriveLoading()"/>
+          <div class="muted small mb-16">Paste a folder link, file link, or just the file ID.</div>
+
+          @if (gdriveError()) {
+            <div class="gdrive-error">{{ gdriveError() }}</div>
+          }
+        </div>
+        <div class="drawer-foot">
+          <button class="btn btn-outline" (click)="gdriveOpen.set(false)" [disabled]="gdriveLoading()">Cancel</button>
+          <button class="btn btn-gold" (click)="importGDrive()" [disabled]="gdriveLoading() || !gdriveUrl().trim()">
+            @if (gdriveLoading()) { <ap-spinner [size]="13"/> Importing… } @else { Import Images }
+          </button>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     .upload-list {
@@ -252,6 +292,50 @@ interface PendingUpload {
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .gdrive-modal {
+      width: min(520px, 96vw);
+    }
+    .gdrive-eyebrow {
+      margin: 0 0 4px;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .gdrive-info {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border-2);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .gdrive-info ap-icon { flex-shrink: 0; margin-top: 1px; }
+    .gdrive-info code {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0 4px;
+      font-size: 11px;
+      color: var(--ink);
+    }
+    .gdrive-error {
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(239,68,68,.07);
+      border: 1px solid rgba(239,68,68,.3);
+      color: #dc2626;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
     @media (max-width: 560px) {
       .drop-zone { padding: 18px 14px; }
       .upload-row { grid-template-columns: 32px 1fr auto; padding: 8px; }
@@ -279,6 +363,43 @@ export class MediaComponent implements OnInit {
   readonly cleaningUp = signal(false);
   readonly page = signal(0);
   readonly pageSize = signal(48);
+
+  // ── Google Drive import ──────────────────────────────────────────────────
+  readonly gdriveOpen = signal(false);
+  readonly gdriveUrl = signal('');
+  readonly gdriveLoading = signal(false);
+  readonly gdriveError = signal('');
+
+  openGDrive(): void {
+    this.gdriveUrl.set('');
+    this.gdriveError.set('');
+    this.gdriveOpen.set(true);
+  }
+
+  async importGDrive(): Promise<void> {
+    const url = this.gdriveUrl().trim();
+    if (!url || this.gdriveLoading()) return;
+    this.gdriveError.set('');
+    this.gdriveLoading.set(true);
+    try {
+      const imported = await this.mediaApi.importFromGDrive(url);
+      if (imported.length === 0) {
+        this.gdriveError.set('No images were found at that URL. Make sure the file/folder is publicly shared.');
+        return;
+      }
+      this.media.update(all => [...imported, ...all]);
+      this.gdriveOpen.set(false);
+      this.toast.success(
+        `${imported.length} image${imported.length === 1 ? '' : 's'} imported`,
+        'Saved to your media library.',
+      );
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Import failed. Check the URL and try again.';
+      this.gdriveError.set(msg);
+    } finally {
+      this.gdriveLoading.set(false);
+    }
+  }
 
   async ngOnInit(): Promise<void> {
     await this.refresh();

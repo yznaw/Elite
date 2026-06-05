@@ -259,5 +259,130 @@ router.delete(
   }),
 );
 
+// ─── Google Drive import ──────────────────────────────────────────────────────
+// POST /api/admin/media/gdrive  { url: "https://drive.google.com/..." }
+// Supports publicly-shared files and (with GOOGLE_DRIVE_API_KEY) folders.
+
+function parseGDriveUrl(raw) {
+  const url = (raw || '').trim();
+  const folderMatch = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch) return { type: 'folder', id: folderMatch[1] };
+  const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (fileMatch) return { type: 'file', id: fileMatch[1] };
+  // Plain ID pasted directly
+  if (/^[a-zA-Z0-9_-]{25,}$/.test(url)) return { type: 'file', id: url };
+  return null;
+}
+
+router.post(
+  '/gdrive',
+  asyncHandler(async (req, res) => {
+    const rawUrl = String(req.body.url || '').trim();
+    if (!rawUrl) return validationError(res, ['Google Drive URL is required.']);
+
+    const parsed = parseGDriveUrl(rawUrl);
+    if (!parsed) return validationError(res, ['Could not find a Google Drive file or folder ID in that URL.']);
+
+    const apiKey = process.env.GOOGLE_DRIVE_API_KEY || '';
+
+    if (parsed.type === 'folder' && !apiKey) {
+      return validationError(res, [
+        'Importing a folder requires a GOOGLE_DRIVE_API_KEY environment variable. ' +
+        'Set it in your server .env to enable folder imports.',
+      ]);
+    }
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const tenant = await ensureDefaultTenant(client);
+      const userId = req.session?.user?.id || null;
+
+      // ── 1. Resolve the list of files to download ────────────────────────
+      let files = [];
+
+      if (parsed.type === 'folder') {
+        const q = encodeURIComponent(`'${parsed.id}' in parents and mimeType contains 'image/' and trashed = false`);
+        const listResp = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100&key=${apiKey}`,
+        );
+        if (!listResp.ok) {
+          const body = await listResp.json().catch(() => ({}));
+          throw new Error(`Google Drive API error ${listResp.status}: ${body?.error?.message || listResp.statusText}`);
+        }
+        files = (await listResp.json()).files || [];
+      } else {
+        // Single file — try to get metadata if we have an API key, else guess
+        if (apiKey) {
+          const metaResp = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${parsed.id}?fields=id,name,mimeType,size&key=${apiKey}`,
+          );
+          if (metaResp.ok) {
+            const meta = await metaResp.json();
+            files = [{ id: meta.id, name: meta.name, mimeType: meta.mimeType }];
+          }
+        }
+        if (files.length === 0) {
+          files = [{ id: parsed.id, name: `gdrive-${parsed.id}.jpg`, mimeType: 'image/jpeg' }];
+        }
+      }
+
+      if (files.length === 0) {
+        await client.query('ROLLBACK');
+        return ok(res, [], 'No images found.');
+      }
+
+      // ── 2. Download each file and save ─────────────────────────────────
+      const inserted = [];
+      for (const file of files) {
+        const downloadUrl = apiKey
+          ? `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${apiKey}`
+          : `https://drive.google.com/uc?export=download&id=${file.id}`;
+
+        const fileResp = await fetch(downloadUrl, {
+          redirect: 'follow',
+          headers: { 'User-Agent': 'EliteAdmin/1.0' },
+        });
+        if (!fileResp.ok) continue;
+
+        const contentType = fileResp.headers.get('content-type') || file.mimeType || 'image/jpeg';
+        if (!contentType.startsWith('image/')) continue;
+
+        const buffer = Buffer.from(await fileResp.arrayBuffer());
+        const stored = await storage.save({
+          buffer,
+          filename: file.name || `gdrive-${file.id}.jpg`,
+          mimeType: contentType,
+        });
+
+        const result = await client.query(
+          `INSERT INTO media_assets
+             (tenant_id, filename, kind, mime_type, size_bytes, storage_url, preview_url, uploaded_by_user_id, metadata)
+           VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
+          [
+            tenant.id,
+            file.name || `gdrive-${file.id}.jpg`,
+            contentType,
+            buffer.length,
+            stored.url,
+            stored.url,
+            userId,
+            JSON.stringify({ storagePath: stored.storagePath, gdriveId: file.id }),
+          ],
+        );
+        inserted.push(mapMedia(result.rows[0]));
+      }
+
+      await client.query('COMMIT');
+      return created(res, inserted, `Imported ${inserted.length} image(s) from Google Drive.`);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
 module.exports = router;
 module.exports.MAX_SIZE_BYTES = MAX_SIZE_BYTES;

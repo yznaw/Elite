@@ -8,7 +8,9 @@ export class AdminMediaService {
   private readonly api = inject(ApiClient);
 
   list(): Promise<MediaFile[]> {
-    return firstValueFrom(this.api.get<MediaFile[]>('/admin/media'));
+    return firstValueFrom(this.api.get<MediaFile[]>('/admin/media')).then(files =>
+      files.map(f => this.normalizeFile(f)),
+    );
   }
 
   link(id: string, productId: string | null, role: string = 'gallery'): Promise<void> {
@@ -23,5 +25,17 @@ export class AdminMediaService {
 
   deleteOrphaned(): Promise<{ deleted: number }> {
     return firstValueFrom(this.api.delete<{ deleted: number }>('/admin/media/orphaned'));
+  }
+
+  /** Import image files from a publicly-shared Google Drive file or folder URL. */
+  importFromGDrive(driveUrl: string): Promise<MediaFile[]> {
+    return firstValueFrom(
+      this.api.post<MediaFile[]>('/admin/media/gdrive', { url: driveUrl }),
+    ).then(files => files.map(f => this.normalizeFile(f)));
+  }
+
+  /** Resolve relative /uploads/… URLs so they route through the API proxy. */
+  normalizeFile(f: MediaFile): MediaFile {
+    return { ...f, preview: f.preview ? this.api.mediaUrl(f.preview) : f.preview };
   }
 }
