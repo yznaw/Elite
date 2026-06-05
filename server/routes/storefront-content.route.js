@@ -122,9 +122,10 @@ function normalizeCollections(collections = []) {
   const incoming = Array.isArray(collections) ? collections : [];
   return DEFAULT_HOME_CONTENT.collections.slice(0, HOME_COLLECTION_LIMIT).map((fallback) => {
     const item = incoming.find((candidate) => candidate && candidate.id === fallback.id) || {};
-
+    const collectionId = asText(item.collectionId, '');
     return {
       id: fallback.id,
+      ...(collectionId ? { collectionId } : {}),
       title: asText(item.title, fallback.title),
       imageUrl: asText(item.imageUrl, fallback.imageUrl),
       link: asText(item.link, fallback.link),
