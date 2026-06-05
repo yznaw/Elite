@@ -175,9 +175,13 @@ router.patch(
       const tenant = await ensureDefaultTenant(client);
       await client.query('DELETE FROM media_links WHERE media_id = $1', [req.params.id]);
       if (req.body.productId) {
+        const role = req.body.role || 'gallery';
         await client.query(
-          'INSERT INTO media_links (tenant_id, media_id, product_id, role) VALUES ($1, $2, $3, $4)',
-          [tenant.id, req.params.id, req.body.productId, req.body.role || 'gallery'],
+          `INSERT INTO media_links (tenant_id, media_id, product_id, role, sort_order)
+           VALUES ($1, $2, $3, $4,
+             COALESCE((SELECT MAX(sort_order) + 1 FROM media_links WHERE product_id = $3 AND role = $4), 0)
+           )`,
+          [tenant.id, req.params.id, req.body.productId, role],
         );
       }
       await client.query('COMMIT');
@@ -285,7 +289,7 @@ function parseGDriveUrl(raw) {
  *
  * Returns the product UUID on a match, or null.
  */
-async function tryAutoLink(client, tenantId, mediaId, { filename = '', folderName = '' } = {}) {
+async function tryAutoLink(client, tenantId, mediaId, { filename = '', folderName = '', sortCounters = new Map() } = {}) {
   const stem = filename.replace(/\.[^.]+$/, '');
   const candidates = [folderName.trim(), stem.trim()].filter(Boolean);
 
@@ -301,7 +305,7 @@ async function tryAutoLink(client, tenantId, mediaId, { filename = '', folderNam
       [tenantId, name],
     );
     if (exact.rowCount > 0) {
-      await linkMedia(client, tenantId, mediaId, exact.rows[0].id);
+      await linkMedia(client, tenantId, mediaId, exact.rows[0].id, sortCounters);
       return exact.rows[0].id;
     }
   }
@@ -317,7 +321,7 @@ async function tryAutoLink(client, tenantId, mediaId, { filename = '', folderNam
     [tenantId, nameUpper],
   );
   if (contains.rowCount > 0) {
-    await linkMedia(client, tenantId, mediaId, contains.rows[0].id);
+    await linkMedia(client, tenantId, mediaId, contains.rows[0].id, sortCounters);
     return contains.rows[0].id;
   }
 
@@ -335,7 +339,7 @@ async function tryAutoLink(client, tenantId, mediaId, { filename = '', folderNam
       [tenantId, prefix],
     );
     if (prefixMatch.rowCount > 0) {
-      await linkMedia(client, tenantId, mediaId, prefixMatch.rows[0].id);
+      await linkMedia(client, tenantId, mediaId, prefixMatch.rows[0].id, sortCounters);
       return prefixMatch.rows[0].id;
     }
   }
@@ -343,15 +347,31 @@ async function tryAutoLink(client, tenantId, mediaId, { filename = '', folderNam
   return null;
 }
 
-async function linkMedia(client, tenantId, mediaId, productId) {
+/**
+ * Insert a single media_link.
+ * `sortCounters` is a Map(productId → nextSortOrder) shared across a
+ * transaction loop so every insert in the loop gets a unique sort_order
+ * (MAX() inside a transaction always reads the pre-transaction snapshot).
+ */
+async function linkMedia(client, tenantId, mediaId, productId, sortCounters = new Map()) {
+  let sortOrder;
+  if (sortCounters.has(productId)) {
+    sortOrder = sortCounters.get(productId);
+  } else {
+    const r = await client.query(
+      `SELECT COALESCE(MAX(sort_order) + 1, 0) AS n
+       FROM media_links WHERE product_id = $1 AND role = 'gallery'`,
+      [productId],
+    );
+    sortOrder = r.rows[0].n;
+  }
+  sortCounters.set(productId, sortOrder + 1);
+
   await client.query(
     `INSERT INTO media_links (tenant_id, media_id, product_id, role, sort_order)
-     VALUES (
-       $1, $2, $3, 'gallery',
-       COALESCE((SELECT MAX(sort_order) + 1 FROM media_links WHERE product_id = $3 AND role = 'gallery'), 0)
-     )
+     VALUES ($1, $2, $3, 'gallery', $4)
      ON CONFLICT DO NOTHING`,
-    [tenantId, mediaId, productId],
+    [tenantId, mediaId, productId, sortOrder],
   );
 }
 
@@ -424,6 +444,7 @@ router.post(
 
       // ── 2. Download, save, and auto-link each file ──────────────────────
       const inserted = [];
+      const sortCounters = new Map(); // tracks next sort_order per product within this transaction
       for (const file of files) {
         const downloadUrl = apiKey
           ? `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${apiKey}`
@@ -457,6 +478,7 @@ router.post(
         const linkedProductId = await tryAutoLink(client, tenant.id, result.rows[0].id, {
           filename,
           folderName,
+          sortCounters,
         });
 
         inserted.push(mapMedia({ ...result.rows[0], product_id: linkedProductId }));
