@@ -5,7 +5,7 @@ export type IconName =
   | 'dash' | 'catalog' | 'store' | 'orders' | 'users' | 'chart' | 'sync' | 'settings'
   | 'media' | 'search' | 'bell' | 'plus' | 'x' | 'drag' | 'edit' | 'trash' | 'eye'
   | 'upload' | 'cube' | 'link' | 'unlink' | 'wand' | 'check' | 'arrow' | 'arrowUp' | 'arrowDn'
-  | 'csv' | 'clock' | 'spinner' | 'list' | 'filter' | 'grid' | 'rows' | 'copy' | 'print' | 'warning' | 'mail' | 'team';
+  | 'csv' | 'clock' | 'spinner' | 'list' | 'filter' | 'grid' | 'rows' | 'copy' | 'print' | 'warning' | 'mail' | 'info' | 'team';
 
 @Component({
   selector: 'ap-icon',
@@ -197,6 +197,11 @@ export type IconName =
       @case ('mail') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
           <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/>
+        </svg>
+      }
+      @case ('info') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1"/>
         </svg>
       }
       @case ('team') {
