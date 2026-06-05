@@ -305,7 +305,7 @@ function cloneContent(content: HomeContentData): HomeContentData {
                     }
                   </select>
                   @if (tile.collectionId && collectionById(tile.collectionId); as col) {
-                    <span class="col-linked-hint mono small">→ /collections/{{ col.handle }}</span>
+                    <span class="col-linked-hint mono small">→ /collection/{{ col.handle }}</span>
                   }
                 </label>
 
@@ -1340,7 +1340,7 @@ export class HomeContentComponent implements OnInit {
               ...t,
               collectionId: colId,
               title: col.title,
-              link: `/collections/${col.handle}`,
+              link: `/collection/${col.handle}`,
               ...(col.imageUrl ? { imageUrl: this.resolveMediaUrl(col.imageUrl) } : {}),
             }
           : t,

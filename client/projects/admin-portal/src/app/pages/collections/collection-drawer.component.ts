@@ -115,7 +115,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
           <label class="lbl">URL Handle <span class="muted" style="font-weight:500;">(collection path)</span></label>
           <div class="handle-row mb-16">
-            <span class="handle-prefix">/collections/</span>
+            <span class="handle-prefix">/collection/</span>
             <input class="inp handle-inp"
                    [ngModel]="form().handle"
                    (ngModelChange)="setHandle($event)"
@@ -128,7 +128,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           </div>
           <div class="handle-preview mb-16">
             <span class="muted small">Preview: </span>
-            <span class="handle-link mono small">/collections/{{ form().handle || 'your-collection-name' }}</span>
+            <span class="handle-link mono small">/collection/{{ form().handle || 'your-collection-name' }}</span>
           </div>
 
           <label class="lbl">{{ t('collections.drawer.desc') }}</label>

@@ -43,7 +43,7 @@ import { HomeContentComponent } from '../home-content/home-content.component';
                   <div class="feat-chip-info">
                     @if (collectionByRef(ref); as col) {
                       <span class="feat-chip-title">{{ col.title }}</span>
-                      <span class="feat-chip-path mono">/collections/{{ col.handle }}</span>
+                      <span class="feat-chip-path mono">/collection/{{ col.handle }}</span>
                     } @else {
                       <span class="feat-chip-title">{{ ref }}</span>
                       <span class="feat-chip-path muted">manual handle</span>
@@ -82,7 +82,7 @@ import { HomeContentComponent } from '../home-content/home-content.component';
                       }
                       <div class="col-picker-info">
                         <div class="col-picker-name">{{ col.title }}</div>
-                        <div class="col-picker-path mono">/collections/{{ col.handle }}</div>
+                        <div class="col-picker-path mono">/collection/{{ col.handle }}</div>
                       </div>
                       <div class="col-picker-check" [class.on]="featuredRefs().includes(col.id)"></div>
                     </div>
@@ -97,7 +97,7 @@ import { HomeContentComponent } from '../home-content/home-content.component';
 
           <!-- Manual handle entry -->
           <div class="manual-entry">
-            <span class="manual-prefix">/collections/</span>
+            <span class="manual-prefix">/collection/</span>
             <input class="inp manual-inp" [(ngModel)]="manualHandle" placeholder="type-a-handle" (keydown.enter)="addManualHandle()"/>
             <button class="btn btn-outline btn-sm" type="button" (click)="addManualHandle()" [disabled]="!manualHandle.trim()">Add</button>
           </div>

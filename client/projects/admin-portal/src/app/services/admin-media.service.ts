@@ -34,6 +34,20 @@ export class AdminMediaService {
     ).then(files => files.map(f => this.normalizeFile(f)));
   }
 
+  /** Load the current default fallback image URL from store settings. */
+  getDefaultImage(): Promise<string | null> {
+    return firstValueFrom(
+      this.api.get<{ config?: { defaultImage?: string } }>('/admin/settings/store'),
+    ).then(r => r?.config?.defaultImage ?? null).catch(() => null);
+  }
+
+  /** Save a media URL as the store-wide default fallback image. */
+  setDefaultImage(url: string): Promise<void> {
+    return firstValueFrom(
+      this.api.patch<unknown>('/admin/settings/store', { config: { defaultImage: url } }),
+    ).then(() => undefined);
+  }
+
   /** Resolve relative /uploads/… URLs so they route through the API proxy. */
   normalizeFile(f: MediaFile): MediaFile {
     return { ...f, preview: f.preview ? this.api.mediaUrl(f.preview) : f.preview };

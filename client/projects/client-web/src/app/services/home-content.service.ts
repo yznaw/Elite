@@ -136,6 +136,6 @@ export class HomeContentService {
     if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
     if (!value.startsWith('/uploads/')) return value;
 
-    return `${this.apiBase.replace(/\/api\/?$/, '')}${value}`;
+    return `${this.apiBase}${value}`;
   }
 }
