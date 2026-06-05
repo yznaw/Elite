@@ -582,6 +582,11 @@ router.post('/bulk-delete', asyncHandler(async (req, res) => {
     const tenant = await ensureDefaultTenant(client);
     await client.query('BEGIN');
 
+    // cart_items has ON DELETE RESTRICT — must be removed before products/variants
+    await client.query(
+      'DELETE FROM cart_items WHERE product_id = ANY($1::uuid[])',
+      [ids],
+    );
     // Remove media links, variants, then products — scoped to tenant
     await client.query(
       'DELETE FROM media_links WHERE product_id = ANY($1::uuid[])',
