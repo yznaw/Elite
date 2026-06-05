@@ -3,14 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Product } from '../models/product.model';
 
-const ALL_PRODUCTS: Product[] = [
-  { id: '1', name: 'Al-Mahmal Oxford',  price: 2800, tag: 'Signature',  leather: 'Camel Nappa',      style: 'Oxford', sizes: [40, 41, 42, 43, 44, 45], image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=85&auto=format&fit=crop' },
-  { id: '2', name: 'Najd Derby',        price: 2200, tag: 'New',        leather: 'Goat Suede',       style: 'Derby',  sizes: [39, 40, 41, 42, 43, 44], image: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=600&q=85&auto=format&fit=crop' },
-  { id: '3', name: 'Hijaz Loafer',      price: 1950, tag: 'Bestseller', leather: 'Calf Leather',     style: 'Loafer', sizes: [40, 41, 42, 43, 44],     image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=600&q=85&auto=format&fit=crop' },
-  { id: '4', name: 'Rub Al Khali Boot', price: 3400, tag: 'Limited',    leather: 'Camel Full-Grain', style: 'Boot',   sizes: [41, 42, 43, 44, 45],     image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=600&q=85&auto=format&fit=crop' },
-  { id: '5', name: 'Medina Mule',       price: 1600, tag: '',           leather: 'Goat Suede',       style: 'Loafer', sizes: [39, 40, 41, 42, 43],     image: 'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=600&q=85&auto=format&fit=crop' },
-  { id: '6', name: 'Quraish Chelsea',   price: 2650, tag: 'New',        leather: 'Calf Leather',     style: 'Boot',   sizes: [40, 41, 42, 43, 44, 45], image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=600&q=85&auto=format&fit=crop' },
-];
+const LOGO_FALLBACK = '/assets/brand/elite-logo-green.png';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -21,12 +14,22 @@ interface ApiResponse<T> {
 @Injectable({ providedIn: 'root' })
 export class ProductsService {
   private readonly http = inject(HttpClient);
-  private readonly _products = signal<Product[]>(ALL_PRODUCTS);
+  private readonly _products = signal<Product[]>([]);
   private readonly apiBase = this.resolveApiBase();
   private loadPromise: Promise<Product[]> | null = null;
+  defaultImage = LOGO_FALLBACK;
 
   constructor() {
-    void this.loadFromApi();
+    void this.loadConfig().then(() => this.loadFromApi());
+  }
+
+  private async loadConfig(): Promise<void> {
+    try {
+      const res = await firstValueFrom(
+        this.http.get<{ success: boolean; data: { defaultImage?: string } }>(`${this.apiBase}/config`),
+      );
+      if (res?.data?.defaultImage) this.defaultImage = res.data.defaultImage;
+    } catch { /* use logo fallback */ }
   }
 
   getAll(): Product[] {
@@ -73,7 +76,7 @@ export class ProductsService {
     const images = Array.isArray(product.images)
       ? product.images.map((image) => this.resolveMediaUrl(image)).filter(Boolean)
       : [];
-    const image = this.resolveMediaUrl(product.image) || images[0] || product.image;
+    const image = this.resolveMediaUrl(product.image) || images[0] || this.defaultImage;
     const colorImages = this.normalizeColorImages(product.colorImages);
     const variants = Array.isArray(product.variants)
       ? product.variants.map((variant) => ({
@@ -112,6 +115,6 @@ export class ProductsService {
     if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
     if (!value.startsWith('/uploads/')) return value;
 
-    return `${this.apiBase.replace(/\/api\/?$/, '')}${value}`;
+    return `${this.apiBase}${value}`; // /api/uploads/… routes through the existing proxy
   }
 }

@@ -167,9 +167,12 @@ interface PendingUpload {
     @if (active(); as m) {
       <ap-media-detail-drawer [media]="m"
         [products]="products()"
+        [defaultImageUrl]="defaultImageUrl()"
+        [settingDefault]="settingDefault()"
         (closed)="active.set(null)"
         (update)="onUpdate($event)"
-        (delete)="onDelete($event)"/>
+        (delete)="onDelete($event)"
+        (setDefault)="setDefaultImage($event)"/>
     }
 
     @if (autoLinking()) {
@@ -355,6 +358,8 @@ export class MediaComponent implements OnInit {
 
   readonly media = signal<MediaFile[]>([]);
   readonly products = signal<Product[]>([]);
+  readonly defaultImageUrl = signal<string | null>(null);
+  readonly settingDefault = signal(false);
   readonly filter = signal<FilterKey>('all');
   readonly active = signal<MediaFile | null>(null);
   readonly autoLinking = signal(false);
@@ -363,6 +368,22 @@ export class MediaComponent implements OnInit {
   readonly cleaningUp = signal(false);
   readonly page = signal(0);
   readonly pageSize = signal(48);
+
+  // ── Default fallback image ───────────────────────────────────────────────
+
+  async setDefaultImage(m: MediaFile): Promise<void> {
+    if (this.settingDefault()) return;
+    this.settingDefault.set(true);
+    try {
+      await this.mediaApi.setDefaultImage(m.preview || '');
+      this.defaultImageUrl.set(m.preview || '');
+      this.toast.success('Default image set', `"${m.name}" will now be used as the product fallback image.`);
+    } catch {
+      this.toast.error('Could not save default image');
+    } finally {
+      this.settingDefault.set(false);
+    }
+  }
 
   // ── Google Drive import ──────────────────────────────────────────────────
   readonly gdriveOpen = signal(false);
@@ -406,6 +427,7 @@ export class MediaComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    void this.mediaApi.getDefaultImage().then(url => this.defaultImageUrl.set(url));
     await this.refresh();
   }
 

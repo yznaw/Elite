@@ -12,7 +12,7 @@ router.get('/store', asyncHandler(async (_req, res) => {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
       `
-        SELECT t.slug, t.name, t.currency, t.timezone, bp.*, ss.*
+        SELECT t.slug, t.name, t.currency, t.timezone, t.config, bp.*, ss.*
         FROM tenants t
         LEFT JOIN brand_profiles bp ON bp.tenant_id = t.id
         LEFT JOIN store_settings ss ON ss.tenant_id = t.id

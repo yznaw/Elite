@@ -28,8 +28,7 @@ interface RefColor {
   sort_order: number;
 }
 
-const FALLBACK_IMAGE =
-  'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=900&q=85&auto=format&fit=crop';
+const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 
 @Component({
   selector: 'cw-product',

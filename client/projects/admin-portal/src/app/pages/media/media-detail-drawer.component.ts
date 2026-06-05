@@ -131,12 +131,44 @@ interface Suggestion {
         </div>
       </div>
 
+      @if (media.kind === 'image') {
+        <div class="default-image-section">
+          @if (isDefault()) {
+            <div class="default-badge">
+              <ap-icon name="check" [size]="12"/> Current default fallback image
+            </div>
+          } @else {
+            <button class="btn btn-outline btn-sm" (click)="setDefault.emit(media)" [disabled]="settingDefault">
+              <ap-icon name="media" [size]="12"/> Set as Default Fallback
+            </button>
+            <div class="muted small" style="margin-top:6px;">Used when a product has no image.</div>
+          }
+        </div>
+      }
+
       <div class="drawer-foot">
         <button class="btn btn-danger" (click)="onDelete()"><ap-icon name="trash" [size]="12"/> Delete</button>
         <button class="btn btn-outline" (click)="closed.emit()">Close</button>
       </div>
     </div>
   `,
+  styles: [`
+    .default-image-section {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-2);
+    }
+    .default-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(2,70,56,.1);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 700;
+    }
+  `],
 })
 export class MediaDetailDrawerComponent {
   @Input({ required: true }) set media(m: MediaFile) {
@@ -146,10 +178,17 @@ export class MediaDetailDrawerComponent {
   get media(): MediaFile { return this._media; }
   private _media!: MediaFile;
   @Input() products: Product[] = [];
+  @Input() defaultImageUrl: string | null = null;
+  @Input() settingDefault = false;
 
   @Output() closed = new EventEmitter<void>();
   @Output() update = new EventEmitter<MediaFile>();
   @Output() delete = new EventEmitter<string>();
+  @Output() setDefault = new EventEmitter<MediaFile>();
+
+  get isDefault(): () => boolean {
+    return () => !!this.defaultImageUrl && !!this._media.preview && this.defaultImageUrl === this._media.preview;
+  }
 
   private readonly confirm = inject(ConfirmService);
 
