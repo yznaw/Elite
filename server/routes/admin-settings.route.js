@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
@@ -151,6 +152,69 @@ router.post('/integrations', asyncHandler(async (req, res) => {
     client.release();
   }
 }));
+
+// ── Team Invitations ─────────────────────────────────────────────────────────
+
+router.get('/invitations', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const result = await client.query(
+      `SELECT i.id, i.email, i.role, i.expires_at, i.created_at,
+              u.full_name AS invited_by_name
+       FROM team_invitations i
+       LEFT JOIN admin_users u ON u.id = i.invited_by
+       WHERE i.tenant_id = $1 AND i.expires_at > NOW()
+       ORDER BY i.created_at DESC`,
+      [tenant.id],
+    );
+    ok(res, result.rows);
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/invitations', asyncHandler(async (req, res) => {
+  const { email, role } = req.body;
+  if (!email) return validationError(res, ['Email is required.']);
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const token     = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const invitedBy = req.session?.userId || null;
+    await client.query(
+      `INSERT INTO team_invitations (tenant_id, email, role, token_hash, invited_by)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (tenant_id, email) DO UPDATE
+       SET role = EXCLUDED.role, token_hash = EXCLUDED.token_hash,
+           invited_by = EXCLUDED.invited_by,
+           expires_at = NOW() + INTERVAL '48 hours',
+           created_at = NOW()`,
+      [tenant.id, email.toLowerCase().trim(), normalizeRole(role), tokenHash, invitedBy],
+    );
+    const inviteLink = `${process.env.ADMIN_ORIGIN || 'http://localhost:4300'}/accept-invite?token=${token}`;
+    created(res, { email, inviteLink }, 'Invitation sent.');
+  } finally {
+    client.release();
+  }
+}));
+
+router.delete('/invitations/:id', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const result = await client.query(
+      'DELETE FROM team_invitations WHERE tenant_id=$1 AND id=$2 RETURNING id',
+      [tenant.id, req.params.id],
+    );
+    if (result.rowCount === 0) return notFound(res, 'Invitation not found.');
+    ok(res, { id: req.params.id }, 'Invitation revoked.');
+  } finally {
+    client.release();
+  }
+}));
+
 
 function initials(name) {
   return String(name || 'User').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || 'U';

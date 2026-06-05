@@ -53,7 +53,7 @@ The Angular workspace (`client/`) contains **two separate applications** in a si
 | **Root Selector** | `<cw-root>` | `<ap-root>` |
 | **Style** | SCSS | SCSS |
 | **Builder** | `@angular-devkit/build-angular:application` | Same |
-| **Output** | `dist/client-web/` | `dist/admin-portal/` |
+| **Output** | `dist/client-web/browser/` | `dist/admin-portal/browser/` |
 | **Strict Mode** | Yes | Yes |
 
 ### The `@shared/*` Path Alias
@@ -179,8 +179,8 @@ npm run build:all    # Builds both Angular apps
 ```
 
 Output:
-- `client/dist/client-web/` → Static files for storefront
-- `client/dist/admin-portal/` → Static files for admin
+- `client/dist/client-web/browser/` → Static files for storefront
+- `client/dist/admin-portal/browser/` → Static files for admin
 
 ### Production Deployment
 
@@ -188,11 +188,11 @@ Both Angular builds produce static files that are served by a web server (Nginx,
 
 ```
                     ┌─────────────────────────────────┐
-                    │           Nginx / CDN            │
+                    │       Nginx HTTPS edge           │
                     │                                  │
-  website.com  ─────┤──► /          → client-web dist  │
+  elitecollections.qa ─► /          → client-web dist  │
                     │                                  │
-  admin.website ────┤──► /          → admin-portal dist│
+  admin.elitecollections.qa ─► /    → admin-portal dist│
                     │                                  │
   */api/*  ─────────┤──► proxy_pass → Express :3000    │
                     └─────────────────────────────────┘
@@ -200,27 +200,20 @@ Both Angular builds produce static files that are served by a web server (Nginx,
 
 ### Example Nginx Config
 
+Nginx terminates HTTPS in production. Express should remain private on `localhost:3000`; see [09 - Nginx HTTPS](./09-nginx-https.md) for the complete Certbot setup.
+
 ```nginx
-# Main website
-server {
-  server_name website.com;
-  root /var/www/elite/client-web;
-  index index.html;
-  location / { try_files $uri $uri/ /index.html; }
+upstream elite_api {
+  server 127.0.0.1:3000;
 }
 
-# Admin subdomain
 server {
-  server_name admin.website.com;
-  root /var/www/elite/admin-portal;
+  listen 80;
+  server_name elitecollections.qa www.elitecollections.qa;
+  root /var/www/elite/client/dist/client-web/browser;
   index index.html;
   location / { try_files $uri $uri/ /index.html; }
-}
-
-# API proxy
-server {
-  server_name website.com admin.website.com;
-  location /api/ { proxy_pass http://localhost:3000; }
+  location /api/ { proxy_pass http://elite_api; }
 }
 ```
 

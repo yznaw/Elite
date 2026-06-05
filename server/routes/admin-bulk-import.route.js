@@ -195,6 +195,7 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
     return res.status(422).json({ success: false, message: 'No CSV file received.' });
   }
 
+  const dryRun  = req.query.dryRun === 'true' || req.query.dryRun === '1';
   const allRows = csvToObjects(req.file.buffer.toString('utf-8'));
   const apiKey  = process.env.GOOGLE_API_KEY || null;
 
@@ -339,16 +340,20 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           );
         }
 
-        await client.query('COMMIT');
+        if (dryRun) {
+          await client.query('ROLLBACK');
+        } else {
+          await client.query('COMMIT');
+        }
 
         const r = {
           name: baseName,
-          productId,
+          productId: dryRun ? null : productId,
           status: wasInserted ? 'created' : 'updated',
           variantsCreated,
           variantsUpdated,
-          imagesUploaded,
-          imagesFailed,
+          imagesUploaded: dryRun ? 0 : imagesUploaded,
+          imagesFailed:   dryRun ? 0 : imagesFailed,
         };
         results.push(r);
         send({ type: 'item', current, total: groups.length, ...r });

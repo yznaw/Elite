@@ -150,8 +150,12 @@ interface FormShape extends StorefrontBlock {
                 <label class="lbl" style="margin:0;">{{ t('storefront.field.products') }}</label>
                 <span class="muted small">{{ form().productIds.length }} {{ t('storefront.field.products.selected') }}</span>
               </div>
+              <div class="inp-search" style="position:relative;margin-bottom:8px;">
+                <input class="inp" [ngModel]="productSearch()" (ngModelChange)="productSearch.set($event)"
+                       placeholder="Search by name or SKU…" style="padding-left:10px;"/>
+              </div>
               <div class="product-picker">
-                @for (p of allProducts; track p.id) {
+                @for (p of filteredProducts(); track p.id) {
                   <button class="product-chip"
                     type="button"
                     [class.selected]="isProductSelected(p.id)"
@@ -385,10 +389,10 @@ interface FormShape extends StorefrontBlock {
 export class SectionDrawerComponent implements OnInit, OnDestroy {
   /** The block being edited. Setter swaps state cleanly. */
   @Input({ required: true }) set block(b: StorefrontBlock) {
-    if (this._currentBlockId === b.id && this.initial) return;
+    if (this._currentBlockId === b.id && this.initial()) return;
     this._currentBlockId = b.id;
-    this.initial = this.normalize(b);
-    this.form.set({ ...this.initial });
+    this.initial.set(this.normalize(b));
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
   }
 
@@ -407,14 +411,23 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
   readonly allProducts = PRODUCTS;
   readonly collections = COLLECTIONS.filter(c => !c.hidden);
 
+  readonly productSearch = signal('');
+  readonly filteredProducts = computed(() => {
+    const q = this.productSearch().toLowerCase().trim();
+    if (!q) return this.allProducts;
+    return this.allProducts.filter(p =>
+      p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q),
+    );
+  });
+
   private _currentBlockId = '';
-  private initial!: FormShape;
+  private readonly initial = signal<FormShape>(this.makeEmptyForm());
 
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly saveState = signal<SaveState>('idle');
   readonly shakeSaveBar = signal(false);
 
-  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
+  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
   private feedbackTimer: number | undefined;
 
@@ -484,7 +497,7 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
     this.saveState.set('saving');
     setTimeout(() => {
       const snapshot = { ...this.form() };
-      this.initial = { ...snapshot };
+      this.initial.set({ ...snapshot });
       this.saveState.set('saved');
       this.toast.success(this.t('storefront.toast.saved.title'), snapshot.title || snapshot.type);
       this.saved.emit(snapshot);
@@ -498,7 +511,7 @@ export class SectionDrawerComponent implements OnInit, OnDestroy {
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
     this.toast.info(this.t('product.toast.discarded.title'), this.t('product.toast.discarded.sub'));
   }

@@ -43,20 +43,21 @@ All pages are lazy-loaded:
 | `/login` | `LoginComponent` | Public — email + password sign-in against `/api/auth/login`. Bounces authed users straight to the return URL. "Forgot password?" link below the form. Sidebar/topbar are hidden on auth routes. |
 | `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
 | `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
-| `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, 3D heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. |
-| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted in localStorage). Search, status quick-filter (All / Active / Hidden), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). **Advanced filter panel**: collection, image status, 3D status, variant count, color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select** with checkbox overlay: Select All, **Set Status** (Active/Hidden) for selection, **Delete** with inline confirm. **New Product** create flow: inline drawer with image gallery (drag-reorder + primary, real multipart upload with per-file progress bar, drag/drop + tap-to-browse), **variants table with color swatch select from `ref_colors`, material select from `ref_materials`, size input with datalist suggestions from `ref_size_sets`**, "Generate sizes" wizard that auto-creates variant rows from a named size set, rich-text descriptions EN & AR, draft auto-save. **Bulk Import** (CSV → products grouped by English Name, each color row → `product_variant`, images from Google Drive, live NDJSON streaming, downloadable CSV report). |
+| `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, 3D heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. **Date Range Filter** (Today / 7 Days / 30 Days / 90 Days) pill-bar above KPIs — all computeds (revenue, new customers, chart data) react to the selected range. Uses `latestDate` from seed data as reference so historical data works correctly. **Low Stock KPI card** — 5th card showing count of variants with stock 1–5 (threshold: ≤5). Clicking the card navigates to `/catalog?stock=low`. Card is always visible (shows 0 when no low-stock items). |
+| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted in localStorage). Search, status quick-filter (All / Active / Hidden / **Low Stock**), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill (with badge showing count) is pre-activated when navigating from the dashboard `?stock=low` query param. **Advanced filter panel**: collection, image status, 3D status, variant count, color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select** with checkbox overlay: Select All, **Set Status** (Active/Hidden) for selection, **Delete** with inline confirm. **Export CSV** button (disabled when filtered list is empty) generates a UTF-8 BOM CSV of the visible product set with columns SKU, Name, Brand, Price, Stock, Status, 3D, Variants. **New Product** create flow: inline drawer with image gallery (drag-reorder + primary, real multipart upload with per-file progress bar, drag/drop + tap-to-browse), **variants table with color swatch select from `ref_colors`, material select from `ref_materials`, size input with datalist suggestions from `ref_size_sets`**, "Generate sizes" wizard that auto-creates variant rows from a named size set, rich-text descriptions EN & AR, draft auto-save. **SEO fields** (meta title, meta description with 160-char counter + red overflow indicator, URL slug with format validation). **Duplicate Product** button in drawer header: creates a hidden copy with auto-incremented SKU (`-COPY`, `-COPY-2`, …), opens the copy immediately. **Bulk Import** (CSV → products grouped by English Name, each color row → `product_variant`, images from Google Drive, live NDJSON streaming, downloadable CSV report) **and Stock Update mode** (2-column SKU/Stock CSV, sends `PATCH /admin/products/bulk-stock`, shows updated/not-found summary). **Dry-Run toggle** in import dialog — sends `?dryRun=true`; server wraps the full pipeline in a transaction that is ROLLBACKed instead of COMMITted, so the preview report is identical to a real import. Results screen shows a "Preview" banner and a "Commit Import" button. **Retry Failed (N)** button in results — reconstructs a CSV from failed rows only and re-runs the upload. **Import History** tab — last 20 imports persisted in `localStorage` (key `elite-admin:import-history`), each entry expandable with per-product detail and a "Download Report" button. |
 | `/reference` | `ReferenceComponent` | Reference data management — **Colors** (name EN/AR + hex, inline color picker, swatch preview), **Materials** (name EN/AR), **Size Charts** (named size sets with comma-editable size arrays). Full CRUD for each, changes immediately available as dropdowns in the product drawer and filters in the catalog. Owner/admin only. |
 | `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image upload (drag/drop + URL paste), drag-to-reorder linked products to control storefront display order |
 | `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, **real multipart upload to `POST /api/admin/media` via drag/drop or tap-to-browse** (per-file thumbnail + progress row, 15 % / 60 % / 100 % … ), 415 / 413 errors surfaced inline, auto-link by SKU, detail drawer. Delete removes the file from storage too. |
 | `/storefront` | `StorefrontComponent` | Section editor with drag & drop, draft → publish, preview |
-| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, full-height drawer with status workflow stepper, tracking number, internal notes & timeline |
+| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, **Date Range filter** (All Time / Today / This Week / This Month / Custom — custom shows `date from/to` inputs). Active date range displayed as a dismissible chip. `clearFilters()` resets date range along with other filters. **CSV export** of the current filtered set (UTF-8 BOM), full-height drawer with status workflow stepper, tracking number, internal notes & timeline, **Print Invoice** button that opens a new browser tab with a fully formatted printable invoice (brand header, shipping address, line-items table, totals, `@media print` styles). |
 | `/customers` | `CustomersComponent` | Customer table/cards, tier filter, **Add Customer** create flow, fully editable detail drawer with real linked-orders history (rows navigate to /orders?id=…) |
 | `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel, top 3D interactions |
-| `/settings` | `SettingsComponent` | Store info, team members, integrations |
+| `/settings` | `SettingsComponent` | Store info (name, currency, timezone, language — `PATCH /api/admin/settings/store`), team members (list, role change, status toggle — `GET/PATCH /api/admin/settings/team/:id`), **Team Invitations** — invite by email + role (`POST /api/admin/settings/invitations`), shows generated invite link in a copy-able input, lists pending (non-expired) invitations with revoke button (`DELETE /api/admin/settings/invitations/:id`). Owner/admin only. |
+| `/accept-invite` | `AcceptInviteComponent` | Public — reads `?token=` query param, validates via `GET /api/invitations/validate`, shows name/password/confirm form. On submit calls `POST /api/invitations/accept`. Redirects to login on success. Invitation token is single-use and expires after 48 h. |
 | `/pos` | `PosComponent` | **Point of Sale** *(planned — not yet built)*. Full-screen dark-theme cashier interface. Touch-optimized product grid, live cart panel, USB + camera barcode scanning, Cash / Card / Split checkout, ESC/POS thermal receipt printing (Bixolon 80mm via WebUSB/TCP), automated cash drawer trigger (RJ12), barcode label generation (Code 128/EAN-13 30×20mm), Park & Resume multi-session carts, offline-first PWA with IndexedDB queue, X Report (mid-shift read), Z Report (end-of-day close with cash float & variance), full/partial returns & refunds, Manager PIN role-based security. Hides sidebar/topbar — renders standalone full-width. See [`docs/pos-system-plan.html`](./pos-system-plan.html) for acceptance criteria. |
 | `**` | — | Redirects to `/dashboard` |
 
-> Every route except `/login`, `/forgot-password`, and `/reset-password` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` will be gated by `roleGuard(['owner','admin','cashier'])` when built. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
+> Every route except `/login`, `/forgot-password`, `/reset-password`, and `/accept-invite` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` will be gated by `roleGuard(['owner','admin','cashier'])` when built. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
 
 ---
 
@@ -83,7 +84,7 @@ Located in `app/shared/`:
 | `AvatarComponent` | `avatar/` | User avatar with initials |
 | `TriggerBadgeComponent` | `trigger-badge/` | Shows who triggered an action (manual vs auto) |
 | `EmptyStateComponent` | `empty-state/` | Empty data state with icon and message |
-| `IconsComponent` | `icons/` | Centralized SVG icon library |
+| `IconsComponent` | `icons/` | Centralized SVG icon library. Available icon names include: `warning` (triangle + exclamation, used for low-stock), `mail` (envelope), `team` (users group), plus all original icons (edit, trash, eye, etc.). |
 | `RichTextComponent` | `rich-text/` | Lightweight `contenteditable` editor with bold/italic/underline/list/link/clear toolbar. Honours `dir` for RTL editing. Used for product descriptions (EN + AR). |
 
 ### Feedback
@@ -127,6 +128,8 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
   - `update(id, partial)` → `Product`
   - `archive(id)` → `{ id }`
   - `bulkDelete(ids[])` → `{ deleted: number }`
+  - `duplicate(id)` → `Product` — calls `POST /admin/products/:id/duplicate`; server creates a hidden copy with auto-incremented SKU
+  - `bulkStockUpdate(updates[])` → `{ updated: number; notFound: string[] }` — calls `PATCH /admin/products/bulk-stock`
 
 ### `AdminCollectionsService`
 
@@ -155,6 +158,20 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 - **Interfaces exported:** `RefColor`, `RefMaterial`, `RefSizeSet`
 - **Methods:** `getColors/createColor/updateColor/deleteColor`, `getMaterials/createMaterial/updateMaterial/deleteMaterial`, `getSizeSets/createSizeSet/updateSizeSet/deleteSizeSet`
 - Changes here are immediately reflected in the product drawer dropdowns and catalog filters.
+
+### `AdminSettingsService`
+
+- **File:** `services/admin-settings.service.ts`
+- **Purpose:** Store settings + team management + team invitations
+- **Methods:**
+  - `getStore()` → `StoreSettingsResponse` — calls `GET /admin/settings/store`
+  - `patchStore(payload)` → `void` — calls `PATCH /admin/settings/store`
+  - `getTeam()` → `TeamMember[]` — calls `GET /admin/settings/team`
+  - `inviteTeam(payload)` → `TeamMember` — calls `POST /admin/settings/team` (legacy; use `sendInvitation` for invite links)
+  - `patchTeam(id, payload)` → `TeamMember` — calls `PATCH /admin/settings/team/:id`
+  - `getInvitations()` → `Invitation[]` — calls `GET /admin/settings/invitations`
+  - `sendInvitation({ email, role })` → `{ email, inviteLink }` — generates token, returns shareable link
+  - `revokeInvitation(id)` → `void` — calls `DELETE /admin/settings/invitations/:id`
 
 ### `StorefrontService`
 
@@ -304,7 +321,7 @@ All models are defined in `app/models/index.ts`:
 
 | Interface | Key Fields | Used By |
 |---|---|---|
-| `Product` | id, name, sku, brand, price, stock, has3d, hidden, image, images[]?, variants[]? | Catalog, Dashboard |
+| `Product` | id, name, sku, brand, price, stock, has3d, hidden, image, images[]?, variants[]?, metaTitle?, metaDesc?, slug? | Catalog, Dashboard |
 | `ProductVariant` | id, sku, size, color, material, price, stock | Product drawer (Variants section) |
 | `MediaFile` | id, name, kind (image/glb), size, linkedTo, preview | Media Library |
 | `Order` | id, date, customer, total, payment, fulfillment, items[], trackingNumber?, timeline[]?, notes[]? | Orders |
@@ -313,6 +330,7 @@ All models are defined in `app/models/index.ts`:
 | `Customer` | id, name, email, orders, ltv, sizePref, notes | Customers |
 | `StorefrontBlock` | id, type, title, visible, config, ctaText, productIds | Storefront Editor |
 | `TeamMember` | id, name, email, role, initials | Settings |
+| `Invitation` | id, email, role, expires_at, created_at, invited_by_name? | Settings — pending invitations |
 | `Integration` | id, name, desc, connected | Settings |
 | `RevenueDay` | day, rev, sessions, conversions | Analytics, Dashboard |
 
@@ -385,6 +403,18 @@ All fonts are self-hosted from `assets/fonts/thmanyah/` (woff2). The Thmanyah fa
 | `.chip` / `.chip.active` | Filter chips |
 | `.save-bar-top` / `.save-bar-top.shake` | Sticky top save banner with shake animation |
 | `.overlay` / `.drawer` | Drawer/modal overlays |
+
+### Mobile Responsiveness
+
+Global responsive rules are in `client/projects/admin-portal/src/styles.scss`:
+
+- **Touch targets:** All `button`, `input`, `select`, `textarea` have a minimum size of 44×44px on mobile (`@media (max-width: 768px)`)
+- **Tables:** `ap-sortable-table` has `overflow-x: auto`; `.tbl` enforces `min-width: 600px` so columns scroll within the container rather than overflowing the page
+- **KPI grid:** 2-col on tablet (≤900px), 1-col on small phones (≤390px)
+- **Catalog top-bar:** wraps to multi-line on ≤768px
+- **Filter panel:** stacks to 1 column on ≤600px
+- **Date range pills (Orders):** wrap on ≤600px
+- **Settings grids (`.grid-2`, `.grid-3`):** stack to 1 column on ≤600px
 
 ---
 
@@ -476,7 +506,7 @@ Each admin section maps to one or more PostgreSQL tables defined in `server/db/m
 | Storefront editor | `storefront_snapshots`, `storefront_blocks`, `storefront_block_products` |
 | Orders · drawer | `orders`, `order_items`, `payments`, `shipments` (tracking number), `order_timeline_entries`, `order_notes` |
 | Customers · drawer | `customers`, `customer_addresses`, `orders` (history join), view `v_customer_order_stats` |
-| Settings · team | `admin_users`, `store_settings`, `integrations`, `audit_events` |
+| Settings · team | `admin_users`, `store_settings`, `integrations`, `audit_events`, `team_invitations` (migration `005_team_invitations.sql`) |
 | Notifications bell | `notifications` |
 
 See [08 – Database & API Implementation](./08-database-api-implementation.md) for the endpoint-to-SQL map and the May 2026 admin-portal → schema mapping.

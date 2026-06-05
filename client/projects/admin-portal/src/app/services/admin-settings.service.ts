@@ -45,4 +45,25 @@ export class AdminSettingsService {
   patchTeam(id: string, payload: { name?: string; email?: string; role?: string; status?: string }): Promise<TeamMember> {
     return firstValueFrom(this.api.patch<TeamMember>(`/admin/settings/team/${id}`, payload));
   }
+
+  getInvitations(): Promise<Invitation[]> {
+    return firstValueFrom(this.api.get<Invitation[]>('/admin/settings/invitations'));
+  }
+
+  sendInvitation(payload: { email: string; role: string }): Promise<{ email: string; inviteLink: string }> {
+    return firstValueFrom(this.api.post<{ email: string; inviteLink: string }>('/admin/settings/invitations', payload));
+  }
+
+  revokeInvitation(id: string): Promise<void> {
+    return firstValueFrom(this.api.delete<unknown>(`/admin/settings/invitations/${id}`)).then(() => undefined);
+  }
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: string;
+  expires_at: string;
+  created_at: string;
+  invited_by_name?: string;
 }

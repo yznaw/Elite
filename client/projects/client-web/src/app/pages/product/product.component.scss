@@ -1135,6 +1135,13 @@ button:focus-visible {
     letter-spacing: 0.08em;
   }
 
+  .size-list .size-btn:hover,
+  .size-list .size-btn.active {
+    border-color: #242424;
+    background: #242424;
+    color: #fff;
+  }
+
   .size-list .size-value {
     text-align: start;
   }

@@ -44,7 +44,7 @@ export class CellTplDirective {
             >
               {{ c.labelKey ? t(c.labelKey) : c.label }}
               @if (!c.noSort) {
-                <span class="sort-i">{{ sortBy() === c.key ? (dir() === 'asc' ? '▲' : '▼') : '↕' }}</span>
+                <span class="sort-i">{{ sortBy() === c.key ? (dir() === 'asc' ? '▲' : '▼') : '↕' }}<span class="sr-only">{{ sortBy() === c.key ? (dir() === 'asc' ? 'ascending' : 'descending') : 'unsorted' }}</span></span>
               }
             </th>
           }
@@ -89,12 +89,14 @@ export class SortableTableComponent {
   templates: Record<string, TemplateRef<{ $implicit: any }>> = {};
 
   private _rows = signal<Row[]>([]);
-  readonly sortBy = signal<string>('');
+  /** null = no active user sort (original order, or defaultSort if provided) */
+  readonly sortBy = signal<string | null>(null);
   readonly dir = signal<'asc' | 'desc'>('desc');
 
   readonly sorted = computed<Row[]>(() => {
     const rows = this._rows();
-    const key = this.sortBy() || this.defaultSort || (this.columns[0]?.key ?? '');
+    const key = this.sortBy() ?? this.defaultSort ?? null;
+    if (!key) return rows;
     const col = this.columns.find((c) => c.key === key);
     if (!col || col.noSort) return rows;
     const direction = this.dir() === 'asc' ? 1 : -1;
@@ -109,13 +111,18 @@ export class SortableTableComponent {
 
   ngOnInit(): void {
     if (this.defaultSort) this.sortBy.set(this.defaultSort);
-    else if (this.columns[0]) this.sortBy.set(this.columns[0].key);
   }
 
   onHeaderClick(c: TableColumn<any>): void {
     if (c.noSort) return;
     if (this.sortBy() === c.key) {
-      this.dir.update((d) => (d === 'asc' ? 'desc' : 'asc'));
+      if (this.dir() === 'desc') {
+        this.dir.set('asc');
+      } else {
+        // third click → clear sort (return to original order)
+        this.sortBy.set(null);
+        this.dir.set('desc');
+      }
     } else {
       this.sortBy.set(c.key);
       this.dir.set('desc');

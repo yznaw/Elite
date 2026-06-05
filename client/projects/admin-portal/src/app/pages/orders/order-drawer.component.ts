@@ -39,9 +39,15 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           </div>
           <div class="card-sub">{{ order().date }} · {{ order().customer }}</div>
         </div>
-        <button class="head-icon-btn" (click)="closed.emit()" [attr.aria-label]="t('common.close')">
-          <ap-icon name="x" [size]="14"/>
-        </button>
+        <div class="head-actions">
+          <button class="head-icon-btn" (click)="printInvoice()" title="Print invoice / packing slip">
+            <ap-icon name="print" [size]="14"/>
+          </button>
+          <span class="head-divider" aria-hidden="true"></span>
+          <button class="head-icon-btn" (click)="closed.emit()" [attr.aria-label]="t('common.close')">
+            <ap-icon name="x" [size]="14"/>
+          </button>
+        </div>
       </div>
 
       <div class="drawer-body">
@@ -225,6 +231,10 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
     .drawer-wide { width: min(640px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
 
+    .head-actions {
+      display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    }
+    .head-divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
     .head-icon-btn {
       width: 32px; height: 32px;
       display: inline-flex; align-items: center; justify-content: center;
@@ -618,6 +628,83 @@ export class OrderDrawerComponent {
 
   timelineLabel(kind: OrderTimelineEntry['kind']): string {
     return TIMELINE_LABEL[kind];
+  }
+
+  printInvoice(): void {
+    const o = this.order();
+    const itemRows = o.items.map(it =>
+      `<tr>
+        <td>${it.n}</td>
+        <td style="text-align:center">EU ${it.s}</td>
+        <td style="text-align:center">${it.q}</td>
+        <td style="text-align:right">${QAR(it.p * it.q)}</td>
+      </tr>`,
+    ).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice ${o.id}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto;}
+    .hd{display:flex;justify-content:space-between;margin-bottom:32px;align-items:flex-start;}
+    .brand{font-size:22px;font-weight:800;letter-spacing:.08em;}
+    .inv-meta{font-size:13px;color:#666;margin-top:4px;}
+    .section{margin-bottom:24px;}
+    .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:6px;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th{text-align:left;padding:8px 10px;border-bottom:2px solid #1a1a1a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+    td{padding:10px;border-bottom:1px solid #e5e5e5;vertical-align:top;}
+    .total-row td{border-top:2px solid #1a1a1a;border-bottom:none;font-weight:700;font-size:15px;}
+    .print-btn{margin-top:24px;padding:8px 18px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;}
+    @media print{.print-btn{display:none;}}
+  </style>
+</head>
+<body>
+  <div class="hd">
+    <div>
+      <div class="brand">ELITE COLLECTION</div>
+      <div class="inv-meta">Invoice ${o.id}</div>
+    </div>
+    <div style="text-align:right;font-size:13px;color:#666;">
+      <div>${o.date}</div>
+      <div style="margin-top:4px;">${o.customer}</div>
+      ${o.customerEmail ? `<div style="margin-top:2px;">${o.customerEmail}</div>` : ''}
+      ${o.customerPhone ? `<div style="margin-top:2px;">${o.customerPhone}</div>` : ''}
+    </div>
+  </div>
+  <div class="section">
+    <div class="label">Shipping Address</div>
+    <div style="font-size:13px;line-height:1.8;">${(o.address || '—').replace(/\n/g, '<br>')}</div>
+  </div>
+  <div class="section">
+    <table>
+      <thead><tr>
+        <th>Product</th>
+        <th style="text-align:center">Size</th>
+        <th style="text-align:center">Qty</th>
+        <th style="text-align:right">Amount</th>
+      </tr></thead>
+      <tbody>${itemRows}</tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="3">Total</td>
+          <td style="text-align:right">${QAR(o.total)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
   }
 
 }

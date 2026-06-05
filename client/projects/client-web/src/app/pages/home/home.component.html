@@ -14,7 +14,12 @@
               <span>{{ activeHeroItem().subtitle }}</span>
             </div>
 
-            <div class="hero-stage">
+            <div
+              class="hero-stage"
+              (pointerdown)="onHeroPointerDown($event)"
+              (pointerup)="onHeroPointerUp($event)"
+              (pointercancel)="onHeroPointerCancel($event)"
+            >
               <button
                 type="button"
                 class="hero-arrow hero-arrow--prev"
@@ -25,11 +30,20 @@
                 <span aria-hidden="true">‹</span>
               </button>
 
-              <figure class="hero-product">
-                <img
-                  [src]="activeHeroItem().imageUrl"
-                  [alt]="activeHeroItem().alt"
-                />
+              <figure
+                class="hero-product"
+                [attr.aria-label]="activeHeroItem().alt"
+              >
+                @for (item of heroItems; track item.id) {
+                  <img
+                    class="hero-product__image"
+                    [class.is-active]="item.id === activeHeroItem().id"
+                    [class.hero-product__image--photo]="item.id === 'white-leather'"
+                    [src]="item.imageUrl"
+                    [alt]="item.alt"
+                    [attr.aria-hidden]="item.id === activeHeroItem().id ? null : 'true'"
+                  />
+                }
               </figure>
 
               <button
@@ -66,7 +80,7 @@
               class="hero-mobile-features"
               aria-label="Product craft details"
             >
-              @for (callout of heroCallouts; track callout.id) {
+              @for (callout of mobileFeatureCards(); track callout.id) {
                 <article class="mobile-feature-card">
                   <img [src]="callout.thumbnail" [alt]="callout.alt" />
                   <div>
@@ -82,8 +96,7 @@
               class="hero-cta"
               (click)="goTo('/collection')"
             >
-              <span>تسوّق المجموعة</span>
-              <span>Shop the Collection</span>
+              <span>{{ heroCtaLabel() }}</span>
             </button>
           </section>
         }

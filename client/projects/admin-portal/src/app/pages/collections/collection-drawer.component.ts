@@ -213,7 +213,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
         <div class="danger-zone mb-24">
           <div style="flex:1;min-width:0;">
-            <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">Delete Collection</div>
+            <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">{{ t('collections.section.danger.title') }}</div>
           </div>
           <button class="btn btn-danger" [disabled]="deleting()" (click)="onDelete()">
             @if (deleting()) {
@@ -377,7 +377,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private readonly productsApi = inject(AdminProductsService);
   readonly t = (k: string): string => this.i18n.t(k);
 
-  private initial!: FormShape;
+  private readonly initial = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false });
   readonly form = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false });
   readonly handleManual = signal(false);
   readonly saveState = signal<SaveState>('idle');
@@ -394,7 +394,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     return idx >= 0 && idx < this._collections().length - 1;
   });
 
-  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
+  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
   get collection(): Collection {
     const list = this._collections();
@@ -421,7 +421,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   get draftKey(): string { return DRAFT_KEY_PREFIX + this._currentId(); }
 
   ngOnInit(): void {
-    if (!this.initial) this.resetForCurrent();
+    this.resetForCurrent();
     void this.loadProducts();
   }
   ngOnDestroy(): void { if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer); }
@@ -439,9 +439,9 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private resetForCurrent(): void {
     const c = this.collection;
     if (!c) return;
-    this.initial = { title: c.title, handle: c.handle || '', description: c.description, imageUrl: c.imageUrl, productIds: [...c.productIds], hidden: c.hidden };
+    this.initial.set({ title: c.title, handle: c.handle || '', description: c.description, imageUrl: c.imageUrl, productIds: [...c.productIds], hidden: c.hidden });
     this.handleManual.set(!!c.handle);
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
     try {
       const raw = localStorage.getItem(this.draftKey);
@@ -456,7 +456,13 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   }
 
   saveLabel(): string {
-    return { idle: 'Save', dirty: 'Unsaved Changes', saving: 'Saving...', saved: 'Saved', error: 'Error' }[this.saveState()];
+    return {
+      idle:   this.t('product.save.idle'),
+      dirty:  this.t('product.save.dirty'),
+      saving: this.t('product.save.saving'),
+      saved:  this.t('product.save.saved'),
+      error:  this.t('product.save.error'),
+    }[this.saveState()];
   }
 
   set<K extends keyof FormShape>(k: K, v: FormShape[K]): void {
@@ -595,7 +601,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
       Object.assign(this.collection, saved);
 
       try { localStorage.removeItem(this.draftKey); } catch {}
-      this.initial = { ...this.form() };
+      this.initial.set({ ...this.form() });
       this.saveState.set('saved');
       this.toast.success(this.t('collections.toast.saved.title'), `${saved.title}`);
       window.setTimeout(() => this.saveState.set('idle'), 1800);
@@ -607,7 +613,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     try { localStorage.removeItem(this.draftKey); } catch {}
     this.saveState.set('idle');
   }
@@ -615,10 +621,10 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   async onDelete(): Promise<void> {
     if (this.deleting()) return;
     const ok = await this.confirm.ask({
-      title: 'Delete Collection?',
-      message: `Are you sure you want to delete "${this.collection.title}"?`,
-      confirmLabel: 'Delete Collection',
-      cancelLabel: 'Cancel',
+      title: this.t('collections.deleteConfirm.title'),
+      message: this.t('collections.deleteConfirm.message') + ` "${this.collection.title}".`,
+      confirmLabel: this.t('collections.deleteConfirm.confirm'),
+      cancelLabel: this.t('common.cancel'),
       variant: 'danger',
     });
     if (!ok) return;

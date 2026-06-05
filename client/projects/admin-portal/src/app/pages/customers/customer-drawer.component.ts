@@ -11,6 +11,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { fulfillmentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
+import { ConfirmService } from '../../services/confirm.service';
 import { ORDERS } from '../../data/mock';
 import { Customer, Order, QAR } from '../../models';
 
@@ -179,6 +180,18 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
                     [placeholder]="t('customerDrawer.field.notes.placeholder')"
                     [ngModel]="form().notes" (ngModelChange)="set('notes', $event)"></textarea>
         </div>
+
+        @if (mode === 'edit') {
+          <div class="danger-zone">
+            <div class="danger-zone-title">{{ t('customerDrawer.section.danger.title') }}</div>
+            <button class="btn btn-danger btn-sm" (click)="onDelete()" [disabled]="deleting()">
+              @if (deleting()) {
+                <ap-spinner [size]="12"/>
+              }
+              {{ t('customerDrawer.deleteConfirm.confirm') }}
+            </button>
+          </div>
+        }
       </div>
     </div>
   `,
@@ -262,6 +275,25 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
       text-align: center;
       background: var(--bg);
     }
+
+    .danger-zone {
+      margin-top: 16px;
+      padding: 16px;
+      background: rgba(239,68,68,.04);
+      border: 1px solid rgba(239,68,68,.2);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .danger-zone-title {
+      font-family: var(--ff-disp);
+      font-size: 14px;
+      color: var(--danger, #ef4444);
+      font-weight: 600;
+    }
   `],
 })
 export class CustomerDrawerComponent implements OnInit {
@@ -269,25 +301,28 @@ export class CustomerDrawerComponent implements OnInit {
   @Input() mode: 'edit' | 'create' = 'edit';
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<Customer>();
+  @Output() deleted = new EventEmitter<Customer>();
   @Output() openOrder = new EventEmitter<Order>();
 
   private readonly toast = inject(ToastService);
   private readonly i18n = inject(I18nService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly t = (k: string): string => this.i18n.t(k);
   readonly QAR = QAR;
   readonly fulfillment = fulfillmentPillKind;
 
-  private initial!: FormShape;
+  private readonly initial = signal<FormShape>(this.makeEmptyForm());
   readonly form = signal<FormShape>(this.makeEmptyForm());
   readonly saveState = signal<SaveState>('idle');
   readonly shakeSaveBar = signal(false);
+  readonly deleting = signal(false);
 
-  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial));
+  readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
   ngOnInit(): void {
-    this.initial = this.makeFormFromCustomer(this.customer);
-    this.form.set({ ...this.initial });
+    this.initial.set(this.makeFormFromCustomer(this.customer));
+    this.form.set({ ...this.initial() });
   }
 
   set<K extends keyof FormShape>(k: K, v: FormShape[K]): void {
@@ -324,7 +359,7 @@ export class CustomerDrawerComponent implements OnInit {
       this.customer.city = f.city;
       this.customer.sizePref = f.sizePref;
       this.customer.notes = f.notes;
-      this.initial = { ...f };
+      this.initial.set({ ...f });
       this.saveState.set('saved');
       const titleKey = this.mode === 'create'
         ? 'customerDrawer.toast.created.title'
@@ -337,7 +372,7 @@ export class CustomerDrawerComponent implements OnInit {
 
   discard(): void {
     if (!this.dirty()) return;
-    this.form.set({ ...this.initial });
+    this.form.set({ ...this.initial() });
     this.saveState.set('idle');
   }
 
@@ -379,4 +414,23 @@ export class CustomerDrawerComponent implements OnInit {
   });
 
   maxSize = (): number => Math.max(...this.sizeStats().map((s) => s.count), 1);
+
+  async onDelete(): Promise<void> {
+    if (this.deleting()) return;
+    const ok = await this.confirm.ask({
+      title: this.t('customerDrawer.deleteConfirm.title'),
+      message: this.t('customerDrawer.deleteConfirm.message') + ` "${this.customer.name}".`,
+      confirmLabel: this.t('customerDrawer.deleteConfirm.confirm'),
+      cancelLabel: this.t('common.cancel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    this.deleting.set(true);
+    try {
+      this.toast.success(this.t('customerDrawer.toast.deleted'), this.customer.name);
+      this.deleted.emit(this.customer);
+    } finally {
+      this.deleting.set(false);
+    }
+  }
 }

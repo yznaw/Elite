@@ -276,7 +276,8 @@ Elite/
 │   │   └── migrations/
 │   │       ├── 001_initial_schema.sql         ← Full schema
 │   │       ├── 002_password_reset_tokens.sql  ← Reset tokens (SHA-256, 30m TTL)
-│   │       └── 003_ref_tables.sql             ← ref_colors, ref_materials, ref_size_sets
+│   │       ├── 003_ref_tables.sql             ← ref_colors, ref_materials, ref_size_sets
+│   │       └── 004_product_seo_fields.sql     ← meta_title, meta_desc columns
 │   ├── middleware/
 │   │   ├── require-auth.js                    ← requireAuth + requireRole helpers
 │   │   └── upload.js                          ← Shared multer config
