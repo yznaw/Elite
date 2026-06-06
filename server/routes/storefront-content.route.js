@@ -1,5 +1,7 @@
 const { Router } = require('express');
 const { asyncHandler, ok, validationError } = require('./lib');
+const db = require('../db/client');
+const { ensureDefaultTenant } = require('../db/tenant');
 
 const HOME_COLLECTION_LIMIT = 3;
 
@@ -97,7 +99,34 @@ const DEFAULT_HOME_CONTENT = {
   },
 };
 
-let homeContent = clone(DEFAULT_HOME_CONTENT);
+let schemaReady = false;
+
+async function ensureColumn(client) {
+  if (schemaReady) return;
+  await client.query(`
+    ALTER TABLE store_settings
+    ADD COLUMN IF NOT EXISTS home_content jsonb
+  `);
+  schemaReady = true;
+}
+
+async function loadContent(client, tenantId) {
+  await ensureColumn(client);
+  const result = await client.query(
+    'SELECT home_content FROM store_settings WHERE tenant_id = $1',
+    [tenantId],
+  );
+  const raw = result.rows[0]?.home_content;
+  return raw ? normalizeContent(raw) : clone(DEFAULT_HOME_CONTENT);
+}
+
+async function saveContent(client, tenantId, content) {
+  await ensureColumn(client);
+  await client.query(
+    'UPDATE store_settings SET home_content = $1 WHERE tenant_id = $2',
+    [JSON.stringify(content), tenantId],
+  );
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -232,8 +261,15 @@ function registerGet(router) {
   router.get(
     '/',
     asyncHandler(async (_req, res) => {
-      res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
-      ok(res, clone(homeContent));
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        const content = await loadContent(client, tenant.id);
+        res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+        ok(res, content);
+      } finally {
+        client.release();
+      }
     }),
   );
 }
@@ -246,16 +282,29 @@ function registerPatch(router) {
       const errors = validateContent(next);
       if (Object.keys(errors).length) return validationError(res, errors);
 
-      homeContent = next;
-      return ok(res, clone(homeContent), 'Home content updated.');
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        await saveContent(client, tenant.id, next);
+        return ok(res, clone(next), 'Home content updated.');
+      } finally {
+        client.release();
+      }
     }),
   );
 
   router.post(
     '/reset',
     asyncHandler(async (_req, res) => {
-      homeContent = clone(DEFAULT_HOME_CONTENT);
-      ok(res, clone(homeContent), 'Home content reset.');
+      const defaults = clone(DEFAULT_HOME_CONTENT);
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        await saveContent(client, tenant.id, defaults);
+        ok(res, defaults, 'Home content reset.');
+      } finally {
+        client.release();
+      }
     }),
   );
 }
