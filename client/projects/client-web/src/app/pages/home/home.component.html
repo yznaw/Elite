@@ -63,7 +63,7 @@
                 <span aria-hidden="true">›</span>
               </button>
 
-              @for (callout of heroCallouts; track callout.id) {
+              @for (callout of mobileFeatureCards(); track callout.id) {
                 <article
                   class="hero-callout"
                   [ngClass]="callout.className"
