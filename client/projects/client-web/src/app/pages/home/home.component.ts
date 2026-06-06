@@ -245,19 +245,20 @@ export class HomeComponent implements OnInit, OnDestroy {
     return target instanceof HTMLElement && target.closest('button') !== null;
   }
 
-  private preloadHeroAssets(): void {
-    const urls = new Set<string>();
-    this.heroItems.forEach((item) => urls.add(item.imageUrl));
-    this.heroCallouts.forEach((callout) => {
-      urls.add(callout.thumbnail);
-      if (callout.whiteThumbnail) urls.add(callout.whiteThumbnail);
-    });
+  toWebp(url: string): string {
+    return url.replace(/\.(png|jpe?g)$/i, '.webp');
+  }
 
-    urls.forEach((url) => {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = url;
-      void image.decode?.().catch(() => undefined);
-    });
+  private preloadHeroAssets(): void {
+    const firstUrl = this.heroItems[0]?.imageUrl;
+    if (!firstUrl) return;
+
+    // Preload the WebP variant of the first hero image (LCP element)
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.type = 'image/webp';
+    link.href = this.toWebp(firstUrl);
+    document.head.appendChild(link);
   }
 }

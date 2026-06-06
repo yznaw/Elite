@@ -34,15 +34,22 @@
                 class="hero-product"
                 [attr.aria-label]="activeHeroItem().alt"
               >
-                @for (item of heroItems; track item.id) {
-                  <img
+                @for (item of heroItems; track item.id; let first = $first) {
+                  <picture
                     class="hero-product__image"
                     [class.is-active]="item.id === activeHeroItem().id"
                     [class.hero-product__image--photo]="item.id === 'white-leather'"
-                    [src]="item.imageUrl"
-                    [alt]="item.alt"
                     [attr.aria-hidden]="item.id === activeHeroItem().id ? null : 'true'"
-                  />
+                  >
+                    <source [srcset]="toWebp(item.imageUrl)" type="image/webp" />
+                    <img
+                      [src]="item.imageUrl"
+                      [alt]="item.alt"
+                      [attr.loading]="first ? 'eager' : 'lazy'"
+                      [attr.fetchpriority]="first ? 'high' : 'low'"
+                      decoding="async"
+                    />
+                  </picture>
                 }
               </figure>
 
@@ -66,7 +73,10 @@
                     ><span></span
                   ></span>
                   <div class="callout-pill">
-                    <img [src]="callout.thumbnail" [alt]="callout.alt" />
+                    <picture>
+                      <source [srcset]="toWebp(callout.thumbnail)" type="image/webp" />
+                      <img [src]="callout.thumbnail" [alt]="callout.alt" loading="lazy" decoding="async" />
+                    </picture>
                     <div>
                       <strong>{{ callout.titleAr }}</strong>
                       <span>{{ callout.subtitleEn }}</span>
@@ -82,7 +92,10 @@
             >
               @for (callout of mobileFeatureCards(); track callout.id) {
                 <article class="mobile-feature-card">
-                  <img [src]="callout.thumbnail" [alt]="callout.alt" />
+                  <picture>
+                    <source [srcset]="toWebp(callout.thumbnail)" type="image/webp" />
+                    <img [src]="callout.thumbnail" [alt]="callout.alt" loading="lazy" decoding="async" />
+                  </picture>
                   <div>
                     <strong>{{ callout.titleAr }}</strong>
                     <span>{{ callout.subtitleEn }}</span>
