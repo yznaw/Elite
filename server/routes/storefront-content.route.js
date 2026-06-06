@@ -232,6 +232,7 @@ function registerGet(router) {
   router.get(
     '/',
     asyncHandler(async (_req, res) => {
+      res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
       ok(res, clone(homeContent));
     }),
   );

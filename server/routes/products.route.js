@@ -5,6 +5,8 @@ const { ensureProductRecommendationsSchema } = require('../db/product-recommenda
 const { createRestockNotification, processRestockNotifications } = require('../lib/restock-notifications');
 
 const router = Router();
+const cardUrl = (alias) => `COALESCE(${alias}.metadata #>> '{imageVariants,card,url}', ${alias}.metadata #>> '{imageVariants,grid,url}', ${alias}.preview_url, ${alias}.storage_url)`;
+const pdpUrl = (alias) => `COALESCE(${alias}.metadata #>> '{imageVariants,pdp,url}', ${alias}.metadata #>> '{imageVariants,grid,url}', ${alias}.preview_url, ${alias}.storage_url)`;
 
 // Empty string means "no image" — clients apply their own logo/placeholder fallback.
 const BUILT_IN_FALLBACK = '';
@@ -32,7 +34,7 @@ const COLOR_IMAGES_SELECT = `
                       linked_variant.color,
                       sku_variant.color
                     ))) AS color_key,
-                    COALESCE(m.preview_url, m.storage_url) AS url,
+                    ${pdpUrl('m')} AS url,
                     CASE
                       WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
                         OR m.metadata ? 'storagePath'
@@ -59,6 +61,25 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   const colors = Array.isArray(row.colors) ? row.colors.filter(Boolean) : [];
   const materials = Array.isArray(row.materials) ? row.materials.filter(Boolean) : [];
   const media = Array.isArray(row.images) ? row.images.filter(Boolean) : [];
+  const imageVariants = Array.isArray(row.image_variants)
+    ? row.image_variants.reduce((map, entry) => {
+      const url = String(entry?.url || '').trim();
+      const variants = entry?.variants && typeof entry.variants === 'object'
+        ? Object.entries(entry.variants).reduce((variantMap, [key, variant]) => {
+          const variantUrl = String(variant?.url || '').trim();
+          if (!variantUrl) return variantMap;
+          variantMap[key] = {
+            url: variantUrl,
+            width: variant.width,
+            mimeType: variant.mimeType,
+          };
+          return variantMap;
+        }, {})
+        : {};
+      if (url) map[url] = variants;
+      return map;
+    }, {})
+    : {};
   const variants = Array.isArray(row.variants)
     ? row.variants
       .filter((variant) => variant && typeof variant === 'object')
@@ -96,6 +117,7 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
     materials,
     image,
     images,
+    imageVariants,
     colorImages,
     variants,
     relatedProductIds: row.related_product_ids || [],
@@ -120,7 +142,25 @@ function variantsSelect() {
           ) AS variants`;
 }
 
+function imageVariantsSelect() {
+  return `
+          COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT jsonb_build_object(
+                'url', ${cardUrl('m')},
+                'storageUrl', m.storage_url,
+                'variants', COALESCE(m.metadata->'imageVariants', '{}'::jsonb)
+              ))
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
+            ),
+            '[]'::jsonb
+          ) AS image_variants`;
+}
+
 router.get('/', async (_req, res, next) => {
+  res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -153,7 +193,7 @@ router.get('/', async (_req, res, next) => {
           ${variantsSelect()},
           COALESCE(
             (
-              SELECT COALESCE(m.preview_url, m.storage_url)
+              SELECT ${cardUrl('m')}
               FROM media_links ml
               JOIN media_assets m ON m.id = ml.media_id
               WHERE ml.product_id = p.id AND ml.role = 'gallery'
@@ -167,10 +207,9 @@ router.get('/', async (_req, res, next) => {
                 ml.sort_order
               LIMIT 1
             ),
-            primary_media.preview_url,
-            primary_media.storage_url,
+            ${cardUrl('primary_media')},
             (
-              SELECT COALESCE(m.preview_url, m.storage_url)
+              SELECT ${cardUrl('m')}
               FROM media_links ml
               JOIN media_assets m ON m.id = ml.media_id
               WHERE ml.product_id = p.id AND ml.role = 'primary'
@@ -185,7 +224,7 @@ router.get('/', async (_req, res, next) => {
                 SELECT DISTINCT ON (url) url, role_rank, sort_order
                 FROM (
                   SELECT
-                    COALESCE(m.preview_url, m.storage_url) AS url,
+                    ${pdpUrl('m')} AS url,
                     CASE
                       WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
                         OR m.metadata ? 'storagePath'
@@ -197,10 +236,10 @@ router.get('/', async (_req, res, next) => {
                   JOIN media_assets m ON m.id = ml.media_id
                   WHERE ml.product_id = p.id AND ml.role = 'gallery'
                   UNION ALL
-                  SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, 2 AS role_rank, 0 AS sort_order
+                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
                   WHERE primary_media.id IS NOT NULL
                   UNION ALL
-                  SELECT COALESCE(m.preview_url, m.storage_url) AS url, 2 AS role_rank, ml.sort_order
+                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
                   FROM media_links ml
                   JOIN media_assets m ON m.id = ml.media_id
                   WHERE ml.product_id = p.id AND ml.role = 'primary'
@@ -212,6 +251,7 @@ router.get('/', async (_req, res, next) => {
             ),
             ARRAY[]::text[]
           ) AS images,
+          ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
@@ -225,7 +265,7 @@ router.get('/', async (_req, res, next) => {
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         WHERE p.tenant_id = $1 AND p.status = 'active'
-        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url
+        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
         ORDER BY p.created_at DESC
       `,
       [tenant.id],
@@ -245,6 +285,7 @@ router.get('/', async (_req, res, next) => {
 });
 
 router.get('/:id', async (req, res, next) => {
+  res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -277,7 +318,7 @@ router.get('/:id', async (req, res, next) => {
           ${variantsSelect()},
           COALESCE(
             (
-              SELECT COALESCE(m.preview_url, m.storage_url)
+              SELECT ${cardUrl('m')}
               FROM media_links ml
               JOIN media_assets m ON m.id = ml.media_id
               WHERE ml.product_id = p.id AND ml.role = 'gallery'
@@ -291,10 +332,9 @@ router.get('/:id', async (req, res, next) => {
                 ml.sort_order
               LIMIT 1
             ),
-            primary_media.preview_url,
-            primary_media.storage_url,
+            ${cardUrl('primary_media')},
             (
-              SELECT COALESCE(m.preview_url, m.storage_url)
+              SELECT ${cardUrl('m')}
               FROM media_links ml
               JOIN media_assets m ON m.id = ml.media_id
               WHERE ml.product_id = p.id AND ml.role = 'primary'
@@ -309,7 +349,7 @@ router.get('/:id', async (req, res, next) => {
                 SELECT DISTINCT ON (url) url, role_rank, sort_order
                 FROM (
                   SELECT
-                    COALESCE(m.preview_url, m.storage_url) AS url,
+                    ${pdpUrl('m')} AS url,
                     CASE
                       WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
                         OR m.metadata ? 'storagePath'
@@ -321,10 +361,10 @@ router.get('/:id', async (req, res, next) => {
                   JOIN media_assets m ON m.id = ml.media_id
                   WHERE ml.product_id = p.id AND ml.role = 'gallery'
                   UNION ALL
-                  SELECT COALESCE(primary_media.preview_url, primary_media.storage_url) AS url, 2 AS role_rank, 0 AS sort_order
+                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
                   WHERE primary_media.id IS NOT NULL
                   UNION ALL
-                  SELECT COALESCE(m.preview_url, m.storage_url) AS url, 2 AS role_rank, ml.sort_order
+                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
                   FROM media_links ml
                   JOIN media_assets m ON m.id = ml.media_id
                   WHERE ml.product_id = p.id AND ml.role = 'primary'
@@ -336,6 +376,7 @@ router.get('/:id', async (req, res, next) => {
             ),
             ARRAY[]::text[]
           ) AS images,
+          ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
@@ -349,7 +390,7 @@ router.get('/:id', async (req, res, next) => {
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status = 'active'
-        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url
+        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
         LIMIT 1
       `,
       [tenant.id, req.params.id],

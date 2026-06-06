@@ -19,7 +19,7 @@
               (click)="selectCollection(collection)"
             >
               @if (collection.imageUrl) {
-                <img [src]="collection.imageUrl" [alt]="collection.title" />
+                <img [src]="collection.imageUrl" [alt]="collection.title" (error)="onImgError($event)" />
               }
               <span>{{ collection.productIds.length }} pieces</span>
               <strong>{{ collection.title }}</strong>
@@ -112,7 +112,16 @@
             </button>
           </div>
 
-          @if (filtered().length === 0) {
+          @if (productsLoading() && !productsLoaded()) {
+            <div class="empty-state">
+              <p>Loading products...</p>
+            </div>
+          } @else if (productsError() && filtered().length === 0) {
+            <div class="empty-state">
+              <p>Products could not be loaded.</p>
+              <button type="button" (click)="retryProducts()">Try again</button>
+            </div>
+          } @else if (filtered().length === 0) {
             <div class="empty-state">
               <p>{{ t("collection.empty") }}</p>
               <button type="button" (click)="clearFilters()">Reset filters</button>
@@ -130,7 +139,11 @@
                     <span class="product-image-wrap">
                       <img
                         [src]="selectedProductImage(p)"
+                        [attr.srcset]="productImageSrcset(p)"
+                        sizes="(min-width: 960px) 25vw, (min-width: 560px) 50vw, 100vw"
                         [alt]="productName(p)"
+                        loading="lazy"
+                        decoding="async"
                         (error)="onImgError($event)"
                       />
                     </span>

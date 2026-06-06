@@ -14,6 +14,15 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const sharp = require('sharp');
+
+const IMAGE_VARIANTS = [
+  { key: 'thumb', width: 240, quality: 74 },
+  { key: 'card', width: 640, quality: 78 },
+  { key: 'grid', width: 900, quality: 80 },
+  { key: 'pdp', width: 1400, quality: 82 },
+  { key: 'zoom', width: 1800, quality: 84 },
+];
 
 class DiskStorage {
   constructor(options = {}) {
@@ -34,13 +43,28 @@ class DiskStorage {
    */
   async save({ buffer, filename, mimeType }) {
     const ext = (path.extname(filename || '') || extFromMime(mimeType) || '').toLowerCase();
-    const slug = `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+    const baseSlug = `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
+    const slug = `${baseSlug}${ext}`;
     const fullPath = path.join(this.uploadsDir, slug);
     await fs.promises.writeFile(fullPath, buffer);
+    const dimensions = isOptimizableImage(mimeType, ext)
+      ? await sharp(buffer, { animated: false }).metadata().then((meta) => ({
+        width: meta.width || null,
+        height: meta.height || null,
+      })).catch(() => ({ width: null, height: null }))
+      : { width: null, height: null };
+    const variants = isOptimizableImage(mimeType, ext)
+      ? await this.createImageVariants({ buffer, baseSlug }).catch(() => ({}))
+      : {};
+
     return {
       url: `${this.publicBase}/${slug}`,
+      previewUrl: variants.card?.url || variants.grid?.url || `${this.publicBase}/${slug}`,
       storagePath: fullPath,
       mimeType: mimeType || mimeFromExt(ext) || 'application/octet-stream',
+      width: dimensions.width,
+      height: dimensions.height,
+      variants,
     };
   }
 
@@ -52,6 +76,56 @@ class DiskStorage {
       if (err.code !== 'ENOENT') throw err;
     }
   }
+
+  async removeMany(storagePaths = []) {
+    await Promise.all(
+      storagePaths
+        .filter(Boolean)
+        .map((storagePath) => this.remove(storagePath).catch(() => undefined)),
+    );
+  }
+
+  async createImageVariants({ buffer, baseSlug }) {
+    const image = sharp(buffer, { animated: false }).rotate();
+    const metadata = await image.metadata();
+    const sourceWidth = metadata.width || 0;
+    const entries = await Promise.all(
+      IMAGE_VARIANTS
+        .filter((variant) => !sourceWidth || sourceWidth >= variant.width * 0.75)
+        .map(async (variant) => {
+          const slug = `${baseSlug}-${variant.key}.webp`;
+          const fullPath = path.join(this.uploadsDir, slug);
+          await sharp(buffer, { animated: false })
+            .rotate()
+            .resize({
+              width: variant.width,
+              withoutEnlargement: true,
+            })
+            .webp({
+              quality: variant.quality,
+              effort: 5,
+            })
+            .toFile(fullPath);
+
+          return [variant.key, {
+            url: `${this.publicBase}/${slug}`,
+            storagePath: fullPath,
+            width: variant.width,
+            mimeType: 'image/webp',
+          }];
+        }),
+    );
+
+    return Object.fromEntries(entries);
+  }
+}
+
+function isOptimizableImage(mime, ext) {
+  const normalizedMime = String(mime || '').toLowerCase();
+  const normalizedExt = String(ext || '').toLowerCase();
+  if (normalizedMime === 'image/gif' || normalizedExt === '.gif') return false;
+  return ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(normalizedMime)
+    || ['.jpg', '.jpeg', '.png', '.webp', '.avif'].includes(normalizedExt);
 }
 
 function extFromMime(mime) {

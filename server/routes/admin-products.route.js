@@ -691,16 +691,21 @@ router.post(
         const inserted = await client.query(
           `
             INSERT INTO media_assets (
-              tenant_id, filename, kind, mime_type, size_bytes,
+              tenant_id, filename, kind, mime_type, size_bytes, width, height,
               storage_url, preview_url, uploaded_by_user_id, metadata
             )
-            VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8::jsonb)
+            VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
             RETURNING id
           `,
           [
             tenant.id, file.originalname, stored.mimeType, file.size,
-            stored.url, stored.url, userId,
-            JSON.stringify({ storagePath: stored.storagePath, originalName: file.originalname }),
+            stored.width, stored.height,
+            stored.url, stored.previewUrl, userId,
+            JSON.stringify({
+              storagePath: stored.storagePath,
+              originalName: file.originalname,
+              imageVariants: stored.variants || {},
+            }),
           ],
         );
         const mediaId = inserted.rows[0].id;

@@ -25,6 +25,7 @@ export interface Product {
   sizes: number[];
   image: string;
   images?: string[];
+  imageVariants?: Record<string, Record<string, { url: string; width?: number; mimeType?: string }>>;
   colorImages?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];

@@ -19,6 +19,7 @@ function mapCollection(row) {
 router.get(
   '/',
   asyncHandler(async (req, res) => {
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 3, 1), 12);
     const client = await db.pool.connect();
 

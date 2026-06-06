@@ -314,10 +314,16 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
                   const stored   = await storage.save({ buffer, filename, mimeType: contentType });
                   const mediaRow = await client.query(
                     `INSERT INTO media_assets
-                       (tenant_id,filename,kind,mime_type,size_bytes,storage_url,preview_url,uploaded_by_user_id,metadata)
-                     VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8::jsonb) RETURNING id`,
-                    [tenant.id, filename, contentType, buffer.length, stored.url, stored.url, userId,
-                     JSON.stringify({ storagePath: stored.storagePath, importedFrom: 'bulk-import', variantSku: row.sku, color: row.color })]
+                       (tenant_id,filename,kind,mime_type,size_bytes,width,height,storage_url,preview_url,uploaded_by_user_id,metadata)
+                     VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8,$9,$10::jsonb) RETURNING id`,
+                    [tenant.id, filename, contentType, buffer.length, stored.width, stored.height, stored.url, stored.previewUrl, userId,
+                     JSON.stringify({
+                       storagePath: stored.storagePath,
+                       importedFrom: 'bulk-import',
+                       variantSku: row.sku,
+                       color: row.color,
+                       imageVariants: stored.variants || {},
+                     })]
                   );
                   const mediaId = mediaRow.rows[0].id;
                   await client.query(

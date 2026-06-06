@@ -22,7 +22,15 @@ function mapMedia(row) {
     preview: row.preview_url || row.storage_url,
     storageUrl: row.storage_url,
     storagePath: row.metadata?.storagePath || null,
+    imageVariants: row.metadata?.imageVariants || {},
   };
+}
+
+async function removeAssetFiles(metadata = {}) {
+  const variantPaths = Object.values(metadata.imageVariants || {})
+    .map((variant) => variant?.storagePath)
+    .filter(Boolean);
+  await storage.removeMany([metadata.storagePath, ...variantPaths]);
 }
 
 function kindFromMime(mime, originalname) {
@@ -92,10 +100,10 @@ router.post(
           const result = await client.query(
             `
               INSERT INTO media_assets (
-                tenant_id, filename, kind, mime_type, size_bytes,
+                tenant_id, filename, kind, mime_type, size_bytes, width, height,
                 storage_url, preview_url, uploaded_by_user_id, metadata
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
               RETURNING *
             `,
             [
@@ -104,10 +112,16 @@ router.post(
               kind,
               stored.mimeType,
               file.size,
+              stored.width,
+              stored.height,
               stored.url,
-              stored.url,
+              stored.previewUrl,
               userId,
-              JSON.stringify({ storagePath: stored.storagePath, originalName: file.originalname }),
+              JSON.stringify({
+                storagePath: stored.storagePath,
+                originalName: file.originalname,
+                imageVariants: stored.variants || {},
+              }),
             ],
           );
           const mediaId = result.rows[0].id;
@@ -218,11 +232,8 @@ router.delete(
       let deleted = 0;
 
       for (const row of lookup.rows) {
-        const storagePath = row.metadata?.storagePath;
         await client.query('DELETE FROM media_assets WHERE tenant_id = $1 AND id = $2', [tenant.id, row.id]);
-        if (storagePath) {
-          await storage.remove(storagePath).catch(() => undefined);
-        }
+        await removeAssetFiles(row.metadata).catch(() => undefined);
         deleted++;
       }
 
@@ -249,12 +260,10 @@ router.delete(
       );
       if (lookup.rowCount === 0) return notFound(res, 'Media asset not found.');
 
-      const storagePath = lookup.rows[0].metadata?.storagePath;
+      const metadata = lookup.rows[0].metadata || {};
       await client.query('DELETE FROM media_assets WHERE tenant_id = $1 AND id = $2', [tenant.id, req.params.id]);
-      if (storagePath) {
-        // Best-effort: a missing file shouldn't fail the API call.
-        await storage.remove(storagePath).catch(() => undefined);
-      }
+      // Best-effort: a missing file shouldn't fail the API call.
+      await removeAssetFiles(metadata).catch(() => undefined);
 
       ok(res, { id: req.params.id }, 'Media asset deleted.');
     } finally {
@@ -465,12 +474,17 @@ router.post(
 
         const result = await client.query(
           `INSERT INTO media_assets
-             (tenant_id, filename, kind, mime_type, size_bytes, storage_url, preview_url, uploaded_by_user_id, metadata)
-           VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
+             (tenant_id, filename, kind, mime_type, size_bytes, width, height, storage_url, preview_url, uploaded_by_user_id, metadata)
+           VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8,$9,$10::jsonb) RETURNING *`,
           [
             tenant.id, filename, contentType, buffer.length,
-            stored.url, stored.url, userId,
-            JSON.stringify({ storagePath: stored.storagePath, gdriveId: file.id }),
+            stored.width, stored.height,
+            stored.url, stored.previewUrl, userId,
+            JSON.stringify({
+              storagePath: stored.storagePath,
+              gdriveId: file.id,
+              imageVariants: stored.variants || {},
+            }),
           ],
         );
 

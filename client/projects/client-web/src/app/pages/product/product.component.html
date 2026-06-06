@@ -3,7 +3,7 @@
     <div class="product-shell">
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <button type="button" (click)="goCollection()">
-          {{ t('product.breadcrumb.collection') }}
+          {{ t("product.breadcrumb.collection") }}
         </button>
         <span>/</span>
         <strong>{{ productName(p) }}</strong>
@@ -15,8 +15,12 @@
             @for (src of gallery(); track src; let i = $index) {
               <img
                 [src]="src"
+                [attr.srcset]="imageSrcset(src, p)"
+                sizes="(min-width: 980px) 58vw, 100vw"
                 [alt]="productName(p)"
                 [class.is-active]="galleryIdx() === i"
+                [attr.fetchpriority]="galleryIdx() === i ? 'high' : null"
+                decoding="async"
                 (error)="onImgError($event)"
               />
             }
@@ -32,7 +36,7 @@
               (click)="toggleWishlist()"
               [attr.aria-label]="t('product.aria.wishlist')"
             >
-              {{ wishlisted() ? '♥' : '♡' }}
+              {{ wishlisted() ? "♥" : "♡" }}
             </button>
 
             @if (gallery().length > 1) {
@@ -63,9 +67,19 @@
                   class="thumb"
                   [class.is-active]="galleryIdx() === i"
                   (click)="setGalleryIdx(i)"
-                  [attr.aria-label]="t('product.aria.viewImage', { index: i + 1 })"
+                  [attr.aria-label]="
+                    t('product.aria.viewImage', { index: i + 1 })
+                  "
                 >
-                  <img [src]="src" alt="" (error)="onImgError($event)" />
+                  <img
+                    [src]="src"
+                    [attr.srcset]="imageSrcset(src, p)"
+                    sizes="96px"
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    (error)="onImgError($event)"
+                  />
                 </button>
               }
             </div>
@@ -74,38 +88,38 @@
 
         <article class="details-panel">
           <h1>{{ productName(p) }}</h1>
-          <p class="descriptor">
-            {{ productLeather(p.leather) }} · {{ t('product.handcraftedSuffix') }}
-          </p>
+          <p class="descriptor">{{ productLeather(p.leather) }}</p>
 
           <div class="price-row">
             <span>{{ price(p.price) }}</span>
-            <small>{{ t('product.dutiesIncluded') }}</small>
           </div>
 
           <p class="description">
-            {{ t('product.descriptionTemplate', { name: productName(p) }) }}
+            {{ t("product.descriptionTemplate", { name: productName(p) }) }}
           </p>
 
-          <dl class="attribute-grid">
+          <!-- <dl class="attribute-grid">
             @for (a of attributes(); track a.key) {
               <div>
                 <dt>{{ t(a.key) }}</dt>
                 <dd>{{ a.value }}</dd>
               </div>
             }
-          </dl>
+          </dl> -->
 
           @if (productColorNames(p).length > 0) {
             <div class="color-section">
               <div class="section-label">
-                <span>{{ t('product.color.label') }}</span>
+                <span>{{ t("product.color.label") }}</span>
                 @if (selectedColor()) {
                   <strong>{{ selectedColor() }}</strong>
                 }
               </div>
 
-              <div class="color-options" [attr.aria-label]="t('product.color.label')">
+              <div
+                class="color-options"
+                [attr.aria-label]="t('product.color.label')"
+              >
                 @for (color of productColorNames(p); track color) {
                   <button
                     type="button"
@@ -128,8 +142,8 @@
           @if (p.sizes && p.sizes.length > 0) {
             <div id="size-section" class="size-section">
               <div class="section-label">
-                <span>{{ t('product.size.label') }}</span>
-                <button type="button">{{ t('product.size.guide') }}</button>
+                <span>{{ t("product.size.label") }}</span>
+                <button type="button">{{ t("product.size.guide") }}</button>
               </div>
 
               <button
@@ -138,8 +152,8 @@
                 (click)="openSizePicker()"
                 [attr.aria-expanded]="sizePickerOpen()"
               >
-                <span>{{ t('product.size.choose') }}</span>
-                <strong>EU {{ selectedSize() ?? '—' }}</strong>
+                <span>{{ t("product.size.choose") }}</span>
+                <strong>EU {{ selectedSize() ?? "—" }}</strong>
               </button>
 
               <div class="size-options">
@@ -154,7 +168,7 @@
                   >
                     <span class="size-value">{{ s }}</span>
                     <span class="size-state" aria-hidden="true">
-                      {{ selectedSize() === s ? '✓' : '' }}
+                      {{ selectedSize() === s ? "✓" : "" }}
                     </span>
                   </button>
                 }
@@ -162,7 +176,12 @@
             </div>
 
             @if (sizePickerOpen()) {
-              <div class="size-sheet" role="dialog" aria-modal="true" [attr.aria-label]="t('product.size.label')">
+              <div
+                class="size-sheet"
+                role="dialog"
+                aria-modal="true"
+                [attr.aria-label]="t('product.size.label')"
+              >
                 <button
                   type="button"
                   class="size-sheet-backdrop"
@@ -172,10 +191,17 @@
                 <div class="size-sheet-panel">
                   <div class="size-sheet-head">
                     <div>
-                      <span>{{ t('product.size.choose') }}</span>
-                      <strong>{{ t('product.size.label') }}</strong>
+                      <span>{{ t("product.size.choose") }}</span>
+                      <strong>{{ t("product.size.label") }}</strong>
                     </div>
-                    <button type="button" class="size-sheet-close" (click)="closeSizePicker()" [attr.aria-label]="t('common.close')">×</button>
+                    <button
+                      type="button"
+                      class="size-sheet-close"
+                      (click)="closeSizePicker()"
+                      [attr.aria-label]="t('common.close')"
+                    >
+                      ×
+                    </button>
                   </div>
                   <div class="size-list">
                     @for (s of p.sizes; track s) {
@@ -188,7 +214,9 @@
                         (click)="selectSize(s)"
                       >
                         <span class="size-value">{{ s }}</span>
-                        <span class="size-state" aria-hidden="true">{{ selectedSize() === s ? '✓' : '' }}</span>
+                        <span class="size-state" aria-hidden="true">{{
+                          selectedSize() === s ? "✓" : ""
+                        }}</span>
                       </button>
                     }
                   </div>
@@ -198,11 +226,23 @@
           }
 
           <div class="qty-row">
-            <span>{{ t('product.qty') }}</span>
+            <span>{{ t("product.qty") }}</span>
             <div class="qty-control">
-              <button type="button" (click)="decQty()" [attr.aria-label]="t('product.aria.decreaseQty')">−</button>
+              <button
+                type="button"
+                (click)="decQty()"
+                [attr.aria-label]="t('product.aria.decreaseQty')"
+              >
+                −
+              </button>
               <strong>{{ qty() }}</strong>
-              <button type="button" (click)="incQty()" [attr.aria-label]="t('product.aria.increaseQty')">+</button>
+              <button
+                type="button"
+                (click)="incQty()"
+                [attr.aria-label]="t('product.aria.increaseQty')"
+              >
+                +
+              </button>
             </div>
           </div>
 
@@ -210,31 +250,44 @@
             @if (selectedSizeInStock()) {
               <button type="button" class="add-cart-btn" (click)="add()">
                 @if (addedFeedback()) {
-                  <span>✓ {{ t('product.cta.added') }}</span>
+                  <span>✓ {{ t("product.cta.added") }}</span>
                 } @else {
-                  <span>{{ t('product.cta.addToCart') }}</span>
+                  <span>{{ t("product.cta.addToCart") }}</span>
                   <small>{{ price(p.price * qty()) }}</small>
                 }
               </button>
               <button type="button" class="buy-now-btn" (click)="buyNow()">
-                <span>{{ t('product.cta.buyNow') }}</span>
+                <span>{{ t("product.cta.buyNow") }}</span>
                 <small>{{ price(p.price * qty()) }}</small>
               </button>
             } @else {
-              <button type="button" class="notify-btn" (click)="openRestockForm()">
-                <span>{{ t('product.restock.notify') }}</span>
-                <small>{{ t('product.restock.size', { size: selectedSize() ?? '—' }) }}</small>
+              <button
+                type="button"
+                class="notify-btn"
+                (click)="openRestockForm()"
+              >
+                <span>{{ t("product.restock.notify") }}</span>
+                <small>{{
+                  t("product.restock.size", { size: selectedSize() ?? "—" })
+                }}</small>
               </button>
             }
           </div>
 
           @if (!selectedSizeInStock()) {
-            <div class="restock-panel" [class.is-open]="restockFormOpen() || restockSubmitted()">
+            <div
+              class="restock-panel"
+              [class.is-open]="restockFormOpen() || restockSubmitted()"
+            >
               @if (restockSubmitted()) {
-                <p class="restock-success">{{ t('product.restock.success') }}</p>
+                <p class="restock-success">
+                  {{ t("product.restock.success") }}
+                </p>
               } @else if (restockFormOpen()) {
                 <form (submit)="submitRestockRequest($event)">
-                  <label for="restock-email">{{ t('product.restock.emailLabel') }}</label>
+                  <label for="restock-email">{{
+                    t("product.restock.emailLabel")
+                  }}</label>
                   <div class="restock-form-row">
                     <input
                       id="restock-email"
@@ -246,7 +299,11 @@
                       required
                     />
                     <button type="submit" [disabled]="restockSubmitting()">
-                      {{ restockSubmitting() ? t('product.restock.sending') : t('product.restock.submit') }}
+                      {{
+                        restockSubmitting()
+                          ? t("product.restock.sending")
+                          : t("product.restock.submit")
+                      }}
                     </button>
                   </div>
                   @if (restockError()) {
@@ -257,20 +314,32 @@
             </div>
           }
 
-          <div class="trust-row">
-            @for (trustKey of ['product.trust.delivery','product.trust.certificate','product.trust.returns']; track trustKey) {
+          <!-- <div class="trust-row">
+            @for (
+              trustKey of [
+                "product.trust.delivery",
+                "product.trust.certificate",
+                "product.trust.returns",
+              ];
+              track trustKey
+            ) {
               <span>✓ {{ t(trustKey) }}</span>
             }
-          </div>
+          </div> -->
 
           <div class="accordion-list">
             @for (acc of accordions; track acc.id) {
               <section>
                 <button type="button" (click)="toggleAccordion(acc.id)">
                   <span>{{ t(acc.titleKey) }}</span>
-                  <strong [class.is-open]="openAccordion() === acc.id">+</strong>
+                  <strong [class.is-open]="openAccordion() === acc.id"
+                    >+</strong
+                  >
                 </button>
-                <div class="accordion-content" [class.open]="openAccordion() === acc.id">
+                <div
+                  class="accordion-content"
+                  [class.open]="openAccordion() === acc.id"
+                >
                   <p>{{ t(acc.contentKey) }}</p>
                 </div>
               </section>
@@ -282,20 +351,34 @@
       @if (recommendedProducts().length > 0) {
         <section class="related-section" aria-labelledby="related-title">
           <div class="related-head">
-            <p>{{ t('product.related.kicker') }}</p>
-            <h2 id="related-title">{{ t('product.related.title') }}</h2>
+            <p>{{ t("product.related.kicker") }}</p>
+            <h2 id="related-title">{{ t("product.related.title") }}</h2>
           </div>
 
           <div class="related-grid">
             @for (item of recommendedProducts(); track item.id) {
               <article class="related-card">
-                <button type="button" class="related-link" (click)="goToProduct(item)">
+                <button
+                  type="button"
+                  class="related-link"
+                  (click)="goToProduct(item)"
+                >
                   <span class="related-image">
-                    <img [src]="item.image" [alt]="productName(item)" (error)="onImgError($event)" />
+                    <img
+                      [src]="item.image"
+                      [attr.srcset]="imageSrcset(item.image, item)"
+                      sizes="(min-width: 900px) 25vw, 50vw"
+                      [alt]="productName(item)"
+                      loading="lazy"
+                      decoding="async"
+                      (error)="onImgError($event)"
+                    />
                   </span>
                   <span class="related-copy">
                     <span class="related-name">{{ productName(item) }}</span>
-                    <span class="related-meta">{{ productLeather(item.leather) }}</span>
+                    <span class="related-meta">{{
+                      productLeather(item.leather)
+                    }}</span>
                     <span class="related-price">{{ price(item.price) }}</span>
                   </span>
                 </button>
@@ -310,19 +393,35 @@
       @if (selectedSizeInStock()) {
         <button type="button" class="add-cart-btn" (click)="add()">
           @if (addedFeedback()) {
-            <ng-container>{{ t('product.sticky.added') }}</ng-container>
+            <ng-container>{{ t("product.sticky.added") }}</ng-container>
           } @else {
-            <ng-container>{{ t('product.sticky.addToCart') }}</ng-container>
+            <ng-container>{{ t("product.sticky.addToCart") }}</ng-container>
           }
         </button>
         <button type="button" class="buy-now-btn" (click)="buyNow()">
-          {{ t('product.sticky.buyNow') }}
+          {{ t("product.sticky.buyNow") }}
         </button>
       } @else {
         <button type="button" class="notify-btn" (click)="openRestockForm()">
-          {{ t('product.restock.notify') }}
+          {{ t("product.restock.notify") }}
         </button>
       }
+    </div>
+  </main>
+} @else {
+  <main class="product-page product-page--state">
+    <div class="product-shell">
+      <section class="product-state" aria-live="polite">
+        @if (productLoading()) {
+          <p>Loading product...</p>
+        } @else {
+          <p>{{ productError() || "Product not found." }}</p>
+          <div class="product-state__actions">
+            <button type="button" (click)="retryProduct()">Try again</button>
+            <button type="button" (click)="goCollection()">Back to collection</button>
+          </div>
+        }
+      </section>
     </div>
   </main>
 }

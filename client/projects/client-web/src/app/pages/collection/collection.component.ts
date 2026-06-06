@@ -8,6 +8,7 @@ import { ProductsService } from '../../services/products.service';
 import { Product } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
 import { CartService } from '../../services/cart.service';
+import { ReferenceDataService } from '../../services/reference-data.service';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
@@ -54,14 +55,6 @@ interface StorefrontCollection {
   productIds: string[];
 }
 
-interface RefColor {
-  id: string;
-  name_en: string;
-  name_ar: string;
-  hex: string;
-  sort_order: number;
-}
-
 @Component({
   selector: 'cw-collection',
   standalone: true,
@@ -76,6 +69,7 @@ export class CollectionComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly i18n = inject(I18nService);
   private readonly cart = inject(CartService);
+  private readonly referenceData = inject(ReferenceDataService);
   private readonly apiBase = this.resolveApiBase();
   private addedTimer: number | undefined;
 
@@ -85,8 +79,11 @@ export class CollectionComponent implements OnInit {
   readonly addedProductId = signal<string | null>(null);
   readonly collections = signal<StorefrontCollection[]>([]);
   readonly collectionsLoaded = signal(false);
+  readonly productsLoading = this.products.loading;
+  readonly productsLoaded = this.products.loaded;
+  readonly productsError = this.products.error;
   readonly activeCollectionKey = signal<string | null>(null);
-  readonly colorHexByName = signal<Record<string, string>>({});
+  readonly colorHexByName = this.referenceData.colorHexByName;
   readonly filtersOpen = signal(false);
   readonly selectedSizes = signal<Record<string, number>>({});
   readonly selectedColors = signal<Record<string, string>>({});
@@ -169,9 +166,9 @@ export class CollectionComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    void this.products.refresh();
+    void this.products.ensureLoaded();
     void this.loadCollections();
-    void this.loadReferenceColors();
+    void this.referenceData.ensureColors();
     this.route.paramMap.subscribe((params) => {
       this.activeCollectionKey.set(params.get('collection'));
       this.selectedFilters.set(this.emptySelectedFilters());
@@ -248,6 +245,10 @@ export class CollectionComponent implements OnInit {
     return this.productImageForColor(product, selectedColor) || product.image;
   }
 
+  productImageSrcset(product: Product): string | null {
+    return this.srcsetFor(this.selectedProductImage(product), product);
+  }
+
   productColorNames(product: Product): string[] {
     return this.productColors(product);
   }
@@ -278,6 +279,10 @@ export class CollectionComponent implements OnInit {
     this.selectedFilters.set(this.emptySelectedFilters());
     this.sort.set('Featured');
     this.filtersOpen.set(false);
+  }
+
+  retryProducts(): void {
+    void this.products.refresh();
   }
 
   showAllCollections(): void {
@@ -436,6 +441,19 @@ export class CollectionComponent implements OnInit {
     return colorIndex >= 0 && images.length >= colors.length ? images[colorIndex] || null : null;
   }
 
+  private srcsetFor(src: string, product: Product): string | null {
+    const variants = product.imageVariants?.[src];
+    if (!variants) return null;
+
+    const srcset = ['thumb', 'card', 'grid', 'pdp']
+      .map((key) => variants[key])
+      .filter((variant): variant is { url: string; width?: number } => !!variant?.url && !!variant?.width)
+      .map((variant) => `${variant.url} ${variant.width}w`)
+      .join(', ');
+
+    return srcset || null;
+  }
+
   private colorKey(value: string): string {
     return String(value || '').trim().toLowerCase();
   }
@@ -486,28 +504,15 @@ export class CollectionComponent implements OnInit {
     }
   }
 
-  private async loadReferenceColors(): Promise<void> {
-    try {
-      const res = await firstValueFrom(
-        this.http.get<ApiResponse<RefColor[]>>(`${this.apiBase}/ref/colors`),
-      );
-      const colors = Array.isArray(res.data) ? res.data : [];
-      this.colorHexByName.set(colors.reduce<Record<string, string>>((map, color) => {
-        const name = String(color.name_en || '').trim().toLowerCase();
-        const hex = String(color.hex || '').trim();
-        if (name && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex)) {
-          map[name] = hex;
-        }
-        return map;
-      }, {}));
-    } catch {
-      this.colorHexByName.set({});
-    }
-  }
-
   private resolveApiBase(): string {
     const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isLocal = hostname === 'localhost'
+      || hostname === '127.0.0.1'
+      || hostname === '::1'
+      || hostname === '[::1]'
+      || /^10\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
     return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
   }
 

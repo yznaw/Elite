@@ -6,6 +6,7 @@ const { asyncHandler, ok } = require('./lib');
 const router = Router();
 
 router.get('/colors', asyncHandler(async (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
   const tenant = await ensureDefaultTenant(db);
   const { rows } = await db.query(
     `SELECT id, name_en, name_ar, hex, sort_order

@@ -7,6 +7,7 @@ import { CartService } from '../../services/cart.service';
 import { ProductsService } from '../../services/products.service';
 import { Product } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
+import { ReferenceDataService } from '../../services/reference-data.service';
 
 interface Accordion {
   id: string;
@@ -18,14 +19,6 @@ interface ApiResponse<T> {
   success: boolean;
   data: T;
   message?: string;
-}
-
-interface RefColor {
-  id: string;
-  name_en: string;
-  name_ar: string;
-  hex: string;
-  sort_order: number;
 }
 
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
@@ -44,6 +37,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly cart = inject(CartService);
   private readonly productsSvc = inject(ProductsService);
   private readonly i18n = inject(I18nService);
+  private readonly referenceData = inject(ReferenceDataService);
   private readonly apiBase = this.resolveApiBase();
 
   private feedbackTimer: number | undefined;
@@ -67,10 +61,12 @@ export class ProductComponent implements OnInit, OnDestroy {
   ];
 
   readonly product = signal<Product | null>(null);
+  readonly productLoading = signal(true);
+  readonly productError = signal('');
   readonly galleryIdx = signal(0);
   readonly selectedSize = signal<number | null>(null);
   readonly selectedColor = signal<string | null>(null);
-  readonly colorHexByName = signal<Record<string, string>>({});
+  readonly colorHexByName = this.referenceData.colorHexByName;
   readonly openAccordion = signal<string | null>(null);
   readonly addedFeedback = signal(false);
   readonly wishlisted = signal(false);
@@ -133,18 +129,27 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
   readonly productTag = (value: string): string => this.i18n.productTag(value);
 
-  async ngOnInit(): Promise<void> {
+  async ngOnInit(force = false): Promise<void> {
     const idParam = this.route.snapshot.paramMap.get('id');
-    await this.productsSvc.refresh();
+    this.productLoading.set(true);
+    this.productError.set('');
+    this.product.set(null);
+    await (force ? this.productsSvc.refresh() : this.productsSvc.ensureLoaded());
     const p = idParam ? this.productsSvc.getById(idParam) : undefined;
-    const nextProduct = p ?? this.productsSvc.getAll()[0];
+    const nextProduct = p ?? (idParam ? undefined : this.productsSvc.getAll()[0]);
+    if (!nextProduct) {
+      this.productError.set(this.productsSvc.error() || 'Product not found.');
+      this.productLoading.set(false);
+      return;
+    }
     this.product.set(nextProduct);
     this.galleryIdx.set(0);
     this.selectedSize.set(nextProduct?.sizes[0] ?? null);
     this.selectedColor.set(null);
     this.sizePickerOpen.set(false);
     this.resetRestockForm();
-    void this.loadReferenceColors();
+    void this.referenceData.ensureColors();
+    this.productLoading.set(false);
   }
 
   ngOnDestroy(): void {
@@ -153,6 +158,10 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   goCollection(): void {
     void this.router.navigate(['/collection']);
+  }
+
+  retryProduct(): void {
+    void this.ngOnInit(true);
   }
 
   goToProduct(nextProduct: Product): void {
@@ -260,6 +269,19 @@ export class ProductComponent implements OnInit, OnDestroy {
     return this.colorHexByName()[value.toLowerCase()] ?? '#d8d2c8';
   }
 
+  imageSrcset(src: string, product: Product): string | null {
+    const variants = product.imageVariants?.[src];
+    if (!variants) return null;
+
+    const srcset = ['thumb', 'card', 'grid', 'pdp', 'zoom']
+      .map((key) => variants[key])
+      .filter((variant): variant is { url: string; width?: number } => !!variant?.url && !!variant?.width)
+      .map((variant) => `${variant.url} ${variant.width}w`)
+      .join(', ');
+
+    return srcset || null;
+  }
+
   sizeInStock(product: Product, size: number): boolean {
     const variants = product.variants || [];
     if (variants.length === 0) return true;
@@ -359,28 +381,15 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.restockError.set('');
   }
 
-  private async loadReferenceColors(): Promise<void> {
-    try {
-      const res = await firstValueFrom(
-        this.http.get<ApiResponse<RefColor[]>>(`${this.apiBase}/ref/colors`),
-      );
-      const colors = Array.isArray(res.data) ? res.data : [];
-      this.colorHexByName.set(colors.reduce<Record<string, string>>((map, color) => {
-        const name = String(color.name_en || '').trim().toLowerCase();
-        const hex = String(color.hex || '').trim();
-        if (name && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex)) {
-          map[name] = hex;
-        }
-        return map;
-      }, {}));
-    } catch {
-      this.colorHexByName.set({});
-    }
-  }
-
   private resolveApiBase(): string {
     const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isLocal = hostname === 'localhost'
+      || hostname === '127.0.0.1'
+      || hostname === '::1'
+      || hostname === '[::1]'
+      || /^10\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
     return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
   }
 }

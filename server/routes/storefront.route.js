@@ -77,6 +77,7 @@ async function loadSnapshot(client, tenantId, status) {
 router.get(
   '/published',
   asyncHandler(async (_req, res) => {
+    res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
     const client = await db.pool.connect();
 
     try {

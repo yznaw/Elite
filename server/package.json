@@ -8,7 +8,8 @@
     "dev": "nodemon index.js",
     "db:migrate": "psql \"$DATABASE_URL\" -f db/migrations/001_initial_schema.sql",
     "db:seed": "node db/seed.js",
-    "db:seed:admins": "node db/seed-admins.js"
+    "db:seed:admins": "node db/seed-admins.js",
+    "media:backfill-variants": "node scripts/backfill-image-variants.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -20,7 +21,8 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.10",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

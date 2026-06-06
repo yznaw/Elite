@@ -15,9 +15,18 @@ interface ApiResponse<T> {
 export class ProductsService {
   private readonly http = inject(HttpClient);
   private readonly _products = signal<Product[]>([]);
+  private readonly _loading = signal(false);
+  private readonly _loaded = signal(false);
+  private readonly _error = signal<string | null>(null);
   private readonly apiBase = this.resolveApiBase();
+  private readonly cacheMs = 60_000;
   private loadPromise: Promise<Product[]> | null = null;
+  private loadedAt = 0;
   defaultImage = LOGO_FALLBACK;
+  readonly products = this._products.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly loaded = this._loaded.asReadonly();
+  readonly error = this._error.asReadonly();
 
   constructor() {
     void this.loadConfig().then(() => this.loadFromApi());
@@ -45,6 +54,13 @@ export class ProductsService {
   }
 
   async ensureLoaded(): Promise<Product[]> {
+    if (this._products().length > 0) {
+      if (Date.now() - this.loadedAt > this.cacheMs && !this._loading()) {
+        void this.loadFromApi(true);
+      }
+      return this._products();
+    }
+
     return this.loadFromApi();
   }
 
@@ -57,6 +73,9 @@ export class ProductsService {
     if (this.loadPromise) return this.loadPromise;
 
     const url = force ? `${this.apiBase}/products?t=${Date.now()}` : `${this.apiBase}/products`;
+    let failed = false;
+    this._loading.set(true);
+    this._error.set(null);
 
     this.loadPromise = firstValueFrom(
       this.http.get<ApiResponse<Product[]>>(url),
@@ -65,9 +84,19 @@ export class ProductsService {
         if (Array.isArray(res.data) && res.data.length > 0) {
           this._products.set(res.data.map((product) => this.normalizeProductImages(product)));
         }
+        this.loadedAt = Date.now();
         return this._products();
       })
-      .catch(() => this._products());
+      .catch(() => {
+        failed = true;
+        this._error.set('Products could not be loaded.');
+        return this._products();
+      })
+      .finally(() => {
+        this._loaded.set(true);
+        this._loading.set(false);
+        if (failed) this.loadPromise = null;
+      });
 
     return this.loadPromise;
   }
@@ -78,6 +107,7 @@ export class ProductsService {
       : [];
     const image = this.resolveMediaUrl(product.image) || images[0] || this.defaultImage;
     const colorImages = this.normalizeColorImages(product.colorImages);
+    const imageVariants = this.normalizeImageVariants(product.imageVariants);
     const variants = Array.isArray(product.variants)
       ? product.variants.map((variant) => ({
         ...variant,
@@ -90,6 +120,7 @@ export class ProductsService {
       ...product,
       image,
       images: images.length ? [...new Set([image, ...images])] : product.images,
+      imageVariants: Object.keys(imageVariants).length ? imageVariants : undefined,
       colorImages: Object.keys(colorImages).length ? colorImages : undefined,
       variants,
     };
@@ -104,9 +135,42 @@ export class ProductsService {
     }, {});
   }
 
+  private normalizeImageVariants(imageVariants: Product['imageVariants']): NonNullable<Product['imageVariants']> {
+    return Object.entries(imageVariants || {}).reduce<NonNullable<Product['imageVariants']>>((map, [source, variants]) => {
+      const sourceUrl = this.resolveMediaUrl(source);
+      const normalizedVariants = Object.entries(variants || {}).reduce<Record<string, { url: string; width?: number; mimeType?: string }>>(
+        (variantMap, [key, value]) => {
+          const url = this.resolveMediaUrl(value?.url);
+          if (!url) return variantMap;
+          variantMap[key] = {
+            ...value,
+            url,
+          };
+          return variantMap;
+        },
+        {},
+      );
+
+      if (sourceUrl && Object.keys(normalizedVariants).length > 0) {
+        map[sourceUrl] = normalizedVariants;
+        Object.values(normalizedVariants).forEach((variant) => {
+          map[variant.url] = normalizedVariants;
+        });
+      }
+
+      return map;
+    }, {});
+  }
+
   private resolveApiBase(): string {
     const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isLocal = hostname === 'localhost'
+      || hostname === '127.0.0.1'
+      || hostname === '::1'
+      || hostname === '[::1]'
+      || /^10\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
     return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
   }
 

@@ -11,6 +11,7 @@ const router = Router();
  * Returns only safe, non-sensitive fields from tenant config.
  */
 router.get('/', asyncHandler(async (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);

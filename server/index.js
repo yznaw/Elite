@@ -19,9 +19,26 @@ const PORT = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
 // ─── Allowed Origins ────────────────────────────────────────────────────────
-const allowedOrigins = process.env.CORS_ORIGINS
+const configuredOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
-  : ['http://localhost:4200', 'http://localhost:4300'];
+  : [];
+const defaultAllowedOrigins = ['http://localhost:4200', 'http://localhost:4300'];
+
+function isAllowedOrigin(origin) {
+  if (configuredOrigins.length > 0) return configuredOrigins.includes(origin);
+  if (defaultAllowedOrigins.includes(origin)) return true;
+  if (isProd) return false;
+
+  try {
+    const { hostname } = new URL(origin);
+    return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)
+      || /^10\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+  } catch {
+    return false;
+  }
+}
 
 // Behind a proxy/load-balancer the secure-cookie check needs trust-proxy.
 if (isProd) app.set('trust proxy', 1);
@@ -31,7 +48,7 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. curl, Postman)
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked: origin ${origin} not allowed`));
@@ -74,7 +91,7 @@ app.use(
 // ─── Static uploads ──────────────────────────────────────────────────────────
 // Served at both /uploads/ (legacy, direct host access) AND /api/uploads/
 // (via the /api proxy so admin.example.com/api/uploads/… always resolves).
-const staticOpts = { maxAge: '7d', immutable: true, fallthrough: false };
+const staticOpts = { maxAge: '1y', immutable: true, fallthrough: false };
 app.use(uploadsPublicBase, express.static(uploadsDir, staticOpts));
 app.use('/api/uploads', express.static(uploadsDir, staticOpts));
 
