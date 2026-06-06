@@ -45,6 +45,12 @@ function validateProduct(body) {
 }
 
 async function replaceVariants(client, tenantId, productId, variants) {
+  // cart_items.variant_id is ON DELETE RESTRICT — null it out before deleting variants
+  // so existing cart items aren't lost (they keep the product, just lose the variant ref)
+  await client.query(
+    'UPDATE cart_items SET variant_id = NULL WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)',
+    [productId],
+  );
   await client.query('DELETE FROM product_variants WHERE product_id = $1', [productId]);
 
   for (const [index, variant] of variants.entries()) {
@@ -210,6 +216,9 @@ function mapAdminProduct(row) {
     metaDesc: row.meta_desc || '',
     slug: row.slug || '',
     relatedProductIds: row.related_product_ids || [],
+    metaTitle: row.meta_title || '',
+    metaDesc: row.meta_desc || '',
+    slug: row.slug || '',
   };
 }
 
@@ -582,6 +591,11 @@ router.post('/bulk-delete', asyncHandler(async (req, res) => {
     const tenant = await ensureDefaultTenant(client);
     await client.query('BEGIN');
 
+    // cart_items has ON DELETE RESTRICT — must be removed before products/variants
+    await client.query(
+      'DELETE FROM cart_items WHERE product_id = ANY($1::uuid[])',
+      [ids],
+    );
     // Remove media links, variants, then products — scoped to tenant
     await client.query(
       'DELETE FROM media_links WHERE product_id = ANY($1::uuid[])',

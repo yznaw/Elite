@@ -10,8 +10,7 @@ import { I18nService } from '../../services/i18n.service';
 import { CartService } from '../../services/cart.service';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
-const FALLBACK_IMAGE =
-  'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&q=85&auto=format&fit=crop';
+const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 const FILTER_TITLES = {
   category: 'Categories',
   price: 'Price',
@@ -517,6 +516,6 @@ export class CollectionComponent implements OnInit {
     if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
     if (!value.startsWith('/uploads/')) return value;
 
-    return `${this.apiBase.replace(/\/api\/?$/, '')}${value}`;
+    return `${this.apiBase}${value}`;
   }
 }

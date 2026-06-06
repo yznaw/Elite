@@ -15,6 +15,7 @@ import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
+import { AdminMediaService } from '../../services/admin-media.service';
 import { StorageService } from '../../services/storage.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
 
@@ -461,6 +462,9 @@ function readPreview(file: File): Promise<string> {
               <ap-icon name="upload" [size]="12"/> {{ t('product.gallery.upload') }}
               <input type="file" multiple accept="image/*" hidden (change)="onUploadImages($event)"/>
             </label>
+            <button class="btn btn-outline btn-sm" type="button" (click)="openMediaPicker()">
+              <ap-icon name="media" [size]="12"/> Pick from Media
+            </button>
             <button class="btn btn-outline btn-sm" type="button" (click)="addImageUrl()">
               <ap-icon name="link" [size]="12"/> {{ t('product.gallery.addUrl') }}
             </button>
@@ -608,6 +612,55 @@ function readPreview(file: File): Promise<string> {
         </div>
       </div>
     </div>
+
+    <!-- ── Media Picker Modal ── -->
+    @if (mediaPicker()) {
+      <div class="overlay" style="z-index:260;" (click)="mediaPicker.set(false)"></div>
+      <div class="media-pick-panel" style="z-index:270;">
+        <div class="mpp-head">
+          <div>
+            <p class="mpp-eyebrow">Media Library</p>
+            <div class="card-title">Select images to add</div>
+          </div>
+          <button class="x-btn" type="button" (click)="mediaPicker.set(false)"><ap-icon name="x" [size]="14"/></button>
+        </div>
+        <div class="mpp-search">
+          <ap-icon name="search" [size]="13"/>
+          <input class="inp" placeholder="Search by filename…"
+                 [ngModel]="mediaSearch()" (ngModelChange)="mediaSearch.set($event)"/>
+        </div>
+        <div class="mpp-body">
+          @if (mediaLoading()) {
+            <div class="mpp-state"><ap-spinner [size]="20"/> Loading media…</div>
+          } @else if (filteredMediaFiles().length === 0) {
+            <div class="mpp-state">No images found in your media library.</div>
+          } @else {
+            <div class="mpp-grid">
+              @for (f of filteredMediaFiles(); track f.id) {
+                <button type="button" class="mpp-item"
+                        [class.picked]="mediaSelected().has(f.preview || '')"
+                        (click)="toggleMediaSelect(f.preview || '')">
+                  <img [src]="f.preview" [alt]="f.name"/>
+                  @if (mediaSelected().has(f.preview || '')) {
+                    <div class="mpp-check"><ap-icon name="check" [size]="12"/></div>
+                  }
+                  <span class="mpp-name">{{ f.name }}</span>
+                </button>
+              }
+            </div>
+          }
+        </div>
+        <div class="drawer-foot">
+          <span class="muted small">{{ mediaSelected().size }} selected</span>
+          <div class="row gap-sm">
+            <button class="btn btn-outline" type="button" (click)="mediaPicker.set(false)">Cancel</button>
+            <button class="btn btn-primary" type="button" [disabled]="mediaSelected().size === 0" (click)="applyMediaSelection()">
+              Add {{ mediaSelected().size > 0 ? mediaSelected().size : '' }} Image{{ mediaSelected().size !== 1 ? 's' : '' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     /* Wider drawer for the editor — full screen on phones */
@@ -692,6 +745,102 @@ function readPreview(file: File): Promise<string> {
     }
 
 
+
+    /* ── Media Picker Panel ── */
+    .media-pick-panel {
+      position: fixed;
+      inset-inline-end: 0;
+      top: 0;
+      bottom: 0;
+      width: min(540px, 100vw);
+      background: var(--surface);
+      border-inline-start: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      box-shadow: -8px 0 32px rgba(0,0,0,.2);
+    }
+    .mpp-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid var(--border-2);
+    }
+    .mpp-eyebrow {
+      margin: 0 0 4px;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .mpp-search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-2);
+      background: var(--bg);
+    }
+    .mpp-search ap-icon { color: var(--muted); flex-shrink: 0; }
+    .mpp-search .inp { border: none; background: transparent; flex: 1; padding: 0; }
+    .mpp-search .inp:focus { outline: none; box-shadow: none; }
+    .mpp-body { flex: 1; overflow-y: auto; padding: 14px; }
+    .mpp-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 48px 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .mpp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .mpp-item {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      background: var(--bg);
+      padding: 0;
+      cursor: pointer;
+      overflow: hidden;
+      transition: border-color .13s, transform .13s;
+    }
+    .mpp-item:hover { border-color: var(--border); transform: scale(1.02); }
+    .mpp-item.picked { border-color: var(--gold); }
+    .mpp-item img { width: 100%; height: 110px; object-fit: cover; display: block; }
+    .mpp-check {
+      position: absolute;
+      top: 6px;
+      inset-inline-end: 6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--gold);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,.3);
+    }
+    .mpp-name {
+      padding: 0 8px 8px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     /* Image Gallery */
     .gallery-drop {
@@ -1038,6 +1187,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly refApi = inject(AdminRefService);
   private readonly uploads = inject(MediaUploadService);
+  private readonly mediaApi = inject(AdminMediaService);
   private readonly storage = inject(StorageService);
 
   readonly refColors   = signal<RefColor[]>([]);
@@ -1052,6 +1202,20 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly draftRestoredAt = signal<string | null>(null);
   readonly saveState = signal<SaveState>('idle');
   readonly shakeSaveBar = signal(false);
+
+  // ── Media picker ──────────────────────────────────────────────────────────
+  readonly mediaPicker = signal(false);
+  readonly mediaFiles = signal<import('../../models').MediaFile[]>([]);
+  readonly mediaLoading = signal(false);
+  readonly mediaSearch = signal('');
+  readonly mediaSelected = signal(new Set<string>());
+
+  readonly filteredMediaFiles = computed(() => {
+    const s = this.mediaSearch().toLowerCase();
+    return this.mediaFiles().filter(f =>
+      f.kind === 'image' && (!s || f.name.toLowerCase().includes(s)),
+    );
+  });
   readonly lastSavedAt = signal<string | null>(null);
   readonly syncing = signal(false);
   readonly deleting = signal(false);
@@ -1190,6 +1354,42 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (url && url.trim()) {
       this.set('images', [...this.form().images, url.trim()]);
     }
+  }
+
+  async openMediaPicker(): Promise<void> {
+    this.mediaSelected.set(new Set());
+    this.mediaSearch.set('');
+    this.mediaPicker.set(true);
+    if (this.mediaFiles().length === 0) {
+      this.mediaLoading.set(true);
+      try {
+        const files = await this.mediaApi.list();
+        this.mediaFiles.set(files);
+      } catch {
+        this.toast.error('Could not load media library');
+      } finally {
+        this.mediaLoading.set(false);
+      }
+    }
+  }
+
+  toggleMediaSelect(preview: string): void {
+    this.mediaSelected.update(set => {
+      const next = new Set(set);
+      next.has(preview) ? next.delete(preview) : next.add(preview);
+      return next;
+    });
+  }
+
+  applyMediaSelection(): void {
+    const selected = [...this.mediaSelected()];
+    if (selected.length === 0) return;
+    const existing = new Set(this.form().images);
+    const toAdd = selected.filter(u => !existing.has(u));
+    if (toAdd.length > 0) {
+      this.set('images', [...this.form().images, ...toAdd]);
+    }
+    this.mediaPicker.set(false);
   }
 
   /** Per-pending-file progress UI state. We render one row per active upload

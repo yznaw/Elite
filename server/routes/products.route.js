@@ -6,8 +6,17 @@ const { createRestockNotification, processRestockNotifications } = require('../l
 
 const router = Router();
 
-const DEFAULT_IMAGE =
-  'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=85&auto=format&fit=crop';
+// Empty string means "no image" — clients apply their own logo/placeholder fallback.
+const BUILT_IN_FALLBACK = '';
+
+async function getDefaultImage(client, tenantId) {
+  try {
+    const r = await client.query('SELECT config FROM tenants WHERE id = $1', [tenantId]);
+    return r.rows[0]?.config?.defaultImage || BUILT_IN_FALLBACK;
+  } catch {
+    return BUILT_IN_FALLBACK;
+  }
+}
 const COLOR_IMAGES_SELECT = `
           COALESCE(
             (
@@ -45,7 +54,7 @@ const COLOR_IMAGES_SELECT = `
             '{}'::jsonb
           ) AS color_images`;
 
-function mapRow(row) {
+function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   const sizes = Array.isArray(row.sizes) ? row.sizes.filter(Boolean) : [];
   const colors = Array.isArray(row.colors) ? row.colors.filter(Boolean) : [];
   const materials = Array.isArray(row.materials) ? row.materials.filter(Boolean) : [];
@@ -71,7 +80,7 @@ function mapRow(row) {
       return map;
     }, {})
     : {};
-  const image = row.image || media[0] || DEFAULT_IMAGE;
+  const image = row.image || media[0] || defaultImage;
   const images = [...new Set([image, ...media])];
 
   return {
@@ -82,7 +91,7 @@ function mapRow(row) {
     tag: row.tag || '',
     leather: row.leather || '',
     style: row.style || '',
-    sizes: sizes.length > 0 ? sizes.map((s) => Number(s)).filter(Number.isFinite) : [40, 41, 42, 43, 44],
+    sizes: sizes.map((s) => Number(s)).filter(Number.isFinite),
     colors,
     materials,
     image,
@@ -222,9 +231,10 @@ router.get('/', async (_req, res, next) => {
       [tenant.id],
     );
 
+    const defaultImage = await getDefaultImage(client, tenant.id);
     res.json({
       success: true,
-      data: result.rows.map(mapRow),
+      data: result.rows.map(row => mapRow(row, defaultImage)),
       message: 'Products retrieved.',
     });
   } catch (err) {
@@ -352,9 +362,10 @@ router.get('/:id', async (req, res, next) => {
       });
     }
 
+    const defaultImage = await getDefaultImage(client, tenant.id);
     res.json({
       success: true,
-      data: mapRow(result.rows[0]),
+      data: mapRow(result.rows[0], defaultImage),
       message: 'Product retrieved.',
     });
   } catch (err) {

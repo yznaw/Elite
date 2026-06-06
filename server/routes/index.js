@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const healthRouter = require('./health.route');
+const configRouter = require('./config.route');
 const authRouter = require('./auth.route');
 const adminProductsRouter = require('./admin-products.route');
 const adminCollectionsRouter = require('./admin-collections.route');
@@ -26,6 +27,7 @@ const router = Router();
 
 // ─── Public routes ───────────────────────────────────────────────────────────
 router.use('/health', healthRouter);
+router.use('/config', configRouter);
 router.use('/auth', authRouter);
 router.use('/invitations', invitationsRouter);
 router.use('/products', productsRouter);

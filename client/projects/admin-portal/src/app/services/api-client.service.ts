@@ -28,6 +28,19 @@ export class ApiClient {
     return `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
+  /**
+   * Resolve a media/storage URL so it always routes through the API proxy.
+   * `/uploads/abc.jpg` → `/api/uploads/abc.jpg` (production, same proxy)
+   * `/uploads/abc.jpg` → `http://localhost:3000/api/uploads/abc.jpg` (dev)
+   * Full https:// URLs are returned unchanged.
+   */
+  mediaUrl(path: string): string {
+    const v = (path || '').trim();
+    if (!v || /^(https?:|data:|blob:)/i.test(v)) return v;
+    if (v.startsWith('/uploads/')) return this.url(v); // e.g. /api/uploads/abc.jpg
+    return v;
+  }
+
   get<T>(path: string): Observable<T> {
     return this.http
       .get<ApiEnvelope<T>>(this.url(path), { withCredentials: true })

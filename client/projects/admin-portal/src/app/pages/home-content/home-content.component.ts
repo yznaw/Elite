@@ -2,10 +2,14 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import { MediaFile } from '../../models';
+import { Collection, MediaFile } from '../../models';
 import { ApiClient } from '../../services/api-client.service';
 import { MediaUploadService } from '../../services/media-upload.service';
+import { AdminMediaService } from '../../services/admin-media.service';
+import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { ToastService } from '../../services/toast.service';
+import { IconComponent } from '../../shared/icons/icon.component';
+import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 
 const HOME_COLLECTION_LIMIT = 3;
 
@@ -20,6 +24,8 @@ interface HomeDiscountHeroContent {
 
 interface HomeCollectionTileContent {
   id: string;
+  /** UUID of a system collection linked to this tile. */
+  collectionId?: string;
   title: string;
   imageUrl: string;
   link: string;
@@ -173,7 +179,7 @@ function cloneContent(content: HomeContentData): HomeContentData {
 @Component({
   selector: 'ap-home-content',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
   template: `
     <div class="page-fade home-admin">
       <header class="card home-admin__header">
@@ -208,10 +214,16 @@ function cloneContent(content: HomeContentData): HomeContentData {
                 <div>
                   <strong>{{ imageName(content().hero.imageUrl) }}</strong>
                   <p>{{ uploadProgress('hero') }}</p>
-                  <input #heroFile type="file" accept="image/*" (change)="uploadHeroImage($event)" hidden />
-                  <button type="button" class="btn btn-outline btn-sm" (click)="heroFile.click()" [disabled]="isUploading('hero')">
-                    {{ isUploading('hero') ? 'Uploading...' : 'Upload photo' }}
-                  </button>
+                  <div class="mini-btns">
+                    <input #heroFile type="file" accept="image/*" (change)="uploadHeroImage($event)" hidden />
+                    <button type="button" class="btn btn-outline btn-sm" (click)="heroFile.click()" [disabled]="isUploading('hero')">
+                      @if (isUploading('hero')) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
+                      {{ isUploading('hero') ? 'Uploading…' : 'Upload' }}
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker('hero')">
+                      <ap-icon name="media" [size]="12"/> Media
+                    </button>
+                  </div>
                 </div>
               </div>
             </label>
@@ -273,29 +285,58 @@ function cloneContent(content: HomeContentData): HomeContentData {
         </div>
 
         <div class="tile-editor-grid">
-          @for (tile of content().collections; track tile.id) {
+          @for (tile of content().collections; track tile.id; let tileIdx = $index) {
             <article class="tile-editor">
+              <!-- Tile preview -->
               <div class="tile-thumb">
                 <img [src]="tile.imageUrl" [alt]="tile.title" />
                 <span>{{ tile.title }}</span>
+                <span class="tile-num">{{ tileIdx + 1 }}</span>
               </div>
 
               <div class="field-stack compact">
+                <!-- Collection link -->
+                <label>
+                  <span class="lbl">Linked Collection</span>
+                  <select class="inp inp-sm" [ngModel]="tile.collectionId || ''" (ngModelChange)="selectCollection(tile.id, $event)">
+                    <option value="">— None (custom) —</option>
+                    @for (col of collections(); track col.id) {
+                      <option [value]="col.id">{{ col.title }}</option>
+                    }
+                  </select>
+                  @if (tile.collectionId && collectionById(tile.collectionId); as col) {
+                    <span class="col-linked-hint mono small">→ /collection/{{ col.handle }}</span>
+                  }
+                </label>
+
                 <label>
                   <span class="lbl">Title</span>
                   <input class="inp" [ngModel]="tile.title" (ngModelChange)="updateCollection(tile.id, 'title', $event)" />
                 </label>
+
                 <label>
                   <span class="lbl">Tile image</span>
                   <div class="mini-picker">
-                    <strong>{{ imageName(tile.imageUrl) }}</strong>
-                    <small>{{ uploadProgress(tile.id) }}</small>
-                    <input #tileFile type="file" accept="image/*" (change)="uploadCollectionImage(tile.id, $event)" hidden />
-                    <button type="button" class="btn btn-outline btn-sm" (click)="tileFile.click()" [disabled]="isUploading(tile.id)">
-                      {{ isUploading(tile.id) ? 'Uploading...' : 'Upload photo' }}
-                    </button>
+                    @if (tile.imageUrl) {
+                      <img class="mini-thumb" [src]="tile.imageUrl" [alt]="tile.title" />
+                    }
+                    <div class="mini-info">
+                      <strong>{{ imageName(tile.imageUrl) }}</strong>
+                      <small>{{ uploadProgress(tile.id) }}</small>
+                    </div>
+                    <div class="mini-btns">
+                      <input #tileFile type="file" accept="image/*" (change)="uploadCollectionImage(tile.id, $event)" hidden />
+                      <button type="button" class="btn btn-outline btn-sm" (click)="tileFile.click()" [disabled]="isUploading(tile.id)">
+                        @if (isUploading(tile.id)) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
+                        {{ isUploading(tile.id) ? 'Uploading…' : 'Upload' }}
+                      </button>
+                      <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker(tile.id)">
+                        <ap-icon name="media" [size]="12"/> Media
+                      </button>
+                    </div>
                   </div>
                 </label>
+
                 <label>
                   <span class="lbl">Collection link</span>
                   <input class="inp" [ngModel]="tile.link" (ngModelChange)="updateCollection(tile.id, 'link', $event)" />
@@ -354,10 +395,16 @@ function cloneContent(content: HomeContentData): HomeContentData {
                 <div class="mini-picker">
                   <strong>{{ imageName(content().story.hero.imageUrl) }}</strong>
                   <small>{{ uploadProgress('story-hero') }}</small>
-                  <input #storyHeroFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden />
-                  <button type="button" class="btn btn-outline btn-sm" (click)="storyHeroFile.click()" [disabled]="isUploading('story-hero')">
-                    {{ isUploading('story-hero') ? 'Uploading...' : 'Upload photo' }}
-                  </button>
+                  <div class="mini-btns">
+                    <input #storyHeroFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden />
+                    <button type="button" class="btn btn-outline btn-sm" (click)="storyHeroFile.click()" [disabled]="isUploading('story-hero')">
+                      @if (isUploading('story-hero')) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
+                      {{ isUploading('story-hero') ? 'Uploading…' : 'Upload' }}
+                    </button>
+                    <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker('story-hero')">
+                      <ap-icon name="media" [size]="12"/> Media
+                    </button>
+                  </div>
                 </div>
               </label>
 
@@ -460,10 +507,16 @@ function cloneContent(content: HomeContentData): HomeContentData {
                     <div class="mini-picker">
                       <strong>{{ imageName(chapter.imageUrl) }}</strong>
                       <small>{{ uploadProgress('story-' + chapter.id) }}</small>
-                      <input #storyChapterFile type="file" accept="image/*" (change)="uploadStoryChapterImage(chapter.id, $event)" hidden />
-                      <button type="button" class="btn btn-outline btn-sm" (click)="storyChapterFile.click()" [disabled]="isUploading('story-' + chapter.id)">
-                        {{ isUploading('story-' + chapter.id) ? 'Uploading...' : 'Upload photo' }}
-                      </button>
+                      <div class="mini-btns">
+                        <input #storyChapterFile type="file" accept="image/*" (change)="uploadStoryChapterImage(chapter.id, $event)" hidden />
+                        <button type="button" class="btn btn-outline btn-sm" (click)="storyChapterFile.click()" [disabled]="isUploading('story-' + chapter.id)">
+                          @if (isUploading('story-' + chapter.id)) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
+                          {{ isUploading('story-' + chapter.id) ? 'Uploading…' : 'Upload' }}
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker('story-' + chapter.id)">
+                          <ap-icon name="media" [size]="12"/> Media
+                        </button>
+                      </div>
                     </div>
                   </label>
                   <label>
@@ -509,8 +562,192 @@ function cloneContent(content: HomeContentData): HomeContentData {
         </div>
       </section>
     </div>
+
+    <!-- ── Media Center Picker Modal ── -->
+    @if (activeMediaPicker()) {
+      <div class="overlay" style="z-index:800;" (click)="activeMediaPicker.set(null)"></div>
+      <div class="media-picker-modal" style="z-index:810;">
+        <div class="mpm-head">
+          <div>
+            <p class="mpm-eyebrow">Media Center</p>
+            <div class="mpm-title">Select an image</div>
+          </div>
+          <button class="x-btn" type="button" (click)="activeMediaPicker.set(null)"><ap-icon name="x" [size]="14"/></button>
+        </div>
+        <div class="mpm-search">
+          <ap-icon name="search" [size]="13"/>
+          <input class="inp with-icon" placeholder="Search by filename…" [ngModel]="mediaSearch()" (ngModelChange)="mediaSearch.set($event)"/>
+        </div>
+        <div class="mpm-body">
+          @if (mediaLoading()) {
+            <div class="mpm-loading"><ap-spinner [size]="20"/> Loading media…</div>
+          } @else if (filteredMediaFiles().length === 0) {
+            <div class="mpm-empty">No images found in your media library.</div>
+          } @else {
+            <div class="mpm-grid">
+              @for (file of filteredMediaFiles(); track file.id) {
+                <button type="button" class="mpm-item" (click)="applyMedia(file)" [title]="file.name">
+                  <img [src]="resolveUrl(file.preview || '')" [alt]="file.name" />
+                  <span class="mpm-name">{{ file.name }}</span>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
   `,
   styles: [`
+    /* ── Tile editor enhancements ── */
+    .tile-num {
+      position: absolute;
+      top: 10px;
+      inset-inline-start: 12px;
+      background: rgba(0,0,0,.55);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      border-radius: 6px;
+      padding: 2px 7px;
+    }
+
+    .col-linked-hint {
+      color: var(--green);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .mini-thumb {
+      width: 100%;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+    }
+
+    .mini-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mini-btns {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Media picker modal ── */
+    .media-picker-modal {
+      position: fixed;
+      inset-inline-end: 0;
+      top: 0;
+      bottom: 0;
+      width: min(560px, 100vw);
+      background: var(--surface);
+      border-inline-start: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      box-shadow: -8px 0 32px rgba(0,0,0,.18);
+    }
+
+    .mpm-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 20px 20px 14px;
+      border-bottom: 1px solid var(--border-2);
+    }
+
+    .mpm-eyebrow {
+      margin: 0 0 4px;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .mpm-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .mpm-search {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-2);
+      background: var(--bg);
+    }
+
+    .mpm-search ap-icon { color: var(--muted); flex-shrink: 0; }
+    .mpm-search .inp { border: none; background: transparent; flex: 1; padding: 0; }
+    .mpm-search .inp:focus { outline: none; box-shadow: none; }
+
+    .mpm-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .mpm-loading,
+    .mpm-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 48px 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .mpm-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .mpm-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      background: var(--bg);
+      padding: 0;
+      cursor: pointer;
+      overflow: hidden;
+      transition: border-color .13s, transform .13s;
+    }
+
+    .mpm-item:hover {
+      border-color: var(--gold);
+      transform: scale(1.02);
+    }
+
+    .mpm-item img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .mpm-name {
+      padding: 0 8px 8px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .home-admin {
       display: grid;
       gap: 18px;
@@ -1062,9 +1299,11 @@ function cloneContent(content: HomeContentData): HomeContentData {
   `],
 })
 export class HomeContentComponent implements OnInit {
-  private readonly api = inject(ApiClient);
+  readonly api = inject(ApiClient);
   private readonly uploads = inject(MediaUploadService);
   private readonly toast = inject(ToastService);
+  private readonly mediaApi = inject(AdminMediaService);
+  private readonly collectionsApi = inject(AdminCollectionsService);
 
   readonly content = signal<HomeContentData>(cloneContent(DEFAULT_HOME_CONTENT));
   readonly savedSnapshot = signal(JSON.stringify(DEFAULT_HOME_CONTENT));
@@ -1074,7 +1313,102 @@ export class HomeContentComponent implements OnInit {
   readonly storyDropTargetId = signal<string | null>(null);
   readonly isDirty = computed(() => JSON.stringify(this.content()) !== this.savedSnapshot());
 
+  // ── Collections ───────────────────────────────────────────────────────────
+  readonly collections = signal<Collection[]>([]);
+
+  collectionById(id: string): Collection | undefined {
+    return this.collections().find(c => c.id === id);
+  }
+
+  selectCollection(tileId: string, colId: string): void {
+    if (!colId) {
+      this.content.update(cur => ({
+        ...cur,
+        collections: cur.collections.map(t =>
+          t.id === tileId ? { ...t, collectionId: undefined } : t,
+        ),
+      }));
+      return;
+    }
+    const col = this.collections().find(c => c.id === colId);
+    if (!col) return;
+    this.content.update(cur => ({
+      ...cur,
+      collections: cur.collections.map(t =>
+        t.id === tileId
+          ? {
+              ...t,
+              collectionId: colId,
+              title: col.title,
+              link: `/collection/${col.handle}`,
+              ...(col.imageUrl ? { imageUrl: this.resolveMediaUrl(col.imageUrl) } : {}),
+            }
+          : t,
+      ),
+    }));
+  }
+
+  // ── Media center picker ───────────────────────────────────────────────────
+  readonly activeMediaPicker = signal<string | null>(null);
+  readonly mediaFiles = signal<MediaFile[]>([]);
+  readonly mediaLoading = signal(false);
+  readonly mediaSearch = signal('');
+
+  readonly filteredMediaFiles = computed(() => {
+    const s = this.mediaSearch().toLowerCase();
+    return this.mediaFiles().filter(f =>
+      f.kind === 'image' && (!s || f.name.toLowerCase().includes(s)),
+    );
+  });
+
+  async openMediaPicker(key: string): Promise<void> {
+    this.activeMediaPicker.set(key);
+    this.mediaSearch.set('');
+    if (this.mediaFiles().length === 0) {
+      this.mediaLoading.set(true);
+      try {
+        const files = await this.mediaApi.list();
+        this.mediaFiles.set(files);
+      } catch {
+        this.toast.error('Could not load media library', 'Check your connection and try again.');
+      } finally {
+        this.mediaLoading.set(false);
+      }
+    }
+  }
+
+  applyMedia(file: MediaFile): void {
+    const key = this.activeMediaPicker();
+    if (!key) return;
+    const raw = (file as MediaFile & { storageUrl?: string }).storageUrl || file.preview || '';
+    const url = this.resolveMediaUrl(raw);
+    if (!url) {
+      this.toast.error('No URL for this media file');
+      return;
+    }
+    if (key === 'hero') {
+      this.updateHero('imageUrl', url);
+    } else if (key === 'story-hero') {
+      this.updateStoryHero('imageUrl', url);
+    } else if (key.startsWith('story-')) {
+      this.updateStoryChapter(key.slice('story-'.length), 'imageUrl', url);
+    } else {
+      this.updateCollection(key, 'imageUrl', url);
+    }
+    this.activeMediaPicker.set(null);
+  }
+
+  /** Public wrapper so the template can call resolveMediaUrl. */
+  resolveUrl(url: string): string {
+    return this.api.mediaUrl(url);
+  }
+
   async ngOnInit(): Promise<void> {
+    // Load collections for the tile selector (parallel with content)
+    void this.collectionsApi.list().then(list => {
+      this.collections.set(list.filter(c => !c.hidden));
+    }).catch(() => { /* non-fatal */ });
+
     try {
       const data = await firstValueFrom(this.api.get<HomeContentData>('/admin/storefront-content'));
       const normalized = this.normalizeContentImages(data);
@@ -1335,8 +1669,10 @@ export class HomeContentComponent implements OnInit {
 
         if (event.stage === 'done') {
           const uploaded = Array.isArray(event.result) ? event.result[0] : event.result;
-          const media = uploaded as (MediaFile & { storageUrl?: string }) | undefined;
-          const url = this.resolveMediaUrl(media?.preview || media?.storageUrl || '');
+          const media = uploaded as (MediaFile & { storageUrl?: string; storage_url?: string }) | undefined;
+          // Try every URL field the server might return
+          const raw = media?.preview || media?.storageUrl || media?.storage_url || '';
+          const url = this.resolveMediaUrl(raw);
           if (!url) {
             this.uploadState.update((state) => ({ ...state, [key]: 'error' }));
             this.toast.error('Upload finished without an image URL', file.name);
@@ -1344,6 +1680,8 @@ export class HomeContentComponent implements OnInit {
           }
 
           applyUrl(url);
+          // Refresh media list so the new file appears in the picker
+          void this.mediaApi.list().then(files => this.mediaFiles.set(files)).catch(() => {});
           this.uploadState.update((state) => ({ ...state, [key]: 100 }));
           this.toast.success('Photo uploaded', `${file.name} is now used in the home layout.`);
         }
@@ -1389,10 +1727,6 @@ export class HomeContentComponent implements OnInit {
   }
 
   private resolveMediaUrl(url: string): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.api.url('/').replace(/\/api\/?$/, '')}${value}`;
+    return this.api.mediaUrl(url);
   }
 }
