@@ -117,7 +117,10 @@ export class ProductComponent implements OnInit, OnDestroy {
     const p = this.product();
     if (!p) return false;
     // Size-optional products (sunglasses, accessories): always in-stock check by total stock
-    if (!p.sizes?.length) return p.variants?.some(v => v.stock > 0) ?? true;
+    if (!p.sizes?.length) {
+      if (p.variants?.length) return p.variants.some(v => v.stock > 0);
+      return (p.stock ?? 1) > 0;
+    }
     const size = this.selectedSize();
     if (!size) return true; // no size chosen yet — don't block CTA
     return this.sizeInStock(p, size);
@@ -284,7 +287,7 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   sizeInStock(product: Product, size: number): boolean {
     const variants = product.variants || [];
-    if (variants.length === 0) return true;
+    if (variants.length === 0) return (product.stock ?? 1) > 0;
 
     const matchingSize = variants.filter((variant) => Number(variant.size) === size);
     if (matchingSize.length === 0) return true;

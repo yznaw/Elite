@@ -119,6 +119,7 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
     images,
     imageVariants,
     colorImages,
+    stock: Math.max(0, Number(row.stock_quantity || 0)),
     variants,
     relatedProductIds: row.related_product_ids || [],
   };

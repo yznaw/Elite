@@ -171,8 +171,37 @@ function rateCandidates(response) {
   return data ? [data] : [];
 }
 
+const LOCAL_CARRIER_PATTERNS = [
+  /nbox\s*logistics/i,
+  /nbox\s*now/i,
+  /^nbox$/i,
+  /local/i,
+  /qatar/i,
+  /qa$/i,
+];
+
+function isLocalCarrier(rate) {
+  const fields = [
+    rate.service_name, rate.service, rate.name, rate.carrier,
+    rate.service_code, rate.code, rate.type, rate.scope,
+  ].filter(Boolean).map(String);
+  return fields.some((f) => LOCAL_CARRIER_PATTERNS.some((re) => re.test(f)));
+}
+
+function pickRate(candidates) {
+  if (!candidates.length) return null;
+  const local = candidates.find(isLocalCarrier);
+  if (local) return local;
+  // Fall back to lowest-cost option
+  return candidates.reduce((cheapest, r) => {
+    const cost = firstNumber(r.amount, r.price, r.total, r.total_amount, r.delivery_fee, r.shipping_fee, r.cost);
+    const cheapestCost = firstNumber(cheapest.amount, cheapest.price, cheapest.total, cheapest.total_amount, cheapest.delivery_fee, cheapest.shipping_fee, cheapest.cost);
+    return cost < cheapestCost ? r : cheapest;
+  });
+}
+
 function normalizeQuote(response) {
-  const rate = rateCandidates(response)[0];
+  const rate = pickRate(rateCandidates(response));
   if (!rate) {
     return {
       available: false,

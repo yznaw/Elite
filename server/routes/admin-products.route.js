@@ -8,6 +8,19 @@ const { ensureProductRecommendationsSchema } = require('../db/product-recommenda
 const { processRestockNotifications } = require('../lib/restock-notifications');
 
 const router = Router();
+
+// Ensure SEO columns exist (migration 004 may not have run on all environments)
+let seoColumnsReady = false;
+async function ensureSeoColumns(client) {
+  if (seoColumnsReady) return;
+  await client.query(`
+    ALTER TABLE products
+      ADD COLUMN IF NOT EXISTS meta_title text,
+      ADD COLUMN IF NOT EXISTS meta_desc  text
+  `);
+  seoColumnsReady = true;
+}
+
 const IMAGE_COLORS_SELECT = `
         COALESCE((
           SELECT jsonb_object_agg(url, color)
@@ -162,6 +175,7 @@ async function replaceImages(client, tenantId, productId, images, imageColors = 
 
 async function replaceRecommendations(client, tenantId, productId, relatedProductIds) {
   await ensureProductRecommendationsSchema(client);
+  await ensureSeoColumns(client);
   const ids = [...new Set((Array.isArray(relatedProductIds) ? relatedProductIds : [])
     .map((id) => String(id || '').trim())
     .filter((id) => id && id !== productId))];
@@ -224,6 +238,7 @@ function mapAdminProduct(row) {
 
 async function loadAdminProduct(client, tenantId, productId) {
   await ensureProductRecommendationsSchema(client);
+  await ensureSeoColumns(client);
   const result = await client.query(
     `
       SELECT
@@ -366,6 +381,7 @@ router.get('/', asyncHandler(async (_req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     await ensureProductRecommendationsSchema(client);
+  await ensureSeoColumns(client);
     const result = await client.query(
       `
         SELECT
@@ -421,6 +437,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     await ensureProductRecommendationsSchema(client);
+  await ensureSeoColumns(client);
     const result = await client.query(
       `
         SELECT

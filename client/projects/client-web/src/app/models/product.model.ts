@@ -23,6 +23,7 @@ export interface Product {
   material?: string;
   materials?: string[];
   sizes: number[];
+  stock?: number;
   image: string;
   images?: string[];
   imageVariants?: Record<string, Record<string, { url: string; width?: number; mimeType?: string }>>;

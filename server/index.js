@@ -7,6 +7,7 @@ const PgSimple = require('connect-pg-simple')(session);
 
 const routes = require('./routes');
 const nboxWebhookRouter = require('./routes/nbox-webhook.route');
+const sadadWebhookRouter = require('./routes/sadad-webhook.route');
 const db = require('./db/client');
 const { ensureDefaultTenant } = require('./db/tenant');
 const { ensureReferenceSchema } = require('./db/reference-schema');
@@ -97,6 +98,7 @@ app.use('/api/uploads', express.static(uploadsDir, staticOpts));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/webhooks/nbox', nboxWebhookRouter);
+app.use('/webhooks/sadad', sadadWebhookRouter);
 app.use('/api', routes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────

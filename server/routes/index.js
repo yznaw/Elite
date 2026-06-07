@@ -20,6 +20,7 @@ const contactRouter = require('./contact.route');
 const cartsRouter = require('./carts.route');
 const storefrontContentRouter = require('./storefront-content.route');
 const nboxWebhookRouter = require('./nbox-webhook.route');
+const paymentsRouter = require('./payments.route');
 const invitationsRouter = require('./invitations.route');
 const { requireAuth } = require('../middleware/require-auth');
 
@@ -36,6 +37,7 @@ router.use('/storefront', storefrontRouter.router);
 router.use('/ref', refRouter);
 router.use('/contact', contactRouter);
 router.use('/carts', cartsRouter);
+router.use('/payments', paymentsRouter);
 router.use('/storefront-content', storefrontContentRouter.publicRouter);
 router.use('/webhooks/nbox', nboxWebhookRouter);
 
