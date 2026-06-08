@@ -125,40 +125,47 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
   let publicOrderNumber = '';
   let paymentUpdateSaved = false;
   try {
-    await client.query('BEGIN');
-
-    // Update order payment status
     const orderResult = await client.query(
       `UPDATE orders
           SET payment_status = $1,
               paid_at        = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_at END,
-              updated_at     = NOW(),
-              metadata       = metadata || $3::jsonb
+              updated_at     = NOW()
         WHERE id = $2
         RETURNING tenant_id, public_number`,
-      [
-        paymentStatus,
-        orderId,
-        JSON.stringify({
-          paymentGateway: {
-            provider: 'sadad',
-            method: 'web_checkout',
-            status: paymentStatus,
-            transactionNumber: transactionNumber || null,
-            transactionStatus,
-          },
-        }),
-      ],
+      [paymentStatus, orderId],
     );
 
     if (orderResult.rowCount === 0) {
-      await client.query('ROLLBACK');
       console.warn('[sadad-callback] Order not found', { orderId, transactionNumber });
       return res.redirect(`${storefrontBase(req)}/checkout/failure?reason=order_not_found`);
     }
 
     const updatedOrder = orderResult.rows[0];
     publicOrderNumber = updatedOrder.public_number;
+    paymentUpdateSaved = true;
+
+    const paymentGatewayMetadata = {
+      paymentGateway: {
+        provider: 'sadad',
+        method: 'web_checkout',
+        status: paymentStatus,
+        transactionNumber: transactionNumber || null,
+        transactionStatus,
+      },
+    };
+
+    await client.query(
+      `UPDATE orders
+          SET metadata = metadata || $3::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [updatedOrder.tenant_id, orderId, JSON.stringify(paymentGatewayMetadata)],
+    ).catch((err) => {
+      console.warn('[sadad-callback] Non-critical metadata update failed', {
+        orderId,
+        code: err.code,
+        message: err.message,
+      });
+    });
 
     // Update the payments record with Sadad transaction details
     await client.query(
@@ -170,14 +177,26 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
               updated_at          = NOW()
         WHERE order_id = $3`,
       [transactionNumber || null, paymentStatus, orderId],
-    );
+    ).catch((err) => {
+      console.warn('[sadad-callback] Non-critical payments update failed', {
+        orderId,
+        code: err.code,
+        message: err.message,
+      });
+    });
 
     if (paymentStatus === 'paid') {
       await client.query(
         `UPDATE orders SET fulfillment_status = 'awaiting'
           WHERE id = $1 AND fulfillment_status = 'awaiting'`,
         [orderId],
-      );
+      ).catch((err) => {
+        console.warn('[sadad-callback] Non-critical fulfillment update failed', {
+          orderId,
+          code: err.code,
+          message: err.message,
+        });
+      });
 
       await client.query(
         `
@@ -201,13 +220,20 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
             transactionStatus,
           }),
         ],
-      );
+      ).catch((err) => {
+        console.warn('[sadad-callback] Non-critical timeline insert failed', {
+          orderId,
+          code: err.code,
+          message: err.message,
+        });
+      });
     }
-    await client.query('COMMIT');
-    paymentUpdateSaved = true;
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error('[sadad-callback] DB update failed', err);
+    console.error('[sadad-callback] Critical order payment update failed', {
+      orderId,
+      code: err.code,
+      message: err.message,
+    });
   } finally {
     client.release();
   }

@@ -61,45 +61,50 @@ router.post('/', async (req, res) => {
 
     if (existing.rows.length === 0) {
       console.warn('[sadad-webhook] No payments record for order', { websiteRefNo });
-      return;
     }
 
-    if (existing.rows[0].provider_payment_id === transactionNumber) {
+    if (existing.rows[0]?.provider_payment_id === transactionNumber) {
       console.log('[sadad-webhook] Duplicate — already processed', { transactionNumber });
-      return;
     }
-
-    await client.query('BEGIN');
 
     // Update orders table
     const orderResult = await client.query(
       `UPDATE orders
           SET payment_status = $1,
               paid_at        = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_at END,
-              updated_at     = NOW(),
-              metadata       = metadata || $3::jsonb
+              updated_at     = NOW()
         WHERE id = $2
         RETURNING tenant_id`,
-      [
-        paymentStatus,
-        websiteRefNo,
-        JSON.stringify({
-          paymentGateway: {
-            provider: 'sadad',
-            method: 'web_checkout',
-            status: paymentStatus,
-            transactionNumber: transactionNumber || null,
-            transactionStatus,
-          },
-        }),
-      ],
+      [paymentStatus, websiteRefNo],
     );
 
     if (orderResult.rowCount === 0) {
-      await client.query('ROLLBACK');
       console.warn('[sadad-webhook] Order not found', { websiteRefNo });
       return;
     }
+
+    const paymentGatewayMetadata = {
+      paymentGateway: {
+        provider: 'sadad',
+        method: 'web_checkout',
+        status: paymentStatus,
+        transactionNumber: transactionNumber || null,
+        transactionStatus,
+      },
+    };
+
+    await client.query(
+      `UPDATE orders
+          SET metadata = metadata || $3::jsonb
+        WHERE tenant_id = $1 AND id = $2`,
+      [orderResult.rows[0].tenant_id, websiteRefNo, JSON.stringify(paymentGatewayMetadata)],
+    ).catch((err) => {
+      console.warn('[sadad-webhook] Non-critical metadata update failed', {
+        websiteRefNo,
+        code: err.code,
+        message: err.message,
+      });
+    });
 
     // Update payments table
     await client.query(
@@ -111,14 +116,26 @@ router.post('/', async (req, res) => {
               updated_at          = NOW()
         WHERE order_id = $3`,
       [transactionNumber, paymentStatus, websiteRefNo],
-    );
+    ).catch((err) => {
+      console.warn('[sadad-webhook] Non-critical payments update failed', {
+        websiteRefNo,
+        code: err.code,
+        message: err.message,
+      });
+    });
 
     if (paymentStatus === 'paid') {
       await client.query(
         `UPDATE orders SET fulfillment_status = 'awaiting'
           WHERE id = $1 AND fulfillment_status = 'awaiting'`,
         [websiteRefNo],
-      );
+      ).catch((err) => {
+        console.warn('[sadad-webhook] Non-critical fulfillment update failed', {
+          websiteRefNo,
+          code: err.code,
+          message: err.message,
+        });
+      });
 
       await client.query(
         `
@@ -142,14 +159,22 @@ router.post('/', async (req, res) => {
             transactionStatus,
           }),
         ],
-      );
+      ).catch((err) => {
+        console.warn('[sadad-webhook] Non-critical timeline insert failed', {
+          websiteRefNo,
+          code: err.code,
+          message: err.message,
+        });
+      });
     }
 
-    await client.query('COMMIT');
     console.log('[sadad-webhook] Order updated', { websiteRefNo, paymentStatus, transactionNumber });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error('[sadad-webhook] DB error', err);
+    console.error('[sadad-webhook] Critical order payment update failed', {
+      websiteRefNo,
+      code: err.code,
+      message: err.message,
+    });
   } finally {
     client.release();
   }
