@@ -122,9 +122,19 @@ app.use((err, req, res, _next) => {
 |---|---|---|---|
 | `GET` | `/api/health` | Server liveness check | `{ success, status, timestamp, uptime }` |
 
+### Public — Config (`/api/config`)
+
+See `server/routes/config.route.js`. No auth required.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/config` | Returns public tenant configuration — `{ defaultImage }`. `defaultImage` is stored in `tenants.config` JSONB and set via the media "Set as Default Fallback" button. The client-web reads this on init to use as a product image fallback. |
+
 ### Admin — Products (`/api/admin/products`)
 
 See `server/routes/admin-products.route.js`. Full CRUD, bulk delete, media gallery management. All endpoints require an active admin session.
+
+**Image normalization:** All responses (`list`, `get`, `saveProduct`, `update`, `duplicate`) now pass through `normalizeProduct()` in `AdminProductsService`, which resolves `image` and `images[]` via `api.mediaUrl()` — converting `/uploads/` → `/api/uploads/` for correct proxy routing.
 
 | Method | Path | Description |
 |---|---|---|
@@ -137,6 +147,22 @@ See `server/routes/admin-products.route.js`. Full CRUD, bulk delete, media galle
 | `DELETE` | `/api/admin/products/:id` | Soft-delete (archive) |
 | `POST` | `/api/admin/products/bulk-delete` | Hard-delete multiple — body: `{ ids[] }` |
 | `POST` | `/api/admin/products/:id/duplicate` | **Duplicate product** — creates hidden copy; auto-increments SKU suffix (`-COPY`, `-COPY-2`, …); copies variants with updated SKUs. Returns the new product. |
+| `POST` | `/api/admin/products/:id/images` | **Multipart image upload** — stores files, appends to gallery, links via `media_links`. Returned `images[]` normalized via `api.mediaUrl()` so freshly-uploaded images display immediately. |
+
+### Admin — Media (`/api/admin/media`)
+
+See `server/routes/admin-media.route.js`. All endpoints require an active admin session.
+
+**Static file serving:** Uploads are served at both `/uploads/` (legacy) and `/api/uploads/` (via proxy) so the Angular admin app at `admin.example.com` can reach files through the `/api` Nginx proxy without additional Nginx configuration.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/media` | List all media assets. Preview URLs normalized via `api.mediaUrl()`. |
+| `POST` | `/api/admin/media` | Upload files (multipart `files[]`). Stores via the storage adapter, inserts `media_assets`, auto-links to a product if `productId` in body. |
+| `POST` | `/api/admin/media/gdrive` | **Google Drive import** — body: `{ url }` (file or folder URL, or bare file ID). Downloads images, saves to storage, inserts `media_assets`. **Auto-links by SKU** via 4-tier matching: (1) folder name = SKU, (2) filename stem = SKU, (3) filename contains SKU, (4) two-segment prefix. Requires `GOOGLE_DRIVE_API_KEY` env var for folder operations. Returns `MediaFile[]` with `linkedTo` set when auto-linked. |
+| `PATCH` | `/api/admin/media/:id/link` | Link/unlink media to a product. **Fixed:** now sets `sort_order = COALESCE(MAX+1, 0)` — the previous version omitted `sort_order` (got default 0) causing a duplicate key constraint when linking a second image to the same product. |
+| `DELETE` | `/api/admin/media/orphaned` | Delete all unlinked media assets and their files. |
+| `DELETE` | `/api/admin/media/:id` | Delete one media asset and its file. |
 
 ### Admin — Settings (`/api/admin/settings`)
 
@@ -217,6 +243,7 @@ cp server/.env.example server/.env
 | `SESSION_MAX_AGE_MS` | `43200000` | No | Session lifetime in ms (default 12 h) |
 | `SESSION_COOKIE_SECURE` | `false` | No | Set `true` in production (requires HTTPS) |
 | `SESSION_COOKIE_SAMESITE` | `lax` | No | Set `none` if admin and API are on different origins in prod |
+| `GOOGLE_DRIVE_API_KEY` | — | No (folder imports only) | Google Cloud API key with Google Drive API enabled. Required for `POST /api/admin/media/gdrive` when importing a folder. Single-file imports work without it via public share URL. Accepts `GOOGLE_DRIVE_API_KEY` or `GOOGLE_API_KEY` (the latter as a fallback). |
 | `NBOX_WEBHOOK_SECRET` | — | Yes for NBOX webhooks | Secret copied from the NBOX webhook page; used to verify inbound shipment updates |
 | `NBOX_API_BASE_URL` | — | Yes for NBOX checkout | NBOX API base URL from the merchant portal |
 | `NBOX_API_TOKEN` | — | Yes for NBOX checkout | NBOX API token used for outbound quote/shipment requests |

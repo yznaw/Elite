@@ -23,6 +23,26 @@ The implementation added:
 - Production FK bug fixes: bulk-delete and product-save now correctly handle `cart_items.product_id` and `cart_items.variant_id` `ON DELETE RESTRICT` constraints.
 - Documentation for endpoint-to-SQL behavior.
 
+**June 2026 additions:**
+
+- `ApiClient.mediaUrl()` — converts `/uploads/` → `/api/uploads/` so all media URLs route through the Nginx `/api` proxy in production. Used by `AdminMediaService`, `AdminProductsService`, `MediaUploadService`, and `HomeContentComponent`.
+- Express now mounts uploads at **both** `/uploads/` (legacy) and `/api/uploads/` (proxy-friendly alias).
+- `GET /api/config` — new public endpoint returning `{ defaultImage }` from `tenants.config` JSONB. The client-web reads this on init for product image fallback.
+- `POST /api/admin/media/gdrive` — Google Drive import endpoint. Downloads images from a public Drive file or folder, saves to storage, and auto-links by SKU via 4-tier matching (folder name → filename stem → filename contains → two-segment prefix).
+- `PATCH /api/admin/media/:id/link` — fixed duplicate key constraint: now sets `sort_order = COALESCE(MAX+1, 0)` (was missing; caused error when linking a second image to the same product).
+- `linkMedia()` refactored to accept a shared `sortCounters` Map so multiple images linked to the same product within one transaction each get a unique `sort_order`.
+- `AdminProductsService.normalizeProduct()` — added to all product API responses (list, get, save, update, duplicate); resolves `image` and `images[]` via `api.mediaUrl()`.
+- `AdminMediaService.list()` — normalizes `preview` URLs via `api.mediaUrl()` on load.
+- `MediaUploadService.uploadProductImages()` — normalizes returned `images[]` via `api.mediaUrl()` on the `done` event.
+- Media picker in the product drawer — multi-select slide-in panel using `AdminMediaService`; cached for the drawer session.
+- Collection drawer: editable URL Handle field, auto-slug from title, live preview.
+- Storefront Featured Collections panel: collection picker chips, manual handle entry, `collectionId` persisted in block settings JSONB.
+- Home Content tiles: Linked Collection dropdown (auto-fills title/link/image); media picker on all image slots.
+- Google Drive auto-link: 4-tier SKU matching with `sortCounters` Map to prevent transaction-level sort_order conflicts.
+- "Set as Default Fallback" in media detail drawer: saves to `tenants.config.defaultImage` via `PATCH /api/admin/settings/store`.
+- Public products API: `BUILT_IN_FALLBACK` changed from Unsplash URL to `''`; hardcoded sizes fallback `[40,41,42,43,44]` removed — products with no size variants now return `sizes: []`.
+- Client-web `resolveMediaUrl` bug fixed (was stripping `/api/` prefix in production); `ALL_PRODUCTS` mock data removed; size-optional product page support.
+
 ---
 
 ## Database Files
@@ -106,6 +126,10 @@ SESSION_COOKIE_SAMESITE=lax      # 'none' if admin runs on a different origin in
 DEFAULT_ADMIN_EMAIL=admin@elite.local
 DEFAULT_ADMIN_PASSWORD=elite-admin
 DEFAULT_ADMIN_NAME=Yusuf Hamad
+
+# Google Drive media import (optional — required for folder imports)
+# Accepts GOOGLE_DRIVE_API_KEY or GOOGLE_API_KEY as fallback
+GOOGLE_DRIVE_API_KEY=
 
 # NBOX delivery integration
 NBOX_WEBHOOK_SECRET=replace-with-nbox-webhook-secret
@@ -336,11 +360,13 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 
 | Method | Endpoint | Database behavior |
 |---|---|---|
-| `GET`    | `/api/admin/media`           | `SELECT` media with product links + uploader info |
+| `GET`    | `/api/admin/media`           | `SELECT` media with product links + uploader info. All `preview` URLs normalized via `api.mediaUrl()`. |
 | `POST`   | `/api/admin/media`           | **Multipart**: store each `files[]` via the storage adapter, `INSERT media_assets`, optionally `INSERT media_links` if `productId` is in the form. Returns array. **JSON fallback**: legacy URL-only `INSERT`. |
-| `PATCH`  | `/api/admin/media/:id/link`  | Transaction: replace `media_links` for asset |
-| `DELETE` | `/api/admin/media/:id`       | `DELETE media_assets` row + `storage.remove()` to clear the file on disk |
-| `POST`   | `/api/admin/products/:id/images` | **Multipart**: batch-uploads images for a product. Transaction writes `media_assets` + `media_links` (role=`gallery`, `sort_order` continuing from current max) and promotes the first new image to `products.primary_media_id` if none was set. Returns the resulting `images: string[]` so the client patches state in one assignment. |
+| `POST`   | `/api/admin/media/gdrive`    | **NEW**: Download images from a Google Drive file or folder URL, `INSERT media_assets` for each, then auto-link by SKU via 4-tier matching. Uses a shared `sortCounters` Map within the transaction to prevent `sort_order` duplicate key conflicts. Requires `GOOGLE_DRIVE_API_KEY` (or `GOOGLE_API_KEY`) for folder listing. |
+| `PATCH`  | `/api/admin/media/:id/link`  | Transaction: delete existing `media_links` for asset, then `INSERT` with `sort_order = COALESCE(MAX+1, 0)`. **Fix:** previous version omitted `sort_order`, which defaulted to 0 and caused a unique constraint violation when linking a second image to the same product. |
+| `DELETE` | `/api/admin/media/orphaned`  | Find all assets with no `media_links` entries, `DELETE media_assets`, call `storage.remove()` for each file. |
+| `DELETE` | `/api/admin/media/:id`       | `DELETE media_assets` row + `storage.remove()` to clear the file on disk. |
+| `POST`   | `/api/admin/products/:id/images` | **Multipart**: batch-uploads images for a product. Transaction writes `media_assets` + `media_links` (role=`gallery`, `sort_order` continuing from current max) and promotes the first new image to `products.primary_media_id` if none was set. Returns `images: string[]` normalized via `api.mediaUrl()` so freshly-uploaded images display immediately. |
 
 ### Storefront Editor
 
