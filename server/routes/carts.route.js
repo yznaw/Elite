@@ -350,6 +350,10 @@ router.post('/shipping-quote', asyncHandler(async (req, res) => {
   if (checkout.items.length === 0) errors.push('At least one cart item is required.');
   if (errors.length > 0) return validationError(res, errors);
 
+  if (!nbox.isConfigured()) {
+    return ok(res, { available: true, amount: 0, currency: 'QAR', serviceName: 'Standard Delivery', serviceCode: 'standard' }, 'Delivery quote ready.');
+  }
+
   try {
     const quote = await nbox.getDeliveryQuote(checkout);
     ok(res, quote, quote.available ? 'NBOX delivery quote ready.' : 'NBOX delivery is unavailable.');
@@ -396,6 +400,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     const shippingCents = toCents(checkout.shippingQuote?.amount || 0);
     const totalCents = subtotalCents + shippingCents;
     const paymentStatus = isPaidPayment(checkout.payment) ? 'paid' : 'pending';
+    const paidAt = paymentStatus === 'paid' ? new Date() : null;
 
     const order = await client.query(
       `
@@ -404,7 +409,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
           payment_status, paid_at, fulfillment_status, subtotal_cents, shipping_cents, total_cents, shipping_address, billing_address,
           metadata
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'paid' THEN now() ELSE NULL END, 'awaiting', $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'awaiting', $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb)
         RETURNING *
       `,
       [
@@ -415,6 +420,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         checkout.customer.name,
         checkout.customer.phone,
         paymentStatus,
+        paidAt,
         subtotalCents,
         shippingCents,
         totalCents,

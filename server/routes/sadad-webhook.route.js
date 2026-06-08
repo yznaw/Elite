@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const db = require('../db/client');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -73,11 +74,11 @@ router.post('/', async (req, res) => {
     return;
   }
 
-  const db = req.app.locals.db;
+  const client = await db.pool.connect();
 
   try {
     // Check if we already processed this exact transaction
-    const existing = await db.query(
+    const existing = await client.query(
       `SELECT payment_status, payment_reference FROM orders WHERE id = $1`,
       [websiteRefNo],
     );
@@ -96,7 +97,7 @@ router.post('/', async (req, res) => {
     }
 
     // ── 4. Update order ───────────────────────────────────────────────────
-    await db.query(
+    await client.query(
       `UPDATE orders
           SET payment_status    = $1,
               payment_reference = $2,
@@ -108,7 +109,7 @@ router.post('/', async (req, res) => {
 
     // Transition to awaiting-fulfilment only on success
     if (paymentStatus === 'paid') {
-      await db.query(
+      await client.query(
         `UPDATE orders
             SET fulfillment_status = 'awaiting'
           WHERE id = $1 AND fulfillment_status IN ('pending', 'awaiting')`,
@@ -121,6 +122,8 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     console.error('[sadad-webhook] DB error', err);
+  } finally {
+    client.release();
   }
 });
 
