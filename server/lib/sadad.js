@@ -142,12 +142,22 @@ function buildPaymentRequest(opts) {
     txnDate,
   };
 
+  // ── productdetail fields ───────────────────────────────────────────────────
+  // Sadad requires productdetail AND includes ALL received form fields when
+  // verifying the signature. So productdetail must be part of the signed params.
+  const items = opts.items && opts.items.length > 0
+    ? opts.items
+    : [{ orderId: opts.orderId, amount: opts.amount, quantity: 1 }];
+
+  items.forEach((item, i) => {
+    params[`productdetail[${i}][order_id]`] = stripUuidHyphens(item.orderId);
+    params[`productdetail[${i}][amount]`]   = Number(item.amount).toFixed(2);
+    params[`productdetail[${i}][quantity]`] = String(item.quantity || 1);
+  });
+
   params.signature = generateSignature(params, secretKey);
 
-  // ── No extra fields ────────────────────────────────────────────────────────
-  // Sadad verifies by sorting ALL received form fields (minus "signature").
-  // Any field we send but didn't sign will cause a checksum mismatch.
-  // We only send the exactly 8 signed params + signature — nothing else.
+  // productDetails is empty — everything is already in params (all signed)
   const productDetails = {};
 
   return { params, productDetails, endpoint: SADAD_ENDPOINT };
