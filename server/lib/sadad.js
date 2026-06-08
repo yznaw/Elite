@@ -60,6 +60,39 @@ function verifyChecksum(params, receivedHash, secretKey) {
   return generated.toLowerCase() === String(receivedHash || '').toLowerCase();
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Strip hyphens from a UUID so it passes Sadad's alphanumeric-only validation.
+ * e.g. "550e8400-e29b-41d4-a716-446655440000" → "550e8400e29b41d4a716446655440000"
+ */
+function stripUuidHyphens(id) {
+  return String(id || '').replace(/-/g, '');
+}
+
+/**
+ * Restore hyphens to a 32-char hex string returned by Sadad in the callback.
+ * PostgreSQL also accepts the hyphen-less form, but this keeps things explicit.
+ */
+function restoreUuidHyphens(id) {
+  const s = String(id || '').replace(/-/g, '');
+  if (s.length !== 32) return id; // not a UUID — return as-is
+  return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20)}`;
+}
+
+/**
+ * Normalise a phone number to digits only.
+ * Sadad requires 8–15 digits with the country code prefix (e.g. 97412345678).
+ */
+function normalisePhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length >= 8 && digits.length <= 15) return digits;
+  // Fallback: Qatar country code + stripped digits (truncated/padded to 11 digits)
+  const bare = digits.replace(/^974/, '');
+  const padded = bare.padEnd(8, '0').slice(0, 8);
+  return `974${padded}`;
+}
+
 // ─── Payment request builder ──────────────────────────────────────────────────
 
 /**
@@ -92,12 +125,15 @@ function buildPaymentRequest(opts) {
   const txnDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
   // All params that will be included in signature (alphabetical sort happens inside generateSignature)
+  // Sadad ORDER_ID must be alphanumeric only — strip UUID hyphens
+  const sadadOrderId = stripUuidHyphens(opts.orderId);
+
   const params = {
     CALLBACK_URL : opts.callbackUrl,
-    CUST_ID      : opts.customer.id || opts.customer.email,
+    CUST_ID      : stripUuidHyphens(opts.customer.id || opts.orderId),
     EMAIL        : opts.customer.email,
-    MOBILE_NO    : String(opts.customer.phone),
-    ORDER_ID     : String(opts.orderId),
+    MOBILE_NO    : normalisePhone(opts.customer.phone),
+    ORDER_ID     : sadadOrderId,
     TXN_AMOUNT   : Number(opts.amount).toFixed(2),
     WEBSITE      : website,
     merchant_id  : merchantId,
@@ -113,7 +149,7 @@ function buildPaymentRequest(opts) {
 
   const productDetails = {};
   items.forEach((item, i) => {
-    productDetails[`productdetail[${i}][order_id]`] = String(item.orderId);
+    productDetails[`productdetail[${i}][order_id]`] = stripUuidHyphens(item.orderId);
     productDetails[`productdetail[${i}][amount]`]   = Number(item.amount).toFixed(2);
     productDetails[`productdetail[${i}][quantity]`] = String(item.quantity || 1);
   });
@@ -142,6 +178,7 @@ module.exports = {
   verifyChecksum,
   buildPaymentRequest,
   toOrderPaymentStatus,
+  restoreUuidHyphens,
   SADAD_ENDPOINT,
   SadadError,
 };

@@ -112,7 +112,8 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
   }
 
   // ── 2. Parse fields ───────────────────────────────────────────────────────
-  const orderId           = payload.ORDERID;
+  // Sadad returns ORDER_ID without hyphens — restore UUID format for DB lookup
+  const orderId           = sadad.restoreUuidHyphens(payload.ORDERID);
   const transactionStatus = Number(payload.transaction_status);
   const transactionNumber = payload.transaction_number;
   const paymentStatus     = sadad.toOrderPaymentStatus(transactionStatus);

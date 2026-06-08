@@ -32,7 +32,8 @@ router.post('/', async (req, res) => {
 
   // ── 2. Parse fields ───────────────────────────────────────────────────────
   const transactionNumber = payload.transactionNumber;
-  const websiteRefNo      = payload.websiteRefNo;   // our ORDER_ID (UUID)
+  // websiteRefNo was sent without hyphens — restore UUID format for DB lookup
+  const websiteRefNo      = sadad.restoreUuidHyphens(payload.websiteRefNo);
   const transactionStatus = Number(payload.transactionStatus);
   const paymentStatus     = sadad.toOrderPaymentStatus(transactionStatus);
 
