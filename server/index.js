@@ -20,13 +20,33 @@ const PORT = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
 // ─── Allowed Origins ────────────────────────────────────────────────────────
-const configuredOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
-  : [];
+function csv(value) {
+  return String(value || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+}
+
+function originFromUrl(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return '';
+  }
+}
+
+const configuredOrigins = csv(process.env.CORS_ORIGINS);
 const defaultAllowedOrigins = ['http://localhost:4200', 'http://localhost:4300'];
+const sadadAllowedOrigins = new Set([
+  'https://sadadqa.com',
+  'https://www.sadadqa.com',
+  originFromUrl(process.env.SADAD_ENDPOINT || 'https://sadadqa.com/webpurchase'),
+  ...csv(process.env.SADAD_CORS_ORIGINS),
+].filter(Boolean));
 
 function isAllowedOrigin(origin) {
-  if (configuredOrigins.length > 0) return configuredOrigins.includes(origin);
+  if (configuredOrigins.includes(origin)) return true;
+  if (sadadAllowedOrigins.has(origin)) return true;
   if (defaultAllowedOrigins.includes(origin)) return true;
   if (isProd) return false;
 
