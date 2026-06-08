@@ -32,41 +32,13 @@ const base = {
   txnDate      : '2026-06-08 21:41:26',
 };
 
-// ── Theory A: 8 fields only, no productdetail ───────────────────────────────
-const paramsA = { ...base };
+const { sortedKeys, string, sig } = computeSig(base, secretKey);
 
-// ── Theory B: productdetail as "Array" (PHP $POST array→string behaviour) ──
-const paramsB = {
-  ...base,
-  productdetail: 'Array',   // PHP converts array fields to string "Array"
-};
-
-// ── Theory C: productdetail fields as literal keys (raw parsing) ────────────
-const paramsC = {
-  ...base,
-  'productdetail[0][order_id]' : 'ba44d6edd9354f818ef9370298065058',
-  'productdetail[0][amount]'   : '800.00',
-  'productdetail[0][quantity]' : '1',
-};
-
-console.log('\n=== Theory A — 8 fields, no productdetail ===');
-const a = computeSig(paramsA, secretKey);
-console.log('Sorted keys:', a.sortedKeys);
-console.log('Signature  :', a.sig);
-
-console.log('\n=== Theory B — productdetail as "Array" (PHP $POST behaviour) ===');
-const b = computeSig(paramsB, secretKey);
-console.log('Sorted keys:', b.sortedKeys);
-console.log('Signature  :', b.sig);
-
-console.log('\n=== Theory C — productdetail as 3 literal keys ===');
-const c = computeSig(paramsC, secretKey);
-console.log('Sorted keys:', c.sortedKeys);
-console.log('Signature  :', c.sig);
-
-console.log('\n=== Which theory our code is currently using? ===');
-console.log('Check the network tab for the "signature" field in the form POST to sadadqa.com');
-console.log('and compare below:\n');
-console.log('Theory A sig:', a.sig);
-console.log('Theory B sig:', b.sig);
-console.log('Theory C sig:', c.sig);
+console.log('\n=== Web Checkout 2.1 request signature ===');
+console.log('Sorted keys:', sortedKeys);
+console.log('String      :', string);
+console.log('Signature   :', sig);
+console.log('\nProduct detail fields are submitted in the form, but are not included in the signed data:');
+console.log('productdetail[0][order_id] = ba44d6edd9354f818ef9370298065058');
+console.log('productdetail[0][amount]   = 800.00');
+console.log('productdetail[0][quantity] = 1');

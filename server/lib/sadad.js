@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const SADAD_ENDPOINT = 'https://sadadqa.com/webpurchase';
+const SADAD_ENDPOINT = env('SADAD_ENDPOINT', 'https://sadadqa.com/webpurchase');
 
 // ─── Error class ─────────────────────────────────────────────────────────────
 class SadadError extends Error {
@@ -124,13 +124,12 @@ function buildPaymentRequest(opts) {
   // txnDate format from Sadad docs: "YYYY-MM-DD HH:MM:SS"
   const txnDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-  // All params that will be included in signature (alphabetical sort happens inside generateSignature)
   // Sadad ORDER_ID must be alphanumeric only — strip UUID hyphens
   const sadadOrderId = stripUuidHyphens(opts.orderId);
 
   // ── Signed params ──────────────────────────────────────────────────────────
-  // Use EXACTLY the 8 fields from Sadad docs section 7 (lowercase "email").
-  // Sadad verifies against this predefined set — extra fields are ignored.
+  // Use only the required request fields. Sadad's guide signs this core object
+  // first, then appends productdetail[...] fields to the submitted form.
   const params = {
     CALLBACK_URL : opts.callbackUrl,
     MOBILE_NO    : normalisePhone(opts.customer.phone),
@@ -141,20 +140,10 @@ function buildPaymentRequest(opts) {
     merchant_id  : merchantId,
     txnDate,
   };
-
-  // ── productdetail handling ─────────────────────────────────────────────────
-  // Sadad's PHP verification uses $_POST. PHP parses bracket-notation fields
-  // (productdetail[0][order_id] etc.) into a nested array under the key
-  // "productdetail". When PHP concatenates that array into the hash string it
-  // produces the literal string "Array". So we sign with productdetail="Array"
-  // to match exactly what Sadad computes on their side.
-  params.productdetail = 'Array';
-
   params.signature = generateSignature(params, secretKey);
 
-  // The actual productdetail array fields are sent in the form separately.
-  // PHP's bracket-notation parsing merges them into $_POST['productdetail']
-  // (the array), which is what we accounted for above with the "Array" value.
+  // Product details are sent as bracket-notation form fields, but are not part
+  // of the request signature per the Web Checkout 2.1 form example.
   const items = opts.items && opts.items.length > 0
     ? opts.items
     : [{ orderId: opts.orderId, amount: opts.amount, quantity: 1 }];
