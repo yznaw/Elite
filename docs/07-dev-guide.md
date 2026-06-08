@@ -291,7 +291,8 @@ Elite/
 │   │       ├── 001_initial_schema.sql         ← Full schema
 │   │       ├── 002_password_reset_tokens.sql  ← Reset tokens (SHA-256, 30m TTL)
 │   │       ├── 003_ref_tables.sql             ← ref_colors, ref_materials, ref_size_sets
-│   │       └── 004_product_meta_seo.sql       ← meta_title, meta_desc columns
+│   │       ├── 004_product_seo_fields.sql     ← meta_title, meta_desc columns
+│   │       └── 005_team_invitations.sql       ← team_invitations (token_hash, 48h TTL)
 │   ├── middleware/
 │   │   ├── require-auth.js                    ← requireAuth + requireRole helpers
 │   │   └── upload.js                          ← Shared multer config
@@ -302,16 +303,17 @@ Elite/
 │       ├── lib.js                             ← asyncHandler, ok, created, notFound, …
 │       ├── health.route.js                    ← GET /api/health
 │       ├── auth.route.js                      ← Login, logout, forgot/reset password
-│       ├── admin-products.route.js            ← Product CRUD + bulk-delete
-│       ├── admin-bulk-import.route.js         ← CSV upload → NDJSON streaming
+│       ├── admin-products.route.js            ← Product CRUD + bulk-delete + duplicate
+│       ├── admin-bulk-import.route.js         ← CSV upload → NDJSON streaming (dry-run)
 │       ├── admin-ref.route.js                 ← Colors, materials, size sets CRUD
-│       ├── admin-media.route.js               ← Media library upload/delete
+│       ├── admin-media.route.js               ← Media library upload/delete/gdrive
 │       ├── admin-collections.route.js         ← Collections CRUD
 │       ├── admin-orders.route.js              ← Orders + workflow + notes + timeline
 │       ├── admin-customers.route.js           ← Customers + order history
 │       ├── admin-analytics.route.js           ← KPI + chart data
 │       ├── admin-storefront.route.js          ← Storefront snapshots + publish
-│       ├── admin-settings.route.js            ← Store settings + team
+│       ├── admin-settings.route.js            ← Store settings + team + invitations
+│       ├── invitations.route.js               ← Public: validate token + accept invite
 │       ├── products.route.js                  ← Public storefront listing
 │       ├── carts.route.js                     ← Public cart
 │       └── contact.route.js                   ← Public contact form
@@ -356,8 +358,11 @@ Elite/
 │               │   ├── admin-orders.service.ts ← Orders + workflow + notes
 │               │   ├── admin-customers.service.ts ← Customer CRM
 │               │   ├── admin-media.service.ts ← Media library
+│               │   ├── admin-settings.service.ts ← Store settings + team + invitations
 │               │   ├── media-upload.service.ts ← Multipart upload with per-file progress
 │               │   ├── storefront.service.ts  ← Draft/publish flow
+│               │   ├── store-config.service.ts ← Shared signals (lowStockThreshold, etc.)
+│               │   ├── storage.service.ts     ← Tenant-scoped localStorage wrapper
 │               │   ├── notification.service.ts ← Global real-time alerts
 │               │   ├── toast.service.ts       ← Toast notifications
 │               │   ├── confirm.service.ts     ← Confirm dialogs
@@ -370,6 +375,8 @@ Elite/
 │               │   │   ├── catalog.component.ts
 │               │   │   ├── product-drawer.component.ts
 │               │   │   └── bulk-import-dialog.component.ts
+│               │   ├── accept-invite/         ← Public: set password from invitation link
+│               │   ├── settings/              ← Store info + team + invitations
 │               │   ├── reference/             ← Colors, materials, size sets management
 │               │   └── …                      ← dashboard, orders, customers, media, etc.
 │               └── shared/                    ← 15+ reusable components

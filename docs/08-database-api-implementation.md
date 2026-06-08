@@ -52,7 +52,8 @@ The implementation added:
 | `server/db/migrations/001_initial_schema.sql` | Full initial PostgreSQL schema |
 | `server/db/migrations/002_password_reset_tokens.sql` | Password reset tokens (SHA-256 hashed, one-shot, 30m TTL) |
 | `server/db/migrations/003_ref_tables.sql` | `ref_colors`, `ref_materials`, `ref_size_sets` — brand reference data |
-| `server/db/migrations/004_product_meta_seo.sql` | `ALTER TABLE products ADD COLUMN meta_title text, meta_desc text` |
+| `server/db/migrations/004_product_seo_fields.sql` | `ALTER TABLE products ADD COLUMN meta_title text, meta_desc text` |
+| `server/db/migrations/005_team_invitations.sql` | `team_invitations` table — UUID PK, `token_hash` TEXT, 48h `expires_at`, single-use |
 | `server/db/client.js` | Shared `pg` connection pool |
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
 | `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |
@@ -70,6 +71,7 @@ The initial schema includes tables for:
 
 - Tenants and white-label brand profiles
 - Admin users and team members
+- Team invitations (token_hash, role, 48h TTL)
 - Store settings
 - Products
 - Product translations
@@ -386,6 +388,11 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 | `GET` | `/api/admin/settings/team` | `SELECT` admin users |
 | `POST` | `/api/admin/settings/team` | `INSERT ... ON CONFLICT DO UPDATE` admin user |
 | `PATCH` | `/api/admin/settings/team/:id` | `UPDATE` admin user |
+| `GET` | `/api/admin/settings/invitations` | `SELECT` from `team_invitations` where not expired |
+| `POST` | `/api/admin/settings/invitations` | `INSERT` into `team_invitations` with SHA-256 hashed token; returns raw token in `inviteLink` |
+| `DELETE` | `/api/admin/settings/invitations/:id` | `DELETE` from `team_invitations` |
+| `GET` | `/api/invitations/validate?token=` | Hash-lookup in `team_invitations`, return `{ email, role }` |
+| `POST` | `/api/invitations/accept` | Transaction: `INSERT` admin_users (bcrypt password), `DELETE` invitation row |
 | `GET` | `/api/admin/settings/integrations` | `SELECT` integrations |
 | `POST` | `/api/admin/settings/integrations` | `INSERT ... ON CONFLICT DO UPDATE` integration |
 
@@ -446,18 +453,12 @@ Already wired to the UI:
 - Admin product save
 - Storefront product collection loading
 
-Still mock-backed in many admin screens:
+Still mock-backed:
 
-- Admin catalog initial list still starts from `data/mock.ts`
-- Collections page still starts from `COLLECTIONS`
-- Customers page still starts from `CUSTOMERS`
-- Orders page still starts from `ORDERS`
-- Media page still starts from `MEDIA_INIT`
-- Analytics/dashboard still use mock rollups
-- Storefront editor service still uses localStorage
-- Settings page still uses mock arrays
+- Analytics charts still use `mock.ts` rollups — `GET /api/admin/analytics/overview` exists but is not yet wired to the analytics component
+- `data/mock.ts` is imported only by the analytics page now; all other pages use real API services
 
-The API routes exist for these areas, so each page can now be migrated from mock data to HTTP services incrementally.
+All other major admin pages (catalog, orders, customers, media, storefront, settings) are fully wired to PostgreSQL via their respective `Admin*Service` classes.
 
 ---
 
@@ -493,34 +494,13 @@ Temporary smoke-test rows were removed after testing where appropriate.
 
 ---
 
-## Notes For Next Implementation Pass
+## Remaining Work
 
-Recommended next steps:
-
-1. Create Angular admin services for each API area:
-   - `AdminCatalogService`
-   - `AdminCollectionsService`
-   - `AdminCustomersService`
-   - `AdminOrdersService`
-   - `AdminMediaService`
-   - `AdminStorefrontApiService`
-   - `AdminSettingsService`
-   - `AdminAnalyticsService`
-
-2. Replace page-level mock imports with service-backed signals.
-
-3. Update drawer save/delete handlers to call:
-   - `POST`
-   - `PATCH`
-   - `DELETE`
-
-4. Add loading, empty, and error states to each page.
-
-5. Add authentication and tenant resolution before production.
-
-6. Add seed data scripts for local development.
-
-7. Add migration tooling once there is more than one migration.
+- **Analytics** — wire `AnalyticsComponent` to `GET /api/admin/analytics/overview`; remove remaining `mock.ts` import
+- **Password reset emails** — `POST /api/auth/forgot` currently logs the reset URL to stdout; wire a real email transport (Resend / SES / SendGrid) in production
+- **Team invitation emails** — `POST /api/admin/settings/invitations` returns `inviteLink` in the response body; the admin copies it manually. Wire email delivery in production
+- **POS backend** — `admin-pos.route.js` is planned but not yet built; see `docs/pos-system-plan.html`
+- **S3 / Supabase storage** — currently disk-only; add driver in `server/lib/storage.js` and set `STORAGE_DRIVER` env
 
 ---
 

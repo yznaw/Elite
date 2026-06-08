@@ -118,8 +118,10 @@ All routes are automatically prefixed with `/api` by the main `app.use('/api', r
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | Server listening port |
+| `DATABASE_URL` | — | PostgreSQL connection string (required) |
 | `CORS_ORIGINS` | `localhost:4200,4300` | Comma-separated allowed origins |
 | `NODE_ENV` | `development` | Environment identifier |
+| `SESSION_SECRET` | — | Long random string for signing the session cookie (required) |
 
 ---
 
@@ -137,24 +139,19 @@ All routes are automatically prefixed with `/api` by the main `app.use('/api', r
 └──────────────┘                                  │
                                                   │
                                            ┌──────▼───────┐
-                                           │   Database   │
-                                           │  (Future)    │
+                                           │  PostgreSQL  │
+                                           │  (live, pg)  │
                                            └──────────────┘
 ```
 
 ### Current State
 
-- **No database yet** — both Angular apps use local mock data and localStorage for persistence
-- The Express server currently only has a health check endpoint
-- The `StorefrontService` uses localStorage as a draft/publish store (designed to be swapped for API calls)
-- The `CartService` persists cart items to localStorage
-
-### Planned State
-
-- Connect Express to a database (Supabase / PostgreSQL / MongoDB)
-- Add auth routes (`/api/auth/*`)
-- Add CRUD routes for products, orders, customers, media
-- Replace localStorage calls in Angular services with `HttpClient` calls
+- **PostgreSQL** is the production database — all admin and storefront data is persisted there
+- Session-based authentication via `express-session` + `connect-pg-simple`
+- All major admin routes are live: products, variants, orders, customers, media, collections, storefront, analytics, settings, team invitations
+- `StorageService` wraps localStorage with tenant-scoped keys (`elite:{tenantId}:{key}`)
+- `StoreConfigService` exposes shared settings (e.g. `lowStockThreshold`) via Angular signals
+- The storefront editor saves drafts and published snapshots to the `storefront_snapshots` table
 
 ---
 
@@ -195,6 +192,7 @@ Both Angular builds produce static files that are served by a web server (Nginx,
   admin.elitecollections.qa ─► /    → admin-portal dist│
                     │                                  │
   */api/*  ─────────┤──► proxy_pass → Express :3000    │
+  */uploads/*  ─────┤──► proxy_pass → Express :3000    │
                     └─────────────────────────────────┘
 ```
 
