@@ -25,7 +25,7 @@ function storefrontBase(req) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payments/sadad/initiate
-// Body: { orderId: string }
+// Body: { orderId: string }  — orderId must be the UUID (not public_number)
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/sadad/initiate', asyncHandler(async (req, res) => {
   const { orderId } = req.body;
@@ -70,12 +70,12 @@ router.post('/sadad/initiate', asyncHandler(async (req, res) => {
       }],
     });
 
+    // Update the payments record created at checkout to reflect Sadad as provider
     await client.query(
-      `UPDATE orders
-          SET payment_provider = 'sadad',
-              payment_status   = 'pending',
-              updated_at       = NOW()
-        WHERE id = $1`,
+      `UPDATE payments
+          SET provider   = 'sadad',
+              updated_at = NOW()
+        WHERE order_id = $1`,
       [order.id],
     );
 
@@ -95,6 +95,7 @@ router.post('/sadad/initiate', asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payments/sadad/callback
 // Sadad posts transaction result as application/x-www-form-urlencoded
+// after the customer completes (or exits) the payment page.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/sadad/callback', asyncHandler(async (req, res) => {
   const payload = req.body;
@@ -105,9 +106,8 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
   delete paramsForVerification.checksumhash;
 
   const isValid = sadad.verifyChecksum(paramsForVerification, receivedHash);
-
   if (!isValid) {
-    console.warn('[sadad-callback] Checksum FAILED', { orderId: payload.ORDERID, txn: payload.transaction_number });
+    console.warn('[sadad-callback] Checksum FAILED', { orderId: payload.ORDERID });
     return res.redirect(`${storefrontBase(req)}/checkout/failure?reason=invalid_signature`);
   }
 
@@ -122,19 +122,32 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
   // ── 3. Update DB ──────────────────────────────────────────────────────────
   const client = await db.pool.connect();
   try {
+    // Update order payment status
     await client.query(
       `UPDATE orders
-          SET payment_status    = $1,
-              payment_reference = $2,
-              updated_at        = NOW()
-        WHERE id = $3`,
-      [paymentStatus, transactionNumber || null, orderId],
+          SET payment_status = $1,
+              paid_at        = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_at END,
+              updated_at     = NOW()
+        WHERE id = $2`,
+      [paymentStatus, orderId],
+    );
+
+    // Update the payments record with Sadad transaction details
+    await client.query(
+      `UPDATE payments
+          SET provider            = 'sadad',
+              provider_payment_id = $1,
+              status              = $2,
+              processed_at        = CASE WHEN $2 = 'paid' THEN NOW() ELSE processed_at END,
+              updated_at          = NOW()
+        WHERE order_id = $3`,
+      [transactionNumber || null, paymentStatus, orderId],
     );
 
     if (paymentStatus === 'paid') {
       await client.query(
         `UPDATE orders SET fulfillment_status = 'awaiting'
-          WHERE id = $1 AND fulfillment_status IN ('pending', 'awaiting')`,
+          WHERE id = $1 AND fulfillment_status = 'awaiting'`,
         [orderId],
       );
     }

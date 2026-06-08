@@ -5,32 +5,18 @@ const sadad = require('../lib/sadad');
 const router = Router();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /webhooks/sadad
+// POST /webhooks/sadad  (JSON body)
 //
-// Sadad sends a JSON POST here for every transaction event, independently of
-// the customer's browser. This is the authoritative server-to-server notification.
-//
-// IMPORTANT (per Sadad docs):
-//   • Always respond HTTP 200 + { "status": "success" } — even on errors.
-//     Non-200 responses cause Sadad to retry, increasing replay risk.
-//   • Implement idempotent handling: track transactionNumber to avoid
-//     processing the same transaction twice.
+// Always responds 200 + { "status": "success" } immediately (Sadad requirement).
+// Processing happens after the response is sent.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/', async (req, res) => {
-  // Respond 200 immediately (Sadad requirement) — processing happens after
+  // Respond immediately — Sadad requires 200 or it will retry
   res.status(200).json({ status: 'success' });
 
-  let payload;
-  try {
-    // req.body is already parsed by express.json() on this route because
-    // index.js registers this router AFTER the global middleware.
-    payload = req.body;
-    if (!payload || typeof payload !== 'object') {
-      console.warn('[sadad-webhook] Received empty or non-object body');
-      return;
-    }
-  } catch (err) {
-    console.error('[sadad-webhook] Failed to parse body', err);
+  const payload = req.body;
+  if (!payload || typeof payload !== 'object') {
+    console.warn('[sadad-webhook] Empty or non-object body');
     return;
   }
 
@@ -39,87 +25,80 @@ router.post('/', async (req, res) => {
   const paramsForVerification = { ...payload };
   delete paramsForVerification.checksumhash;
 
-  const isValid = sadad.verifyChecksum(paramsForVerification, receivedHash);
-  if (!isValid) {
-    console.warn('[sadad-webhook] Checksum verification FAILED — ignoring', {
-      transactionNumber: payload.transactionNumber,
-      websiteRefNo     : payload.websiteRefNo,
-    });
+  if (!sadad.verifyChecksum(paramsForVerification, receivedHash)) {
+    console.warn('[sadad-webhook] Checksum FAILED — ignoring', { txn: payload.transactionNumber });
     return;
   }
 
   // ── 2. Parse fields ───────────────────────────────────────────────────────
-  const transactionNumber  = payload.transactionNumber;
-  const websiteRefNo       = payload.websiteRefNo;   // merchant ORDER_ID
-  const transactionStatus  = Number(payload.transactionStatus);
-  const txnAmount          = payload.txnAmount;
-  const isTestMode         = payload.isTestMode;
+  const transactionNumber = payload.transactionNumber;
+  const websiteRefNo      = payload.websiteRefNo;   // our ORDER_ID (UUID)
+  const transactionStatus = Number(payload.transactionStatus);
+  const paymentStatus     = sadad.toOrderPaymentStatus(transactionStatus);
 
-  const paymentStatus = sadad.toOrderPaymentStatus(transactionStatus);
-
-  console.log('[sadad-webhook]', {
-    transactionNumber, websiteRefNo, transactionStatus,
-    paymentStatus, txnAmount, isTestMode,
-  });
+  console.log('[sadad-webhook]', { transactionNumber, websiteRefNo, transactionStatus, paymentStatus });
 
   if (!websiteRefNo) {
-    console.warn('[sadad-webhook] Missing websiteRefNo — cannot update order');
+    console.warn('[sadad-webhook] Missing websiteRefNo');
     return;
   }
 
-  // ── 3. Idempotency check ──────────────────────────────────────────────────
-  // Only process status 2 (failed) or 3 (paid) — skip status 1 (in-progress)
+  // Skip status 1 (In Progress) — no DB update needed, wait for final status
   if (transactionStatus === 1) {
-    console.log('[sadad-webhook] Status=1 (In Progress) — no update needed, awaiting final status');
+    console.log('[sadad-webhook] Status=1 (In Progress) — skipping until final');
     return;
   }
 
+  // ── 3. Idempotency + update ───────────────────────────────────────────────
   const client = await db.pool.connect();
-
   try {
-    // Check if we already processed this exact transaction
+    // Check if this exact transaction was already processed
     const existing = await client.query(
-      `SELECT payment_status, payment_reference FROM orders WHERE id = $1`,
+      `SELECT provider_payment_id FROM payments WHERE order_id = $1`,
       [websiteRefNo],
     );
 
     if (existing.rows.length === 0) {
-      console.warn('[sadad-webhook] Order not found', { orderId: websiteRefNo });
+      console.warn('[sadad-webhook] No payments record for order', { websiteRefNo });
       return;
     }
 
-    const order = existing.rows[0];
-
-    // Skip if already processed with this same transaction reference
-    if (order.payment_reference === transactionNumber) {
-      console.log('[sadad-webhook] Duplicate webhook — already processed', { transactionNumber });
+    if (existing.rows[0].provider_payment_id === transactionNumber) {
+      console.log('[sadad-webhook] Duplicate — already processed', { transactionNumber });
       return;
     }
 
-    // ── 4. Update order ───────────────────────────────────────────────────
+    // Update orders table
     await client.query(
       `UPDATE orders
-          SET payment_status    = $1,
-              payment_reference = $2,
-              payment_provider  = 'sadad',
-              updated_at        = NOW()
-        WHERE id = $3`,
-      [paymentStatus, transactionNumber, websiteRefNo],
+          SET payment_status = $1,
+              paid_at        = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_at END,
+              updated_at     = NOW()
+        WHERE id = $2`,
+      [paymentStatus, websiteRefNo],
     );
 
-    // Transition to awaiting-fulfilment only on success
+    // Update payments table
+    await client.query(
+      `UPDATE payments
+          SET provider            = 'sadad',
+              provider_payment_id = $1,
+              status              = $2,
+              processed_at        = CASE WHEN $2 = 'paid' THEN NOW() ELSE processed_at END,
+              updated_at          = NOW()
+        WHERE order_id = $3`,
+      [transactionNumber, paymentStatus, websiteRefNo],
+    );
+
     if (paymentStatus === 'paid') {
       await client.query(
-        `UPDATE orders
-            SET fulfillment_status = 'awaiting'
-          WHERE id = $1 AND fulfillment_status IN ('pending', 'awaiting')`,
+        `UPDATE orders SET fulfillment_status = 'awaiting'
+          WHERE id = $1 AND fulfillment_status = 'awaiting'`,
         [websiteRefNo],
       );
     }
 
-    console.log('[sadad-webhook] Order updated', {
-      orderId: websiteRefNo, paymentStatus, transactionNumber,
-    });
+    console.log('[sadad-webhook] Order updated', { websiteRefNo, paymentStatus, transactionNumber });
   } catch (err) {
     console.error('[sadad-webhook] DB error', err);
   } finally {
