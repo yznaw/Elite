@@ -7,7 +7,7 @@ const website    = process.env.SADAD_WEBSITE;
 
 console.log('\n=== Loaded env vars ===');
 console.log('SADAD_MERCHANT_ID :', JSON.stringify(merchantId));
-console.log('SADAD_SECRET_KEY  :', JSON.stringify(secretKey));
+console.log('SADAD_SECRET_KEY  :', secretKey ? '[set]' : '[missing]');
 console.log('SADAD_WEBSITE     :', JSON.stringify(website));
 
 function computeSig(params, key) {
@@ -17,7 +17,7 @@ function computeSig(params, key) {
   return {
     sortedKeys,
     string: str,
-    sig: crypto.createHash('sha256').update(str).digest('hex').toUpperCase(),
+    sig: crypto.createHash('sha256').update(str).digest('hex'),
   };
 }
 
@@ -27,7 +27,7 @@ const base = {
   ORDER_ID     : 'ba44d6edd9354f818ef9370298065058',
   TXN_AMOUNT   : '800.00',
   WEBSITE      : website,
-  email        : 'test@pay.com',
+  EMAIL        : 'test@pay.com',
   merchant_id  : merchantId,
   txnDate      : '2026-06-08 21:41:26',
 };

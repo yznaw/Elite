@@ -30,11 +30,11 @@ function isConfigured() {
  *   1. Sort all params alphabetically by key
  *   2. Prefix string with the Secret Key
  *   3. Concatenate parameter VALUES only (no keys, no separators)
- *   4. SHA256 hash → uppercase hex
+ *   4. SHA256 hash → lowercase hex
  *
  * @param {Record<string, string>} params  — must NOT include 'signature' or 'checksumhash'
  * @param {string} secretKey
- * @returns {string}  uppercase hex digest
+ * @returns {string}  lowercase hex digest
  */
 function generateSignature(params, secretKey) {
   const sortedKeys = Object.keys(params).sort();
@@ -42,7 +42,7 @@ function generateSignature(params, secretKey) {
   for (const k of sortedKeys) {
     str += params[k];
   }
-  return crypto.createHash('sha256').update(str).digest('hex').toUpperCase();
+  return crypto.createHash('sha256').update(str).digest('hex');
 }
 
 /**
@@ -132,11 +132,11 @@ function buildPaymentRequest(opts) {
   // first, then appends productdetail[...] fields to the submitted form.
   const params = {
     CALLBACK_URL : opts.callbackUrl,
+    EMAIL        : opts.customer.email,
     MOBILE_NO    : normalisePhone(opts.customer.phone),
     ORDER_ID     : sadadOrderId,
     TXN_AMOUNT   : Number(opts.amount).toFixed(2),
     WEBSITE      : website,
-    email        : opts.customer.email,   // lowercase — matches Sadad section 7
     merchant_id  : merchantId,
     txnDate,
   };
