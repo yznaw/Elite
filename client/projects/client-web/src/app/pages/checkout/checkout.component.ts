@@ -175,7 +175,7 @@ export class CheckoutComponent {
         items: this.cart.items(),
         shippingQuote: this.shippingQuote()!,
       });
-      orderId = order.id;
+      orderId = order.id; // UUID for payment gateway
     } catch {
       this.error.set(this.t('checkout.error.submit'));
       this.placing.set(false);

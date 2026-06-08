@@ -551,7 +551,8 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     }
 
     created(res, {
-      id: createdOrder.public_number,
+      id: createdOrder.id,                   // UUID — used for payment initiation
+      orderNumber: createdOrder.public_number, // human-readable display reference
       total: fromCents(createdOrder.total_cents),
       delivery: fromCents(createdOrder.shipping_cents),
       payment: paymentStatus,

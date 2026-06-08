@@ -36,7 +36,8 @@ export interface DeliveryQuote {
 }
 
 export interface CheckoutOrder {
-  id: string;
+  id: string;          // UUID — use for payment initiation
+  orderNumber: string; // human-readable reference (e.g. EC-26-0677520)
   total: number;
   delivery?: number;
   payment: 'pending' | 'paid' | 'failed' | 'refunded';
