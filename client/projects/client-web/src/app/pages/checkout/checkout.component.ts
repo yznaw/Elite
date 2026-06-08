@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { CartService } from '../../services/cart.service';
 import { CheckoutService } from '../../services/checkout.service';
 import { DeliveryQuote } from '../../services/checkout.service';
+import { PaymentService } from '../../services/payment.service';
 import { I18nService } from '../../services/i18n.service';
 
 const STEPS = ['checkout.step.details', 'checkout.step.delivery', 'checkout.step.payment'] as const;
@@ -28,6 +29,7 @@ interface CheckoutForm {
 export class CheckoutComponent {
   readonly cart = inject(CartService);
   private readonly checkoutApi = inject(CheckoutService);
+  private readonly paymentService = inject(PaymentService);
   private readonly router = inject(Router);
   private readonly i18n = inject(I18nService);
 
@@ -38,6 +40,7 @@ export class CheckoutComponent {
   readonly placed = signal(false);
   readonly placedTotal = signal(0);
   readonly placing = signal(false);
+  readonly redirecting = signal(false);
   readonly quoteLoading = signal(false);
   readonly shippingQuote = signal<DeliveryQuote | null>(null);
   readonly error = signal('');
@@ -141,7 +144,7 @@ export class CheckoutComponent {
   }
 
   private async placeOrder(): Promise<void> {
-    if (this.placing()) return;
+    if (this.placing() || this.redirecting()) return;
     if (this.cart.items().length === 0) {
       this.error.set(this.t('checkout.error.empty'));
       return;
@@ -150,7 +153,10 @@ export class CheckoutComponent {
 
     const form = this.form();
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+
+    // ── Step 1: Create the order (payment_status = pending) ───────────────
     this.placing.set(true);
+    let orderId: string;
     try {
       const order = await this.checkoutApi.createOrder({
         customer: {
@@ -169,16 +175,23 @@ export class CheckoutComponent {
         items: this.cart.items(),
         shippingQuote: this.shippingQuote()!,
       });
-
-      this.placedTotal.set(order.total || this.total());
-      this.orderNumber.set(order.id);
-      this.placed.set(true);
-      this.cart.clear();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      orderId = order.id;
     } catch {
       this.error.set(this.t('checkout.error.submit'));
-    } finally {
       this.placing.set(false);
+      return;
+    }
+    this.placing.set(false);
+
+    // ── Step 2: Redirect to Sadad payment page ────────────────────────────
+    this.redirecting.set(true);
+    try {
+      this.cart.clear();
+      // This call builds a hidden form and submits it — browser navigates away.
+      await this.paymentService.redirectToSadadCheckout(orderId);
+    } catch {
+      this.redirecting.set(false);
+      this.error.set(this.t('checkout.error.payment'));
     }
   }
 

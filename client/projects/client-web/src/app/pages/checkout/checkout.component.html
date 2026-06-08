@@ -135,10 +135,18 @@
         <!-- Nav buttons -->
         <div style="display: flex; gap: 12px; margin-top: 28px;">
           @if (step() > 0) {
-            <button class="btn-outline" [disabled]="placing()" (click)="back()" style="padding: 14px 24px; flex: 1;">{{ t('common.back') }}</button>
+            <button class="btn-outline" [disabled]="placing() || redirecting()" (click)="back()" style="padding: 14px 24px; flex: 1;">{{ t('common.back') }}</button>
           }
-          <button class="btn-gold" [disabled]="placing() || cart.items().length === 0" (click)="next()" style="padding: 16px; flex: 2; font-size: 11px; letter-spacing: 0.18em;">
-            {{ placing() ? t('checkout.placing') : (step() < steps.length - 1 ? t('common.continue') : t('checkout.placeOrder')) }}
+          <button class="btn-gold" [disabled]="placing() || redirecting() || cart.items().length === 0" (click)="next()" style="padding: 16px; flex: 2; font-size: 11px; letter-spacing: 0.18em;">
+            @if (placing()) {
+              {{ t('checkout.placing') }}
+            } @else if (redirecting()) {
+              {{ t('checkout.redirecting') }}
+            } @else if (step() < steps.length - 1) {
+              {{ t('common.continue') }}
+            } @else {
+              {{ t('checkout.placeOrder') }}
+            }
           </button>
         </div>
 

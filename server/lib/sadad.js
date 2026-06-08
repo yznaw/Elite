@@ -1,3 +1,9 @@
+const crypto = require('crypto');
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const SADAD_ENDPOINT = 'https://sadadqa.com/webpurchase';
+
+// ─── Error class ─────────────────────────────────────────────────────────────
 class SadadError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -6,153 +12,136 @@ class SadadError extends Error {
   }
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function env(name, fallback = '') {
   return String(process.env[name] || fallback).trim();
 }
 
 function isConfigured() {
-  return Boolean(env('SADAD_MERCHANT_ID') && env('SADAD_API_KEY'));
+  return Boolean(env('SADAD_MERCHANT_ID') && env('SADAD_SECRET_KEY'));
 }
 
-function baseUrl() {
-  return env('SADAD_API_BASE_URL', 'https://api.sadad.qa').replace(/\/+$/, '');
-}
+// ─── Signature / Checksum ─────────────────────────────────────────────────────
 
-function authHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'X-Merchant-ID': env('SADAD_MERCHANT_ID'),
-    'X-API-Key': env('SADAD_API_KEY'),
-  };
+/**
+ * Generate a SADAD SHA256 signature.
+ *
+ * Algorithm (per official docs):
+ *   1. Sort all params alphabetically by key
+ *   2. Prefix string with the Secret Key
+ *   3. Concatenate parameter VALUES only (no keys, no separators)
+ *   4. SHA256 hash → uppercase hex
+ *
+ * @param {Record<string, string>} params  — must NOT include 'signature' or 'checksumhash'
+ * @param {string} secretKey
+ * @returns {string}  uppercase hex digest
+ */
+function generateSignature(params, secretKey) {
+  const sortedKeys = Object.keys(params).sort();
+  let str = secretKey;
+  for (const k of sortedKeys) {
+    str += params[k];
+  }
+  return crypto.createHash('sha256').update(str).digest('hex').toUpperCase();
 }
 
 /**
- * Create a payment session with Sadad.
- * Returns a redirect URL to send the customer to.
+ * Verify a SADAD checksumhash received in a callback or webhook.
+ *
+ * @param {Record<string, string>} params  — all fields EXCEPT checksumhash
+ * @param {string} receivedHash            — the checksumhash value from the payload
+ * @param {string} [secretKey]             — defaults to SADAD_SECRET_KEY env var
+ * @returns {boolean}
+ */
+function verifyChecksum(params, receivedHash, secretKey) {
+  const key = secretKey || env('SADAD_SECRET_KEY');
+  if (!key) return false;
+  const generated = generateSignature(params, key);
+  return generated.toLowerCase() === String(receivedHash || '').toLowerCase();
+}
+
+// ─── Payment request builder ──────────────────────────────────────────────────
+
+/**
+ * Build signed parameters for SADAD Web Checkout 2.1.
+ *
+ * The caller receives { params, productDetails, endpoint }.
+ * The Angular client should create a hidden HTML form, add all these as hidden
+ * inputs, and submit it — this redirects the customer to the SADAD payment page.
  *
  * @param {{
- *   orderId: string,
- *   amount: number,
- *   currency: string,
- *   customer: { firstName: string, lastName: string, email: string, phone: string },
- *   successUrl: string,
- *   failureUrl: string,
- *   webhookUrl: string,
- * }} params
+ *   orderId        : string,
+ *   amount         : number,
+ *   callbackUrl    : string,
+ *   customer       : { id?: string, email: string, phone: string },
+ *   items?         : Array<{ orderId: string|number, amount: number, quantity: number }>
+ * }} opts
  */
-async function createPaymentSession(params) {
-  if (!isConfigured()) {
-    throw new SadadError('Sadad is not configured — set SADAD_MERCHANT_ID and SADAD_API_KEY');
+function buildPaymentRequest(opts) {
+  const secretKey  = env('SADAD_SECRET_KEY');
+  const merchantId = env('SADAD_MERCHANT_ID');
+  const website    = env('SADAD_WEBSITE', 'DEFAULT');
+
+  if (!secretKey || !merchantId) {
+    throw new SadadError(
+      'Sadad is not configured — set SADAD_MERCHANT_ID and SADAD_SECRET_KEY in your .env',
+    );
   }
 
-  // TODO: replace with the real Sadad endpoint and payload shape once docs are available
-  const body = {
-    merchant_order_id: params.orderId,
-    amount: params.amount,
-    currency: params.currency || 'QAR',
-    customer: {
-      first_name: params.customer.firstName,
-      last_name: params.customer.lastName,
-      email: params.customer.email,
-      phone: params.customer.phone,
-    },
-    redirect_urls: {
-      success: params.successUrl,
-      failure: params.failureUrl,
-    },
-    webhook_url: params.webhookUrl,
+  // txnDate format from Sadad docs: "YYYY-MM-DD HH:MM:SS"
+  const txnDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+  // All params that will be included in signature (alphabetical sort happens inside generateSignature)
+  const params = {
+    CALLBACK_URL : opts.callbackUrl,
+    CUST_ID      : opts.customer.id || opts.customer.email,
+    EMAIL        : opts.customer.email,
+    MOBILE_NO    : String(opts.customer.phone),
+    ORDER_ID     : String(opts.orderId),
+    TXN_AMOUNT   : Number(opts.amount).toFixed(2),
+    WEBSITE      : website,
+    merchant_id  : merchantId,
+    txnDate,
   };
 
-  const res = await fetch(`${baseUrl()}/v1/payments`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
+  params.signature = generateSignature(params, secretKey);
+
+  // Product detail inputs — array notation used in the form
+  const items = opts.items && opts.items.length > 0
+    ? opts.items
+    : [{ orderId: opts.orderId, amount: opts.amount, quantity: 1 }];
+
+  const productDetails = {};
+  items.forEach((item, i) => {
+    productDetails[`productdetail[${i}][order_id]`] = String(item.orderId);
+    productDetails[`productdetail[${i}][amount]`]   = Number(item.amount).toFixed(2);
+    productDetails[`productdetail[${i}][quantity]`] = String(item.quantity || 1);
   });
 
-  const json = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new SadadError('Sadad payment session creation failed', { status: res.status, body: json });
-  }
-
-  // TODO: adjust field names to match the real Sadad response shape
-  return {
-    sessionId: json.session_id || json.id,
-    redirectUrl: json.redirect_url || json.payment_url,
-    raw: json,
-  };
+  return { params, productDetails, endpoint: SADAD_ENDPOINT };
 }
 
-/**
- * Retrieve payment status from Sadad by session/transaction ID.
- */
-async function getPaymentStatus(sessionId) {
-  if (!isConfigured()) {
-    throw new SadadError('Sadad is not configured — set SADAD_MERCHANT_ID and SADAD_API_KEY');
-  }
-
-  // TODO: adjust endpoint path to match actual Sadad API
-  const res = await fetch(`${baseUrl()}/v1/payments/${sessionId}`, {
-    method: 'GET',
-    headers: authHeaders(),
-  });
-
-  const json = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new SadadError('Sadad status check failed', { status: res.status, body: json });
-  }
-
-  // TODO: map to actual field names from Sadad response
-  return {
-    sessionId,
-    status: json.status,           // expected: 'paid' | 'pending' | 'failed' | 'cancelled'
-    transactionId: json.transaction_id,
-    amount: json.amount,
-    currency: json.currency,
-    paidAt: json.paid_at,
-    raw: json,
-  };
-}
+// ─── Status mapping ───────────────────────────────────────────────────────────
 
 /**
- * Verify a webhook payload signature from Sadad.
- * TODO: implement actual signature verification once docs are available.
+ * Map a SADAD numeric transactionStatus to the internal order payment status.
+ *   1 → 'pending'  (In Progress — do NOT fulfil yet)
+ *   2 → 'failed'
+ *   3 → 'paid'
  */
-function verifyWebhookSignature(rawBody, signatureHeader) {
-  const secret = env('SADAD_WEBHOOK_SECRET');
-  if (!secret) return true; // skip if not configured yet
-
-  // TODO: replace with real HMAC or RSA verification per Sadad docs
-  const crypto = require('crypto');
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(rawBody)
-    .digest('hex');
-
-  return signatureHeader === expected;
-}
-
-/**
- * Map a Sadad payment status string to the internal order payment status.
- */
-function toOrderPaymentStatus(sadadStatus) {
-  const map = {
-    paid: 'paid',
-    success: 'paid',
-    pending: 'pending',
-    failed: 'failed',
-    cancelled: 'failed',
-    refunded: 'refunded',
-  };
-  return map[String(sadadStatus).toLowerCase()] || 'pending';
+function toOrderPaymentStatus(transactionStatus) {
+  const code = Number(transactionStatus);
+  if (code === 3) return 'paid';
+  if (code === 2) return 'failed';
+  return 'pending';
 }
 
 module.exports = {
   isConfigured,
-  createPaymentSession,
-  getPaymentStatus,
-  verifyWebhookSignature,
+  generateSignature,
+  verifyChecksum,
+  buildPaymentRequest,
   toOrderPaymentStatus,
+  SADAD_ENDPOINT,
   SadadError,
 };

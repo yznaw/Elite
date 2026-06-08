@@ -375,7 +375,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     errors.push('Delivery address, city, and country are required.');
   }
   if (checkout.items.length === 0) errors.push('At least one cart item is required.');
-  if (!checkout.shippingQuote?.available) errors.push('A valid NBOX delivery quote is required.');
+  if (nbox.isConfigured() && !checkout.shippingQuote?.available) errors.push('A valid NBOX delivery quote is required.');
   if (errors.length > 0) return validationError(res, errors);
 
   const client = await db.pool.connect();
@@ -393,7 +393,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       const qty = Number(item.qty || item.quantity) || 1;
       return sum + toCents(item.price) * qty;
     }, 0);
-    const shippingCents = toCents(checkout.shippingQuote.amount || 0);
+    const shippingCents = toCents(checkout.shippingQuote?.amount || 0);
     const totalCents = subtotalCents + shippingCents;
     const paymentStatus = isPaidPayment(checkout.payment) ? 'paid' : 'pending';
 
