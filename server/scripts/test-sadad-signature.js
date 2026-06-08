@@ -22,7 +22,7 @@ function computeSig(params, key) {
 }
 
 const base = {
-  CALLBACK_URL : 'https://api.elitecollections.qa/api/payments/sadad/callback',
+  CALLBACK_URL : 'https://elitecollections.qa/api/payments/sadad/callback',
   MOBILE_NO    : '12345678',
   ORDER_ID     : 'ba44d6edd9354f818ef9370298065058',
   TXN_AMOUNT   : '800.00',
