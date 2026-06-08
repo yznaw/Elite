@@ -142,23 +142,29 @@ function buildPaymentRequest(opts) {
     txnDate,
   };
 
-  // ── productdetail fields ───────────────────────────────────────────────────
-  // Sadad requires productdetail AND includes ALL received form fields when
-  // verifying the signature. So productdetail must be part of the signed params.
+  // ── productdetail handling ─────────────────────────────────────────────────
+  // Sadad's PHP verification uses $_POST. PHP parses bracket-notation fields
+  // (productdetail[0][order_id] etc.) into a nested array under the key
+  // "productdetail". When PHP concatenates that array into the hash string it
+  // produces the literal string "Array". So we sign with productdetail="Array"
+  // to match exactly what Sadad computes on their side.
+  params.productdetail = 'Array';
+
+  params.signature = generateSignature(params, secretKey);
+
+  // The actual productdetail array fields are sent in the form separately.
+  // PHP's bracket-notation parsing merges them into $_POST['productdetail']
+  // (the array), which is what we accounted for above with the "Array" value.
   const items = opts.items && opts.items.length > 0
     ? opts.items
     : [{ orderId: opts.orderId, amount: opts.amount, quantity: 1 }];
 
-  items.forEach((item, i) => {
-    params[`productdetail[${i}][order_id]`] = stripUuidHyphens(item.orderId);
-    params[`productdetail[${i}][amount]`]   = Number(item.amount).toFixed(2);
-    params[`productdetail[${i}][quantity]`] = String(item.quantity || 1);
-  });
-
-  params.signature = generateSignature(params, secretKey);
-
-  // productDetails is empty — everything is already in params (all signed)
   const productDetails = {};
+  items.forEach((item, i) => {
+    productDetails[`productdetail[${i}][order_id]`] = stripUuidHyphens(item.orderId);
+    productDetails[`productdetail[${i}][amount]`]   = Number(item.amount).toFixed(2);
+    productDetails[`productdetail[${i}][quantity]`] = String(item.quantity || 1);
+  });
 
   return { params, productDetails, endpoint: SADAD_ENDPOINT };
 }

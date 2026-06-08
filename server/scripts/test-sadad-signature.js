@@ -1,10 +1,3 @@
-/**
- * Run from the server directory:
- *   node scripts/test-sadad-signature.js
- *
- * Prints exactly what the signature string looks like so you can
- * spot any env-var or field-name issues.
- */
 require('dotenv').config();
 const crypto = require('crypto');
 
@@ -17,31 +10,6 @@ console.log('SADAD_MERCHANT_ID :', JSON.stringify(merchantId));
 console.log('SADAD_SECRET_KEY  :', JSON.stringify(secretKey));
 console.log('SADAD_WEBSITE     :', JSON.stringify(website));
 
-// ── Approach A: section-7 style (8 fields, lowercase "email") ───────────────
-const paramsA = {
-  CALLBACK_URL : 'https://api.elitecollections.qa/api/payments/sadad/callback',
-  MOBILE_NO    : '12345678',
-  ORDER_ID     : 'ba44d6edd9354f818ef9370298065058',
-  TXN_AMOUNT   : '800.00',
-  WEBSITE      : website,
-  email        : 'test@pay.com',
-  merchant_id  : merchantId,
-  txnDate      : '2026-06-08 21:41:26',
-};
-
-// ── Approach B: end-to-end style (9 fields, uppercase EMAIL + CUST_ID) ──────
-const paramsB = {
-  CALLBACK_URL : 'https://api.elitecollections.qa/api/payments/sadad/callback',
-  CUST_ID      : 'ba44d6edd9354f818ef9370298065058',
-  EMAIL        : 'test@pay.com',
-  MOBILE_NO    : '12345678',
-  ORDER_ID     : 'ba44d6edd9354f818ef9370298065058',
-  TXN_AMOUNT   : '800.00',
-  WEBSITE      : website,
-  merchant_id  : merchantId,
-  txnDate      : '2026-06-08 21:41:26',
-};
-
 function computeSig(params, key) {
   const sortedKeys = Object.keys(params).sort();
   let str = key;
@@ -53,19 +21,52 @@ function computeSig(params, key) {
   };
 }
 
-console.log('\n=== Approach A — section-7 style (lowercase email, no CUST_ID) ===');
+const base = {
+  CALLBACK_URL : 'https://api.elitecollections.qa/api/payments/sadad/callback',
+  MOBILE_NO    : '12345678',
+  ORDER_ID     : 'ba44d6edd9354f818ef9370298065058',
+  TXN_AMOUNT   : '800.00',
+  WEBSITE      : website,
+  email        : 'test@pay.com',
+  merchant_id  : merchantId,
+  txnDate      : '2026-06-08 21:41:26',
+};
+
+// ── Theory A: 8 fields only, no productdetail ───────────────────────────────
+const paramsA = { ...base };
+
+// ── Theory B: productdetail as "Array" (PHP $POST array→string behaviour) ──
+const paramsB = {
+  ...base,
+  productdetail: 'Array',   // PHP converts array fields to string "Array"
+};
+
+// ── Theory C: productdetail fields as literal keys (raw parsing) ────────────
+const paramsC = {
+  ...base,
+  'productdetail[0][order_id]' : 'ba44d6edd9354f818ef9370298065058',
+  'productdetail[0][amount]'   : '800.00',
+  'productdetail[0][quantity]' : '1',
+};
+
+console.log('\n=== Theory A — 8 fields, no productdetail ===');
 const a = computeSig(paramsA, secretKey);
-console.log('Sorted keys   :', a.sortedKeys);
-console.log('String hashed :', JSON.stringify(a.string));
-console.log('Signature     :', a.sig);
+console.log('Sorted keys:', a.sortedKeys);
+console.log('Signature  :', a.sig);
 
-console.log('\n=== Approach B — end-to-end style (uppercase EMAIL + CUST_ID) ===');
+console.log('\n=== Theory B — productdetail as "Array" (PHP $POST behaviour) ===');
 const b = computeSig(paramsB, secretKey);
-console.log('Sorted keys   :', b.sortedKeys);
-console.log('String hashed :', JSON.stringify(b.string));
-console.log('Signature     :', b.sig);
+console.log('Sorted keys:', b.sortedKeys);
+console.log('Signature  :', b.sig);
 
-console.log('\n=== Signature sent to Sadad (from the failing request) ===');
-console.log('B45262A1D34A5C40FA9D7F47023ECB82A9623C1E23DBBB7EDF489F905E202B3E');
-console.log('\nMatch A?', a.sig === 'B45262A1D34A5C40FA9D7F47023ECB82A9623C1E23DBBB7EDF489F905E202B3E');
-console.log('Match B?', b.sig === 'B45262A1D34A5C40FA9D7F47023ECB82A9623C1E23DBBB7EDF489F905E202B3E');
+console.log('\n=== Theory C — productdetail as 3 literal keys ===');
+const c = computeSig(paramsC, secretKey);
+console.log('Sorted keys:', c.sortedKeys);
+console.log('Signature  :', c.sig);
+
+console.log('\n=== Which theory our code is currently using? ===');
+console.log('Check the network tab for the "signature" field in the form POST to sadadqa.com');
+console.log('and compare below:\n');
+console.log('Theory A sig:', a.sig);
+console.log('Theory B sig:', b.sig);
+console.log('Theory C sig:', c.sig);
