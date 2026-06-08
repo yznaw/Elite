@@ -144,21 +144,11 @@ function buildPaymentRequest(opts) {
 
   params.signature = generateSignature(params, secretKey);
 
-  // ── Extra (unsigned) form fields ───────────────────────────────────────────
-  // CUST_ID and productdetail are sent to Sadad but are NOT part of the hash.
-  const productDetails = {
-    CUST_ID: stripUuidHyphens(opts.customer.id || opts.orderId),
-  };
-
-  const items = opts.items && opts.items.length > 0
-    ? opts.items
-    : [{ orderId: opts.orderId, amount: opts.amount, quantity: 1 }];
-
-  items.forEach((item, i) => {
-    productDetails[`productdetail[${i}][order_id]`] = stripUuidHyphens(item.orderId);
-    productDetails[`productdetail[${i}][amount]`]   = Number(item.amount).toFixed(2);
-    productDetails[`productdetail[${i}][quantity]`] = String(item.quantity || 1);
-  });
+  // ── No extra fields ────────────────────────────────────────────────────────
+  // Sadad verifies by sorting ALL received form fields (minus "signature").
+  // Any field we send but didn't sign will cause a checksum mismatch.
+  // We only send the exactly 8 signed params + signature — nothing else.
+  const productDetails = {};
 
   return { params, productDetails, endpoint: SADAD_ENDPOINT };
 }
