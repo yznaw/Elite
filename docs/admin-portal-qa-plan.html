@@ -525,7 +525,7 @@
       </div>
       <div class="meta-item">
         <span class="meta-label">Bugs Fixed</span>
-        <span class="meta-value">21 <span>(total)</span></span>
+        <span class="meta-value">24 <span>(total)</span></span>
       </div>
       <div class="meta-item">
         <span class="meta-label">Stack</span>
@@ -797,10 +797,10 @@
 
     <div class="phase-complete-bar">
       <span class="pcb-icon">✅</span>
-      <strong>Phase 2 Complete</strong> — All 58 checks reviewed. 3 bugs fixed, 1 deferred finding (GLB stub).
+      <strong>Phase 2 Complete</strong> — All 58 checks reviewed. 6 bugs fixed, 1 deferred finding (GLB stub).
       <div class="pcb-pills">
-        <span class="pcb-pill pcb-pass">55 Pass</span>
-        <span class="pcb-pill pcb-fixed">3 Fixed</span>
+        <span class="pcb-pill pcb-pass">53 Pass</span>
+        <span class="pcb-pill pcb-fixed">6 Fixed</span>
         <span class="pcb-pill pcb-finding">1 Finding</span>
       </div>
     </div>
@@ -820,7 +820,7 @@
         <span class="note-icon">✅</span>
         <div>
           <strong>Phase 2 Complete — 2026-05-26</strong>
-          All 58 checks reviewed against source. 55 passed, 3 bugs fixed in code, 1 open finding
+          All 58 checks reviewed against source. 53 passed, 6 bugs fixed (3 original + 3 production: bulk-delete FK, save-product FK, meta_title missing column), 1 open finding
           (GLB upload buttons are UI stubs — deferred feature). Gate is clear — Phase 3 can proceed.
         </div>
       </div>
@@ -865,7 +865,7 @@
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Draft restored on drawer re-open<br><small style="font-weight:400;opacity:.7">resetForCurrent() reads localStorage; if raw.savedAt → form.set(parsed.form); draftRestoredAt.set(savedAt)</small></label></div>
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Delete product → confirmation dialog → removed from list<br><small style="font-weight:400;opacity:.7">onDelete() → confirm.ask() → deleted.emit(product); catalog removes on deleted event + undo toast</small></label></div>
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Duplicate product → new draft added to list <span class="tag tag-edge">EDGE</span><br><small style="font-weight:400;opacity:.7">duplicateProduct() → AdminProductsService.duplicate(id) → duplicated.emit(copy)</small></label></div>
-            <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Save updates catalog list (name, price, stock sync) <span class="tag tag-api">API</span><br><small style="font-weight:400;opacity:.7">save(): directly mutates product object fields (name, sku, price, stock, variants, images) from saved response</small></label></div>
+            <div class="check-item fixed"><span class="status-dot sd-fixed">🔧</span><label>Save updates catalog list (name, price, stock sync) <span class="tag tag-api">API</span> <span class="tag tag-crit">CRIT</span><br><small style="font-weight:400;opacity:.7"><strong>FIXED (production):</strong> PATCH /:id returned 500 in production — <code>replaceVariants()</code> ran <code>DELETE FROM product_variants</code> but <code>cart_items.variant_id</code> is <code>ON DELETE RESTRICT</code>. Fixed by nulling <code>cart_items.variant_id</code> before the delete. Also: <code>meta_title</code>/<code>meta_desc</code> columns were missing from the DB — added migration 004 and restored SEO fields in <code>upsertProduct()</code>.</small></label></div>
           </div>
         </div>
 
@@ -893,7 +893,7 @@
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Selection mode activates on first checkbox click<br><small style="font-weight:400;opacity:.7">selectionMode signal; onSelect(id) calls selectionMode.set(true) then adds to selectedIds</small></label></div>
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Select all / clear selection<br><small style="font-weight:400;opacity:.7">bulkSelectAll() → selectedIds.set(new Set(filtered().map(p =&gt; p.id))); bulkSelectNone() → selectedIds.set(new Set())</small></label></div>
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Bulk set status → Active / Hidden <span class="tag tag-api">API</span><br><small style="font-weight:400;opacity:.7">onBulkAction('status-active'/'status-hidden') → bulkSetStatus(hidden: boolean) → AdminProductsService.bulkStockUpdate</small></label></div>
-            <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Bulk delete → confirmation dialog → removes all <span class="tag tag-api">API</span><br><small style="font-weight:400;opacity:.7">onBulkAction('delete') → confirm.ask() → productsApi.bulkDelete(ids) → remove from _products</small></label></div>
+            <div class="check-item fixed"><span class="status-dot sd-fixed">🔧</span><label>Bulk delete → confirmation dialog → removes all <span class="tag tag-api">API</span> <span class="tag tag-crit">CRIT</span><br><small style="font-weight:400;opacity:.7"><strong>FIXED (production):</strong> POST /bulk-delete returned 500 — <code>DELETE FROM products</code> was blocked by <code>cart_items.product_id ON DELETE RESTRICT</code>. Fixed by adding <code>DELETE FROM cart_items WHERE product_id = ANY($1)</code> before deleting variants and products.</small></label></div>
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>CSV export generates correct file <span class="tag tag-perf">PERF</span><br><small style="font-weight:400;opacity:.7">exportCsv() iterates filtered() (not all products); UTF-8 BOM; maps all columns; triggers download via anchor.click()</small></label></div>
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Bulk import dialog opens, CSV parsed correctly<br><small style="font-weight:400;opacity:.7">BulkImportDialogComponent: streaming NDJSON via fetch() ReadableStream; parses rows with header detection</small></label></div>
             <div class="check-item pass"><span class="status-dot sd-pass">✓</span><label>Dry-run import previews rows before commit <span class="tag tag-edge">EDGE</span><br><small style="font-weight:400;opacity:.7">dryRun signal toggle; sends dryRun:true in payload; server previews without DB write; commit button becomes visible after preview</small></label></div>
@@ -971,6 +971,24 @@
             <td><code>product-drawer.component.ts</code> (lines 439–453)</td>
             <td>3D/GLB section in product drawer renders four action buttons (Replace, Unlink, Upload 3D, Link URL) but none have click handlers. All are visual stubs — clicking them does nothing.</td>
             <td>Deferred feature — GLB upload/link is not yet implemented. Marked as open. When implemented, will need: <code>MediaUploadService.uploadMedia()</code> integration, a <code>has3d</code> toggle on the product model, and a GLB-specific endpoint. No fix applied this session.</td>
+          </tr>
+          <tr>
+            <td><span class="fix-badge fb-fixed">FIXED</span></td>
+            <td><code>server/routes/admin-products.route.js</code></td>
+            <td><strong>Production 500 — bulk delete:</strong> <code>POST /api/admin/products/bulk-delete</code> failed with FK violation. <code>cart_items.product_id</code> references <code>products(id) ON DELETE RESTRICT</code>. Deleting products while cart items exist caused PostgreSQL to reject the operation.</td>
+            <td>Added <code>DELETE FROM cart_items WHERE product_id = ANY($1::uuid[])</code> as the first step in the bulk-delete transaction, before deleting variants and products.</td>
+          </tr>
+          <tr>
+            <td><span class="fix-badge fb-fixed">FIXED</span></td>
+            <td><code>server/routes/admin-products.route.js</code></td>
+            <td><strong>Production 500 — save product:</strong> <code>PATCH /api/admin/products/:id</code> failed with FK violation. <code>replaceVariants()</code> runs <code>DELETE FROM product_variants WHERE product_id = $1</code> but <code>cart_items.variant_id</code> references <code>product_variants(id) ON DELETE RESTRICT</code>. Saving any product whose variants were in an active cart crashed.</td>
+            <td>Added <code>UPDATE cart_items SET variant_id = NULL WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)</code> before the variant delete. Cart items survive with their product reference intact.</td>
+          </tr>
+          <tr>
+            <td><span class="fix-badge fb-fixed">FIXED</span></td>
+            <td><code>server/routes/admin-products.route.js</code><br><code>server/db/migrations/004_product_meta_seo.sql</code></td>
+            <td><strong>Production 500 — meta_title column missing:</strong> <code>PATCH /api/admin/products/:id</code> returned <code>column "meta_title" does not exist</code>. The <code>products</code> table was never given <code>meta_title</code> / <code>meta_desc</code> columns, yet the server code tried to <code>SET meta_title = $13</code>.</td>
+            <td>Created migration <code>004_product_meta_seo.sql</code>: <code>ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_title text, ADD COLUMN IF NOT EXISTS meta_desc text</code>. Restored <code>metaTitle</code>/<code>metaDesc</code> in <code>upsertProduct()</code> UPDATE + INSERT queries, PATCH payload builder, and <code>mapAdminProduct()</code> response mapper.</td>
           </tr>
         </tbody>
       </table>
@@ -1848,7 +1866,7 @@
 
 <div class="doc-footer">
   <strong>Elite Collection Admin Portal</strong> — QA &amp; Validation Master Plan · Angular 17 + Express + PostgreSQL ·
-  Generated 2026-05-26 · Updated 2026-05-28 · 222 validation checks across 6 interconnected phases · All phases complete · 21 bugs fixed · All findings resolved
+  Generated 2026-05-26 · Updated 2026-06-08 · 222 validation checks across 6 interconnected phases · All phases complete · 24 bugs fixed · All findings resolved
 </div>
 
 </body>
