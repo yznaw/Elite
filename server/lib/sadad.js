@@ -128,26 +128,32 @@ function buildPaymentRequest(opts) {
   // Sadad ORDER_ID must be alphanumeric only — strip UUID hyphens
   const sadadOrderId = stripUuidHyphens(opts.orderId);
 
+  // ── Signed params ──────────────────────────────────────────────────────────
+  // Use EXACTLY the 8 fields from Sadad docs section 7 (lowercase "email").
+  // Sadad verifies against this predefined set — extra fields are ignored.
   const params = {
     CALLBACK_URL : opts.callbackUrl,
-    CUST_ID      : stripUuidHyphens(opts.customer.id || opts.orderId),
-    EMAIL        : opts.customer.email,
     MOBILE_NO    : normalisePhone(opts.customer.phone),
     ORDER_ID     : sadadOrderId,
     TXN_AMOUNT   : Number(opts.amount).toFixed(2),
     WEBSITE      : website,
+    email        : opts.customer.email,   // lowercase — matches Sadad section 7
     merchant_id  : merchantId,
     txnDate,
   };
 
   params.signature = generateSignature(params, secretKey);
 
-  // Product detail inputs — array notation used in the form
+  // ── Extra (unsigned) form fields ───────────────────────────────────────────
+  // CUST_ID and productdetail are sent to Sadad but are NOT part of the hash.
+  const productDetails = {
+    CUST_ID: stripUuidHyphens(opts.customer.id || opts.orderId),
+  };
+
   const items = opts.items && opts.items.length > 0
     ? opts.items
     : [{ orderId: opts.orderId, amount: opts.amount, quantity: 1 }];
 
-  const productDetails = {};
   items.forEach((item, i) => {
     productDetails[`productdetail[${i}][order_id]`] = stripUuidHyphens(item.orderId);
     productDetails[`productdetail[${i}][amount]`]   = Number(item.amount).toFixed(2);
