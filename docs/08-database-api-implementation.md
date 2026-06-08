@@ -1,7 +1,7 @@
 # 08 — Database & API Implementation
 
 > **Audience:** Backend developers, frontend developers wiring pages to API  
-> **Last updated:** May 12, 2026 — real file uploads (storage adapter), password reset flow, dashboard live data, UI shell cleanup
+> **Last updated:** June 2026 — StorageService tenant-scoped localStorage, StoreConfigService, migration 004 (meta_title/meta_desc), production FK bug fixes (bulk-delete + product save)
 
 ---
 
@@ -16,8 +16,11 @@ The implementation added:
 - A default tenant helper for white-label/multi-tenant data.
 - Public storefront API routes.
 - Admin API routes for catalog, collections, customers, orders, media, storefront editor, settings, analytics, and integrations.
-- Product save wiring from the admin portal to PostgreSQL.
+- Product save wiring from the admin portal to PostgreSQL (including `meta_title`/`meta_desc` SEO fields via migration 004).
 - Storefront collection loading from the `products` table.
+- `StorageService` — tenant-scoped `localStorage` wrapper (`elite:{tenantId}:{base}`). All client-side persistence now uses this service instead of raw `localStorage`.
+- `StoreConfigService` — shared signal for `lowStockThreshold`, persisted via `StorageService`, read by dashboard, catalog, and settings.
+- Production FK bug fixes: bulk-delete and product-save now correctly handle `cart_items.product_id` and `cart_items.variant_id` `ON DELETE RESTRICT` constraints.
 - Documentation for endpoint-to-SQL behavior.
 
 ---
@@ -28,6 +31,8 @@ The implementation added:
 |---|---|
 | `server/db/migrations/001_initial_schema.sql` | Full initial PostgreSQL schema |
 | `server/db/migrations/002_password_reset_tokens.sql` | Password reset tokens (SHA-256 hashed, one-shot, 30m TTL) |
+| `server/db/migrations/003_ref_tables.sql` | `ref_colors`, `ref_materials`, `ref_size_sets` — brand reference data |
+| `server/db/migrations/004_product_meta_seo.sql` | `ALTER TABLE products ADD COLUMN meta_title text, meta_desc text` |
 | `server/db/client.js` | Shared `pg` connection pool |
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
 | `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |

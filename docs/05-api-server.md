@@ -368,7 +368,7 @@ server/
 │       ├── 001_initial_schema.sql   ← Full schema (tenants, products, orders, …)
 │       ├── 002_password_reset_tokens.sql ← Reset tokens (SHA-256 hashed, one-shot, 30m TTL)
 │       ├── 003_ref_tables.sql       ← ref_colors, ref_materials, ref_size_sets
-│       ├── 004_product_seo_fields.sql ← ADD COLUMN meta_title, meta_desc to products
+│       ├── 004_product_meta_seo.sql   ← ADD COLUMN meta_title, meta_desc to products
 │       └── 005_team_invitations.sql ← team_invitations table (UUID PK, token_hash, 48h TTL)
 ├── middleware/
 │   ├── require-auth.js              ← requireAuth + requireRole helpers
@@ -423,9 +423,16 @@ Admin authentication uses **server-side sessions** (no JWT):
 ### Bulk Delete endpoint (`POST /api/admin/products/bulk-delete`)
 
 - Body: `{ ids: string[] }` — array of product UUIDs
-- Permanently deletes `media_links`, `product_variants`, then `products` rows
+- Transaction order (FK-safe): `cart_items` → `media_links` → `product_variants` → `products`
+  - `cart_items` must be deleted first — `cart_items.product_id` is `ON DELETE RESTRICT`
 - Scoped to the tenant — other tenants' products are never touched
 - Returns `{ deleted: number }`
+
+### Product save (`PATCH /api/admin/products/:id`)
+
+- Calls `replaceVariants()` internally, which deletes all old variants and re-inserts them
+- **FK safety:** Before deleting variants, `cart_items.variant_id` is set to `NULL` for any cart items referencing those variants (`cart_items.variant_id` is `ON DELETE RESTRICT`). Cart items survive with their product reference intact.
+- **SEO fields:** `meta_title` and `meta_desc` are included in the `UPDATE` query (added by migration `004_product_meta_seo.sql`). Returned in the response via `mapAdminProduct()`.
 
 ### Reference data endpoints (`/api/admin/ref/*`)
 

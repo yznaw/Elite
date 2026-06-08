@@ -106,6 +106,20 @@ npm run admin    # admin-portal only
 - **Standalone only** — No `NgModule` declarations. Every component sets `standalone: true`
 - **Lazy-loaded pages** — All page components are loaded via `loadComponent()` in routes
 - **Signals for state** — Use `signal()`, `computed()`, `effect()` instead of `BehaviorSubject`
+- **Never use raw `localStorage`** — Always use `StorageService` so keys are tenant-scoped (`elite:{tenantId}:{base}`). Raw `localStorage` calls will bleed state across tenants if multiple users share a browser session.
+
+```typescript
+// ✅ Do this
+private readonly storage = inject(StorageService);
+const view = this.storage.get('my-view-key') ?? 'table';
+this.storage.set('my-view-key', 'cards');
+
+// ❌ Not this — not tenant-scoped
+localStorage.getItem('my-view-key');
+localStorage.setItem('my-view-key', 'cards');
+```
+
+- **Shared config via `StoreConfigService`** — Store-level settings that multiple pages read (e.g., `lowStockThreshold`) live in `StoreConfigService`. Don't hardcode thresholds in individual components; read `storeConfig.lowStockThreshold()` instead.
 - **No arrow functions in templates** — Angular 17 templates do not allow `=>` in event bindings. Extract to named component methods: `(click)="doThing()"` not `(click)="sig.update(v => !v)"`
 - **No self-closing non-void tags** — `<option [value]="x">{{ x }}</option>`, never `<option [value]="x"/>`
 - **Inject function** — Use `inject()` instead of constructor injection:
@@ -277,7 +291,7 @@ Elite/
 │   │       ├── 001_initial_schema.sql         ← Full schema
 │   │       ├── 002_password_reset_tokens.sql  ← Reset tokens (SHA-256, 30m TTL)
 │   │       ├── 003_ref_tables.sql             ← ref_colors, ref_materials, ref_size_sets
-│   │       └── 004_product_seo_fields.sql     ← meta_title, meta_desc columns
+│   │       └── 004_product_meta_seo.sql       ← meta_title, meta_desc columns
 │   ├── middleware/
 │   │   ├── require-auth.js                    ← requireAuth + requireRole helpers
 │   │   └── upload.js                          ← Shared multer config
