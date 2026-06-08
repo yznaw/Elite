@@ -122,16 +122,43 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
 
   // ── 3. Update DB ──────────────────────────────────────────────────────────
   const client = await db.pool.connect();
+  let publicOrderNumber = '';
+  let paymentUpdateSaved = false;
   try {
+    await client.query('BEGIN');
+
     // Update order payment status
-    await client.query(
+    const orderResult = await client.query(
       `UPDATE orders
           SET payment_status = $1,
               paid_at        = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_at END,
-              updated_at     = NOW()
-        WHERE id = $2`,
-      [paymentStatus, orderId],
+              updated_at     = NOW(),
+              metadata       = metadata || $3::jsonb
+        WHERE id = $2
+        RETURNING tenant_id, public_number`,
+      [
+        paymentStatus,
+        orderId,
+        JSON.stringify({
+          paymentGateway: {
+            provider: 'sadad',
+            method: 'web_checkout',
+            status: paymentStatus,
+            transactionNumber: transactionNumber || null,
+            transactionStatus,
+          },
+        }),
+      ],
     );
+
+    if (orderResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      console.warn('[sadad-callback] Order not found', { orderId, transactionNumber });
+      return res.redirect(`${storefrontBase(req)}/checkout/failure?reason=order_not_found`);
+    }
+
+    const updatedOrder = orderResult.rows[0];
+    publicOrderNumber = updatedOrder.public_number;
 
     // Update the payments record with Sadad transaction details
     await client.query(
@@ -151,8 +178,35 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
           WHERE id = $1 AND fulfillment_status = 'awaiting'`,
         [orderId],
       );
+
+      await client.query(
+        `
+          INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, metadata)
+          SELECT $1, $2, 'paid', $3, $4::jsonb
+          WHERE NOT EXISTS (
+            SELECT 1
+              FROM order_timeline_entries
+             WHERE order_id = $2
+               AND kind = 'paid'
+               AND metadata->>'provider' = 'sadad'
+          )
+        `,
+        [
+          updatedOrder.tenant_id,
+          orderId,
+          'SADAD payment confirmed.',
+          JSON.stringify({
+            provider: 'sadad',
+            transactionNumber: transactionNumber || null,
+            transactionStatus,
+          }),
+        ],
+      );
     }
+    await client.query('COMMIT');
+    paymentUpdateSaved = true;
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('[sadad-callback] DB update failed', err);
   } finally {
     client.release();
@@ -160,13 +214,17 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
 
   // ── 4. Redirect to storefront ─────────────────────────────────────────────
   const sf = storefrontBase(req);
+  const orderRef = encodeURIComponent(publicOrderNumber || orderId);
+  if (!paymentUpdateSaved) {
+    return res.redirect(`${sf}/checkout/failure?order=${orderRef}&reason=payment_update_failed`);
+  }
   if (paymentStatus === 'paid') {
-    return res.redirect(`${sf}/checkout/success?order=${orderId}`);
+    return res.redirect(`${sf}/thank-you?order=${orderRef}`);
   }
   if (paymentStatus === 'failed') {
-    return res.redirect(`${sf}/checkout/failure?order=${orderId}&reason=${encodeURIComponent(payload.RESPMSG || 'failed')}`);
+    return res.redirect(`${sf}/checkout/failure?order=${orderRef}&reason=${encodeURIComponent(payload.RESPMSG || 'failed')}`);
   }
-  return res.redirect(`${sf}/checkout/pending?order=${orderId}`);
+  return res.redirect(`${sf}/checkout/pending?order=${orderRef}`);
 }));
 
 module.exports = router;

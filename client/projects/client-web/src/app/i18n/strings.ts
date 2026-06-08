@@ -284,6 +284,12 @@ const EN = {
   'checkout.confirm.orderLabel': 'Order Number',
   'checkout.confirm.totalLabel': 'Order Total',
 
+  'thankYou.kicker': 'Payment Confirmed',
+  'thankYou.title': 'Thank You',
+  'thankYou.body': 'Your order is confirmed and our team will begin preparing it for fulfillment. A confirmation email will follow shortly.',
+  'thankYou.orderLabel': 'Order Number',
+  'thankYou.contact': 'Contact Us',
+
   // ─────────────────────────────────────────────────────────────────────
   //  Story page
   // ─────────────────────────────────────────────────────────────────────
@@ -643,6 +649,12 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.confirm.quote': '"سنبلّغك حين يبدأ رحلته."',
   'checkout.confirm.orderLabel': 'رقم الطلب',
   'checkout.confirm.totalLabel': 'إجمالي الطلب',
+
+  'thankYou.kicker': 'تم تأكيد الدفع',
+  'thankYou.title': 'شكراً لك',
+  'thankYou.body': 'تم تأكيد طلبك وسيبدأ فريقنا بتجهيزه للتنفيذ. ستصلك رسالة تأكيد قريباً.',
+  'thankYou.orderLabel': 'رقم الطلب',
+  'thankYou.contact': 'تواصل معنا',
 
   // Story
   'story.headline.line1': 'حرفة',

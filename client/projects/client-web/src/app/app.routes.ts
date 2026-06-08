@@ -29,6 +29,20 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'thank-you',
+    loadComponent: () =>
+      import('./pages/thank-you/thank-you.component').then(
+        (m) => m.ThankYouComponent,
+      ),
+  },
+  {
+    path: 'checkout/success',
+    loadComponent: () =>
+      import('./pages/thank-you/thank-you.component').then(
+        (m) => m.ThankYouComponent,
+      ),
+  },
+  {
     path: 'checkout',
     loadComponent: () =>
       import('./pages/checkout/checkout.component').then(

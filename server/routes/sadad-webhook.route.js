@@ -69,15 +69,37 @@ router.post('/', async (req, res) => {
       return;
     }
 
+    await client.query('BEGIN');
+
     // Update orders table
-    await client.query(
+    const orderResult = await client.query(
       `UPDATE orders
           SET payment_status = $1,
               paid_at        = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_at END,
-              updated_at     = NOW()
-        WHERE id = $2`,
-      [paymentStatus, websiteRefNo],
+              updated_at     = NOW(),
+              metadata       = metadata || $3::jsonb
+        WHERE id = $2
+        RETURNING tenant_id`,
+      [
+        paymentStatus,
+        websiteRefNo,
+        JSON.stringify({
+          paymentGateway: {
+            provider: 'sadad',
+            method: 'web_checkout',
+            status: paymentStatus,
+            transactionNumber: transactionNumber || null,
+            transactionStatus,
+          },
+        }),
+      ],
     );
+
+    if (orderResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      console.warn('[sadad-webhook] Order not found', { websiteRefNo });
+      return;
+    }
 
     // Update payments table
     await client.query(
@@ -97,10 +119,36 @@ router.post('/', async (req, res) => {
           WHERE id = $1 AND fulfillment_status = 'awaiting'`,
         [websiteRefNo],
       );
+
+      await client.query(
+        `
+          INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, metadata)
+          SELECT $1, $2, 'paid', $3, $4::jsonb
+          WHERE NOT EXISTS (
+            SELECT 1
+              FROM order_timeline_entries
+             WHERE order_id = $2
+               AND kind = 'paid'
+               AND metadata->>'provider' = 'sadad'
+          )
+        `,
+        [
+          orderResult.rows[0].tenant_id,
+          websiteRefNo,
+          'SADAD payment confirmed.',
+          JSON.stringify({
+            provider: 'sadad',
+            transactionNumber: transactionNumber || null,
+            transactionStatus,
+          }),
+        ],
+      );
     }
 
+    await client.query('COMMIT');
     console.log('[sadad-webhook] Order updated', { websiteRefNo, paymentStatus, transactionNumber });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('[sadad-webhook] DB error', err);
   } finally {
     client.release();
