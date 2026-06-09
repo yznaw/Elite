@@ -20,21 +20,18 @@
     </div>
 
     <div class="story-hero__facts" aria-label="Story highlights">
-      <span>1962</span>
-      <span>Doha atelier</span>
-      <span>Hand finished</span>
+      @for (fact of content().heroFacts; track fact.id) {
+        <span>{{ fact.label }}</span>
+      }
     </div>
   </section>
 
   <section class="story-intro" aria-label="Craft philosophy">
     <div>
-      <p class="story-kicker">Our philosophy</p>
-      <h2>Less decoration. More evidence.</h2>
+      <p class="story-kicker">{{ content().intro.kicker }}</p>
+      <h2>{{ content().intro.headline }}</h2>
     </div>
-    <p>
-      Every mark on the page below can be shaped from the admin portal, but the story keeps one
-      rhythm: material, hand, proportion, and the quiet confidence of a pair made to last.
-    </p>
+    <p>{{ content().intro.body }}</p>
   </section>
 
   <section class="chapter-stack" aria-label="Elite story chapters">

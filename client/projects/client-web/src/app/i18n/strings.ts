@@ -335,6 +335,7 @@ const EN = {
   'contact.subject.order': 'Order Support',
   'contact.subject.press': 'Press & Partnerships',
 
+  'contact.form.title': 'Send an Enquiry',
   'contact.send': 'Send Message',
   'contact.success.kicker': 'Message Received',
   'contact.success.headline.line1': 'A Client Advisor',
@@ -689,6 +690,7 @@ const AR: Record<keyof typeof EN, string> = {
   'contact.subject.order': 'دعم الطلبات',
   'contact.subject.press': 'صحافة وشراكات',
 
+  'contact.form.title': 'أرسل استفساراً',
   'contact.send': 'إرسال الرسالة',
   'contact.success.kicker': 'تم استلام الرسالة',
   'contact.success.headline.line1': 'مستشار العملاء',

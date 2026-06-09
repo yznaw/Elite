@@ -6,8 +6,8 @@ const { asyncHandler, ok } = require('./lib');
 const DEFAULT_HOME_LAYOUT = [
   {
     id: 'home-hero',
-    type: '3D Hero',
-    title: '3D Hero',
+    type: 'Landing Hero',
+    title: 'Landing Hero',
     visible: true,
     config: 'Interactive model hero',
   },
@@ -20,8 +20,8 @@ const DEFAULT_HOME_LAYOUT = [
   },
   {
     id: 'home-discount',
-    type: 'Discount Hero',
-    title: 'Discount Hero',
+    type: 'Promotion Section',
+    title: 'Promotion Section',
     visible: true,
     config: 'Promotional split section',
   },
