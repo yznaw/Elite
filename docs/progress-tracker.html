@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Elite — Implementation Progress Tracker</title>
+<style>
+  :root {
+    --green:   #024638;
+    --green-2: #036350;
+    --green-3: #012b23;
+    --gold:    #c5a572;
+    --gold-2:  #d6bc91;
+    --bg:      #f5f6fa;
+    --surface: #ffffff;
+    --ink:     #1a1f36;
+    --ink-2:   #3d4159;
+    --muted:   #6b7088;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger:  #ef4444;
+    --info:    #3b82f6;
+    --border:  #e2e5f0;
+    --radius:  10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ── Header ───────────────────────────────── */
+  .page-header {
+    background: var(--green);
+    padding: 32px 40px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .page-header__brand { color: var(--gold); font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase; margin-bottom: 6px; }
+  .page-header__title { color: #fff; font-size: 28px; font-weight: 600; }
+  .page-header__sub   { color: rgba(255,255,255,0.55); font-size: 13px; margin-top: 4px; }
+  .overall-ring {
+    flex-shrink: 0;
+    width: 90px; height: 90px;
+    border-radius: 50%;
+    border: 3px solid rgba(197,165,114,0.25);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(197,165,114,0.08);
+  }
+  .overall-ring__pct { font-size: 26px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .overall-ring__lbl { font-size: 9px; letter-spacing: 0.15em; color: rgba(255,255,255,0.5); text-transform: uppercase; margin-top: 2px; }
+
+  /* ── Progress bar ──────────────────────────── */
+  .progress-strip {
+    background: var(--green-3);
+    padding: 0 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 40px;
+  }
+  .progress-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .progress-bar__fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold), var(--gold-2));
+    border-radius: 99px;
+    transition: width 0.6s ease;
+    width: 0%;
+  }
+  .progress-strip__label { font-size: 11px; color: rgba(255,255,255,0.5); white-space: nowrap; }
+
+  /* ── Legend ────────────────────────────────── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    padding: 16px 40px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot--done    { background: var(--success); }
+  .dot--active  { background: var(--warning); }
+  .dot--pending { background: var(--border); border: 1px solid #ccc; }
+  .dot--blocked { background: var(--danger); }
+
+  /* ── Content ───────────────────────────────── */
+  .content { padding: 32px 40px; display: flex; flex-direction: column; gap: 24px; max-width: 1300px; }
+
+  /* ── Feature Card ──────────────────────────── */
+  .feature {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .feature__head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: #fcfcfd;
+  }
+  .feature__num {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--green);
+    color: var(--gold);
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .feature__title { font-size: 16px; font-weight: 600; flex: 1; }
+  .feature__layer {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 4px;
+    background: #f0f1f8; color: var(--muted);
+  }
+  .feature__layer--full { background: #e8f5f1; color: var(--green-2); }
+  .feature__progress-wrap {
+    display: flex; align-items: center; gap: 10px;
+    min-width: 130px;
+  }
+  .feature__progress-bar {
+    flex: 1; height: 5px;
+    background: var(--border);
+    border-radius: 99px; overflow: hidden;
+  }
+  .feature__progress-bar__fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 99px;
+    transition: width 0.4s ease;
+  }
+  .feature__progress-pct { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 30px; text-align: right; }
+
+  .status-badge {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 10px; border-radius: 99px;
+    white-space: nowrap;
+  }
+  .status-badge--pending  { background: #f0f1f8; color: var(--muted); }
+  .status-badge--active   { background: #fef3c7; color: #92400e; }
+  .status-badge--done     { background: #d1fae5; color: #065f46; }
+  .status-badge--blocked  { background: #fee2e2; color: #991b1b; }
+
+  /* ── Tasks Table ───────────────────────────── */
+  .tasks { width: 100%; border-collapse: collapse; }
+  .tasks th {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 8px 16px;
+    text-align: left;
+    background: #f8f9fc;
+    border-bottom: 1px solid var(--border);
+  }
+  .tasks td {
+    padding: 11px 16px;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f1f8;
+    vertical-align: top;
+  }
+  .tasks tr:last-child td { border-bottom: none; }
+  .tasks tr:hover td { background: #fafbff; }
+
+  .task-status {
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .task-status .dot { flex-shrink: 0; }
+
+  .layer-tag {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    font-weight: 500; white-space: nowrap;
+  }
+  .layer-tag--db     { background: #ede9fe; color: #5b21b6; }
+  .layer-tag--server { background: #dbeafe; color: #1e40af; }
+  .layer-tag--model  { background: #fce7f3; color: #9d174d; }
+  .layer-tag--admin  { background: #fef9c3; color: #713f12; }
+  .layer-tag--web    { background: #dcfce7; color: #14532d; }
+  .layer-tag--css    { background: #fde8d8; color: #9a3412; }
+
+  .file-ref {
+    font-size: 11px; color: var(--muted);
+    font-family: 'SF Mono', Menlo, monospace;
+    word-break: break-all;
+  }
+
+  .notes-cell { font-size: 12px; color: var(--muted); max-width: 260px; line-height: 1.5; }
+
+  /* ── Summary Footer ────────────────────────── */
+  .summary {
+    margin: 0 40px 40px;
+    padding: 20px 24px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+  }
+  .summary-cell {
+    background: var(--surface);
+    padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .summary-cell:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .summary-cell:last-child  { border-radius: 0 var(--radius) var(--radius) 0; }
+  .summary-cell__value { font-size: 28px; font-weight: 700; }
+  .summary-cell__label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .summary-cell--done    .summary-cell__value { color: var(--success); }
+  .summary-cell--active  .summary-cell__value { color: var(--warning); }
+  .summary-cell--pending .summary-cell__value { color: var(--muted); }
+  .summary-cell--total   .summary-cell__value { color: var(--green); }
+
+  /* ── Last Updated ──────────────────────────── */
+  .last-updated {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 40px 32px;
+  }
+
+  @media (max-width: 900px) {
+    .page-header { padding: 24px 20px; }
+    .content { padding: 20px; }
+    .legend { padding: 12px 20px; }
+    .progress-strip { padding: 0 20px; }
+    .summary { margin: 0 20px 24px; grid-template-columns: repeat(2, 1fr); }
+    .last-updated { padding: 0 20px 24px; }
+    .tasks th:nth-child(4),
+    .tasks td:nth-child(4) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════════════════ -->
+<header class="page-header">
+  <div>
+    <p class="page-header__brand">Elite Collection · Admin Platform</p>
+    <h1 class="page-header__title">Implementation Progress Tracker</h1>
+    <p class="page-header__sub">8 Features · 3 Layers (DB / Server / Frontend) · Updated after each feature</p>
+  </div>
+  <div class="overall-ring">
+    <span class="overall-ring__pct" id="overall-pct">0%</span>
+    <span class="overall-ring__lbl">Overall</span>
+  </div>
+</header>
+
+<div class="progress-strip">
+  <div class="progress-bar"><div class="progress-bar__fill" id="overall-bar"></div></div>
+  <span class="progress-strip__label" id="overall-label">0 of 45 tasks done</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     LEGEND
+═══════════════════════════════════════════════════════════ -->
+<div class="legend">
+  <div class="legend-item"><div class="dot dot--done"></div> Done</div>
+  <div class="legend-item"><div class="dot dot--active"></div> In Progress</div>
+  <div class="legend-item"><div class="dot dot--pending"></div> Pending</div>
+  <div class="legend-item"><div class="dot dot--blocked"></div> Blocked</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     FEATURES
+═══════════════════════════════════════════════════════════ -->
+<div class="content">
+
+  <!-- ── F4: Remove 3D ──────────────────────────────────── -->
+  <div class="feature" id="f4">
+    <div class="feature__head">
+      <div class="feature__num">4</div>
+      <div class="feature__title">Remove 3D Model References</div>
+      <span class="feature__layer">Admin · Client-web</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="f4-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:200px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:200px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Remove has3d / views3d from Product model</td>
+          <td><span class="layer-tag layer-tag--model">Model</span></td>
+          <td class="file-ref">admin-portal/models/index.ts</td>
+          <td class="notes-cell">Remove has3d, views3d from Product interface</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Remove 3D fields from normalizeProduct()</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">admin-products.service.ts</td>
+          <td class="notes-cell">Drop has3d, views3d from response mapping</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Remove 3D fact row from product drawer</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">Remove 3D status pill, views badge, has3d from buildPayload()</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Remove 3D filter from catalog</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">catalog.component.ts</td>
+          <td class="notes-cell">Remove 3D filter chip from advanced filter panel</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Remove Top 3D Interactions from analytics</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">analytics.component.ts</td>
+          <td class="notes-cell">Remove the 3D heatmap / top interactions card</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Remove 3D i18n keys</td>
+          <td><span class="layer-tag layer-tag--model">Model</span></td>
+          <td class="file-ref">admin-portal/i18n/strings.ts</td>
+          <td class="notes-cell">Remove product.fact.3d* keys</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F1: Stock Logic ───────────────────────────────── -->
+  <div class="feature" id="f1">
+    <div class="feature__head">
+      <div class="feature__num">1</div>
+      <div class="feature__title">Stock Logic — Hide Product-Level Stock When Variants Exist</div>
+      <span class="feature__layer">Server · Admin</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="f1-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:200px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:200px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Auto-compute product stock from variants on save</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">admin-products.route.js</td>
+          <td class="notes-cell">When variants supplied, stock_quantity = SUM(variant.stock)</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Hide stock input when variants exist</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">@if (!hasVariants()) show editable field, else show read-only computed total</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Omit stock from payload when variants present</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">buildPayload() — skip stock field when variants.length > 0</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F2: Cost Price ────────────────────────────────── -->
+  <div class="feature" id="f2">
+    <div class="feature__head">
+      <div class="feature__num">2</div>
+      <div class="feature__title">Add Cost Price to Variants</div>
+      <span class="feature__layer feature__layer--full">DB · Server · Model · Admin</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="f2-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:200px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:200px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>DB migration — add cost_price_cents to product_variants</td>
+          <td><span class="layer-tag layer-tag--db">DB</span></td>
+          <td class="file-ref">migrations/006_cost_price.sql</td>
+          <td class="notes-cell">ALTER TABLE product_variants ADD COLUMN cost_price_cents integer (nullable)</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Server — include cost_price_cents in variant INSERT/SELECT</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">admin-products.route.js</td>
+          <td class="notes-cell">replaceVariants() + mapVariant() + validateProductBody()</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>TypeScript model — add costPrice to ProductVariant</td>
+          <td><span class="layer-tag layer-tag--model">Model</span></td>
+          <td class="file-ref">admin-portal/models/index.ts</td>
+          <td class="notes-cell">costPrice?: number (nullable — not all products have cost data)</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Variants table — add Cost Price column</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">New column in variants table after Price; number input, step=0.01</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F3: Margin Formula ────────────────────────────── -->
+  <div class="feature" id="f3">
+    <div class="feature__head">
+      <div class="feature__num">3</div>
+      <div class="feature__title">Margin Formula — Computed Column in Variants Table</div>
+      <span class="feature__layer">Admin UI only</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="f3-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:200px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:200px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Computed variantMargins signal</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">((price − cost) / price) × 100 per variant</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Margin column in variants table (read-only, color-coded)</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">≥40% green · 20–39% amber · &lt;20% red · no cost → dash</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Avg margin summary below variants table</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">Show "Avg. margin: XX%" for variants with cost data</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F8: Arabic Name ───────────────────────────────── -->
+  <div class="feature" id="f8">
+    <div class="feature__head">
+      <div class="feature__num">8</div>
+      <div class="feature__title">Arabic Name Field + Bulk Import Support</div>
+      <span class="feature__layer feature__layer--full">Server · Model · Admin · Bulk Import</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="f8-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:200px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:200px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Server — upsert nameAr into product_translations (locale='ar')</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">admin-products.route.js</td>
+          <td class="notes-cell">mapAdminProduct() LEFT JOIN product_translations; POST/PATCH upsert ar row</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>TypeScript model — add nameAr to Product</td>
+          <td><span class="layer-tag layer-tag--model">Model</span></td>
+          <td class="file-ref">admin-portal/models/index.ts</td>
+          <td class="notes-cell">nameAr?: string</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Product drawer — Arabic Name input field</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">product-drawer.component.ts</td>
+          <td class="notes-cell">Below EN name, dir="auto", placeholder in Arabic</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Bulk import — map nameAr as product Arabic name (not description)</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">admin-bulk-import.route.js</td>
+          <td class="notes-cell">nameAr → product_translations upsert, separate from description.ar</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F6: Sidebar ───────────────────────────────────── -->
+  <div class="feature" id="f6">
+    <div class="feature__head">
+      <div class="feature__num">6</div>
+      <div class="feature__title">Sidebar — Scrollable on Small Screens + Collapse/Expand</div>
+      <span class="feature__layer">Admin CSS · Service</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="f6-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:200px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:200px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Make nav links container scrollable</td>
+          <td><span class="layer-tag layer-tag--css">CSS</span></td>
+          <td class="file-ref">sidebar.component.ts</td>
+          <td class="notes-cell">overflow-y: auto; flex: 1; min-height: 0 on the nav links div</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Add collapse toggle button (desktop)</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">sidebar.component.ts</td>
+          <td class="notes-cell">Button at top of sidebar to collapse to icon-rail (≥1025px)</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Add collapsed state to SidebarToggleService</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">sidebar-toggle.service.ts</td>
+          <td class="notes-cell">collapsed = signal&lt;boolean&gt;(false)</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>App shell — bind sidebar-collapsed class + CSS variable</td>
+          <td><span class="layer-tag layer-tag--css">CSS</span></td>
+          <td class="file-ref">app.component.ts · styles.scss</td>
+          <td class="notes-cell">--sidebar-w: 240px → 68px when collapsed; grid transition</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F5+7: Storefront Tabs + Editable Pages ─────────── -->
+  <div class="feature" id="f57">
+    <div class="feature__head">
+      <div class="feature__num">5·7</div>
+      <div class="feature__title">Storefront Tabs — All Pages Editable from Admin</div>
+      <span class="feature__layer feature__layer--full">DB · Server · Admin · Client-web</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="f57-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:220px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:220px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Extend storefront-content schema — heroSlider</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">storefront-content.route.js</td>
+          <td class="notes-cell">heroItems[], heroCallouts[], ctaEn, ctaAr — normalize + defaults</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Extend storefront-content schema — promise + stats</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">storefront-content.route.js</td>
+          <td class="notes-cell">promise.cards[], stats[] — icon, label EN/AR, value</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Extend storefront-content schema — contact page</td>
+          <td><span class="layer-tag layer-tag--server">Server</span></td>
+          <td class="file-ref">storefront-content.route.js</td>
+          <td class="notes-cell">kicker, headline EN/AR, phone, infoBlocks[], promiseLine</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Extend HomeContentData model (client-web)</td>
+          <td><span class="layer-tag layer-tag--model">Model</span></td>
+          <td class="file-ref">client-web/models/home-content.model.ts</td>
+          <td class="notes-cell">HeroSliderContent, PromiseContent, StatsContent, ContactContent interfaces</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Update HomeContentService — normalize new fields</td>
+          <td><span class="layer-tag layer-tag--web">Web</span></td>
+          <td class="file-ref">client-web/services/home-content.service.ts</td>
+          <td class="notes-cell">normalizeContentImages() + cloneContent() cover new keys</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>home.component.ts — replace hardcoded heroItems with signals</td>
+          <td><span class="layer-tag layer-tag--web">Web</span></td>
+          <td class="file-ref">client-web/pages/home/home.component.ts</td>
+          <td class="notes-cell">heroItems, heroCallouts, ctaLabel, metaCards, stats all read from service with fallbacks</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>story.component.ts — add editable intro section</td>
+          <td><span class="layer-tag layer-tag--web">Web</span></td>
+          <td class="file-ref">client-web/pages/story/story.component.ts/html</td>
+          <td class="notes-cell">story-intro kicker + headline + body from service</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>contact.component.ts — replace i18n with service data</td>
+          <td><span class="layer-tag layer-tag--web">Web</span></td>
+          <td class="file-ref">client-web/pages/contact/contact.component.ts</td>
+          <td class="notes-cell">kicker, headline, subhead, infoBlocks, phone, promise from service</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Storefront admin page — 3 page-level tabs</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">Home Page · Our Story · Contact Us tabs with publish bar always visible</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Home tab — Section Order sub-tab (drag/drop)</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">Move existing drag/drop from StorefrontComponent into sub-tab</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Home tab — Landing Hero sub-tab editor</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">heroItems (2 slides): name, subtitle, image picker. heroCallouts (4): titleAr, subtitleEn, thumbnail pickers</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Home tab — Collections sub-tab editor</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">Move from HomeContentComponent — 3 tiles with collection picker + image + title + link</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Home tab — Promotion Section sub-tab editor</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">Move from HomeContentComponent — image, title, body, discountText, ctaText, ctaLink</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Home tab — Craft Promise sub-tab editor</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">3 cards: icon, label EN/AR, sub EN/AR</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Home tab — Stats Reel sub-tab editor</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">4 stats: value, label EN/AR</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Our Story tab — Hero, Intro, Chapters, Quote, Atelier sub-tabs</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">Move all story editing from HomeContentComponent</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Contact Us tab — header, info blocks, form settings sub-tabs</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">storefront.component.ts</td>
+          <td class="notes-cell">New editor for contact page content (kicker, headline, phone, infoBlocks)</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Deprecate /home-content route → redirect to /storefront</td>
+          <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+          <td class="file-ref">app.routes.ts · sidebar.component.ts</td>
+          <td class="notes-cell">Add redirect, remove sidebar link for Home Content</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Docs Update ───────────────────────────────────── -->
+  <div class="feature" id="docs">
+    <div class="feature__head">
+      <div class="feature__num">✦</div>
+      <div class="feature__title">Documentation Update</div>
+      <span class="feature__layer">Docs</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" style="width:0%"></div></div>
+        <span class="feature__progress-pct">0%</span>
+      </div>
+      <span class="status-badge status-badge--pending" id="docs-badge">Pending</span>
+    </div>
+    <table class="tasks">
+      <thead><tr>
+        <th style="width:200px">Task</th>
+        <th style="width:80px">Layer</th>
+        <th style="width:200px">File</th>
+        <th>Notes</th>
+        <th style="width:120px">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Update 04-admin-portal.md</td>
+          <td><span class="layer-tag layer-tag--model">Docs</span></td>
+          <td class="file-ref">docs/04-admin-portal.md</td>
+          <td class="notes-cell">New storefront tabs, sidebar collapse, product drawer changes</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Update 05-api-server.md</td>
+          <td><span class="layer-tag layer-tag--model">Docs</span></td>
+          <td class="file-ref">docs/05-api-server.md</td>
+          <td class="notes-cell">New storefront-content fields, cost price endpoint changes</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+        <tr>
+          <td>Update 08-database-api-implementation.md</td>
+          <td><span class="layer-tag layer-tag--model">Docs</span></td>
+          <td class="file-ref">docs/08-database-api-implementation.md</td>
+          <td class="notes-cell">Migration 006 cost price, nameAr translation upsert</td>
+          <td><div class="task-status"><div class="dot dot--pending"></div> Pending</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /content -->
+
+<!-- ══════════════════════════════════════════════════════════
+     SUMMARY FOOTER
+═══════════════════════════════════════════════════════════ -->
+<div class="summary">
+  <div class="summary-cell summary-cell--done">
+    <span class="summary-cell__value" id="count-done">0</span>
+    <span class="summary-cell__label">Tasks Done</span>
+  </div>
+  <div class="summary-cell summary-cell--active">
+    <span class="summary-cell__value" id="count-active">0</span>
+    <span class="summary-cell__label">In Progress</span>
+  </div>
+  <div class="summary-cell summary-cell--pending">
+    <span class="summary-cell__value" id="count-pending">45</span>
+    <span class="summary-cell__label">Pending</span>
+  </div>
+  <div class="summary-cell summary-cell--total">
+    <span class="summary-cell__value">45</span>
+    <span class="summary-cell__label">Total Tasks</span>
+  </div>
+</div>
+
+<p class="last-updated">Last updated: <span id="last-updated-ts">–</span></p>
+
+<script>
+// ── Data model ──────────────────────────────────────────────
+// Each task: [featureId, status]
+// status: 'pending' | 'active' | 'done' | 'blocked'
+const TASKS = {
+  f4:   ['done','done','done','done','done','done'],
+  f1:   ['done','done','done'],
+  f2:   ['done','done','done','done'],
+  f3:   ['done','done','done'],
+  f8:   ['done','done','done','done'],
+  f6:   ['done','done','done','done'],
+  f57:  ['done','done','done','done','done','done','done','done','done','done','done','done','done','done','done','done','done'],
+  docs: ['done','done','done'],
+};
+
+const TOTAL = Object.values(TASKS).reduce((s,a) => s + a.length, 0);
+
+function dotClass(s) {
+  if (s === 'done')    return 'dot--done';
+  if (s === 'active')  return 'dot--active';
+  if (s === 'blocked') return 'dot--blocked';
+  return 'dot--pending';
+}
+function badgeClass(s) {
+  if (s === 'done')   return 'status-badge--done';
+  if (s === 'active') return 'status-badge--active';
+  if (s === 'blocked') return 'status-badge--blocked';
+  return 'status-badge--pending';
+}
+function badgeLabel(s) {
+  if (s === 'done')    return 'Done ✓';
+  if (s === 'active')  return 'In Progress';
+  if (s === 'blocked') return 'Blocked';
+  return 'Pending';
+}
+
+function refresh() {
+  let totalDone = 0, totalActive = 0;
+
+  Object.entries(TASKS).forEach(([featureId, statuses]) => {
+    const done    = statuses.filter(s => s === 'done').length;
+    const active  = statuses.filter(s => s === 'active').length;
+    const total   = statuses.length;
+    const pct     = Math.round((done / total) * 100);
+
+    totalDone   += done;
+    totalActive += active;
+
+    // Feature progress bar
+    const feat = document.getElementById(featureId);
+    if (!feat) return;
+    const fill = feat.querySelector('.feature__progress-bar__fill');
+    const pctEl = feat.querySelector('.feature__progress-pct');
+    if (fill)  fill.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+
+    // Feature badge
+    const badge = document.getElementById(featureId + '-badge');
+    if (badge) {
+      const overall = done === total ? 'done' : active > 0 ? 'active' : 'pending';
+      badge.className = 'status-badge ' + badgeClass(overall);
+      badge.textContent = badgeLabel(overall);
+    }
+
+    // Row dots
+    const rows = feat.querySelectorAll('tbody tr');
+    rows.forEach((row, i) => {
+      const cell = row.querySelector('.task-status');
+      if (!cell) return;
+      const s = statuses[i] || 'pending';
+      cell.innerHTML = `<div class="dot ${dotClass(s)}"></div> ${
+        s === 'done' ? 'Done' : s === 'active' ? 'In Progress' : s === 'blocked' ? 'Blocked' : 'Pending'
+      }`;
+    });
+  });
+
+  const pct = Math.round((totalDone / TOTAL) * 100);
+  document.getElementById('overall-pct').textContent = pct + '%';
+  document.getElementById('overall-bar').style.width = pct + '%';
+  document.getElementById('overall-label').textContent = `${totalDone} of ${TOTAL} tasks done`;
+  document.getElementById('count-done').textContent   = totalDone;
+  document.getElementById('count-active').textContent = totalActive;
+  document.getElementById('count-pending').textContent = TOTAL - totalDone - totalActive;
+  document.getElementById('last-updated-ts').textContent = new Date().toLocaleString('en-GB', {
+    day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'
+  });
+}
+
+refresh();
+</script>
+</body>
+</html>

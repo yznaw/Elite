@@ -23,7 +23,16 @@ The implementation added:
 - Production FK bug fixes: bulk-delete and product-save now correctly handle `cart_items.product_id` and `cart_items.variant_id` `ON DELETE RESTRICT` constraints.
 - Documentation for endpoint-to-SQL behavior.
 
-**June 2026 additions:**
+**June 2026 — Feature batch additions:**
+
+- Migration `006_cost_price.sql` — `cost_price_cents integer` (nullable) added to `product_variants`. CHECK constraint `product_variants_cost_nonneg`.
+- `nameAr` (Arabic product name) stored in `product_translations (locale='ar')`. Upserted on every product save via `admin-products.route.js`. Returned via LEFT JOIN in all product SELECT queries.
+- Stock aggregation: when variants are present, `products.stock_quantity` is auto-computed as `SUM(variant.stock_quantity)` on every save. The product-level stock input is hidden in the admin UI when variants exist.
+- 3D model feature removed from UI: `has3d`/`views3d` fields no longer sent or displayed. DB columns remain but are always set to `false`/`0`.
+- Sidebar collapse: `SidebarToggleService.collapsed` signal added. App shell grid uses `--sidebar-w` CSS variable (240px ↔ 68px).
+- Storefront content expanded: `storefront-content.route.js` now normalizes `heroSlider`, `promise`, `stats`, and `contact` sections. `store_settings.home_content` JSONB stores all of them.
+
+**Previous June 2026 additions:**
 
 - `ApiClient.mediaUrl()` — converts `/uploads/` → `/api/uploads/` so all media URLs route through the Nginx `/api` proxy in production. Used by `AdminMediaService`, `AdminProductsService`, `MediaUploadService`, and `HomeContentComponent`.
 - Express now mounts uploads at **both** `/uploads/` (legacy) and `/api/uploads/` (proxy-friendly alias).
@@ -54,6 +63,7 @@ The implementation added:
 | `server/db/migrations/003_ref_tables.sql` | `ref_colors`, `ref_materials`, `ref_size_sets` — brand reference data |
 | `server/db/migrations/004_product_seo_fields.sql` | `ALTER TABLE products ADD COLUMN meta_title text, meta_desc text` |
 | `server/db/migrations/005_team_invitations.sql` | `team_invitations` table — UUID PK, `token_hash` TEXT, 48h `expires_at`, single-use |
+| `server/db/migrations/006_cost_price.sql` | `ALTER TABLE product_variants ADD COLUMN cost_price_cents integer` (nullable) + CHECK constraint |
 | `server/db/client.js` | Shared `pg` connection pool |
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
 | `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |
