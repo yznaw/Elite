@@ -468,6 +468,16 @@ async function postJson(path, payload, { retried = false } = {}) {
     throw new NboxError('NBOX API credentials are invalid.', { message: err.message });
   }
 
+  // Debug: log outgoing request (token masked to last 6 chars)
+  const debugHeaders = Object.fromEntries(
+    Object.entries(headers).map(([k, v]) =>
+      k.toLowerCase().includes('token') || k.toLowerCase() === 'authorization'
+        ? [k, `***${String(v).slice(-6)}`]
+        : [k, v],
+    ),
+  );
+  console.log('[nbox] outgoing request', { url, headers: debugHeaders });
+
   let response;
   try {
     response = await fetch(url, {
