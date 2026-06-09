@@ -44,7 +44,7 @@ All pages are lazy-loaded:
 | `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
 | `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
 | `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, top-products-by-price heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. **Date Range Filter** (Today / 7 Days / 30 Days / 90 Days) pill-bar above KPIs. **Low Stock KPI card** — shows count of products with stock between 1 and the configurable threshold (default: 8, set via `StoreConfigService`). Clicking the card navigates to `/catalog?stock=low`. Card shows 0 when all items are stocked. |
-| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted via `StorageService` — tenant-scoped). Search (matches name, SKU, **and brand**), status quick-filter (All / Active / Hidden / **Out of Stock** (red badge) / **Low Stock** (amber badge)), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill is pre-activated via `?stock=low` from the dashboard KPI card. Low-stock threshold from `StoreConfigService.lowStockThreshold()`. **Advanced filter panel**: collection, **brand** (auto-populated from loaded products), color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select**: Select All, Set Status, Delete with confirm. **Export CSV** (SKU, Name, Brand, Price, Stock, Status, Variants). **New Product** create flow: inline drawer with image gallery (drag-reorder + primary, real multipart upload with per-file progress bar, drag/drop, **"Pick from Media" button opens a multi-select slide-in panel from the media library** — session-cached, searchable), **variants card layout** (each variant = 2-row card: identity row — SKU/Color/Size/Material; numbers row — Stock/Price/Cost/Margin badge), "Generate sizes" wizard, rich-text EN/AR, draft auto-save. **Arabic Name field** (`nameAr`) stored in `product_translations`. **Cost price per variant** (`cost_price_cents`) with real-time **margin formula** (color-coded pill). **Stock is auto-computed** from variant sum when variants exist. **SEO fields** (`meta_title`, `meta_desc` 160-char counter, slug). **Duplicate Product**. **Bulk Import** + **Stock Update mode** (Dry-Run, Retry Failed, Import History). |
+| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted via `StorageService` — tenant-scoped). Search (matches name, SKU, **and brand**), status quick-filter (All / Active / Hidden / **Out of Stock** (red badge) / **Low Stock** (amber badge)), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill is pre-activated via `?stock=low` from the dashboard KPI card. Low-stock threshold from `StoreConfigService.lowStockThreshold()`. **Advanced filter panel**: collection, **brand** (auto-populated from loaded products), color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select**: Select All, Set Status, Delete with confirm. **Export CSV** (SKU, Name, Brand, Price, Stock, Status, Variants). **Product drawer** section order (Shopify-style): ① Image Gallery ② Product Info (title EN/AR, brand, SKU) ③ Pricing & Stock ④ Variants ⑤ Description ⑥ Organization (collections + related) ⑦ SEO ⑧ Sync ⑨ Danger Zone. **Variant table** (compact single-row per variant, researched against Shopify / WooCommerce / BigCommerce / Etsy): always-visible columns — Photo · Color · Size · Stock · Price · SKU; collapsible columns (⌄ expand) — Material · Cost · Margin (auto-calculated). Stock input turns red when 0 / amber when < 5. Price shows inline "QAR" prefix. SKU is always visible (used for warehouse/POS daily). Color→image linking: click the photo cell in each variant row to open an image picker popover — maps `imageColors[imageUrl] = colorName` so the storefront shows the correct image per color. Image gallery thumbnails show a read-only color badge for linked images. "Generate sizes" wizard. **`ap-save-bar` component**: green sliding bar with Discard / Save changes; appears when the form is dirty, hides when idle. **Arabic Name field** (`nameAr`) stored in `product_translations`. **Cost price per variant** (`cost_price_cents`) with real-time **margin formula** (color-coded pill: green ≥ 40 %, amber 20–40 %, red < 20 %). **Stock is auto-computed** from variant sum when variants exist. **SEO fields** (`meta_title`, `meta_desc` 160-char counter, slug). **Duplicate Product**. **Bulk Import** + **Stock Update mode** (Dry-Run, Retry Failed, Import History). |
 | `/reference` | `ReferenceComponent` | Reference data management — **Colors** (name EN/AR + hex, inline color picker, swatch preview), **Materials** (name EN/AR), **Size Charts** (named size sets with comma-editable size arrays). Full CRUD for each, changes immediately available as dropdowns in the product drawer and filters in the catalog. Owner/admin only. |
 | `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image (drag/drop + URL paste), drag-to-reorder linked products. **Collection drawer:** editable **URL Handle** field (auto-slugged from title, `/collection/{handle}` live preview, reset-to-auto button). Handle is saved to the DB `handle` column and used by the storefront Featured Collections panel. |
 | `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, real multipart upload (drag/drop or browse, per-file progress), auto-link by SKU, detail drawer. **Google Drive import:** "Google Drive" button opens a modal — paste a file or folder URL (folder requires `GOOGLE_DRIVE_API_KEY` env var). Images are downloaded, saved to storage, and **auto-linked by SKU** via 4-tier matching: (1) folder name = SKU, (2) filename stem = SKU, (3) filename contains SKU, (4) two-segment prefix matches SKU start. Success toast reports how many were auto-linked. **Set as Default Fallback** button in the detail drawer saves the image URL to tenant config (`PATCH /api/admin/settings/store { config: { defaultImage } }`). Delete removes the DB row and the file from storage. |
@@ -339,7 +339,7 @@ All models are defined in `app/models/index.ts`:
 | Interface | Key Fields | Used By |
 |---|---|---|
 | `Product` | id, name, nameAr?, sku, brand, price, stock, hidden, image, images[]?, variants[]?, metaTitle?, metaDesc?, slug? | Catalog, Dashboard |
-| `ProductVariant` | id, sku, size, color, material, price, stock | Product drawer (Variants section) |
+| `ProductVariant` | id, sku, size, color, material, price, stock, costPrice? | Product drawer (Variants section) |
 | `MediaFile` | id, name, kind (image/glb), size, linkedTo, preview | Media Library |
 | `Order` | id, date, customer, total, payment, fulfillment, items[], trackingNumber?, timeline[]?, notes[]? | Orders |
 | `OrderTimelineEntry` | id, ts, kind, detail?, actor? | Order drawer timeline |
@@ -357,6 +357,53 @@ All models are defined in `app/models/index.ts`:
 export const QAR = (n: number): string => 'QAR ' + n.toLocaleString();
 export const fmtBytes = (n: number): string => { /* formats B/KB/MB */ };
 ```
+
+---
+
+## Variant Table Design
+
+### Field Order Rationale
+
+The variant table column order was researched against Shopify, WooCommerce, BigCommerce, and Etsy. Every major platform keeps these fields always visible:
+
+| Column | Always visible | Why |
+|---|---|---|
+| **Photo** | ✅ | Instant visual ID; first on all platforms |
+| **Color** | ✅ | Primary differentiator; color swatch + select |
+| **Size** | ✅ | Primary differentiator; centered mono text |
+| **Stock** | ✅ | Critical ops metric; live colour: red = 0, amber < 5 |
+| **Price** | ✅ | Core commercial field; inline "QAR" prefix |
+| **SKU** | ✅ | All platforms keep it visible — warehouse, POS, barcodes |
+| Material | ⌄ collapsible | Set once at setup, never changed day-to-day |
+| Cost | ⌄ collapsible | Finance input entered once; drives margin |
+| Margin | ⌄ collapsible | Read-only calculated output; "set cost to calculate" hint |
+
+### CSS Grid
+
+```
+44px  minmax(120px,1.7fr)  60px   68px    96px    minmax(100px,1.3fr)  54px
+Photo Color                 Size   Stock   Price   SKU                  Actions
+```
+
+### Color → Image Linking
+
+Each color variant can be linked to one gallery image via the photo cell in the row:
+- Click the photo cell → image picker popover opens (to the right)
+- Selecting an image stores `imageColors[imageUrl] = colorName` in the product form
+- The storefront uses this map to show the correct image for each color
+- Gallery thumbnails display a read-only color badge for linked images
+- A transparent full-screen backdrop closes the picker on outside click
+
+### Collapsible Detail
+
+The `⌄` expand button opens an inline detail panel with:
+- **Material** — dropdown from `RefMaterial` reference data
+- **Cost (QAR)** — cost price input; drives margin calculation
+- **Margin** — auto-calculated: `((price − cost) / price) × 100`; colour-coded pill
+
+### Responsive behaviour (≤ 600 px)
+
+SKU column and Margin field are hidden on narrow screens. Detail panel collapses to 2 columns (Material + Cost).
 
 ---
 
@@ -418,7 +465,8 @@ All fonts are self-hosted from `assets/fonts/thmanyah/` (woff2). The Thmanyah fa
 | `.toggle` / `.toggle.on` | Toggle switch |
 | `.tabs` / `.tab` / `.tab.active` | Tab navigation |
 | `.chip` / `.chip.active` | Filter chips |
-| `.save-bar-top` / `.save-bar-top.shake` | Sticky top save banner with shake animation |
+| `ap-save-bar` | **Shared save bar component** — `[dirty]`, `[saving]`, `[justSaved]`, `[shake]`, `[label]`, `[saveLabel]`, `[discardLabel]` inputs; `(saved)`, `(discarded)` outputs. Uses host binding to apply `.save-bar-top` so global CSS rules apply automatically. Used by: product-drawer, collection-drawer, customer-drawer, section-drawer, home-content, settings (General tab). |
+| `.save-bar-top` / `.save-bar-top.dirty` / `.save-bar-top.shake` | Global CSS: green sliding bar (height 0→54px), shake animation on validation error |
 | `.overlay` / `.drawer` | Drawer/modal overlays |
 
 ### Mobile Responsiveness
