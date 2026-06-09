@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const db = require('../db/client');
+const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -187,18 +188,6 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
 
     if (paymentStatus === 'paid') {
       await client.query(
-        `UPDATE orders SET fulfillment_status = 'awaiting'
-          WHERE id = $1 AND fulfillment_status = 'awaiting'`,
-        [orderId],
-      ).catch((err) => {
-        console.warn('[sadad-callback] Non-critical fulfillment update failed', {
-          orderId,
-          code: err.code,
-          message: err.message,
-        });
-      });
-
-      await client.query(
         `
           INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, metadata)
           SELECT $1, $2, 'paid', $3, $4::jsonb
@@ -227,6 +216,23 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
           message: err.message,
         });
       });
+
+      await bookNboxForPaidOrder(client, updatedOrder.tenant_id, orderId)
+        .then((deliveryResult) => {
+          if (deliveryResult.failed) {
+            console.warn('[sadad-callback] NBOX booking failed after payment confirmation', {
+              orderId,
+              result: deliveryResult,
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn('[sadad-callback] Non-critical NBOX booking error', {
+            orderId,
+            code: err.code,
+            message: err.message,
+          });
+        });
     }
   } catch (err) {
     console.error('[sadad-callback] Critical order payment update failed', {

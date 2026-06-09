@@ -14,8 +14,8 @@ NBOX_WEBHOOK_SECRET=replace-with-nbox-webhook-secret
 NBOX_API_BASE_URL=https://uat.portal.nbox.qa
 NBOX_API_TOKEN=replace-with-nbox-api-token
 NBOX_API_KEY=
-NBOX_AUTH_HEADER=Authorization
-NBOX_AUTH_SCHEME=Bearer
+NBOX_AUTH_HEADER=x-nbox-shop-token
+NBOX_AUTH_SCHEME=
 
 NBOX_RATE_ENDPOINT=replace-with-rate-endpoint-path
 NBOX_SHIPMENT_ENDPOINT=replace-with-create-shipment-endpoint-path
@@ -31,6 +31,8 @@ NBOX_ORIGIN_COUNTRY=QA
 ```
 
 `NBOX_RATE_ENDPOINT` and `NBOX_SHIPMENT_ENDPOINT` must come from NBOX's merchant/API documentation. The app keeps them configurable because NBOX may expose account-specific endpoint paths.
+
+Do not use your webhook URL for any of these outbound API settings. `https://elitecollections.qa/api/webhooks/nbox` is only for NBOX to call back into Elite after a shipment changes status.
 
 ## Customer Checkout Flow
 
@@ -48,6 +50,7 @@ The server creates the NBOX shipment only after payment is confirmed as `paid`.
 Current triggers:
 
 - A future payment gateway can call `POST /api/carts/checkout` with `payment.status = paid`.
+- SADAD callback/webhook confirms payment and books NBOX delivery.
 - The admin portal can mark an order as paid; `PATCH /api/admin/orders/:id/status` then attempts NBOX booking.
 
 If NBOX booking succeeds, Elite stores:
@@ -70,4 +73,3 @@ Subscribe to:
 ```text
 shipment.update
 ```
-

@@ -221,8 +221,8 @@ cp server/.env.example server/.env
 | `NBOX_API_BASE_URL` | — | Yes for NBOX checkout | NBOX API base URL from the merchant portal |
 | `NBOX_API_TOKEN` | — | Yes for NBOX checkout | NBOX API token used for outbound quote/shipment requests |
 | `NBOX_API_KEY` | — | If provided by NBOX | Optional API key header value |
-| `NBOX_AUTH_HEADER` | `Authorization` | No | Header used for `NBOX_API_TOKEN` |
-| `NBOX_AUTH_SCHEME` | `Bearer` | No | Auth scheme prepended to `NBOX_API_TOKEN`; set empty if NBOX expects the raw token |
+| `NBOX_AUTH_HEADER` | `x-nbox-shop-token` | No | Header used for `NBOX_API_TOKEN` |
+| `NBOX_AUTH_SCHEME` | empty | No | Auth scheme prepended to `NBOX_API_TOKEN`; keep empty for NBOX shop tokens |
 | `NBOX_RATE_ENDPOINT` | — | Yes for delivery quotes | NBOX endpoint path for delivery pricing/availability |
 | `NBOX_SHIPMENT_ENDPOINT` | — | Yes for shipment booking | NBOX endpoint path for creating a shipment after payment is confirmed |
 | `NBOX_DEFAULT_ITEM_WEIGHT_GRAMS` | `1000` | No | Fallback item weight used when product weight is not available |

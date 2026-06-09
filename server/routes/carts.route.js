@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const nbox = require('../lib/nbox');
+const { bookNboxForPaidOrder, nboxQuoteMetadata } = require('../lib/order-delivery');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -107,81 +108,6 @@ function normalizeCheckout(req) {
 
 function isPaidPayment(payment) {
   return String(payment?.status || '').trim().toLowerCase() === 'paid';
-}
-
-function nboxQuoteMetadata(quote) {
-  if (!quote) return null;
-  return {
-    id: quote.id || quote.rateId || null,
-    serviceName: quote.serviceName || quote.service_name || null,
-    serviceCode: quote.serviceCode || quote.service_code || null,
-    amount: Number(quote.amount || 0),
-    currency: quote.currency || 'QAR',
-    eta: quote.eta || null,
-  };
-}
-
-async function attachNboxShipment(client, tenantId, order, checkout) {
-  const shipment = await nbox.createShipment({
-    orderNumber: order.public_number,
-    customer: checkout.customer,
-    shippingAddress: checkout.shippingAddress,
-    items: checkout.items,
-    shippingQuote: checkout.shippingQuote,
-  });
-
-  await client.query(
-    `
-      INSERT INTO shipments (
-        tenant_id, order_id, carrier, service, tracking_number, tracking_url, status, address
-      )
-      VALUES ($1, $2, 'nbox', $3, $4, $5, 'processing', $6::jsonb)
-      ON CONFLICT DO NOTHING
-    `,
-    [
-      tenantId,
-      order.id,
-      shipment.id || checkout.shippingQuote?.serviceName || 'NBOX',
-      shipment.trackingNumber || null,
-      shipment.trackingUrl || null,
-      JSON.stringify(checkout.shippingAddress),
-    ],
-  );
-
-  await client.query(
-    `
-      UPDATE orders
-      SET fulfillment_status = 'processing',
-          metadata = metadata || $3::jsonb
-      WHERE tenant_id = $1 AND id = $2
-    `,
-    [
-      tenantId,
-      order.id,
-      JSON.stringify({
-        nbox: {
-          quote: nboxQuoteMetadata(checkout.shippingQuote),
-          shipment,
-          bookedAt: new Date().toISOString(),
-        },
-      }),
-    ],
-  );
-
-  await client.query(
-    'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)',
-    [
-      tenantId,
-      order.id,
-      'processing',
-      shipment.trackingNumber
-        ? `NBOX shipment booked. Tracking: ${shipment.trackingNumber}`
-        : 'NBOX shipment booked.',
-      JSON.stringify({ provider: 'nbox', shipment }),
-    ],
-  );
-
-  return shipment;
 }
 
 async function upsertCustomer(client, tenantId, customer, shippingAddress) {
@@ -517,37 +443,8 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     inTransaction = false;
 
     if (paymentStatus === 'paid') {
-      await client.query('BEGIN');
-      inTransaction = true;
-      try {
-        nboxShipment = await attachNboxShipment(client, tenantId, createdOrder, checkout);
-        await client.query('COMMIT');
-        inTransaction = false;
-      } catch (err) {
-        if (inTransaction) {
-          await client.query('ROLLBACK');
-          inTransaction = false;
-        }
-        await client.query(
-          `
-            UPDATE orders
-            SET metadata = metadata || $3::jsonb
-            WHERE tenant_id = $1 AND id = $2
-          `,
-          [
-            tenantId,
-            createdOrder.id,
-            JSON.stringify({
-              nbox: {
-                quote: nboxQuoteMetadata(checkout.shippingQuote),
-                bookingFailedAt: new Date().toISOString(),
-                bookingError: err.message,
-              },
-            }),
-          ],
-        );
-        throw err;
-      }
+      const deliveryResult = await bookNboxForPaidOrder(client, tenantId, createdOrder.id);
+      nboxShipment = deliveryResult.created ? deliveryResult.shipment : null;
     }
 
     created(res, {

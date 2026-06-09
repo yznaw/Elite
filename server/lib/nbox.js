@@ -16,17 +16,58 @@ function isConfigured() {
   return Boolean(env('NBOX_API_BASE_URL') && env('NBOX_API_TOKEN'));
 }
 
+function assertExternalNboxUrl(value, source) {
+  const url = String(value || '').trim();
+  if (!url) {
+    throw new NboxError(`${source} is not configured.`, {
+      source,
+      configured: false,
+    });
+  }
+  if (/webhooks\/nbox/i.test(url)) {
+    throw new NboxError(
+      `${source} points to Elite's inbound NBOX webhook URL. Configure the outbound NBOX API URL instead.`,
+      {
+        source,
+        value: url,
+        hint: 'Use NBOX_API_BASE_URL from NBOX, for example https://uat.portal.nbox.qa, and endpoint paths from NBOX API docs.',
+      },
+    );
+  }
+}
+
 function endpointUrl(path) {
-  const base = env('NBOX_API_BASE_URL').replace(/\/+$/, '');
-  const cleanPath = String(path || '').replace(/^\/+/, '');
-  return `${base}/${cleanPath}`;
+  const rawPath = String(path || '').trim();
+  assertExternalNboxUrl(rawPath, 'NBOX endpoint');
+
+  if (/^https?:\/\//i.test(rawPath)) {
+    assertExternalNboxUrl(rawPath, 'NBOX endpoint');
+    return rawPath;
+  }
+
+  const rawBase = env('NBOX_API_BASE_URL');
+  assertExternalNboxUrl(rawBase, 'NBOX_API_BASE_URL');
+
+  let baseUrl;
+  try {
+    baseUrl = new URL(rawBase);
+  } catch {
+    throw new NboxError('NBOX_API_BASE_URL must be an absolute URL including https://.', {
+      source: 'NBOX_API_BASE_URL',
+      value: rawBase,
+      example: 'https://uat.portal.nbox.qa',
+    });
+  }
+
+  const cleanPath = rawPath.replace(/^\/+/, '');
+  return `${baseUrl.href.replace(/\/+$/, '')}/${cleanPath}`;
 }
 
 function authHeaders() {
   const token = env('NBOX_API_TOKEN');
   const apiKey = env('NBOX_API_KEY');
-  const authHeader = env('NBOX_AUTH_HEADER', 'Authorization');
-  const authScheme = env('NBOX_AUTH_SCHEME', 'Bearer');
+  const authHeader = env('NBOX_AUTH_HEADER', 'x-nbox-shop-token');
+  const authScheme = env('NBOX_AUTH_SCHEME');
   const headers = {
     'Content-Type': 'application/json',
   };
@@ -122,11 +163,30 @@ async function postJson(path, payload) {
     throw new NboxError('NBOX API is not configured.', { configured: false });
   }
 
-  const response = await fetch(endpointUrl(path), {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(payload),
-  });
+  let url;
+  try {
+    url = endpointUrl(path);
+  } catch (err) {
+    if (err.name === 'NboxError') throw err;
+    throw new NboxError('NBOX endpoint URL is invalid.', {
+      path,
+      message: err.message,
+    });
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new NboxError('NBOX API request failed before a response was received.', {
+      url,
+      message: err.message,
+    });
+  }
   const text = await response.text();
   let data = null;
   try {
