@@ -290,6 +290,14 @@ const EN = {
   'thankYou.orderLabel': 'Order Number',
   'thankYou.contact': 'Contact Us',
 
+  'checkoutResult.failureKicker': 'Payment Unsuccessful',
+  'checkoutResult.failureTitle': 'Payment Failed',
+  'checkoutResult.failureBody': 'We were unable to process your payment. If you were charged, please contact us with your order reference and we will resolve it promptly.',
+  'checkoutResult.pendingKicker': 'Payment Pending',
+  'checkoutResult.pendingTitle': 'Processing',
+  'checkoutResult.pendingBody': 'Your payment is being processed. Please wait a few minutes and check your email for a confirmation. If nothing arrives, contact us with your order reference.',
+  'checkoutResult.tryAgain': 'Try Again',
+
   // ─────────────────────────────────────────────────────────────────────
   //  Story page
   // ─────────────────────────────────────────────────────────────────────
@@ -655,6 +663,14 @@ const AR: Record<keyof typeof EN, string> = {
   'thankYou.body': 'تم تأكيد طلبك وسيبدأ فريقنا بتجهيزه للتنفيذ. ستصلك رسالة تأكيد قريباً.',
   'thankYou.orderLabel': 'رقم الطلب',
   'thankYou.contact': 'تواصل معنا',
+
+  'checkoutResult.failureKicker': 'الدفع غير ناجح',
+  'checkoutResult.failureTitle': 'فشل الدفع',
+  'checkoutResult.failureBody': 'لم نتمكن من معالجة دفعتك. إذا تم خصم المبلغ، يرجى التواصل معنا مع رقم الطلب وسنحل الأمر فوراً.',
+  'checkoutResult.pendingKicker': 'الدفع قيد المعالجة',
+  'checkoutResult.pendingTitle': 'جارٍ المعالجة',
+  'checkoutResult.pendingBody': 'دفعتك قيد المعالجة. يرجى الانتظار بضع دقائق والتحقق من بريدك الإلكتروني. إذا لم تصلك رسالة تأكيد، تواصل معنا مع رقم الطلب.',
+  'checkoutResult.tryAgain': 'حاول مجدداً',
 
   // Story
   'story.headline.line1': 'حرفة',

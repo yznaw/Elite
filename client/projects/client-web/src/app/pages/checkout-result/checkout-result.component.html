@@ -1,0 +1,29 @@
+<main class="result-page">
+  <section class="result-wrap anim-fade-up">
+    <div class="result-icon" [class.result-icon--pending]="isPending()" aria-hidden="true">
+      {{ isPending() ? '⏳' : '✕' }}
+    </div>
+
+    <p class="result-kicker">
+      {{ isPending() ? t('checkoutResult.pendingKicker') : t('checkoutResult.failureKicker') }}
+    </p>
+    <h1 class="serif result-title">
+      {{ isPending() ? t('checkoutResult.pendingTitle') : t('checkoutResult.failureTitle') }}
+    </h1>
+    <p class="result-copy">
+      {{ isPending() ? t('checkoutResult.pendingBody') : t('checkoutResult.failureBody') }}
+    </p>
+
+    @if (orderNumber()) {
+      <div class="order-ref">
+        <div class="order-label">{{ t('thankYou.orderLabel') }}</div>
+        <div class="serif order-number">{{ orderNumber() }}</div>
+      </div>
+    }
+
+    <div class="result-actions">
+      <a routerLink="/checkout" class="btn-gold">{{ t('checkoutResult.tryAgain') }}</a>
+      <a routerLink="/contact" class="btn-outline">{{ t('thankYou.contact') }}</a>
+    </div>
+  </section>
+</main>

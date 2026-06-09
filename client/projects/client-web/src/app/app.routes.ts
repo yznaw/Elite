@@ -43,6 +43,20 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'checkout/failure',
+    loadComponent: () =>
+      import('./pages/checkout-result/checkout-result.component').then(
+        (m) => m.CheckoutResultComponent,
+      ),
+  },
+  {
+    path: 'checkout/pending',
+    loadComponent: () =>
+      import('./pages/checkout-result/checkout-result.component').then(
+        (m) => m.CheckoutResultComponent,
+      ),
+  },
+  {
     path: 'checkout',
     loadComponent: () =>
       import('./pages/checkout/checkout.component').then(

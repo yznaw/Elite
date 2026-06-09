@@ -72,9 +72,9 @@ router.post('/', async (req, res) => {
     const orderResult = await client.query(
       `UPDATE orders
           SET payment_status = $1,
-              paid_at        = CASE WHEN $1 = 'paid' THEN NOW() ELSE paid_at END,
+              paid_at        = CASE WHEN $1::text = 'paid' THEN NOW() ELSE paid_at END,
               updated_at     = NOW()
-        WHERE id = $2
+        WHERE id = $2::uuid
         RETURNING tenant_id`,
       [paymentStatus, websiteRefNo],
     );
