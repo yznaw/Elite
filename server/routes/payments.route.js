@@ -128,8 +128,8 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
   try {
     const orderResult = await client.query(
       `UPDATE orders
-          SET payment_status = $1,
-              paid_at        = CASE WHEN $1::text = 'paid' THEN NOW() ELSE paid_at END,
+          SET payment_status = $1::order_payment_status,
+              paid_at        = CASE WHEN $1::order_payment_status = 'paid' THEN NOW() ELSE paid_at END,
               updated_at     = NOW()
         WHERE id = $2::uuid
         RETURNING tenant_id, public_number`,

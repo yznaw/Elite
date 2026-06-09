@@ -498,6 +498,7 @@ async function postJson(path, payload, { retried = false } = {}) {
   } catch {
     data = { raw: text };
   }
+  console.log('[nbox] response', { status: response.status, body: text.slice(0, 500) });
 
   if (response.status === 401 || response.status === 403) {
     if (!retried) {
