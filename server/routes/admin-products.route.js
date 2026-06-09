@@ -70,13 +70,17 @@ async function replaceVariants(client, tenantId, productId, variants) {
     const sku = String(variant.sku || '').trim();
     if (!sku) continue;
 
+    const costCents = variant.costPrice != null && variant.costPrice !== ''
+      ? Math.max(0, Math.round(Number(variant.costPrice) * 100))
+      : null;
+
     await client.query(
       `
         INSERT INTO product_variants (
           tenant_id, product_id, sku, size, color, material,
-          price_cents, stock_quantity, sort_order, is_active
+          price_cents, cost_price_cents, stock_quantity, sort_order, is_active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
       `,
       [
         tenantId,
@@ -86,6 +90,7 @@ async function replaceVariants(client, tenantId, productId, variants) {
         String(variant.color || '').trim() || null,
         String(variant.material || '').trim() || null,
         toCents(variant.price),
+        costCents,
         Math.max(0, Number.parseInt(variant.stock, 10) || 0),
         index,
       ],
@@ -215,12 +220,11 @@ function mapAdminProduct(row) {
   return {
     id: row.id,
     name: row.name,
+    nameAr: row.name_ar || '',
     sku: row.sku,
     brand: row.brand,
     price: Math.round(Number(row.base_price_cents || 0) / 100),
     stock: Number(row.stock_quantity || 0),
-    has3d: row.has_3d,
-    views3d: Number(row.views_3d || 0),
     hidden: row.status === 'hidden',
     image: row.image || '',
     images: row.images || [],
@@ -253,6 +257,7 @@ async function loadAdminProduct(client, tenantId, productId) {
               'color', pv.color,
               'material', pv.material,
               'price', round(pv.price_cents / 100.0),
+              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
               'stock', pv.stock_quantity
             )
           ) FILTER (WHERE pv.id IS NOT NULL),
@@ -272,12 +277,14 @@ async function loadAdminProduct(client, tenantId, productId) {
           WHERE pr.tenant_id = p.tenant_id
             AND pr.product_id = p.id
             AND rp.status <> 'archived'
-        ), ARRAY[]::uuid[]) AS related_product_ids
+        ), ARRAY[]::uuid[]) AS related_product_ids,
+        pt_ar.name AS name_ar
       FROM products p
       LEFT JOIN product_variants pv ON pv.product_id = p.id
       LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
+      LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
       WHERE p.tenant_id = $1 AND p.id = $2 AND p.status <> 'archived'
-      GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
+      GROUP BY p.id, primary_media.preview_url, primary_media.storage_url, pt_ar.name
     `,
     [tenantId, productId],
   );
@@ -301,6 +308,11 @@ async function upsertProduct(client, tenant, product) {
   const metaTitle = String(product.metaTitle || '').trim() || null;
   const metaDesc = String(product.metaDesc || '').trim() || null;
 
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const stockQty = variants.length > 0
+    ? variants.reduce((sum, v) => sum + (Math.max(0, Number.parseInt(v.stock, 10) || 0)), 0)
+    : Math.max(0, Number.parseInt(product.stock, 10) || 0);
+
   const params = [
     tenant.id,
     sku,
@@ -311,9 +323,9 @@ async function upsertProduct(client, tenant, product) {
     JSON.stringify(description),
     toCents(product.price),
     currency,
-    Math.max(0, Number.parseInt(product.stock, 10) || 0),
-    Boolean(product.has3d),
-    Math.max(0, Number.parseInt(product.views3d, 10) || 0),
+    stockQty,
+    false,  // has_3d always false — feature removed
+    0,      // views_3d always 0 — feature removed
     metaTitle,   // $13
     metaDesc,    // $14
   ];
@@ -368,11 +380,25 @@ async function upsertProduct(client, tenant, product) {
     );
 
   const saved = upserted.rows[0];
-  await replaceVariants(client, tenant.id, saved.id, Array.isArray(product.variants) ? product.variants : []);
+  await replaceVariants(client, tenant.id, saved.id, variants);
   await replaceImages(client, tenant.id, saved.id, images, imageColors);
   if (hasRelatedProductIds) {
     await replaceRecommendations(client, tenant.id, saved.id, product.relatedProductIds);
   }
+
+  // Upsert Arabic name into product_translations
+  const nameAr = String(product.nameAr || '').trim();
+  if (nameAr) {
+    await client.query(
+      `
+        INSERT INTO product_translations (product_id, locale, name)
+        VALUES ($1, 'ar', $2)
+        ON CONFLICT (product_id, locale) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
+      `,
+      [saved.id, nameAr],
+    );
+  }
+
   return { ...saved, tenantId: tenant.id, imageCount: images.length };
 }
 
@@ -396,6 +422,7 @@ router.get('/', asyncHandler(async (_req, res) => {
                 'color', pv.color,
                 'material', pv.material,
                 'price', round(pv.price_cents / 100.0),
+                'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
                 'stock', pv.stock_quantity
               )
             ) FILTER (WHERE pv.id IS NOT NULL),
@@ -415,12 +442,14 @@ router.get('/', asyncHandler(async (_req, res) => {
             WHERE pr.tenant_id = p.tenant_id
               AND pr.product_id = p.id
               AND rp.status <> 'archived'
-          ), ARRAY[]::uuid[]) AS related_product_ids
+          ), ARRAY[]::uuid[]) AS related_product_ids,
+          pt_ar.name AS name_ar
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
+        LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.status <> 'archived'
-        GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
+        GROUP BY p.id, primary_media.preview_url, primary_media.storage_url, pt_ar.name
         ORDER BY p.created_at DESC
       `,
       [tenant.id],
@@ -452,6 +481,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
                 'color', pv.color,
                 'material', pv.material,
                 'price', round(pv.price_cents / 100.0),
+                'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
                 'stock', pv.stock_quantity
               )
             ) FILTER (WHERE pv.id IS NOT NULL),
@@ -471,12 +501,14 @@ router.get('/:id', asyncHandler(async (req, res) => {
             WHERE pr.tenant_id = p.tenant_id
               AND pr.product_id = p.id
               AND rp.status <> 'archived'
-          ), ARRAY[]::uuid[]) AS related_product_ids
+          ), ARRAY[]::uuid[]) AS related_product_ids,
+          pt_ar.name AS name_ar
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
+        LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status <> 'archived'
-        GROUP BY p.id, primary_media.preview_url, primary_media.storage_url
+        GROUP BY p.id, primary_media.preview_url, primary_media.storage_url, pt_ar.name
       `,
       [tenant.id, req.params.id],
     );
@@ -563,12 +595,18 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     }
 
     const existing = current.rows[0];
+    const patchVariants = req.body.variants;
+    const patchStockRaw = req.body.stock ?? existing.stock_quantity;
+    const patchStock = Array.isArray(patchVariants) && patchVariants.length > 0
+      ? patchVariants.reduce((sum, v) => sum + (Math.max(0, Number.parseInt(v.stock, 10) || 0)), 0)
+      : patchStockRaw;
+
     const payload = {
       name: req.body.name ?? existing.name,
       sku: req.body.sku ?? existing.sku,
       brand: req.body.brand ?? existing.brand,
       price: req.body.price ?? Math.round(Number(existing.base_price_cents) / 100),
-      stock: req.body.stock ?? existing.stock_quantity,
+      stock: patchStock,
       hidden: req.body.hidden ?? existing.status === 'hidden',
       enDesc: req.body.enDesc ?? existing.description?.en,
       arDesc: req.body.arDesc ?? existing.description?.ar,
@@ -576,11 +614,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       metaTitle: req.body.metaTitle ?? existing.meta_title,
       metaDesc: req.body.metaDesc ?? existing.meta_desc,
       id: req.params.id,
-      variants: req.body.variants,
+      variants: patchVariants,
       images: req.body.images,
       relatedProductIds: req.body.relatedProductIds,
-      has3d: req.body.has3d ?? existing.has_3d,
-      views3d: req.body.views3d ?? existing.views_3d,
     };
 
     const saved = await upsertProduct(client, tenant, payload);

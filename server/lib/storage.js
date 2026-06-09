@@ -14,7 +14,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const sharp = require('sharp');
+let sharp;
+try { sharp = require('sharp'); } catch { sharp = null; }
 
 const IMAGE_VARIANTS = [
   { key: 'thumb', width: 240, quality: 74 },
@@ -47,13 +48,13 @@ class DiskStorage {
     const slug = `${baseSlug}${ext}`;
     const fullPath = path.join(this.uploadsDir, slug);
     await fs.promises.writeFile(fullPath, buffer);
-    const dimensions = isOptimizableImage(mimeType, ext)
+    const dimensions = (sharp && isOptimizableImage(mimeType, ext))
       ? await sharp(buffer, { animated: false }).metadata().then((meta) => ({
         width: meta.width || null,
         height: meta.height || null,
       })).catch(() => ({ width: null, height: null }))
       : { width: null, height: null };
-    const variants = isOptimizableImage(mimeType, ext)
+    const variants = (sharp && isOptimizableImage(mimeType, ext))
       ? await this.createImageVariants({ buffer, baseSlug }).catch(() => ({}))
       : {};
 
@@ -86,6 +87,7 @@ class DiskStorage {
   }
 
   async createImageVariants({ buffer, baseSlug }) {
+    if (!sharp) return {};
     const image = sharp(buffer, { animated: false }).rotate();
     const metadata = await image.metadata();
     const sourceWidth = metadata.width || 0;
