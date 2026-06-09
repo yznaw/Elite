@@ -30,6 +30,7 @@ function nboxItems(rows) {
     qty: item.quantity,
     quantity: item.quantity,
     price: fromCents(item.unit_price_cents),
+    metadata: item.metadata || {},
   }));
 }
 
@@ -117,7 +118,7 @@ async function bookNboxForPaidOrder(client, tenantId, orderId) {
 
     const itemResult = await client.query(
       `
-        SELECT product_id, sku, product_name, quantity, unit_price_cents
+        SELECT product_id, sku, product_name, quantity, unit_price_cents, metadata
           FROM order_items
          WHERE tenant_id = $1 AND order_id = $2
          ORDER BY created_at
@@ -158,7 +159,7 @@ async function bookNboxForPaidOrder(client, tenantId, orderId) {
       [
         tenantId,
         order.id,
-        shipment.id || nboxQuoteFromOrder(order)?.serviceName || 'NBOX',
+        shipment.serviceName || shipment.carrier || nboxQuoteFromOrder(order)?.serviceName || 'NBOX',
         shipment.trackingNumber || null,
         shipment.trackingUrl || null,
         JSON.stringify(order.shipping_address || {}),

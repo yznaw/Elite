@@ -11,28 +11,36 @@ Elite integrates with NBOX in two directions:
 ```bash
 NBOX_WEBHOOK_SECRET=replace-with-nbox-webhook-secret
 
-NBOX_API_BASE_URL=https://uat.portal.nbox.qa
+NBOX_API_BASE_URL=https://nbox.now/api
 NBOX_API_TOKEN=replace-with-nbox-api-token
+NBOX_SHOP_DOMAIN=elitecollections.qa
 NBOX_API_KEY=
 NBOX_AUTH_HEADER=x-nbox-shop-token
 NBOX_AUTH_SCHEME=
 
-NBOX_RATE_ENDPOINT=replace-with-rate-endpoint-path
-NBOX_SHIPMENT_ENDPOINT=replace-with-create-shipment-endpoint-path
+NBOX_RATE_ENDPOINT=/rates
+NBOX_SHIPMENT_ENDPOINT=/order
 
 NBOX_DEFAULT_SERVICE_CODE=
 NBOX_DEFAULT_ITEM_WEIGHT_GRAMS=1000
+NBOX_DEFAULT_ITEM_LENGTH_CM=35
+NBOX_DEFAULT_ITEM_WIDTH_CM=25
+NBOX_DEFAULT_ITEM_HEIGHT_CM=15
 NBOX_ORIGIN_NAME=Elite Collections
 NBOX_ORIGIN_PHONE=
 NBOX_ORIGIN_EMAIL=admin@elitecollections.qa
-NBOX_ORIGIN_ADDRESS=
+NBOX_ORIGIN_ADDRESS=replace-with-pickup-address
 NBOX_ORIGIN_CITY=Doha
+NBOX_ORIGIN_STATE=Doha
 NBOX_ORIGIN_COUNTRY=QA
+NBOX_ORIGIN_ZIP=0000
 ```
 
-`NBOX_RATE_ENDPOINT` and `NBOX_SHIPMENT_ENDPOINT` must come from NBOX's merchant/API documentation. The app keeps them configurable because NBOX may expose account-specific endpoint paths.
+Use `https://staging.nbox.now/api` for NBOX staging/testing. The live NBOX Now endpoints are `/rates` for quotes and `/order` for order/shipment creation.
 
 Do not use your webhook URL for any of these outbound API settings. `https://elitecollections.qa/api/webhooks/nbox` is only for NBOX to call back into Elite after a shipment changes status.
+
+`NBOX_API_TOKEN` is sent as the raw `x-nbox-shop-token` header. `NBOX_SHOP_DOMAIN` is sent as `x-nbox-shop-domain`; it must match the domain/store attached to that token in NBOX.
 
 ## Customer Checkout Flow
 
