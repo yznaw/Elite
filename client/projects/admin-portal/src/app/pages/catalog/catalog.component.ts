@@ -146,15 +146,6 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               </select>
             </div>
 
-            <div class="fp-group">
-              <label class="fp-label">3D Model</label>
-              <select class="inp inp-sm" [ngModel]="v3d()" (ngModelChange)="v3d.set($event); page.set(0)">
-                <option value="All">All</option>
-                <option value="Linked">{{ t('catalog.linked') }}</option>
-                <option value="Missing">{{ t('catalog.missing') }}</option>
-              </select>
-            </div>
-
             <div class="fp-group fp-price">
               <label class="fp-label">Price range (QAR)</label>
               <div class="price-range">
@@ -188,9 +179,6 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               }
               @if (colorFilter() !== 'all') {
                 <span class="fchip">Color: {{ colorFilter() }} <button (click)="colorFilter.set('all')">×</button></span>
-              }
-              @if (v3d() !== 'All') {
-                <span class="fchip">3D: {{ v3d() }} <button (click)="v3d.set('All')">×</button></span>
               }
               @if (priceMin() > 0 || priceMax() > 0) {
                 <span class="fchip">Price: {{ priceMin() }}–{{ priceMax() || '∞' }} QAR <button (click)="priceMin.set(0);priceMax.set(0)">×</button></span>
@@ -285,9 +273,6 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                     </div>
                   }
                   @if (!selectionMode()) {
-                    <span class="prod-3d-badge" [class.linked]="p.has3d" [class.missing]="!p.has3d">
-                      {{ p.has3d ? '✓ 3D' : '○ No 3D' }}
-                    </span>
                     @if (p.hidden) {
                       <span class="prod-hidden-badge">○ {{ t('catalog.hidden') }}</span>
                     }
@@ -622,7 +607,7 @@ export class CatalogComponent implements OnInit {
   readonly search        = signal('');
   readonly collectionId  = signal('All');
   readonly brandFilter   = signal('all');
-  readonly v3d           = signal('All');
+
   readonly statusFilter  = signal<StatusFilter>('all');
   readonly colorFilter   = signal('all');
   readonly priceMin      = signal(0);
@@ -671,7 +656,6 @@ export class CatalogComponent implements OnInit {
   readonly hasAdvancedFilters = computed(() =>
     this.collectionId() !== 'All' ||
     this.brandFilter() !== 'all' ||
-    this.v3d() !== 'All' ||
     this.colorFilter() !== 'all' ||
     this.priceMin() > 0 ||
     this.priceMax() > 0,
@@ -681,7 +665,6 @@ export class CatalogComponent implements OnInit {
     let n = 0;
     if (this.collectionId() !== 'All') n++;
     if (this.brandFilter() !== 'all') n++;
-    if (this.v3d() !== 'All') n++;
     if (this.colorFilter() !== 'all') n++;
     if (this.priceMin() > 0 || this.priceMax() > 0) n++;
     return n;
@@ -691,7 +674,6 @@ export class CatalogComponent implements OnInit {
     const s         = this.search().toLowerCase();
     const colId     = this.collectionId();
     const brand     = this.brandFilter();
-    const v3d       = this.v3d();
     const status    = this.statusFilter();
     const colF      = this.colorFilter();
     const pMin      = this.priceMin();
@@ -711,9 +693,6 @@ export class CatalogComponent implements OnInit {
       }
 
       if (brand !== 'all' && p.brand !== brand) return false;
-
-      if (v3d === 'Linked'  && !p.has3d) return false;
-      if (v3d === 'Missing' && p.has3d)  return false;
 
       if (colF !== 'all') {
         const variantColors = p.variants?.map(v => v.color?.toLowerCase()) ?? [];
@@ -852,7 +831,7 @@ export class CatalogComponent implements OnInit {
     const id = 'P-NEW-' + Date.now().toString(36).slice(-5).toUpperCase();
     const draft: Product = {
       id, name: '', sku: '', brand: '', price: 0, stock: 0,
-      has3d: false, views3d: 0, hidden: true,
+      hidden: true,
       image: 'https://images.unsplash.com/photo-1519415943484-9fa1873496d4?w=600&q=80&auto=format&fit=crop',
       variants: [],
     };
@@ -865,7 +844,6 @@ export class CatalogComponent implements OnInit {
     this.search.set('');
     this.collectionId.set('All');
     this.brandFilter.set('all');
-    this.v3d.set('All');
     this.statusFilter.set('all');
     this.colorFilter.set('all');
     this.priceMin.set(0);
@@ -923,7 +901,7 @@ export class CatalogComponent implements OnInit {
     const products = this.filtered();
     if (products.length === 0) return;
     const rows = [
-      'SKU,Name,Brand,Price (QAR),Stock,Status,3D,Variants',
+      'SKU,Name,Brand,Price (QAR),Stock,Status,Variants',
       ...products.map(p => [
         `"${p.sku}"`,
         `"${p.name.replace(/"/g, '""')}"`,
@@ -931,7 +909,6 @@ export class CatalogComponent implements OnInit {
         p.price,
         p.stock,
         p.hidden ? 'Hidden' : 'Active',
-        p.has3d ? 'Yes' : 'No',
         p.variants?.length ?? 0,
       ].join(',')),
     ];

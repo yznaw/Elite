@@ -6,7 +6,7 @@ import { BarChartComponent } from '../../shared/charts/bar-chart.component';
 import { PieChartComponent } from '../../shared/charts/pie-chart.component';
 import { FunnelComponent } from '../../shared/charts/funnel.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
-import { FUNNEL, PRODUCTS, REVENUE_30D, TRAFFIC } from '../../data/mock';
+import { FUNNEL, REVENUE_30D, TRAFFIC } from '../../data/mock';
 import { QAR } from '../../models';
 
 @Component({
@@ -82,33 +82,15 @@ import { QAR } from '../../models';
         </div>
       </div>
 
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Top 10 by 3D Interaction</div>
-              <div class="card-sub">Total drag/zoom views · Last 30 days</div>
-            </div>
-          </div>
-          <div class="card-pad">
-            @if (topByViews.length > 0) {
-              <ap-bar-chart [data]="topByViews"/>
-            } @else {
-              <ap-empty-state icon="cube" title="No 3D views yet" sub="Interactions appear once customers explore products."/>
-            }
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Conversion Funnel</div>
+            <div class="card-sub">From visit to purchase</div>
           </div>
         </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Conversion Funnel</div>
-              <div class="card-sub">From visit to purchase</div>
-            </div>
-          </div>
-          <div class="card-pad">
-            <ap-funnel [data]="funnel"/>
-          </div>
+        <div class="card-pad">
+          <ap-funnel [data]="funnel"/>
         </div>
       </div>
     </div>
@@ -126,7 +108,6 @@ export class AnalyticsComponent {
   readonly rev30 = REVENUE_30D as unknown as Array<Record<string, unknown>>;
   readonly traffic = TRAFFIC;
   readonly funnel = FUNNEL;
-  readonly topByViews = [...PRODUCTS].sort((a, b) => b.views3d - a.views3d).slice(0, 10).map((p) => ({ label: p.name, value: p.views3d }));
 
   readonly totalSessions = REVENUE_30D.reduce((s, d) => s + d.sessions, 0);
   readonly totalConversions = REVENUE_30D.reduce((s, d) => s + d.conversions, 0);

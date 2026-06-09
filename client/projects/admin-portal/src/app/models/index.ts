@@ -5,18 +5,18 @@ export interface ProductVariant {
   color: string;
   material: string;
   price: number;
+  costPrice?: number;
   stock: number;
 }
 
 export interface Product {
   id: string;
   name: string;
+  nameAr?: string;
   sku: string;
   brand: string;
   price: number;
   stock: number;
-  has3d: boolean;
-  views3d: number;
   hidden: boolean;
   /** Primary thumbnail used everywhere except the editor gallery.
       Mirrors `images[0]` whenever a gallery is present. */
