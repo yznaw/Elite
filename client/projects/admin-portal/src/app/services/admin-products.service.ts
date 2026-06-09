@@ -19,8 +19,6 @@ export interface SaveProductPayload {
   images: string[];
   imageColors: Record<string, string>;
   relatedProductIds: string[];
-  has3d: boolean;
-  views3d: number;
 }
 
 @Injectable({ providedIn: 'root' })

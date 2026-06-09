@@ -43,16 +43,17 @@ All pages are lazy-loaded:
 | `/login` | `LoginComponent` | Public — email + password sign-in against `/api/auth/login`. Bounces authed users straight to the return URL. "Forgot password?" link below the form. Sidebar/topbar are hidden on auth routes. |
 | `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
 | `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
-| `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, 3D heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. **Date Range Filter** (Today / 7 Days / 30 Days / 90 Days) pill-bar above KPIs — all computeds (revenue, new customers, chart data) react to the selected range. Uses `latestDate` from seed data as reference so historical data works correctly. **Low Stock KPI card** — 5th card showing count of variants with stock 1–5 (threshold: ≤5). Clicking the card navigates to `/catalog?stock=low`. Card is always visible (shows 0 when no low-stock items). |
-| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted in localStorage). Search, status quick-filter (All / Active / Hidden / **Low Stock**), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill (with badge showing count) is pre-activated when navigating from the dashboard `?stock=low` query param. **Advanced filter panel**: collection, image status, 3D status, variant count, color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select** with checkbox overlay: Select All, **Set Status** (Active/Hidden) for selection, **Delete** with inline confirm. **Export CSV** button (disabled when filtered list is empty) generates a UTF-8 BOM CSV of the visible product set with columns SKU, Name, Brand, Price, Stock, Status, 3D, Variants. **New Product** create flow: inline drawer with image gallery (drag-reorder + primary, real multipart upload with per-file progress bar, drag/drop + tap-to-browse), **variants table with color swatch select from `ref_colors`, material select from `ref_materials`, size input with datalist suggestions from `ref_size_sets`**, "Generate sizes" wizard that auto-creates variant rows from a named size set, rich-text descriptions EN & AR, draft auto-save. **SEO fields** (meta title, meta description with 160-char counter + red overflow indicator, URL slug with format validation). **Duplicate Product** button in drawer header: creates a hidden copy with auto-incremented SKU (`-COPY`, `-COPY-2`, …), opens the copy immediately. **Bulk Import** (CSV → products grouped by English Name, each color row → `product_variant`, images from Google Drive, live NDJSON streaming, downloadable CSV report) **and Stock Update mode** (2-column SKU/Stock CSV, sends `PATCH /admin/products/bulk-stock`, shows updated/not-found summary). **Dry-Run toggle** in import dialog — sends `?dryRun=true`; server wraps the full pipeline in a transaction that is ROLLBACKed instead of COMMITted, so the preview report is identical to a real import. Results screen shows a "Preview" banner and a "Commit Import" button. **Retry Failed (N)** button in results — reconstructs a CSV from failed rows only and re-runs the upload. **Import History** tab — last 20 imports persisted in `localStorage` (key `elite-admin:import-history`), each entry expandable with per-product detail and a "Download Report" button. |
+| `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, top-products-by-price heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. **Date Range Filter** (Today / 7 Days / 30 Days / 90 Days) pill-bar above KPIs. **Low Stock KPI card** — shows count of products with stock between 1 and the configurable threshold (default: 8, set via `StoreConfigService`). Clicking the card navigates to `/catalog?stock=low`. Card shows 0 when all items are stocked. |
+| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted via `StorageService` — tenant-scoped). Search (matches name, SKU, **and brand**), status quick-filter (All / Active / Hidden / **Out of Stock** (red badge) / **Low Stock** (amber badge)), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill is pre-activated via `?stock=low` from the dashboard KPI card. Low-stock threshold from `StoreConfigService.lowStockThreshold()`. **Advanced filter panel**: collection, **brand** (auto-populated from loaded products), color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select**: Select All, Set Status, Delete with confirm. **Export CSV** (SKU, Name, Brand, Price, Stock, Status, Variants). **New Product** create flow: inline drawer with image gallery (drag-reorder + primary, real multipart upload with per-file progress bar, drag/drop, **"Pick from Media" button opens a multi-select slide-in panel from the media library** — session-cached, searchable), **variants card layout** (each variant = 2-row card: identity row — SKU/Color/Size/Material; numbers row — Stock/Price/Cost/Margin badge), "Generate sizes" wizard, rich-text EN/AR, draft auto-save. **Arabic Name field** (`nameAr`) stored in `product_translations`. **Cost price per variant** (`cost_price_cents`) with real-time **margin formula** (color-coded pill). **Stock is auto-computed** from variant sum when variants exist. **SEO fields** (`meta_title`, `meta_desc` 160-char counter, slug). **Duplicate Product**. **Bulk Import** + **Stock Update mode** (Dry-Run, Retry Failed, Import History). |
 | `/reference` | `ReferenceComponent` | Reference data management — **Colors** (name EN/AR + hex, inline color picker, swatch preview), **Materials** (name EN/AR), **Size Charts** (named size sets with comma-editable size arrays). Full CRUD for each, changes immediately available as dropdowns in the product drawer and filters in the catalog. Owner/admin only. |
-| `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image upload (drag/drop + URL paste), drag-to-reorder linked products to control storefront display order |
-| `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, **real multipart upload to `POST /api/admin/media` via drag/drop or tap-to-browse** (per-file thumbnail + progress row, 15 % / 60 % / 100 % … ), 415 / 413 errors surfaced inline, auto-link by SKU, detail drawer. Delete removes the file from storage too. |
-| `/storefront` | `StorefrontComponent` | Section editor with drag & drop, draft → publish, preview |
+| `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image (drag/drop + URL paste), drag-to-reorder linked products. **Collection drawer:** editable **URL Handle** field (auto-slugged from title, `/collection/{handle}` live preview, reset-to-auto button). Handle is saved to the DB `handle` column and used by the storefront Featured Collections panel. |
+| `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, real multipart upload (drag/drop or browse, per-file progress), auto-link by SKU, detail drawer. **Google Drive import:** "Google Drive" button opens a modal — paste a file or folder URL (folder requires `GOOGLE_DRIVE_API_KEY` env var). Images are downloaded, saved to storage, and **auto-linked by SKU** via 4-tier matching: (1) folder name = SKU, (2) filename stem = SKU, (3) filename contains SKU, (4) two-segment prefix matches SKU start. Success toast reports how many were auto-linked. **Set as Default Fallback** button in the detail drawer saves the image URL to tenant config (`PATCH /api/admin/settings/store { config: { defaultImage } }`). Delete removes the DB row and the file from storage. |
+| `/storefront` | `StorefrontComponent` | **3-tab unified content editor** with sticky Publish/Preview bar. **Tab: Home Page** — sub-tabs: Section Order (drag/drop visibility), Landing Hero (heroSlider items + feature callouts, EN/AR CTA), Collections (3 tiles + featured collections picker), Promotion Section (image/title/body/CTA), Craft Promise (3 cards EN/AR), Stats Reel (4 values EN/AR). **Tab: Our Story** — sub-tabs: Hero, Intro, Chapters (4), Quote, Atelier. **Tab: Contact Us** — sub-tabs: Page Header (EN/AR headline), Info Blocks (3 blocks with lines), Phone & Promise. All image slots have Upload + Pick from Media. Save Content writes to `PATCH /api/admin/storefront-content`; Publish Layout writes to `POST /api/admin/storefront/publish`. |
+| `/home-content` | — | **Redirects to `/storefront`** (deprecated — all editing moved into the Storefront tabs). |
 | `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, **Date Range filter** (All Time / Today / This Week / This Month / Custom — custom shows `date from/to` inputs). Active date range displayed as a dismissible chip. `clearFilters()` resets date range along with other filters. **CSV export** of the current filtered set (UTF-8 BOM), full-height drawer with status workflow stepper, tracking number, internal notes & timeline, **Print Invoice** button that opens a new browser tab with a fully formatted printable invoice (brand header, shipping address, line-items table, totals, `@media print` styles). |
 | `/customers` | `CustomersComponent` | Customer table/cards, tier filter, **Add Customer** create flow, fully editable detail drawer with real linked-orders history (rows navigate to /orders?id=…) |
-| `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel, top 3D interactions |
-| `/settings` | `SettingsComponent` | Store info (name, currency, timezone, language — `PATCH /api/admin/settings/store`), team members (list, role change, status toggle — `GET/PATCH /api/admin/settings/team/:id`), **Team Invitations** — invite by email + role (`POST /api/admin/settings/invitations`), shows generated invite link in a copy-able input, lists pending (non-expired) invitations with revoke button (`DELETE /api/admin/settings/invitations/:id`). Owner/admin only. |
+| `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel |
+| `/settings` | `SettingsComponent` | **General tab:** Store info (name, currency, timezone, language — `PATCH /api/admin/settings/store`) + **Low Stock Threshold** number input — sets `StoreConfigService.lowStockThreshold()`, persisted tenant-scoped via `StorageService`, consumed by catalog and dashboard. **Team tab:** team members (list, role change, status toggle — `GET/PATCH /api/admin/settings/team/:id`). **Team Invitations** — invite by email + role (`POST /api/admin/settings/invitations`), shows generated invite link in a copy-able input, lists pending invitations with revoke button. **Integrations tab.** Owner/admin only. |
 | `/accept-invite` | `AcceptInviteComponent` | Public — reads `?token=` query param, validates via `GET /api/invitations/validate`, shows name/password/confirm form. On submit calls `POST /api/invitations/accept`. Redirects to login on success. Invitation token is single-use and expires after 48 h. |
 | `/pos` | `PosComponent` | **Point of Sale** *(planned — not yet built)*. Full-screen dark-theme cashier interface. Touch-optimized product grid, live cart panel, USB + camera barcode scanning, Cash / Card / Split checkout, ESC/POS thermal receipt printing (Bixolon 80mm via WebUSB/TCP), automated cash drawer trigger (RJ12), barcode label generation (Code 128/EAN-13 30×20mm), Park & Resume multi-session carts, offline-first PWA with IndexedDB queue, X Report (mid-shift read), Z Report (end-of-day close with cash float & variance), full/partial returns & refunds, Manager PIN role-based security. Hides sidebar/topbar — renders standalone full-width. See [`docs/pos-system-plan.html`](./pos-system-plan.html) for acceptance criteria. |
 | `**` | — | Redirects to `/dashboard` |
@@ -77,7 +78,8 @@ Located in `app/shared/`:
 | Component | Folder | Description |
 |---|---|---|
 | `KpiComponent` | `kpi/` | KPI card with icon, value, delta indicator |
-| `SortableTableComponent` | `sortable-table/` | Reusable sortable, paginated data table |
+| `SortableTableComponent` | `sortable-table/` | Reusable sortable data table. Header click cycles **desc → asc → none** (third click restores original row order). Supports `defaultSort` input and custom `sort` functions per column. |
+| `PaginationComponent` | `pagination/` | Pagination bar with **First «**, Prev, Next, **Last »** buttons and a page-size selector (25/50/100). Emits `pageChange` and `pageSizeChange` events. |
 | `ChartComponent` | `charts/` | Canvas-based chart rendering (line, area, bar) |
 | `SparklineComponent` | `sparkline/` | Tiny inline sparkline chart |
 | `PillComponent` | `pill/` | Status pill badge (green/amber/red/blue/grey/gold) |
@@ -109,6 +111,7 @@ Located in `app/shared/`:
   - Sends `withCredentials: true` on every request so the session cookie travels with admin calls
   - Unwraps the `{ success, data }` envelope — callers receive `data` directly
 - **Methods:** `get<T>(path)`, `post<T>(path, body)`, `put<T>(path, body)`, `patch<T>(path, body)`, `delete<T>(path)`
+- **`mediaUrl(path)`** — converts `/uploads/abc.jpg` → `/api/uploads/abc.jpg` so every media URL routes through the Nginx `/api` proxy in production. Returns absolute `https://` or `data:` URLs unchanged. Used by `AdminMediaService`, `AdminProductsService`, `MediaUploadService`, and `HomeContentComponent`.
 
 All admin services inject `ApiClient` and call `firstValueFrom()` to return Promises.
 
@@ -173,12 +176,26 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
   - `sendInvitation({ email, role })` → `{ email, inviteLink }` — generates token, returns shareable link
   - `revokeInvitation(id)` → `void` — calls `DELETE /admin/settings/invitations/:id`
 
+### `StorageService`
+
+- **File:** `services/storage.service.ts`
+- **Purpose:** Tenant-scoped wrapper around `localStorage`. All keys are namespaced as `elite:{tenantId}:{base}` (falls back to `elite:local:{base}` when no user is loaded). Use this service everywhere instead of raw `localStorage` to prevent cross-tenant state bleed.
+- **API:** `get(base)`, `set(base, value)`, `remove(base)`, `key(base)` — thin wrappers that inject `AuthService` to derive the tenant ID at call time.
+
+### `StoreConfigService`
+
+- **File:** `services/store-config.service.ts`
+- **Purpose:** Shared store-level configuration persisted via `StorageService`. Currently holds `lowStockThreshold` — the number below which a product is flagged as low stock across the catalog, dashboard, and settings pages.
+- **State:** `lowStockThreshold = signal<number>(8)` (readonly), persisted as `storage.key('low-stock-threshold')`
+- **API:** `setLowStockThreshold(value)` — clamped to `Math.max(1, Math.round(value))`
+- **Used by:** `DashboardComponent`, `CatalogComponent`, `SettingsComponent`
+
 ### `StorefrontService`
 
 - **File:** `services/storefront.service.ts`
 - **Purpose:** Manages the storefront layout with draft/publish workflow
 - **State:** Two signals — `draft` and `published` (each is a `Snapshot` with blocks + timestamp)
-- **Persistence:** `localStorage` (designed to be swapped for API calls)
+- **Persistence:** `StorageService` — keys `storefront:draft` and `storefront:published` are tenant-scoped (`elite:{tenantId}:storefront:draft`). Loaded in the constructor (not in field initializers) so `StorageService` is available.
 - **API:**
   - `saveDraft(blocks)` — Save working copy
   - `publish()` — Promote draft → published
@@ -288,7 +305,7 @@ All mock data lives in `app/data/mock.ts`:
 | Export | Type | Description |
 |---|---|---|
 | `PRODUCTS` | `Product[]` | 12 products (6 Elite + 6 other brands) |
-| `MEDIA_INIT` | `MediaFile[]` | 17 media files (images + 3D models) |
+| `MEDIA_INIT` | `MediaFile[]` | 17 media files (images) |
 | `CUSTOMERS` | `Customer[]` | 10 customers with profiles |
 | `ORDERS` | `Order[]` | 12 orders with line items |
 | `REVENUE_30D` | `RevenueDay[]` | 30 days of generated revenue data |
@@ -321,7 +338,7 @@ All models are defined in `app/models/index.ts`:
 
 | Interface | Key Fields | Used By |
 |---|---|---|
-| `Product` | id, name, sku, brand, price, stock, has3d, hidden, image, images[]?, variants[]?, metaTitle?, metaDesc?, slug? | Catalog, Dashboard |
+| `Product` | id, name, nameAr?, sku, brand, price, stock, hidden, image, images[]?, variants[]?, metaTitle?, metaDesc?, slug? | Catalog, Dashboard |
 | `ProductVariant` | id, sku, size, color, material, price, stock | Product drawer (Variants section) |
 | `MediaFile` | id, name, kind (image/glb), size, linkedTo, preview | Media Library |
 | `Order` | id, date, customer, total, payment, fulfillment, items[], trackingNumber?, timeline[]?, notes[]? | Orders |
@@ -433,7 +450,8 @@ The storefront editor is the most complex feature in the admin portal:
 │         │                 │          │
 │    saveDraft()       publish()       │
 │         │                 │          │
-│    localStorage     localStorage     │
+│  StorageService     StorageService   │
+│  (tenant-scoped)    (tenant-scoped)  │
 │         │                 │          │
 └─────────┼─────────────────┼──────────┘
           │                 │
@@ -441,11 +459,13 @@ The storefront editor is the most complex feature in the admin portal:
     Admin edits →→→→ Shoppers see
 ```
 
+Keys: `elite:{tenantId}:storefront:draft` and `elite:{tenantId}:storefront:published`
+
 ### Flow
 
 1. Admin drags/edits sections → `saveDraft()` called automatically
 2. Admin clicks "Publish" → `publish()` promotes draft to published
-3. Customer-web reads from `published` localStorage key
+3. Customer-web reads from the `storefront:published` key (tenant-scoped)
 4. Admin can preview via `buildPreviewLink()` → opens storefront with draft data
 5. Admin can undo publish via `revertPublished(previousSnapshot)`
 

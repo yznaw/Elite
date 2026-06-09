@@ -63,13 +63,6 @@ import { IconComponent } from '../../shared/icons/icon.component';
           [deltaUp]="true"
           icon="users"
           [sparkData]="customersSpark()"/>
-        <ap-kpi
-          [label]="t('dash.top3DViews')"
-          [value]="topViews().toLocaleString()"
-          [delta]="topProductName()"
-          [deltaUp]="true"
-          icon="cube"
-          [sparkData]="viewsSpark()"/>
         <div class="kpi kpi-clickable" (click)="goToLowStock()">
           <div class="kpi-label">
             <span class="kpi-icon" style="color:var(--warning,#f59e0b)"><ap-icon name="warning" [size]="14"/></span>
@@ -107,8 +100,8 @@ import { IconComponent } from '../../shared/icons/icon.component';
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">{{ t('dash.heatmap.title') }}</div>
-              <div class="card-sub">{{ t('dash.heatmap.sub') }}</div>
+              <div class="card-title">{{ t('dash.topProducts.title') }}</div>
+              <div class="card-sub">{{ t('dash.topProducts.sub') }}</div>
             </div>
           </div>
           <div class="card-pad">
@@ -120,9 +113,9 @@ import { IconComponent } from '../../shared/icons/icon.component';
                   <div class="heat-meta">{{ p.brand }} · {{ p.sku }}</div>
                 </div>
                 <div class="heat-bar">
-                  <div class="heat-bar-fill" [style.width.%]="(p.views3d / Math.max(maxViews(), 1)) * 100"></div>
+                  <div class="heat-bar-fill" [style.width.%]="(p.price / Math.max(maxPrice(), 1)) * 100"></div>
                 </div>
-                <div class="heat-count">{{ p.views3d }}</div>
+                <div class="heat-count">{{ QAR(p.price) }}</div>
               </div>
             }
             @if (heatTop().length === 0) {
@@ -258,12 +251,10 @@ export class DashboardComponent implements OnInit {
   });
 
   readonly heatTop = computed<Product[]>(() =>
-    [...this.products()].sort((a, b) => (b.views3d || 0) - (a.views3d || 0)).slice(0, 6),
+    [...this.products()].sort((a, b) => b.price - a.price).slice(0, 6),
   );
 
-  readonly maxViews = computed(() => this.heatTop()[0]?.views3d || 0);
-  readonly topViews = computed(() => this.maxViews());
-  readonly topProductName = computed(() => this.heatTop()[0]?.name || '—');
+  readonly maxPrice = computed(() => this.heatTop()[0]?.price || 0);
   readonly lowStockCount = computed(() => {
     const t = this.storeConfig.lowStockThreshold();
     return this.products().filter(p => p.stock > 0 && p.stock < t).length;
@@ -311,15 +302,6 @@ export class DashboardComponent implements OnInit {
     const total = this.customers().length;
     const seed = Math.max(1, total - 6);
     return Array.from({ length: 7 }, (_, i) => Math.min(total, seed + i));
-  });
-
-  readonly viewsSpark = computed(() => {
-    // Show the top 7 products by views as a bar-style sparkline.
-    return [...this.products()]
-      .sort((a, b) => (b.views3d || 0) - (a.views3d || 0))
-      .slice(0, 7)
-      .map((p) => p.views3d || 0)
-      .reverse();
   });
 
   // ── Misc helpers ─────────────────────────────────────────────────────────

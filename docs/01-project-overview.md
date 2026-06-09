@@ -31,18 +31,18 @@ The platform is built as a **white-label product** — meaning the same codebase
 - 📱 **Fully responsive** — mobile, tablet, desktop
 
 ### Admin Portal
-- 📊 **Dashboard** — revenue charts, KPIs, recent orders, 3D heatmap
-- 📋 **Product & Collection Management**
-- Full catalog administration with product linking, visibility toggling, and stock management.
-- Custom Collections system (similar to Shopify) allowing manual grouping of products. Collections can be surfaced directly in the storefront editor.
-- Built-in 3D asset linking to specific SKUs.
-- 🖼️ **Media Library** — upload images and 3D models, auto-link by SKU, link/unlink
-- 🏗️ **Storefront Editor** — drag & drop section ordering, draft → publish flow, preview
-- 📦 **Orders** — search, filter by payment/fulfillment status, order detail drawer
+- 📊 **Dashboard** — revenue charts, KPIs (including low stock alert), recent orders, date range filter
+- 📋 **Product & Collection Management** — full catalog with bulk import (dry-run + retry + history), CSV export, SEO fields, duplicate product, bulk stock update via CSV
+- Custom Collections system (similar to Shopify) with URL handles for storefront linking
+- Built-in 3D asset linking to specific SKUs
+- 🖼️ **Media Library** — upload images, Google Drive import, auto-link by SKU, set default fallback image
+- 🏗️ **Storefront Editor** — drag & drop section ordering, draft → publish flow, featured collections
+- 📦 **Orders** — search, date range filter, payment/fulfillment filters, CSV export, print invoice
 - 👥 **Customer CRM** — customer cards, order history, size preferences, internal notes
 - 📈 **Analytics** — sessions vs conversions, traffic sources, conversion funnel, top 3D interactions
-- ⚙️ **Settings** — store info, team members with roles, integrations
+- ⚙️ **Settings** — store info, low stock threshold, team members with roles, team invitations (email invite with secure link, 48h token)
 - 🌐 **Bilingual (EN/AR)** with full RTL support
+- 📱 **Mobile responsive** — 44px touch targets, scrollable tables, adaptive layouts
 
 ---
 
@@ -76,6 +76,8 @@ The platform is built as a **white-label product** — meaning the same codebase
 | Language | TypeScript | 5.4 |
 | Styling | SCSS + CSS Custom Properties | — |
 | Backend | Node.js + Express | 4.19 |
+| Database | PostgreSQL (via `pg` pool) | 14+ |
+| Auth | express-session + connect-pg-simple | — |
 | Build Tool | Angular CLI + Webpack (via `@angular-devkit`) | 17.3 |
 | Package Manager | npm | — |
 

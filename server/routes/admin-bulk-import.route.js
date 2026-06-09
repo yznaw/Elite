@@ -247,7 +247,8 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
       try {
         await client.query('BEGIN');
 
-        const description = { en: firstRow.desc.trim(), ar: firstRow.nameAr || '' };
+        const description = { en: firstRow.desc.trim(), ar: '' };
+        const nameAr = (firstRow.nameAr || '').trim();
 
         // Find or create product by slug — slug is the grouping key across imports
         const existing = await client.query(
@@ -272,6 +273,16 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           );
           productId   = ins.rows[0].id;
           wasInserted = true;
+        }
+
+        // Upsert Arabic name into product_translations
+        if (nameAr) {
+          await client.query(
+            `INSERT INTO product_translations (product_id, locale, name)
+             VALUES ($1, 'ar', $2)
+             ON CONFLICT (product_id, locale) DO UPDATE SET name = EXCLUDED.name, updated_at = now()`,
+            [productId, nameAr]
+          );
         }
 
         // Each color row → one product_variant

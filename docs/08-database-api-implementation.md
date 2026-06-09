@@ -1,7 +1,7 @@
 # 08 — Database & API Implementation
 
 > **Audience:** Backend developers, frontend developers wiring pages to API  
-> **Last updated:** May 12, 2026 — real file uploads (storage adapter), password reset flow, dashboard live data, UI shell cleanup
+> **Last updated:** June 2026 — StorageService tenant-scoped localStorage, StoreConfigService, migration 004 (meta_title/meta_desc), production FK bug fixes (bulk-delete + product save)
 
 ---
 
@@ -16,9 +16,41 @@ The implementation added:
 - A default tenant helper for white-label/multi-tenant data.
 - Public storefront API routes.
 - Admin API routes for catalog, collections, customers, orders, media, storefront editor, settings, analytics, and integrations.
-- Product save wiring from the admin portal to PostgreSQL.
+- Product save wiring from the admin portal to PostgreSQL (including `meta_title`/`meta_desc` SEO fields via migration 004).
 - Storefront collection loading from the `products` table.
+- `StorageService` — tenant-scoped `localStorage` wrapper (`elite:{tenantId}:{base}`). All client-side persistence now uses this service instead of raw `localStorage`.
+- `StoreConfigService` — shared signal for `lowStockThreshold`, persisted via `StorageService`, read by dashboard, catalog, and settings.
+- Production FK bug fixes: bulk-delete and product-save now correctly handle `cart_items.product_id` and `cart_items.variant_id` `ON DELETE RESTRICT` constraints.
 - Documentation for endpoint-to-SQL behavior.
+
+**June 2026 — Feature batch additions:**
+
+- Migration `006_cost_price.sql` — `cost_price_cents integer` (nullable) added to `product_variants`. CHECK constraint `product_variants_cost_nonneg`.
+- `nameAr` (Arabic product name) stored in `product_translations (locale='ar')`. Upserted on every product save via `admin-products.route.js`. Returned via LEFT JOIN in all product SELECT queries.
+- Stock aggregation: when variants are present, `products.stock_quantity` is auto-computed as `SUM(variant.stock_quantity)` on every save. The product-level stock input is hidden in the admin UI when variants exist.
+- 3D model feature removed from UI: `has3d`/`views3d` fields no longer sent or displayed. DB columns remain but are always set to `false`/`0`.
+- Sidebar collapse: `SidebarToggleService.collapsed` signal added. App shell grid uses `--sidebar-w` CSS variable (240px ↔ 68px).
+- Storefront content expanded: `storefront-content.route.js` now normalizes `heroSlider`, `promise`, `stats`, and `contact` sections. `store_settings.home_content` JSONB stores all of them.
+
+**Previous June 2026 additions:**
+
+- `ApiClient.mediaUrl()` — converts `/uploads/` → `/api/uploads/` so all media URLs route through the Nginx `/api` proxy in production. Used by `AdminMediaService`, `AdminProductsService`, `MediaUploadService`, and `HomeContentComponent`.
+- Express now mounts uploads at **both** `/uploads/` (legacy) and `/api/uploads/` (proxy-friendly alias).
+- `GET /api/config` — new public endpoint returning `{ defaultImage }` from `tenants.config` JSONB. The client-web reads this on init for product image fallback.
+- `POST /api/admin/media/gdrive` — Google Drive import endpoint. Downloads images from a public Drive file or folder, saves to storage, and auto-links by SKU via 4-tier matching (folder name → filename stem → filename contains → two-segment prefix).
+- `PATCH /api/admin/media/:id/link` — fixed duplicate key constraint: now sets `sort_order = COALESCE(MAX+1, 0)` (was missing; caused error when linking a second image to the same product).
+- `linkMedia()` refactored to accept a shared `sortCounters` Map so multiple images linked to the same product within one transaction each get a unique `sort_order`.
+- `AdminProductsService.normalizeProduct()` — added to all product API responses (list, get, save, update, duplicate); resolves `image` and `images[]` via `api.mediaUrl()`.
+- `AdminMediaService.list()` — normalizes `preview` URLs via `api.mediaUrl()` on load.
+- `MediaUploadService.uploadProductImages()` — normalizes returned `images[]` via `api.mediaUrl()` on the `done` event.
+- Media picker in the product drawer — multi-select slide-in panel using `AdminMediaService`; cached for the drawer session.
+- Collection drawer: editable URL Handle field, auto-slug from title, live preview.
+- Storefront Featured Collections panel: collection picker chips, manual handle entry, `collectionId` persisted in block settings JSONB.
+- Home Content tiles: Linked Collection dropdown (auto-fills title/link/image); media picker on all image slots.
+- Google Drive auto-link: 4-tier SKU matching with `sortCounters` Map to prevent transaction-level sort_order conflicts.
+- "Set as Default Fallback" in media detail drawer: saves to `tenants.config.defaultImage` via `PATCH /api/admin/settings/store`.
+- Public products API: `BUILT_IN_FALLBACK` changed from Unsplash URL to `''`; hardcoded sizes fallback `[40,41,42,43,44]` removed — products with no size variants now return `sizes: []`.
+- Client-web `resolveMediaUrl` bug fixed (was stripping `/api/` prefix in production); `ALL_PRODUCTS` mock data removed; size-optional product page support.
 
 ---
 
@@ -28,6 +60,10 @@ The implementation added:
 |---|---|
 | `server/db/migrations/001_initial_schema.sql` | Full initial PostgreSQL schema |
 | `server/db/migrations/002_password_reset_tokens.sql` | Password reset tokens (SHA-256 hashed, one-shot, 30m TTL) |
+| `server/db/migrations/003_ref_tables.sql` | `ref_colors`, `ref_materials`, `ref_size_sets` — brand reference data |
+| `server/db/migrations/004_product_seo_fields.sql` | `ALTER TABLE products ADD COLUMN meta_title text, meta_desc text` |
+| `server/db/migrations/005_team_invitations.sql` | `team_invitations` table — UUID PK, `token_hash` TEXT, 48h `expires_at`, single-use |
+| `server/db/migrations/006_cost_price.sql` | `ALTER TABLE product_variants ADD COLUMN cost_price_cents integer` (nullable) + CHECK constraint |
 | `server/db/client.js` | Shared `pg` connection pool |
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
 | `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |
@@ -45,6 +81,7 @@ The initial schema includes tables for:
 
 - Tenants and white-label brand profiles
 - Admin users and team members
+- Team invitations (token_hash, role, 48h TTL)
 - Store settings
 - Products
 - Product translations
@@ -101,6 +138,10 @@ SESSION_COOKIE_SAMESITE=lax      # 'none' if admin runs on a different origin in
 DEFAULT_ADMIN_EMAIL=admin@elite.local
 DEFAULT_ADMIN_PASSWORD=elite-admin
 DEFAULT_ADMIN_NAME=Yusuf Hamad
+
+# Google Drive media import (optional — required for folder imports)
+# Accepts GOOGLE_DRIVE_API_KEY or GOOGLE_API_KEY as fallback
+GOOGLE_DRIVE_API_KEY=
 
 # NBOX delivery integration
 NBOX_WEBHOOK_SECRET=replace-with-nbox-webhook-secret
@@ -334,11 +375,13 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 
 | Method | Endpoint | Database behavior |
 |---|---|---|
-| `GET`    | `/api/admin/media`           | `SELECT` media with product links + uploader info |
+| `GET`    | `/api/admin/media`           | `SELECT` media with product links + uploader info. All `preview` URLs normalized via `api.mediaUrl()`. |
 | `POST`   | `/api/admin/media`           | **Multipart**: store each `files[]` via the storage adapter, `INSERT media_assets`, optionally `INSERT media_links` if `productId` is in the form. Returns array. **JSON fallback**: legacy URL-only `INSERT`. |
-| `PATCH`  | `/api/admin/media/:id/link`  | Transaction: replace `media_links` for asset |
-| `DELETE` | `/api/admin/media/:id`       | `DELETE media_assets` row + `storage.remove()` to clear the file on disk |
-| `POST`   | `/api/admin/products/:id/images` | **Multipart**: batch-uploads images for a product. Transaction writes `media_assets` + `media_links` (role=`gallery`, `sort_order` continuing from current max) and promotes the first new image to `products.primary_media_id` if none was set. Returns the resulting `images: string[]` so the client patches state in one assignment. |
+| `POST`   | `/api/admin/media/gdrive`    | **NEW**: Download images from a Google Drive file or folder URL, `INSERT media_assets` for each, then auto-link by SKU via 4-tier matching. Uses a shared `sortCounters` Map within the transaction to prevent `sort_order` duplicate key conflicts. Requires `GOOGLE_DRIVE_API_KEY` (or `GOOGLE_API_KEY`) for folder listing. |
+| `PATCH`  | `/api/admin/media/:id/link`  | Transaction: delete existing `media_links` for asset, then `INSERT` with `sort_order = COALESCE(MAX+1, 0)`. **Fix:** previous version omitted `sort_order`, which defaulted to 0 and caused a unique constraint violation when linking a second image to the same product. |
+| `DELETE` | `/api/admin/media/orphaned`  | Find all assets with no `media_links` entries, `DELETE media_assets`, call `storage.remove()` for each file. |
+| `DELETE` | `/api/admin/media/:id`       | `DELETE media_assets` row + `storage.remove()` to clear the file on disk. |
+| `POST`   | `/api/admin/products/:id/images` | **Multipart**: batch-uploads images for a product. Transaction writes `media_assets` + `media_links` (role=`gallery`, `sort_order` continuing from current max) and promotes the first new image to `products.primary_media_id` if none was set. Returns `images: string[]` normalized via `api.mediaUrl()` so freshly-uploaded images display immediately. |
 
 ### Storefront Editor
 
@@ -358,6 +401,11 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 | `GET` | `/api/admin/settings/team` | `SELECT` admin users |
 | `POST` | `/api/admin/settings/team` | `INSERT ... ON CONFLICT DO UPDATE` admin user |
 | `PATCH` | `/api/admin/settings/team/:id` | `UPDATE` admin user |
+| `GET` | `/api/admin/settings/invitations` | `SELECT` from `team_invitations` where not expired |
+| `POST` | `/api/admin/settings/invitations` | `INSERT` into `team_invitations` with SHA-256 hashed token; returns raw token in `inviteLink` |
+| `DELETE` | `/api/admin/settings/invitations/:id` | `DELETE` from `team_invitations` |
+| `GET` | `/api/invitations/validate?token=` | Hash-lookup in `team_invitations`, return `{ email, role }` |
+| `POST` | `/api/invitations/accept` | Transaction: `INSERT` admin_users (bcrypt password), `DELETE` invitation row |
 | `GET` | `/api/admin/settings/integrations` | `SELECT` integrations |
 | `POST` | `/api/admin/settings/integrations` | `INSERT ... ON CONFLICT DO UPDATE` integration |
 
@@ -418,18 +466,12 @@ Already wired to the UI:
 - Admin product save
 - Storefront product collection loading
 
-Still mock-backed in many admin screens:
+Still mock-backed:
 
-- Admin catalog initial list still starts from `data/mock.ts`
-- Collections page still starts from `COLLECTIONS`
-- Customers page still starts from `CUSTOMERS`
-- Orders page still starts from `ORDERS`
-- Media page still starts from `MEDIA_INIT`
-- Analytics/dashboard still use mock rollups
-- Storefront editor service still uses localStorage
-- Settings page still uses mock arrays
+- Analytics charts still use `mock.ts` rollups — `GET /api/admin/analytics/overview` exists but is not yet wired to the analytics component
+- `data/mock.ts` is imported only by the analytics page now; all other pages use real API services
 
-The API routes exist for these areas, so each page can now be migrated from mock data to HTTP services incrementally.
+All other major admin pages (catalog, orders, customers, media, storefront, settings) are fully wired to PostgreSQL via their respective `Admin*Service` classes.
 
 ---
 
@@ -465,34 +507,13 @@ Temporary smoke-test rows were removed after testing where appropriate.
 
 ---
 
-## Notes For Next Implementation Pass
+## Remaining Work
 
-Recommended next steps:
-
-1. Create Angular admin services for each API area:
-   - `AdminCatalogService`
-   - `AdminCollectionsService`
-   - `AdminCustomersService`
-   - `AdminOrdersService`
-   - `AdminMediaService`
-   - `AdminStorefrontApiService`
-   - `AdminSettingsService`
-   - `AdminAnalyticsService`
-
-2. Replace page-level mock imports with service-backed signals.
-
-3. Update drawer save/delete handlers to call:
-   - `POST`
-   - `PATCH`
-   - `DELETE`
-
-4. Add loading, empty, and error states to each page.
-
-5. Add authentication and tenant resolution before production.
-
-6. Add seed data scripts for local development.
-
-7. Add migration tooling once there is more than one migration.
+- **Analytics** — wire `AnalyticsComponent` to `GET /api/admin/analytics/overview`; remove remaining `mock.ts` import
+- **Password reset emails** — `POST /api/auth/forgot` currently logs the reset URL to stdout; wire a real email transport (Resend / SES / SendGrid) in production
+- **Team invitation emails** — `POST /api/admin/settings/invitations` returns `inviteLink` in the response body; the admin copies it manually. Wire email delivery in production
+- **POS backend** — `admin-pos.route.js` is planned but not yet built; see `docs/pos-system-plan.html`
+- **S3 / Supabase storage** — currently disk-only; add driver in `server/lib/storage.js` and set `STORAGE_DRIVER` env
 
 ---
 

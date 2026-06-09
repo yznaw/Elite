@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HomeContentService } from '../../services/home-content.service';
+import { LocaleService } from '../../services/locale.service';
 
 @Component({
   selector: 'cw-story',
@@ -11,8 +12,9 @@ import { HomeContentService } from '../../services/home-content.service';
 })
 export class StoryComponent implements OnInit {
   private readonly homeContent = inject(HomeContentService);
+  readonly locale = inject(LocaleService);
 
-  readonly content = computed(() => this.homeContent.contentData().story);
+  readonly content  = computed(() => this.homeContent.contentData().story);
   readonly chapters = computed(() => this.content().chapters);
 
   ngOnInit(): void {

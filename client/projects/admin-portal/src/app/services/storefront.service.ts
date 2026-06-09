@@ -13,9 +13,9 @@ interface Snapshot {
 }
 
 export const HOME_LAYOUT_BLOCKS: StorefrontBlock[] = [
-  { id: 'home-hero', type: '3D Hero', title: '3D Hero', visible: true, config: 'Interactive model hero' },
+  { id: 'home-hero', type: 'Landing Hero', title: 'Landing Hero', visible: true, config: 'Interactive model hero' },
   { id: 'home-collections', type: 'Featured Collections', title: 'Featured Collections', visible: true, config: '3 admin collections', collectionIds: [] },
-  { id: 'home-discount', type: 'Discount Hero', title: 'Discount Hero', visible: true, config: 'Promotional split section' },
+  { id: 'home-discount', type: 'Promotion Section', title: 'Promotion Section', visible: true, config: 'Promotional split section' },
   { id: 'home-promise', type: 'Craft Promise', title: 'Craft Promise', visible: true, config: 'Stats and atelier promise' },
 ];
 

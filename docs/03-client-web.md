@@ -147,12 +147,17 @@ Located in `app/shared/`:
 
 - **File:** `services/products.service.ts`
 - **Provider:** Root-level (`providedIn: 'root'`)
+- **State:** `_products` signal (empty initial, loaded from `/api/products` on construction); `defaultImage` string (loaded from `/api/config` before products load, falls back to `/assets/brand/elite-logo-green.png` if not configured)
 - **Methods:**
-  - `getAll(): Product[]` — Returns all products
-  - `getById(id: number): Product | undefined` — Find by ID
+  - `getAll(): Product[]` — Returns products signal value
+  - `getById(id: string): Product | undefined` — Find by UUID
   - `getFeatured(): Product[]` — Returns first 3 products
+  - `ensureLoaded() / refresh()` — Force-reload from API
+- **Image normalization:** All products returned from the API pass through `normalizeProductImages()` which resolves `/uploads/…` paths via `resolveMediaUrl()` (→ `/api/uploads/…`), deduplicates the `images[]` array, and applies `colorImages` normalization. Missing images fall back to `this.defaultImage`.
 
-> **Note:** Currently uses hardcoded mock data. To connect to an API, replace the `ALL_PRODUCTS` array with `HttpClient.get()` calls.
+**`resolveMediaUrl()` — Bug fix (June 2026):** The previous implementation stripped `/api/` from the base URL (`apiBase.replace(/\/api\/?$/, '')`), leaving an empty prefix in production. Now uses `${this.apiBase}${value}` directly so `/uploads/abc.jpg` becomes `/api/uploads/abc.jpg`, which routes through the Nginx proxy to Express.
+
+**Fallback images:** `FALLBACK_IMAGE` constant (used by `onImgError` in collection and product pages) was changed from a hardcoded Unsplash URL to `/assets/brand/elite-logo-green.png`.
 
 ### `CartService`
 
@@ -323,16 +328,30 @@ All `@font-face` declarations are at the top of `styles.scss`. No external font 
 
 ```typescript
 interface Product {
-  id: number;
+  id: string;              // UUID (was `number` in the mock era)
   name: string;
   price: number;
-  tag: string;       // 'Signature' | 'New' | 'Bestseller' | 'Limited' | ''
-  leather: string;   // e.g. 'Camel Nappa', 'Goat Suede'
-  style: string;     // 'Oxford' | 'Derby' | 'Loafer' | 'Boot'
-  sizes: number[];   // EU sizes
-  image: string;     // URL
+  tag: string;             // 'Signature' | 'New' | 'Bestseller' | 'Limited' | ''
+  leather: string;         // e.g. 'Camel Nappa', 'Goat Suede'
+  style: string;           // 'Oxford' | 'Derby' | 'Loafer' | 'Boot'
+  sizes: number[];         // EU sizes — empty [] for size-optional products (sunglasses, accessories)
+  image: string;           // Primary URL (resolved via resolveMediaUrl)
+  images?: string[];       // Full gallery
+  colorImages?: Record<string, string>; // color name → image URL
+  variants?: ProductVariant[];
 }
 ```
+
+#### Size-optional products
+
+Products where `sizes.length === 0` (e.g. sunglasses, accessories) are handled gracefully:
+
+- **Product page:** the entire size selector section is hidden (`@if (p.sizes && p.sizes.length > 0)`).
+- **`selectedSizeInStock`:** checks total variant stock instead of per-size stock.
+- **`cartItem()`:** `size` defaults to `0` (not hardcoded `40`).
+- **Restock form:** no longer requires a size to be selected before submitting.
+
+The public products API previously returned `[40, 41, 42, 43, 44]` as a fallback when a product had no size variants. This fallback was removed — the API now returns `sizes: []` for size-optional products.
 
 ### `CartItem`
 

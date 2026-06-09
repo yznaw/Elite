@@ -1,5 +1,9 @@
 @if (showShell()) {
-  <div class="app">
+  <div
+    class="app"
+    [class.sidebar-collapsed]="sidebarCollapsed()"
+    [style.--sidebar-w]="sidebarCollapsed() ? '68px' : '240px'"
+  >
     <ap-sidebar/>
     <div class="main">
       <ap-topbar/>

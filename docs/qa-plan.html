@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Elite — QA Testing Plan</title>
+<style>
+  :root {
+    --green: #024638; --gold: #c5a572; --bg: #f5f6fa;
+    --surface: #fff; --ink: #1a1f36; --muted: #6b7088;
+    --success: #10b981; --warning: #f59e0b; --danger: #ef4444;
+    --border: #e2e5f0; --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--ink); }
+
+  .page-header { background: var(--green); padding: 32px 40px; }
+  .page-header__brand { color: var(--gold); font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 6px; }
+  .page-header__title { color: #fff; font-size: 26px; font-weight: 600; }
+  .page-header__sub { color: rgba(255,255,255,0.5); font-size: 13px; margin-top: 4px; }
+
+  .content { padding: 32px 40px; max-width: 1200px; display: flex; flex-direction: column; gap: 28px; }
+
+  .section { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+  .section-head {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 24px; background: #fafbff;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-num {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--green); color: var(--gold);
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .section-title-text { font-size: 16px; font-weight: 600; }
+  .section-scope { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); background: #f8f9fc;
+    padding: 8px 16px; text-align: left; border-bottom: 1px solid var(--border);
+  }
+  td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #f2f3f8; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbff; }
+
+  .tc-id { font-family: monospace; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .tc-step { line-height: 1.6; }
+  .tc-expect { line-height: 1.6; font-size: 12px; color: #2d5a27; }
+  .tc-risk span {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 99px;
+  }
+  .risk-high   { background: #fee2e2; color: #991b1b; }
+  .risk-medium { background: #fef3c7; color: #92400e; }
+  .risk-low    { background: #d1fae5; color: #065f46; }
+
+  .check-col { width: 80px; text-align: center; }
+  .check-box {
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid var(--border); border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .env-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 99px;
+    font-weight: 600;
+  }
+  .env-admin { background: #dbeafe; color: #1e40af; }
+  .env-web   { background: #dcfce7; color: #14532d; }
+  .env-api   { background: #ede9fe; color: #5b21b6; }
+  .env-db    { background: #fce7f3; color: #9d174d; }
+
+  .legend { display: flex; gap: 16px; padding: 16px 40px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border); margin: 0 40px 40px;
+  }
+  .summary-cell {
+    background: var(--surface); padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .summary-cell__val { font-size: 32px; font-weight: 700; color: var(--green); }
+  .summary-cell__lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  @media (max-width: 900px) {
+    .content { padding: 20px; }
+    .legend  { padding: 12px 20px; }
+    .summary-grid { margin: 0 20px 20px; grid-template-columns: repeat(2,1fr); }
+    th:nth-child(5), td:nth-child(5) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <p class="page-header__brand">Elite Collection · Admin Platform</p>
+  <h1 class="page-header__title">QA Testing Plan — Feature Validation</h1>
+  <p class="page-header__sub">6 Feature Areas · 42 Test Cases · Run after each deployment</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><span class="env-badge env-admin">Admin</span> Admin portal (localhost:4300)</div>
+  <div class="legend-item"><span class="env-badge env-web">Web</span> Client storefront (localhost:4200)</div>
+  <div class="legend-item"><span class="env-badge env-api">API</span> Express server (localhost:3000)</div>
+  <div class="legend-item"><span class="env-badge env-db">DB</span> PostgreSQL query</div>
+  <div class="legend-item"><span class="risk-high" style="display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;">High</span> Data-loss or regression risk</div>
+  <div class="legend-item"><span class="risk-medium" style="display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;">Med</span> UX or logic risk</div>
+  <div class="legend-item"><span class="risk-low" style="display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;">Low</span> Visual / cosmetic</div>
+</div>
+
+<div class="content">
+
+  <!-- ── F1: Stock Logic ──────────────────────────────── -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">1</div>
+      <div class="section-title-text">Stock Logic — Variant-based stock aggregation</div>
+      <span class="section-scope"><span class="env-badge env-admin">Admin</span> <span class="env-badge env-api">API</span> <span class="env-badge env-db">DB</span></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>ID</th><th>Test Step</th><th>Expected Result</th><th>Risk</th><th class="check-col">Pass</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="tc-id">F1-01</td>
+          <td class="tc-step">Open a product with <strong>no variants</strong>. Check the stock field in Pricing &amp; Availability.</td>
+          <td class="tc-expect">Stock field shows an editable number input. Changing it and saving persists to DB.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F1-02</td>
+          <td class="tc-step">Add 3 variants to the same product (e.g. stock 5, 10, 15). Check the stock field.</td>
+          <td class="tc-expect">Stock field becomes a read-only display showing <strong>30</strong> with a note "Computed from variant stock totals". The editable input is gone.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F1-03</td>
+          <td class="tc-step">Save the product with variants. Check <code>products.stock_quantity</code> in DB.</td>
+          <td class="tc-expect">DB row shows <code>stock_quantity = 30</code> (sum of all variant stocks).</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F1-04</td>
+          <td class="tc-step">Change one variant stock from 10 → 20. Save. Re-open product.</td>
+          <td class="tc-expect">Computed total updates to 40. DB <code>stock_quantity = 40</code>.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F1-05</td>
+          <td class="tc-step">Delete all variants from a product and save.</td>
+          <td class="tc-expect">Stock field reverts to editable input. Product stock becomes 0 in DB.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F1-06</td>
+          <td class="tc-step">Check the catalog list view for a variant-based product.</td>
+          <td class="tc-expect">Catalog shows aggregated stock (e.g. "40 units"), not a stale product-level value.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F1-07</td>
+          <td class="tc-step">Dashboard Low Stock KPI — set threshold to 50. Create a product with variants summing to 30 units.</td>
+          <td class="tc-expect">Dashboard KPI counts the product as low-stock (30 &lt; 50).</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F2+3: Cost Price + Margin ─────────────────────── -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">2·3</div>
+      <div class="section-title-text">Cost Price + Margin Formula</div>
+      <span class="section-scope"><span class="env-badge env-admin">Admin</span> <span class="env-badge env-api">API</span> <span class="env-badge env-db">DB</span></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>ID</th><th>Test Step</th><th>Expected Result</th><th>Risk</th><th class="check-col">Pass</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="tc-id">F2-01</td>
+          <td class="tc-step">Open product drawer → Variants table. Confirm column headers are: SKU · Size · Color · Material · Price · <strong>Cost · Margin</strong> · Stock · (action).</td>
+          <td class="tc-expect">All 9 columns visible with correct labels.</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F2-02</td>
+          <td class="tc-step">Add a variant: Price = 1000 QAR, Cost = 600 QAR. Check the Margin column.</td>
+          <td class="tc-expect">Margin shows <strong>40%</strong> with a <span style="background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:99px;font-size:11px;">green</span> pill.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F2-03</td>
+          <td class="tc-step">Set Cost = 850 QAR (Price remains 1000). Check margin.</td>
+          <td class="tc-expect">Margin = <strong>15%</strong> with a <span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:99px;font-size:11px;">red</span> pill.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F2-04</td>
+          <td class="tc-step">Set Cost = 750 QAR. Check margin.</td>
+          <td class="tc-expect">Margin = <strong>25%</strong> with an <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;font-size:11px;">amber</span> pill.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F2-05</td>
+          <td class="tc-step">Leave Cost field empty for a variant. Check Margin column.</td>
+          <td class="tc-expect">Margin column shows <code>—</code> dash (not 0%, not NaN).</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F2-06</td>
+          <td class="tc-step">Save the product. Query DB: <code>SELECT cost_price_cents FROM product_variants WHERE product_id = '...'</code></td>
+          <td class="tc-expect"><code>cost_price_cents = 60000</code> (600 QAR × 100). Empty cost variants have <code>NULL</code>.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F2-07</td>
+          <td class="tc-step">Re-open the saved product. Check cost fields are pre-filled.</td>
+          <td class="tc-expect">Cost inputs show the saved values. Margin recomputes correctly on load.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F2-08</td>
+          <td class="tc-step">Add multiple variants with costs. Check the "Avg. margin" summary below the table.</td>
+          <td class="tc-expect">Avg. margin shows the average of all variants with cost data. Variants without cost are excluded from the average.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F4: 3D Removal ─────────────────────────────────── -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">4</div>
+      <div class="section-title-text">3D Model References — Complete Removal</div>
+      <span class="section-scope"><span class="env-badge env-admin">Admin</span></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>ID</th><th>Test Step</th><th>Expected Result</th><th>Risk</th><th class="check-col">Pass</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="tc-id">F4-01</td>
+          <td class="tc-step">Open any product drawer. Check the facts bar (thumbnail area).</td>
+          <td class="tc-expect">No "3D Status", "3D Linked/Missing", or "3D Views" row. Facts show: Linked media · Product ID.</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F4-02</td>
+          <td class="tc-step">Scroll through the product drawer. Look for the 3D Model (.glb) upload section.</td>
+          <td class="tc-expect">No GLB section exists anywhere in the drawer.</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F4-03</td>
+          <td class="tc-step">Open Catalog → Advanced Filters panel.</td>
+          <td class="tc-expect">No "3D Model" filter dropdown. Filter count and chips do not reference 3D.</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F4-04</td>
+          <td class="tc-step">Export CSV from Catalog page. Open the file.</td>
+          <td class="tc-expect">CSV headers: SKU, Name, Brand, Price, Stock, Status, Variants — no "3D" column.</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F4-05</td>
+          <td class="tc-step">Open Analytics page. Check all chart cards.</td>
+          <td class="tc-expect">No "Top 3D Interactions" card. Conversion Funnel card is full-width.</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F4-06</td>
+          <td class="tc-step">Dashboard — check KPI cards and heatmap.</td>
+          <td class="tc-expect">No "Top 3D Views" KPI. Heatmap shows "Top Products by Price" with QAR values.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F4-07</td>
+          <td class="tc-step">Save a product and check the API response (browser dev tools → Network).</td>
+          <td class="tc-expect">Response does not include <code>has3d</code> or <code>views3d</code> fields.</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F8: Arabic Name ─────────────────────────────────── -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">8</div>
+      <div class="section-title-text">Arabic Name Field + Bulk Import</div>
+      <span class="section-scope"><span class="env-badge env-admin">Admin</span> <span class="env-badge env-api">API</span> <span class="env-badge env-db">DB</span></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>ID</th><th>Test Step</th><th>Expected Result</th><th>Risk</th><th class="check-col">Pass</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="tc-id">F8-01</td>
+          <td class="tc-step">Open any product drawer → Basics section. Check field labels.</td>
+          <td class="tc-expect">Two name fields: "Product Name (English)" and "Arabic Name" below it. Arabic field has <code>dir="auto"</code>.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F8-02</td>
+          <td class="tc-step">Enter Arabic name "حذاء جلدي فاخر" and save. Re-open product.</td>
+          <td class="tc-expect">Arabic name field shows saved value. Text direction auto-switches to RTL in the input.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F8-03</td>
+          <td class="tc-step">After saving, query DB: <code>SELECT name FROM product_translations WHERE product_id = '...' AND locale = 'ar'</code></td>
+          <td class="tc-expect">Row exists with <code>name = 'حذاء جلدي فاخر'</code>.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F8-04</td>
+          <td class="tc-step">Update the Arabic name to a different value and save again.</td>
+          <td class="tc-expect">DB row is updated (ON CONFLICT DO UPDATE), not duplicated. Only one row per <code>(product_id, 'ar')</code>.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F8-05</td>
+          <td class="tc-step">Leave Arabic name empty and save.</td>
+          <td class="tc-expect">No translation row is created/updated. Existing Arabic name row is preserved if one existed previously.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F8-06</td>
+          <td class="tc-step">Bulk import a CSV with "Arabic Name" / "name_ar" column filled for some rows.</td>
+          <td class="tc-expect">After import, querying <code>product_translations</code> shows Arabic name rows for products with that column filled. Products without it have no translation row.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F8-07</td>
+          <td class="tc-step">Call <code>GET /api/admin/products</code> and inspect a product with an Arabic name.</td>
+          <td class="tc-expect">Response includes <code>"nameAr": "حذاء جلدي فاخر"</code> field.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── F6: Sidebar ─────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">6</div>
+      <div class="section-title-text">Sidebar — Scrollability + Collapse/Expand</div>
+      <span class="section-scope"><span class="env-badge env-admin">Admin</span></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>ID</th><th>Test Step</th><th>Expected Result</th><th>Risk</th><th class="check-col">Pass</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="tc-id">F6-01</td>
+          <td class="tc-step">Open admin on a small screen (height 600px). Simulate with browser devtools viewport.</td>
+          <td class="tc-expect">All nav links are accessible by scrolling inside the sidebar. No link is cut off. Scrollbar appears on hover.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F6-02</td>
+          <td class="tc-step">On desktop (≥1025px), click the collapse button (← arrow) in the sidebar header.</td>
+          <td class="tc-expect">Sidebar collapses to 68px icon-only rail. Text labels, sub-labels, user info hide. Icons remain. Animation is smooth.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F6-03</td>
+          <td class="tc-step">While collapsed, hover over a nav icon.</td>
+          <td class="tc-expect">Tooltip shows the route label (via the <code>title</code> attribute).</td>
+          <td class="tc-risk"><span class="risk-low">Low</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F6-04</td>
+          <td class="tc-step">Click the expand button (→ arrow) while collapsed.</td>
+          <td class="tc-expect">Sidebar expands back to 240px with labels. Main content area adjusts via CSS grid transition.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F6-05</td>
+          <td class="tc-step">On mobile (≤1024px), click the hamburger. Check sidebar opens as a drawer.</td>
+          <td class="tc-expect">Sidebar slides in from the left. Backdrop appears. Clicking backdrop closes it.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F6-06</td>
+          <td class="tc-step">Navigate to different pages while sidebar is open on mobile.</td>
+          <td class="tc-expect">Sidebar closes automatically after each navigation.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">F6-07</td>
+          <td class="tc-step">Check all pages render correctly with the sidebar collapsed.</td>
+          <td class="tc-expect">Page content fills the remaining width. No layout breakage on Dashboard, Catalog, Orders, Settings.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Regression: Existing features ────────────────────── -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">✦</div>
+      <div class="section-title-text">Regression — Existing Features Not Broken</div>
+      <span class="section-scope"><span class="env-badge env-admin">Admin</span> <span class="env-badge env-api">API</span> <span class="env-badge env-web">Web</span></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>ID</th><th>Test Step</th><th>Expected Result</th><th>Risk</th><th class="check-col">Pass</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="tc-id">REG-01</td>
+          <td class="tc-step">Create a new product from scratch (no variants) — full save flow.</td>
+          <td class="tc-expect">Product appears in catalog. Stock is editable. Save succeeds. Product visible on storefront.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">REG-02</td>
+          <td class="tc-step">Bulk import a CSV file with 5 products. Check dry-run, then real import.</td>
+          <td class="tc-expect">Dry-run shows preview without DB changes. Real import inserts products. Arabic name is stored if the column was filled.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">REG-03</td>
+          <td class="tc-step">Duplicate a product. Open the copy.</td>
+          <td class="tc-expect">Copy has all fields, including nameAr and cost prices on variants. Stock is correct.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">REG-04</td>
+          <td class="tc-step">Bulk stock update via CSV (stock-update mode).</td>
+          <td class="tc-expect">Stock updates apply to <code>products.stock_quantity</code> for no-variant products. Variant products remain unaffected.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">REG-05</td>
+          <td class="tc-step">Upload an image to a product's gallery and verify it displays.</td>
+          <td class="tc-expect">Image appears in gallery, sets primary if first. Product image shows on catalog grid.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">REG-06</td>
+          <td class="tc-step">Open an order, update its status to Shipped with a tracking number.</td>
+          <td class="tc-expect">Timeline updates. Tracking number saved. Status pill changes.</td>
+          <td class="tc-risk"><span class="risk-medium">Med</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+        <tr>
+          <td class="tc-id">REG-07</td>
+          <td class="tc-step">Navigate to the storefront (client-web) and verify the home page loads with products.</td>
+          <td class="tc-expect">Hero section renders. Collection tiles appear. No console errors. Bilingual switch (EN/AR) works.</td>
+          <td class="tc-risk"><span class="risk-high">High</span></td>
+          <td class="check-col"><div class="check-box"></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /content -->
+
+<div class="summary-grid">
+  <div class="summary-cell">
+    <span class="summary-cell__val">42</span>
+    <span class="summary-cell__lbl">Total Test Cases</span>
+  </div>
+  <div class="summary-cell">
+    <span class="summary-cell__val" style="color:var(--danger);">21</span>
+    <span class="summary-cell__lbl">High Risk Cases</span>
+  </div>
+  <div class="summary-cell">
+    <span class="summary-cell__val" style="color:var(--warning);">14</span>
+    <span class="summary-cell__lbl">Medium Risk Cases</span>
+  </div>
+  <div class="summary-cell">
+    <span class="summary-cell__val" style="color:var(--success);">7</span>
+    <span class="summary-cell__lbl">Low Risk Cases</span>
+  </div>
+</div>
+
+</body>
+</html>

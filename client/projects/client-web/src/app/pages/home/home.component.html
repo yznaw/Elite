@@ -34,7 +34,7 @@
                 class="hero-product"
                 [attr.aria-label]="activeHeroItem().alt"
               >
-                @for (item of heroItems; track item.id; let first = $first) {
+                @for (item of heroItems(); track item.id; let first = $first) {
                   <picture
                     class="hero-product__image"
                     [class.is-active]="item.id === activeHeroItem().id"
@@ -63,11 +63,11 @@
                 <span aria-hidden="true">›</span>
               </button>
 
-              @for (callout of mobileFeatureCards(); track callout.id) {
+              @for (callout of activeHeroCallouts(); track callout.id) {
                 <article
                   class="hero-callout"
-                  [ngClass]="callout.className"
-                  [style.--delay]="callout.delay"
+                  [ngClass]="'hero-callout--' + callout.id"
+                  [style.--delay]="calloutDelay(callout.id)"
                 >
                   <span class="callout-line" aria-hidden="true"
                     ><span></span
@@ -90,7 +90,7 @@
               class="hero-mobile-features"
               aria-label="Product craft details"
             >
-              @for (callout of mobileFeatureCards(); track callout.id) {
+              @for (callout of activeHeroCallouts(); track callout.id) {
                 <article class="mobile-feature-card">
                   <picture>
                     <source [srcset]="toWebp(callout.thumbnail)" type="image/webp" />
@@ -184,17 +184,14 @@
             <div class="promise-panel">
               <div>
                 <p class="discount-kicker">{{ t("home.promise.kicker") }}</p>
-                <h2 id="home-promise-title" class="serif">
-                  {{ t("home.promise.title") }}
-                </h2>
+                <h2 id="home-promise-title" class="serif">{{ t("home.promise.title") }}</h2>
               </div>
-
               <div class="promise-grid">
-                @for (card of metaCards; track card.id) {
+                @for (card of promiseCards(); track card.id) {
                   <article [class.is-visible]="metaVisible()">
                     <span>{{ card.icon }}</span>
-                    <h3>{{ t(card.labelKey) }}</h3>
-                    <p>{{ t(card.subKey) }}</p>
+                    <h3>{{ locale.locale() === 'ar' ? card.labelAr : card.labelEn }}</h3>
+                    <p>{{ locale.locale() === 'ar' ? card.subAr : card.subEn }}</p>
                   </article>
                 }
               </div>
@@ -205,10 +202,10 @@
         @case ("home-reels") {
           <section class="home-commerce">
             <div class="stats-grid">
-              @for (stat of stats; track stat.value) {
+              @for (stat of statItems(); track stat.id) {
                 <article>
                   <strong class="serif">{{ stat.value }}</strong>
-                  <span>{{ t(stat.labelKey) }}</span>
+                  <span>{{ locale.locale() === 'ar' ? stat.labelAr : stat.labelEn }}</span>
                 </article>
               }
             </div>
