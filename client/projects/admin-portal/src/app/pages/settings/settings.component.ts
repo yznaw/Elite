@@ -5,6 +5,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
+import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
@@ -20,9 +21,16 @@ type Tab = 'general' | 'team' | 'integrations';
 @Component({
   selector: 'ap-settings',
   standalone: true,
-  imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective],
+  imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent],
   template: `
     <div class="page-fade">
+      @if (tab() === 'general') {
+        <ap-save-bar
+          [dirty]="isDirty()"
+          [saving]="savingGeneral()"
+          (saved)="saveGeneral()"
+          (discarded)="discardGeneral()"/>
+      }
       <div class="tabs">
         @for (tt of tabs; track tt.key) {
           <button class="tab" [class.active]="tab() === tt.key" (click)="tab.set(tt.key)">{{ t(tt.labelKey) }}</button>
@@ -89,13 +97,6 @@ type Tab = 'general' | 'team' | 'integrations';
               </div>
             </div>
 
-            <div class="row gap-sm mt-24" style="justify-content:flex-end;">
-              <button class="btn btn-ghost" [disabled]="savingGeneral()" (click)="discardGeneral()">{{ t('common.discard') }}</button>
-              <button class="btn btn-primary" [disabled]="savingGeneral()" (click)="saveGeneral()">
-                @if (savingGeneral()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
-                @else { {{ t('common.saveChanges') }} }
-              </button>
-            </div>
           }
         </div>
       }
@@ -263,6 +264,14 @@ export class SettingsComponent implements OnInit {
 
   // Snapshot for discard
   private _storeSnapshot = { storeName: 'Elite Collection', currency: 'QAR', timezone: 'Asia/Qatar', language: 'en', lowStockThreshold: 8 };
+
+  readonly isDirty = computed(() =>
+    this.storeName() !== this._storeSnapshot.storeName ||
+    this.currency()  !== this._storeSnapshot.currency  ||
+    this.timezone()  !== this._storeSnapshot.timezone  ||
+    this.language()  !== this._storeSnapshot.language  ||
+    this.lowStockThreshold() !== this._storeSnapshot.lowStockThreshold
+  );
 
   // ── Team ──────────────────────────────────────────────────────────────────
   readonly loadingTeam = signal(true);

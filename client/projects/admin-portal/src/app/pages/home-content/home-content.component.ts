@@ -10,6 +10,7 @@ import { AdminCollectionsService } from '../../services/admin-collections.servic
 import { ToastService } from '../../services/toast.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
+import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 
 const HOME_COLLECTION_LIMIT = 3;
 
@@ -179,21 +180,23 @@ function cloneContent(content: HomeContentData): HomeContentData {
 @Component({
   selector: 'ap-home-content',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, SaveBarComponent],
   template: `
     <div class="page-fade home-admin">
+      <ap-save-bar
+        [dirty]="isDirty()"
+        [saving]="saving()"
+        (saved)="save()"
+        (discarded)="resetToDefaults()"/>
       <header class="card home-admin__header">
         <div>
           <p>Storefront Home</p>
           <h1>Hero & Featured Collections</h1>
-          <span>Update the discount hero and collection grid used on the customer home page.</span>
+          <span>Update the Promotion Section and collection grid used on the customer home page.</span>
         </div>
 
         <div class="home-admin__actions">
-          <button type="button" class="btn btn-outline" (click)="resetToDefaults()" [disabled]="saving()">Reset</button>
-          <button type="button" class="btn btn-gold" (click)="save()" [disabled]="saving() || !isDirty()">
-            {{ saving() ? 'Saving...' : 'Save changes' }}
-          </button>
+          <button type="button" class="btn btn-outline btn-sm" (click)="resetToDefaults()" [disabled]="saving()">Reset to defaults</button>
         </div>
       </header>
 

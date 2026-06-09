@@ -7,6 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
+import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
@@ -30,7 +31,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 @Component({
   selector: 'ap-collection-drawer',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, SaveBarComponent],
   template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
@@ -71,27 +72,14 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         </div>
       </div>
       
-      <div class="save-bar-top" [class.dirty]="dirty()" [class.shake]="shakeSaveBar()">
-        <div class="row gap-sm" style="min-width:0;flex:1;">
-          <span class="save-badge" style="background:transparent;border-color:transparent;color:#fff;">
-            {{ t('product.unsaved.title') }}
-          </span>
-        </div>
-        <div class="row gap-sm" style="flex-shrink:0;">
-          <button class="btn btn-ghost btn-sm" (click)="discard()" [disabled]="saveState() === 'saving'">
-            {{ t('common.discard') }}
-          </button>
-          <button class="btn btn-primary btn-sm" (click)="save()" [disabled]="saveState() === 'saving'">
-            @if (saveState() === 'saving') {
-              <ap-spinner/> {{ t('common.saving') }}
-            } @else if (saveState() === 'saved') {
-              <ap-icon name="check" [size]="12"/> {{ t('common.save') }}d
-            } @else {
-              {{ t('common.saveChanges') }}
-            }
-          </button>
-        </div>
-      </div>
+      <ap-save-bar
+        [dirty]="dirty()"
+        [saving]="saveState() === 'saving'"
+        [justSaved]="saveState() === 'saved'"
+        [shake]="shakeSaveBar()"
+        [label]="t('product.unsaved.title')"
+        (saved)="save()"
+        (discarded)="discard()"/>
 
       <div class="drawer-body">
         <div class="vis-block mb-24" [class.hidden-state]="form().hidden">

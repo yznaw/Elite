@@ -8,6 +8,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
+import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { fulfillmentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
@@ -28,7 +29,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 @Component({
   selector: 'ap-customer-drawer',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, AvatarComponent, PillComponent, SpinnerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, AvatarComponent, PillComponent, SpinnerComponent, SaveBarComponent],
   template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide customer-drawer" [class.is-dirty]="dirty()">
@@ -52,25 +53,14 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
         </button>
       </div>
 
-      <div class="save-bar-top" [class.dirty]="dirty()" [class.shake]="shakeSaveBar()">
-        <div class="row gap-sm" style="min-width:0;flex:1;">
-          <span class="save-badge" style="background:transparent;border-color:transparent;color:#fff;">
-            {{ t('customerDrawer.unsaved') }}
-          </span>
-        </div>
-        <div class="row gap-sm" style="flex-shrink:0;">
-          <button class="btn btn-ghost btn-sm" (click)="discard()" [disabled]="saveState() === 'saving'">
-            {{ t('common.discard') }}
-          </button>
-          <button class="btn btn-primary btn-sm" (click)="save()" [disabled]="saveState() === 'saving'">
-            @if (saveState() === 'saving') {
-              <ap-spinner/> {{ t('common.saving') }}
-            } @else {
-              {{ t('common.saveChanges') }}
-            }
-          </button>
-        </div>
-      </div>
+      <ap-save-bar
+        [dirty]="dirty()"
+        [saving]="saveState() === 'saving'"
+        [justSaved]="saveState() === 'saved'"
+        [shake]="shakeSaveBar()"
+        [label]="t('customerDrawer.unsaved')"
+        (saved)="save()"
+        (discarded)="discard()"/>
 
       <div class="drawer-body">
         @if (mode === 'edit') {
