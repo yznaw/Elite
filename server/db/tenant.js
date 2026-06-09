@@ -42,6 +42,16 @@ async function ensureDefaultTenant(client) {
 
   await ensureDefaultAdminUser(client, tenant.id);
 
+  // Ensure integration rows exist so config can be patched without INSERT logic elsewhere
+  await client.query(
+    `
+      INSERT INTO integrations (tenant_id, integration_key, name, description, status)
+      VALUES ($1, 'nbox', 'NBOX Logistics', 'NBOX last-mile delivery', 'disconnected')
+      ON CONFLICT (tenant_id, integration_key) DO NOTHING
+    `,
+    [tenant.id],
+  );
+
   return tenant;
 }
 

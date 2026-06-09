@@ -3,6 +3,8 @@ const DEFAULT_ITEM_LENGTH_CM = 35;
 const DEFAULT_ITEM_WIDTH_CM = 25;
 const DEFAULT_ITEM_HEIGHT_CM = 15;
 
+const db = require('../db/client');
+
 class NboxError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -21,12 +23,59 @@ function isConfigured() {
   return hasStatic || hasLogin;
 }
 
+// In-memory cache (fast path for single-process, single-restart scenarios)
 const _token = { value: null, fetchedAt: 0 };
 const TOKEN_TTL_MS = 23 * 60 * 60 * 1000;
 
-function invalidateToken() {
+// ── DB-backed token persistence ───────────────────────────────────────────────
+// Survives server restarts and works across multiple worker processes.
+
+async function readTokenFromDb() {
+  try {
+    const { rows } = await db.query(
+      `SELECT config FROM integrations WHERE integration_key = 'nbox' LIMIT 1`,
+    );
+    const cfg = rows[0]?.config;
+    if (cfg?.nboxToken && cfg?.nboxTokenFetchedAt) {
+      return { token: cfg.nboxToken, fetchedAt: Number(cfg.nboxTokenFetchedAt) };
+    }
+  } catch {
+    // DB unavailable — will fall through to a fresh login
+  }
+  return null;
+}
+
+async function persistTokenToDb(token, fetchedAt) {
+  try {
+    await db.query(
+      `UPDATE integrations
+          SET config     = config || $1::jsonb,
+              updated_at = NOW()
+        WHERE integration_key = 'nbox'`,
+      [JSON.stringify({ nboxToken: token, nboxTokenFetchedAt: fetchedAt })],
+    );
+  } catch (err) {
+    console.warn('[nbox] Could not persist token to DB (non-critical):', err.message);
+  }
+}
+
+async function clearTokenFromDb() {
+  try {
+    await db.query(
+      `UPDATE integrations
+          SET config     = config - 'nboxToken' - 'nboxTokenFetchedAt',
+              updated_at = NOW()
+        WHERE integration_key = 'nbox'`,
+    );
+  } catch {
+    // non-critical
+  }
+}
+
+async function invalidateToken() {
   _token.value = null;
   _token.fetchedAt = 0;
+  await clearTokenFromDb();
 }
 
 async function freshToken() {
@@ -37,10 +86,21 @@ async function freshToken() {
     return env('NBOX_API_TOKEN');
   }
 
+  // 1. In-memory cache (fastest)
   if (_token.value && (Date.now() - _token.fetchedAt) < TOKEN_TTL_MS) {
     return _token.value;
   }
 
+  // 2. DB cache (survives restarts / multiple workers)
+  const cached = await readTokenFromDb();
+  if (cached && (Date.now() - cached.fetchedAt) < TOKEN_TTL_MS) {
+    _token.value = cached.token;
+    _token.fetchedAt = cached.fetchedAt;
+    console.log('[nbox] Reused token from DB cache.');
+    return _token.value;
+  }
+
+  // 3. Login to obtain a fresh token
   const base = env('NBOX_API_BASE_URL').replace(/\/+$/, '');
   let res;
   try {
@@ -70,7 +130,8 @@ async function freshToken() {
 
   _token.value = token;
   _token.fetchedAt = Date.now();
-  console.log('[nbox] Obtained fresh token via login.');
+  console.log('[nbox] Obtained fresh token via login — persisting to DB.');
+  await persistTokenToDb(_token.value, _token.fetchedAt);
   return token;
 }
 
@@ -431,7 +492,7 @@ async function postJson(path, payload, { retried = false } = {}) {
   if (response.status === 401 || response.status === 403) {
     if (!retried) {
       console.warn('[nbox] Auth rejected — re-logging in and retrying.');
-      invalidateToken();
+      await invalidateToken();
       return postJson(path, payload, { retried: true });
     }
     throw new NboxError(`NBOX API authentication failed after re-login.`, {
@@ -444,7 +505,7 @@ async function postJson(path, payload, { retried = false } = {}) {
   if (['unauthorized', 'unauthenticated'].includes(bodyStatus)) {
     if (!retried) {
       console.warn('[nbox] Auth rejected in body — re-logging in and retrying.');
-      invalidateToken();
+      await invalidateToken();
       return postJson(path, payload, { retried: true });
     }
     throw new NboxError(
