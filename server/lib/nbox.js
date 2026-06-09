@@ -16,7 +16,62 @@ function env(name, fallback = '') {
 }
 
 function isConfigured() {
-  return Boolean(env('NBOX_API_BASE_URL') && env('NBOX_API_TOKEN'));
+  const hasStatic = Boolean(env('NBOX_API_BASE_URL') && env('NBOX_API_TOKEN'));
+  const hasLogin = Boolean(env('NBOX_API_BASE_URL') && env('NBOX_LOGIN_EMAIL') && env('NBOX_LOGIN_PASSWORD'));
+  return hasStatic || hasLogin;
+}
+
+const _token = { value: null, fetchedAt: 0 };
+const TOKEN_TTL_MS = 23 * 60 * 60 * 1000;
+
+function invalidateToken() {
+  _token.value = null;
+  _token.fetchedAt = 0;
+}
+
+async function freshToken() {
+  const email = env('NBOX_LOGIN_EMAIL');
+  const password = env('NBOX_LOGIN_PASSWORD');
+
+  if (!email || !password) {
+    return env('NBOX_API_TOKEN');
+  }
+
+  if (_token.value && (Date.now() - _token.fetchedAt) < TOKEN_TTL_MS) {
+    return _token.value;
+  }
+
+  const base = env('NBOX_API_BASE_URL').replace(/\/+$/, '');
+  let res;
+  try {
+    res = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password,
+        shopId: env('NBOX_SHOP_DOMAIN'),
+        shopName: env('NBOX_ORIGIN_NAME', 'Elite Collections'),
+        platform: env('NBOX_PLATFORM', 'custom'),
+        url: env('NBOX_SHOP_URL', `https://${env('NBOX_SHOP_DOMAIN')}`),
+      }),
+    });
+  } catch (err) {
+    throw new NboxError('NBOX login request failed.', { message: err.message });
+  }
+
+  let data;
+  try { data = await res.json(); } catch { data = {}; }
+
+  const token = data?.token || data?.data?.token || data?.accessToken || data?.access_token;
+  if (!token) {
+    throw new NboxError('NBOX login failed — no token in response.', { data });
+  }
+
+  _token.value = token;
+  _token.fetchedAt = Date.now();
+  console.log('[nbox] Obtained fresh token via login.');
+  return token;
 }
 
 function assertExternalNboxUrl(value, source) {
@@ -66,8 +121,8 @@ function endpointUrl(path) {
   return `${baseUrl.href.replace(/\/+$/, '')}/${cleanPath}`;
 }
 
-function authHeaders() {
-  const token = env('NBOX_API_TOKEN');
+async function authHeaders() {
+  const token = await freshToken();
   const apiKey = env('NBOX_API_KEY');
   const shopDomain = env('NBOX_SHOP_DOMAIN');
   const authHeader = env('NBOX_AUTH_HEADER', 'x-nbox-shop-token');
@@ -328,7 +383,7 @@ function buildOrderPayload({ orderNumber, customer, shippingAddress, items, ship
   });
 }
 
-async function postJson(path, payload) {
+async function postJson(path, payload, { retried = false } = {}) {
   if (!isConfigured()) {
     throw new NboxError('NBOX API is not configured.', { configured: false });
   }
@@ -346,7 +401,7 @@ async function postJson(path, payload) {
 
   let headers;
   try {
-    headers = authHeaders();
+    headers = await authHeaders();
   } catch (err) {
     if (err.name === 'NboxError') throw err;
     throw new NboxError('NBOX API credentials are invalid.', { message: err.message });
@@ -371,6 +426,31 @@ async function postJson(path, payload) {
     data = text ? JSON.parse(text) : null;
   } catch {
     data = { raw: text };
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    if (!retried) {
+      console.warn('[nbox] Auth rejected — re-logging in and retrying.');
+      invalidateToken();
+      return postJson(path, payload, { retried: true });
+    }
+    throw new NboxError(`NBOX API authentication failed after re-login.`, {
+      status: response.status,
+      data,
+    });
+  }
+
+  const bodyStatus = String(data?.status || '').trim().toLowerCase();
+  if (['unauthorized', 'unauthenticated'].includes(bodyStatus)) {
+    if (!retried) {
+      console.warn('[nbox] Auth rejected in body — re-logging in and retrying.');
+      invalidateToken();
+      return postJson(path, payload, { retried: true });
+    }
+    throw new NboxError(
+      data?.message || 'NBOX API authentication failed after re-login.',
+      { data },
+    );
   }
 
   if (!response.ok) {
@@ -439,6 +519,14 @@ function pickRate(candidates) {
 }
 
 function normalizeQuote(response) {
+  const topStatus = String(response?.status || '').trim().toLowerCase();
+  if (['unauthorized', 'unauthenticated', 'forbidden', 'error', 'failed', 'failure'].includes(topStatus)) {
+    throw new NboxError(
+      firstString(response?.message, `NBOX API returned status: ${topStatus}.`),
+      { status: topStatus, data: response },
+    );
+  }
+
   const rate = pickRate(rateCandidates(response));
   if (!rate) {
     return {
