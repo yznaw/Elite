@@ -8,6 +8,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { RichTextComponent } from '../../shared/rich-text/rich-text.component';
+import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
@@ -20,7 +21,7 @@ import { StorageService } from '../../services/storage.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
-  name: string; sku: string; brand: string; collectionIds: string[];
+  name: string; nameAr: string; sku: string; brand: string; collectionIds: string[];
   relatedProductIds: string[];
   price: number; stock: number; hidden: boolean;
   enDesc: string; arDesc: string;
@@ -48,7 +49,7 @@ function readPreview(file: File): Promise<string> {
 @Component({
   selector: 'ap-product-drawer',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent],
+  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent],
   template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
@@ -115,27 +116,14 @@ function readPreview(file: File): Promise<string> {
         </div>
       </div>
 
-      <div class="save-bar-top" [class.dirty]="dirty()" [class.shake]="shakeSaveBar()">
-        <div class="row gap-sm" style="min-width:0;flex:1;">
-          <span class="save-badge" style="background:transparent;border-color:transparent;color:#fff;">
-            {{ t('product.unsaved.title') }}
-          </span>
-        </div>
-        <div class="row gap-sm" style="flex-shrink:0;">
-          <button class="btn btn-ghost btn-sm" (click)="discard()" [disabled]="saveState() === 'saving'">
-            {{ t('common.discard') }}
-          </button>
-          <button class="btn btn-primary btn-sm" (click)="save()" [disabled]="saveState() === 'saving'">
-            @if (saveState() === 'saving') {
-              <ap-spinner/> {{ t('common.saving') }}
-            } @else if (saveState() === 'saved') {
-              <ap-icon name="check" [size]="12"/> {{ t('common.save') }}d
-            } @else {
-              {{ t('common.saveChanges') }}
-            }
-          </button>
-        </div>
-      </div>
+      <ap-save-bar
+        [dirty]="dirty()"
+        [saving]="saveState() === 'saving'"
+        [justSaved]="saveState() === 'saved'"
+        [shake]="shakeSaveBar()"
+        [label]="t('product.unsaved.title')"
+        (saved)="save()"
+        (discarded)="discard()"/>
 
       <!-- Body: scrollable form -->
       <div class="drawer-body">
@@ -171,16 +159,8 @@ function readPreview(file: File): Promise<string> {
           </div>
           <div>
             <div class="row" style="justify-content:space-between;margin-bottom:14px;">
-              <span class="muted small">{{ t('product.fact.3dStatus') }}</span>
-              <ap-pill [kind]="product.has3d ? 'green' : 'grey'">{{ product.has3d ? t('product.fact.3dLinked') : t('product.fact.3dMissing') }}</ap-pill>
-            </div>
-            <div class="row" style="justify-content:space-between;margin-bottom:14px;">
               <span class="muted small">{{ t('product.fact.linkedMedia') }}</span>
               <span class="strong">{{ linkedMediaCount }} {{ linkedMediaCount === 1 ? t('product.fact.file') : t('product.fact.files') }}</span>
-            </div>
-            <div class="row" style="justify-content:space-between;margin-bottom:14px;">
-              <span class="muted small">{{ t('product.fact.views30d') }}</span>
-              <span class="strong mono">{{ product.views3d.toLocaleString() }}</span>
             </div>
             <div class="row" style="justify-content:space-between;">
               <span class="muted small">{{ t('product.fact.id') }}</span>
@@ -189,196 +169,7 @@ function readPreview(file: File): Promise<string> {
           </div>
         </div>
 
-        <!-- Section: Basics -->
-        <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
-          <span>{{ t('product.section.basics') }}</span>
-        </div>
-
-        <div class="mb-24">
-          <label class="lbl">{{ t('product.field.name') }}</label>
-          <input class="inp mb-16" [ngModel]="form().name" (ngModelChange)="set('name', $event)"/>
-
-          <div class="grid-2 mb-16">
-            <div>
-              <label class="lbl">{{ t('product.field.sku') }}</label>
-              <input class="inp mono" [ngModel]="form().sku" (ngModelChange)="set('sku', $event)"/>
-            </div>
-            <div>
-              <label class="lbl">{{ t('product.field.brand') }}</label>
-              <input class="inp" [ngModel]="form().brand" (ngModelChange)="set('brand', $event)"/>
-            </div>
-          </div>
-
-          <div class="mb-16">
-            <label class="lbl">{{ t('nav.collections') }}</label>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;">
-              @for (c of collections; track c.id) {
-                <label class="row gap-sm" style="align-items:center;background:var(--bg-2);padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--border-2);transition:0.12s;" [style.border-color]="form().collectionIds.includes(c.id) ? 'var(--gold)' : ''" [style.background]="form().collectionIds.includes(c.id) ? 'var(--gold-3)' : ''">
-                  <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;"/>
-                  <span class="small">{{ c.title }}</span>
-                </label>
-              }
-            </div>
-          </div>
-
-          <div class="mb-16">
-            <label class="lbl">{{ t('product.related.label') }}</label>
-            <div class="muted small mb-8">{{ t('product.related.sub') }}</div>
-            <div class="related-picker">
-              @for (p of relatedOptions(); track p.id) {
-                <button
-                  type="button"
-                  class="related-option"
-                  [class.selected]="form().relatedProductIds.includes(p.id)"
-                  (click)="toggleRelatedProduct(p.id)"
-                >
-                  <span class="related-thumb">
-                    @if (productThumb(p)) {
-                      <img [src]="productThumb(p)" [alt]="p.name" (error)="onImgError($event)" />
-                    }
-                  </span>
-                  <span class="related-copy">
-                    <strong>{{ p.name }}</strong>
-                    <small>{{ p.sku }} · QAR {{ p.price.toLocaleString() }}</small>
-                  </span>
-                  <span class="related-check">{{ form().relatedProductIds.includes(p.id) ? '✓' : '+' }}</span>
-                </button>
-              }
-            </div>
-          </div>
-
-          <div class="grid-2 mb-16">
-            <div>
-              <label class="lbl">{{ t('product.field.price') }}</label>
-              <input class="inp mono" type="number" min="0" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
-            </div>
-            <div>
-              <label class="lbl">{{ t('product.field.stock') }}</label>
-              <input class="inp" type="number" min="0" [ngModel]="form().stock" (ngModelChange)="setNum('stock', $event)"/>
-              @if (form().stock === 0) {
-                <div class="muted small mt-8" style="color:var(--danger);">{{ t('product.field.stock.out') }}</div>
-              } @else if (form().stock < 8) {
-                <div class="muted small mt-8" style="color:var(--warning);">{{ t('product.field.stock.low') }}</div>
-              }
-            </div>
-          </div>
-        </div>
-
-        <!-- Section: Variants -->
-        <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
-          <span>{{ t('product.section.variants') }}</span>
-          @if (form().variants.length > 0) {
-            <span class="muted small" style="font-weight:400;margin-inline-start:auto;">{{ variantsSummary() }} · {{ variantsTotalStock() }} {{ t('product.field.stock') }}</span>
-          }
-        </div>
-
-        <div class="mb-24">
-          @if (form().variants.length === 0) {
-            <div class="variants-empty">
-              <div class="strong">{{ t('product.variants.empty.title') }}</div>
-              <div class="muted small mt-8">{{ t('product.variants.empty.sub') }}</div>
-              <button class="btn btn-outline btn-sm mt-16" (click)="addVariant()">
-                <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
-              </button>
-            </div>
-          } @else {
-            <div class="variants-table">
-              <div class="vt-head">
-                <div class="vt-c-sku">{{ t('product.variants.col.sku') }}</div>
-                <div class="vt-c-size">{{ t('product.variants.col.size') }}</div>
-                <div class="vt-c-color">{{ t('product.variants.col.color') }}</div>
-                <div class="vt-c-mat">{{ t('product.variants.col.material') }}</div>
-                <div class="vt-c-price">{{ t('product.variants.col.price') }}</div>
-                <div class="vt-c-stock">{{ t('product.variants.col.stock') }}</div>
-                <div class="vt-c-act"></div>
-              </div>
-              @for (v of form().variants; track v.id; let i = $index) {
-                <div class="vt-row">
-                  <div class="vt-c-sku"><input class="inp inp-sm mono" [placeholder]="t('product.variants.placeholder.sku')" [ngModel]="v.sku" (ngModelChange)="updateVariant(i, { sku: $event })"/></div>
-                  <div class="vt-c-size">
-                    @if (refSizeSets().length > 0) {
-                      <input class="inp inp-sm" list="size-options" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
-                    } @else {
-                      <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
-                    }
-                  </div>
-                  <div class="vt-c-color">
-                    @if (refColors().length > 0) {
-                      <div class="color-select-wrap">
-                        <span class="color-dot" [style.background]="colorHex(v.color)"></span>
-                        <select class="inp inp-sm color-select" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })">
-                          <option value="">{{ t('product.variants.placeholder.color') }}</option>
-                          @for (c of refColors(); track c.id) {
-                            <option [value]="c.name_en">{{ c.name_en }}</option>
-                          }
-                        </select>
-                      </div>
-                    } @else {
-                      <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.color')" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/>
-                    }
-                  </div>
-                  <div class="vt-c-mat">
-                    @if (refMaterials().length > 0) {
-                      <select class="inp inp-sm" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })">
-                        <option value="">{{ t('product.variants.placeholder.material') }}</option>
-                        @for (m of refMaterials(); track m.id) {
-                          <option [value]="m.name_en">{{ m.name_en }}</option>
-                        }
-                      </select>
-                    } @else {
-                      <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.material')" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })"/>
-                    }
-                  </div>
-                  <div class="vt-c-price"><input class="inp inp-sm mono" type="number" min="0" [ngModel]="v.price" (ngModelChange)="updateVariant(i, { price: +$event || 0 })"/></div>
-                  <div class="vt-c-stock"><input class="inp inp-sm mono" type="number" min="0" [ngModel]="v.stock" (ngModelChange)="updateVariant(i, { stock: +$event || 0 })"/></div>
-                  <div class="vt-c-act">
-                    <button class="vt-remove" (click)="removeVariant(i)" [attr.aria-label]="t('common.remove')">
-                      <ap-icon name="trash" [size]="12"/>
-                    </button>
-                  </div>
-                </div>
-              }
-
-              <!-- Size datalist for free-text with suggestions -->
-              <datalist id="size-options">
-                @for (ss of refSizeSets(); track ss.id) {
-                  @for (sz of ss.sizes; track sz) { <option [value]="sz">{{ sz }}</option> }
-                }
-              </datalist>
-
-              <div class="vt-foot">
-                <div class="muted small">
-                  @if (variantsPriceRange()) {
-                    <span>{{ t('product.variants.priceRange') }}: <span class="strong mono">{{ variantsPriceRange() }}</span></span>
-                  }
-                </div>
-                <div class="row gap-sm" style="flex-wrap:wrap;">
-                  @if (refSizeSets().length > 0) {
-                    <div class="gen-sizes-wrap">
-                      <select class="inp inp-sm" #sizeSetSel style="font-size:11px;">
-                        <option value="">Generate sizes…</option>
-                        @for (ss of refSizeSets(); track ss.id) {
-                          <option [value]="ss.id">{{ ss.name }}</option>
-                        }
-                      </select>
-                      <button class="btn btn-outline btn-sm" [disabled]="!sizeSetSel.value"
-                              (click)="generateSizes(sizeSetSel.value); sizeSetSel.value=''">
-                        <ap-icon name="wand" [size]="12"/> Go
-                      </button>
-                    </div>
-                  }
-                  <button class="btn btn-outline btn-sm" (click)="addVariant()">
-                    <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          }
-        </div>
-
-        <!-- Section: Image Gallery -->
+        <!-- ① Section: Image Gallery — visual anchor, first like Shopify -->
         <div class="section-title">
           <ap-icon name="media" [size]="14"/>
           <span>{{ t('product.section.gallery') }}</span>
@@ -426,21 +217,12 @@ function readPreview(file: File): Promise<string> {
                     @if (i === 0) {
                       <span class="thumb-primary">{{ t('product.gallery.primary') }}</span>
                     }
-                    <div class="thumb-color">
-                      <select
-                        class="inp inp-sm"
-                        [attr.aria-label]="'Photo color'"
-                        [ngModel]="imageColor(img)"
-                        (ngModelChange)="setImageColor(img, $event)"
-                        (click)="$event.stopPropagation()"
-                        (mousedown)="$event.stopPropagation()"
-                      >
-                        <option value="">No color</option>
-                        @for (color of imageColorOptions(); track color) {
-                          <option [value]="color">{{ color }}</option>
-                        }
-                      </select>
-                    </div>
+                    @if (colorLinkedToImage(img); as linkedColor) {
+                      <div class="thumb-color-badge">
+                        <span class="color-dot" [style.background]="colorHex(linkedColor)"></span>
+                        <span>{{ linkedColor }}</span>
+                      </div>
+                    }
                     <div class="thumb-actions">
                       @if (i !== 0) {
                         <button class="thumb-act" type="button" (click)="setPrimaryImage(i)" [attr.aria-label]="t('product.gallery.makePrimary')" [attr.title]="t('product.gallery.makePrimary')">
@@ -471,34 +253,281 @@ function readPreview(file: File): Promise<string> {
           </div>
         </div>
 
-        <!-- Section: Media -->
+        <!-- ② Section: Basics — title + identity fields -->
         <div class="section-title">
-          <ap-icon name="cube" [size]="14"/>
-          <span>{{ t('product.section.media') }}</span>
+          <ap-icon name="catalog" [size]="14"/>
+          <span>{{ t('product.section.basics') }}</span>
         </div>
 
         <div class="mb-24">
-          <label class="lbl">{{ t('product.field.glb') }}</label>
-          <div style="padding:18px;border:1px dashed var(--border);border-radius:10px;background:var(--bg);text-align:center;">
-            @if (product.has3d) {
-              <div class="strong mono">elite-{{ product.id.toLowerCase() }}.glb</div>
-              <div class="muted small mt-8">{{ t('product.field.glb.linked') }}</div>
-              <div class="row gap-sm mt-16" style="justify-content:center;flex-wrap:wrap;">
-                <button class="btn btn-outline btn-sm"><ap-icon name="upload" [size]="12"/> {{ t('product.field.glb.replace') }}</button>
-                <button class="btn btn-danger btn-sm"><ap-icon name="trash" [size]="12"/> {{ t('product.field.glb.unlink') }}</button>
-              </div>
-            } @else {
-              <div class="muted"><ap-icon name="cube" [size]="14"/></div>
-              <div class="strong mt-8">{{ t('product.field.glb.empty') }}</div>
-              <div class="muted small mt-8">{{ t('product.field.glb.emptySub') }}</div>
-              <div class="row gap-sm mt-16" style="justify-content:center;flex-wrap:wrap;">
-                <button class="btn btn-gold btn-sm"><ap-icon name="upload" [size]="12"/> {{ t('product.field.glb.upload') }}</button>
-                <button class="btn btn-outline btn-sm">{{ t('product.field.glb.linkUrl') }}</button>
-              </div>
-            }
+          <label class="lbl">{{ t('product.field.name') }}</label>
+          <input class="inp mb-8" [ngModel]="form().name" (ngModelChange)="set('name', $event)"/>
+          <label class="lbl">{{ t('product.field.nameAr') }}</label>
+          <input class="inp mb-16" dir="auto" [placeholder]="t('product.field.nameAr.placeholder')" [ngModel]="form().nameAr" (ngModelChange)="set('nameAr', $event)"/>
+
+          <div class="grid-2">
+            <div>
+              <label class="lbl">{{ t('product.field.brand') }}</label>
+              <input class="inp" [ngModel]="form().brand" (ngModelChange)="set('brand', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">{{ t('product.field.sku') }}</label>
+              <input class="inp mono" [ngModel]="form().sku" (ngModelChange)="set('sku', $event)"/>
+            </div>
           </div>
         </div>
 
+        <!-- ③ Section: Pricing & Stock -->
+        <div class="section-title">
+          <ap-icon name="chart" [size]="14"/>
+          <span>{{ t('product.section.pricing') }}</span>
+        </div>
+
+        <div class="mb-24">
+          <div class="grid-2">
+            <div>
+              <label class="lbl">{{ t('product.field.price') }} (QAR)</label>
+              <input class="inp mono" type="number" min="0" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">{{ t('product.field.stock') }}</label>
+              @if (hasVariants()) {
+                <div class="inp" style="background:var(--bg);cursor:default;color:var(--ink-2);">{{ variantsTotalStock() }}</div>
+                <div class="muted small mt-8">{{ t('product.field.stock.fromVariants') }}</div>
+              } @else {
+                <input class="inp" type="number" min="0" [ngModel]="form().stock" (ngModelChange)="setNum('stock', $event)"/>
+                @if (form().stock === 0) {
+                  <div class="muted small mt-8" style="color:var(--danger);">{{ t('product.field.stock.out') }}</div>
+                } @else if (form().stock < 8) {
+                  <div class="muted small mt-8" style="color:var(--warning);">{{ t('product.field.stock.low') }}</div>
+                }
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Variants -->
+        <div class="section-title">
+          <ap-icon name="catalog" [size]="14"/>
+          <span>{{ t('product.section.variants') }}</span>
+          @if (form().variants.length > 0) {
+            <span class="muted small" style="font-weight:400;margin-inline-start:auto;">{{ variantsSummary() }} · {{ variantsTotalStock() }} {{ t('product.field.stock') }}</span>
+          }
+        </div>
+
+        <div class="mb-24" style="position:relative;">
+          @if (form().variants.length === 0) {
+            <div class="variants-empty">
+              <div class="strong">{{ t('product.variants.empty.title') }}</div>
+              <div class="muted small mt-8">{{ t('product.variants.empty.sub') }}</div>
+              <button class="btn btn-outline btn-sm mt-16" (click)="addVariant()">
+                <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
+              </button>
+            </div>
+          } @else {
+            <!-- Transparent backdrop to close image picker on outside click -->
+            @if (variantPickerOpenId()) {
+              <div class="vc-backdrop" (click)="closeVariantPicker()"></div>
+            }
+            <div class="variants-cards">
+              <!-- Column headers -->
+              <div class="vc-header">
+                <span>Photo</span>
+                <span>{{ t('product.variants.col.color') }}</span>
+                <span>{{ t('product.variants.col.size') }}</span>
+                <span>{{ t('product.variants.col.stock') }}</span>
+                <span>{{ t('product.variants.col.price') }}</span>
+                <span>{{ t('product.variants.col.margin') }}</span>
+                <span></span>
+              </div>
+
+              @for (v of form().variants; track v.id; let i = $index) {
+                <div class="vc" [class.vc-expanded]="expandedVariants().has(v.id)" [class.vc-no-id]="!v.color && !v.size">
+
+                  <!-- Compact row: always visible -->
+                  <div class="vc-row">
+
+                    <!-- Image link cell — FIRST column -->
+                    <div class="vc-cell vc-cell--img">
+                      <div class="vc-img-cell"
+                           [class.has-img]="!!imageForColor(v.color)"
+                           [class.no-color]="!v.color"
+                           [attr.title]="v.color ? ('Link photo for ' + v.color) : 'Set a color first'"
+                           (click)="v.color ? toggleVariantPicker(v.id) : null">
+                        @if (imageForColor(v.color); as linkedImg) {
+                          <img class="vc-img-thumb" [src]="linkedImg" [alt]="v.color"/>
+                          <span class="vc-img-edit-icon"><ap-icon name="edit" [size]="10"/></span>
+                        } @else {
+                          <span class="vc-img-placeholder">
+                            <ap-icon name="media" [size]="15"/>
+                          </span>
+                        }
+                      </div>
+                      <!-- Image picker popover — anchored to the variants-cards container via fixed positioning -->
+                      @if (variantPickerOpenId() === v.id) {
+                        <div class="vc-img-picker" (click)="$event.stopPropagation()">
+                          <div class="vc-img-picker-head">
+                            Link photo for <strong>{{ v.color }}</strong>
+                            <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
+                          </div>
+                          @if (form().images.length === 0) {
+                            <p class="vc-img-picker-empty">Upload gallery images first</p>
+                          } @else {
+                            <div class="vc-img-picker-grid">
+                              <button class="vc-img-opt vc-img-opt--none" type="button" [class.is-sel]="!imageForColor(v.color)"
+                                      (click)="setColorImage(v.color, ''); closeVariantPicker()">
+                                <span class="vc-img-none-label">None</span>
+                              </button>
+                              @for (img of form().images; track img) {
+                                <button class="vc-img-opt" type="button"
+                                        [class.is-sel]="imageForColor(v.color) === img"
+                                        (click)="setColorImage(v.color, img); closeVariantPicker()">
+                                  <img [src]="img" [alt]="''"/>
+                                </button>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+
+                    <!-- Color -->
+                    <div class="vc-cell vc-cell--color">
+                      @if (refColors().length > 0) {
+                        <div class="color-select-wrap">
+                          <span class="color-dot" [style.background]="colorHex(v.color)"></span>
+                          <select class="inp inp-sm color-select" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })">
+                            <option value="">{{ t('product.variants.placeholder.color') }}</option>
+                            @for (c of refColors(); track c.id) {
+                              <option [value]="c.name_en">{{ c.name_en }}</option>
+                            }
+                          </select>
+                        </div>
+                      } @else {
+                        <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.color')" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/>
+                      }
+                    </div>
+
+                    <!-- Size -->
+                    <div class="vc-cell vc-cell--size">
+                      <input class="inp inp-sm" list="size-options" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
+                    </div>
+
+                    <!-- Stock -->
+                    <div class="vc-cell vc-cell--num">
+                      <input class="inp inp-sm mono" type="number" min="0"
+                             [ngModel]="v.stock" (ngModelChange)="updateVariant(i, { stock: +$event || 0 })"/>
+                    </div>
+
+                    <!-- Price -->
+                    <div class="vc-cell vc-cell--num">
+                      <input class="inp inp-sm mono" type="number" min="0"
+                             [ngModel]="v.price" (ngModelChange)="updateVariant(i, { price: +$event || 0 })"/>
+                    </div>
+
+                    <!-- Margin -->
+                    <div class="vc-cell vc-cell--margin">
+                      @if (variantMargin(v); as m) {
+                        <span class="margin-pill" [class.margin-green]="m >= 40" [class.margin-amber]="m >= 20 && m < 40" [class.margin-red]="m < 20">{{ m }}%</span>
+                      } @else {
+                        <span class="margin-dash muted small">—</span>
+                      }
+                    </div>
+
+                    <!-- Actions: expand + delete -->
+                    <div class="vc-cell vc-cell--actions">
+                      <button class="vt-expand" type="button"
+                              [class.is-open]="expandedVariants().has(v.id)"
+                              (click)="toggleVariantExpand(v.id)"
+                              [attr.title]="expandedVariants().has(v.id) ? 'Collapse details' : 'SKU · Material · Cost'">
+                        <ap-icon name="arrowDn" [size]="12"/>
+                      </button>
+                      <button class="vt-remove" type="button" (click)="removeVariant(i)" [attr.aria-label]="t('common.remove')">
+                        <ap-icon name="trash" [size]="12"/>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Validation hint -->
+                  @if (!v.color && !v.size) {
+                    <div class="vc-hint">Add a color or size so this variant can be distinguished</div>
+                  }
+
+                  <!-- Expandable detail: SKU, Material, Cost -->
+                  @if (expandedVariants().has(v.id)) {
+                    <div class="vc-detail">
+                      <div class="vc-field">
+                        <label class="vc-lbl">{{ t('product.variants.col.sku') }}</label>
+                        <input class="inp inp-sm mono" [placeholder]="t('product.variants.placeholder.sku')"
+                               [ngModel]="v.sku" (ngModelChange)="updateVariant(i, { sku: $event })"/>
+                      </div>
+                      <div class="vc-field">
+                        <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
+                        @if (refMaterials().length > 0) {
+                          <select class="inp inp-sm" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })">
+                            <option value="">—</option>
+                            @for (m of refMaterials(); track m.id) {
+                              <option [value]="m.name_en">{{ m.name_en }}</option>
+                            }
+                          </select>
+                        } @else {
+                          <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.material')"
+                                 [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })"/>
+                        }
+                      </div>
+                      <div class="vc-field">
+                        <label class="vc-lbl">{{ t('product.variants.col.cost') }} (QAR)</label>
+                        <input class="inp inp-sm mono" type="number" min="0" step="0.01" [placeholder]="'—'"
+                               [ngModel]="v.costPrice ?? null"
+                               (ngModelChange)="updateVariant(i, { costPrice: $event !== null && $event !== '' ? +$event : undefined })"/>
+                      </div>
+                    </div>
+                  }
+
+                </div>
+              }
+
+              <!-- Size datalist for free-text with suggestions -->
+              <datalist id="size-options">
+                @for (ss of refSizeSets(); track ss.id) {
+                  @for (sz of ss.sizes; track sz) { <option [value]="sz">{{ sz }}</option> }
+                }
+              </datalist>
+
+              <div class="vt-foot">
+                <div class="muted small" style="display:flex;gap:16px;flex-wrap:wrap;">
+                  @if (variantsPriceRange()) {
+                    <span>{{ t('product.variants.priceRange') }}: <span class="strong mono">{{ variantsPriceRange() }}</span></span>
+                  }
+                  @if (avgMargin() !== null) {
+                    <span>{{ t('product.variants.avgMargin') }}: <span class="strong mono">{{ avgMargin() }}%</span></span>
+                  }
+                </div>
+                <div class="row gap-sm" style="flex-wrap:wrap;">
+                  @if (refSizeSets().length > 0) {
+                    <div class="gen-sizes-wrap">
+                      <select class="inp inp-sm" #sizeSetSel style="font-size:11px;">
+                        <option value="">Generate sizes…</option>
+                        @for (ss of refSizeSets(); track ss.id) {
+                          <option [value]="ss.id">{{ ss.name }}</option>
+                        }
+                      </select>
+                      <button class="btn btn-outline btn-sm" [disabled]="!sizeSetSel.value"
+                              (click)="generateSizes(sizeSetSel.value); sizeSetSel.value=''">
+                        <ap-icon name="wand" [size]="12"/> Go
+                      </button>
+                    </div>
+                  }
+                  <button class="btn btn-outline btn-sm" (click)="addVariant()">
+                    <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- ⑤ Section: Description —rich content after key commerce fields -->
         <!-- Section: Description -->
         <div class="section-title">
           <ap-icon name="edit" [size]="14"/>
@@ -522,7 +551,53 @@ function readPreview(file: File): Promise<string> {
             (valueChange)="set('arDesc', $event)"/>
         </div>
 
-        <!-- Section: SEO -->
+        <!-- ⑥ Section: Organization — collections & related products -->
+        <div class="section-title">
+          <ap-icon name="list" [size]="14"/>
+          <span>{{ t('product.section.organization') }}</span>
+        </div>
+
+        <div class="mb-24">
+          <div class="mb-16">
+            <label class="lbl">{{ t('nav.collections') }}</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+              @for (c of collections; track c.id) {
+                <label class="row gap-sm" style="align-items:center;background:var(--bg-2);padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--border-2);transition:0.12s;" [style.border-color]="form().collectionIds.includes(c.id) ? 'var(--gold)' : ''" [style.background]="form().collectionIds.includes(c.id) ? 'var(--gold-3)' : ''">
+                  <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;"/>
+                  <span class="small">{{ c.title }}</span>
+                </label>
+              }
+            </div>
+          </div>
+
+          <div>
+            <label class="lbl">{{ t('product.related.label') }}</label>
+            <div class="muted small mb-8">{{ t('product.related.sub') }}</div>
+            <div class="related-picker">
+              @for (p of relatedOptions(); track p.id) {
+                <button
+                  type="button"
+                  class="related-option"
+                  [class.selected]="form().relatedProductIds.includes(p.id)"
+                  (click)="toggleRelatedProduct(p.id)"
+                >
+                  <span class="related-thumb">
+                    @if (productThumb(p)) {
+                      <img [src]="productThumb(p)" [alt]="p.name" (error)="onImgError($event)" />
+                    }
+                  </span>
+                  <span class="related-copy">
+                    <strong>{{ p.name }}</strong>
+                    <small>{{ p.sku }} · QAR {{ p.price.toLocaleString() }}</small>
+                  </span>
+                  <span class="related-check">{{ form().relatedProductIds.includes(p.id) ? '✓' : '+' }}</span>
+                </button>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- ⑦ Section: SEO -->
         <div class="section-title">
           <ap-icon name="search" [size]="14"/>
           <span>{{ t('product.section.seo') }}</span>
@@ -576,7 +651,7 @@ function readPreview(file: File): Promise<string> {
             </div>
             <div class="ms-row">
               <span class="muted small">{{ t('product.sync.posStock') }}</span>
-              <span class="strong">{{ product.stock }} · {{ product.has3d ? t('product.fact.3dLinked') : t('product.fact.3dMissing') }}</span>
+              <span class="strong">{{ product.stock }}</span>
             </div>
             <div class="row gap-sm" style="margin-top:14px;flex-wrap:wrap;">
               <button class="btn btn-gold" style="flex:1;min-width:200px;" [disabled]="syncing()" (click)="runProductSync()">
@@ -891,21 +966,26 @@ function readPreview(file: File): Promise<string> {
       border-radius: 99px;
       text-transform: uppercase;
     }
-    .thumb-color {
+    /* Read-only color badge on gallery thumbnails (color is now managed from Variants) */
+    .thumb-color-badge {
       position: absolute;
-      inset-inline: 6px;
       bottom: 6px;
-    }
-    .thumb-color .inp {
-      width: 100%;
-      height: 28px;
-      border-color: rgba(255,255,255,0.72);
+      inset-inline: 6px;
+      display: flex; align-items: center; gap: 5px;
       background: rgba(255,255,255,0.94);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-      font-size: 11px;
+      backdrop-filter: blur(4px);
+      border-radius: 6px;
       padding: 3px 7px;
-      cursor: pointer;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--ink);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      pointer-events: none;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
+    .thumb-color-badge .color-dot { width: 10px; height: 10px; flex-shrink: 0; }
     .thumb-actions {
       position: absolute;
       top: 6px;
@@ -996,36 +1076,211 @@ function readPreview(file: File): Promise<string> {
       background: var(--bg);
       text-align: center;
     }
-    .variants-table {
+
+    /* ── Variant cards ─────────────────────────────────── */
+    .variants-cards {
       border: 1px solid var(--border-2);
       border-radius: 10px;
-      overflow: hidden;
+      /* No overflow:hidden — popover must escape the container */
       background: #fff;
     }
-    .variants-table .vt-head,
-    .variants-table .vt-row {
-      display: grid;
-      grid-template-columns: minmax(140px, 1.4fr) 70px 90px minmax(110px, 1.1fr) 90px 80px 32px;
-      gap: 8px;
-      align-items: center;
-      padding: 10px 12px;
+    .variants-cards > .vc-header { border-radius: 10px 10px 0 0; }
+    .variants-cards > .vc:last-of-type { border-radius: 0 0 10px 10px; }
+
+    /* Grid column definition — shared by header and data rows */
+    /* PHOTO | COLOR | SIZE | STOCK | PRICE | MARGIN | ACTIONS */
+    .vc-cols {
+      grid-template-columns: 48px minmax(110px,1.8fr) 60px repeat(2, minmax(72px,1fr)) 52px 60px;
     }
-    .variants-table .vt-head {
+
+    /* Column header row */
+    .vc-header {
+      display: grid;
+      grid-template-columns: 48px minmax(110px,1.8fr) 60px repeat(2, minmax(72px,1fr)) 52px 60px;
+      gap: 8px;
+      padding: 7px 14px;
       background: var(--bg);
       border-bottom: 1px solid var(--border-2);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+    }
+    .vc-header span {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted);
+    }
+    .vc-header span:first-child { text-align: center; }
+
+    /* Each variant wrapper */
+    .vc {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border-2);
+      display: flex; flex-direction: column; gap: 0;
+      transition: background 0.12s;
+    }
+    .vc:last-of-type { border-bottom: none; }
+    .vc.vc-no-id { background: rgba(251,191,36,0.04); }
+    .vc.vc-expanded { background: var(--bg); }
+
+    /* Compact row: all primary fields in one line */
+    .vc-row {
+      display: grid;
+      grid-template-columns: 48px minmax(110px,1.8fr) 60px repeat(2, minmax(72px,1fr)) 52px 60px;
+      gap: 8px;
+      align-items: center;
+      min-height: 48px;
+    }
+
+    /* Generic cell */
+    .vc-cell { display: flex; align-items: center; }
+    .vc-cell--color { min-width: 0; }
+    .vc-cell--size { min-width: 0; }
+    .vc-cell--num { min-width: 0; }
+    .vc-cell--margin { justify-content: flex-start; }
+    .vc-cell--actions { gap: 4px; justify-content: flex-end; }
+
+    /* Image link cell — first column, centered */
+    .vc-cell--img { justify-content: center; position: relative; }
+    .vc-img-cell {
+      position: relative;
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1.5px dashed var(--border);
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
+      transition: border-color 0.15s, background 0.15s;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .vc-img-cell:hover:not(.no-color) { border-color: var(--gold); background: var(--gold-3); }
+    .vc-img-cell.has-img { border-style: solid; border-color: var(--gold); }
+    .vc-img-cell.no-color { cursor: not-allowed; opacity: 0.35; }
+    .vc-img-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .vc-img-edit-icon {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.4);
+      color: #fff;
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    .vc-img-cell:hover:not(.no-color) .vc-img-edit-icon { opacity: 1; }
+    .vc-img-placeholder { color: var(--muted); display: flex; }
+
+    /* Image picker popover — opens to the right of the photo cell */
+    .vc-img-picker {
+      position: absolute;
+      top: 0;
+      left: calc(100% + 10px);
+      z-index: 300;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
+      min-width: 224px;
+      max-width: 280px;
+    }
+    .vc-img-picker-head {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 10px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-2);
+    }
+    .vc-img-picker-head strong { color: var(--ink); }
+    .vc-img-picker-close {
+      width: 20px; height: 20px;
+      border: none; background: none; cursor: pointer;
+      color: var(--muted); font-size: 11px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 4px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .vc-img-picker-close:hover { color: var(--ink); background: var(--bg); }
+    .vc-img-picker-empty {
+      font-size: 12px; color: var(--muted);
+      text-align: center; padding: 8px 0 4px; margin: 0;
+    }
+    .vc-img-picker-grid {
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .vc-img-opt {
+      width: 56px; height: 56px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid var(--border-2);
+      cursor: pointer;
+      padding: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.12s, transform 0.1s, box-shadow 0.12s;
+    }
+    .vc-img-opt img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .vc-img-opt.is-sel {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(193,154,91,0.2);
+    }
+    .vc-img-opt:hover:not(.is-sel) { border-color: var(--ink-2); transform: scale(1.05); }
+    .vc-img-opt--none { border-style: dashed; }
+    .vc-img-none-label {
+      font-size: 9px; font-weight: 700;
+      color: var(--muted); text-align: center;
+      line-height: 1.3; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    /* Transparent backdrop to catch outside clicks */
+    .vc-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 299;
+      background: transparent;
+    }
+
+    /* Validation hint */
+    .vc-hint {
+      font-size: 11px; color: var(--warning, #d97706);
+      padding: 4px 0 6px;
+      display: flex; align-items: center; gap: 5px;
+    }
+
+    /* Expandable detail row */
+    .vc-detail {
+      display: grid;
+      grid-template-columns: minmax(100px,1.6fr) minmax(100px,1.4fr) minmax(80px,1fr);
+      gap: 10px;
+      padding: 12px 0 4px;
+      border-top: 1px dashed var(--border-2);
+      margin-top: 10px;
+      animation: vc-reveal 0.14s ease-out;
+    }
+    @keyframes vc-reveal {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Shared field wrapper (for detail row) */
+    .vc-field { display: flex; flex-direction: column; gap: 4px; }
+    .vc-lbl {
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    /* Expand button */
+    .vt-expand {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
       color: var(--ink-2);
+      cursor: pointer;
+      transition: all 0.12s;
+      flex-shrink: 0;
     }
-    .variants-table .vt-row { border-top: 1px solid var(--border-2); }
-    .variants-table .vt-row:first-of-type { border-top: none; }
-    .variants-table .inp-sm {
-      height: 32px;
-      padding: 4px 8px;
-      font-size: 12px;
-    }
+    .vt-expand ap-icon { transition: transform 0.18s ease; display: flex; }
+    .vt-expand.is-open ap-icon { transform: rotate(180deg); }
+    .vt-expand:hover { color: var(--gold); border-color: rgba(193,154,91,0.3); background: var(--gold-3); }
+
     .vt-remove {
       width: 28px; height: 28px;
       display: inline-flex; align-items: center; justify-content: center;
@@ -1035,17 +1290,30 @@ function readPreview(file: File): Promise<string> {
       color: var(--ink-2);
       cursor: pointer;
       transition: all 0.12s;
+      flex-shrink: 0;
     }
     .vt-remove:hover {
       color: var(--danger);
       border-color: rgba(239, 68, 68, 0.3);
       background: rgba(239, 68, 68, 0.06);
     }
+
+    .margin-pill {
+      display: inline-block;
+      font-size: 11px; font-weight: 600;
+      padding: 3px 8px; border-radius: 99px;
+    }
+    .margin-green { background: #d1fae5; color: #065f46; }
+    .margin-amber { background: #fef3c7; color: #92400e; }
+    .margin-red   { background: #fee2e2; color: #991b1b; }
+    .margin-dash  { color: var(--muted); }
+
+    /* Footer: summary + add button */
     .vt-foot {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 12px;
+      padding: 10px 14px;
       background: var(--bg);
       border-top: 1px solid var(--border-2);
       gap: 12px;
@@ -1062,10 +1330,27 @@ function readPreview(file: File): Promise<string> {
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.3);
       transition: background 0.12s;
     }
-    .color-select { flex: 1; }
+    .color-select { flex: 1; min-width: 0; }
 
     /* Generate sizes row */
     .gen-sizes-wrap { display: flex; gap: 4px; align-items: center; }
+
+    /* Responsive: stack on narrow screens */
+    @media (max-width: 600px) {
+      .vc-header { display: none; }
+      .vc-row {
+        grid-template-columns: 48px 1fr 56px 56px 56px;
+        grid-template-rows: auto auto;
+      }
+      .vc-cell--img  { grid-column: 1; grid-row: 1 / 3; align-self: center; }
+      .vc-cell--color { grid-column: 2 / 5; grid-row: 1; }
+      .vc-cell--size  { grid-column: 2; grid-row: 2; }
+      .vc-cell--num:first-of-type { grid-column: 3; grid-row: 2; }
+      .vc-cell--num:last-of-type  { grid-column: 4; grid-row: 2; }
+      .vc-cell--margin { display: none; }
+      .vc-cell--actions { grid-column: 5; grid-row: 1 / 3; align-self: center; flex-direction: column; }
+      .vc-detail { grid-template-columns: 1fr 1fr; }
+    }
     .related-picker {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1130,16 +1415,6 @@ function readPreview(file: File): Promise<string> {
       color: var(--green);
       font-weight: 800;
     }
-    @media (max-width: 720px) {
-      .variants-table .vt-head { display: none; }
-      .variants-table .vt-row {
-        grid-template-columns: 1fr 1fr;
-        row-gap: 6px;
-      }
-      .vt-c-sku, .vt-c-mat { grid-column: 1 / -1; }
-      .vt-c-act { grid-column: 1 / -1; justify-self: end; }
-    }
-
     @media (max-width: 720px) {
       .nav-pos { padding: 0 4px; min-width: 28px; font-size: 10px; }
       .section-title { font-size: 15px; padding: 14px 0 10px; }
@@ -1236,6 +1511,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   });
 
   readonly duplicating = signal(false);
+  readonly expandedVariants = signal(new Set<string>());
+  readonly variantPickerOpenId = signal<string | null>(null);
 
   /** Convenience: the current product object (or first as fallback). */
   get product(): Product {
@@ -1313,7 +1590,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   private makeEmptyForm(): FormShape {
     return {
-      name: '', sku: '', brand: '', collectionIds: [],
+      name: '', nameAr: '', sku: '', brand: '', collectionIds: [],
       price: 0, stock: 0, hidden: false,
       enDesc: '', arDesc: '',
       metaTitle: '', metaDesc: '', slug: '',
@@ -1327,6 +1604,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private makeFormFromProduct(p: Product): FormShape {
     return {
       name: p.name,
+      nameAr: p.nameAr || '',
       sku: p.sku,
       brand: p.brand,
       collectionIds: this.collections.filter(c => c.productIds.includes(p.id)).map(c => c.id),
@@ -1632,6 +1910,21 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.toast.success(`${newVariants.length} sizes added`, ss.name);
   }
 
+  readonly hasVariants = computed(() => this.form().variants.length > 0);
+
+  variantMargin(v: ProductVariant): number | null {
+    if (v.costPrice == null || !v.price) return null;
+    return Math.round(((v.price - v.costPrice) / v.price) * 100);
+  }
+
+  readonly avgMargin = computed((): number | null => {
+    const margins = this.form().variants
+      .map(v => this.variantMargin(v))
+      .filter((m): m is number => m !== null);
+    if (margins.length === 0) return null;
+    return Math.round(margins.reduce((s, m) => s + m, 0) / margins.length);
+  });
+
   variantsTotalStock(): number {
     return this.form().variants.reduce((s, v) => s + (Number(v.stock) || 0), 0);
   }
@@ -1649,6 +1942,38 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (n === 0) return '';
     const tpl = n === 1 ? this.t('product.variants.summary.one') : this.t('product.variants.summary.many');
     return tpl.replace('{n}', String(n));
+  }
+
+  toggleVariantExpand(id: string): void {
+    const s = new Set(this.expandedVariants());
+    s.has(id) ? s.delete(id) : s.add(id);
+    this.expandedVariants.set(s);
+  }
+
+  toggleVariantPicker(id: string): void {
+    this.variantPickerOpenId.set(this.variantPickerOpenId() === id ? null : id);
+  }
+
+  closeVariantPicker(): void {
+    this.variantPickerOpenId.set(null);
+  }
+
+  imageForColor(colorName: string): string | null {
+    if (!colorName) return null;
+    const entry = Object.entries(this.form().imageColors).find(([, c]) => c === colorName);
+    return entry ? entry[0] : null;
+  }
+
+  setColorImage(colorName: string, imageUrl: string): void {
+    const next = Object.fromEntries(
+      Object.entries(this.form().imageColors).filter(([, c]) => c !== colorName)
+    );
+    if (imageUrl) next[imageUrl] = colorName;
+    this.set('imageColors', next);
+  }
+
+  colorLinkedToImage(imageUrl: string): string | null {
+    return this.form().imageColors[imageUrl] || null;
   }
 
   private pruneImageColors(imageColors: Record<string, string>, images: string[]): Record<string, string> {
@@ -1740,11 +2065,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     try {
       const f = this.form();
       const previousId = this.product.id;
-      const payload = {
-        ...f,
-        has3d: this.product.has3d,
-        views3d: this.product.views3d,
-      };
+      const payload = f.variants.length > 0
+        ? { ...f, stock: this.variantsTotalStock() }
+        : { ...f };
       const saved = this.product.id.startsWith('P-NEW-')
         ? await this.productsApi.saveProduct(payload)
         : await this.productsApi.update(this.product.id, payload);
@@ -1767,8 +2090,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.price = saved.price;
       this.product.stock = saved.stock;
       this.product.hidden = saved.hidden;
-      this.product.has3d = saved.has3d;
-      this.product.views3d = saved.views3d;
       this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
       this.product.images = [...(saved.images ?? f.images)];
       this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };
