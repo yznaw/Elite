@@ -330,14 +330,14 @@ function readPreview(file: File): Promise<string> {
               <div class="vc-backdrop" (click)="closeVariantPicker()"></div>
             }
             <div class="variants-cards">
-              <!-- Column headers -->
+              <!-- Column headers: Photo | Color | Size | Stock | Price | SKU | Actions -->
               <div class="vc-header">
-                <span>Photo</span>
+                <span>{{ t('product.gallery.primary') }}</span>
                 <span>{{ t('product.variants.col.color') }}</span>
                 <span>{{ t('product.variants.col.size') }}</span>
                 <span>{{ t('product.variants.col.stock') }}</span>
                 <span>{{ t('product.variants.col.price') }}</span>
-                <span>{{ t('product.variants.col.margin') }}</span>
+                <span>{{ t('product.variants.col.sku') }}</span>
                 <span></span>
               </div>
 
@@ -347,23 +347,23 @@ function readPreview(file: File): Promise<string> {
                   <!-- Compact row: always visible -->
                   <div class="vc-row">
 
-                    <!-- Image link cell — FIRST column -->
+                    <!-- ① Photo — image linked to this color variant -->
                     <div class="vc-cell vc-cell--img">
                       <div class="vc-img-cell"
                            [class.has-img]="!!imageForColor(v.color)"
                            [class.no-color]="!v.color"
-                           [attr.title]="v.color ? ('Link photo for ' + v.color) : 'Set a color first'"
+                           [attr.title]="v.color ? ('Link photo · ' + v.color) : 'Set a color first to link a photo'"
                            (click)="v.color ? toggleVariantPicker(v.id) : null">
                         @if (imageForColor(v.color); as linkedImg) {
                           <img class="vc-img-thumb" [src]="linkedImg" [alt]="v.color"/>
                           <span class="vc-img-edit-icon"><ap-icon name="edit" [size]="10"/></span>
                         } @else {
                           <span class="vc-img-placeholder">
-                            <ap-icon name="media" [size]="15"/>
+                            <ap-icon name="media" [size]="14"/>
                           </span>
                         }
                       </div>
-                      <!-- Image picker popover — anchored to the variants-cards container via fixed positioning -->
+                      <!-- Image picker popover -->
                       @if (variantPickerOpenId() === v.id) {
                         <div class="vc-img-picker" (click)="$event.stopPropagation()">
                           <div class="vc-img-picker-head">
@@ -391,55 +391,60 @@ function readPreview(file: File): Promise<string> {
                       }
                     </div>
 
-                    <!-- Color -->
+                    <!-- ② Color — swatch + select -->
                     <div class="vc-cell vc-cell--color">
                       @if (refColors().length > 0) {
                         <div class="color-select-wrap">
                           <span class="color-dot" [style.background]="colorHex(v.color)"></span>
                           <select class="inp inp-sm color-select" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })">
-                            <option value="">{{ t('product.variants.placeholder.color') }}</option>
+                            <option value="">—</option>
                             @for (c of refColors(); track c.id) {
                               <option [value]="c.name_en">{{ c.name_en }}</option>
                             }
                           </select>
                         </div>
                       } @else {
-                        <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.color')" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/>
+                        <input class="inp inp-sm" [placeholder]="'—'" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/>
                       }
                     </div>
 
-                    <!-- Size -->
+                    <!-- ③ Size — text input with datalist -->
                     <div class="vc-cell vc-cell--size">
-                      <input class="inp inp-sm" list="size-options" [placeholder]="t('product.variants.placeholder.size')" [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
+                      <input class="inp inp-sm vc-size-inp" list="size-options"
+                             [placeholder]="'—'"
+                             [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
                     </div>
 
-                    <!-- Stock -->
+                    <!-- ④ Stock — with live out/low-stock colouring -->
                     <div class="vc-cell vc-cell--num">
-                      <input class="inp inp-sm mono" type="number" min="0"
+                      <input class="inp inp-sm mono vc-stock-inp"
+                             [class.stock-out]="v.stock === 0"
+                             [class.stock-low]="v.stock > 0 && v.stock < 5"
+                             type="number" min="0"
                              [ngModel]="v.stock" (ngModelChange)="updateVariant(i, { stock: +$event || 0 })"/>
                     </div>
 
-                    <!-- Price -->
-                    <div class="vc-cell vc-cell--num">
-                      <input class="inp inp-sm mono" type="number" min="0"
-                             [ngModel]="v.price" (ngModelChange)="updateVariant(i, { price: +$event || 0 })"/>
+                    <!-- ⑤ Price — QAR prefixed -->
+                    <div class="vc-cell vc-cell--num vc-cell--price">
+                      <div class="vc-price-wrap">
+                        <span class="vc-price-pfx">QAR</span>
+                        <input class="inp inp-sm mono" type="number" min="0"
+                               [ngModel]="v.price" (ngModelChange)="updateVariant(i, { price: +$event || 0 })"/>
+                      </div>
                     </div>
 
-                    <!-- Margin -->
-                    <div class="vc-cell vc-cell--margin">
-                      @if (variantMargin(v); as m) {
-                        <span class="margin-pill" [class.margin-green]="m >= 40" [class.margin-amber]="m >= 20 && m < 40" [class.margin-red]="m < 20">{{ m }}%</span>
-                      } @else {
-                        <span class="margin-dash muted small">—</span>
-                      }
+                    <!-- ⑥ SKU — always visible (warehouse / POS reference) -->
+                    <div class="vc-cell vc-cell--sku">
+                      <input class="inp inp-sm mono" [placeholder]="'SKU'"
+                             [ngModel]="v.sku" (ngModelChange)="updateVariant(i, { sku: $event })"/>
                     </div>
 
-                    <!-- Actions: expand + delete -->
+                    <!-- Actions: expand (Material + Cost inside) + delete -->
                     <div class="vc-cell vc-cell--actions">
                       <button class="vt-expand" type="button"
                               [class.is-open]="expandedVariants().has(v.id)"
                               (click)="toggleVariantExpand(v.id)"
-                              [attr.title]="expandedVariants().has(v.id) ? 'Collapse details' : 'SKU · Material · Cost'">
+                              [attr.title]="expandedVariants().has(v.id) ? 'Collapse' : 'Material · Cost · Margin'">
                         <ap-icon name="arrowDn" [size]="12"/>
                       </button>
                       <button class="vt-remove" type="button" (click)="removeVariant(i)" [attr.aria-label]="t('common.remove')">
@@ -453,14 +458,9 @@ function readPreview(file: File): Promise<string> {
                     <div class="vc-hint">Add a color or size so this variant can be distinguished</div>
                   }
 
-                  <!-- Expandable detail: SKU, Material, Cost -->
+                  <!-- Expandable detail: Material | Cost | Margin (calculated) -->
                   @if (expandedVariants().has(v.id)) {
                     <div class="vc-detail">
-                      <div class="vc-field">
-                        <label class="vc-lbl">{{ t('product.variants.col.sku') }}</label>
-                        <input class="inp inp-sm mono" [placeholder]="t('product.variants.placeholder.sku')"
-                               [ngModel]="v.sku" (ngModelChange)="updateVariant(i, { sku: $event })"/>
-                      </div>
                       <div class="vc-field">
                         <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
                         @if (refMaterials().length > 0) {
@@ -480,6 +480,14 @@ function readPreview(file: File): Promise<string> {
                         <input class="inp inp-sm mono" type="number" min="0" step="0.01" [placeholder]="'—'"
                                [ngModel]="v.costPrice ?? null"
                                (ngModelChange)="updateVariant(i, { costPrice: $event !== null && $event !== '' ? +$event : undefined })"/>
+                      </div>
+                      <div class="vc-field vc-field--margin">
+                        <label class="vc-lbl">{{ t('product.variants.col.margin') }}</label>
+                        @if (variantMargin(v); as m) {
+                          <span class="margin-pill" [class.margin-green]="m >= 40" [class.margin-amber]="m >= 20 && m < 40" [class.margin-red]="m < 20">{{ m }}%</span>
+                        } @else {
+                          <span class="margin-dash muted small">— set cost to calculate</span>
+                        }
                       </div>
                     </div>
                   }
@@ -1087,18 +1095,25 @@ function readPreview(file: File): Promise<string> {
     .variants-cards > .vc-header { border-radius: 10px 10px 0 0; }
     .variants-cards > .vc:last-of-type { border-radius: 0 0 10px 10px; }
 
-    /* Grid column definition — shared by header and data rows */
-    /* PHOTO | COLOR | SIZE | STOCK | PRICE | MARGIN | ACTIONS */
-    .vc-cols {
-      grid-template-columns: 48px minmax(110px,1.8fr) 60px repeat(2, minmax(72px,1fr)) 52px 60px;
+    /* Grid: Photo | Color | Size | Stock | Price | SKU | Actions
+       Rationale:
+         - Photo 44px   : thumbnail, fixed
+         - Color 130px+ : swatch + select, needs room for color name
+         - Size  60px   : short (42, XL) — narrower than other fields
+         - Stock 68px   : number only, inline status colour
+         - Price 96px   : "QAR" prefix + number
+         - SKU   100px+ : monospace, variable length (critical for ops)
+         - Actions 54px : expand + delete                              */
+    .vc-header,
+    .vc-row {
+      grid-template-columns: 44px minmax(120px,1.7fr) 60px 68px 96px minmax(100px,1.3fr) 54px;
     }
 
     /* Column header row */
     .vc-header {
       display: grid;
-      grid-template-columns: 48px minmax(110px,1.8fr) 60px repeat(2, minmax(72px,1fr)) 52px 60px;
       gap: 8px;
-      padding: 7px 14px;
+      padding: 6px 14px;
       background: var(--bg);
       border-bottom: 1px solid var(--border-2);
     }
@@ -1123,19 +1138,43 @@ function readPreview(file: File): Promise<string> {
     /* Compact row: all primary fields in one line */
     .vc-row {
       display: grid;
-      grid-template-columns: 48px minmax(110px,1.8fr) 60px repeat(2, minmax(72px,1fr)) 52px 60px;
       gap: 8px;
       align-items: center;
-      min-height: 48px;
+      min-height: 46px;
     }
 
     /* Generic cell */
-    .vc-cell { display: flex; align-items: center; }
-    .vc-cell--color { min-width: 0; }
-    .vc-cell--size { min-width: 0; }
-    .vc-cell--num { min-width: 0; }
-    .vc-cell--margin { justify-content: flex-start; }
+    .vc-cell { display: flex; align-items: center; min-width: 0; }
     .vc-cell--actions { gap: 4px; justify-content: flex-end; }
+
+    /* Size — centred mono text for numeric values (38, 42, XL…) */
+    .vc-size-inp { text-align: center; }
+
+    /* Stock — live status colouring */
+    .vc-stock-inp { text-align: center; transition: border-color 0.15s, background 0.15s, color 0.15s; }
+    .vc-stock-inp.stock-out {
+      border-color: var(--danger) !important;
+      background: rgba(239,68,68,0.05);
+      color: var(--danger);
+      font-weight: 600;
+    }
+    .vc-stock-inp.stock-low { border-color: var(--warning, #d97706) !important; }
+
+    /* Price — "QAR" prefix inside the input */
+    .vc-cell--price { flex-direction: column; }
+    .vc-price-wrap { position: relative; width: 100%; display: flex; align-items: center; }
+    .vc-price-pfx {
+      position: absolute; left: 7px;
+      font-size: 8px; font-weight: 800;
+      color: var(--muted); pointer-events: none;
+      letter-spacing: 0.05em; text-transform: uppercase;
+      line-height: 1;
+    }
+    .vc-price-wrap .inp { padding-left: 30px; width: 100%; }
+
+    /* SKU — monospace, always visible (warehouse / POS reference) */
+    .vc-cell--sku { min-width: 0; }
+    .vc-cell--sku .inp { font-family: var(--ff-mono, monospace); font-size: 12px; }
 
     /* Image link cell — first column, centered */
     .vc-cell--img { justify-content: center; position: relative; }
@@ -1242,16 +1281,18 @@ function readPreview(file: File): Promise<string> {
       display: flex; align-items: center; gap: 5px;
     }
 
-    /* Expandable detail row */
+    /* Expandable detail: Material | Cost | Margin (3 equal columns) */
     .vc-detail {
       display: grid;
-      grid-template-columns: minmax(100px,1.6fr) minmax(100px,1.4fr) minmax(80px,1fr);
+      grid-template-columns: 1.4fr 1fr 1fr;
       gap: 10px;
-      padding: 12px 0 4px;
+      padding: 10px 0 4px;
       border-top: 1px dashed var(--border-2);
-      margin-top: 10px;
+      margin-top: 8px;
       animation: vc-reveal 0.14s ease-out;
     }
+    /* Margin field inside detail: label + pill stacked */
+    .vc-field--margin { flex-direction: column; align-items: flex-start; gap: 5px; }
     @keyframes vc-reveal {
       from { opacity: 0; transform: translateY(-6px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -1338,18 +1379,20 @@ function readPreview(file: File): Promise<string> {
     /* Responsive: stack on narrow screens */
     @media (max-width: 600px) {
       .vc-header { display: none; }
+      .vc-header,
       .vc-row {
-        grid-template-columns: 48px 1fr 56px 56px 56px;
+        grid-template-columns: 40px 1fr 52px 52px 44px;
         grid-template-rows: auto auto;
       }
-      .vc-cell--img  { grid-column: 1; grid-row: 1 / 3; align-self: center; }
+      .vc-cell--img   { grid-column: 1; grid-row: 1 / 3; align-self: center; }
       .vc-cell--color { grid-column: 2 / 5; grid-row: 1; }
       .vc-cell--size  { grid-column: 2; grid-row: 2; }
-      .vc-cell--num:first-of-type { grid-column: 3; grid-row: 2; }
-      .vc-cell--num:last-of-type  { grid-column: 4; grid-row: 2; }
-      .vc-cell--margin { display: none; }
+      .vc-cell--num   { grid-column: 3; grid-row: 2; }
+      .vc-cell--price { grid-column: 4; grid-row: 2; }
+      .vc-cell--sku   { display: none; }
       .vc-cell--actions { grid-column: 5; grid-row: 1 / 3; align-self: center; flex-direction: column; }
       .vc-detail { grid-template-columns: 1fr 1fr; }
+      .vc-field--margin { display: none; }
     }
     .related-picker {
       display: grid;
