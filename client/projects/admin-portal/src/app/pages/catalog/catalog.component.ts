@@ -573,27 +573,44 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       }
       .status-pills::-webkit-scrollbar { display: none; }
 
-      /* ③ Action row — single scrollable row, no wrap */
+      /* ③ Action row — fill full width, no scrolling, no gaps */
       .top-actions {
         order: 2;
         width: 100%;
         margin-inline-start: 0;
         flex-wrap: nowrap;
-        overflow-x: auto;
-        scrollbar-width: none;
-        gap: 6px;
-        padding-bottom: 2px; /* room for box-shadow on buttons */
+        overflow-x: unset;     /* fill, don't scroll */
+        gap: 5px;
       }
-      .top-actions::-webkit-scrollbar { display: none; }
+
+      /* Every direct child stretches equally */
+      .top-actions > * { flex: 1 1 0; min-width: 0; }
+
+      /* Every button: fill its flex cell, taller touch target */
+      .top-actions .btn {
+        width: 100%;
+        height: 40px;
+        padding: 0;
+        justify-content: center;
+        min-width: unset;
+      }
+
+      /* View toggle: fill its cell, stretch inner buttons too */
+      .top-actions .view-toggle { height: 40px; }
+      .top-actions .vt-btn { flex: 1; width: auto; height: 100%; }
+
+      /* + New Product — 1.7× wider, stands out as primary CTA */
+      .btn-new-product {
+        flex: 1.7 1 0;
+        margin-inline-start: 0;
+        height: 40px;
+      }
 
       /* Sort select hidden — accessible via Filters panel */
       .ctrl-inp { display: none; }
 
-      /* Export / Import: icon-only on mobile to save space */
+      /* Export / Import: icon-only on mobile */
       .mob-icon-only .btn-lbl { display: none; }
-
-      /* New Product: auto-margin pushes it to the right edge */
-      .btn-new-product { margin-inline-start: auto; flex-shrink: 0; }
 
       /* List view on narrow: 3 columns */
       .lv-head, .lv-row { grid-template-columns: 36px 1fr 80px; }
