@@ -871,71 +871,81 @@ interface StorefrontContent {
   styles: [`
     .sf-shell { padding-bottom: 60px; }
 
-    /* ── Unified storefront action bar ─────────── */
+    /* ── Unified storefront action bar ─────────────────────────── */
+    /*  Always sticky at the top of the scroll area — needs strong
+        depth cues so scrolled content doesn't bleed through it.     */
     .pub-bar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 28px;
-      height: 54px;
+      height: 52px;
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; z-index: 10;
+      /* Crisp 1 px separator + soft depth shadow so the bar always
+         "floats" above content as you scroll */
+      border-bottom: 1.5px solid var(--border-2);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      position: sticky; top: 0; z-index: 40;
       gap: 12px; flex-wrap: wrap;
-      transition: background 0.2s, border-color 0.2s;
+      transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
     }
-    /* When content is dirty: shift to green (matches save-bar-top colour) */
+
+    /* Content-dirty: green bar — Shopify-style contextual save */
     .pub-bar--content-dirty {
       background: var(--green);
-      border-bottom-color: rgba(0,0,0,0.1);
+      border-bottom-color: rgba(0,0,0,0.12);
+      box-shadow: 0 4px 20px rgba(2,70,56,0.22);
     }
     .pub-bar--content-dirty .pub-bar__title { color: #fff; }
-    .pub-bar__left { display: flex; align-items: center; gap: 10px; }
-    .pub-bar__title { font-size: 15px; font-weight: 700; transition: color 0.2s; }
-    .pub-bar__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+    .pub-bar__left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .pub-bar__title { font-size: 14px; font-weight: 700; transition: color 0.2s; white-space: nowrap; }
+    .pub-bar__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
     /* Status badges */
     .pub-bar__badge {
       font-size: 10px; font-weight: 700;
       letter-spacing: 0.06em; text-transform: uppercase;
       padding: 3px 9px; border-radius: 99px;
+      white-space: nowrap;
     }
     .pub-bar__badge--content {
       background: rgba(255,255,255,0.18);
-      color: rgba(255,255,255,0.9);
-      border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.92);
+      border: 1px solid rgba(255,255,255,0.28);
     }
     .pub-bar__badge--layout {
-      background: rgba(193,154,91,0.12);
+      background: rgba(193,154,91,0.1);
       color: var(--gold);
-      border: 1px solid rgba(193,154,91,0.3);
+      border: 1px solid rgba(193,154,91,0.28);
     }
 
-    /* Contextual button overrides inside dirty bar */
-    .pub-bar--content-dirty .btn-ghost.pub-bar__discard {
-      background: rgba(239,68,68,0.15);
-      border-color: rgba(239,68,68,0.4);
-      color: #fca5a5;
+    /* Button overrides when bar is green */
+    .pub-bar--content-dirty .pub-bar__discard {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.88);
     }
-    .pub-bar--content-dirty .btn-ghost.pub-bar__discard:hover {
-      background: rgba(239,68,68,0.28);
+    .pub-bar--content-dirty .pub-bar__discard:hover {
+      background: rgba(239,68,68,0.22);
+      border-color: rgba(239,68,68,0.5);
       color: #fff;
     }
     .pub-bar--content-dirty .btn-primary {
-      background: #fff; color: var(--green);
+      background: #fff; color: var(--green); font-weight: 700;
     }
-    .pub-bar--content-dirty .btn-primary:hover { background: var(--bg-2); }
+    .pub-bar--content-dirty .btn-primary:hover { background: var(--gold-3); }
     .pub-bar--content-dirty .btn-outline {
-      border-color: rgba(255,255,255,0.35);
+      border-color: rgba(255,255,255,0.3);
       color: rgba(255,255,255,0.85);
       background: transparent;
     }
     .pub-bar--content-dirty .btn-outline:hover {
-      border-color: rgba(255,255,255,0.7);
+      border-color: rgba(255,255,255,0.65);
       color: #fff;
     }
     .pub-bar__divider {
       width: 1px; height: 20px;
-      background: rgba(255,255,255,0.2);
-      margin: 0 4px;
+      background: rgba(255,255,255,0.22);
+      margin: 0 2px;
     }
 
     /* ── Page tabs ──────────────────────────────── */
@@ -1996,11 +2006,17 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     return new Promise<string | null>((resolve) => {
       this.uploadApi.uploadMedia([file]).subscribe({
         next: (progress) => {
-          if (progress.stage === 'done' && progress.result) {
-            this.uploading.set(false);
-            const r = progress.result as { storage_url?: string; preview_url?: string } | Array<{ storage_url?: string; preview_url?: string }>;
-            const item = Array.isArray(r) ? r[0] : r;
-            resolve(this.api.mediaUrl(item?.preview_url || item?.storage_url || ''));
+          if (progress.stage !== 'done') return;
+          this.uploading.set(false);
+          // Server returns MediaFile[] via mapMedia() — fields are camelCase
+          const list = progress.result as import('../../models').MediaFile[] | import('../../models').MediaFile | null | undefined;
+          const item = Array.isArray(list) ? list[0] : list;
+          const rawUrl = item?.preview || (item as { storageUrl?: string })?.storageUrl || '';
+          if (rawUrl) {
+            resolve(this.api.mediaUrl(rawUrl));
+          } else {
+            this.toast.error('Upload error', 'Server returned no image URL.');
+            resolve(null);
           }
         },
         error: () => {
