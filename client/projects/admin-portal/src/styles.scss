@@ -2797,6 +2797,45 @@ html[dir='rtl'] a, html[dir='rtl'] .nav-item { text-decoration: none; }
   .tbl { min-width: 600px; }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE FOUNDATION — Phase 1  (see docs/mobile-ux-plan.html)
+   All rules below target phones only (≤768px or ≤480px).
+   Desktop/tablet layout is intentionally untouched.
+═══════════════════════════════════════════════════════════════ */
+
+/* Task 1a — Body overflow stays hidden (viewport-lock is intentional).
+   Add momentum scroll to the inner scroll container instead. */
+@media (max-width: 768px) {
+  .scroll-area {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Task 1c — Base font 13 → 14px on phones.
+   Inputs stay at 16px (prevents iOS auto-zoom on focus). */
+@media (max-width: 768px) {
+  body                   { font-size: 14px; }
+  .card-title            { font-size: 16px; }
+  .card-sub              { font-size: 12px; }
+}
+
+/* Task 1d — Touch targets: upgrade from 44px → 48px on phones.
+   (The ≤1024px rule above already sets 44px on tablet.) */
+@media (max-width: 768px) {
+  .btn:not(.btn-sm),
+  .icon-btn,
+  .topbar-burger {
+    min-height: 48px;
+    min-width: 48px;
+  }
+  /* Topbar compact: 60px (tablet) → 52px (phone) */
+  .topbar                { height: 52px !important; }
+  /* Crumb label hidden on small phones — title is enough */
+}
+@media (max-width: 480px) {
+  .topbar .crumb         { display: none !important; }
+}
+
 /* Sortable table wrapper: force scroll container */
 ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 

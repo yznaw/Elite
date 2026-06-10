@@ -39,3 +39,12 @@
   .scroll-area { padding: 18px; }
   .scroll-area--flush-top { padding-top: 0; }
 }
+
+/* Phone: smooth momentum scroll, tighter padding */
+@media (max-width: 768px) {
+  .scroll-area {
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 16px 32px;
+  }
+  .scroll-area--flush-top { padding-top: 0; }
+}

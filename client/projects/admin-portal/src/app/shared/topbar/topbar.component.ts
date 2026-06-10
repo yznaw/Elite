@@ -63,9 +63,30 @@ const META: Record<string, PageMeta> = {
     </div>
 
     @if (searchOpen()) {
-      <div class="topbar-search-pane inp-search">
-        <ap-icon name="search" [size]="14"/>
-        <input class="inp with-icon" [placeholder]="t('topbar.search.placeholder')" autofocus/>
+      <div class="topbar-search-pane">
+        <!-- Back button: visible only on mobile overlay -->
+        <button
+          class="icon-btn search-close-btn"
+          type="button"
+          (click)="toggleSearch()"
+          aria-label="Close search"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               width="18" height="18">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <!-- Input wrapper keeps the search icon absolutely positioned -->
+        <div class="inp-search search-input-wrap">
+          <ap-icon name="search" [size]="14"/>
+          <input
+            class="inp with-icon"
+            [placeholder]="t('topbar.search.placeholder')"
+            (keydown.escape)="toggleSearch()"
+            autofocus
+          />
+        </div>
       </div>
     }
   `,
@@ -99,13 +120,52 @@ const META: Record<string, PageMeta> = {
     }
     html[dir='rtl'] .topbar .crumb { letter-spacing: 0; }
     .topbar-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+
+    /* ── Search pane — desktop (below topbar, simple bar) ── */
     .topbar-search-pane {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       padding: 10px 16px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       animation: fadeIn 0.18s ease;
     }
+    .search-input-wrap { flex: 1; }
     .topbar-search-pane .inp { width: 100%; }
+    .search-close-btn { display: none !important; }
+
+    /* ── Search pane — mobile (full-screen overlay) ── */
+    @media (max-width: 768px) {
+      .topbar-search-pane {
+        position: fixed;
+        inset: 0;
+        z-index: 300;
+        padding: 20px 16px 16px;
+        border-bottom: none;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 0;
+        animation: searchOverlayIn 0.22s cubic-bezier(.22,1,.36,1);
+      }
+      .search-close-btn {
+        display: inline-flex !important;
+        align-self: flex-start;
+        margin-bottom: 16px;
+        flex-shrink: 0;
+      }
+      .search-input-wrap { flex: none; width: 100%; }
+      .topbar-search-pane .inp {
+        height: 52px;
+        font-size: 18px !important;
+        padding-left: 44px;
+      }
+    }
+    @keyframes searchOverlayIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
   `],
 })
 export class TopbarComponent {
