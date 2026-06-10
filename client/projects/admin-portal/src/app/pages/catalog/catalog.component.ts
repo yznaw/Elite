@@ -94,17 +94,17 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             </button>
 
             <!-- Export CSV -->
-            <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0">
-              <ap-icon name="arrowDn" [size]="14"/> Export
+            <button class="btn btn-outline btn-sm mob-icon-only" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
+              <ap-icon name="arrowDn" [size]="14"/> <span class="btn-lbl">Export</span>
             </button>
 
             <!-- Bulk import -->
-            <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)">
-              <ap-icon name="upload" [size]="14"/> Import
+            <button class="btn btn-outline btn-sm mob-icon-only" (click)="showBulkImport.set(true)" title="Import">
+              <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">Import</span>
             </button>
 
             <!-- New product -->
-            <button class="btn btn-gold btn-sm" (click)="createProduct()" [disabled]="selectionMode()">
+            <button class="btn btn-gold btn-sm btn-new-product" (click)="createProduct()" [disabled]="selectionMode()">
               <ap-icon name="plus" [size]="14"/> {{ t('catalog.newProduct') }}
             </button>
           </div>
@@ -544,26 +544,67 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     /* ── Pagination ── */
     .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; }
 
-    /* ── Mobile-first breakpoints ── */
+    /* ── Responsive breakpoints ── */
     @media (max-width: 900px) {
-      .lv-head, .lv-row {
-        grid-template-columns: 36px minmax(120px,1fr) 80px 70px;
-      }
+      .lv-head, .lv-row { grid-template-columns: 36px minmax(120px,1fr) 80px 70px; }
       .hide-mobile { display: none !important; }
     }
-    @media (max-width: 600px) {
-      .top-bar { gap: 6px; }
-      .search-box { min-width: 100%; order: -1; }
-      .status-pills { font-size: 11px; }
-      .top-actions { gap: 4px; width: 100%; justify-content: flex-end; }
-      .ctrl-inp { display: none; }   /* hide sort on very small — accessible via filter panel */
+
+    @media (max-width: 640px) {
+      /* Top bar: stack vertically, each row full-width */
+      .top-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+
+      /* ① Search — always first, full width */
+      .search-box { width: 100%; min-width: 0; order: 0; }
+
+      /* ② Status pills — horizontal scroll, never wrap */
+      .status-pills {
+        order: 1;
+        width: 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 10px;
+      }
+      .status-pills::-webkit-scrollbar { display: none; }
+
+      /* ③ Action row — single scrollable row, no wrap */
+      .top-actions {
+        order: 2;
+        width: 100%;
+        margin-inline-start: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        gap: 6px;
+        padding-bottom: 2px; /* room for box-shadow on buttons */
+      }
+      .top-actions::-webkit-scrollbar { display: none; }
+
+      /* Sort select hidden — accessible via Filters panel */
+      .ctrl-inp { display: none; }
+
+      /* Export / Import: icon-only on mobile to save space */
+      .mob-icon-only .btn-lbl { display: none; }
+
+      /* New Product: auto-margin pushes it to the right edge */
+      .btn-new-product { margin-inline-start: auto; flex-shrink: 0; }
+
+      /* List view on narrow: 3 columns */
+      .lv-head, .lv-row { grid-template-columns: 36px 1fr 80px; }
+      .hide-small { display: none !important; }
+
+      /* Filter panel: 2 columns */
       .filter-panel-grid { grid-template-columns: 1fr 1fr; }
+
+      /* Selection bar: stack vertically */
       .sel-bar { flex-direction: column; align-items: flex-start; }
       .sel-actions { width: 100%; flex-wrap: wrap; }
-      .lv-head, .lv-row {
-        grid-template-columns: 36px 1fr 80px;
-      }
-      .hide-small { display: none !important; }
     }
   `],
 })

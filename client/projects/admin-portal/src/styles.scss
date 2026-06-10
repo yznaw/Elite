@@ -2761,12 +2761,26 @@ html[dir='rtl'] a, html[dir='rtl'] .nav-item { text-decoration: none; }
   input.inp, select.inp { min-height: 44px; font-size: 16px !important; }
 }
 
-/* Catalog top-bar wraps gracefully on tablet/phone */
+/* Top-bar: wraps gracefully on tablet/phone */
 @media (max-width: 768px) {
   .top-bar { flex-wrap: wrap; gap: 8px; }
   .top-actions { flex-wrap: wrap; width: 100%; }
   .search-box { width: 100%; }
-  .status-pills { flex-wrap: wrap; }
+  /* Status pills: horizontal scroll instead of wrapping onto 2+ rows */
+  .status-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .status-pills::-webkit-scrollbar { display: none; }
+  /* Date-range and filter pills: same treatment */
+  .date-range-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .date-range-pills::-webkit-scrollbar { display: none; }
 }
 
 /* kpi-grid: 2 cols on tablet, 1 col on narrow phone */
@@ -2792,10 +2806,9 @@ ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling
   .fp-price, .fp-page { grid-column: span 1 !important; }
 }
 
-/* Order date range pills wrap on mobile */
+/* Order date range pills: scroll horizontally (already set above at 768px) */
 @media (max-width: 600px) {
-  .date-range-pills { flex-wrap: wrap; }
-  .dr-pill { flex: 1 1 auto; text-align: center; }
+  .dr-pill { flex-shrink: 0; }
 }
 
 /* Settings grid stacks on phone */
