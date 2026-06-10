@@ -3,7 +3,7 @@
     <div class="product-shell">
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <button type="button" (click)="goCollection()">
-          {{ t("product.breadcrumb.collection") }}
+          {{ fromCollectionName() || t("product.breadcrumb.collection") }}
         </button>
         <span>/</span>
         <strong>{{ productName(p) }}</strong>
@@ -29,7 +29,7 @@
               <span class="tag-chip">{{ productTag(p.tag) }}</span>
             }
 
-            <button
+            <!-- <button
               type="button"
               class="wishlist-btn"
               [class.is-active]="wishlisted()"
@@ -37,7 +37,7 @@
               [attr.aria-label]="t('product.aria.wishlist')"
             >
               {{ wishlisted() ? "♥" : "♡" }}
-            </button>
+            </button> -->
 
             @if (gallery().length > 1) {
               <button
@@ -418,7 +418,9 @@
           <p>{{ productError() || "Product not found." }}</p>
           <div class="product-state__actions">
             <button type="button" (click)="retryProduct()">Try again</button>
-            <button type="button" (click)="goCollection()">Back to collection</button>
+            <button type="button" (click)="goCollection()">
+              Back to collection
+            </button>
           </div>
         }
       </section>

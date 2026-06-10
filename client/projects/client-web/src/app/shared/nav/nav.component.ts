@@ -168,8 +168,13 @@ const FALLBACK_SEARCH_IMAGE =
             <div class="mobile-search-results">
               @for (item of searchResults(); track item.id) {
                 <button type="button" class="mobile-search-result" (click)="selectSearchResult(item)">
-                  <span>{{ productName(item) }}</span>
-                  <small>{{ productStyle(item.style) }} · {{ price(item.price) }}</small>
+                  <span class="mobile-search-thumb">
+                    <img [src]="item.image" alt="" (error)="onSearchImgError($event)" />
+                  </span>
+                  <span class="mobile-search-copy">
+                    <span class="mobile-search-name">{{ productName(item) }}</span>
+                    <small>{{ productStyle(item.style) }} · {{ price(item.price) }}</small>
+                  </span>
                 </button>
               } @empty {
                 <p>{{ t('nav.searchEmpty') }}</p>
@@ -708,9 +713,10 @@ const FALLBACK_SEARCH_IMAGE =
     }
 
     .mobile-search-result {
-      display: grid;
-      gap: 4px;
-      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
       border: 1px solid rgba(255, 250, 240, 0.1);
       border-radius: 16px;
       background: rgba(255, 250, 240, 0.07);
@@ -719,7 +725,29 @@ const FALLBACK_SEARCH_IMAGE =
       text-align: start;
     }
 
-    .mobile-search-result span {
+    .mobile-search-thumb {
+      flex: 0 0 auto;
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(255, 250, 240, 0.1);
+    }
+
+    .mobile-search-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .mobile-search-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .mobile-search-name {
       font-family: var(--ff-serif);
       font-size: 20px;
       line-height: 1.1;
@@ -788,7 +816,7 @@ const FALLBACK_SEARCH_IMAGE =
         display: none;
       }
 
-      .search-panel {
+      .search-wrap {
         display: none;
       }
 
@@ -929,7 +957,8 @@ export class NavComponent {
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
     if (!this.searchOpen()) return;
-    if (!this.host.nativeElement.contains(event.target as Node)) {
+    const searchWrap = this.host.nativeElement.querySelector('.search-wrap');
+    if (searchWrap && !searchWrap.contains(event.target as Node)) {
       this.closeSearch();
     }
   }

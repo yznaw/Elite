@@ -177,7 +177,11 @@ export class CollectionComponent implements OnInit {
   }
 
   goToProduct(p: Product): void {
-    void this.router.navigate(['/product', p.id]);
+    const active = this.activeCollection();
+    const extras = active
+      ? { queryParams: { col: active.handle || active.id, colName: active.title } }
+      : undefined;
+    void this.router.navigate(['/product', p.id], extras);
     window.scrollTo(0, 0);
   }
 

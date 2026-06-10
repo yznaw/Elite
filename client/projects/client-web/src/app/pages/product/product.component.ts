@@ -77,6 +77,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly restockSubmitting = signal(false);
   readonly restockSubmitted = signal(false);
   readonly restockError = signal('');
+  readonly fromCollectionHandle = signal<string | null>(null);
+  readonly fromCollectionName = signal<string | null>(null);
 
   readonly gallery = computed(() => {
     const p = this.product();
@@ -134,6 +136,9 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   async ngOnInit(force = false): Promise<void> {
     const idParam = this.route.snapshot.paramMap.get('id');
+    const queryParams = this.route.snapshot.queryParamMap;
+    this.fromCollectionHandle.set(queryParams.get('col'));
+    this.fromCollectionName.set(queryParams.get('colName'));
     this.productLoading.set(true);
     this.productError.set('');
     this.product.set(null);
@@ -160,7 +165,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   goCollection(): void {
-    void this.router.navigate(['/collection']);
+    const handle = this.fromCollectionHandle();
+    void this.router.navigate(handle ? ['/collection', handle] : ['/collection']);
   }
 
   retryProduct(): void {
@@ -175,7 +181,9 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.qty.set(1);
     this.sizePickerOpen.set(false);
     this.resetRestockForm();
-    void this.router.navigate(['/product', nextProduct.id]);
+    void this.router.navigate(['/product', nextProduct.id], {
+      queryParamsHandling: 'preserve',
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
