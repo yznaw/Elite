@@ -20,14 +20,15 @@
 }
 
 .scroll-area {
-  /* Expose as variables so pages that need full-bleed sticky bars
-     can cancel the padding with calc(-1 * var(--page-pt)) etc. */
-  --page-pt: 28px;
-  --page-px: 32px;
-  --page-pb: 40px;
   flex: 1;
   overflow: auto;
-  padding: var(--page-pt) var(--page-px) var(--page-pb);
+  padding: 28px 32px 40px;
+}
+
+/* Pages with their own full-width sticky sub-toolbar (e.g. storefront)
+   need zero top padding so the sub-toolbar clips flush under the topbar. */
+.scroll-area--flush-top {
+  padding-top: 0;
 }
 
 /* On mobile/tablet the sidebar becomes a fixed drawer — grid is 1 column */
@@ -35,10 +36,6 @@
   .app {
     grid-template-columns: 1fr !important;
   }
-  .scroll-area {
-    --page-pt: 18px;
-    --page-px: 18px;
-    --page-pb: 24px;
-    padding: var(--page-pt) var(--page-px) var(--page-pb);
-  }
+  .scroll-area { padding: 18px; }
+  .scroll-area--flush-top { padding-top: 0; }
 }
