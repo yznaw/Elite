@@ -81,16 +81,16 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <!-- Advanced filters toggle -->
             <button class="btn btn-outline btn-sm" [class.btn-filter-active]="hasAdvancedFilters()"
-                    (click)="toggleFilters()">
+                    (click)="toggleFilters()" title="Filters">
               <ap-icon name="filter" [size]="13"/>
-              Filters
+              <span class="btn-lbl">Filters</span>
               @if (hasAdvancedFilters()) { <span class="filter-badge">{{ activeFilterCount() }}</span> }
             </button>
 
             <!-- Bulk select -->
             <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
-                    (click)="toggleSelectionMode()">
-              <ap-icon name="check" [size]="13"/> {{ selectionMode() ? 'Cancel' : 'Select' }}
+                    (click)="toggleSelectionMode()" title="Select">
+              <ap-icon name="check" [size]="13"/> <span class="btn-lbl">{{ selectionMode() ? 'Cancel' : 'Select' }}</span>
             </button>
 
             <!-- Export CSV -->
@@ -104,8 +104,8 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             </button>
 
             <!-- New product -->
-            <button class="btn btn-gold btn-sm btn-new-product" (click)="createProduct()" [disabled]="selectionMode()">
-              <ap-icon name="plus" [size]="14"/> {{ t('catalog.newProduct') }}
+            <button class="btn btn-gold btn-sm btn-new-product" (click)="createProduct()" [disabled]="selectionMode()" title="New Product">
+              <ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('catalog.newProduct') }}</span>
             </button>
           </div>
         </div>

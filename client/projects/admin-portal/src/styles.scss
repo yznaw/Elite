@@ -2816,3 +2816,11 @@ ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling
   .grid-2 { grid-template-columns: 1fr !important; }
   .grid-3 { grid-template-columns: 1fr !important; }
 }
+
+/* ── Icon-only buttons on mobile ──────────────────────────────────────────
+   Wrap any button label text in <span class="btn-lbl">…</span>.
+   On screens ≤ 640px the text hides and only the icon remains, saving
+   toolbar space. Icons must have a meaningful title/aria-label as fallback. */
+@media (max-width: 640px) {
+  .btn-lbl { display: none; }
+}
