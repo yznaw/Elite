@@ -196,7 +196,7 @@ interface StorefrontContent {
                       <span class="small mono">{{ imageName(item.imageUrl) }}</span>
                       <div class="row gap-sm">
                         <input #slFile type="file" accept="image/*" (change)="uploadSliderImage(i, $event)" hidden/>
-                        <button class="btn btn-outline btn-sm" (click)="slFile.click()"><ap-icon name="upload" [size]="12"/> Upload</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="slFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('slider-item-'+i)"><ap-icon name="media" [size]="12"/> Media</button>
                       </div>
                       <input class="inp mt-8" placeholder="or paste URL…" [ngModel]="item.imageUrl" (ngModelChange)="patchSliderItem(i,'imageUrl',$event)"/>
@@ -247,7 +247,7 @@ interface StorefrontContent {
                                 }
                                 <div style="flex:1;min-width:0;">
                                   <input #ctFile type="file" accept="image/*" (change)="uploadCalloutImage(i,ci,$event)" hidden/>
-                                  <button class="btn btn-outline btn-sm" (click)="ctFile.click()"><ap-icon name="upload" [size]="12"/> Upload</button>
+                                  <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="ctFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
                                   <input class="inp mt-6" style="font-size:11px;" placeholder="or paste URL…" [ngModel]="callout.thumbnail" (ngModelChange)="patchCallout(i,ci,'thumbnail',$event)"/>
                                 </div>
                               </div>
@@ -372,7 +372,7 @@ interface StorefrontContent {
                             <div style="flex:1">
                               <div class="row gap-sm mb-4">
                                 <input #tileFile type="file" accept="image/*" (change)="uploadTileImage(ti, $event)" hidden/>
-                                <button class="btn btn-outline btn-sm" (click)="tileFile.click()"><ap-icon name="upload" [size]="12"/> Upload</button>
+                                <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="tileFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
                                 <button class="btn btn-outline btn-sm" (click)="openMediaPicker('tile-'+ti)"><ap-icon name="media" [size]="12"/> Media</button>
                               </div>
                               <input class="inp" [ngModel]="tile.imageUrl" (ngModelChange)="patchTile(ti,'imageUrl',$event)" placeholder="https://…"/>
@@ -404,7 +404,7 @@ interface StorefrontContent {
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #heroFile type="file" accept="image/*" (change)="uploadHeroImage($event)" hidden/>
-                        <button class="btn btn-outline btn-sm" (click)="heroFile.click()"><ap-icon name="upload" [size]="12"/> Upload</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="heroFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('hero')"><ap-icon name="media" [size]="12"/> Media</button>
                       </div>
                       <input class="inp" placeholder="https://…" [ngModel]="content().hero.imageUrl" (ngModelChange)="patchHero('imageUrl',$event)"/>
@@ -512,7 +512,7 @@ interface StorefrontContent {
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #shFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden/>
-                        <button class="btn btn-outline btn-sm" (click)="shFile.click()"><ap-icon name="upload" [size]="12"/> Upload</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="shFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('story-hero')"><ap-icon name="media" [size]="12"/> Media</button>
                       </div>
                       <input class="inp" placeholder="https://…" [ngModel]="content().story.hero.imageUrl" (ngModelChange)="patchStoryHero('imageUrl',$event)"/>
@@ -596,7 +596,7 @@ interface StorefrontContent {
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #chFile type="file" accept="image/*" (change)="uploadChapterImage(i,$event)" hidden/>
-                        <button class="btn btn-outline btn-sm" (click)="chFile.click()"><ap-icon name="upload" [size]="12"/> Upload</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="chFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('chapter-'+i)"><ap-icon name="media" [size]="12"/> Media</button>
                       </div>
                       <input class="inp" placeholder="https://…" [ngModel]="chapter.imageUrl" (ngModelChange)="patchChapter(i,'imageUrl',$event)"/>
@@ -807,94 +807,145 @@ interface StorefrontContent {
   @if (mediaPickerTarget()) {
     <div class="overlay" (click)="mediaPickerTarget.set(null)"></div>
     <div class="drawer media-picker-drawer">
-      <div class="drawer-head"><div class="card-title">Pick from Media</div><button class="x-btn" (click)="mediaPickerTarget.set(null)"><ap-icon name="x" [size]="14"/></button></div>
-      <div class="drawer-body">
-        <div class="media-picker-search">
-          <ap-icon name="search" [size]="13"/>
-          <input class="inp with-icon" placeholder="Search…" [ngModel]="mediaPickerSearch()" (ngModelChange)="mediaPickerSearch.set($event)"/>
-        </div>
-        <div class="media-picker-grid">
-          @if (mediaPickerLoading()) { <ap-spinner/> }
-          @else {
-            @for (m of filteredMediaFiles(); track m.id) {
-              <button class="mp-item" type="button" (click)="applyMediaPick(m.preview || '')">
-                <img [src]="m.preview" [alt]="m.name"/>
-              </button>
-            }
+
+      <!-- Header -->
+      <div class="mpp-head">
+        <div style="min-width:0;">
+          <p class="mpp-eyebrow">Media Library</p>
+          <div class="card-title" style="margin:0;">Pick an Image</div>
+          @if (!mediaPickerLoading()) {
+            <div class="muted small mt-4">{{ filteredMediaFiles().length }} image{{ filteredMediaFiles().length === 1 ? '' : 's' }}</div>
           }
         </div>
+        <button class="x-btn" style="flex-shrink:0;" (click)="mediaPickerTarget.set(null)">
+          <ap-icon name="x" [size]="14"/>
+        </button>
       </div>
+
+      <!-- Toolbar: search + upload -->
+      <div class="mpp-toolbar">
+        <div class="mpp-search">
+          <ap-icon name="search" [size]="13"/>
+          <input class="inp" placeholder="Search files…"
+                 [ngModel]="mediaPickerSearch()" (ngModelChange)="mediaPickerSearch.set($event)"/>
+        </div>
+        <label class="btn btn-gold btn-sm mpp-upload-btn" style="cursor:pointer;flex-shrink:0;">
+          @if (uploading()) { <ap-spinner [size]="10"/> Uploading… }
+          @else { <ap-icon name="upload" [size]="12"/> Upload }
+          <input type="file" accept="image/*" hidden [disabled]="uploading()" (change)="uploadAndPick($event)"/>
+        </label>
+      </div>
+
+      <!-- Grid body -->
+      <div class="mpp-body">
+        @if (mediaPickerLoading()) {
+          <div class="mpp-state">
+            <ap-spinner/> <span>Loading library…</span>
+          </div>
+        } @else if (filteredMediaFiles().length === 0) {
+          <div class="mpp-state mpp-empty">
+            <ap-icon name="media" [size]="36"/>
+            <p class="strong">No images found</p>
+            <p class="muted small">{{ mediaPickerSearch() ? 'Try a different search term' : 'Upload an image to get started' }}</p>
+          </div>
+        } @else {
+          <div class="media-picker-grid">
+            @for (m of filteredMediaFiles(); track m.id) {
+              <button class="mp-item" type="button" (click)="applyMediaPick(m.preview || '')">
+                <div class="mp-item__img-wrap">
+                  <img [src]="m.preview" [alt]="m.name" (error)="onMediaImgError($event)"/>
+                  <div class="mp-item__overlay">
+                    <ap-icon name="check" [size]="20"/>
+                  </div>
+                </div>
+                <div class="mp-item__name">{{ mediaFileName(m.name) }}</div>
+              </button>
+            }
+          </div>
+        }
+      </div>
+
     </div>
   }
   `,
   styles: [`
     .sf-shell { padding-bottom: 60px; }
 
-    /* ── Unified storefront action bar ─────────── */
+    /* ── Unified storefront action bar ─────────────────────────── */
+    /*  Always sticky at the top of the scroll area — needs strong
+        depth cues so scrolled content doesn't bleed through it.     */
     .pub-bar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 28px;
-      height: 54px;
+      height: 52px;
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; z-index: 10;
+      /* Crisp 1 px separator + soft depth shadow so the bar always
+         "floats" above content as you scroll */
+      border-bottom: 1.5px solid var(--border-2);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      position: sticky; top: 0; z-index: 40;
       gap: 12px; flex-wrap: wrap;
-      transition: background 0.2s, border-color 0.2s;
+      transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
     }
-    /* When content is dirty: shift to green (matches save-bar-top colour) */
+
+    /* Content-dirty: green bar — Shopify-style contextual save */
     .pub-bar--content-dirty {
       background: var(--green);
-      border-bottom-color: rgba(0,0,0,0.1);
+      border-bottom-color: rgba(0,0,0,0.12);
+      box-shadow: 0 4px 20px rgba(2,70,56,0.22);
     }
     .pub-bar--content-dirty .pub-bar__title { color: #fff; }
-    .pub-bar__left { display: flex; align-items: center; gap: 10px; }
-    .pub-bar__title { font-size: 15px; font-weight: 700; transition: color 0.2s; }
-    .pub-bar__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+    .pub-bar__left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .pub-bar__title { font-size: 14px; font-weight: 700; transition: color 0.2s; white-space: nowrap; }
+    .pub-bar__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
     /* Status badges */
     .pub-bar__badge {
       font-size: 10px; font-weight: 700;
       letter-spacing: 0.06em; text-transform: uppercase;
       padding: 3px 9px; border-radius: 99px;
+      white-space: nowrap;
     }
     .pub-bar__badge--content {
       background: rgba(255,255,255,0.18);
-      color: rgba(255,255,255,0.9);
-      border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.92);
+      border: 1px solid rgba(255,255,255,0.28);
     }
     .pub-bar__badge--layout {
-      background: rgba(193,154,91,0.12);
+      background: rgba(193,154,91,0.1);
       color: var(--gold);
-      border: 1px solid rgba(193,154,91,0.3);
+      border: 1px solid rgba(193,154,91,0.28);
     }
 
-    /* Contextual button overrides inside dirty bar */
-    .pub-bar--content-dirty .btn-ghost.pub-bar__discard {
-      background: rgba(239,68,68,0.15);
-      border-color: rgba(239,68,68,0.4);
-      color: #fca5a5;
+    /* Button overrides when bar is green */
+    .pub-bar--content-dirty .pub-bar__discard {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.88);
     }
-    .pub-bar--content-dirty .btn-ghost.pub-bar__discard:hover {
-      background: rgba(239,68,68,0.28);
+    .pub-bar--content-dirty .pub-bar__discard:hover {
+      background: rgba(239,68,68,0.22);
+      border-color: rgba(239,68,68,0.5);
       color: #fff;
     }
     .pub-bar--content-dirty .btn-primary {
-      background: #fff; color: var(--green);
+      background: #fff; color: var(--green); font-weight: 700;
     }
-    .pub-bar--content-dirty .btn-primary:hover { background: var(--bg-2); }
+    .pub-bar--content-dirty .btn-primary:hover { background: var(--gold-3); }
     .pub-bar--content-dirty .btn-outline {
-      border-color: rgba(255,255,255,0.35);
+      border-color: rgba(255,255,255,0.3);
       color: rgba(255,255,255,0.85);
       background: transparent;
     }
     .pub-bar--content-dirty .btn-outline:hover {
-      border-color: rgba(255,255,255,0.7);
+      border-color: rgba(255,255,255,0.65);
       color: #fff;
     }
     .pub-bar__divider {
       width: 1px; height: 20px;
-      background: rgba(255,255,255,0.2);
-      margin: 0 4px;
+      background: rgba(255,255,255,0.22);
+      margin: 0 2px;
     }
 
     /* ── Page tabs ──────────────────────────────── */
@@ -1227,18 +1278,109 @@ interface StorefrontContent {
     /* ── Media picker drawer ────────────────────── */
     .media-picker-drawer {
       position: fixed; inset-block: 0; inset-inline-end: 0;
-      width: 360px; z-index: 200;
+      width: 380px; z-index: 200;
       display: flex; flex-direction: column;
+      background: var(--surface);
+      box-shadow: -10px 0 40px rgba(0,0,0,.18);
     }
-    .media-picker-search { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-    .media-picker-search ap-icon { color: var(--muted); }
-    .media-picker-search .inp { flex: 1; border: none; background: transparent; padding: 0; }
-    .media-picker-search .inp:focus { outline: none; box-shadow: none; }
-    .drawer-body { flex: 1; overflow-y: auto; padding: 16px; }
-    .media-picker-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
-    .mp-item { border: none; padding: 0; background: var(--bg); border-radius: 8px; overflow: hidden; aspect-ratio: 1; cursor: pointer; transition: opacity 0.12s; }
-    .mp-item:hover { opacity: 0.8; }
-    .mp-item img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Header */
+    .mpp-head {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 12px;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border-2);
+      flex-shrink: 0;
+    }
+    .mpp-eyebrow {
+      margin: 0 0 3px;
+      font-size: 10px; font-weight: 800; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--gold);
+    }
+
+    /* Toolbar */
+    .mpp-toolbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border-2);
+      flex-shrink: 0;
+    }
+    .mpp-search {
+      display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    .mpp-search ap-icon { color: var(--muted); flex-shrink: 0; }
+    .mpp-search .inp { border: none; background: transparent; padding: 0; flex: 1; }
+    .mpp-search .inp:focus { outline: none; box-shadow: none; }
+    .mpp-upload-btn { white-space: nowrap; }
+
+    /* Scrollable body */
+    .mpp-body { flex: 1; overflow-y: auto; padding: 14px; }
+
+    /* Loading / empty state */
+    .mpp-state {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; padding: 56px 24px;
+      color: var(--muted); font-size: 13px;
+    }
+    .mpp-empty p { margin: 0; }
+
+    /* 2-column grid — larger cards, easier to click and see */
+    .media-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    /* Image card */
+    .mp-item {
+      display: flex; flex-direction: column;
+      border: 2px solid var(--border-2);
+      padding: 0; background: var(--bg);
+      border-radius: 10px; overflow: hidden;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+      text-align: left;
+    }
+    .mp-item:hover {
+      border-color: var(--gold);
+      box-shadow: 0 6px 20px rgba(0,0,0,.12);
+      transform: translateY(-2px);
+    }
+    .mp-item__img-wrap {
+      position: relative;
+      aspect-ratio: 1;
+      overflow: hidden;
+      background: var(--bg-2);
+    }
+    .mp-item__img-wrap img {
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
+      transition: transform 0.2s;
+    }
+    .mp-item:hover .mp-item__img-wrap img { transform: scale(1.04); }
+
+    /* Gold overlay with checkmark on hover */
+    .mp-item__overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(197,165,114,0.82);
+      color: #fff;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .mp-item:hover .mp-item__overlay { opacity: 1; }
+
+    /* Filename label */
+    .mp-item__name {
+      padding: 6px 8px;
+      font-size: 10px; font-weight: 500;
+      color: var(--ink-2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border-top: 1px solid var(--border-2);
+      background: var(--surface);
+      line-height: 1.3;
+    }
   `],
 })
 export class StorefrontComponent implements OnInit, OnDestroy {
@@ -1317,6 +1459,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   readonly mediaPickerTarget = signal<string | null>(null);
   readonly mediaPickerSearch = signal('');
   readonly mediaPickerLoading = signal(false);
+  readonly uploading = signal(false);
   private _mediaFiles = signal<MediaFile[]>([]);
   readonly filteredMediaFiles = computed(() => {
     const s = this.mediaPickerSearch().toLowerCase();
@@ -1846,21 +1989,53 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     if (url) this.patchChapter(i, 'imageUrl', url);
   }
 
+  async uploadAndPick(event: Event): Promise<void> {
+    const url = await this.uploadFile(event);
+    if (url) {
+      void this.mediaApi.list().then((files) => this._mediaFiles.set(files));
+      this.applyMediaPick(url);
+    }
+  }
+
   private async uploadFile(event: Event): Promise<string | null> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return null;
+    const err = this.uploadApi.validate(file);
+    if (err) { this.toast.error('Invalid file', err); return null; }
+    this.uploading.set(true);
     return new Promise<string | null>((resolve) => {
       this.uploadApi.uploadMedia([file]).subscribe({
         next: (progress) => {
-          if (progress.stage === 'done' && progress.result) {
-            const r = progress.result as { storage_url?: string; preview_url?: string } | Array<{ storage_url?: string; preview_url?: string }>;
-            const item = Array.isArray(r) ? r[0] : r;
-            resolve(this.api.mediaUrl(item?.preview_url || item?.storage_url || ''));
+          if (progress.stage !== 'done') return;
+          this.uploading.set(false);
+          // Server returns MediaFile[] via mapMedia() — fields are camelCase
+          const list = progress.result as import('../../models').MediaFile[] | import('../../models').MediaFile | null | undefined;
+          const item = Array.isArray(list) ? list[0] : list;
+          const rawUrl = item?.preview || (item as { storageUrl?: string })?.storageUrl || '';
+          if (rawUrl) {
+            resolve(this.api.mediaUrl(rawUrl));
+          } else {
+            this.toast.error('Upload error', 'Server returned no image URL.');
+            resolve(null);
           }
         },
-        error: () => { this.toast.error('Upload failed', 'Could not upload image.'); resolve(null); },
+        error: () => {
+          this.uploading.set(false);
+          this.toast.error('Upload failed', 'Could not upload image.');
+          resolve(null);
+        },
       });
     });
+  }
+
+  mediaFileName(name: string): string {
+    const base = name.replace(/\.[^.]+$/, '');
+    return base.length > 20 ? base.slice(0, 18) + '…' : base;
+  }
+
+  onMediaImgError(e: Event): void {
+    const img = e.target as HTMLImageElement;
+    img.style.display = 'none';
   }
 
   // ── Private helpers ───────────────────────────────────────────────────
