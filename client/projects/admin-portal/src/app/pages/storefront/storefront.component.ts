@@ -869,7 +869,15 @@ interface StorefrontContent {
   }
   `,
   styles: [`
-    .sf-shell { padding-bottom: 60px; }
+    /* Pull the shell flush against the topbar by cancelling the
+       scroll-area's top padding. Horizontal padding is cancelled too so
+       pub-bar and page-tabs can bleed edge-to-edge. Inner content sections
+       restore their own horizontal spacing via padding: 0 32px.           */
+    .sf-shell {
+      margin-top:    calc(-1 * var(--page-pt, 28px));
+      margin-inline: calc(-1 * var(--page-px, 32px));
+      padding-bottom: 60px;
+    }
 
     /* ── Unified storefront action bar ─────────────────────────── */
     /*  Always sticky at the top of the scroll area — needs strong

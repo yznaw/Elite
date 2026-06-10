@@ -20,9 +20,14 @@
 }
 
 .scroll-area {
+  /* Expose as variables so pages that need full-bleed sticky bars
+     can cancel the padding with calc(-1 * var(--page-pt)) etc. */
+  --page-pt: 28px;
+  --page-px: 32px;
+  --page-pb: 40px;
   flex: 1;
   overflow: auto;
-  padding: 28px 32px 40px;
+  padding: var(--page-pt) var(--page-px) var(--page-pb);
 }
 
 /* On mobile/tablet the sidebar becomes a fixed drawer — grid is 1 column */
@@ -30,5 +35,10 @@
   .app {
     grid-template-columns: 1fr !important;
   }
-  .scroll-area { padding: 18px; }
+  .scroll-area {
+    --page-pt: 18px;
+    --page-px: 18px;
+    --page-pb: 24px;
+    padding: var(--page-pt) var(--page-px) var(--page-pb);
+  }
 }
