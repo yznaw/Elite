@@ -205,19 +205,29 @@ interface StorefrontContent {
                 </label>
                 <label><span class="lbl">Alt text (accessibility)</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
 
-                <!-- Per-slide collapsible callouts -->
-                <div class="callouts-section">
-                  <button class="callouts-toggle" type="button" (click)="toggleSlideCallouts(i)">
-                    <ap-icon name="catalog" [size]="13"/>
-                    Feature callouts ({{ item.callouts.length }})
-                    <span class="callouts-arrow" [class.open]="expandedSlide() === i">›</span>
+                <!-- Per-slide collapsible callouts — clear accordion UI -->
+                <div class="callouts-section" [class.callouts-open]="expandedSlide() === i">
+                  <button class="callouts-toggle" type="button" (click)="toggleSlideCallouts(i)"
+                          [attr.aria-expanded]="expandedSlide() === i">
+                    <span class="callouts-toggle__icon">
+                      <ap-icon name="catalog" [size]="12"/>
+                    </span>
+                    <span class="callouts-toggle__label">Feature Callouts</span>
+                    <span class="callouts-toggle__count">{{ item.callouts.length }}</span>
+                    <span class="callouts-toggle__hint">{{ expandedSlide() === i ? 'Collapse' : 'Expand' }}</span>
+                    <span class="callouts-toggle__arrow" [class.open]="expandedSlide() === i">
+                      <ap-icon name="arrowDn" [size]="13"/>
+                    </span>
                   </button>
                   @if (expandedSlide() === i) {
                     <div class="callouts-body">
                       @for (callout of item.callouts; track callout.id; let ci = $index) {
                         <div class="callout-row">
                           <div class="callout-row__head">
-                            <span class="mono small muted">{{ callout.id }}</span>
+                            <span class="callout-row__id">
+                              <ap-icon name="drag" [size]="11"/>
+                              {{ callout.id }}
+                            </span>
                             <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeCallout(i,ci)">
                               <ap-icon name="trash" [size]="11"/>
                             </button>
@@ -227,12 +237,18 @@ interface StorefrontContent {
                             <label><span class="lbl">English label</span><input class="inp inp-sm" [ngModel]="callout.subtitleEn" (ngModelChange)="patchCallout(i,ci,'subtitleEn',$event)"/></label>
                             <label>
                               <span class="lbl">Thumbnail</span>
-                              <div class="row gap-sm">
-                                @if (callout.thumbnail) { <img class="callout-thumb" [src]="callout.thumbnail" [alt]="callout.alt"/> }
-                                <div style="flex:1">
+                              <div class="callout-thumb-row">
+                                @if (callout.thumbnail) {
+                                  <img class="callout-thumb" [src]="callout.thumbnail" [alt]="callout.alt"/>
+                                } @else {
+                                  <div class="callout-thumb callout-thumb--empty">
+                                    <ap-icon name="media" [size]="16"/>
+                                  </div>
+                                }
+                                <div style="flex:1;min-width:0;">
                                   <input #ctFile type="file" accept="image/*" (change)="uploadCalloutImage(i,ci,$event)" hidden/>
                                   <button class="btn btn-outline btn-sm" (click)="ctFile.click()"><ap-icon name="upload" [size]="12"/> Upload</button>
-                                  <input class="inp mt-4" style="font-size:11px;" placeholder="or paste URL" [ngModel]="callout.thumbnail" (ngModelChange)="patchCallout(i,ci,'thumbnail',$event)"/>
+                                  <input class="inp mt-6" style="font-size:11px;" placeholder="or paste URL…" [ngModel]="callout.thumbnail" (ngModelChange)="patchCallout(i,ci,'thumbnail',$event)"/>
                                 </div>
                               </div>
                             </label>
@@ -985,22 +1001,93 @@ interface StorefrontContent {
     .callout-sep { border: none; border-top: 1px dashed var(--border); margin: 4px 0; }
 
     /* ── Per-slide collapsible callouts ─────────── */
-    .callouts-section { margin-top: 16px; border-top: 1px solid var(--border-2); }
+    .callouts-section { margin-top: 16px; }
+
+    /* Accordion trigger button */
     .callouts-toggle {
       display: flex; align-items: center; gap: 8px;
-      width: 100%; padding: 10px 0;
-      background: transparent; border: none;
-      font-size: 12px; font-weight: 600; color: var(--muted);
+      width: 100%; padding: 10px 14px;
+      background: var(--bg);
+      border: 1.5px solid var(--border-2);
+      border-radius: 8px;
+      font-size: 13px; font-weight: 600; color: var(--ink-2);
       cursor: pointer; text-align: start;
-      transition: color 0.12s;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
-    .callouts-toggle:hover { color: var(--green); }
-    .callouts-arrow { margin-left: auto; transition: transform 0.2s; display: inline-block; }
-    .callouts-arrow.open { transform: rotate(90deg); }
-    .callouts-body { padding-bottom: 8px; }
+    .callouts-toggle:hover {
+      border-color: var(--gold);
+      color: var(--green);
+      background: var(--gold-3);
+    }
+    /* When open: connect visually to the body below */
+    .callouts-open .callouts-toggle {
+      border-color: var(--gold);
+      border-radius: 8px 8px 0 0;
+      border-bottom-color: transparent;
+      background: var(--gold-3);
+      color: var(--green);
+    }
+
+    .callouts-toggle__icon {
+      width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--green); color: #fff;
+      border-radius: 5px; flex-shrink: 0;
+    }
+    .callouts-open .callouts-toggle__icon { background: var(--gold); }
+
+    .callouts-toggle__label { flex: 1; }
+
+    .callouts-toggle__count {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 20px; height: 20px;
+      background: var(--green); color: #fff;
+      font-size: 10px; font-weight: 700;
+      padding: 0 6px; border-radius: 99px;
+    }
+    .callouts-open .callouts-toggle__count { background: var(--gold); }
+
+    .callouts-toggle__hint {
+      font-size: 10px; font-weight: 400;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+    }
+
+    .callouts-toggle__arrow {
+      display: flex; transition: transform 0.22s cubic-bezier(0.22,1,0.36,1);
+    }
+    .callouts-toggle__arrow.open { transform: rotate(180deg); }
+
+    /* Accordion body — connected border */
+    .callouts-body {
+      border: 1.5px solid var(--gold);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      padding: 14px 14px 10px;
+      background: var(--surface);
+    }
+
+    /* Individual callout rows */
     .callout-row { padding: 10px 0; }
-    .callout-row__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .callout-row__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .callout-row__head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .callout-row__id {
+      display: flex; align-items: center; gap: 6px;
+      font-family: monospace; font-size: 11px;
+      color: var(--muted); font-weight: 600;
+    }
+    .callout-row__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .callout-thumb-row { display: flex; align-items: flex-start; gap: 10px; }
+    .callout-thumb {
+      width: 52px; height: 52px;
+      object-fit: cover; border-radius: 7px; flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+    .callout-thumb--empty {
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg); color: var(--muted);
+    }
     @media (max-width: 640px) { .callout-row__fields { grid-template-columns: 1fr; } }
 
     /* ── Social links editor ────────────────────── */

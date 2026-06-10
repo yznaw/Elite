@@ -81,7 +81,12 @@
             "tsConfig": "projects/admin-portal/tsconfig.app.json",
             "assets": [
               "projects/admin-portal/src/favicon.ico",
-              "projects/admin-portal/src/assets"
+              "projects/admin-portal/src/assets",
+              {
+                "glob": "**/*",
+                "input": "projects/client-web/src/assets",
+                "output": "/assets"
+              }
             ],
             "styles": ["projects/admin-portal/src/styles.scss"],
             "scripts": []
