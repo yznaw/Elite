@@ -6,6 +6,7 @@ import { SidebarComponent } from './shared/sidebar/sidebar.component';
 import { TopbarComponent } from './shared/topbar/topbar.component';
 import { ToastComponent } from './shared/toast/toast.component';
 import { ConfirmDialogComponent } from './shared/confirm-dialog/confirm-dialog.component';
+import { BottomNavComponent } from './shared/bottom-nav/bottom-nav.component';
 import { SidebarToggleService } from './shared/sidebar-toggle.service';
 
 @Component({
@@ -18,6 +19,7 @@ import { SidebarToggleService } from './shared/sidebar-toggle.service';
     TopbarComponent,
     ToastComponent,
     ConfirmDialogComponent,
+    BottomNavComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
