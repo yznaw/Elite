@@ -33,15 +33,27 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
       <!-- ── Top bar ── -->
       <div class="card mb-16" style="padding:12px 14px;">
-        <div class="top-bar">
-          <!-- Search -->
+
+        <!-- Row 1: search + primary actions -->
+        <div class="tb-row1">
           <div class="inp-search search-box">
             <ap-icon name="search" [size]="14"/>
             <input class="inp with-icon" [placeholder]="t('catalog.search.placeholder')"
                    [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
           </div>
+          <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
+            <ap-icon name="download" [size]="14"/> <span class="btn-lbl">Export</span>
+          </button>
+          <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)" title="Import">
+            <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">Import</span>
+          </button>
+          <button class="btn btn-gold btn-sm" (click)="createProduct()" [disabled]="selectionMode()" title="New Product">
+            <ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('catalog.newProduct') }}</span>
+          </button>
+        </div>
 
-          <!-- Status quick-filter pills -->
+        <!-- Row 2: status pills + secondary controls -->
+        <div class="tb-row2">
           <div class="status-pills">
             <button class="status-pill" [class.active]="statusFilter() === 'all'"    (click)="statusFilter.set('all'); page.set(0)">All</button>
             <button class="status-pill" [class.active]="statusFilter() === 'active'" (click)="statusFilter.set('active'); page.set(0)">Active</button>
@@ -56,9 +68,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             </button>
           </div>
 
-          <!-- Right-side controls -->
-          <div class="top-actions">
-            <!-- Sort -->
+          <div class="tb-controls">
             <select class="inp ctrl-inp" [ngModel]="sortKey()" (ngModelChange)="sortKey.set($event)">
               <option value="newest">Newest</option>
               <option value="name-az">Name A–Z</option>
@@ -68,8 +78,6 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               <option value="stock-asc">Stock ↑</option>
               <option value="stock-desc">Stock ↓</option>
             </select>
-
-            <!-- View toggle -->
             <div class="view-toggle">
               <button class="vt-btn" [class.active]="viewMode() === 'grid'" (click)="setView('grid')" title="Grid view">
                 <ap-icon name="grid" [size]="14"/>
@@ -78,34 +86,15 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                 <ap-icon name="rows" [size]="14"/>
               </button>
             </div>
-
-            <!-- Advanced filters toggle -->
             <button class="btn btn-outline btn-sm" [class.btn-filter-active]="hasAdvancedFilters()"
                     (click)="toggleFilters()" title="Filters">
               <ap-icon name="filter" [size]="13"/>
               <span class="btn-lbl">Filters</span>
               @if (hasAdvancedFilters()) { <span class="filter-badge">{{ activeFilterCount() }}</span> }
             </button>
-
-            <!-- Bulk select -->
             <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
                     (click)="toggleSelectionMode()" title="Select">
               <ap-icon name="check" [size]="13"/> <span class="btn-lbl">{{ selectionMode() ? 'Cancel' : 'Select' }}</span>
-            </button>
-
-            <!-- Export CSV -->
-            <button class="btn btn-outline btn-sm mob-icon-only" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
-              <ap-icon name="download" [size]="14"/> <span class="btn-lbl">Export</span>
-            </button>
-
-            <!-- Bulk import -->
-            <button class="btn btn-outline btn-sm mob-icon-only" (click)="showBulkImport.set(true)" title="Import">
-              <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">Import</span>
-            </button>
-
-            <!-- New product -->
-            <button class="btn btn-gold btn-sm btn-new-product" (click)="createProduct()" [disabled]="selectionMode()" title="New Product">
-              <ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('catalog.newProduct') }}</span>
             </button>
           </div>
         </div>
@@ -395,11 +384,17 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     }
   `,
   styles: [`
-    /* ── Top bar ── */
-    .top-bar {
+    /* ── Top bar rows ── */
+    .tb-row1 {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .search-box { flex: 1; min-width: 0; position: relative; }
+    .tb-row2 {
       display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     }
-    .search-box { flex: 1; min-width: 200px; position: relative; }
+    .tb-controls {
+      display: flex; align-items: center; gap: 6px; margin-inline-start: auto; flex-wrap: wrap;
+    }
     .status-pills {
       display: flex; gap: 2px; flex-shrink: 0;
       background: var(--bg-2); border-radius: 8px; padding: 3px;
@@ -415,9 +410,6 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     .status-pill.danger.active { color: var(--danger, #dc2626); }
     .ls-badge { background: var(--warning, #f59e0b); color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 0 5px; line-height: 16px; }
     .danger-badge { background: var(--danger, #dc2626) !important; }
-    .top-actions {
-      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-inline-start: auto;
-    }
     .ctrl-inp { width: auto; min-width: 110px; font-size: 12px; padding: 6px 10px; }
 
     /* ── View toggle ── */
@@ -554,19 +546,13 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     }
 
     @media (max-width: 640px) {
-      /* Top bar: stack vertically, each row full-width */
-      .top-bar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-      }
+      /* Row 1: search grows, buttons shrink to icon-only */
+      .tb-row1 { gap: 6px; }
+      .tb-row1 .btn-lbl { display: none; }
 
-      /* ① Search — always first, full width */
-      .search-box { width: 100%; min-width: 0; order: 0; }
-
-      /* ② Status pills — horizontal scroll, never wrap */
+      /* Row 2: pills scroll, controls wrap */
+      .tb-row2 { gap: 6px; }
       .status-pills {
-        order: 1;
         width: 100%;
         flex-wrap: nowrap;
         overflow-x: auto;
@@ -575,45 +561,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
         border-radius: 10px;
       }
       .status-pills::-webkit-scrollbar { display: none; }
-
-      /* ③ Action row — fill full width, no scrolling, no gaps */
-      .top-actions {
-        order: 2;
-        width: 100%;
-        margin-inline-start: 0;
-        flex-wrap: nowrap;
-        overflow-x: unset;     /* fill, don't scroll */
-        gap: 5px;
-      }
-
-      /* Every direct child stretches equally */
-      .top-actions > * { flex: 1 1 0; min-width: 0; }
-
-      /* Every button: fill its flex cell, taller touch target */
-      .top-actions .btn {
-        width: 100%;
-        height: 40px;
-        padding: 0;
-        justify-content: center;
-        min-width: unset;
-      }
-
-      /* View toggle: fill its cell, stretch inner buttons too */
-      .top-actions .view-toggle { height: 40px; }
-      .top-actions .vt-btn { flex: 1; width: auto; height: 100%; }
-
-      /* + New Product — 1.7× wider, stands out as primary CTA */
-      .btn-new-product {
-        flex: 1.7 1 0;
-        margin-inline-start: 0;
-        height: 40px;
-      }
-
-      /* Sort select hidden — accessible via Filters panel */
+      .tb-controls { margin-inline-start: 0; width: 100%; justify-content: flex-start; }
+      .tb-controls .btn-lbl { display: none; }
       .ctrl-inp { display: none; }
-
-      /* Export / Import: icon-only on mobile */
-      .mob-icon-only .btn-lbl { display: none; }
 
       /* List view on narrow: 3 columns */
       .lv-head, .lv-row { grid-template-columns: 36px 1fr 80px; }

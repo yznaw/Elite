@@ -28,8 +28,8 @@ import { IconComponent } from '../../shared/icons/icon.component';
       cursor: pointer; color: var(--muted); transition: all 0.13s;
     }
     .range-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-    .range-dates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .range-dates .inp { width: auto; font-size: 12px; padding: 5px 10px; }
+    .range-dates { display: flex; align-items: center; gap: 8px; width: 100%; }
+    .range-dates .inp { flex: 1; min-width: 0; font-size: 12px; padding: 5px 10px; }
     .kpi-clickable { cursor: pointer; transition: box-shadow .15s, transform .1s; }
     .kpi-clickable:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); }
   `],
