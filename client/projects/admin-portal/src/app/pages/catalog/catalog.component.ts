@@ -95,7 +95,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <!-- Export CSV -->
             <button class="btn btn-outline btn-sm mob-icon-only" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
-              <ap-icon name="arrowDn" [size]="14"/> <span class="btn-lbl">Export</span>
+              <ap-icon name="download" [size]="14"/> <span class="btn-lbl">Export</span>
             </button>
 
             <!-- Bulk import -->

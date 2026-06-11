@@ -21,19 +21,16 @@ import { Order, QAR } from '../../models';
   imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, PaginationComponent, OrderDrawerComponent],
   template: `
     <div class="page-fade">
-      <div class="row gap-sm mb-16" style="flex-wrap:wrap;">
-        <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
-          <ap-icon name="search" [size]="14"/>
-          <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
-        </div>
-        <select class="inp" style="width:auto;" [ngModel]="paymentFilter()" (ngModelChange)="paymentFilter.set($event); page.set(0)">
+      <!-- Row 1: filters + export -->
+      <div class="row gap-sm mb-10" style="flex-wrap:wrap;">
+        <select class="inp orders-filter-sel" [ngModel]="paymentFilter()" (ngModelChange)="paymentFilter.set($event); page.set(0)">
           <option value="all">{{ t('orders.allPayment') }}</option>
           <option value="paid">{{ t('pill.paid') }}</option>
           <option value="pending">{{ t('pill.pending') }}</option>
           <option value="refunded">{{ t('pill.refunded') }}</option>
           <option value="failed">{{ t('pill.failed') }}</option>
         </select>
-        <select class="inp" style="width:auto;" [ngModel]="fulfillmentFilter()" (ngModelChange)="fulfillmentFilter.set($event); page.set(0)">
+        <select class="inp orders-filter-sel" [ngModel]="fulfillmentFilter()" (ngModelChange)="fulfillmentFilter.set($event); page.set(0)">
           <option value="all">{{ t('orders.allFulfillment') }}</option>
           <option value="awaiting">{{ t('pill.awaiting') }}</option>
           <option value="processing">{{ t('pill.processing') }}</option>
@@ -41,13 +38,18 @@ import { Order, QAR } from '../../models';
           <option value="delivered">{{ t('pill.delivered') }}</option>
           <option value="returned">{{ t('pill.returned') }}</option>
         </select>
-        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
+        <button class="btn btn-outline" style="margin-inline-start:auto;" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
           @if (exporting()) {
             <ap-spinner/> <span class="btn-lbl">{{ t('common.exporting') }}</span>
           } @else {
-            <ap-icon name="arrowDn" [size]="14"/> <span class="btn-lbl">{{ t('common.exportCsv') }}</span>
+            <ap-icon name="download" [size]="14"/> <span class="btn-lbl">{{ t('common.exportCsv') }}</span>
           }
         </button>
+      </div>
+      <!-- Row 2: search (full width) -->
+      <div class="inp-search mb-16" style="position:relative;">
+        <ap-icon name="search" [size]="14"/>
+        <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
       </div>
 
       <!-- Date range filter -->
@@ -161,6 +163,8 @@ import { Order, QAR } from '../../models';
     }
   `,
   styles: [`
+    .orders-filter-sel { width: auto; }
+    .mb-10 { margin-bottom: 10px; }
     .date-range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
     .dr-pill { border: none; background: none; padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; color: var(--muted); transition: all 0.13s; }
     .dr-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }

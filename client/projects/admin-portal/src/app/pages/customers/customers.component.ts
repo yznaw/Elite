@@ -66,7 +66,7 @@ const MOBILE_BP = 900;
           </div>
         }
 
-        <button class="btn btn-outline" title="Export"><ap-icon name="arrowDn" [size]="14"/> <span class="btn-lbl">{{ t('common.export') }}</span></button>
+        <button class="btn btn-outline" title="Export"><ap-icon name="download" [size]="14"/> <span class="btn-lbl">{{ t('common.export') }}</span></button>
         @if (!isMobile()) {
           <button class="btn btn-gold" (click)="createCustomer()" title="Add Customer"><ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('customers.add') }}</span></button>
         }

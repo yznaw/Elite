@@ -153,14 +153,14 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 <span>Dry run</span>
               </label>
               <a class="btn btn-outline btn-sm" [href]="templateUrl" download>
-                <ap-icon name="arrowDn" [size]="13"/> Template
+                <ap-icon name="download" [size]="13"/> Template
               </a>
               <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startImport()">
                 <ap-icon name="upload" [size]="14"/> {{ dryRun() ? 'Preview Import' : 'Import Products' }}
               </button>
             } @else {
               <button class="btn btn-outline btn-sm" (click)="downloadStockTemplate()">
-                <ap-icon name="arrowDn" [size]="13"/> Template
+                <ap-icon name="download" [size]="13"/> Template
               </button>
               <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startStockImport()">
                 <ap-icon name="upload" [size]="14"/> Update Stock
@@ -274,7 +274,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
             }
             <button class="btn btn-outline" (click)="reset()">Import Another</button>
             <button class="btn btn-outline" (click)="downloadReport()">
-              <ap-icon name="arrowDn" [size]="13"/> Download Report
+              <ap-icon name="download" [size]="13"/> Download Report
             </button>
             @if (wasLastDryRun()) {
               <button class="btn btn-gold" (click)="commitDryRun()">
