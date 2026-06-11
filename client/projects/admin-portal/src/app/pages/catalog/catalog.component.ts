@@ -561,11 +561,14 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       }
       .status-pills::-webkit-scrollbar { display: none; }
 
-      /* Row 3: hide text labels + sort select; end-group wraps below */
+      /* Row 3: full-width equal buttons */
+      .tb-row3 { gap: 6px; width: 100%; }
       .tb-row3 .btn-lbl { display: none; }
       .ctrl-inp { display: none; }
-      .tb-row3-end { margin-inline-start: 0; }
-      .tb-row3 { gap: 6px; }
+      /* Dissolve the end-group so its children join the parent flex */
+      .tb-row3-end { display: contents; }
+      /* Every direct flex child stretches equally */
+      .tb-row3 > * { flex: 1 1 0; min-width: 0; justify-content: center; padding-inline: 0; }
 
       /* List view on narrow: 3 columns */
       .lv-head, .lv-row { grid-template-columns: 36px 1fr 80px; }
