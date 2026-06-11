@@ -2576,9 +2576,13 @@ html[dir='rtl'] .drawer {
   .prod-card { border-radius: 10px; }
 }
 
-/* Media grid: smaller minimums on phone */
+/* Media grid: tighter columns on phone */
 @media (max-width: 720px) {
   .media-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; gap: 10px; }
+}
+@media (max-width: 480px) {
+  /* 2-column grid on small phones — cards are comfortably tappable */
+  .media-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
 }
 
 /* Confirm dialog: a touch wider and never larger than viewport on phone */

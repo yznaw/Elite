@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -112,6 +112,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       </div>
 
       <!-- ── Advanced filter panel ── -->
+      @if (showFilters() && isMobile()) {
+        <div class="filter-backdrop" (click)="toggleFilters()" aria-hidden="true"></div>
+      }
       @if (showFilters()) {
         <div class="filter-panel card mb-16">
           <div class="filter-panel-grid">
@@ -243,7 +246,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       }
 
       <!-- ── GRID view ── -->
-      @if (viewMode() === 'grid') {
+      @if (effectiveView() === 'grid') {
         @if (paged().length === 0) {
           <div class="card">
             <ap-empty-state icon="catalog" [title]="t('catalog.empty.title')" [sub]="t('catalog.empty.sub')">
@@ -303,7 +306,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       }
 
       <!-- ── LIST view ── -->
-      @if (viewMode() === 'list') {
+      @if (effectiveView() === 'list') {
         @if (paged().length === 0) {
           <div class="card">
             <ap-empty-state icon="catalog" [title]="t('catalog.empty.title')" [sub]="t('catalog.empty.sub')">
@@ -622,6 +625,39 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       /* Selection bar: stack vertically */
       .sel-bar { flex-direction: column; align-items: flex-start; }
       .sel-actions { width: 100%; flex-wrap: wrap; }
+
+      /* Hide view toggle on phone — grid is forced */
+      .view-toggle { display: none !important; }
+    }
+
+    /* ── Mobile filter bottom sheet ── */
+    @media (max-width: 768px) {
+      .filter-backdrop {
+        position: fixed; inset: 0; z-index: 180;
+        background: rgba(0,0,0,0.4);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+        animation: fadeIn 0.18s ease;
+      }
+      .filter-panel {
+        position: fixed;
+        inset-inline: 0;
+        bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+        max-height: 72vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        z-index: 190;
+        border-radius: 20px 20px 0 0 !important;
+        margin-bottom: 0 !important;
+        box-shadow: 0 -8px 40px rgba(2,70,56,.15);
+        animation: sheetUp 0.28s cubic-bezier(.34,1.1,.64,1);
+      }
+      @keyframes sheetUp {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0); }
+      }
+      /* Compact grid inside the sheet */
+      .filter-panel-grid { grid-template-columns: 1fr 1fr; }
     }
   `],
 })
@@ -675,6 +711,14 @@ export class CatalogComponent implements OnInit {
     (this.storage.get('catalog-view') as ViewMode) || 'grid',
   );
   readonly showFilters   = signal(false);
+  readonly isMobile      = signal(window.innerWidth <= 768);
+
+  @HostListener('window:resize')
+  onResize(): void { this.isMobile.set(window.innerWidth <= 768); }
+
+  readonly effectiveView = computed<ViewMode>(() =>
+    this.isMobile() ? 'grid' : this.viewMode()
+  );
   readonly page          = signal(0);
   readonly pageSize      = signal(25);
   readonly refColors     = signal<RefColor[]>([]);

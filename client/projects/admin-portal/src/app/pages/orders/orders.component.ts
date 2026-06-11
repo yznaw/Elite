@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -72,46 +72,79 @@ import { Order, QAR } from '../../models';
         }
       </div>
 
-      <div class="card">
+      <!-- Desktop table -->
+      @if (!isMobile()) {
+        <div class="card">
+          @if (filtered().length === 0) {
+            <ap-empty-state icon="orders" [title]="t('orders.empty.title')" [sub]="t('orders.empty.sub')">
+              <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
+            </ap-empty-state>
+          } @else {
+            <ap-sortable-table [columns]="columns" [rows]="paged()" [rowClick]="openOrder">
+              <ng-template apCellTpl="id" let-r>
+                <span class="strong mono" style="color:var(--green);">{{ r.id }}</span>
+              </ng-template>
+              <ng-template apCellTpl="itemsCount" let-r>
+                <span class="muted">{{ r.itemsCount }}</span>
+              </ng-template>
+              <ng-template apCellTpl="total" let-r>
+                <span class="strong mono">{{ QAR(r.total) }}</span>
+              </ng-template>
+              <ng-template apCellTpl="payment" let-r>
+                <ap-pill [kind]="paymentPill(r.payment).kind">{{ t(paymentPill(r.payment).labelKey) }}</ap-pill>
+              </ng-template>
+              <ng-template apCellTpl="fulfillment" let-r>
+                <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
+              </ng-template>
+              <ng-template apCellTpl="actions" let-r>
+                <div class="row gap-sm" style="justify-content:flex-end;">
+                  <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openOrder(r)">{{ t('common.view') }}</button>
+                  @if (r.fulfillment === 'awaiting' || r.fulfillment === 'processing') {
+                    <button class="btn btn-outline btn-sm" [disabled]="fulfillingId() === r.id"
+                      (click)="$event.stopPropagation(); markFulfilled(r)">
+                      @if (fulfillingId() === r.id) {
+                        <ap-spinner [size]="12"/> {{ t('common.working') }}
+                      } @else {
+                        {{ t('orders.markFulfilled') }}
+                      }
+                    </button>
+                  }
+                </div>
+              </ng-template>
+            </ap-sortable-table>
+          }
+        </div>
+      }
+
+      <!-- Mobile card list -->
+      @if (isMobile()) {
         @if (filtered().length === 0) {
-          <ap-empty-state icon="orders" [title]="t('orders.empty.title')" [sub]="t('orders.empty.sub')">
-            <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
-          </ap-empty-state>
+          <div class="card">
+            <ap-empty-state icon="orders" [title]="t('orders.empty.title')" [sub]="t('orders.empty.sub')">
+              <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
+            </ap-empty-state>
+          </div>
         } @else {
-          <ap-sortable-table [columns]="columns" [rows]="paged()" [rowClick]="openOrder">
-            <ng-template apCellTpl="id" let-r>
-              <span class="strong mono" style="color:var(--green);">{{ r.id }}</span>
-            </ng-template>
-            <ng-template apCellTpl="itemsCount" let-r>
-              <span class="muted">{{ r.itemsCount }}</span>
-            </ng-template>
-            <ng-template apCellTpl="total" let-r>
-              <span class="strong mono">{{ QAR(r.total) }}</span>
-            </ng-template>
-            <ng-template apCellTpl="payment" let-r>
-              <ap-pill [kind]="paymentPill(r.payment).kind">{{ t(paymentPill(r.payment).labelKey) }}</ap-pill>
-            </ng-template>
-            <ng-template apCellTpl="fulfillment" let-r>
-              <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
-            </ng-template>
-            <ng-template apCellTpl="actions" let-r>
-              <div class="row gap-sm" style="justify-content:flex-end;">
-                <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openOrder(r)">{{ t('common.view') }}</button>
-                @if (r.fulfillment === 'awaiting' || r.fulfillment === 'processing') {
-                  <button class="btn btn-outline btn-sm" [disabled]="fulfillingId() === r.id"
-                    (click)="$event.stopPropagation(); markFulfilled(r)">
-                    @if (fulfillingId() === r.id) {
-                      <ap-spinner [size]="12"/> {{ t('common.working') }}
-                    } @else {
-                      {{ t('orders.markFulfilled') }}
-                    }
-                  </button>
-                }
+          <div class="order-cards">
+            @for (o of paged(); track o.id) {
+              <div class="order-card" [class]="'order-card--' + o.fulfillment" (click)="openOrder(o)">
+                <div class="oc-row1">
+                  <span class="oc-id">{{ o.id }}</span>
+                  <span class="oc-date muted">{{ o.date }}</span>
+                </div>
+                <div class="oc-customer">{{ o.customer }}</div>
+                <div class="oc-row3">
+                  <span class="oc-items muted">{{ o.itemsCount }} item{{ o.itemsCount !== 1 ? 's' : '' }}</span>
+                  <span class="oc-total">{{ QAR(o.total) }}</span>
+                  <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
+                  <ap-pill [kind]="paymentPill(o.payment).kind">{{ t(paymentPill(o.payment).labelKey) }}</ap-pill>
+                </div>
+                <div class="oc-cta">View →</div>
               </div>
-            </ng-template>
-          </ap-sortable-table>
+            }
+          </div>
         }
-      </div>
+      }
 
       <ap-pagination
         [page]="page()"
@@ -134,6 +167,33 @@ import { Order, QAR } from '../../models';
     .filter-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(2,70,56,.09); color: var(--green); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
     .filter-chip button { background: none; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; opacity: .6; }
     .filter-chip button:hover { opacity: 1; }
+
+    /* ── Mobile order cards ── */
+    .order-cards { display: flex; flex-direction: column; gap: 10px; }
+    .order-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      border-inline-start-width: 4px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .order-card:active { box-shadow: var(--shadow); }
+    .order-card--awaiting, .order-card--processing { border-inline-start-color: var(--warning); }
+    .order-card--shipped   { border-inline-start-color: var(--info); }
+    .order-card--delivered { border-inline-start-color: var(--success); }
+    .order-card--returned  { border-inline-start-color: var(--muted); }
+    .oc-row1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .oc-id   { font-size: 13px; font-weight: 700; color: var(--green); font-family: var(--ff-mono); }
+    .oc-date { font-size: 12px; }
+    .oc-customer { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
+    .oc-row3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .oc-items { font-size: 12px; }
+    .oc-total { font-size: 14px; font-weight: 700; color: var(--gold); font-family: var(--ff-mono); margin-inline-end: auto; }
+    .oc-cta { font-size: 12px; color: var(--muted); text-align: end; margin-top: 8px; }
   `],
 })
 export class OrdersComponent implements OnInit, OnDestroy {
@@ -143,6 +203,10 @@ export class OrdersComponent implements OnInit, OnDestroy {
   private readonly ordersApi = inject(AdminOrdersService);
 
   readonly t = (k: string): string => this.i18n.t(k);
+
+  readonly isMobile = signal(window.innerWidth <= 768);
+  @HostListener('window:resize')
+  onResize(): void { this.isMobile.set(window.innerWidth <= 768); }
 
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
