@@ -13,15 +13,30 @@ import { QAR } from '../../models';
   selector: 'ap-analytics',
   standalone: true,
   imports: [CommonModule, KpiComponent, LineChartComponent, BarChartComponent, PieChartComponent, FunnelComponent, EmptyStateComponent],
+  styles: [`
+    /* Range filter row: horizontal scroll on phone instead of wrapping */
+    .range-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    @media (max-width: 640px) {
+      .range-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; gap: 6px; }
+      .range-row::-webkit-scrollbar { display: none; }
+      .range-row .btn { flex-shrink: 0; white-space: nowrap; }
+    }
+    /* Traffic sources: side-by-side on desktop, stacked on phone */
+    .traffic-inner { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
+    @media (max-width: 600px) {
+      .traffic-inner { grid-template-columns: 1fr; justify-items: center; }
+      .traffic-inner > div { width: 100%; }
+    }
+  `],
   template: `
     <div class="page-fade">
-      <div class="row gap-sm mb-24" style="justify-content:space-between;flex-wrap:wrap;">
-        <div class="row gap-sm">
+      <div class="range-row mb-24">
+        <div class="row gap-sm" style="flex-wrap:nowrap;">
           @for (r of ranges; track r.key) {
             <button class="btn" [class.btn-primary]="range() === r.key" [class.btn-outline]="range() !== r.key" (click)="range.set(r.key)">{{ r.label }}</button>
           }
         </div>
-        <div class="row gap-sm">
+        <div class="row gap-sm" style="flex-shrink:0;">
           <button class="btn btn-outline">Compare</button>
           <button class="btn btn-outline">Export PDF</button>
         </div>
@@ -62,7 +77,7 @@ import { QAR } from '../../models';
               <div class="card-sub">Last 30 days</div>
             </div>
           </div>
-          <div class="card-pad" style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;">
+          <div class="card-pad traffic-inner">
             @if (traffic.length > 0) {
               <ap-pie-chart [data]="traffic"/>
               <div>
