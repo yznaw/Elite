@@ -81,31 +81,31 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
             <!-- Advanced filters toggle -->
             <button class="btn btn-outline btn-sm" [class.btn-filter-active]="hasAdvancedFilters()"
-                    (click)="toggleFilters()">
+                    (click)="toggleFilters()" title="Filters">
               <ap-icon name="filter" [size]="13"/>
-              Filters
+              <span class="btn-lbl">Filters</span>
               @if (hasAdvancedFilters()) { <span class="filter-badge">{{ activeFilterCount() }}</span> }
             </button>
 
             <!-- Bulk select -->
             <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
-                    (click)="toggleSelectionMode()">
-              <ap-icon name="check" [size]="13"/> {{ selectionMode() ? 'Cancel' : 'Select' }}
+                    (click)="toggleSelectionMode()" title="Select">
+              <ap-icon name="check" [size]="13"/> <span class="btn-lbl">{{ selectionMode() ? 'Cancel' : 'Select' }}</span>
             </button>
 
             <!-- Export CSV -->
-            <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0">
-              <ap-icon name="arrowDn" [size]="14"/> Export
+            <button class="btn btn-outline btn-sm mob-icon-only" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
+              <ap-icon name="arrowDn" [size]="14"/> <span class="btn-lbl">Export</span>
             </button>
 
             <!-- Bulk import -->
-            <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)">
-              <ap-icon name="upload" [size]="14"/> Import
+            <button class="btn btn-outline btn-sm mob-icon-only" (click)="showBulkImport.set(true)" title="Import">
+              <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">Import</span>
             </button>
 
             <!-- New product -->
-            <button class="btn btn-gold btn-sm" (click)="createProduct()" [disabled]="selectionMode()">
-              <ap-icon name="plus" [size]="14"/> {{ t('catalog.newProduct') }}
+            <button class="btn btn-gold btn-sm btn-new-product" (click)="createProduct()" [disabled]="selectionMode()" title="New Product">
+              <ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('catalog.newProduct') }}</span>
             </button>
           </div>
         </div>
@@ -544,26 +544,84 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     /* ── Pagination ── */
     .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; }
 
-    /* ── Mobile-first breakpoints ── */
+    /* ── Responsive breakpoints ── */
     @media (max-width: 900px) {
-      .lv-head, .lv-row {
-        grid-template-columns: 36px minmax(120px,1fr) 80px 70px;
-      }
+      .lv-head, .lv-row { grid-template-columns: 36px minmax(120px,1fr) 80px 70px; }
       .hide-mobile { display: none !important; }
     }
-    @media (max-width: 600px) {
-      .top-bar { gap: 6px; }
-      .search-box { min-width: 100%; order: -1; }
-      .status-pills { font-size: 11px; }
-      .top-actions { gap: 4px; width: 100%; justify-content: flex-end; }
-      .ctrl-inp { display: none; }   /* hide sort on very small — accessible via filter panel */
+
+    @media (max-width: 640px) {
+      /* Top bar: stack vertically, each row full-width */
+      .top-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+
+      /* ① Search — always first, full width */
+      .search-box { width: 100%; min-width: 0; order: 0; }
+
+      /* ② Status pills — horizontal scroll, never wrap */
+      .status-pills {
+        order: 1;
+        width: 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 10px;
+      }
+      .status-pills::-webkit-scrollbar { display: none; }
+
+      /* ③ Action row — fill full width, no scrolling, no gaps */
+      .top-actions {
+        order: 2;
+        width: 100%;
+        margin-inline-start: 0;
+        flex-wrap: nowrap;
+        overflow-x: unset;     /* fill, don't scroll */
+        gap: 5px;
+      }
+
+      /* Every direct child stretches equally */
+      .top-actions > * { flex: 1 1 0; min-width: 0; }
+
+      /* Every button: fill its flex cell, taller touch target */
+      .top-actions .btn {
+        width: 100%;
+        height: 40px;
+        padding: 0;
+        justify-content: center;
+        min-width: unset;
+      }
+
+      /* View toggle: fill its cell, stretch inner buttons too */
+      .top-actions .view-toggle { height: 40px; }
+      .top-actions .vt-btn { flex: 1; width: auto; height: 100%; }
+
+      /* + New Product — 1.7× wider, stands out as primary CTA */
+      .btn-new-product {
+        flex: 1.7 1 0;
+        margin-inline-start: 0;
+        height: 40px;
+      }
+
+      /* Sort select hidden — accessible via Filters panel */
+      .ctrl-inp { display: none; }
+
+      /* Export / Import: icon-only on mobile */
+      .mob-icon-only .btn-lbl { display: none; }
+
+      /* List view on narrow: 3 columns */
+      .lv-head, .lv-row { grid-template-columns: 36px 1fr 80px; }
+      .hide-small { display: none !important; }
+
+      /* Filter panel: 2 columns */
       .filter-panel-grid { grid-template-columns: 1fr 1fr; }
+
+      /* Selection bar: stack vertically */
       .sel-bar { flex-direction: column; align-items: flex-start; }
       .sel-actions { width: 100%; flex-wrap: wrap; }
-      .lv-head, .lv-row {
-        grid-template-columns: 36px 1fr 80px;
-      }
-      .hide-small { display: none !important; }
     }
   `],
 })

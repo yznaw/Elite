@@ -27,7 +27,7 @@ import { Collection } from '../../models';
             <option value="Visible">{{ t('collections.visible') }}</option>
             <option value="Hidden">{{ t('collections.hidden') }}</option>
           </select>
-          <button class="btn btn-gold" (click)="openNew()"><ap-icon name="plus" [size]="14"/> {{ t('collections.new') }}</button>
+          <button class="btn btn-gold" (click)="openNew()" title="New Collection"><ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('collections.new') }}</span></button>
         </div>
       </div>
 

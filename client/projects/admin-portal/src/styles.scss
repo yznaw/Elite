@@ -2761,12 +2761,26 @@ html[dir='rtl'] a, html[dir='rtl'] .nav-item { text-decoration: none; }
   input.inp, select.inp { min-height: 44px; font-size: 16px !important; }
 }
 
-/* Catalog top-bar wraps gracefully on tablet/phone */
+/* Top-bar: wraps gracefully on tablet/phone */
 @media (max-width: 768px) {
   .top-bar { flex-wrap: wrap; gap: 8px; }
   .top-actions { flex-wrap: wrap; width: 100%; }
   .search-box { width: 100%; }
-  .status-pills { flex-wrap: wrap; }
+  /* Status pills: horizontal scroll instead of wrapping onto 2+ rows */
+  .status-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .status-pills::-webkit-scrollbar { display: none; }
+  /* Date-range and filter pills: same treatment */
+  .date-range-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .date-range-pills::-webkit-scrollbar { display: none; }
 }
 
 /* kpi-grid: 2 cols on tablet, 1 col on narrow phone */
@@ -2783,6 +2797,45 @@ html[dir='rtl'] a, html[dir='rtl'] .nav-item { text-decoration: none; }
   .tbl { min-width: 600px; }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE FOUNDATION — Phase 1  (see docs/mobile-ux-plan.html)
+   All rules below target phones only (≤768px or ≤480px).
+   Desktop/tablet layout is intentionally untouched.
+═══════════════════════════════════════════════════════════════ */
+
+/* Task 1a — Body overflow stays hidden (viewport-lock is intentional).
+   Add momentum scroll to the inner scroll container instead. */
+@media (max-width: 768px) {
+  .scroll-area {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Task 1c — Base font 13 → 14px on phones.
+   Inputs stay at 16px (prevents iOS auto-zoom on focus). */
+@media (max-width: 768px) {
+  body                   { font-size: 14px; }
+  .card-title            { font-size: 16px; }
+  .card-sub              { font-size: 12px; }
+}
+
+/* Task 1d — Touch targets: upgrade from 44px → 48px on phones.
+   (The ≤1024px rule above already sets 44px on tablet.) */
+@media (max-width: 768px) {
+  .btn:not(.btn-sm),
+  .icon-btn,
+  .topbar-burger {
+    min-height: 48px;
+    min-width: 48px;
+  }
+  /* Topbar compact: 60px (tablet) → 52px (phone) */
+  .topbar                { height: 52px !important; }
+  /* Crumb label hidden on small phones — title is enough */
+}
+@media (max-width: 480px) {
+  .topbar .crumb         { display: none !important; }
+}
+
 /* Sortable table wrapper: force scroll container */
 ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
@@ -2792,14 +2845,21 @@ ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling
   .fp-price, .fp-page { grid-column: span 1 !important; }
 }
 
-/* Order date range pills wrap on mobile */
+/* Order date range pills: scroll horizontally (already set above at 768px) */
 @media (max-width: 600px) {
-  .date-range-pills { flex-wrap: wrap; }
-  .dr-pill { flex: 1 1 auto; text-align: center; }
+  .dr-pill { flex-shrink: 0; }
 }
 
 /* Settings grid stacks on phone */
 @media (max-width: 600px) {
   .grid-2 { grid-template-columns: 1fr !important; }
   .grid-3 { grid-template-columns: 1fr !important; }
+}
+
+/* ── Icon-only buttons on mobile ──────────────────────────────────────────
+   Wrap any button label text in <span class="btn-lbl">…</span>.
+   On screens ≤ 640px the text hides and only the icon remains, saving
+   toolbar space. Icons must have a meaningful title/aria-label as fallback. */
+@media (max-width: 640px) {
+  .btn-lbl { display: none; }
 }

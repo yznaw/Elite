@@ -7,7 +7,7 @@
     <ap-sidebar/>
     <div class="main">
       <ap-topbar/>
-      <div class="scroll-area">
+      <div class="scroll-area" [class.scroll-area--flush-top]="flushTop()">
         <router-outlet/>
       </div>
     </div>

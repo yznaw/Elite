@@ -42,8 +42,8 @@ type Tab = 'colors' | 'materials' | 'sizes';
         <div class="ref-section">
           <div class="ref-toolbar">
             <span class="ref-count">{{ colors().length }} color{{ colors().length !== 1 ? 's' : '' }}</span>
-            <button class="btn btn-gold btn-sm" (click)="addColor()">
-              <ap-icon name="plus" [size]="13"/> Add Color
+            <button class="btn btn-gold btn-sm" (click)="addColor()" title="Add Color">
+              <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Color</span>
             </button>
           </div>
 
@@ -105,7 +105,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
           <div class="ref-toolbar">
             <span class="ref-count">{{ materials().length }} material{{ materials().length !== 1 ? 's' : '' }}</span>
             <button class="btn btn-gold btn-sm" (click)="addMaterial()">
-              <ap-icon name="plus" [size]="13"/> Add Material
+              <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Material</span>
             </button>
           </div>
 
@@ -149,7 +149,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
           <div class="ref-toolbar">
             <span class="ref-count">{{ sizeSets().length }} size set{{ sizeSets().length !== 1 ? 's' : '' }}</span>
             <button class="btn btn-gold btn-sm" (click)="addSizeSet()">
-              <ap-icon name="plus" [size]="13"/> Add Size Set
+              <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Size Set</span>
             </button>
           </div>
 

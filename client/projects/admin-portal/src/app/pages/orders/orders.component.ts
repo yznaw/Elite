@@ -41,11 +41,11 @@ import { Order, QAR } from '../../models';
           <option value="delivered">{{ t('pill.delivered') }}</option>
           <option value="returned">{{ t('pill.returned') }}</option>
         </select>
-        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()">
+        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
           @if (exporting()) {
-            <ap-spinner/> {{ t('common.exporting') }}
+            <ap-spinner/> <span class="btn-lbl">{{ t('common.exporting') }}</span>
           } @else {
-            {{ t('common.exportCsv') }}
+            <ap-icon name="arrowDn" [size]="14"/> <span class="btn-lbl">{{ t('common.exportCsv') }}</span>
           }
         </button>
       </div>
