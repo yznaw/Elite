@@ -569,6 +569,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       .tb-row3-end { display: contents; }
       /* Every direct flex child stretches equally */
       .tb-row3 > * { flex: 1 1 0; min-width: 0; justify-content: center; padding-inline: 0; }
+      /* New Product is the primary CTA — double width, show label */
+      .tb-row3 .btn-gold { flex: 2 1 0; }
+      .tb-row3 .btn-gold .btn-lbl { display: inline; }
 
       /* List view on narrow: 3 columns */
       .lv-head, .lv-row { grid-template-columns: 36px 1fr 80px; }
