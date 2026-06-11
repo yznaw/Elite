@@ -34,25 +34,16 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       <!-- ── Top bar ── -->
       <div class="card mb-16" style="padding:12px 14px;">
 
-        <!-- Row 1: search + primary actions -->
+        <!-- Row 1: search (full width) -->
         <div class="tb-row1">
           <div class="inp-search search-box">
             <ap-icon name="search" [size]="14"/>
             <input class="inp with-icon" [placeholder]="t('catalog.search.placeholder')"
                    [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
           </div>
-          <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
-            <ap-icon name="download" [size]="14"/> <span class="btn-lbl">Export</span>
-          </button>
-          <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)" title="Import">
-            <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">Import</span>
-          </button>
-          <button class="btn btn-gold btn-sm" (click)="createProduct()" [disabled]="selectionMode()" title="New Product">
-            <ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('catalog.newProduct') }}</span>
-          </button>
         </div>
 
-        <!-- Row 2: status pills + secondary controls -->
+        <!-- Row 2: status quick-filter pills -->
         <div class="tb-row2">
           <div class="status-pills">
             <button class="status-pill" [class.active]="statusFilter() === 'all'"    (click)="statusFilter.set('all'); page.set(0)">All</button>
@@ -67,34 +58,46 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               @if (lowStockCount() > 0) { <span class="ls-badge">{{ lowStockCount() }}</span> }
             </button>
           </div>
+        </div>
 
-          <div class="tb-controls">
-            <select class="inp ctrl-inp" [ngModel]="sortKey()" (ngModelChange)="sortKey.set($event)">
-              <option value="newest">Newest</option>
-              <option value="name-az">Name A–Z</option>
-              <option value="name-za">Name Z–A</option>
-              <option value="price-asc">Price ↑</option>
-              <option value="price-desc">Price ↓</option>
-              <option value="stock-asc">Stock ↑</option>
-              <option value="stock-desc">Stock ↓</option>
-            </select>
-            <div class="view-toggle">
-              <button class="vt-btn" [class.active]="viewMode() === 'grid'" (click)="setView('grid')" title="Grid view">
-                <ap-icon name="grid" [size]="14"/>
-              </button>
-              <button class="vt-btn" [class.active]="viewMode() === 'list'" (click)="setView('list')" title="List view">
-                <ap-icon name="rows" [size]="14"/>
-              </button>
-            </div>
-            <button class="btn btn-outline btn-sm" [class.btn-filter-active]="hasAdvancedFilters()"
-                    (click)="toggleFilters()" title="Filters">
-              <ap-icon name="filter" [size]="13"/>
-              <span class="btn-lbl">Filters</span>
-              @if (hasAdvancedFilters()) { <span class="filter-badge">{{ activeFilterCount() }}</span> }
+        <!-- Row 3: CTAs -->
+        <div class="tb-row3">
+          <select class="inp ctrl-inp" [ngModel]="sortKey()" (ngModelChange)="sortKey.set($event)">
+            <option value="newest">Newest</option>
+            <option value="name-az">Name A–Z</option>
+            <option value="name-za">Name Z–A</option>
+            <option value="price-asc">Price ↑</option>
+            <option value="price-desc">Price ↓</option>
+            <option value="stock-asc">Stock ↑</option>
+            <option value="stock-desc">Stock ↓</option>
+          </select>
+          <div class="view-toggle">
+            <button class="vt-btn" [class.active]="viewMode() === 'grid'" (click)="setView('grid')" title="Grid view">
+              <ap-icon name="grid" [size]="14"/>
             </button>
-            <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
-                    (click)="toggleSelectionMode()" title="Select">
-              <ap-icon name="check" [size]="13"/> <span class="btn-lbl">{{ selectionMode() ? 'Cancel' : 'Select' }}</span>
+            <button class="vt-btn" [class.active]="viewMode() === 'list'" (click)="setView('list')" title="List view">
+              <ap-icon name="rows" [size]="14"/>
+            </button>
+          </div>
+          <button class="btn btn-outline btn-sm" [class.btn-filter-active]="hasAdvancedFilters()"
+                  (click)="toggleFilters()" title="Filters">
+            <ap-icon name="filter" [size]="13"/>
+            <span class="btn-lbl">Filters</span>
+            @if (hasAdvancedFilters()) { <span class="filter-badge">{{ activeFilterCount() }}</span> }
+          </button>
+          <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
+                  (click)="toggleSelectionMode()" title="Select">
+            <ap-icon name="check" [size]="13"/> <span class="btn-lbl">{{ selectionMode() ? 'Cancel' : 'Select' }}</span>
+          </button>
+          <div class="tb-row3-end">
+            <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
+              <ap-icon name="download" [size]="14"/> <span class="btn-lbl">Export</span>
+            </button>
+            <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)" title="Import">
+              <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">Import</span>
+            </button>
+            <button class="btn btn-gold btn-sm" (click)="createProduct()" [disabled]="selectionMode()" title="New Product">
+              <ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('catalog.newProduct') }}</span>
             </button>
           </div>
         </div>
@@ -385,15 +388,16 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
   `,
   styles: [`
     /* ── Top bar rows ── */
-    .tb-row1 {
-      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
-    }
-    .search-box { flex: 1; min-width: 0; position: relative; }
+    .tb-row1 { margin-bottom: 10px; }
+    .search-box { width: 100%; position: relative; }
     .tb-row2 {
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 8px;
     }
-    .tb-controls {
-      display: flex; align-items: center; gap: 6px; margin-inline-start: auto; flex-wrap: wrap;
+    .tb-row3 {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .tb-row3-end {
+      display: flex; align-items: center; gap: 6px; margin-inline-start: auto;
     }
     .status-pills {
       display: flex; gap: 2px; flex-shrink: 0;
@@ -546,24 +550,22 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     }
 
     @media (max-width: 640px) {
-      /* Row 1: search grows, buttons shrink to icon-only */
-      .tb-row1 { gap: 6px; }
-      .tb-row1 .btn-lbl { display: none; }
-
-      /* Row 2: pills scroll, controls wrap */
-      .tb-row2 { gap: 6px; }
+      /* Row 2: pills scroll horizontally */
       .status-pills {
-        width: 100%;
         flex-wrap: nowrap;
         overflow-x: auto;
         scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
         border-radius: 10px;
+        width: 100%;
       }
       .status-pills::-webkit-scrollbar { display: none; }
-      .tb-controls { margin-inline-start: 0; width: 100%; justify-content: flex-start; }
-      .tb-controls .btn-lbl { display: none; }
+
+      /* Row 3: hide text labels + sort select; end-group wraps below */
+      .tb-row3 .btn-lbl { display: none; }
       .ctrl-inp { display: none; }
+      .tb-row3-end { margin-inline-start: 0; }
+      .tb-row3 { gap: 6px; }
 
       /* List view on narrow: 3 columns */
       .lv-head, .lv-row { grid-template-columns: 36px 1fr 80px; }
