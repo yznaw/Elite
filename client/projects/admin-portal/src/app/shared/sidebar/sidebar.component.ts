@@ -324,7 +324,7 @@ interface NavLink {
       .sidebar.collapsed .sidebar-footer { padding-inline: 4px; }
     }
 
-    /* ── Mobile/tablet drawer ─────────── */
+    /* ── Tablet drawer (769–1024px) ────── */
     @media (max-width: 1024px) {
       .sidebar {
         position: fixed;
@@ -343,7 +343,15 @@ interface NavLink {
       }
     }
 
-    /* ── Mobile/tablet backdrop ────────── */
+    /* ── Phone (≤768px): bottom nav owns navigation.
+          Sidebar and backdrop are unconditionally hidden so the
+          hamburger drawer can never appear even if the signal fires. ── */
+    @media (max-width: 768px) {
+      .sidebar           { inset-inline-start: -280px !important; visibility: hidden; }
+      .sidebar-backdrop  { display: none !important; }
+    }
+
+    /* ── Tablet/desktop backdrop ────────── */
     .sidebar-backdrop {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.42);

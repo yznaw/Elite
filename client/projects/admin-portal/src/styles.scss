@@ -2836,6 +2836,12 @@ html[dir='rtl'] a, html[dir='rtl'] .nav-item { text-decoration: none; }
   .topbar .crumb         { display: none !important; }
 }
 
+/* Phone: bottom nav replaces the sidebar drawer entirely —
+   hide the hamburger so only one nav system is visible */
+@media (max-width: 768px) {
+  .topbar-burger         { display: none !important; }
+}
+
 /* Sortable table wrapper: force scroll container */
 ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
