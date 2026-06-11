@@ -1,5 +1,5 @@
 import {
-  Component, EventEmitter, Input, OnDestroy, OnInit, Output,
+  Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -255,7 +255,7 @@ function readPreview(file: File): Promise<string> {
 
         <!-- ② Section: Basics — title + identity fields -->
         <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
+          <ap-icon name="edit" [size]="14"/>
           <span>{{ t('product.section.basics') }}</span>
         </div>
 
@@ -278,12 +278,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- ③ Section: Pricing & Stock -->
-        <div class="section-title">
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('pricing')" (click)="toggleSection('pricing')">
           <ap-icon name="chart" [size]="14"/>
           <span>{{ t('product.section.pricing') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('pricing')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('pricing') ? 'none' : ''"  >
           <div class="grid-2">
             <div>
               <label class="lbl">{{ t('product.field.price') }} (QAR)</label>
@@ -307,15 +308,16 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- Section: Variants -->
-        <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('variants')" (click)="toggleSection('variants')">
+          <ap-icon name="grid" [size]="14"/>
           <span>{{ t('product.section.variants') }}</span>
           @if (form().variants.length > 0) {
             <span class="muted small" style="font-weight:400;margin-inline-start:auto;">{{ variantsSummary() }} · {{ variantsTotalStock() }} {{ t('product.field.stock') }}</span>
           }
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('variants')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24" style="position:relative;">
+        <div class="mb-24" style="position:relative;" [style.display]="isMobile() && !openSections().has('variants') ? 'none' : ''"  >
           @if (form().variants.length === 0) {
             <div class="variants-empty">
               <div class="strong">{{ t('product.variants.empty.title') }}</div>
@@ -535,45 +537,55 @@ function readPreview(file: File): Promise<string> {
           }
         </div>
 
-        <!-- ⑤ Section: Description —rich content after key commerce fields -->
-        <!-- Section: Description -->
-        <div class="section-title">
+        <!-- ⑤ Section: Description -->
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('desc')" (click)="toggleSection('desc')">
           <ap-icon name="edit" [size]="14"/>
           <span>{{ t('product.section.description') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('desc')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
-          <label class="lbl">{{ t('product.field.descEn') }}</label>
-          <ap-rich-text
-            dir="ltr"
-            [value]="form().enDesc"
-            [ariaLabel]="t('product.field.descEn')"
-            (valueChange)="set('enDesc', $event)"/>
-        </div>
-        <div class="mb-24">
-          <label class="lbl">{{ t('product.field.descAr') }}</label>
-          <ap-rich-text
-            dir="rtl"
-            [value]="form().arDesc"
-            [ariaLabel]="t('product.field.descAr')"
-            (valueChange)="set('arDesc', $event)"/>
+        <div [style.display]="isMobile() && !openSections().has('desc') ? 'none' : ''">
+          <div class="mb-24">
+            <label class="lbl">{{ t('product.field.descEn') }}</label>
+            <ap-rich-text
+              dir="ltr"
+              [value]="form().enDesc"
+              [ariaLabel]="t('product.field.descEn')"
+              (valueChange)="set('enDesc', $event)"/>
+          </div>
+          <div class="mb-24">
+            <label class="lbl">{{ t('product.field.descAr') }}</label>
+            <ap-rich-text
+              dir="rtl"
+              [value]="form().arDesc"
+              [ariaLabel]="t('product.field.descAr')"
+              (valueChange)="set('arDesc', $event)"/>
+          </div>
         </div>
 
         <!-- ⑥ Section: Organization — collections & related products -->
-        <div class="section-title">
-          <ap-icon name="list" [size]="14"/>
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('org')" (click)="toggleSection('org')">
+          <ap-icon name="collections" [size]="14"/>
           <span>{{ t('product.section.organization') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('org')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('org') ? 'none' : ''"  >
           <div class="mb-16">
             <label class="lbl">{{ t('nav.collections') }}</label>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
-              @for (c of collections; track c.id) {
-                <label class="row gap-sm" style="align-items:center;background:var(--bg-2);padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--border-2);transition:0.12s;" [style.border-color]="form().collectionIds.includes(c.id) ? 'var(--gold)' : ''" [style.background]="form().collectionIds.includes(c.id) ? 'var(--gold-3)' : ''">
-                  <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;"/>
-                  <span class="small">{{ c.title }}</span>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+              @for (c of topLevelCollections(); track c.id) {
+                <label class="col-check-row" [class.col-check-selected]="form().collectionIds.includes(c.id)">
+                  <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;flex-shrink:0;"/>
+                  <span class="small strong">{{ c.title }}</span>
                 </label>
+                @for (child of subCollectionsOf(c.id); track child.id) {
+                  <label class="col-check-row col-check-sub" [class.col-check-selected]="form().collectionIds.includes(child.id)">
+                    <ap-icon name="hierarchy" [size]="10" style="color:var(--muted);flex-shrink:0;"/>
+                    <input type="checkbox" [checked]="form().collectionIds.includes(child.id)" (change)="toggleCollection(child.id)" style="margin:0;flex-shrink:0;"/>
+                    <span class="small">{{ child.title }}</span>
+                  </label>
+                }
               }
             </div>
           </div>
@@ -606,12 +618,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- ⑦ Section: SEO -->
-        <div class="section-title">
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('seo')" (click)="toggleSection('seo')">
           <ap-icon name="search" [size]="14"/>
           <span>{{ t('product.section.seo') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('seo')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('seo') ? 'none' : ''"  >
           <label class="lbl">{{ t('product.field.metaTitle') }}</label>
           <input class="inp mb-16" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
           <label class="lbl">{{ t('product.field.metaDesc') }}</label>
@@ -627,12 +640,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- Section: Sync -->
-        <div class="section-title">
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('sync')" (click)="toggleSection('sync')">
           <ap-icon name="sync" [size]="14"/>
           <span>{{ t('product.section.sync') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('sync')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('sync') ? 'none' : ''"  >
           <div class="ms-block">
             <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
               <div>
@@ -675,12 +689,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- Section: Danger zone -->
-        <div class="section-title danger-section">
+        <div class="section-title danger-section" [class.sec-collapsed]="isMobile() && !openSections().has('danger')" (click)="toggleSection('danger')">
           <ap-icon name="trash" [size]="14"/>
           <span>{{ t('product.section.danger') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('danger')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="danger-zone mb-24">
+        <div class="danger-zone mb-24" [style.display]="isMobile() && !openSections().has('danger') ? 'none' : ''"  >
           <div style="flex:1;min-width:0;">
             <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">{{ t('product.delete.title') }}</div>
             <div class="muted small">{{ t('product.delete.sub') }}</div>
@@ -1458,10 +1473,34 @@ function readPreview(file: File): Promise<string> {
       color: var(--green);
       font-weight: 800;
     }
+    /* Collection hierarchy checkboxes */
+    .col-check-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border-2); background: var(--bg-2);
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .col-check-row:hover { border-color: var(--gold); }
+    .col-check-selected { border-color: var(--gold) !important; background: var(--gold-3) !important; }
+    .col-check-sub { margin-inline-start: 20px; }
+
     @media (max-width: 720px) {
       .nav-pos { padding: 0 4px; min-width: 28px; font-size: 10px; }
       .section-title { font-size: 15px; padding: 14px 0 10px; }
       .save-bar-hint .kbd { display: none; }
+    }
+
+    /* ── Collapsible sections (mobile only) ── */
+    @media (max-width: 768px) {
+      /* Make section headers feel tappable */
+      .section-title { cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
+      /* Chevron icon: rotates open/closed */
+      .sec-chev { flex-shrink: 0; opacity: 0.45; transition: transform 0.2s ease; }
+      .sec-chev.open { transform: rotate(180deg); }
+      /* Muted look when collapsed */
+      .section-title.sec-collapsed { opacity: 0.72; }
+      /* Prevent chevron overlapping the variant summary text */
+      .section-title .sec-chev { margin-inline-start: 8px; }
     }
   `],
 })
@@ -1524,6 +1563,23 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // ── Media picker ──────────────────────────────────────────────────────────
   readonly mediaPicker = signal(false);
   readonly mediaFiles = signal<import('../../models').MediaFile[]>([]);
+
+  /* ── Mobile collapsible sections ── */
+  readonly isMobile = signal(window.innerWidth <= 768);
+  // Gallery and Basics are always open; the rest start collapsed on mobile.
+  readonly openSections = signal(new Set(['gallery', 'basics', 'pricing', 'variants']));
+
+  @HostListener('window:resize')
+  onDrawerResize(): void { this.isMobile.set(window.innerWidth <= 768); }
+
+  toggleSection(id: string): void {
+    if (!this.isMobile()) return;
+    this.openSections.update(s => {
+      const next = new Set(s);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }
   readonly mediaLoading = signal(false);
   readonly mediaSearch = signal('');
   readonly mediaSelected = signal(new Set<string>());
@@ -2067,6 +2123,14 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   toggleCollection(id: string): void {
     const ids = this.form().collectionIds;
     this.set('collectionIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  }
+
+  topLevelCollections(): Collection[] {
+    return this.collections.filter(c => !c.parentId);
+  }
+
+  subCollectionsOf(parentId: string): Collection[] {
+    return this.collections.filter(c => c.parentId === parentId);
   }
 
   relatedOptions(): Product[] {
