@@ -35,12 +35,18 @@ export class AdminProductsService {
       .then(p => this.normalizeProduct(p));
   }
 
-  /** Resolve /uploads/… image URLs so they route through the API proxy. */
+  /** Resolve /uploads/… image URLs so they route through the API proxy.
+   *  imageColors keys are URL-keyed, so they must be normalized to the same
+   *  proxy format as images[] — otherwise imageForColor() can never match. */
   private normalizeProduct(p: Product): Product {
+    const norm = (u: string) => this.api.mediaUrl(u);
     return {
       ...p,
-      image: p.image ? this.api.mediaUrl(p.image) : p.image,
-      images: p.images?.map(u => this.api.mediaUrl(u)) ?? p.images,
+      image:       p.image ? norm(p.image) : p.image,
+      images:      p.images?.map(norm) ?? p.images,
+      imageColors: Object.fromEntries(
+        Object.entries(p.imageColors ?? {}).map(([url, color]) => [norm(url), color])
+      ),
     };
   }
 

@@ -381,47 +381,47 @@ function readPreview(file: File): Promise<string> {
                       {{ groupStock(group.items) }} in stock
                     </span>
 
-                    <!-- Image picker trigger (one per color group) -->
-                    <button class="vcg-img-btn" type="button"
-                            (click)="$event.stopPropagation(); toggleVariantPicker('group-' + group.colorKey)"
-                            [class.has-img]="!!imageForColor(group.colorName)"
-                            [attr.title]="group.colorName ? 'Link photo for ' + group.colorName : 'Link photo'"
-                            style="flex-shrink:0;">
-                      @if (imageForColor(group.colorName); as img) {
-                        <img [src]="img" [alt]="group.colorName" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>
-                        <span class="vc-img-edit-icon"><ap-icon name="edit" [size]="9"/></span>
-                      } @else {
-                        <ap-icon name="media" [size]="13"/>
-                      }
-                    </button>
-
-                    <!-- Group image picker popover — opens downward, right-aligned -->
-                    @if (variantPickerOpenId() === 'group-' + group.colorKey) {
-                      <div class="vc-img-picker vc-img-picker--group" (click)="$event.stopPropagation()">
-                        <div class="vc-img-picker-head">
-                          Link photo for <strong>{{ group.colorName }}</strong>
-                          <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
-                        </div>
-                        @if (form().images.length === 0) {
-                          <p class="vc-img-picker-empty">Upload gallery images first</p>
+                    <!-- Image picker trigger + popover, wrapped so picker anchors to button -->
+                    <div class="vcg-img-wrap" (click)="$event.stopPropagation()">
+                      <button class="vcg-img-btn" type="button"
+                              (click)="toggleVariantPicker('group-' + group.colorKey)"
+                              [class.has-img]="!!imageForColor(group.colorName)"
+                              [attr.title]="group.colorName ? 'Link photo for ' + group.colorName : 'Link photo'">
+                        @if (imageForColor(group.colorName); as img) {
+                          <img [src]="img" [alt]="group.colorName" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>
+                          <span class="vc-img-edit-icon"><ap-icon name="edit" [size]="9"/></span>
                         } @else {
-                          <div class="vc-img-picker-grid">
-                            <button class="vc-img-opt vc-img-opt--none" type="button"
-                                    [class.is-sel]="!imageForColor(group.colorName)"
-                                    (click)="setColorImage(group.colorName, ''); closeVariantPicker()">
-                              <span class="vc-img-none-label">None</span>
-                            </button>
-                            @for (img of form().images; track img) {
-                              <button class="vc-img-opt" type="button"
-                                      [class.is-sel]="imageForColor(group.colorName) === img"
-                                      (click)="setColorImage(group.colorName, img); closeVariantPicker()">
-                                <img [src]="img" [alt]="''"/>
-                              </button>
-                            }
-                          </div>
+                          <ap-icon name="media" [size]="13"/>
                         }
-                      </div>
-                    }
+                      </button>
+
+                      @if (variantPickerOpenId() === 'group-' + group.colorKey) {
+                        <div class="vc-img-picker vc-img-picker--group" (click)="$event.stopPropagation()">
+                          <div class="vc-img-picker-head">
+                            Link photo for <strong>{{ group.colorName }}</strong>
+                            <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
+                          </div>
+                          @if (form().images.length === 0) {
+                            <p class="vc-img-picker-empty">Upload gallery images first</p>
+                          } @else {
+                            <div class="vc-img-picker-grid">
+                              <button class="vc-img-opt vc-img-opt--none" type="button"
+                                      [class.is-sel]="!imageForColor(group.colorName)"
+                                      (click)="setColorImage(group.colorName, ''); closeVariantPicker()">
+                                <span class="vc-img-none-label">None</span>
+                              </button>
+                              @for (img of form().images; track img) {
+                                <button class="vc-img-opt" type="button"
+                                        [class.is-sel]="imageForColor(group.colorName) === img"
+                                        (click)="setColorImage(group.colorName, img); closeVariantPicker()">
+                                  <img [src]="img" [alt]="''"/>
+                                </button>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
 
                     <!-- Spacer -->
                     <span style="flex:1;"></span>
@@ -1202,8 +1202,11 @@ function readPreview(file: File): Promise<string> {
     }
     .vcg-stock--out { color: var(--danger); border-color: rgba(239,68,68,.3); }
 
+    /* Wrapper gives the picker a tight anchor right next to the button */
+    .vcg-img-wrap { position: relative; flex-shrink: 0; }
+
     .vcg-img-btn {
-      width: 32px; height: 32px; border-radius: 6px; flex-shrink: 0;
+      width: 32px; height: 32px; border-radius: 6px;
       border: 1px dashed var(--border); background: var(--bg);
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       color: var(--muted); position: relative; overflow: hidden;
@@ -1343,17 +1346,18 @@ function readPreview(file: File): Promise<string> {
       min-width: 224px;
       max-width: 280px;
     }
-    /* Group-level picker: drops downward from the header, right-aligned so it never
-       exceeds the drawer's right edge regardless of drawer width. */
+    /* Group picker anchors to .vcg-img-wrap (32 px button).
+       Opens downward; right edge aligns with button right edge.
+       Extends leftward so it never escapes the drawer. */
     .vc-img-picker--group {
-      top: calc(100% + 4px);
+      top: calc(100% + 6px);
       left: auto;
-      right: 8px;
+      right: 0;
       min-width: 260px;
-      max-width: 320px;
+      max-width: 300px;
     }
     .vc-img-picker--group .vc-img-picker-grid {
-      max-height: 200px;
+      max-height: 220px;
       overflow-y: auto;
     }
     .vc-img-picker-head {

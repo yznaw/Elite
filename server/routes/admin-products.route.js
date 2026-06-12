@@ -116,17 +116,21 @@ async function replaceVariants(client, tenantId, productId, variants) {
 }
 
 async function findOrCreateImageAsset(client, tenantId, url, index) {
+  // The Angular client normalises /uploads/ paths to /api/uploads/ for proxy
+  // routing, so strip that prefix before DB lookup to avoid duplicate assets.
+  const rawUrl = url.startsWith('/api/') ? url.slice(4) : url;
   const existing = await client.query(
     `
       SELECT id
       FROM media_assets
       WHERE tenant_id = $1
         AND kind = 'image'
-        AND (storage_url = $2 OR preview_url = $2)
+        AND (storage_url = $2 OR preview_url = $2
+             OR storage_url = $3 OR preview_url = $3)
       ORDER BY created_at
       LIMIT 1
     `,
-    [tenantId, url],
+    [tenantId, url, rawUrl],
   );
   if (existing.rowCount > 0) return existing.rows[0].id;
 
@@ -673,8 +677,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       metaTitle: req.body.metaTitle ?? existing.meta_title,
       metaDesc: req.body.metaDesc ?? existing.meta_desc,
       id: req.params.id,
+      nameAr: req.body.nameAr,
       variants: patchVariants,
       images: req.body.images,
+      imageColors: req.body.imageColors,
       relatedProductIds: req.body.relatedProductIds,
     };
 
