@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { CartService } from '../../services/cart.service';
 import { ProductsService } from '../../services/products.service';
 import { Product } from '../../models/product.model';
@@ -41,6 +41,9 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly apiBase = this.resolveApiBase();
 
   private feedbackTimer: number | undefined;
+  private routeSub?: Subscription;
+  private querySub?: Subscription;
+  private loadToken = 0;
 
   readonly accordions: Accordion[] = [
     {
@@ -134,15 +137,40 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
   readonly productTag = (value: string): string => this.i18n.productTag(value);
 
-  async ngOnInit(force = false): Promise<void> {
-    const idParam = this.route.snapshot.paramMap.get('id');
-    const queryParams = this.route.snapshot.queryParamMap;
-    this.fromCollectionHandle.set(queryParams.get('col'));
-    this.fromCollectionName.set(queryParams.get('colName'));
+  ngOnInit(): void {
+    this.querySub = this.route.queryParamMap.subscribe((queryParams) => {
+      this.fromCollectionHandle.set(queryParams.get('col'));
+      this.fromCollectionName.set(queryParams.get('colName'));
+    });
+
+    this.routeSub = this.route.paramMap.subscribe((params) => {
+      void this.loadProduct(params.get('id'));
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.routeSub?.unsubscribe();
+    this.querySub?.unsubscribe();
+    if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
+  }
+
+  goCollection(): void {
+    const handle = this.fromCollectionHandle();
+    void this.router.navigate(handle ? ['/collection', handle] : ['/collection']);
+  }
+
+  retryProduct(): void {
+    void this.loadProduct(this.route.snapshot.paramMap.get('id'), true);
+  }
+
+  private async loadProduct(idParam: string | null, force = false): Promise<void> {
+    const token = ++this.loadToken;
     this.productLoading.set(true);
     this.productError.set('');
     this.product.set(null);
     await (force ? this.productsSvc.refresh() : this.productsSvc.ensureLoaded());
+    if (token !== this.loadToken) return;
+
     const p = idParam ? this.productsSvc.getById(idParam) : undefined;
     const nextProduct = p ?? (idParam ? undefined : this.productsSvc.getAll()[0]);
     if (!nextProduct) {
@@ -154,23 +182,11 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.galleryIdx.set(0);
     this.selectedSize.set(nextProduct?.sizes[0] ?? null);
     this.selectedColor.set(null);
+    this.qty.set(1);
     this.sizePickerOpen.set(false);
     this.resetRestockForm();
     void this.referenceData.ensureColors();
     this.productLoading.set(false);
-  }
-
-  ngOnDestroy(): void {
-    if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
-  }
-
-  goCollection(): void {
-    const handle = this.fromCollectionHandle();
-    void this.router.navigate(handle ? ['/collection', handle] : ['/collection']);
-  }
-
-  retryProduct(): void {
-    void this.ngOnInit(true);
   }
 
   goToProduct(nextProduct: Product): void {
