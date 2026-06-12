@@ -19,6 +19,11 @@ const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
+const sessionCookieSecure = process.env.SESSION_COOKIE_SECURE === 'true'
+  ? 'auto'
+  : process.env.SESSION_COOKIE_SECURE === 'auto'
+    ? 'auto'
+    : false;
 
 // ─── Allowed Origins ────────────────────────────────────────────────────────
 function csv(value) {
@@ -103,7 +108,7 @@ app.use(
     }),
     cookie: {
       httpOnly: true,
-      secure: process.env.SESSION_COOKIE_SECURE === 'true',
+      secure: sessionCookieSecure,
       sameSite: process.env.SESSION_COOKIE_SAMESITE || 'lax',
       maxAge: Number.parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 12 * 60 * 60 * 1000,
     },

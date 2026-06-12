@@ -557,10 +557,14 @@
   display: none;
 }
 
-.size-btn:hover {
+.size-btn:not(:disabled):hover {
   border-color: var(--pdp-green);
   color: var(--pdp-green);
   transform: translateY(-2px);
+}
+
+.size-btn:disabled {
+  cursor: not-allowed;
 }
 
 .size-btn.active {
@@ -571,21 +575,11 @@
 }
 
 .size-btn.out-of-stock {
-  border-style: dashed;
-  border-color: rgba(31, 28, 23, 0.2);
-  background: rgba(255, 255, 255, 0.4);
-  color: var(--pdp-muted);
-}
-
-.size-btn.out-of-stock .size-value {
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-
-.size-btn.out-of-stock.active {
-  border-color: var(--pdp-gold-deep);
-  background: #f4ead8;
-  color: var(--pdp-gold-deep);
+  border-color: rgba(31, 28, 23, 0.12);
+  background: rgba(31, 28, 23, 0.06);
+  color: rgba(31, 28, 23, 0.34);
+  box-shadow: none;
+  transform: none;
 }
 
 .size-sheet {
@@ -1325,6 +1319,12 @@ button:focus-visible {
     color: #f3efe4;
   }
 
+  .size-list .size-btn.out-of-stock {
+    border-color: rgba(31, 28, 23, 0.12);
+    background: rgba(31, 28, 23, 0.06);
+    color: rgba(31, 28, 23, 0.34);
+  }
+
   .size-list .size-value {
     text-align: start;
   }
@@ -1338,6 +1338,10 @@ button:focus-visible {
 
   .size-list .size-btn.active .size-value::before {
     color: rgba(243, 239, 228, 0.7);
+  }
+
+  .size-list .size-btn.out-of-stock .size-value::before {
+    color: rgba(31, 28, 23, 0.3);
   }
 
   .size-list .size-state {
@@ -1355,6 +1359,12 @@ button:focus-visible {
     border-color: var(--pdp-gold);
     background: var(--pdp-gold);
     color: #fff;
+  }
+
+  .size-list .size-btn.out-of-stock .size-state {
+    border-color: rgba(31, 28, 23, 0.12);
+    background: transparent;
+    color: rgba(31, 28, 23, 0.3);
   }
 
   .restock-form-row {

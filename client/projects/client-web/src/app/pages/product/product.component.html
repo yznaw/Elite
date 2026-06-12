@@ -163,6 +163,7 @@
                     class="size-btn"
                     [class.active]="selectedSize() === s"
                     [class.out-of-stock]="!sizeInStock(p, s)"
+                    [disabled]="!sizeInStock(p, s)"
                     [attr.aria-pressed]="selectedSize() === s"
                     (click)="selectSize(s)"
                   >
@@ -210,6 +211,7 @@
                         class="size-btn"
                         [class.active]="selectedSize() === s"
                         [class.out-of-stock]="!sizeInStock(p, s)"
+                        [disabled]="!sizeInStock(p, s)"
                         [attr.aria-pressed]="selectedSize() === s"
                         (click)="selectSize(s)"
                       >
