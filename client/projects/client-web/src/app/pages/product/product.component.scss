@@ -267,9 +267,17 @@
 /* ── Thumbnails ── */
 .thumb-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  // grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
   gap: 10px;
   margin-top: 12px;
+  grid-auto-flow: column;
+  grid-auto-columns: 70px;
+  grid-template-columns: none;
+  overflow-x: auto;
+  gap: 9px;
+  margin-top: 10px;
+  padding-bottom: 5px;
+  scrollbar-width: none;
 }
 
 .thumb {

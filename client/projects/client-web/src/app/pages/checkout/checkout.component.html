@@ -1,109 +1,395 @@
 @if (placed()) {
-  <div style="padding-top: 80px; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 80px 24px;">
-    <div class="anim-fade-up" style="max-width: 500px; width: 100%; text-align: center;">
-      <div style="width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--gold); display: flex; align-items: center; justify-content: center; margin: 0 auto 32px; font-size: 24px; color: var(--gold); animation: pulseGold 2s ease-in-out 3;">
+  <div
+    style="
+      padding-top: 80px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 24px;
+    "
+  >
+    <div
+      class="anim-fade-up"
+      style="max-width: 500px; width: 100%; text-align: center"
+    >
+      <div
+        style="
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          border: 1px solid var(--gold);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 32px;
+          font-size: 24px;
+          color: var(--gold);
+          animation: pulseGold 2s ease-in-out 3;
+        "
+      >
         ✓
       </div>
-      <h2 class="serif" style="font-size: 42px; font-weight: 300; color: var(--cream); margin-bottom: 12px;">
-        {{ t('checkout.confirm.title') }}
+      <h2
+        class="serif"
+        style="
+          font-size: 42px;
+          font-weight: 300;
+          color: var(--cream);
+          margin-bottom: 12px;
+        "
+      >
+        {{ t("checkout.confirm.title") }}
       </h2>
-      <p style="font-family: var(--ff-sans); font-size: 13px; color: var(--muted); line-height: 1.8; margin-bottom: 8px;">
-        {{ t('checkout.confirm.body1') }}
+      <p
+        style="
+          font-family: var(--ff-sans);
+          font-size: 13px;
+          color: var(--muted);
+          line-height: 1.8;
+          margin-bottom: 8px;
+        "
+      >
+        {{ t("checkout.confirm.body1") }}
       </p>
-      <p style="font-family: var(--ff-serif); font-size: 18px; color: var(--gold); font-style: italic; margin-bottom: 36px;">
-        {{ t('checkout.confirm.quote') }}
+      <p
+        style="
+          font-family: var(--ff-serif);
+          font-size: 18px;
+          color: var(--gold);
+          font-style: italic;
+          margin-bottom: 36px;
+        "
+      >
+        {{ t("checkout.confirm.quote") }}
       </p>
-      <div style="border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 20px 0; margin-bottom: 36px;">
+      <div
+        style="
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+          padding: 20px 0;
+          margin-bottom: 36px;
+        "
+      >
         @if (orderNumber()) {
-          <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted); margin-bottom: 10px;">{{ t('checkout.confirm.orderLabel') }}</div>
-          <div class="serif" style="font-size: 24px; color: var(--cream); margin-bottom: 18px;">{{ orderNumber() }}</div>
+          <div
+            style="
+              font-family: var(--ff-sans);
+              font-size: 11px;
+              color: var(--muted);
+              margin-bottom: 10px;
+            "
+          >
+            {{ t("checkout.confirm.orderLabel") }}
+          </div>
+          <div
+            class="serif"
+            style="font-size: 24px; color: var(--cream); margin-bottom: 18px"
+          >
+            {{ orderNumber() }}
+          </div>
         }
-        <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted); margin-bottom: 4px;">{{ t('checkout.confirm.totalLabel') }}</div>
-        <div class="serif" style="font-size: 28px; color: var(--gold);">{{ price(total()) }}</div>
+        <div
+          style="
+            font-family: var(--ff-sans);
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 4px;
+          "
+        >
+          {{ t("checkout.confirm.totalLabel") }}
+        </div>
+        <div class="serif" style="font-size: 28px; color: var(--gold)">
+          {{ price(total()) }}
+        </div>
       </div>
-      <button class="btn-gold" (click)="goCollection()" style="padding: 16px 48px; font-size: 11px; letter-spacing: 0.18em;">
-        {{ t('common.continueBrowsing') }}
+      <button
+        class="btn-gold"
+        (click)="goCollection()"
+        style="padding: 16px 48px; font-size: 11px; letter-spacing: 0.18em"
+      >
+        {{ t("common.continueBrowsing") }}
       </button>
     </div>
   </div>
 } @else {
-  <div style="padding-top: 80px; min-height: 100vh;">
-    <div class="checkout-grid" style="max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; display: grid; grid-template-columns: 1fr; gap: 32px;">
+  <div style="padding-top: 80px; min-height: 100vh">
+    <div
+      class="checkout-grid"
+      style="
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 32px;
+      "
+    >
       <!-- LEFT: Form -->
       <div>
-        <div style="text-align: center; margin-bottom: 40px;">
-          <div style="font-family: var(--ff-serif); font-size: 22px; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 4px;">{{ t('brand.name') }}</div>
-          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.3em; color: var(--muted); text-transform: uppercase;">{{ t('checkout.brand.kicker') }}</div>
+        <div style="text-align: center; margin-bottom: 40px">
+          <!-- <div style="font-family: var(--ff-serif); font-size: 22px; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 4px;">{{ t('brand.name') }}</div> -->
+          <div
+            style="
+              font-family: var(--ff-sans);
+              font-size: 9px;
+              letter-spacing: 0.3em;
+              color: var(--muted);
+              text-transform: uppercase;
+            "
+          >
+            {{ t("checkout.brand.kicker") }}
+          </div>
         </div>
 
         <!-- Step indicators -->
-        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 40px; gap: 0;">
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 40px;
+            gap: 0;
+          "
+        >
           @for (s of steps; track s; let i = $index) {
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"
+            <div
+              style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+              "
               [style.cursor]="i <= step() ? 'pointer' : 'default'"
-              (click)="jumpTo(i)">
-              <div class="step-indicator"
+              (click)="jumpTo(i)"
+            >
+              <div
+                class="step-indicator"
                 [class.active]="i === step()"
-                [class.done]="i < step()">
-                @if (i < step()) { <span>✓</span> } @else { <span>{{ i + 1 }}</span> }
+                [class.done]="i < step()"
+              >
+                @if (i < step()) {
+                  <span>✓</span>
+                } @else {
+                  <span>{{ i + 1 }}</span>
+                }
               </div>
-              <span style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;"
-                [style.color]="i === step() ? 'var(--gold)' : 'var(--muted)'">{{ t(s) }}</span>
+              <span
+                style="
+                  font-family: var(--ff-sans);
+                  font-size: 9px;
+                  letter-spacing: 0.15em;
+                  text-transform: uppercase;
+                "
+                [style.color]="i === step() ? 'var(--gold)' : 'var(--muted)'"
+                >{{ t(s) }}</span
+              >
             </div>
             @if (i < steps.length - 1) {
-              <div style="flex: 1; height: 1px; margin: 0 12px 20px;"
-                [style.background]="i < step() ? 'var(--gold-dim)' : 'var(--border)'"></div>
+              <div
+                style="flex: 1; height: 1px; margin: 0 12px 20px"
+                [style.background]="
+                  i < step() ? 'var(--gold-dim)' : 'var(--border)'
+                "
+              ></div>
             }
           }
         </div>
 
         <!-- Step 0: Details -->
         @if (step() === 0) {
-          <div class="anim-fade-up" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div
+            class="anim-fade-up"
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px"
+          >
             <div class="float-wrap">
-              <input class="float-input" type="text" [value]="form().firstName" (input)="set('firstName', inputValue($event))" placeholder=" " />
-              <label class="float-label">{{ t('checkout.field.firstName') }}</label>
+              <input
+                class="float-input"
+                type="text"
+                [value]="form().firstName"
+                (input)="set('firstName', inputValue($event))"
+                placeholder=" "
+              />
+              <label class="float-label">{{
+                t("checkout.field.firstName")
+              }}</label>
             </div>
             <div class="float-wrap">
-              <input class="float-input" type="text" [value]="form().lastName" (input)="set('lastName', inputValue($event))" placeholder=" " />
-              <label class="float-label">{{ t('checkout.field.lastName') }}</label>
+              <input
+                class="float-input"
+                type="text"
+                [value]="form().lastName"
+                (input)="set('lastName', inputValue($event))"
+                placeholder=" "
+              />
+              <label class="float-label">{{
+                t("checkout.field.lastName")
+              }}</label>
             </div>
-            <div class="float-wrap" style="grid-column: 1/-1;">
-              <input class="float-input" type="email" [value]="form().email" (input)="set('email', inputValue($event))" placeholder=" " />
-              <label class="float-label">{{ t('checkout.field.email') }}</label>
+            <div class="float-wrap" style="grid-column: 1/-1">
+              <input
+                class="float-input"
+                type="email"
+                [value]="form().email"
+                (input)="set('email', inputValue($event))"
+                placeholder=" "
+              />
+              <label class="float-label">{{ t("checkout.field.email") }}</label>
             </div>
-            <div class="float-wrap" style="grid-column: 1/-1;">
-              <input class="float-input" type="tel" [value]="form().phone" (input)="set('phone', inputValue($event))" placeholder=" " />
-              <label class="float-label">{{ t('checkout.field.phone') }}</label>
+            <div class="float-wrap" style="grid-column: 1/-1">
+              <input
+                class="float-input"
+                type="tel"
+                [value]="form().phone"
+                (input)="set('phone', inputValue($event))"
+                placeholder=" "
+              />
+              <label class="float-label">{{ t("checkout.field.phone") }}</label>
             </div>
           </div>
         }
 
         <!-- Step 1: Delivery -->
         @if (step() === 1) {
-          <div class="anim-fade-up" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div class="float-wrap" style="grid-column: 1/-1;">
-              <input class="float-input" type="text" [value]="form().address" (input)="set('address', inputValue($event))" placeholder=" " />
-              <label class="float-label">{{ t('checkout.field.address') }}</label>
+          <div
+            class="anim-fade-up"
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px"
+          >
+            <div class="float-wrap" style="grid-column: 1/-1">
+              <input
+                class="float-input"
+                type="text"
+                [value]="form().address"
+                (input)="set('address', inputValue($event))"
+                placeholder=" "
+              />
+              <label class="float-label">{{
+                t("checkout.field.address")
+              }}</label>
+            </div>
+            <div class="checkout-address-grid">
+              <div class="float-wrap">
+                <input
+                  class="float-input"
+                  type="text"
+                  [value]="form().zone"
+                  (input)="set('zone', inputValue($event))"
+                  placeholder=" "
+                />
+                <label class="float-label">{{
+                  t("checkout.field.zone")
+                }}</label>
+              </div>
+              <div class="float-wrap">
+                <input
+                  class="float-input"
+                  type="text"
+                  [value]="form().street"
+                  (input)="set('street', inputValue($event))"
+                  placeholder=" "
+                />
+                <label class="float-label">{{
+                  t("checkout.field.street")
+                }}</label>
+              </div>
+              <div class="float-wrap">
+                <input
+                  class="float-input"
+                  type="text"
+                  [value]="form().building"
+                  (input)="set('building', inputValue($event))"
+                  placeholder=" "
+                />
+                <label class="float-label">{{
+                  t("checkout.field.building")
+                }}</label>
+              </div>
+            </div>
+            <div class="float-wrap" style="grid-column: 1/-1">
+              <textarea
+                class="float-input"
+                [value]="form().additionalDetails"
+                (input)="set('additionalDetails', inputValue($event))"
+                placeholder=" "
+                rows="3"
+                style="padding-top: 20px; resize: vertical"
+              ></textarea>
+              <label class="float-label">{{
+                t("checkout.field.additionalDetails")
+              }}</label>
             </div>
             <div class="float-wrap">
-              <input class="float-input" type="text" [value]="form().city" (input)="set('city', inputValue($event))" placeholder=" " />
-              <label class="float-label">{{ t('checkout.field.city') }}</label>
+              <input
+                class="float-input"
+                type="text"
+                [value]="form().city"
+                (input)="set('city', inputValue($event))"
+                placeholder=" "
+              />
+              <label class="float-label">{{ t("checkout.field.city") }}</label>
             </div>
             <div class="float-wrap">
-              <select class="float-input" [value]="form().country" (change)="set('country', selectValue($event))"
-                style="padding-top: 20px; padding-bottom: 8px; cursor: pointer;">
-                @for (c of countries; track c) { <option [value]="c">{{ countryLabel(c) }}</option> }
+              <select
+                class="float-input"
+                [value]="form().country"
+                (change)="set('country', selectValue($event))"
+                style="padding-top: 20px; padding-bottom: 8px; cursor: pointer"
+              >
+                @for (c of countries; track c) {
+                  <option [value]="c">{{ countryLabel(c) }}</option>
+                }
               </select>
-              <label class="float-label" style="top: 6px; font-size: 9px; color: var(--gold);">{{ t('checkout.field.country') }}</label>
+              <label
+                class="float-label"
+                style="top: 6px; font-size: 9px; color: var(--gold)"
+                >{{ t("checkout.field.country") }}</label
+              >
             </div>
-            <div style="grid-column: 1/-1; padding: 16px; background: var(--card); border: 1px solid var(--border); margin-top: 4px;">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div
+              style="
+                grid-column: 1/-1;
+                padding: 16px;
+                background: var(--card);
+                border: 1px solid var(--border);
+                margin-top: 4px;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                "
+              >
                 <div>
-                  <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream); margin-bottom: 2px;">{{ t('checkout.delivery.title') }}</div>
-                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">{{ deliveryStatus() }}</div>
+                  <div
+                    style="
+                      font-family: var(--ff-sans);
+                      font-size: 11px;
+                      color: var(--cream);
+                      margin-bottom: 2px;
+                    "
+                  >
+                    {{ t("checkout.delivery.title") }}
+                  </div>
+                  <div
+                    style="
+                      font-family: var(--ff-sans);
+                      font-size: 10px;
+                      color: var(--muted);
+                    "
+                  >
+                    {{ deliveryStatus() }}
+                  </div>
                 </div>
-                <span style="font-family: var(--ff-serif); font-size: 16px; color: var(--gold);">{{ deliveryPrice() }}</span>
+                <span
+                  style="
+                    font-family: var(--ff-serif);
+                    font-size: 16px;
+                    color: var(--gold);
+                  "
+                  >{{ deliveryPrice() }}</span
+                >
               </div>
             </div>
           </div>
@@ -111,104 +397,334 @@
 
         <!-- Step 2: Payment -->
         @if (step() === 2) {
-          <div class="anim-fade-up" style="display: grid; gap: 12px;">
-            <div style="padding: 20px; background: var(--card); border: 1px solid var(--border);">
-              <div style="display: flex; justify-content: space-between; gap: 16px; align-items: flex-start;">
+          <div class="anim-fade-up" style="display: grid; gap: 12px">
+            <div
+              style="
+                padding: 20px;
+                background: var(--card);
+                border: 1px solid var(--border);
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  gap: 16px;
+                  align-items: flex-start;
+                "
+              >
                 <div>
-                  <div style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream); margin-bottom: 6px;">{{ t('checkout.gateway.title') }}</div>
-                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); line-height: 1.7;">{{ t('checkout.gateway.sub') }}</div>
+                  <div
+                    style="
+                      font-family: var(--ff-sans);
+                      font-size: 11px;
+                      color: var(--cream);
+                      margin-bottom: 6px;
+                    "
+                  >
+                    {{ t("checkout.gateway.title") }}
+                  </div>
+                  <div
+                    style="
+                      font-family: var(--ff-sans);
+                      font-size: 10px;
+                      color: var(--muted);
+                      line-height: 1.7;
+                    "
+                  >
+                    {{ t("checkout.gateway.sub") }}
+                  </div>
                 </div>
-                <span style="font-family: var(--ff-serif); font-size: 16px; color: var(--gold); white-space: nowrap;">{{ t('checkout.gateway.status') }}</span>
+                <span
+                  style="
+                    font-family: var(--ff-serif);
+                    font-size: 16px;
+                    color: var(--gold);
+                    white-space: nowrap;
+                  "
+                  >{{ t("checkout.gateway.status") }}</span
+                >
               </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 0;">
-              <span style="font-size: 10px; color: var(--muted);">🔒</span>
-              <span style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;">{{ t('checkout.security') }}</span>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 0;
+              "
+            >
+              <span style="font-size: 10px; color: var(--muted)">🔒</span>
+              <span
+                style="
+                  font-family: var(--ff-sans);
+                  font-size: 10px;
+                  color: var(--muted);
+                  letter-spacing: 0.06em;
+                "
+                >{{ t("checkout.security") }}</span
+              >
             </div>
           </div>
         }
 
         @if (error()) {
-          <p style="font-family: var(--ff-sans); font-size: 11px; color: #f3a7a7; text-align: center; margin-top: 20px;">{{ error() }}</p>
+          <p
+            style="
+              font-family: var(--ff-sans);
+              font-size: 11px;
+              color: #f3a7a7;
+              text-align: center;
+              margin-top: 20px;
+            "
+          >
+            {{ error() }}
+          </p>
         }
 
         <!-- Nav buttons -->
-        <div style="display: flex; gap: 12px; margin-top: 28px;">
+        <div style="display: flex; gap: 12px; margin-top: 28px">
           @if (step() > 0) {
-            <button class="btn-outline" [disabled]="placing() || redirecting()" (click)="back()" style="padding: 14px 24px; flex: 1;">{{ t('common.back') }}</button>
+            <button
+              class="btn-outline"
+              [disabled]="placing() || redirecting()"
+              (click)="back()"
+              style="padding: 14px 24px; flex: 1"
+            >
+              {{ t("common.back") }}
+            </button>
           }
-          <button class="btn-gold" [disabled]="placing() || redirecting() || cart.items().length === 0" (click)="next()" style="padding: 16px; flex: 2; font-size: 11px; letter-spacing: 0.18em;">
+          <button
+            class="btn-gold"
+            [disabled]="placing() || redirecting() || cart.items().length === 0"
+            (click)="next()"
+            style="
+              padding: 16px;
+              flex: 2;
+              font-size: 11px;
+              letter-spacing: 0.18em;
+            "
+          >
             @if (placing()) {
-              {{ t('checkout.placing') }}
+              {{ t("checkout.placing") }}
             } @else if (redirecting()) {
-              {{ t('checkout.redirecting') }}
+              {{ t("checkout.redirecting") }}
             } @else if (step() < steps.length - 1) {
-              {{ t('common.continue') }}
+              {{ t("common.continue") }}
             } @else {
-              {{ t('checkout.placeOrder') }}
+              {{ t("checkout.placeOrder") }}
             }
           </button>
         </div>
 
-        <p style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); text-align: center; margin-top: 16px; letterSpacing: 0.06em;">
-          {{ t('checkout.terms') }}
+        <p
+          style="
+            font-family: var(--ff-sans);
+            font-size: 10px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 16px;
+            letterspacing: 0.06em;
+          "
+        >
+          {{ t("checkout.terms") }}
         </p>
       </div>
 
       <!-- RIGHT: Order summary -->
       <div>
-        <div class="glass" style="padding: 28px; position: sticky; top: 90px;">
-          <div style="font-family: var(--ff-sans); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-bottom: 20px;">
-            {{ t('checkout.summary.title') }}
+        <div class="glass" style="padding: 28px; position: sticky; top: 90px">
+          <div
+            style="
+              font-family: var(--ff-sans);
+              font-size: 9px;
+              letter-spacing: 0.25em;
+              text-transform: uppercase;
+              color: var(--muted);
+              margin-bottom: 20px;
+            "
+          >
+            {{ t("checkout.summary.title") }}
           </div>
 
           @if (cart.items().length === 0) {
-            <p style="font-family: var(--ff-sans); font-size: 12px; color: var(--muted);">{{ t('checkout.summary.empty') }}</p>
+            <p
+              style="
+                font-family: var(--ff-sans);
+                font-size: 12px;
+                color: var(--muted);
+              "
+            >
+              {{ t("checkout.summary.empty") }}
+            </p>
           } @else {
-            @for (item of cart.items(); track item.id + '-' + item.size) {
-              <div style="display: flex; gap: 14px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border2);">
-                <div class="img-placeholder" style="width: 64px; height: 64px; flex-shrink: 0;">
-                  <img [src]="item.image" [alt]="itemName(item)"
-                    style="width: 100%; height: 100%; object-fit: cover; opacity: 0.95;"
-                    (error)="onImgError($event)" />
+            @for (item of cart.items(); track item.id + "-" + item.size) {
+              <div
+                style="
+                  display: flex;
+                  gap: 14px;
+                  margin-bottom: 16px;
+                  padding-bottom: 16px;
+                  border-bottom: 1px solid var(--border2);
+                "
+              >
+                <div
+                  class="img-placeholder"
+                  style="width: 64px; height: 64px; flex-shrink: 0"
+                >
+                  <img
+                    [src]="item.image"
+                    [alt]="itemName(item)"
+                    style="
+                      width: 100%;
+                      height: 100%;
+                      object-fit: cover;
+                      opacity: 0.95;
+                    "
+                    (error)="onImgError($event)"
+                  />
                 </div>
-                <div style="flex: 1;">
-                  <div style="font-family: var(--ff-serif); font-size: 15px; color: var(--cream); margin-bottom: 2px;">{{ itemName(item) }}</div>
-                  <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted);">{{ t('cart.size') }} {{ item.size }} · {{ t('cart.qty') }} {{ item.qty }}</div>
+                <div style="flex: 1">
+                  <div
+                    style="
+                      font-family: var(--ff-serif);
+                      font-size: 15px;
+                      color: var(--cream);
+                      margin-bottom: 2px;
+                    "
+                  >
+                    {{ itemName(item) }}
+                  </div>
+                  <div
+                    style="
+                      font-family: var(--ff-sans);
+                      font-size: 10px;
+                      color: var(--muted);
+                    "
+                  >
+                    {{ t("cart.size") }} {{ item.size }} · {{ t("cart.qty") }}
+                    {{ item.qty }}
+                  </div>
                 </div>
-                <div style="font-family: var(--ff-sans); font-size: 13px; color: var(--gold); white-space: nowrap;">
+                <div
+                  style="
+                    font-family: var(--ff-sans);
+                    font-size: 13px;
+                    color: var(--gold);
+                    white-space: nowrap;
+                  "
+                >
                   {{ price(item.price * item.qty) }}
                 </div>
               </div>
             }
           }
 
-          <div class="divider" style="margin: 8px 0 16px;"></div>
+          <div class="divider" style="margin: 8px 0 16px"></div>
 
-          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.subtotal') }}</span>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">{{ price(subtotal()) }}</span>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 10px;
+            "
+          >
+            <span
+              style="
+                font-family: var(--ff-sans);
+                font-size: 11px;
+                color: var(--muted);
+              "
+              >{{ t("checkout.summary.subtotal") }}</span
+            >
+            <span
+              style="
+                font-family: var(--ff-sans);
+                font-size: 11px;
+                color: var(--cream-dim);
+              "
+              >{{ price(subtotal()) }}</span
+            >
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.delivery') }}</span>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 10px;
+            "
+          >
+            <span
+              style="
+                font-family: var(--ff-sans);
+                font-size: 11px;
+                color: var(--muted);
+              "
+              >{{ t("checkout.summary.delivery") }}</span
+            >
+            <span
+              style="
+                font-family: var(--ff-sans);
+                font-size: 11px;
+                color: var(--cream-dim);
+              "
+            >
               @if (shippingQuote()?.available) {
-                {{ deliveryFee() > 0 ? price(deliveryFee()) : t('checkout.delivery.free') }}
+                {{
+                  deliveryFee() > 0
+                    ? price(deliveryFee())
+                    : t("checkout.delivery.free")
+                }}
               } @else {
-                {{ t('checkout.summary.deliveryValue') }}
+                {{ t("checkout.summary.deliveryValue") }}
               }
             </span>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--muted);">{{ t('checkout.summary.duties') }}</span>
-            <span style="font-family: var(--ff-sans); font-size: 11px; color: var(--cream-dim);">{{ t('checkout.summary.dutiesValue') }}</span>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 10px;
+            "
+          >
+            <span
+              style="
+                font-family: var(--ff-sans);
+                font-size: 11px;
+                color: var(--muted);
+              "
+              >{{ t("checkout.summary.duties") }}</span
+            >
+            <span
+              style="
+                font-family: var(--ff-sans);
+                font-size: 11px;
+                color: var(--cream-dim);
+              "
+              >{{ t("checkout.summary.dutiesValue") }}</span
+            >
           </div>
 
-          <div class="divider" style="margin: 12px 0;"></div>
+          <div class="divider" style="margin: 12px 0"></div>
 
-          <div style="display: flex; justify-content: space-between;">
-            <span style="font-family: var(--ff-sans); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cream);">{{ t('checkout.summary.total') }}</span>
-            <span style="font-family: var(--ff-serif); font-size: 22px; color: var(--gold);">{{ price(total()) }}</span>
+          <div style="display: flex; justify-content: space-between">
+            <span
+              style="
+                font-family: var(--ff-sans);
+                font-size: 12px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--cream);
+              "
+              >{{ t("checkout.summary.total") }}</span
+            >
+            <span
+              style="
+                font-family: var(--ff-serif);
+                font-size: 22px;
+                color: var(--gold);
+              "
+              >{{ price(total()) }}</span
+            >
           </div>
         </div>
       </div>

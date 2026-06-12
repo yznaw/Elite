@@ -15,6 +15,10 @@ interface CheckoutForm {
   email: string;
   phone: string;
   address: string;
+  zone: string;
+  street: string;
+  building: string;
+  additionalDetails: string;
   city: string;
   country: string;
 }
@@ -34,7 +38,7 @@ export class CheckoutComponent {
   private readonly i18n = inject(I18nService);
 
   readonly steps = STEPS;
-  readonly countries = ['Qatar', 'UAE', 'Kuwait', 'Saudi Arabia', 'Bahrain', 'Oman'];
+  readonly countries = ['Qatar'];
 
   readonly step = signal(0);
   readonly placed = signal(false);
@@ -52,6 +56,10 @@ export class CheckoutComponent {
     email: '',
     phone: '',
     address: '',
+    zone: '',
+    street: '',
+    building: '',
+    additionalDetails: '',
     city: '',
     country: 'Qatar',
   });
@@ -66,7 +74,7 @@ export class CheckoutComponent {
 
   set<K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
-    if (['phone', 'address', 'city', 'country'].includes(String(key))) {
+    if (['phone', 'address', 'zone', 'street', 'building', 'additionalDetails', 'city', 'country'].includes(String(key))) {
       this.shippingQuote.set(null);
     }
   }
@@ -169,6 +177,10 @@ export class CheckoutComponent {
           fullName,
           phone: form.phone.trim(),
           line1: form.address.trim(),
+          zone: form.zone.trim(),
+          street: form.street.trim(),
+          building: form.building.trim(),
+          additionalDetails: form.additionalDetails.trim(),
           city: form.city.trim(),
           country: form.country,
         },
@@ -215,6 +227,10 @@ export class CheckoutComponent {
           fullName,
           phone: form.phone.trim(),
           line1: form.address.trim(),
+          zone: form.zone.trim(),
+          street: form.street.trim(),
+          building: form.building.trim(),
+          additionalDetails: form.additionalDetails.trim(),
           city: form.city.trim(),
           country: form.country,
         },

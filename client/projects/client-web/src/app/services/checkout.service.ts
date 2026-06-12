@@ -20,6 +20,10 @@ export interface CheckoutAddress {
   fullName: string;
   phone: string;
   line1: string;
+  zone?: string;
+  street?: string;
+  building?: string;
+  additionalDetails?: string;
   city: string;
   country: string;
 }
