@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -17,9 +17,9 @@ import { HomeContentService } from './services/home-content.service';
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
-  private readonly router    = inject(Router);
-  private readonly locale    = inject(LocaleService);
-  readonly homeContent       = inject(HomeContentService);
+  private readonly router   = inject(Router);
+  private readonly locale   = inject(LocaleService);
+  readonly homeContent      = inject(HomeContentService);
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -30,38 +30,19 @@ export class AppComponent {
     { initialValue: this.router.url },
   );
 
-  readonly hideFooter    = computed(() => this.currentUrl().startsWith('/checkout'));
+  readonly hideFooter = computed(() => this.currentUrl().startsWith('/checkout'));
 
-  // Preview banner state
+  // True when loaded inside the admin's preview iframe (suppresses the banner)
+  readonly isEmbedded = typeof window !== 'undefined' && window !== window.parent;
+
+  // Banner state (for direct-tab preview access)
   readonly bannerVisible = signal(true);
-  readonly viewport      = signal<'desktop' | 'mobile'>('desktop');
-  readonly isPhonePreview = computed(() =>
-    this.homeContent.isPreviewMode() && this.viewport() === 'mobile',
-  );
-
-  constructor() {
-    // Keep <html> class in sync — used by global CSS for outer shell styling
-    effect(() => {
-      if (!this.homeContent.isPreviewMode()) {
-        document.documentElement.classList.remove('preview-mobile');
-        return;
-      }
-      if (this.viewport() === 'mobile') {
-        document.documentElement.classList.add('preview-mobile');
-      } else {
-        document.documentElement.classList.remove('preview-mobile');
-      }
-    });
-  }
-
   toggleBanner(): void { this.bannerVisible.update(v => !v); }
 
-  setViewport(v: 'desktop' | 'mobile'): void { this.viewport.set(v); }
-
   exitPreview(): void {
-    document.documentElement.classList.remove('preview-mobile');
     const url = new URL(window.location.href);
     url.searchParams.delete('preview');
+    url.searchParams.delete('embedded');
     window.location.href = url.toString();
   }
 }

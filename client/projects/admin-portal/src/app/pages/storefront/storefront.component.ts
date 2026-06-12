@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { firstValueFrom } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
@@ -916,6 +917,91 @@ interface StorefrontContent {
 
     </div>
   }
+
+  <!-- ══════════════════════════════════════════════════════════════
+       PREVIEW MODAL — fullscreen iframe, Shopify-style
+  ═══════════════════════════════════════════════════════════════ -->
+  @if (previewOpen()) {
+    <div class="pv-modal" role="dialog" aria-label="Storefront preview">
+
+      <!-- Toolbar -->
+      <div class="pv-toolbar">
+        <button class="pv-back" type="button" (click)="closePreview()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          <span>Back to editing</span>
+        </button>
+
+        <div class="pv-device-group">
+          <button class="pv-device-btn" [class.active]="previewDevice() === 'desktop'"
+                  (click)="previewDevice.set('desktop')" title="Desktop (full width)">
+            <svg width="16" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+            </svg>
+            Desktop
+          </button>
+          <button class="pv-device-btn" [class.active]="previewDevice() === 'mobile'"
+                  (click)="previewDevice.set('mobile')" title="Mobile (393 px — iPhone 14)">
+            <svg width="11" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/>
+            </svg>
+            Mobile
+          </button>
+        </div>
+
+        <div class="pv-toolbar-right">
+          <button class="pv-newtab" type="button" (click)="openPreviewInNewTab()" title="Open in a new browser tab">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            New tab
+          </button>
+          @if (previewDevice() === 'mobile') {
+            <span class="pv-size-badge">393 × 852</span>
+          }
+        </div>
+      </div>
+
+      <!-- Stage -->
+      <div class="pv-stage" [class.pv-stage--mobile]="previewDevice() === 'mobile'">
+
+        @if (previewDevice() === 'desktop') {
+          <!-- Desktop: full-width iframe -->
+          <iframe class="pv-iframe-desktop"
+                  [src]="previewSafeUrl()"
+                  title="Storefront preview"
+                  allow="same-origin"></iframe>
+        }
+
+        @if (previewDevice() === 'mobile') {
+          <!-- Mobile: realistic phone frame -->
+          <div class="pv-phone">
+            <!-- Side buttons (decorative) -->
+            <div class="pv-phone__side-l">
+              <div class="pv-phone__btn"></div>
+              <div class="pv-phone__btn"></div>
+              <div class="pv-phone__btn"></div>
+            </div>
+            <div class="pv-phone__side-r">
+              <div class="pv-phone__btn pv-phone__btn--power"></div>
+            </div>
+            <!-- Screen -->
+            <div class="pv-phone__screen">
+              <!-- Dynamic island -->
+              <div class="pv-phone__island" aria-hidden="true"></div>
+              <!-- Storefront iframe -->
+              <iframe class="pv-phone__iframe"
+                      [src]="previewSafeUrl()"
+                      title="Storefront mobile preview"
+                      allow="same-origin"></iframe>
+              <!-- Home indicator -->
+              <div class="pv-phone__home" aria-hidden="true"></div>
+            </div>
+          </div>
+        }
+
+      </div>
+    </div>
+  }
   `,
   styles: [`
     /* Height tokens — change here and sticky tops update automatically */
@@ -1580,19 +1666,192 @@ interface StorefrontContent {
       background: var(--surface);
       line-height: 1.3;
     }
+
+    /* ══════════════════════════════════════════════════════════════
+       PREVIEW MODAL
+    ═══════════════════════════════════════════════════════════════ */
+    .pv-modal {
+      position: fixed; inset: 0; z-index: 900;
+      display: flex; flex-direction: column;
+      background: #0c0e14;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────────────────── */
+    .pv-toolbar {
+      display: flex; align-items: center;
+      height: 52px; flex-shrink: 0;
+      padding: 0 20px; gap: 12px;
+      background: #13151f;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .pv-back {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 14px; border-radius: 7px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: transparent; color: rgba(255,255,255,0.65);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: all 0.14s; white-space: nowrap;
+    }
+    .pv-back:hover { background: rgba(255,255,255,0.07); color: #fff; border-color: rgba(255,255,255,0.2); }
+
+    .pv-device-group {
+      display: flex; align-items: center; gap: 1px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 8px; padding: 3px; margin: 0 auto;
+    }
+
+    .pv-device-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 5px; border: none;
+      background: transparent; color: rgba(255,255,255,0.4);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: all 0.13s; white-space: nowrap;
+    }
+    .pv-device-btn:hover { color: rgba(255,255,255,0.8); }
+    .pv-device-btn.active {
+      background: var(--green, #024638); color: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    .pv-toolbar-right {
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    }
+
+    .pv-newtab {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 13px; border-radius: 7px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: transparent; color: rgba(255,255,255,0.5);
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.14s;
+    }
+    .pv-newtab:hover { color: #fff; border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); }
+
+    .pv-size-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.25);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Stage ───────────────────────────────────────────────────── */
+    .pv-stage {
+      flex: 1; overflow: hidden;
+      display: flex; align-items: stretch; justify-content: center;
+      background: #0c0e14;
+    }
+
+    /* Desktop: full iframe */
+    .pv-iframe-desktop {
+      width: 100%; height: 100%;
+      border: none; background: #fff; display: block;
+    }
+
+    /* Mobile stage: dark studio */
+    .pv-stage--mobile {
+      align-items: center;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(193,154,91,0.07) 0%, transparent 55%),
+        linear-gradient(180deg, #111008 0%, #0a0a0a 100%);
+      padding: 20px 0 36px;
+    }
+
+    /* ── Phone hardware ──────────────────────────────────────────── */
+    .pv-phone {
+      position: relative;
+      /* iPhone 14 proportions: 393×852 logical pixels */
+      width: 393px;
+      height: min(852px, calc(100% - 0px));
+      flex-shrink: 0;
+    }
+
+    /* Side buttons — left (volume + silent) */
+    .pv-phone__side-l {
+      position: absolute; left: -3.5px; top: 120px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .pv-phone__side-r {
+      position: absolute; right: -3.5px; top: 160px;
+    }
+    .pv-phone__btn {
+      width: 3.5px; height: 36px;
+      background: #2a2a2c;
+      border-radius: 2px;
+    }
+    .pv-phone__btn--power { height: 64px; }
+
+    /* Screen + bezel */
+    .pv-phone__screen {
+      position: absolute; inset: 0;
+      border-radius: 50px;
+      background: #000;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      /* Bezel layers:
+         1. screen edge (bright specular)
+         2. aluminum body (dark)
+         3. outer edge
+         4. ground shadow                */
+      box-shadow:
+        0 0 0 1.5px rgba(255,255,255,0.22),
+        0 0 0 13px #1c1c1e,
+        0 0 0 14px rgba(255,255,255,0.06),
+        0 60px 130px -10px rgba(0,0,0,1),
+        0 24px 60px rgba(0,0,0,0.6);
+    }
+
+    /* Dynamic island notch */
+    .pv-phone__island {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      width: 120px; height: 34px;
+      background: #000;
+      border-radius: 20px;
+      z-index: 10;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.8);
+    }
+
+    /* The actual storefront — fills remaining screen */
+    .pv-phone__iframe {
+      flex: 1; width: 100%; border: none;
+      display: block; background: #fff;
+      /* top padding so content starts below the island */
+      padding-top: 0;
+    }
+
+    /* Home indicator */
+    .pv-phone__home {
+      height: 28px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #000;
+    }
+    .pv-phone__home::after {
+      content: '';
+      width: 130px; height: 5px;
+      background: rgba(255,255,255,0.32);
+      border-radius: 99px;
+    }
   `],
 })
 export class StorefrontComponent implements OnInit, OnDestroy {
-  private readonly toast         = inject(ToastService);
-  private readonly confirm       = inject(ConfirmService);
-  private readonly i18n          = inject(I18nService);
+  private readonly toast          = inject(ToastService);
+  private readonly confirm        = inject(ConfirmService);
+  private readonly i18n           = inject(I18nService);
   private readonly collectionsApi = inject(AdminCollectionsService);
-  private readonly api           = inject(ApiClient);
-  private readonly mediaApi      = inject(AdminMediaService);
-  private readonly uploadApi     = inject(MediaUploadService);
-  readonly storefront            = inject(StorefrontService);
+  private readonly api            = inject(ApiClient);
+  private readonly mediaApi       = inject(AdminMediaService);
+  private readonly uploadApi      = inject(MediaUploadService);
+  private readonly sanitizer      = inject(DomSanitizer);
+  readonly storefront             = inject(StorefrontService);
 
   readonly t = (key: string): string => this.i18n.t(key);
+
+  // ── Preview modal ─────────────────────────────────────────────────────
+  readonly previewOpen   = signal(false);
+  readonly previewDevice = signal<'desktop' | 'mobile'>('desktop');
+  private  _previewUrl   = signal('');
+  readonly previewSafeUrl = computed<SafeResourceUrl>(() =>
+    this.sanitizer.bypassSecurityTrustResourceUrl(this._previewUrl()),
+  );
 
   // ── Tab state ─────────────────────────────────────────────────────────
   readonly pageTab     = signal<PageTab>('home');
@@ -1779,7 +2038,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     }
   }
 
-  // ── Preview draft in storefront with a secure short-lived token ───────
+  // ── Preview modal — opens iframe overlay ─────────────────────────────
   async openPreview(): Promise<void> {
     if (this.generatingToken()) return;
     this.generatingToken.set(true);
@@ -1789,12 +2048,23 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       );
       const base = this.storefront.storefrontUrl();
       const sep  = base.includes('?') ? '&' : '?';
-      window.open(`${base}${sep}preview=${token}`, '_blank', 'noopener,noreferrer');
+      // embedded=1 tells the storefront to suppress its own preview banner
+      this._previewUrl.set(`${base}${sep}preview=${token}&embedded=1`);
+      this.previewOpen.set(true);
+      this.previewDevice.set('desktop');
     } catch {
       this.toast.error('Preview failed', 'Could not generate a preview link.');
     } finally {
       this.generatingToken.set(false);
     }
+  }
+
+  closePreview(): void { this.previewOpen.set(false); }
+
+  openPreviewInNewTab(): void {
+    // Strip embedded flag when opening in a real tab
+    const url = this._previewUrl().replace('&embedded=1', '').replace('?embedded=1&', '?');
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   // ── Discard unsaved edits — reload last saved state ───────────────────
