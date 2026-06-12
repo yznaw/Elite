@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -63,7 +63,7 @@ interface StorefrontCollection {
   templateUrl: './collection.component.html',
   styleUrl: './collection.component.scss',
 })
-export class CollectionComponent implements OnInit {
+export class CollectionComponent implements OnInit, OnDestroy {
   private readonly products = inject(ProductsService);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
@@ -73,6 +73,8 @@ export class CollectionComponent implements OnInit {
   private readonly referenceData = inject(ReferenceDataService);
   private readonly apiBase = this.resolveApiBase();
   private addedTimer: number | undefined;
+  private mobileMediaQuery?: MediaQueryList;
+  private mobileMediaQueryHandler?: () => void;
 
   readonly sortOptions = SORT_OPTIONS;
   readonly sort = signal<SortOption>('Featured');
@@ -87,6 +89,9 @@ export class CollectionComponent implements OnInit {
   readonly colorHexByName = this.referenceData.colorHexByName;
   readonly filtersOpen = signal(false);
   readonly expandedFilterGroups = signal<Partial<Record<CollapsibleFilterGroupId, boolean>>>({});
+  readonly isMobileView = signal(false);
+  readonly mobilePage = signal(0);
+  readonly mobilePageSize = 10;
   readonly selectedSizes = signal<Record<string, number>>({});
   readonly selectedColors = signal<Record<string, string>>({});
   readonly selectedFilters = signal<SelectedFilters>(this.emptySelectedFilters());
@@ -167,15 +172,38 @@ export class CollectionComponent implements OnInit {
     return list;
   });
 
+  readonly visibleProducts = computed<Product[]>(() => {
+    const list = this.filtered();
+    if (!this.isMobileView()) return list;
+    const start = this.mobilePage() * this.mobilePageSize;
+    return list.slice(start, start + this.mobilePageSize);
+  });
+
+  readonly mobileTotalPages = computed(() => (
+    this.isMobileView() ? Math.max(1, Math.ceil(this.filtered().length / this.mobilePageSize)) : 1
+  ));
+
+  readonly showMobilePagination = computed(() => (
+    this.isMobileView() && this.filtered().length > this.mobilePageSize
+  ));
+
   ngOnInit(): void {
     void this.products.ensureLoaded();
     void this.loadCollections();
     void this.referenceData.ensureColors();
+    this.setupMobilePagination();
     this.route.paramMap.subscribe((params) => {
       this.activeCollectionKey.set(params.get('collection'));
       this.selectedFilters.set(this.emptySelectedFilters());
       this.filtersOpen.set(false);
+      this.mobilePage.set(0);
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.mobileMediaQuery && this.mobileMediaQueryHandler) {
+      this.mobileMediaQuery.removeEventListener('change', this.mobileMediaQueryHandler);
+    }
   }
 
   goToProduct(p: Product): void {
@@ -187,7 +215,10 @@ export class CollectionComponent implements OnInit {
     window.scrollTo(0, 0);
   }
 
-  setSort(s: SortOption): void { this.sort.set(s); }
+  setSort(s: SortOption): void {
+    this.sort.set(s);
+    this.mobilePage.set(0);
+  }
 
   toggleFilterGroup(groupId: CollapsibleFilterGroupId): void {
     this.expandedFilterGroups.update((groups) => ({
@@ -230,6 +261,7 @@ export class CollectionComponent implements OnInit {
 
   selectCollection(collection: StorefrontCollection | null): void {
     this.selectedFilters.set(this.emptySelectedFilters());
+    this.mobilePage.set(0);
     const route = collection
       ? ['/collection', collection.handle || collection.id]
       : ['/collection'];
@@ -306,6 +338,7 @@ export class CollectionComponent implements OnInit {
 
       return { ...current, [groupId]: nextValues };
     });
+    this.mobilePage.set(0);
   }
 
   isFilterSelected(groupId: FilterGroupId, value: string): boolean {
@@ -320,6 +353,7 @@ export class CollectionComponent implements OnInit {
     this.selectedFilters.set(this.emptySelectedFilters());
     this.sort.set('Featured');
     this.filtersOpen.set(false);
+    this.mobilePage.set(0);
   }
 
   retryProducts(): void {
@@ -329,8 +363,17 @@ export class CollectionComponent implements OnInit {
   showAllCollections(): void {
     this.selectedFilters.set(this.emptySelectedFilters());
     this.sort.set('Featured');
+    this.mobilePage.set(0);
     void this.router.navigate(['/collection']);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  prevMobilePage(): void {
+    this.mobilePage.update((page) => Math.max(0, page - 1));
+  }
+
+  nextMobilePage(): void {
+    this.mobilePage.update((page) => Math.min(this.mobileTotalPages() - 1, page + 1));
   }
 
   sortLabel(value: SortOption): string {
@@ -563,5 +606,18 @@ export class CollectionComponent implements OnInit {
     if (!value.startsWith('/uploads/')) return value;
 
     return `${this.apiBase}${value}`;
+  }
+
+  private setupMobilePagination(): void {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    this.mobileMediaQuery = window.matchMedia('(max-width: 767px)');
+    this.mobileMediaQueryHandler = () => {
+      this.isMobileView.set(this.mobileMediaQuery?.matches ?? false);
+      if (!this.isMobileView()) this.mobilePage.set(0);
+    };
+
+    this.mobileMediaQueryHandler();
+    this.mobileMediaQuery.addEventListener('change', this.mobileMediaQueryHandler);
   }
 }

@@ -188,7 +188,7 @@
             </div>
           } @else {
             <div class="product-grid">
-              @for (p of filtered(); track p.id; let i = $index) {
+              @for (p of visibleProducts(); track p.id; let i = $index) {
                 <article
                   class="product-tile"
                   (mouseenter)="hovered.set(p.id)"
@@ -270,6 +270,32 @@
                 </article>
               }
             </div>
+
+            @if (showMobilePagination()) {
+              <div class="mobile-pagination" aria-label="Collection pages">
+                <button
+                  type="button"
+                  class="mobile-page-btn"
+                  (click)="prevMobilePage()"
+                  [disabled]="mobilePage() === 0"
+                  aria-label="Previous page"
+                >
+                  ←
+                </button>
+                <span class="mobile-page-status">
+                  {{ mobilePage() + 1 }} / {{ mobileTotalPages() }}
+                </span>
+                <button
+                  type="button"
+                  class="mobile-page-btn"
+                  (click)="nextMobilePage()"
+                  [disabled]="mobilePage() >= mobileTotalPages() - 1"
+                  aria-label="Next page"
+                >
+                  →
+                </button>
+              </div>
+            }
           }
         </div>
       </div>
