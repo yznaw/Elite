@@ -7,6 +7,7 @@ import { NavComponent } from './shared/nav/nav.component';
 import { FooterComponent } from './shared/footer/footer.component';
 import { CartDrawerComponent } from './shared/cart-drawer/cart-drawer.component';
 import { LocaleService } from './services/locale.service';
+import { HomeContentService } from './services/home-content.service';
 
 @Component({
   selector: 'cw-root',
@@ -18,6 +19,7 @@ import { LocaleService } from './services/locale.service';
 export class AppComponent {
   private readonly router = inject(Router);
   private readonly locale = inject(LocaleService);
+  readonly homeContent = inject(HomeContentService);
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -29,4 +31,10 @@ export class AppComponent {
   );
 
   readonly hideFooter = computed(() => this.currentUrl().startsWith('/checkout'));
+
+  exitPreview(): void {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('preview');
+    window.location.href = url.toString();
+  }
 }

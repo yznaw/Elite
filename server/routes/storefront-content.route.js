@@ -181,6 +181,7 @@ const DEFAULT_HOME_CONTENT = {
 };
 
 let schemaReady = false;
+let draftSchemaReady = false;
 
 async function ensureColumn(client) {
   if (schemaReady) return;
@@ -189,6 +190,39 @@ async function ensureColumn(client) {
     ADD COLUMN IF NOT EXISTS home_content jsonb
   `);
   schemaReady = true;
+}
+
+async function ensureDraftColumn(client) {
+  if (draftSchemaReady) return;
+  await client.query(`
+    ALTER TABLE store_settings
+    ADD COLUMN IF NOT EXISTS home_content_draft jsonb
+  `);
+  draftSchemaReady = true;
+}
+
+// ── Secure preview token store (in-memory, 15-min TTL) ──────────────────────
+const { randomBytes } = require('crypto');
+const PREVIEW_TOKEN_TTL_MS = 15 * 60 * 1000;
+const _previewTokens = new Map(); // token -> expiresAt (ms)
+
+function createPreviewToken() {
+  // Sweep expired tokens before creating a new one
+  const now = Date.now();
+  for (const [t, exp] of _previewTokens) {
+    if (exp < now) _previewTokens.delete(t);
+  }
+  const token = randomBytes(32).toString('hex');
+  _previewTokens.set(token, now + PREVIEW_TOKEN_TTL_MS);
+  return token;
+}
+
+function validatePreviewToken(token) {
+  if (!token || typeof token !== 'string') return false;
+  const exp = _previewTokens.get(token);
+  if (!exp) return false;
+  if (exp < Date.now()) { _previewTokens.delete(token); return false; }
+  return true;
 }
 
 async function loadContent(client, tenantId) {
@@ -237,6 +271,43 @@ async function saveContent(client, tenantId, content) {
     'UPDATE store_settings SET home_content = $1 WHERE tenant_id = $2',
     [JSON.stringify(content), tenantId],
   );
+}
+
+async function loadDraft(client, tenantId) {
+  await ensureDraftColumn(client);
+  const result = await client.query(
+    'SELECT home_content_draft FROM store_settings WHERE tenant_id = $1',
+    [tenantId],
+  );
+  const raw = result.rows[0]?.home_content_draft;
+  return raw ? normalizeContent(raw) : null;
+}
+
+async function saveDraft(client, tenantId, content) {
+  await ensureDraftColumn(client);
+  await client.query(
+    'UPDATE store_settings SET home_content_draft = $1 WHERE tenant_id = $2',
+    [JSON.stringify(content), tenantId],
+  );
+}
+
+async function promoteDraftToLive(client, tenantId) {
+  await ensureDraftColumn(client);
+  await ensureColumn(client);
+  const result = await client.query(
+    'SELECT home_content_draft FROM store_settings WHERE tenant_id = $1',
+    [tenantId],
+  );
+  const raw = result.rows[0]?.home_content_draft;
+  if (!raw) throw new Error('No draft to publish.');
+  const content = normalizeContent(raw);
+  await client.query(
+    `UPDATE store_settings
+     SET home_content = $1, home_content_draft = NULL
+     WHERE tenant_id = $2`,
+    [JSON.stringify(content), tenantId],
+  );
+  return content;
 }
 
 function clone(value) {
@@ -580,12 +651,106 @@ function registerPatch(router) {
   );
 }
 
+// ── Admin: GET /admin/storefront-content/draft ──────────────────────────────
+function registerGetDraft(router) {
+  router.get(
+    '/draft',
+    asyncHandler(async (_req, res) => {
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        const draft = await loadDraft(client, tenant.id);
+        res.set('Cache-Control', 'no-store');
+        ok(res, draft); // null when no draft exists
+      } finally {
+        client.release();
+      }
+    }),
+  );
+}
+
+// ── Admin: POST /admin/storefront-content/draft ─────────────────────────────
+function registerSaveDraft(router) {
+  router.post(
+    '/draft',
+    asyncHandler(async (req, res) => {
+      const next = normalizeContent(req.body);
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        await saveDraft(client, tenant.id, next);
+        return ok(res, clone(next), 'Draft saved.');
+      } finally {
+        client.release();
+      }
+    }),
+  );
+}
+
+// ── Admin: POST /admin/storefront-content/publish ───────────────────────────
+function registerPublishContent(router) {
+  router.post(
+    '/publish',
+    asyncHandler(async (_req, res) => {
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        const live = await promoteDraftToLive(client, tenant.id);
+        return ok(res, clone(live), 'Draft published to storefront.');
+      } finally {
+        client.release();
+      }
+    }),
+  );
+}
+
+// ── Admin: POST /admin/storefront-content/preview-token ────────────────────
+function registerPreviewToken(router) {
+  router.post(
+    '/preview-token',
+    asyncHandler(async (_req, res) => {
+      const token = createPreviewToken();
+      res.set('Cache-Control', 'no-store');
+      ok(res, { token, ttlSeconds: PREVIEW_TOKEN_TTL_MS / 1000 });
+    }),
+  );
+}
+
+// ── Public: GET /storefront-content/draft?token=TOKEN ──────────────────────
+function registerPublicDraft(router) {
+  router.get(
+    '/draft',
+    asyncHandler(async (req, res) => {
+      const { token } = req.query;
+      if (!validatePreviewToken(token)) {
+        res.status(401).json({ success: false, message: 'Invalid or expired preview token.' });
+        return;
+      }
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        // Fall back to live content when no draft exists
+        const draft = await loadDraft(client, tenant.id) || await loadContent(client, tenant.id);
+        res.set('Cache-Control', 'no-store');
+        ok(res, draft);
+      } finally {
+        client.release();
+      }
+    }),
+  );
+}
+
 const publicRouter = Router();
 registerGet(publicRouter);
+registerPublicDraft(publicRouter);
 
 const adminRouter = Router();
 registerGet(adminRouter);
 registerPatch(adminRouter);
+registerGetDraft(adminRouter);
+registerSaveDraft(adminRouter);
+registerPublishContent(adminRouter);
+registerPreviewToken(adminRouter);
 
 module.exports = {
   adminRouter,

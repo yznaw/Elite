@@ -1,3 +1,19 @@
+@if (homeContent.isPreviewMode()) {
+  <div class="preview-banner" role="banner" aria-label="Draft preview mode">
+    <div class="preview-banner__inner">
+      <div class="preview-banner__left">
+        <span class="preview-banner__dot"></span>
+        <span class="preview-banner__label">Draft Preview</span>
+        <span class="preview-banner__sub">This page shows unpublished content — not visible to customers.</span>
+      </div>
+      <button class="preview-banner__exit" type="button" (click)="exitPreview()"
+              aria-label="Exit preview mode">
+        Exit preview ✕
+      </button>
+    </div>
+  </div>
+}
+
 <cw-nav />
 
 <main>
