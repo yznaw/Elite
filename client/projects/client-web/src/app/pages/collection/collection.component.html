@@ -61,38 +61,98 @@
               <span>{{ activeFilterCount() }}</span>
             }
           </h1>
+          <div class="filter-bulk-actions" aria-label="Filter group controls">
+            <button
+              type="button"
+              class="filter-icon-action"
+              (click)="expandAllFilters()"
+              aria-label="Expand all filters"
+              title="Expand all"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 8l5 5 5-5" />
+                <path d="M7 13l5 5 5-5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="filter-icon-action"
+              (click)="collapseAllFilters()"
+              aria-label="Collapse all filters"
+              title="Collapse all"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 16l5-5 5 5" />
+                <path d="M7 11l5-5 5 5" />
+              </svg>
+            </button>
+          </div>
           <button type="button" class="filter-close" (click)="closeFilters()">
             Done
           </button>
 
           @for (group of filterGroups(); track group.id) {
-            <div class="filter-group">
-              <h2>{{ group.title }}</h2>
-              @for (option of group.options; track option.value) {
-                <label class="filter-option">
-                  <input
-                    type="checkbox"
-                    [checked]="isFilterSelected(group.id, option.value)"
-                    (change)="toggleFilter(group.id, option.value)"
-                  />
-                  <span>{{ option.label }}</span>
-                  <small>{{ option.count }}</small>
-                </label>
+            <div class="filter-group" [class.is-collapsed]="!isFilterGroupExpanded(group.id)">
+              <button
+                type="button"
+                class="filter-group-toggle"
+                (click)="toggleFilterGroup(group.id)"
+                [attr.aria-expanded]="isFilterGroupExpanded(group.id)"
+                [attr.aria-controls]="filterGroupPanelId(group.id)"
+              >
+                <span>{{ group.title }}</span>
+                @if (selectedFilterCount(group.id) > 0) {
+                  <small>{{ selectedFilterCount(group.id) }}</small>
+                }
+                <span class="filter-group-chevron" aria-hidden="true">⌄</span>
+              </button>
+
+              @if (isFilterGroupExpanded(group.id)) {
+                <div class="filter-options" [id]="filterGroupPanelId(group.id)">
+                  @for (option of group.options; track option.value) {
+                    <label class="filter-option">
+                      <input
+                        type="checkbox"
+                        [checked]="isFilterSelected(group.id, option.value)"
+                        (change)="toggleFilter(group.id, option.value)"
+                      />
+                      <span>{{ option.label }}</span>
+                      <small>{{ option.count }}</small>
+                    </label>
+                  }
+                </div>
               }
             </div>
           }
 
-          <div class="filter-group">
-            <h2>Sort</h2>
-            @for (o of sortOptions; track o) {
-              <label class="filter-option filter-option-sort">
-                <input
-                  type="checkbox"
-                  [checked]="sort() === o"
-                  (change)="setSort(o)"
-                />
-                <span>{{ sortLabel(o) }}</span>
-              </label>
+          <div class="filter-group" [class.is-collapsed]="!isFilterGroupExpanded('sort')">
+            <button
+              type="button"
+              class="filter-group-toggle"
+              (click)="toggleFilterGroup('sort')"
+              [attr.aria-expanded]="isFilterGroupExpanded('sort')"
+              [attr.aria-controls]="filterGroupPanelId('sort')"
+            >
+              <span>Sort</span>
+              @if (sort() !== 'Featured') {
+                <small>1</small>
+              }
+              <span class="filter-group-chevron" aria-hidden="true">⌄</span>
+            </button>
+
+            @if (isFilterGroupExpanded('sort')) {
+              <div class="filter-options" [id]="filterGroupPanelId('sort')">
+                @for (o of sortOptions; track o) {
+                  <label class="filter-option filter-option-sort">
+                    <input
+                      type="checkbox"
+                      [checked]="sort() === o"
+                      (change)="setSort(o)"
+                    />
+                    <span>{{ sortLabel(o) }}</span>
+                  </label>
+                }
+              </div>
             }
           </div>
 

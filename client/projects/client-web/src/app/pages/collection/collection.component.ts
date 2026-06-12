@@ -25,6 +25,7 @@ const FILTER_TITLES = {
 
 type SortOption = (typeof SORT_OPTIONS)[number];
 type FilterGroupId = keyof typeof FILTER_TITLES;
+type CollapsibleFilterGroupId = FilterGroupId | 'sort';
 
 interface FilterOption {
   value: string;
@@ -85,6 +86,7 @@ export class CollectionComponent implements OnInit {
   readonly activeCollectionKey = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
   readonly filtersOpen = signal(false);
+  readonly expandedFilterGroups = signal<Partial<Record<CollapsibleFilterGroupId, boolean>>>({});
   readonly selectedSizes = signal<Record<string, number>>({});
   readonly selectedColors = signal<Record<string, string>>({});
   readonly selectedFilters = signal<SelectedFilters>(this.emptySelectedFilters());
@@ -187,6 +189,37 @@ export class CollectionComponent implements OnInit {
 
   setSort(s: SortOption): void { this.sort.set(s); }
 
+  toggleFilterGroup(groupId: CollapsibleFilterGroupId): void {
+    this.expandedFilterGroups.update((groups) => ({
+      ...groups,
+      [groupId]: !this.isFilterGroupExpanded(groupId),
+    }));
+  }
+
+  expandAllFilters(): void {
+    this.setAllFilterGroups(true);
+  }
+
+  collapseAllFilters(): void {
+    this.setAllFilterGroups(false);
+  }
+
+  isFilterGroupExpanded(groupId: CollapsibleFilterGroupId): boolean {
+    return this.expandedFilterGroups()[groupId] ?? true;
+  }
+
+  filterGroupPanelId(groupId: CollapsibleFilterGroupId): string {
+    return `collection-filter-${groupId}`;
+  }
+
+  private setAllFilterGroups(expanded: boolean): void {
+    const groups = this.filterGroups().reduce<Partial<Record<CollapsibleFilterGroupId, boolean>>>(
+      (map, group) => ({ ...map, [group.id]: expanded }),
+      { sort: expanded },
+    );
+    this.expandedFilterGroups.set(groups);
+  }
+
   openFilters(): void {
     this.filtersOpen.set(true);
   }
@@ -277,6 +310,10 @@ export class CollectionComponent implements OnInit {
 
   isFilterSelected(groupId: FilterGroupId, value: string): boolean {
     return this.selectedFilters()[groupId].includes(value);
+  }
+
+  selectedFilterCount(groupId: FilterGroupId): number {
+    return this.selectedFilters()[groupId].length;
   }
 
   clearFilters(): void {
