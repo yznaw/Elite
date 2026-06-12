@@ -273,6 +273,10 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.selectedSizes.update((sizes) => ({ ...sizes, [product.id]: size }));
   }
 
+  sizeSelectValue(event: Event): number {
+    return Number.parseInt((event.target as HTMLSelectElement).value, 10);
+  }
+
   selectProductColor(product: Product, color: string, event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
@@ -421,6 +425,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private collectionScopedProducts(): Product[] {
     const collection = this.activeCollection();
     if (!collection) return this.allProducts();
+    if (collection.handle === 'all-products') return this.allProducts();
     const ids = new Set(collection.productIds);
     return this.allProducts().filter((product) => ids.has(product.id));
   }

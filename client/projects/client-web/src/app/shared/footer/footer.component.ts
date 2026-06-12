@@ -46,10 +46,13 @@ interface FooterColumn {
 
       <div class="footer-bottom">
         <p>
-          {{ t('footer.copyright') }}
+          {{ t('footer.copyright', { year: currentYear }) }}
         </p>
         <p>
           {{ t('footer.cities') }}
+        </p>
+        <p>
+          {{ t('footer.poweredBy') }}
         </p>
       </div>
     </footer>
@@ -215,7 +218,8 @@ interface FooterColumn {
 })
 export class FooterComponent {
   private readonly i18n = inject(I18nService);
-  readonly t = (key: string): string => this.i18n.t(key);
+  readonly t = this.i18n.t;
+  readonly currentYear = new Date().getFullYear();
 
   readonly columns: FooterColumn[] = [
     {

@@ -56,6 +56,9 @@ import { Collection } from '../../models';
               @if (c.hidden) {
                 <span class="prod-3d-badge" style="top:10px;inset-inline-end:10px;inset-inline-start:auto;background:rgba(239,68,68,0.92);">○ {{ t('collections.hidden') }}</span>
               }
+              @if (c.system) {
+                <span class="prod-3d-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">○ All Products</span>
+              }
             </div>
             <div class="prod-body">
               <div class="prod-name">{{ c.title }}</div>

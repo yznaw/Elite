@@ -52,7 +52,21 @@ async function ensureDefaultTenant(client) {
     [tenant.id],
   );
 
+  await ensureAllProductsCollection(client, tenant.id);
+
   return tenant;
+}
+
+async function ensureAllProductsCollection(client, tenantId) {
+  await client.query(
+    `
+      INSERT INTO collections (tenant_id, handle, title, description, status, sort_order, seo)
+      VALUES ($1, 'all-products', 'All Products', 'Browse every product in the catalog.', 'active', 9999, '{}'::jsonb)
+      ON CONFLICT (tenant_id, handle) DO UPDATE
+      SET status = 'active'
+    `,
+    [tenantId],
+  );
 }
 
 /** Ensure at least one admin user exists for the tenant so the login page is

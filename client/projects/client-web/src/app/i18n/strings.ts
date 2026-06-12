@@ -94,7 +94,8 @@ const EN = {
   'footer.link.sizeGuide': 'Size Guide',
   'footer.link.careGuide': 'Care Guide',
   'footer.link.returns': 'Returns',
-  'footer.copyright': '© 2026 Elite Collection. All rights reserved.',
+  'footer.copyright': '© {year} Elite Collection. All rights reserved.',
+  'footer.poweredBy': 'Powered by nous',
   'footer.cities': 'Doha',
 
   // ─────────────────────────────────────────────────────────────────────
@@ -481,7 +482,8 @@ const AR: Record<keyof typeof EN, string> = {
   'footer.link.sizeGuide': 'دليل المقاسات',
   'footer.link.careGuide': 'دليل العناية',
   'footer.link.returns': 'الإرجاع',
-  'footer.copyright': '© 2026 إيليت كولكشن. جميع الحقوق محفوظة.',
+  'footer.copyright': '© {year} إيليت كولكشن. جميع الحقوق محفوظة.',
+  'footer.poweredBy': 'مدعوم من nous',
   'footer.cities': 'الدوحة',
 
   // Home

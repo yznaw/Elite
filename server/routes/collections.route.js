@@ -25,6 +25,34 @@ router.get(
 
     try {
       const tenant = await ensureDefaultTenant(client);
+      const systemResult = await client.query(
+        `
+          SELECT
+            c.id,
+            c.handle,
+            c.title,
+            c.description,
+            c.seo->>'imageUrl' AS image_url,
+            ARRAY[]::text[] AS product_ids
+          FROM collections c
+          WHERE c.tenant_id = $1 AND c.status = 'active' AND c.handle = 'all-products'
+          LIMIT 1
+        `,
+        [tenant.id],
+      );
+
+      const systemProductIds = systemResult.rowCount > 0
+        ? (await client.query(
+            `
+              SELECT id::text
+              FROM products
+              WHERE tenant_id = $1 AND status <> 'archived'
+              ORDER BY created_at DESC
+            `,
+            [tenant.id],
+          )).rows.map((row) => row.id)
+        : [];
+
       const result = await client.query(
         `
           SELECT
@@ -39,15 +67,20 @@ router.get(
             ) AS product_ids
           FROM collections c
           LEFT JOIN collection_products cp ON cp.collection_id = c.id
-          WHERE c.tenant_id = $1 AND c.status = 'active'
+          WHERE c.tenant_id = $1 AND c.status = 'active' AND c.handle <> 'all-products'
           GROUP BY c.id
           ORDER BY c.sort_order, c.created_at DESC
           LIMIT $2
         `,
-        [tenant.id, limit],
+        [tenant.id, Math.max(limit - (systemResult.rowCount > 0 ? 1 : 0), 0)],
       );
 
-      ok(res, result.rows.map(mapCollection));
+      const rows = result.rows.map(mapCollection);
+      if (systemResult.rowCount > 0) {
+        rows.push({ ...mapCollection(systemResult.rows[0]), productIds: systemProductIds });
+      }
+
+      ok(res, rows);
     } finally {
       client.release();
     }
