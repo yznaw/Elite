@@ -34,10 +34,13 @@ export interface Product {
 
 export interface CartItem {
   id: string;
+  variantId?: string;
+  sku?: string;
   name: string;
   price: number;
   image: string;
   leather: string;
+  color?: string | null;
   size: number;
   qty: number;
 }

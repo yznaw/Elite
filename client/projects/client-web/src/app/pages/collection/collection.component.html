@@ -194,7 +194,7 @@
                 <article
                   class="product-tile"
                   (mouseenter)="hovered.set(p.id)"
-                  (mouseleave)="hovered.set(null)"
+                  (mouseleave)="onProductTileLeave(p)"
                   [style.animation-delay]="i * 0.035 + 's'"
                 >
                   <button type="button" class="product-link" (click)="goToProduct(p)">
@@ -214,27 +214,33 @@
                       <span class="product-meta"
                         >{{ productStyle(p.style) }} Shoe</span
                       >
-                      @if (productColorNames(p).length > 0) {
-                        <span class="product-colors" aria-label="Available colors">
-                          @for (color of productColorNames(p); track color) {
-                            <span
-                              class="product-color-swatch"
-                              role="button"
-                              tabindex="0"
-                              [class.is-selected]="selectedProductColor(p) === color"
-                              [style.background]="colorHex(color)"
-                              [attr.title]="color"
-                              [attr.aria-label]="color"
-                              [attr.aria-pressed]="selectedProductColor(p) === color"
-                              (click)="selectProductColor(p, color, $event)"
-                              (keydown)="onProductColorKeydown(p, color, $event)"
-                            ></span>
-                          }
-                        </span>
-                      }
                       <span class="product-price">{{ price(p.price) }}</span>
                     </span>
                   </button>
+
+                  @if (productColorNames(p).length > 0) {
+                    <div class="product-colors" aria-label="Available colors">
+                      @for (color of productColorNames(p); track color) {
+                        <button
+                          type="button"
+                          class="product-color-swatch"
+                          [class.is-selected]="colorSelected(p, color)"
+                          [class.has-image]="colorSwatchImage(color)"
+                          [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
+                          [attr.title]="color"
+                          [attr.aria-label]="color"
+                          [attr.aria-pressed]="colorSelected(p, color)"
+                          (mouseenter)="previewProductColor(p, color, $event)"
+                          (focus)="previewProductColor(p, color, $event)"
+                          (click)="selectProductColor(p, color, $event)"
+                        >
+                          @if (colorSwatchImage(color); as swatchImage) {
+                            <img [src]="swatchImage" [alt]="color" loading="lazy" decoding="async" />
+                          }
+                        </button>
+                      }
+                    </div>
+                  }
 
                   <div class="purchase-panel">
                     <div class="size-picker" [attr.aria-label]="t('collection.quickAdd.size')">
@@ -249,7 +255,7 @@
                           (change)="selectSize(p, sizeSelectValue($event))"
                           [attr.aria-label]="t('collection.quickAdd.size')"
                         >
-                          @for (size of p.sizes; track size) {
+                          @for (size of availableSizes(p); track size) {
                             <option [value]="size">EU {{ size }}</option>
                           }
                         </select>

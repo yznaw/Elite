@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ProductsService } from '../../services/products.service';
-import { Product } from '../../models/product.model';
+import { Product, ProductVariant } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
 import { CartService } from '../../services/cart.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
@@ -87,6 +87,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly productsError = this.products.error;
   readonly activeCollectionKey = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
+  readonly colorSwatchImageByName = this.referenceData.colorSwatchImageByName;
   readonly filtersOpen = signal(false);
   readonly expandedFilterGroups = signal<Partial<Record<CollapsibleFilterGroupId, boolean>>>({});
   readonly isMobileView = signal(false);
@@ -208,9 +209,14 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   goToProduct(p: Product): void {
     const active = this.activeCollection();
-    const extras = active
-      ? { queryParams: { col: active.handle || active.id, colName: active.title } }
-      : undefined;
+    const selectedColor = this.selectedProductColor(p);
+    const queryParams: Record<string, string> = {};
+    if (active) {
+      queryParams['col'] = active.handle || active.id;
+      queryParams['colName'] = active.title;
+    }
+    if (selectedColor) queryParams['color'] = this.colorSlug(selectedColor);
+    const extras = Object.keys(queryParams).length ? { queryParams } : undefined;
     void this.router.navigate(['/product', p.id], extras);
     window.scrollTo(0, 0);
   }
@@ -277,10 +283,29 @@ export class CollectionComponent implements OnInit, OnDestroy {
     return Number.parseInt((event.target as HTMLSelectElement).value, 10);
   }
 
-  selectProductColor(product: Product, color: string, event?: Event): void {
+  previewProductColor(product: Product, color: string, event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
     this.selectedColors.update((colors) => ({ ...colors, [product.id]: color }));
+    this.selectedSizes.update((sizes) => {
+      const available = this.availableSizes(product, color);
+      const current = sizes[product.id];
+      if (current && available.includes(current)) return sizes;
+      const nextSize = available[0] ?? product.sizes[0] ?? 40;
+      return { ...sizes, [product.id]: nextSize };
+    });
+  }
+
+  selectProductColor(product: Product, color: string, event?: Event): void {
+    this.previewProductColor(product, color, event);
+  }
+
+  clearProductColorPreview(product: Product): void {
+    this.selectedColors.update((colors) => {
+      const next = { ...colors };
+      delete next[product.id];
+      return next;
+    });
   }
 
   onProductColorKeydown(product: Product, color: string, event: KeyboardEvent): void {
@@ -304,7 +329,10 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   selectedSize(product: Product): number {
-    return this.selectedSizes()[product.id] || product.sizes[0] || 40;
+    const available = this.availableSizes(product);
+    const selected = this.selectedSizes()[product.id];
+    if (selected && available.includes(selected)) return selected;
+    return available[0] ?? product.sizes[0] ?? 40;
   }
 
   selectedProductColor(product: Product): string | null {
@@ -326,11 +354,38 @@ export class CollectionComponent implements OnInit, OnDestroy {
     return this.productColors(product);
   }
 
+  availableSizes(product: Product, color = this.selectedProductColor(product)): number[] {
+    const variants = product.variants || [];
+    if (!color || variants.length === 0) return product.sizes;
+
+    const colorKey = this.colorKey(color);
+    const sizes = variants
+      .filter((variant) => this.colorKey(variant.color || '') === colorKey)
+      .filter((variant) => Number(variant.stock) > 0)
+      .map((variant) => Number(variant.size))
+      .filter(Number.isFinite);
+
+    return [...new Set(sizes)].sort((a, b) => a - b);
+  }
+
   colorHex(name: string): string {
     const value = name.trim();
     if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) return value;
 
     return this.colorHexByName()[value.toLowerCase()] ?? '#d8d2c8';
+  }
+
+  colorSwatchImage(name: string): string | null {
+    return this.colorSwatchImageByName()[this.colorKey(name)] ?? null;
+  }
+
+  colorSelected(product: Product, color: string): boolean {
+    return this.colorKey(this.selectedProductColor(product) || '') === this.colorKey(color);
+  }
+
+  onProductTileLeave(product: Product): void {
+    this.hovered.set(null);
+    this.clearProductColorPreview(product);
   }
 
   toggleFilter(groupId: FilterGroupId, value: string): void {
@@ -411,12 +466,17 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   private cartItem(product: Product) {
+    const variant = this.selectedVariant(product);
+    const color = this.selectedProductColor(product) || variant?.color || this.productColors(product)[0] || null;
     return {
       id: product.id,
+      variantId: variant?.id,
+      sku: variant?.sku,
       name: product.name,
-      price: product.price,
-      image: this.selectedProductImage(product),
+      price: variant?.price || product.price,
+      image: color ? this.productImageForColor(product, color) || product.image : this.selectedProductImage(product),
       leather: product.leather,
+      color,
       size: this.selectedSize(product),
       qty: 1,
     };
@@ -521,13 +581,26 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   private productImageForColor(product: Product, color: string): string | null {
     const key = this.colorKey(color);
-    const mappedImage = product.colorImages?.[key];
+    const mappedImage = this.mappedImageForColor(product, key);
     if (mappedImage) return mappedImage;
 
     const colors = this.productColors(product);
     const images = product.images || [];
     const colorIndex = colors.findIndex((item) => this.colorKey(item) === key);
     return colorIndex >= 0 && images.length >= colors.length ? images[colorIndex] || null : null;
+  }
+
+  private selectedVariant(product: Product): ProductVariant | undefined {
+    const size = this.selectedSize(product);
+    const selectedColorKey = this.selectedProductColor(product)
+      ? this.colorKey(this.selectedProductColor(product) || '')
+      : '';
+    const variants = product.variants || [];
+    return variants.find((variant) => {
+      const sizeMatches = Number(variant.size) === size;
+      const colorMatches = !selectedColorKey || this.colorKey(variant.color || '') === selectedColorKey;
+      return sizeMatches && colorMatches;
+    });
   }
 
   private srcsetFor(src: string, product: Product): string | null {
@@ -545,6 +618,20 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   private colorKey(value: string): string {
     return String(value || '').trim().toLowerCase();
+  }
+
+  private colorSlug(value: string): string {
+    return this.colorKey(value).replace(/[^a-z0-9]+/g, '');
+  }
+
+  private mappedImageForColor(product: Product, key: string): string | null {
+    const colorImages = product.colorImages || {};
+    const direct = colorImages[key];
+    if (direct) return direct;
+
+    const target = this.colorSlug(key);
+    const match = Object.entries(colorImages).find(([color]) => this.colorSlug(color) === target);
+    return match?.[1] || null;
   }
 
   private productLeathers(product: Product): string[] {

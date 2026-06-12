@@ -72,6 +72,13 @@ export class CheckoutComponent {
   readonly price = (value: number): string => this.i18n.price(value);
   readonly itemName = (item: { id: string; name: string }): string => this.i18n.productName(item);
 
+  itemDetails(item: { size: number; color?: string | null }): string {
+    return [
+      `${this.t('cart.size')} ${item.size}`,
+      item.color,
+    ].filter(Boolean).join(' · ');
+  }
+
   set<K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
     if (['phone', 'address', 'zone', 'street', 'building', 'additionalDetails', 'city', 'country'].includes(String(key))) {

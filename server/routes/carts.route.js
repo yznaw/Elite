@@ -41,10 +41,13 @@ function mapPublicCart(cart) {
     subtotal: fromCents(cart.subtotal_cents || 0),
     items: (cart.items || []).map((item) => ({
       id: String(item.product_id),
+      variantId: item.variant_id ? String(item.variant_id) : undefined,
+      sku: item.sku || '',
       name: item.product_name,
       price: fromCents(item.unit_price_cents),
       image: item.metadata?.image || '',
       leather: item.metadata?.leather || '',
+      color: item.metadata?.color || null,
       size: Number(item.size) || 0,
       qty: Number(item.quantity) || 1,
     })),
@@ -217,6 +220,7 @@ router.post('/current/items', asyncHandler(async (req, res) => {
         JSON.stringify({
           image: req.body.image || null,
           leather: req.body.leather || null,
+          color: req.body.color || null,
         }),
       ],
     );
@@ -237,14 +241,18 @@ router.delete('/current/items/:productId', asyncHandler(async (req, res) => {
     await client.query('BEGIN');
     const cart = await ensureSessionCart(client, req);
     const size = req.query.size == null ? null : String(req.query.size);
+    const variantId = isUuid(req.query.variantId) ? req.query.variantId : null;
+    const color = req.query.color == null ? null : String(req.query.color).trim().toLowerCase();
     await client.query(
       `
         DELETE FROM cart_items
         WHERE cart_id = $1
           AND product_id = $2
           AND ($3::text IS NULL OR size = $3)
+          AND ($4::uuid IS NULL OR variant_id = $4)
+          AND ($4::uuid IS NOT NULL OR $5::text IS NULL OR lower(metadata->>'color') = $5)
       `,
-      [cart.id, req.params.productId, size],
+      [cart.id, req.params.productId, size, variantId, color],
     );
     await refreshCartSubtotal(client, cart.id);
     await client.query('COMMIT');
@@ -399,7 +407,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
           unit,
           unit * qty,
           item.image || null,
-          JSON.stringify({ leather: item.leather || null }),
+          JSON.stringify({ leather: item.leather || null, color: item.color || null }),
         ],
       );
     }

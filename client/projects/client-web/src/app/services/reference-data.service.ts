@@ -13,6 +13,14 @@ interface RefColor {
   name_en: string;
   name_ar: string;
   hex: string;
+  swatch_image_url?: string | null;
+  sort_order: number;
+}
+
+export interface RefSizeSet {
+  id: string;
+  name: string;
+  sizes: string[];
   sort_order: number;
 }
 
@@ -22,10 +30,16 @@ export class ReferenceDataService {
   private readonly apiBase = this.resolveApiBase();
   private readonly cacheMs = 60 * 60_000;
   private readonly _colorHexByName = signal<Record<string, string>>({});
+  private readonly _colorSwatchImageByName = signal<Record<string, string>>({});
+  private readonly _sizeSets = signal<RefSizeSet[]>([]);
   private colorsPromise: Promise<Record<string, string>> | null = null;
+  private sizeSetsPromise: Promise<RefSizeSet[]> | null = null;
   private colorsLoadedAt = 0;
+  private sizeSetsLoadedAt = 0;
 
   readonly colorHexByName = this._colorHexByName.asReadonly();
+  readonly colorSwatchImageByName = this._colorSwatchImageByName.asReadonly();
+  readonly sizeSets = this._sizeSets.asReadonly();
 
   async ensureColors(): Promise<Record<string, string>> {
     if (Object.keys(this._colorHexByName()).length > 0) {
@@ -40,6 +54,21 @@ export class ReferenceDataService {
 
   async refreshColors(): Promise<Record<string, string>> {
     return this.loadColors(true);
+  }
+
+  async ensureSizeSets(): Promise<RefSizeSet[]> {
+    if (this._sizeSets().length > 0) {
+      if (Date.now() - this.sizeSetsLoadedAt > this.cacheMs && !this.sizeSetsPromise) {
+        void this.loadSizeSets(true);
+      }
+      return this._sizeSets();
+    }
+
+    return this.loadSizeSets();
+  }
+
+  async refreshSizeSets(): Promise<RefSizeSet[]> {
+    return this.loadSizeSets(true);
   }
 
   private async loadColors(force = false): Promise<Record<string, string>> {
@@ -59,7 +88,14 @@ export class ReferenceDataService {
           }
           return acc;
         }, {});
+        const swatchMap = colors.reduce<Record<string, string>>((acc, color) => {
+          const name = String(color.name_en || '').trim().toLowerCase();
+          const image = this.resolveMediaUrl(color.swatch_image_url);
+          if (name && image) acc[name] = image;
+          return acc;
+        }, {});
         this._colorHexByName.set(map);
+        this._colorSwatchImageByName.set(swatchMap);
         this.colorsLoadedAt = Date.now();
         return map;
       })
@@ -69,6 +105,32 @@ export class ReferenceDataService {
       });
 
     return this.colorsPromise;
+  }
+
+  private async loadSizeSets(force = false): Promise<RefSizeSet[]> {
+    if (force) this.sizeSetsPromise = null;
+    if (this.sizeSetsPromise) return this.sizeSetsPromise;
+
+    this.sizeSetsPromise = firstValueFrom(
+      this.http.get<ApiResponse<RefSizeSet[]>>(`${this.apiBase}/ref/size-sets`),
+    )
+      .then((res) => {
+        const sets = Array.isArray(res.data)
+          ? res.data.map((set) => ({
+            ...set,
+            sizes: Array.isArray(set.sizes) ? set.sizes.map((size) => String(size).trim()).filter(Boolean) : [],
+          })).filter((set) => set.name && set.sizes.length > 0)
+          : [];
+        this._sizeSets.set(sets);
+        this.sizeSetsLoadedAt = Date.now();
+        return sets;
+      })
+      .catch(() => this._sizeSets())
+      .finally(() => {
+        this.sizeSetsPromise = null;
+      });
+
+    return this.sizeSetsPromise;
   }
 
   private resolveApiBase(): string {
@@ -81,5 +143,13 @@ export class ReferenceDataService {
       || /^192\.168\./.test(hostname)
       || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
     return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
+  }
+
+  private resolveMediaUrl(url: string | null | undefined): string {
+    const value = (url || '').trim();
+    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
+    if (!value.startsWith('/uploads/')) return value;
+
+    return `${this.apiBase}${value}`;
   }
 }

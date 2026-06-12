@@ -558,7 +558,7 @@
               {{ t("checkout.summary.empty") }}
             </p>
           } @else {
-            @for (item of cart.items(); track item.id + "-" + item.size) {
+            @for (item of cart.items(); track item.id + "-" + item.size + "-" + (item.variantId || item.color || "")) {
               <div
                 style="
                   display: flex;
@@ -602,8 +602,7 @@
                       color: var(--muted);
                     "
                   >
-                    {{ t("cart.size") }} {{ item.size }} · {{ t("cart.qty") }}
-                    {{ item.qty }}
+                    {{ itemDetails(item) }} · {{ t("cart.qty") }} {{ item.qty }}
                   </div>
                 </div>
                 <div

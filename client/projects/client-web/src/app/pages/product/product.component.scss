@@ -497,11 +497,21 @@
   height: 34px;
   place-items: center;
   padding: 0;
+  overflow: hidden;
   border: 1px solid rgba(31, 28, 23, 0.16);
   border-radius: 50%;
+  background-size: cover;
+  background-position: center;
   box-shadow: 0 0 0 3px var(--pdp-surface), 0 5px 14px rgba(30, 28, 24, 0.16);
   cursor: pointer;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.color-swatch img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .color-swatch:hover {
@@ -582,7 +592,8 @@
   box-shadow: 0 10px 22px -14px rgba(0, 53, 42, 0.8);
 }
 
-.size-btn.out-of-stock {
+.size-btn.out-of-stock,
+.size-btn.unavailable {
   border-color: rgba(31, 28, 23, 0.12);
   background: rgba(31, 28, 23, 0.06);
   color: rgba(31, 28, 23, 0.34);
@@ -590,8 +601,162 @@
   transform: none;
 }
 
+.size-btn.out-of-stock:not(.unavailable)::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-inline-start: 7px;
+  border-radius: 50%;
+  background: rgba(31, 28, 23, 0.26);
+}
+
+.size-btn.unavailable .size-value {
+  text-decoration: line-through;
+}
+
 .size-sheet {
   display: none;
+}
+
+.size-guide-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.size-guide-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(20, 18, 14, 0.48);
+  cursor: pointer;
+}
+
+.size-guide-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 18px;
+  width: min(560px, 100%);
+  max-height: min(78vh, 680px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgba(31, 28, 23, 0.12);
+  border-radius: 16px;
+  background: var(--pdp-surface);
+  box-shadow: 0 30px 90px -34px rgba(20, 18, 14, 0.66);
+}
+
+.size-guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.size-guide-head span {
+  color: var(--pdp-gold-deep);
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.size-guide-head h2 {
+  margin: 4px 0 0;
+  color: var(--pdp-ink);
+  font-family: var(--ff-serif);
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.size-guide-close {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--pdp-line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--pdp-ink);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.size-guide-close:hover {
+  background: var(--pdp-green);
+  color: #f3efe4;
+  transform: rotate(90deg);
+}
+
+.size-guide-list {
+  display: grid;
+  gap: 10px;
+}
+
+.size-guide-card {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--pdp-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.size-guide-card h3 {
+  margin: 0;
+  color: var(--pdp-ink);
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.size-guide-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.size-guide-chips span {
+  display: inline-grid;
+  min-height: 30px;
+  place-items: center;
+  padding: 0 10px;
+  border: 1px solid rgba(31, 28, 23, 0.12);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--pdp-ink-soft);
+  font-family: var(--ff-sans);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.size-guide-state {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--pdp-line);
+  border-radius: 12px;
+  color: var(--pdp-ink-soft);
+  font-family: var(--ff-sans);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
 }
 
 /* ── Quantity ── */
@@ -1236,6 +1401,26 @@ button:focus-visible {
     inset: 0;
     z-index: 60;
     display: block;
+  }
+
+  .size-guide-modal {
+    align-items: end;
+    padding: 0;
+  }
+
+  .size-guide-panel {
+    width: 100%;
+    max-height: min(82vh, 620px);
+    padding: 20px 16px calc(22px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0;
+  }
+
+  .size-guide-head h2 {
+    font-size: 30px;
+  }
+
+  .size-guide-card {
+    padding: 14px;
   }
 
   .size-sheet-backdrop {

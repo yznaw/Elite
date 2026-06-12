@@ -124,14 +124,18 @@
                   <button
                     type="button"
                     class="color-swatch"
-                    [class.is-selected]="selectedColor() === color"
-                    [style.background]="colorHex(color)"
+                    [class.is-selected]="colorSelected(color)"
+                    [class.has-image]="colorSwatchImage(color)"
+                    [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
                     [attr.title]="color"
                     [attr.aria-label]="t('product.color.choose', { color })"
-                    [attr.aria-pressed]="selectedColor() === color"
+                    [attr.aria-pressed]="colorSelected(color)"
                     (click)="selectProductColor(color)"
                     (keydown)="onProductColorKeydown(color, $event)"
                   >
+                    @if (colorSwatchImage(color); as swatchImage) {
+                      <img [src]="swatchImage" [alt]="color" loading="lazy" decoding="async" />
+                    }
                     <span class="sr-only">{{ color }}</span>
                   </button>
                 }
@@ -143,7 +147,7 @@
             <div id="size-section" class="size-section">
               <div class="section-label">
                 <span>{{ t("product.size.label") }}</span>
-                <button type="button">{{ t("product.size.guide") }}</button>
+                <button type="button" (click)="openSizeGuide()">{{ t("product.size.guide") }}</button>
               </div>
 
               <button
@@ -157,19 +161,20 @@
               </button>
 
               <div class="size-options">
-                @for (s of p.sizes; track s) {
+                @for (s of availableSizes(); track s.size) {
                   <button
                     type="button"
                     class="size-btn"
-                    [class.active]="selectedSize() === s"
-                    [class.out-of-stock]="!sizeInStock(p, s)"
-                    [disabled]="!sizeInStock(p, s)"
-                    [attr.aria-pressed]="selectedSize() === s"
-                    (click)="selectSize(s)"
+                    [class.active]="selectedSize() === s.size"
+                    [class.unavailable]="!s.available"
+                    [class.out-of-stock]="s.available && !s.inStock"
+                    [disabled]="!s.available"
+                    [attr.aria-pressed]="selectedSize() === s.size"
+                    (click)="selectSize(s.size)"
                   >
-                    <span class="size-value">{{ s }}</span>
+                    <span class="size-value">{{ s.size }}</span>
                     <span class="size-state" aria-hidden="true">
-                      {{ selectedSize() === s ? "✓" : "" }}
+                      {{ selectedSize() === s.size ? "✓" : "" }}
                     </span>
                   </button>
                 }
@@ -205,19 +210,20 @@
                     </button>
                   </div>
                   <div class="size-list">
-                    @for (s of p.sizes; track s) {
+                    @for (s of availableSizes(); track s.size) {
                       <button
                         type="button"
                         class="size-btn"
-                        [class.active]="selectedSize() === s"
-                        [class.out-of-stock]="!sizeInStock(p, s)"
-                        [disabled]="!sizeInStock(p, s)"
-                        [attr.aria-pressed]="selectedSize() === s"
-                        (click)="selectSize(s)"
+                        [class.active]="selectedSize() === s.size"
+                        [class.unavailable]="!s.available"
+                        [class.out-of-stock]="s.available && !s.inStock"
+                        [disabled]="!s.available"
+                        [attr.aria-pressed]="selectedSize() === s.size"
+                        (click)="selectSize(s.size)"
                       >
-                        <span class="size-value">{{ s }}</span>
+                        <span class="size-value">{{ s.size }}</span>
                         <span class="size-state" aria-hidden="true">{{
-                          selectedSize() === s ? "✓" : ""
+                          selectedSize() === s.size ? "✓" : ""
                         }}</span>
                       </button>
                     }
@@ -349,6 +355,58 @@
           </div>
         </article>
       </section>
+
+      @if (sizeGuideOpen()) {
+        <div
+          class="size-guide-modal"
+          role="dialog"
+          aria-modal="true"
+          [attr.aria-label]="t('product.size.guide')"
+        >
+          <button
+            type="button"
+            class="size-guide-backdrop"
+            (click)="closeSizeGuide()"
+            [attr.aria-label]="t('common.close')"
+          ></button>
+
+          <section class="size-guide-panel">
+            <div class="size-guide-head">
+              <div>
+                <span>{{ t("product.size.label") }}</span>
+                <h2>{{ t("product.size.guide") }}</h2>
+              </div>
+              <button
+                type="button"
+                class="size-guide-close"
+                (click)="closeSizeGuide()"
+                [attr.aria-label]="t('common.close')"
+              >
+                ×
+              </button>
+            </div>
+
+            @if (sizeGuideLoading()) {
+              <p class="size-guide-state">{{ t("product.size.guideLoading") }}</p>
+            } @else if (sizeGuideError()) {
+              <p class="size-guide-state">{{ sizeGuideError() }}</p>
+            } @else {
+              <div class="size-guide-list">
+                @for (set of sizeSets(); track set.id) {
+                  <article class="size-guide-card">
+                    <h3>{{ set.name }}</h3>
+                    <div class="size-guide-chips">
+                      @for (size of set.sizes; track size) {
+                        <span>EU {{ size }}</span>
+                      }
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+          </section>
+        </div>
+      }
 
       @if (recommendedProducts().length > 0) {
         <section class="related-section" aria-labelledby="related-title">
