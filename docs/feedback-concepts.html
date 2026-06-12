@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Elite — Feedback Design Concepts</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0d0b08; --cream:#eee9df; --gold:#b8924a; --gold2:#c9a96e;
+  --gold-glow:rgba(184,146,74,.12); --muted:#8a7a62; --green:#024638;
+  --border:rgba(0,0,0,.10); --border2:rgba(0,0,0,.06);
+  --ag:#024638; --agold:#c5a572; --abg:#f5f6fa; --as:#fff;
+  --ab:rgba(0,0,0,.08); --ai:#1a1f36; --am:#6b7088;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Montserrat',sans-serif;background:#0a0c12;color:#e2e8f0;min-height:100vh}
+
+/* ── Shell nav ──────────────────────────────────────────────────── */
+.snav{
+  position:sticky;top:0;z-index:300;
+  background:rgba(10,12,18,.92);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex;align-items:center;gap:0;padding:0 32px;
+  overflow-x:auto;scrollbar-width:none;
+}
+.snav::-webkit-scrollbar{display:none}
+.snav-brand{
+  font-size:11px;font-weight:800;letter-spacing:.18em;color:#b8924a;
+  white-space:nowrap;padding:0 28px 0 0;margin-right:24px;
+  border-right:1px solid rgba(255,255,255,.07);line-height:60px;
+  font-style:italic;font-size:18px;font-family:'Cormorant Garamond',serif;
+}
+.stab{
+  line-height:60px;padding:0 20px;font-size:11px;font-weight:600;
+  letter-spacing:.06em;color:rgba(255,255,255,.35);
+  border:none;background:none;cursor:pointer;white-space:nowrap;
+  border-bottom:2px solid transparent;transition:all .15s;
+}
+.stab:hover{color:rgba(255,255,255,.7)}
+.stab.on{color:#b8924a;border-bottom-color:#b8924a}
+
+/* ── Section wrapper ─────────────────────────────────────────────── */
+.sec{display:none;max-width:1440px;margin:0 auto;padding:56px 40px}
+.sec.on{display:block}
+@media(max-width:640px){.sec{padding:32px 16px}}
+
+/* ── Section header ──────────────────────────────────────────────── */
+.sh{margin-bottom:52px}
+.sh-tag{font-size:9px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#b8924a;margin-bottom:10px}
+.sh-title{font-family:'Cormorant Garamond',serif;font-size:clamp(28px,4vw,48px);font-weight:300;color:#f1f5f9;line-height:1.15;margin-bottom:10px}
+.sh-sub{font-size:13px;color:rgba(255,255,255,.38);line-height:1.7;max-width:640px}
+
+/* ── Concept grid ────────────────────────────────────────────────── */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:28px}
+@media(max-width:760px){.cgrid{grid-template-columns:1fr}}
+
+/* ── Concept card ────────────────────────────────────────────────── */
+.cc{
+  border-radius:16px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.06);
+  background:#13151f;
+  display:flex;flex-direction:column;
+  transition:transform .2s,border-color .2s,box-shadow .2s;
+  cursor:pointer;
+}
+.cc:hover{transform:translateY(-4px);border-color:rgba(184,146,74,.35);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.cc-preview{height:320px;position:relative;overflow:hidden;flex-shrink:0}
+.cc-meta{padding:22px 24px 24px;display:flex;flex-direction:column;gap:10px}
+.cc-num{font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(184,146,74,.6)}
+.cc-name{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;color:#f1f5f9;font-style:italic}
+.cc-desc{font-size:11px;color:rgba(255,255,255,.38);line-height:1.65}
+.cc-tags{display:flex;flex-wrap:wrap;gap:6px}
+.cc-tag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:99px;background:rgba(184,146,74,.1);color:#b8924a;border:1px solid rgba(184,146,74,.2)}
+.cc-tag.green{background:rgba(2,70,56,.15);color:#4ade80;border-color:rgba(74,222,128,.2)}
+
+/* divider */
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(184,146,74,.3),transparent);margin:48px 0}
+
+/* ── Concept full-view button ─────────────────────────────────────── */
+.view-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:10px 20px;border-radius:8px;font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
+  background:rgba(184,146,74,.12);border:1px solid rgba(184,146,74,.25);
+  color:#b8924a;transition:all .15s;margin-top:6px;font-family:'Montserrat',sans-serif;
+}
+.view-btn:hover{background:rgba(184,146,74,.22);border-color:#b8924a;color:#c9a96e}
+
+/* ── Modal overlay ───────────────────────────────────────────────── */
+.modal-backdrop{
+  position:fixed;inset:0;z-index:500;
+  background:rgba(0,0,0,.85);backdrop-filter:blur(8px);
+  display:none;align-items:center;justify-content:center;padding:24px;
+}
+.modal-backdrop.on{display:flex}
+.modal-box{
+  width:100%;max-width:900px;max-height:90vh;overflow-y:auto;
+  border-radius:20px;border:1px solid rgba(255,255,255,.08);
+  background:#13151f;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;
+}
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px 28px;border-bottom:1px solid rgba(255,255,255,.06);
+  position:sticky;top:0;background:#13151f;z-index:2;
+}
+.modal-title{font-size:13px;font-weight:700;color:#f1f5f9}
+.modal-close{width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:transparent;color:rgba(255,255,255,.5);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .12s}
+.modal-close:hover{background:rgba(255,255,255,.08);color:#fff}
+.modal-body{padding:28px}
+.modal-views{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+@media(max-width:640px){.modal-views{grid-template-columns:1fr}}
+.mview-label{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.25);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.mview-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.05)}
+
+/* ═══════════════════════════════════════════════════
+   ELITE STOREFRONT TOKENS
+═══════════════════════════════════════════════════ */
+.ep{background:#eee9df;font-family:'Montserrat',sans-serif;color:#1a1208}
+.ep-bar{background:#024638;padding:0 24px;height:44px;display:flex;align-items:center;justify-content:space-between}
+.ep-bar-logo{font-size:15px;font-weight:700;font-style:italic;color:#d4a853;font-family:'Cormorant Garamond',serif}
+.ep-bar-right{display:flex;gap:14px;font-size:12px;color:rgba(255,255,255,.65)}
+.ep-body{padding:16px}
+.ep-name{font-size:20px;font-weight:700;color:#1a1208;margin-bottom:4px}
+.ep-price{font-size:16px;color:#b8924a;font-weight:600;margin-bottom:12px}
+.ep-accord{border-top:1px solid rgba(0,0,0,.1)}
+.ep-arow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.1);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1a1208}
+.ep-arow span{color:#b8924a;font-size:14px;font-weight:300}
+.ep-notify{width:100%;padding:13px;background:#f0e6ce;border:none;border-radius:3px;color:#5c3d11;font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;margin-top:10px;display:flex;align-items:center;justify-content:space-between;font-family:'Montserrat',sans-serif;cursor:pointer}
+
+/* Mobile frame */
+.mframe{width:340px;border-radius:36px;overflow:hidden;box-shadow:0 0 0 8px #1c1f2e,0 0 0 9px rgba(255,255,255,.05),0 20px 50px rgba(0,0,0,.5);background:#eee9df}
+.mframe-bar{background:#024638;padding:12px 18px 10px;display:flex;align-items:center;justify-content:space-between}
+.mframe-logo{font-size:16px;font-weight:700;font-style:italic;color:#d4a853;font-family:'Cormorant Garamond',serif}
+.mframe-icons{font-size:14px;color:rgba(255,255,255,.7);display:flex;gap:10px}
+
+/* Desktop frame */
+.dframe{border-radius:10px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04);background:#eee9df}
+
+
+/* ═══════════════════════════════════════════════════
+   CONCEPT A — "The Whisper"
+   Floating bottom bar, appears after scrolling
+═══════════════════════════════════════════════════ */
+.whisper-bar{
+  position:absolute;bottom:0;left:0;right:0;
+  background:rgba(2,70,56,.96);backdrop-filter:blur(12px);
+  padding:14px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-top:1px solid rgba(184,146,74,.25);
+}
+.whisper-text{font-size:11px;font-weight:600;letter-spacing:.08em;color:#fff}
+.whisper-text small{display:block;font-size:9px;font-weight:400;color:rgba(255,255,255,.45);letter-spacing:.04em;margin-top:1px}
+.whisper-btn{
+  padding:8px 18px;border-radius:4px;border:1px solid rgba(184,146,74,.5);
+  background:rgba(184,146,74,.15);color:#c9a96e;font-size:9px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;font-family:'Montserrat',sans-serif;
+}
+.whisper-form{
+  position:absolute;inset:0;background:rgba(2,70,56,.97);backdrop-filter:blur(20px);
+  padding:28px 24px;display:flex;flex-direction:column;gap:16px;
+}
+.wf-close{position:absolute;top:14px;right:16px;background:rgba(255,255,255,.1);border:none;border-radius:6px;width:30px;height:30px;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+.wf-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-style:italic;color:#fff;line-height:1.25}
+.wf-sub{font-size:10px;color:rgba(255,255,255,.45);letter-spacing:.04em}
+.wf-stars{display:flex;gap:4px}
+.wf-star{font-size:26px;color:rgba(255,255,255,.2);cursor:pointer;transition:color .1s}
+.wf-star.on{color:#d4a853}
+.wf-textarea{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:13px 15px;color:#fff;font-size:12px;font-family:'Montserrat',sans-serif;resize:none;height:90px;width:100%;outline:none}
+.wf-textarea::placeholder{color:rgba(255,255,255,.3)}
+.wf-textarea:focus{border-color:rgba(184,146,74,.5);background:rgba(255,255,255,.1)}
+.wf-input{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:11px 14px;color:#fff;font-size:12px;font-family:'Montserrat',sans-serif;width:100%;outline:none}
+.wf-input::placeholder{color:rgba(255,255,255,.3)}
+.wf-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wf-submit{padding:13px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:#0d0b08;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif}
+.wf-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:5px}
+
+/* ═══════════════════════════════════════════════════
+   CONCEPT B — "The Impression"
+   Editorial, full-width, magazine feel
+═══════════════════════════════════════════════════ */
+.impression-sec{
+  background:#1a1208;padding:48px 32px;
+  display:flex;flex-direction:column;align-items:center;
+  text-align:center;
+}
+.imp-quote-mark{font-family:'Cormorant Garamond',serif;font-size:120px;color:rgba(184,146,74,.12);line-height:.6;margin-bottom:8px;font-style:italic}
+.imp-title{font-family:'Cormorant Garamond',serif;font-size:clamp(22px,3.5vw,36px);font-weight:300;font-style:italic;color:#f0e6ce;margin-bottom:8px;line-height:1.25}
+.imp-sub{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(184,146,74,.6);margin-bottom:28px}
+.imp-textarea{
+  width:100%;max-width:520px;
+  background:transparent;border:none;border-bottom:1px solid rgba(184,146,74,.3);
+  padding:14px 0;color:#f0e6ce;font-size:14px;font-family:'Cormorant Garamond',serif;
+  font-style:italic;resize:none;height:80px;outline:none;text-align:center;line-height:1.6;
+}
+.imp-textarea::placeholder{color:rgba(240,230,206,.25)}
+.imp-divider{width:60px;height:1px;background:rgba(184,146,74,.3);margin:24px auto}
+.imp-contact{display:flex;gap:12px;width:100%;max-width:520px;margin-bottom:24px}
+.imp-input{flex:1;background:transparent;border-bottom:1px solid rgba(184,146,74,.2);padding:10px 0;color:#f0e6ce;font-size:12px;font-family:'Montserrat',sans-serif;outline:none}
+.imp-input::placeholder{color:rgba(240,230,206,.25);font-size:11px}
+.imp-btn{padding:12px 36px;background:transparent;border:1px solid rgba(184,146,74,.4);border-radius:2px;color:#b8924a;font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;transition:all .2s}
+.imp-btn:hover{background:rgba(184,146,74,.1)}
+.imp-privacy{font-size:9px;color:rgba(240,230,206,.2);letter-spacing:.08em}
+
+/* ═══════════════════════════════════════════════════
+   CONCEPT C — "The Mood"
+   4 big mood tiles, tap one → expand
+═══════════════════════════════════════════════════ */
+.mood-sec{background:#eee9df;padding:32px 20px}
+.mood-eyebrow{font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#b8924a;margin-bottom:6px;text-align:center}
+.mood-title{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:400;color:#1a1208;text-align:center;margin-bottom:24px;line-height:1.2}
+.mood-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0}
+.mood-tile{
+  padding:20px 14px;border-radius:8px;border:1.5px solid rgba(0,0,0,.1);
+  background:rgba(255,255,255,.5);text-align:center;cursor:pointer;
+  transition:all .18s;display:flex;flex-direction:column;align-items:center;gap:6px;
+}
+.mood-tile:hover,.mood-tile.active{border-color:#b8924a;background:#fff;box-shadow:0 4px 20px rgba(184,146,74,.15)}
+.mood-tile.active{border-color:#b8924a}
+.mood-emoji{font-size:28px;line-height:1}
+.mood-label{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#8a7a62}
+.mood-tile:hover .mood-label,.mood-tile.active .mood-label{color:#b8924a}
+.mood-form{
+  margin-top:14px;padding:16px;background:#fff;border-radius:8px;
+  border:1px solid rgba(184,146,74,.2);
+  display:none;flex-direction:column;gap:12px;
+}
+.mood-form.on{display:flex}
+.mood-form-title{font-size:11px;font-weight:600;color:#1a1208}
+.mood-ta{width:100%;padding:11px 13px;border:1px solid rgba(0,0,0,.1);border-radius:4px;font-size:12px;font-family:'Montserrat',sans-serif;color:#1a1208;resize:none;height:72px;background:rgba(238,233,223,.4);outline:none}
+.mood-ta:focus{border-color:#b8924a}
+.mood-inp{width:100%;padding:10px 13px;border:1px solid rgba(0,0,0,.1);border-radius:4px;font-size:12px;font-family:'Montserrat',sans-serif;color:#1a1208;background:rgba(238,233,223,.4);outline:none}
+.mood-sub{width:100%;padding:12px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:#0d0b08;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif}
+
+/* ═══════════════════════════════════════════════════
+   CONCEPT D — "The Invite"
+   Conversational chip selection
+═══════════════════════════════════════════════════ */
+.invite-sec{background:#eee9df;padding:32px 20px}
+.inv-step{display:flex;flex-direction:column;gap:12px}
+.inv-step.hidden{display:none}
+.inv-q{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:400;color:#1a1208;line-height:1.3;margin-bottom:4px}
+.inv-hint{font-size:10px;color:#8a7a62}
+.inv-chips{display:flex;flex-wrap:wrap;gap:8px}
+.inv-chip{
+  padding:9px 18px;border-radius:99px;border:1.5px solid rgba(0,0,0,.12);
+  background:rgba(255,255,255,.5);font-size:11px;font-weight:500;color:#5c4a32;
+  cursor:pointer;transition:all .14s;font-family:'Montserrat',sans-serif;
+}
+.inv-chip:hover,.inv-chip.on{border-color:#b8924a;background:#fff;color:#b8924a}
+.inv-ta{width:100%;padding:12px 14px;border:1.5px solid rgba(0,0,0,.1);border-radius:8px;font-size:12px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:14px;color:#1a1208;resize:none;height:80px;background:rgba(255,255,255,.5);outline:none}
+.inv-ta:focus{border-color:#b8924a;background:#fff}
+.inv-row{display:flex;gap:10px}
+.inv-inp{flex:1;padding:10px 13px;border:1.5px solid rgba(0,0,0,.1);border-radius:6px;font-size:11px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.5);color:#1a1208;outline:none}
+.inv-inp:focus{border-color:#b8924a}
+.inv-sub{padding:12px 28px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:5px;color:#0d0b08;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap}
+.inv-next{padding:10px 22px;background:transparent;border:1.5px solid rgba(0,0,0,.12);border-radius:5px;color:#5c4a32;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif}
+.inv-next:hover{border-color:#b8924a;color:#b8924a}
+.inv-progress{display:flex;gap:5px;margin-bottom:16px}
+.inv-dot{width:6px;height:6px;border-radius:50%;background:rgba(0,0,0,.1)}
+.inv-dot.on{background:#b8924a}
+
+/* ═══════════════════════════════════════════════════
+   KIOSK CONCEPTS
+═══════════════════════════════════════════════════ */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:40px;align-items:start}
+@media(max-width:960px){.kgrid{grid-template-columns:1fr}}
+
+.kc-frame{
+  border-radius:14px;overflow:hidden;
+  box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 10px #1c1f2e,0 0 0 11px rgba(255,255,255,.04);
+  aspect-ratio:4/3;position:relative;font-family:'Montserrat',sans-serif;
+}
+.kc-portrait{
+  aspect-ratio:3/4;
+  box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 10px #1c1f2e,0 0 0 11px rgba(255,255,255,.04);
+}
+
+/* Kiosk A — The Concierge (dark, portrait) */
+.kca{background:#024638;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:clamp(24px,5%,60px);position:relative;width:100%;height:100%}
+.kca-bg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(184,146,74,.15) 0%,transparent 60%)}
+.kca-logo{font-family:'Cormorant Garamond',serif;font-size:clamp(24px,4vw,40px);font-style:italic;color:#d4a853;position:relative;z-index:1;margin-bottom:4px}
+.kca-divider{color:rgba(184,146,74,.4);font-size:14px;margin:12px 0;position:relative;z-index:1}
+.kca-q{font-size:clamp(15px,2.5vw,26px);font-weight:300;color:#fff;position:relative;z-index:1;margin-bottom:clamp(20px,4%,36px);line-height:1.4}
+.kca-stars{display:flex;gap:clamp(6px,1.5vw,16px);justify-content:center;margin-bottom:clamp(16px,3%,28px);position:relative;z-index:1}
+.kca-star{font-size:clamp(32px,6vw,52px);color:rgba(255,255,255,.15);cursor:pointer;transition:all .12s;user-select:none}
+.kca-star.on{color:#d4a853}
+.kca-star:hover{transform:scale(1.2)}
+.kca-labels{display:flex;justify-content:space-between;width:100%;max-width:300px;margin:0 auto clamp(16px,3%,28px);position:relative;z-index:1}
+.kca-lbl{font-size:clamp(7px,1.2vw,10px);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.3)}
+.kca-fields{display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px;margin-bottom:clamp(14px,2.5%,24px);position:relative;z-index:1}
+.kca-inp{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:5px;padding:clamp(11px,2%,16px) clamp(14px,2.5%,20px);color:#fff;font-size:clamp(12px,1.8vw,15px);font-family:'Montserrat',sans-serif;outline:none;transition:border-color .15s}
+.kca-inp:focus{border-color:rgba(184,146,74,.5);background:rgba(255,255,255,.1)}
+.kca-inp::placeholder{color:rgba(255,255,255,.25)}
+.kca-btn{padding:clamp(12px,2%,17px) clamp(40px,6%,70px);background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:5px;color:#0d0b08;font-size:clamp(9px,1.3vw,12px);font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;position:relative;z-index:1;box-shadow:0 8px 28px rgba(184,146,74,.3)}
+.kca-skip{font-size:clamp(8px,1.2vw,10px);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.25);background:none;border:none;cursor:pointer;margin-top:clamp(8px,1.5%,14px);font-family:'Montserrat',sans-serif;position:relative;z-index:1}
+.kca-skip:hover{color:rgba(255,255,255,.5)}
+
+/* Kiosk B — Split "The Gallery" (landscape) */
+.kcb{display:grid;grid-template-columns:1fr 1fr;width:100%;height:100%}
+.kcb-left{background:#1a1208;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.kcb-left-bg{position:absolute;inset:0;background:linear-gradient(160deg,#2a1f0e,#0d0906)}
+.kcb-left-img{position:relative;z-index:1;text-align:center;padding:clamp(16px,3%,40px)}
+.kcb-left-eyebrow{font-size:clamp(7px,1vw,9px);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(184,146,74,.5);margin-bottom:8px}
+.kcb-left-name{font-family:'Cormorant Garamond',serif;font-size:clamp(16px,2.5vw,28px);font-weight:300;font-style:italic;color:#f0e6ce;margin-bottom:4px}
+.kcb-left-price{font-size:clamp(11px,1.5vw,16px);color:#b8924a;font-weight:600}
+.kcb-left-img-box{width:clamp(80px,12vw,140px);height:clamp(80px,12vw,140px);border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);margin:clamp(12px,2%,24px) auto;display:flex;align-items:center;justify-content:center;font-size:clamp(32px,5vw,56px)}
+.kcb-right{background:#eee9df;padding:clamp(16px,3%,40px);display:flex;flex-direction:column;justify-content:center;gap:clamp(10px,2%,18px)}
+.kcb-right-title{font-family:'Cormorant Garamond',serif;font-size:clamp(15px,2.5vw,26px);font-weight:400;color:#1a1208;line-height:1.25}
+.kcb-stars{display:flex;gap:clamp(3px,0.7vw,8px)}
+.kcb-star{font-size:clamp(24px,4.5vw,40px);color:rgba(0,0,0,.1);cursor:pointer;transition:color .1s;user-select:none}
+.kcb-star.on{color:#b8924a}
+.kcb-ta{width:100%;padding:clamp(10px,2%,15px);border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:clamp(11px,1.5vw,14px);font-family:'Montserrat',sans-serif;color:#1a1208;resize:none;height:clamp(60px,10%,100px);background:rgba(255,255,255,.6);outline:none}
+.kcb-ta:focus{border-color:#b8924a}
+.kcb-inp{width:100%;padding:clamp(9px,1.5%,13px);border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:clamp(11px,1.5vw,14px);font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);color:#1a1208;outline:none}
+.kcb-inp:focus{border-color:#b8924a}
+.kcb-btns{display:flex;gap:8px}
+.kcb-skip{flex:1;padding:clamp(9px,1.5%,13px);background:transparent;border:1.5px solid rgba(0,0,0,.12);border-radius:4px;font-size:clamp(8px,1.1vw,10px);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a7a62;cursor:pointer;font-family:'Montserrat',sans-serif}
+.kcb-go{flex:2;padding:clamp(9px,1.5%,13px);background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;font-size:clamp(8px,1.1vw,10px);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#0d0b08;cursor:pointer;font-family:'Montserrat',sans-serif}
+
+/* Kiosk C — "The Express" ultra-minimal */
+.kcc{background:#f5f0e8;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:clamp(20px,4%,50px);width:100%;height:100%;position:relative}
+.kcc-bar{position:absolute;top:0;left:0;right:0;height:clamp(6px,1.2%,10px);background:linear-gradient(90deg,#024638,#b8924a,#024638)}
+.kcc-logo{font-family:'Cormorant Garamond',serif;font-size:clamp(18px,3vw,28px);font-style:italic;color:#024638;margin-bottom:clamp(12px,2.5%,24px)}
+.kcc-q{font-size:clamp(14px,2vw,22px);font-weight:600;color:#1a1208;margin-bottom:clamp(14px,2.5%,28px);line-height:1.3}
+.kcc-emojis{display:flex;gap:clamp(8px,2vw,24px);margin-bottom:clamp(10px,2%,20px);justify-content:center}
+.kcc-emoji-btn{
+  display:flex;flex-direction:column;align-items:center;gap:clamp(4px,0.8%,8px);
+  padding:clamp(12px,2%,20px) clamp(14px,2.5%,28px);
+  border-radius:12px;border:2px solid rgba(0,0,0,.08);background:rgba(255,255,255,.7);
+  cursor:pointer;transition:all .15s;font-family:'Montserrat',sans-serif;
+}
+.kcc-emoji-btn:hover,.kcc-emoji-btn.on{border-color:#b8924a;background:#fff;box-shadow:0 4px 20px rgba(184,146,74,.15)}
+.kcc-emoji{font-size:clamp(28px,5vw,44px)}
+.kcc-emoji-lbl{font-size:clamp(7px,1.1vw,10px);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a7a62}
+.kcc-emoji-btn.on .kcc-emoji-lbl{color:#b8924a}
+.kcc-name-row{display:flex;gap:10px;width:100%;max-width:340px;margin-top:clamp(6px,1%,12px)}
+.kcc-inp{flex:1;padding:clamp(11px,2%,15px);border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:clamp(12px,1.8vw,15px);font-family:'Montserrat',sans-serif;background:#fff;color:#1a1208;outline:none}
+.kcc-inp:focus{border-color:#b8924a}
+.kcc-btn{padding:clamp(11px,2%,15px) clamp(20px,3%,36px);background:linear-gradient(135deg,#024638,#013028);border:none;border-radius:5px;color:#fff;font-size:clamp(9px,1.3vw,12px);font-weight:700;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif}
+.kcc-privacy{font-size:clamp(8px,1vw,10px);color:rgba(0,0,0,.2);margin-top:clamp(10px,2%,18px);letter-spacing:.06em}
+</style>
+</head>
+<body>
+
+<nav class="snav">
+  <div class="snav-brand">elite</div>
+  <button class="stab on" onclick="show('web')">Product Page</button>
+  <button class="stab" onclick="show('kiosk')">iPad Kiosk</button>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PRODUCT PAGE CONCEPTS
+══════════════════════════════════════════════════════════════════ -->
+<div id="web" class="sec on">
+  <div class="sh">
+    <div class="sh-tag">Storefront · 4 Directions</div>
+    <div class="sh-title">How should it feel<br/>to leave a thought?</div>
+    <div class="sh-sub">All four work for anyone — browsers, gift buyers, repeat customers. None require a purchase. Each has a different personality. Pick the one that fits the brand.</div>
+  </div>
+
+  <div class="cgrid">
+
+    <!-- Concept A card -->
+    <div class="cc" onclick="openModal('ma')">
+      <div class="cc-preview" style="background:#024638;position:relative;overflow:hidden">
+        <!-- mini product page -->
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)">
+          <div style="font-size:9px;color:rgba(255,255,255,.35);letter-spacing:.1em;margin-bottom:4px">COLLECTION / MISSTITCH OSTRICH</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;color:#fff">MisStitch Ostrich</div>
+          <div style="font-size:13px;color:#b8924a;font-weight:600;margin-top:2px">QAR 1,080</div>
+        </div>
+        <div style="padding:10px 16px;flex:1">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);padding:8px 0;font-size:8px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.4)">MATERIAL & CARE <span style="color:rgba(184,146,74,.6)">+</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);padding:8px 0;font-size:8px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.4)">SIZING & FIT <span style="color:rgba(184,146,74,.6)">+</span></div>
+          </div>
+        </div>
+        <!-- The bar -->
+        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(2,70,56,.97);border-top:1px solid rgba(184,146,74,.25);padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:10px;font-weight:600;color:#fff;letter-spacing:.04em">Leave a thought →</div>
+            <div style="font-size:8px;color:rgba(255,255,255,.35);margin-top:1px">Private · 60 seconds</div>
+          </div>
+          <div style="padding:7px 14px;background:rgba(184,146,74,.15);border:1px solid rgba(184,146,74,.4);border-radius:3px;font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#c9a96e">Share</div>
+        </div>
+      </div>
+      <div class="cc-meta">
+        <div class="cc-num">Concept A</div>
+        <div class="cc-name">The Whisper</div>
+        <div class="cc-desc">A floating dark bar at the very bottom of the page. Barely there, never distracting. Tapping it opens a full-screen overlay form over the page — felt from below, like a gentle nudge.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">Least intrusive</span>
+          <span class="cc-tag">Luxury feel</span>
+          <span class="cc-tag green">Best for browsers</span>
+        </div>
+        <button class="view-btn">View interactive demo →</button>
+      </div>
+    </div>
+
+    <!-- Concept B card -->
+    <div class="cc" onclick="openModal('mb')">
+      <div class="cc-preview" style="background:#1a1208;position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px 24px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:80px;color:rgba(184,146,74,.1);line-height:.7;margin-bottom:4px;font-style:italic">"</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;font-weight:300;color:#f0e6ce;line-height:1.4;margin-bottom:12px">What's your<br/>first impression?</div>
+        <div style="font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:rgba(184,146,74,.5);margin-bottom:18px">Any visitor. No purchase needed.</div>
+        <div style="width:100%;max-width:240px;border-bottom:1px solid rgba(184,146,74,.25);padding-bottom:10px;margin-bottom:16px">
+          <div style="font-size:11px;color:rgba(240,230,206,.25);font-family:'Cormorant Garamond',serif;font-style:italic">Write your thoughts here…</div>
+        </div>
+        <div style="padding:8px 28px;border:1px solid rgba(184,146,74,.3);border-radius:2px;color:#b8924a;font-size:8px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Submit</div>
+      </div>
+      <div class="cc-meta">
+        <div class="cc-num">Concept B</div>
+        <div class="cc-name">The Impression</div>
+        <div class="cc-desc">A dark editorial section below the product, like a guest book. Large serif typography, no star rating — just a single text field and optional contact. Maximally elegant, zero friction.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">Most elegant</span>
+          <span class="cc-tag">Editorial</span>
+          <span class="cc-tag green">Zero friction</span>
+        </div>
+        <button class="view-btn">View interactive demo →</button>
+      </div>
+    </div>
+
+    <!-- Concept C card -->
+    <div class="cc" onclick="openModal('mc')">
+      <div class="cc-preview" style="background:#eee9df;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#b8924a;margin-bottom:6px">How do you feel about it?</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:18px;color:#1a1208;margin-bottom:20px;text-align:center">Tap the one that<br/>matches your feeling</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:260px">
+          <div style="padding:14px 10px;border-radius:8px;border:1.5px solid #b8924a;background:#fff;text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px">
+            <div style="font-size:24px">😍</div>
+            <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#b8924a">Love it</div>
+          </div>
+          <div style="padding:14px 10px;border-radius:8px;border:1.5px solid rgba(0,0,0,.1);background:rgba(255,255,255,.5);text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px">
+            <div style="font-size:24px">👍</div>
+            <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a7a62">Like it</div>
+          </div>
+          <div style="padding:14px 10px;border-radius:8px;border:1.5px solid rgba(0,0,0,.1);background:rgba(255,255,255,.5);text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px">
+            <div style="font-size:24px">🤔</div>
+            <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a7a62">Not sure</div>
+          </div>
+          <div style="padding:14px 10px;border-radius:8px;border:1.5px solid rgba(0,0,0,.1);background:rgba(255,255,255,.5);text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px">
+            <div style="font-size:24px">💬</div>
+            <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a7a62">Tell us more</div>
+          </div>
+        </div>
+      </div>
+      <div class="cc-meta">
+        <div class="cc-num">Concept C</div>
+        <div class="cc-name">The Mood</div>
+        <div class="cc-desc">4 big mood tiles. One tap — done. The selected mood expands a short optional form for details. Fastest to complete, highest conversion rate. Great for anyone passing by.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">Highest completion</span>
+          <span class="cc-tag">Trendy</span>
+          <span class="cc-tag green">Works for anyone</span>
+        </div>
+        <button class="view-btn">View interactive demo →</button>
+      </div>
+    </div>
+
+    <!-- Concept D card -->
+    <div class="cc" onclick="openModal('md')">
+      <div class="cc-preview" style="background:#eee9df;display:flex;flex-direction:column;justify-content:center;padding:24px 20px;gap:16px">
+        <div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:18px;color:#1a1208;margin-bottom:12px">What brought you here today?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            <div style="padding:7px 14px;border-radius:99px;border:1.5px solid #b8924a;background:#fff;font-size:10px;font-weight:500;color:#b8924a">Just browsing</div>
+            <div style="padding:7px 14px;border-radius:99px;border:1.5px solid rgba(0,0,0,.1);background:rgba(255,255,255,.5);font-size:10px;font-weight:500;color:#5c4a32">Buying a gift</div>
+            <div style="padding:7px 14px;border-radius:99px;border:1.5px solid rgba(0,0,0,.1);background:rgba(255,255,255,.5);font-size:10px;font-weight:500;color:#5c4a32">I'm a regular</div>
+            <div style="padding:7px 14px;border-radius:99px;border:1.5px solid rgba(0,0,0,.1);background:rgba(255,255,255,.5);font-size:10px;font-weight:500;color:#5c4a32">Researching</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:18px;color:#1a1208;margin-bottom:10px">What would you tell us?</div>
+          <div style="width:100%;border:1.5px solid rgba(0,0,0,.1);border-radius:8px;padding:11px 13px;background:rgba(255,255,255,.6);font-size:11px;color:rgba(0,0,0,.25);font-style:italic;font-family:'Cormorant Garamond',serif">Anything at all — we read every word</div>
+        </div>
+      </div>
+      <div class="cc-meta">
+        <div class="cc-num">Concept D</div>
+        <div class="cc-name">The Invite</div>
+        <div class="cc-desc">Conversational, step-by-step. "What brought you here?" with chip answers — includes options for non-buyers. Then one open text field. Feels like talking to a person, not filling a form.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">Most personal</span>
+          <span class="cc-tag">Inclusive</span>
+          <span class="cc-tag green">Non-buyer friendly</span>
+        </div>
+        <button class="view-btn">View interactive demo →</button>
+      </div>
+    </div>
+
+  </div><!-- /cgrid -->
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     IPAD KIOSK CONCEPTS
+══════════════════════════════════════════════════════════════════ -->
+<div id="kiosk" class="sec">
+  <div class="sh">
+    <div class="sh-tag">iPad Kiosk · 3 Directions</div>
+    <div class="sh-title">Three moods for<br/>the checkout counter</div>
+    <div class="sh-sub">All fullscreen, all touch-optimized (60px+ tap targets). Choose based on how much time your customers have and the feeling you want at the counter.</div>
+  </div>
+
+  <div class="kgrid">
+
+    <!-- Kiosk A -->
+    <div>
+      <div class="cc-num" style="margin-bottom:10px">Kiosk A &nbsp;·&nbsp; The Concierge</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.35);margin-bottom:18px;line-height:1.6">Dark green, portrait. Feels like a luxury hotel check-in. Staff hands the iPad to the customer. Generous whitespace, one question at a time, maximum brand presence.</div>
+      <div style="display:flex;justify-content:center">
+        <div class="kc-frame kc-portrait" style="width:320px">
+          <div class="kca" style="width:100%;height:100%">
+            <div class="kca-bg"></div>
+            <div class="kca-logo">elite</div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(184,146,74,.5);position:relative;z-index:1;margin-bottom:6px">ARABIC LEATHER ARTISANS</div>
+            <div class="kca-divider">◇</div>
+            <div class="kca-q">How was your experience<br/>with us today?</div>
+            <div class="kca-stars" id="ka-stars">
+              <span class="kca-star on" onclick="rateKA(1)">★</span>
+              <span class="kca-star on" onclick="rateKA(2)">★</span>
+              <span class="kca-star on" onclick="rateKA(3)">★</span>
+              <span class="kca-star on" onclick="rateKA(4)">★</span>
+              <span class="kca-star" onclick="rateKA(5)">★</span>
+            </div>
+            <div class="kca-labels"><span class="kca-lbl">Poor</span><span class="kca-lbl">Excellent</span></div>
+            <div class="kca-fields">
+              <input class="kca-inp" placeholder="Your name (optional)"/>
+              <input class="kca-inp" placeholder="Phone or email (optional)" type="email"/>
+            </div>
+            <button class="kca-btn">Submit →</button>
+            <button class="kca-skip">Skip without leaving details</button>
+          </div>
+        </div>
+      </div>
+      <div class="cc-tags" style="margin-top:14px;justify-content:center;display:flex;flex-wrap:wrap;gap:6px">
+        <span class="cc-tag">Portrait</span><span class="cc-tag">All-in-one screen</span><span class="cc-tag green">Most premium</span>
+      </div>
+    </div>
+
+    <!-- Kiosk B -->
+    <div>
+      <div class="cc-num" style="margin-bottom:10px">Kiosk B &nbsp;·&nbsp; The Gallery</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.35);margin-bottom:18px;line-height:1.6">Landscape split-screen. Product image on the left — customer sees what they're rating. Form on the right. Most visual, best when the product matters as much as the feedback.</div>
+      <div class="kc-frame" style="width:100%">
+        <div class="kcb" style="width:100%;height:100%">
+          <div class="kcb-left">
+            <div class="kcb-left-bg"></div>
+            <div class="kcb-left-img">
+              <div class="kcb-left-eyebrow">Now Rating</div>
+              <div class="kcb-left-img-box">👟</div>
+              <div class="kcb-left-name">MisStitch Ostrich</div>
+              <div class="kcb-left-price">QAR 1,080</div>
+            </div>
+          </div>
+          <div class="kcb-right">
+            <div class="kcb-right-title">How would you rate<br/>this product?</div>
+            <div class="kcb-stars" id="kb-stars">
+              <span class="kcb-star on" onclick="rateKB(1)">★</span>
+              <span class="kcb-star on" onclick="rateKB(2)">★</span>
+              <span class="kcb-star on" onclick="rateKB(3)">★</span>
+              <span class="kcb-star on" onclick="rateKB(4)">★</span>
+              <span class="kcb-star" onclick="rateKB(5)">★</span>
+            </div>
+            <textarea class="kcb-ta" placeholder="Tell us what you think — fit, quality, style…"></textarea>
+            <input class="kcb-inp" placeholder="Name or phone (optional)"/>
+            <div class="kcb-btns">
+              <button class="kcb-skip">Skip</button>
+              <button class="kcb-go">Submit →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cc-tags" style="margin-top:14px;justify-content:center;display:flex;flex-wrap:wrap;gap:6px">
+        <span class="cc-tag">Landscape</span><span class="cc-tag">Product-first</span><span class="cc-tag green">Most visual</span>
+      </div>
+    </div>
+
+    <!-- Kiosk C -->
+    <div>
+      <div class="cc-num" style="margin-bottom:10px">Kiosk C &nbsp;·&nbsp; The Express</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.35);margin-bottom:18px;line-height:1.6">Cream/white, ultra-minimal. Four emoji mood buttons + name field. Done in 8 seconds. Best for busy counters where customers are in a rush. Maximize responses over depth.</div>
+      <div class="kc-frame" style="width:100%">
+        <div class="kcc" style="width:100%;height:100%">
+          <div class="kcc-bar"></div>
+          <div class="kcc-logo">elite</div>
+          <div class="kcc-q">How do you feel<br/>about your purchase?</div>
+          <div class="kcc-emojis">
+            <div class="kcc-emoji-btn on" onclick="selectExpress(this)">
+              <div class="kcc-emoji">😍</div>
+              <div class="kcc-emoji-lbl">Love it</div>
+            </div>
+            <div class="kcc-emoji-btn" onclick="selectExpress(this)">
+              <div class="kcc-emoji">😊</div>
+              <div class="kcc-emoji-lbl">Happy</div>
+            </div>
+            <div class="kcc-emoji-btn" onclick="selectExpress(this)">
+              <div class="kcc-emoji">😐</div>
+              <div class="kcc-emoji-lbl">Okay</div>
+            </div>
+            <div class="kcc-emoji-btn" onclick="selectExpress(this)">
+              <div class="kcc-emoji">😕</div>
+              <div class="kcc-emoji-lbl">Disappointed</div>
+            </div>
+          </div>
+          <div class="kcc-name-row">
+            <input class="kcc-inp" placeholder="Your name (optional)"/>
+            <button class="kcc-btn">Done ✓</button>
+          </div>
+          <div class="kcc-privacy">◇ &nbsp;Private · only our team sees this</div>
+        </div>
+      </div>
+      <div class="cc-tags" style="margin-top:14px;justify-content:center;display:flex;flex-wrap:wrap;gap:6px">
+        <span class="cc-tag">Landscape</span><span class="cc-tag">8-second flow</span><span class="cc-tag green">Highest response rate</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL — Concept A: The Whisper
+══════════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="ma" onclick="closeIfBackdrop(event,'ma')">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Concept A — The Whisper &nbsp;·&nbsp; Interactive demo</div>
+      <button class="modal-close" onclick="closeModal('ma')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-views">
+        <!-- Desktop -->
+        <div>
+          <div class="mview-label">Product page — bar closed</div>
+          <div class="dframe">
+            <div class="ep-bar"><div class="ep-bar-logo">elite</div><div class="ep-bar-right">Collection &nbsp; Our Story &nbsp; Contact &nbsp; 🔍 🛒</div></div>
+            <div style="position:relative">
+              <div class="ep-body">
+                <div class="ep-name">MisStitch Ostrich</div>
+                <div class="ep-price">QAR 1,080</div>
+                <div class="ep-accord">
+                  <div class="ep-arow">MATERIAL & CARE <span>+</span></div>
+                  <div class="ep-arow">DELIVERY & PACKAGING <span>+</span></div>
+                  <div class="ep-arow">SIZING & FIT <span>+</span></div>
+                </div>
+                <button class="ep-notify" style="margin-top:10px">NOTIFY ME <span style="font-size:8px;color:#9a7535">SIZE —</span></button>
+              </div>
+              <!-- Floating bar -->
+              <div class="whisper-bar">
+                <div class="whisper-text">Leave a thought →<small>Private · 60 seconds · anyone welcome</small></div>
+                <button class="whisper-btn" onclick="openWhisper()">Share</button>
+              </div>
+              <!-- Whisper form overlay -->
+              <div class="whisper-form" id="whisper-form" style="display:none">
+                <button class="wf-close" onclick="closeWhisper()">✕</button>
+                <div class="wf-title">What's on<br/>your mind?</div>
+                <div class="wf-sub">Private — only our team reads this. No purchase needed.</div>
+                <div>
+                  <div class="wf-label">Rating (optional)</div>
+                  <div class="wf-stars" id="wstars">
+                    <span class="wf-star on" onclick="rateW(1)">★</span>
+                    <span class="wf-star on" onclick="rateW(2)">★</span>
+                    <span class="wf-star on" onclick="rateW(3)">★</span>
+                    <span class="wf-star" onclick="rateW(4)">★</span>
+                    <span class="wf-star" onclick="rateW(5)">★</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="wf-label">Your thoughts *</div>
+                  <textarea class="wf-textarea" placeholder="Fit, quality, style, first impression — anything…"></textarea>
+                </div>
+                <div class="wf-row">
+                  <div>
+                    <div class="wf-label">Name (optional)</div>
+                    <input class="wf-input" placeholder="Your name"/>
+                  </div>
+                  <div>
+                    <div class="wf-label">Email (optional)</div>
+                    <input class="wf-input" type="email" placeholder="your@email.com"/>
+                  </div>
+                </div>
+                <button class="wf-submit">Submit →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Mobile -->
+        <div>
+          <div class="mview-label">Mobile — bar + form</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe">
+              <div class="mframe-bar"><div class="mframe-logo">elite</div><div class="mframe-icons">🔍 🛒 —</div></div>
+              <div style="background:#e0d8cc;height:120px;display:flex;align-items:center;justify-content:center;font-size:32px">👟</div>
+              <div style="padding:14px">
+                <div style="font-size:17px;font-weight:700;color:#1a1208;margin-bottom:4px">MisStitch Ostrich</div>
+                <div style="font-size:14px;color:#b8924a;font-weight:600;margin-bottom:12px">QAR 1,080</div>
+                <div style="font-size:8px;font-weight:700;letter-spacing:.12em;border-top:1px solid rgba(0,0,0,.1);padding-top:10px;margin-bottom:8px;text-transform:uppercase;color:#1a1208;display:flex;justify-content:space-between">MATERIAL & CARE <span style="color:#b8924a;font-size:12px;font-weight:300">+</span></div>
+                <div style="font-size:8px;font-weight:700;letter-spacing:.12em;border-top:1px solid rgba(0,0,0,.1);padding-top:10px;margin-bottom:8px;text-transform:uppercase;color:#1a1208;display:flex;justify-content:space-between">SIZING & FIT <span style="color:#b8924a;font-size:12px;font-weight:300">+</span></div>
+                <button style="width:100%;padding:12px;background:#f0e6ce;border:none;border-radius:3px;font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#5c3d11;margin:10px 0;display:flex;justify-content:space-between;font-family:'Montserrat',sans-serif">NOTIFY ME <span style="font-size:7px;color:#9a7535">SIZE —</span></button>
+                <!-- Whisper bar mobile -->
+                <div style="border:1.5px solid rgba(184,146,74,.3);border-radius:4px;background:rgba(2,70,56,.04)">
+                  <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <div style="width:24px;height:24px;border-radius:4px;background:linear-gradient(135deg,#c9a96e,#9a7535);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;flex-shrink:0">★</div>
+                      <div>
+                        <div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#1a1208">Leave a thought</div>
+                        <div style="font-size:8px;color:#8a7a62;margin-top:1px">60 sec · stays private</div>
+                      </div>
+                    </div>
+                    <div style="color:#b8924a;font-size:14px">▾</div>
+                  </div>
+                  <!-- expanded form preview -->
+                  <div style="padding:0 14px 14px;border-top:1px solid rgba(0,0,0,.07)">
+                    <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a7a62;margin:10px 0 8px">Rating (optional)</div>
+                    <div style="display:flex;gap:4px;margin-bottom:12px;justify-content:center">
+                      <span style="font-size:26px;color:#b8924a">★</span><span style="font-size:26px;color:#b8924a">★</span><span style="font-size:26px;color:#b8924a">★</span><span style="font-size:26px;color:#ddd0bb">★</span><span style="font-size:26px;color:#ddd0bb">★</span>
+                    </div>
+                    <textarea style="width:100%;height:70px;padding:10px 12px;border:1px solid rgba(0,0,0,.12);border-radius:4px;font-size:11px;font-family:'Montserrat',sans-serif;color:#1a1208;background:rgba(255,255,255,.6);resize:none" placeholder="Your thoughts…"></textarea>
+                    <button style="width:100%;margin-top:10px;padding:12px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:3px;color:#0d0b08;font-size:8px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;font-family:'Montserrat',sans-serif">Submit →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal B: The Impression -->
+<div class="modal-backdrop" id="mb" onclick="closeIfBackdrop(event,'mb')">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Concept B — The Impression &nbsp;·&nbsp; Interactive demo</div>
+      <button class="modal-close" onclick="closeModal('mb')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-views">
+        <div>
+          <div class="mview-label">Desktop — editorial section</div>
+          <div class="dframe">
+            <div class="ep-bar"><div class="ep-bar-logo">elite</div><div class="ep-bar-right">Collection &nbsp; Our Story &nbsp; 🔍 🛒</div></div>
+            <div class="ep-body">
+              <div class="ep-name">MisStitch Ostrich</div>
+              <div class="ep-price">QAR 1,080</div>
+              <div class="ep-accord" style="margin-bottom:0">
+                <div class="ep-arow">MATERIAL & CARE <span>+</span></div>
+                <div class="ep-arow">SIZING & FIT <span>+</span></div>
+              </div>
+              <button class="ep-notify">NOTIFY ME <span style="font-size:8px;color:#9a7535">SIZE —</span></button>
+            </div>
+            <div class="impression-sec">
+              <div class="imp-quote-mark">"</div>
+              <div class="imp-title">What's your first impression?</div>
+              <div class="imp-sub">Any visitor welcome &nbsp;·&nbsp; No purchase needed &nbsp;·&nbsp; Stays private</div>
+              <textarea class="imp-textarea" placeholder="Write anything — a feeling, a detail, a question…"></textarea>
+              <div class="imp-divider"></div>
+              <div class="imp-contact">
+                <input class="imp-input" placeholder="Name (optional)"/>
+                <input class="imp-input" placeholder="Email (optional)" type="email"/>
+              </div>
+              <button class="imp-btn">Submit</button>
+              <div class="imp-privacy" style="margin-top:14px">◇ &nbsp; Private — only the Elite team reads your response</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mview-label">Mobile</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe">
+              <div class="mframe-bar"><div class="mframe-logo">elite</div><div class="mframe-icons">🔍 🛒</div></div>
+              <div style="background:#1a1208;padding:28px 20px;text-align:center">
+                <div style="font-family:'Cormorant Garamond',serif;font-size:70px;color:rgba(184,146,74,.1);line-height:.6;margin-bottom:4px;font-style:italic">"</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-size:19px;font-style:italic;color:#f0e6ce;margin-bottom:6px;line-height:1.3">What's your<br/>first impression?</div>
+                <div style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:rgba(184,146,74,.5);margin-bottom:18px">Any visitor welcome</div>
+                <textarea style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(184,146,74,.25);padding:10px 0;color:#f0e6ce;font-size:13px;font-family:'Cormorant Garamond',serif;font-style:italic;resize:none;height:70px;outline:none;text-align:center" placeholder="Write anything…"></textarea>
+                <div style="width:50px;height:1px;background:rgba(184,146,74,.25);margin:18px auto 14px"></div>
+                <input style="width:100%;background:transparent;border-bottom:1px solid rgba(184,146,74,.15);padding:9px 0;color:#f0e6ce;font-size:11px;font-family:'Montserrat',sans-serif;outline:none;margin-bottom:10px" placeholder="Name or email (optional)"/>
+                <button style="padding:10px 28px;background:transparent;border:1px solid rgba(184,146,74,.35);border-radius:2px;color:#b8924a;font-size:8px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;font-family:'Montserrat',sans-serif">Submit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal C: The Mood -->
+<div class="modal-backdrop" id="mc" onclick="closeIfBackdrop(event,'mc')">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Concept C — The Mood &nbsp;·&nbsp; Interactive demo</div>
+      <button class="modal-close" onclick="closeModal('mc')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-views">
+        <div>
+          <div class="mview-label">Desktop — tap a mood</div>
+          <div class="dframe">
+            <div class="ep-bar"><div class="ep-bar-logo">elite</div><div class="ep-bar-right">Collection &nbsp; 🔍 🛒</div></div>
+            <div class="ep-body">
+              <div class="ep-name">MisStitch Ostrich</div><div class="ep-price">QAR 1,080</div>
+              <div class="ep-accord"><div class="ep-arow">MATERIAL & CARE <span>+</span></div><div class="ep-arow">SIZING & FIT <span>+</span></div></div>
+              <button class="ep-notify" style="margin-top:10px">NOTIFY ME <span style="font-size:8px;color:#9a7535">SIZE —</span></button>
+            </div>
+            <div class="mood-sec">
+              <div class="mood-eyebrow">Share your reaction</div>
+              <div class="mood-title">How do you feel about it?</div>
+              <div class="mood-grid" id="dmoods">
+                <div class="mood-tile" onclick="pickMood(this,'d')"><div class="mood-emoji">😍</div><div class="mood-label">Love it</div></div>
+                <div class="mood-tile" onclick="pickMood(this,'d')"><div class="mood-emoji">👍</div><div class="mood-label">Like it</div></div>
+                <div class="mood-tile" onclick="pickMood(this,'d')"><div class="mood-emoji">🤔</div><div class="mood-label">Not sure</div></div>
+                <div class="mood-tile" onclick="pickMood(this,'d')"><div class="mood-emoji">💬</div><div class="mood-label">Tell us more</div></div>
+              </div>
+              <div class="mood-form" id="dmood-form">
+                <div class="mood-form-title">Want to add anything? (optional)</div>
+                <textarea class="mood-ta" placeholder="Fit, quality, style, what caught your eye…"></textarea>
+                <input class="mood-inp" placeholder="Name or email (optional — for follow-up)"/>
+                <button class="mood-sub">Submit →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mview-label">Mobile</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe">
+              <div class="mframe-bar"><div class="mframe-logo">elite</div><div class="mframe-icons">🔍 🛒</div></div>
+              <div class="mood-sec" style="padding:20px 14px">
+                <div class="mood-eyebrow">Share your reaction</div>
+                <div class="mood-title" style="font-size:18px">How do you feel about it?</div>
+                <div class="mood-grid" id="mmoods">
+                  <div class="mood-tile" onclick="pickMood(this,'m')"><div class="mood-emoji">😍</div><div class="mood-label">Love it</div></div>
+                  <div class="mood-tile active" onclick="pickMood(this,'m')"><div class="mood-emoji">👍</div><div class="mood-label">Like it</div></div>
+                  <div class="mood-tile" onclick="pickMood(this,'m')"><div class="mood-emoji">🤔</div><div class="mood-label">Not sure</div></div>
+                  <div class="mood-tile" onclick="pickMood(this,'m')"><div class="mood-emoji">💬</div><div class="mood-label">Tell us more</div></div>
+                </div>
+                <div class="mood-form on" style="margin-top:12px">
+                  <div class="mood-form-title">Add a note? (optional)</div>
+                  <textarea class="mood-ta" style="height:60px" placeholder="Anything you'd like to share…"></textarea>
+                  <input class="mood-inp" placeholder="Name or email (optional)"/>
+                  <button class="mood-sub">Submit →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal D: The Invite -->
+<div class="modal-backdrop" id="md" onclick="closeIfBackdrop(event,'md')">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Concept D — The Invite &nbsp;·&nbsp; Interactive demo (step through it)</div>
+      <button class="modal-close" onclick="closeModal('md')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-views">
+        <div>
+          <div class="mview-label">Desktop — conversational flow</div>
+          <div class="dframe">
+            <div class="ep-bar"><div class="ep-bar-logo">elite</div><div class="ep-bar-right">Collection &nbsp; 🔍 🛒</div></div>
+            <div class="ep-body">
+              <div class="ep-name">MisStitch Ostrich</div><div class="ep-price">QAR 1,080</div>
+              <div class="ep-accord"><div class="ep-arow">SIZING & FIT <span>+</span></div></div>
+              <button class="ep-notify" style="margin-top:10px">NOTIFY ME <span style="font-size:8px;color:#9a7535">SIZE —</span></button>
+            </div>
+            <div class="invite-sec">
+              <div class="inv-progress"><div class="inv-dot on" id="d-d1"></div><div class="inv-dot" id="d-d2"></div><div class="inv-dot" id="d-d3"></div></div>
+              <!-- Step 1 -->
+              <div class="inv-step" id="d-s1">
+                <div class="inv-q">What brought you here today?</div>
+                <div class="inv-hint">Choose all that apply — no purchase needed to share feedback</div>
+                <div class="inv-chips">
+                  <div class="inv-chip" onclick="this.classList.toggle('on')">Just browsing</div>
+                  <div class="inv-chip" onclick="this.classList.toggle('on')">Buying a gift</div>
+                  <div class="inv-chip" onclick="this.classList.toggle('on')">I'm a regular</div>
+                  <div class="inv-chip" onclick="this.classList.toggle('on')">Researching</div>
+                  <div class="inv-chip" onclick="this.classList.toggle('on')">First time here</div>
+                </div>
+                <button class="inv-next" onclick="invStep('d',2)">Continue →</button>
+              </div>
+              <!-- Step 2 -->
+              <div class="inv-step hidden" id="d-s2">
+                <div class="inv-q">What would you tell us?</div>
+                <div class="inv-hint">A feeling, a detail, a question — we read every word</div>
+                <textarea class="inv-ta" placeholder="Anything at all…"></textarea>
+                <div style="display:flex;gap:8px">
+                  <button class="inv-next" onclick="invStep('d',1)">← Back</button>
+                  <button class="inv-next" onclick="invStep('d',3)">Continue →</button>
+                </div>
+              </div>
+              <!-- Step 3 -->
+              <div class="inv-step hidden" id="d-s3">
+                <div class="inv-q">May we reach out?</div>
+                <div class="inv-hint">Completely optional. Useful if you'd like us to follow up.</div>
+                <div class="inv-row">
+                  <input class="inv-inp" placeholder="Name"/>
+                  <input class="inv-inp" placeholder="Email or phone" type="email"/>
+                  <button class="inv-sub">Send →</button>
+                </div>
+                <button class="inv-next" style="align-self:flex-start;margin-top:6px" onclick="invStep('d',2)">← Back</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mview-label">Mobile</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe">
+              <div class="mframe-bar"><div class="mframe-logo">elite</div><div class="mframe-icons">🔍 🛒</div></div>
+              <div class="invite-sec" style="padding:20px 14px">
+                <div class="inv-progress"><div class="inv-dot on" id="m-d1"></div><div class="inv-dot" id="m-d2"></div><div class="inv-dot" id="m-d3"></div></div>
+                <div class="inv-step" id="m-s1">
+                  <div class="inv-q" style="font-size:17px">What brought you here today?</div>
+                  <div class="inv-hint">No purchase needed to share</div>
+                  <div class="inv-chips">
+                    <div class="inv-chip on" onclick="this.classList.toggle('on')">Just browsing</div>
+                    <div class="inv-chip" onclick="this.classList.toggle('on')">Buying a gift</div>
+                    <div class="inv-chip" onclick="this.classList.toggle('on')">I'm a regular</div>
+                    <div class="inv-chip" onclick="this.classList.toggle('on')">Researching</div>
+                  </div>
+                  <button class="inv-next" onclick="invStep('m',2)">Continue →</button>
+                </div>
+                <div class="inv-step hidden" id="m-s2">
+                  <div class="inv-q" style="font-size:17px">What would you tell us?</div>
+                  <textarea class="inv-ta" style="height:90px" placeholder="A feeling, a detail…"></textarea>
+                  <div style="display:flex;gap:8px">
+                    <button class="inv-next" onclick="invStep('m',1)">← Back</button>
+                    <button class="inv-next" onclick="invStep('m',3)">Continue →</button>
+                  </div>
+                </div>
+                <div class="inv-step hidden" id="m-s3">
+                  <div class="inv-q" style="font-size:17px">May we reach out?</div>
+                  <div class="inv-hint">Completely optional</div>
+                  <input class="inv-inp" placeholder="Name" style="margin-bottom:8px"/>
+                  <input class="inv-inp" placeholder="Email or phone" style="margin-bottom:10px"/>
+                  <button class="inv-sub" style="width:100%">Send →</button>
+                  <button class="inv-next" style="margin-top:6px" onclick="invStep('m',2)">← Back</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Tab nav */
+function show(id){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'))
+  document.querySelectorAll('.stab').forEach(b=>b.classList.remove('on'))
+  document.getElementById(id).classList.add('on')
+  const idx=['web','kiosk'].indexOf(id)
+  document.querySelectorAll('.stab')[idx].classList.add('on')
+}
+
+/* Modal */
+function openModal(id){document.getElementById(id).classList.add('on')}
+function closeModal(id){document.getElementById(id).classList.remove('on')}
+function closeIfBackdrop(e,id){if(e.target===document.getElementById(id))closeModal(id)}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-backdrop.on').forEach(m=>m.classList.remove('on'))})
+
+/* Whisper */
+function openWhisper(){
+  const f=document.getElementById('whisper-form')
+  f.style.display='flex'
+}
+function closeWhisper(){document.getElementById('whisper-form').style.display='none'}
+
+/* Whisper stars */
+let wR=3
+function rateW(n){
+  wR=n
+  document.querySelectorAll('#wstars .wf-star').forEach((s,i)=>s.classList.toggle('on',i<n))
+}
+
+/* Kiosk A stars */
+let kaR=4
+function rateKA(n){kaR=n;document.querySelectorAll('#ka-stars .kca-star').forEach((s,i)=>s.classList.toggle('on',i<n))}
+
+/* Kiosk B stars */
+let kbR=4
+function rateKB(n){kbR=n;document.querySelectorAll('#kb-stars .kcb-star').forEach((s,i)=>s.classList.toggle('on',i<n))}
+
+/* Express kiosk */
+function selectExpress(el){
+  document.querySelectorAll('.kcc-emoji-btn').forEach(b=>b.classList.remove('on'))
+  el.classList.add('on')
+}
+
+/* Mood */
+function pickMood(el,pfx){
+  const container=document.getElementById(pfx+'moods')
+  container.querySelectorAll('.mood-tile').forEach(t=>t.classList.remove('active'))
+  el.classList.add('active')
+  const form=document.getElementById(pfx+'mood-form')
+  if(form) form.classList.add('on')
+}
+
+/* Invite steps */
+function invStep(pfx,n){
+  ;[1,2,3].forEach(i=>{
+    const s=document.getElementById(pfx+'-s'+i)
+    const d=document.getElementById(pfx+'-d'+i)
+    if(s) s.classList.toggle('hidden',i!==n)
+    if(d) d.classList.toggle('on',i<=n)
+  })
+}
+</script>
+</body>
+</html>

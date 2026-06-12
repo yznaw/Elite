@@ -1,11 +1,12 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ToastService } from '../../services/toast.service';
+import { ConfirmService } from '../../services/confirm.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
-import { I18nService } from '../../services/i18n.service';
 
 type Tab = 'colors' | 'materials' | 'sizes';
 
@@ -27,13 +28,16 @@ type Tab = 'colors' | 'materials' | 'sizes';
       <!-- ── Tabs ── -->
       <div class="ref-tabs">
         <button class="ref-tab" [class.active]="tab() === 'colors'"    (click)="tab.set('colors')">
-          <span class="tab-dot" style="background:#c9a84c;"></span> Colors <span class="tab-count">{{ colors().length }}</span>
+          <span class="tab-dot" style="background:#c9a84c;"></span> Colors
+          <span class="tab-count">{{ colors().length }}</span>
         </button>
         <button class="ref-tab" [class.active]="tab() === 'materials'" (click)="tab.set('materials')">
-          <span class="tab-dot" style="background:#7c3aed;"></span> Materials <span class="tab-count">{{ materials().length }}</span>
+          <span class="tab-dot" style="background:#7c3aed;"></span> Materials
+          <span class="tab-count">{{ materials().length }}</span>
         </button>
         <button class="ref-tab" [class.active]="tab() === 'sizes'"     (click)="tab.set('sizes')">
-          <span class="tab-dot" style="background:#2563eb;"></span> Size Charts <span class="tab-count">{{ sizeSets().length }}</span>
+          <span class="tab-dot" style="background:#2563eb;"></span> Size Charts
+          <span class="tab-count">{{ sizeSets().length }}</span>
         </button>
       </div>
 
@@ -42,9 +46,14 @@ type Tab = 'colors' | 'materials' | 'sizes';
         <div class="ref-section">
           <div class="ref-toolbar">
             <span class="ref-count">{{ colors().length }} color{{ colors().length !== 1 ? 's' : '' }}</span>
-            <button class="btn btn-gold btn-sm" (click)="addColor()" title="Add Color">
-              <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Color</span>
-            </button>
+            <div class="toolbar-right">
+              @if (savingSort()) {
+                <span class="sort-saving"><ap-spinner [size]="12"/> Saving order…</span>
+              }
+              <button class="btn btn-gold btn-sm" (click)="addColor()">
+                <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Color</span>
+              </button>
+            </div>
           </div>
 
           @if (loading()) {
@@ -53,43 +62,53 @@ type Tab = 'colors' | 'materials' | 'sizes';
             <div class="ref-empty">No colors yet. Add your first brand color.</div>
           } @else {
             <div class="color-grid">
+
+              <!-- NEW COLOR form card -->
+              @if (editingId() === '__new_color__') {
+                <div class="color-card editing">
+                  <ng-container *ngTemplateOutlet="colorEditForm; context: { $implicit: null }"/>
+                </div>
+              }
+
               @for (c of colors(); track c.id) {
-                <div class="color-card" [class.editing]="editingId() === c.id">
+                <div class="color-card"
+                     [class.editing]="editingId() === c.id"
+                     [class.dragging]="draggingColorId() === c.id"
+                     [class.drop-target]="dropTargetColorId() === c.id"
+                     [attr.draggable]="editingId() ? null : 'true'"
+                     (dragstart)="onColorDragStart(c.id)"
+                     (dragover)="onColorDragOver($event, c.id)"
+                     (drop)="onColorDrop($event, c.id)"
+                     (dragend)="onColorDragEnd()">
                   @if (editingId() === c.id) {
-                    <!-- Inline edit form -->
-                    <div class="color-edit">
-                      <div class="swatch-preview" [style.background]="editColor.hex"></div>
-                      <div class="edit-fields">
-                        <div class="ef-row">
-                          <input class="inp inp-sm" placeholder="Name (EN)" [(ngModel)]="editColor.name_en"/>
-                          <input class="inp inp-sm" placeholder="اسم عربي" dir="rtl" [(ngModel)]="editColor.name_ar"/>
-                        </div>
-                        <div class="ef-row">
-                          <label class="ef-hex-wrap">
-                            <input type="color" class="ef-color-picker" [(ngModel)]="editColor.hex"/>
-                            <span class="inp inp-sm mono ef-hex-text">{{ editColor.hex }}</span>
-                          </label>
-                          <input class="inp inp-sm mono" type="number" placeholder="Order" style="width:72px;" [(ngModel)]="editColor.sort_order"/>
-                        </div>
-                      </div>
-                      <div class="edit-actions">
-                        <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveColor(c.id)">
-                          @if (saving()) { <ap-spinner [size]="10"/> } Save
-                        </button>
-                        <button class="btn btn-sm btn-outline" (click)="cancelEdit()">Cancel</button>
-                      </div>
-                    </div>
+                    <ng-container *ngTemplateOutlet="colorEditForm; context: { $implicit: c }"/>
                   } @else {
-                    <!-- Display row -->
-                    <div class="color-swatch" [style.background]="c.hex"></div>
+                    <!-- Drag handle -->
+                    <div class="drag-handle" title="Drag to reorder"><ap-icon name="drag" [size]="12"/></div>
+                    <!-- Swatch -->
+                    @if (c.swatch_image_url) {
+                      <img class="color-swatch color-swatch--img" [src]="c.swatch_image_url" [alt]="c.name_en"/>
+                    } @else {
+                      <div class="color-swatch" [style.background]="c.hex"></div>
+                    }
+                    <!-- Info -->
                     <div class="color-info">
                       <span class="color-name-en">{{ c.name_en }}</span>
                       <span class="color-name-ar">{{ c.name_ar }}</span>
                       <span class="color-hex mono">{{ c.hex }}</span>
                     </div>
+                    <!-- Usage badge -->
+                    @if ((c.variant_count ?? 0) > 0) {
+                      <button class="usage-badge" (click)="goToCatalogFilter(c.name_en)" title="View products using this color">
+                        {{ c.variant_count }} variant{{ (c.variant_count ?? 0) !== 1 ? 's' : '' }}
+                      </button>
+                    } @else {
+                      <span class="usage-badge usage-badge--zero">unused</span>
+                    }
+                    <!-- Actions -->
                     <div class="color-acts">
                       <button class="act-btn" (click)="startEditColor(c)" title="Edit"><ap-icon name="edit" [size]="13"/></button>
-                      <button class="act-btn danger" (click)="deleteColor(c.id)" title="Delete"><ap-icon name="trash" [size]="13"/></button>
+                      <button class="act-btn danger" (click)="deleteColor(c)" title="Delete"><ap-icon name="trash" [size]="13"/></button>
                     </div>
                   }
                 </div>
@@ -104,9 +123,14 @@ type Tab = 'colors' | 'materials' | 'sizes';
         <div class="ref-section">
           <div class="ref-toolbar">
             <span class="ref-count">{{ materials().length }} material{{ materials().length !== 1 ? 's' : '' }}</span>
-            <button class="btn btn-gold btn-sm" (click)="addMaterial()">
-              <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Material</span>
-            </button>
+            <div class="toolbar-right">
+              @if (savingSort()) {
+                <span class="sort-saving"><ap-spinner [size]="12"/> Saving order…</span>
+              }
+              <button class="btn btn-gold btn-sm" (click)="addMaterial()">
+                <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Material</span>
+              </button>
+            </div>
           </div>
 
           @if (loading()) {
@@ -115,25 +139,38 @@ type Tab = 'colors' | 'materials' | 'sizes';
             <div class="ref-empty">No materials yet.</div>
           } @else {
             <div class="mat-list">
+
+              @if (editingId() === '__new_material__') {
+                <div class="mat-row editing">
+                  <ng-container *ngTemplateOutlet="matEditForm; context: { $implicit: null }"/>
+                </div>
+              }
+
               @for (m of materials(); track m.id) {
-                <div class="mat-row" [class.editing]="editingId() === m.id">
+                <div class="mat-row"
+                     [class.editing]="editingId() === m.id"
+                     [class.dragging]="draggingMatId() === m.id"
+                     [class.drop-target]="dropTargetMatId() === m.id"
+                     [attr.draggable]="editingId() ? null : 'true'"
+                     (dragstart)="onMatDragStart(m.id)"
+                     (dragover)="onMatDragOver($event, m.id)"
+                     (drop)="onMatDrop($event, m.id)"
+                     (dragend)="onMatDragEnd()">
                   @if (editingId() === m.id) {
-                    <div class="mat-edit">
-                      <input class="inp inp-sm" placeholder="Name (EN)" [(ngModel)]="editMaterial.name_en" style="flex:1;min-width:140px;"/>
-                      <input class="inp inp-sm" placeholder="اسم عربي" dir="rtl" [(ngModel)]="editMaterial.name_ar" style="flex:1;min-width:120px;"/>
-                      <input class="inp inp-sm mono" type="number" placeholder="Order" style="width:72px;" [(ngModel)]="editMaterial.sort_order"/>
-                      <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveMaterial(m.id)">
-                        @if (saving()) { <ap-spinner [size]="10"/> } Save
-                      </button>
-                      <button class="btn btn-sm btn-outline" (click)="cancelEdit()">Cancel</button>
-                    </div>
+                    <ng-container *ngTemplateOutlet="matEditForm; context: { $implicit: m }"/>
                   } @else {
-                    <div class="mat-icon">🧵</div>
+                    <div class="drag-handle"><ap-icon name="drag" [size]="12"/></div>
+                    <div class="mat-icon">{{ materialIcon(m.name_en) }}</div>
                     <span class="mat-name-en">{{ m.name_en }}</span>
                     <span class="mat-name-ar muted">{{ m.name_ar }}</span>
+                    @if ((m.variant_count ?? 0) > 0) {
+                      <span class="usage-badge">{{ m.variant_count }} variant{{ (m.variant_count ?? 0) !== 1 ? 's' : '' }}</span>
+                    } @else {
+                      <span class="usage-badge usage-badge--zero">unused</span>
+                    }
                     <div class="mat-acts">
                       <button class="act-btn" (click)="startEditMaterial(m)" title="Edit"><ap-icon name="edit" [size]="13"/></button>
-                      <button class="act-btn danger" (click)="deleteMaterial(m.id)" title="Delete"><ap-icon name="trash" [size]="13"/></button>
+                      <button class="act-btn danger" (click)="deleteMaterial(m)" title="Delete"><ap-icon name="trash" [size]="13"/></button>
                     </div>
                   }
                 </div>
@@ -169,9 +206,15 @@ type Tab = 'colors' | 'materials' | 'sizes';
                       </div>
                       <label class="lbl">Sizes (comma-separated)</label>
                       <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
+                      <!-- Chip preview with up/down reorder -->
                       <div class="size-preview">
-                        @for (sz of editSizeSet.sizes; track sz) {
-                          <span class="size-chip">{{ sz }}</span>
+                        @for (sz of editSizeSet.sizes; track sz; let si = $index) {
+                          <span class="size-chip size-chip--reorder">
+                            {{ sz }}
+                            <button class="chip-btn" (click)="moveSizeChip(si, -1)" [disabled]="si === 0" title="Move left">‹</button>
+                            <button class="chip-btn" (click)="moveSizeChip(si, 1)" [disabled]="si === editSizeSet.sizes.length - 1" title="Move right">›</button>
+                            <button class="chip-btn chip-btn--rm" (click)="removeSizeChip(si)" title="Remove">×</button>
+                          </span>
                         }
                       </div>
                       <div class="edit-actions" style="margin-top:10px;">
@@ -184,7 +227,13 @@ type Tab = 'colors' | 'materials' | 'sizes';
                   } @else {
                     <div class="size-head">
                       <span class="size-name">📐 {{ s.name }}</span>
-                      <div class="mat-acts">
+                      @if ((s.usage_hint ?? 0) > 0) {
+                        <span class="usage-badge" style="margin-inline-start:8px;">{{ s.usage_hint }} product{{ (s.usage_hint ?? 0) !== 1 ? 's' : '' }}</span>
+                      } @else {
+                        <span class="usage-badge usage-badge--zero" style="margin-inline-start:8px;">unused</span>
+                      }
+                      <div class="mat-acts" style="margin-inline-start:auto;">
+                        <button class="act-btn" (click)="duplicateSizeSet(s.id)" title="Duplicate"><ap-icon name="copy" [size]="13"/></button>
                         <button class="act-btn" (click)="startEditSizeSet(s)" title="Edit"><ap-icon name="edit" [size]="13"/></button>
                         <button class="act-btn danger" (click)="deleteSizeSet(s.id)" title="Delete"><ap-icon name="trash" [size]="13"/></button>
                       </div>
@@ -201,12 +250,60 @@ type Tab = 'colors' | 'materials' | 'sizes';
           }
         </div>
       }
+
+      <!-- ════ Color edit form template ════ -->
+      <ng-template #colorEditForm let-c>
+        <div class="color-edit">
+          <div class="swatch-preview-wrap">
+            @if (editColor.swatch_image_url) {
+              <img class="swatch-preview swatch-preview--img" [src]="editColor.swatch_image_url" alt="Swatch preview"/>
+            } @else {
+              <div class="swatch-preview" [style.background]="editColor.hex"></div>
+            }
+          </div>
+          <div class="edit-fields">
+            <div class="ef-row">
+              <input class="inp inp-sm" placeholder="Name (EN)" [(ngModel)]="editColor.name_en"/>
+              <input class="inp inp-sm" placeholder="اسم عربي" dir="rtl" [(ngModel)]="editColor.name_ar"/>
+            </div>
+            <div class="ef-row">
+              <label class="ef-hex-wrap">
+                <input type="color" class="ef-color-picker" [(ngModel)]="editColor.hex"/>
+                <span class="inp inp-sm mono ef-hex-text">{{ editColor.hex }}</span>
+              </label>
+              <input class="inp inp-sm mono" type="number" placeholder="Order" style="width:72px;" [(ngModel)]="editColor.sort_order"/>
+            </div>
+            <div class="ef-row">
+              <input class="inp inp-sm" placeholder="Swatch image URL (optional — for textured leathers)" [(ngModel)]="editColor.swatch_image_url" style="flex:1;"/>
+            </div>
+            <p class="ef-hint">Leave blank to use the hex color circle. Set a texture thumbnail URL for suede, croc, or exotic leather.</p>
+          </div>
+          <div class="edit-actions">
+            <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveColor(c?.id)">
+              @if (saving()) { <ap-spinner [size]="10"/> } Save
+            </button>
+            <button class="btn btn-sm btn-outline" (click)="cancelEdit()">Cancel</button>
+          </div>
+        </div>
+      </ng-template>
+
+      <!-- ════ Material edit form template ════ -->
+      <ng-template #matEditForm let-m>
+        <div class="mat-edit">
+          <input class="inp inp-sm" placeholder="Name (EN)" [(ngModel)]="editMaterial.name_en" style="flex:1;min-width:140px;"/>
+          <input class="inp inp-sm" placeholder="اسم عربي" dir="rtl" [(ngModel)]="editMaterial.name_ar" style="flex:1;min-width:120px;"/>
+          <input class="inp inp-sm mono" type="number" placeholder="Order" style="width:72px;" [(ngModel)]="editMaterial.sort_order"/>
+          <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveMaterial(m?.id)">
+            @if (saving()) { <ap-spinner [size]="10"/> } Save
+          </button>
+          <button class="btn btn-sm btn-outline" (click)="cancelEdit()">Cancel</button>
+        </div>
+      </ng-template>
+
     </div>
   `,
   styles: [`
-    .ref-header {
-      margin-bottom: 24px;
-    }
+    .ref-header { margin-bottom: 24px; }
     .ref-title {
       font-size: 22px; font-weight: 800;
       font-family: var(--ff-disp);
@@ -239,11 +336,12 @@ type Tab = 'colors' | 'materials' | 'sizes';
     .ref-tab.active .tab-count { background: var(--green); color: #fff; }
 
     /* ── Section ── */
-    .ref-section { }
     .ref-toolbar {
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
     }
+    .toolbar-right { display: flex; align-items: center; gap: 10px; }
+    .sort-saving { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
     .ref-count { font-size: 13px; color: var(--muted); }
     .ref-loading { padding: 40px; text-align: center; }
     .ref-empty {
@@ -255,40 +353,68 @@ type Tab = 'colors' | 'materials' | 'sizes';
     /* ── Color cards ── */
     .color-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 10px;
     }
     .color-card {
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: center; gap: 10px;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px 14px;
-      transition: box-shadow 0.15s;
+      border-radius: 10px; padding: 10px 12px;
+      transition: box-shadow 0.15s, opacity 0.15s;
+      cursor: grab;
     }
     .color-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
-    .color-card.editing { border-color: var(--gold); flex-direction: column; align-items: stretch; }
+    .color-card.editing { border-color: var(--gold); flex-direction: column; align-items: stretch; cursor: default; }
+    .color-card.dragging { opacity: 0.45; cursor: grabbing; }
+    .color-card.drop-target { border-color: var(--green); box-shadow: 0 0 0 2px rgba(2,70,56,.15); }
+
+    .drag-handle {
+      color: var(--muted); cursor: grab; padding: 2px 0; flex-shrink: 0;
+      opacity: 0.4; transition: opacity 0.12s;
+    }
+    .color-card:hover .drag-handle,
+    .mat-row:hover .drag-handle { opacity: 1; }
+
     .color-swatch {
       width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
       border: 1px solid rgba(0,0,0,.1); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
     }
+    .color-swatch--img { object-fit: cover; }
     .color-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
     .color-name-en { font-size: 13px; font-weight: 600; }
     .color-name-ar { font-size: 12px; color: var(--muted); direction: rtl; text-align: start; }
     .color-hex { font-size: 11px; color: var(--muted); }
     .color-acts { display: flex; gap: 4px; flex-shrink: 0; }
 
+    /* Usage badge */
+    .usage-badge {
+      font-size: 10px; font-weight: 600; letter-spacing: .04em;
+      padding: 3px 8px; border-radius: 99px; white-space: nowrap; flex-shrink: 0;
+      background: #fef3c7; color: #92400e;
+      border: none; cursor: pointer; transition: background .12s;
+    }
+    .usage-badge:hover { background: #fde68a; }
+    .usage-badge--zero {
+      background: var(--bg-2); color: var(--muted);
+      cursor: default; pointer-events: none;
+    }
+
     /* Color edit form */
     .color-edit { display: flex; flex-direction: column; gap: 8px; }
+    .swatch-preview-wrap { width: 100%; }
     .swatch-preview {
       width: 100%; height: 48px; border-radius: 8px;
       border: 1px solid rgba(0,0,0,.1);
       transition: background 0.15s;
     }
+    .swatch-preview--img { object-fit: cover; height: 48px; border-radius: 8px; display: block; }
     .edit-fields { display: flex; flex-direction: column; gap: 8px; }
     .ef-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .ef-row .inp { flex: 1; min-width: 100px; }
     .ef-hex-wrap { display: flex; align-items: center; gap: 6px; flex: 1; cursor: pointer; }
     .ef-color-picker { width: 32px; height: 32px; border: none; padding: 0; cursor: pointer; border-radius: 6px; background: none; }
     .ef-hex-text { flex: 1; }
+    .ef-hint { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: -2px; }
     .edit-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     /* ── Action buttons ── */
@@ -305,11 +431,15 @@ type Tab = 'colors' | 'materials' | 'sizes';
     /* ── Material list ── */
     .mat-list { display: flex; flex-direction: column; gap: 6px; }
     .mat-row {
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: center; gap: 10px;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px 14px; flex-wrap: wrap;
+      border-radius: 10px; padding: 10px 12px; flex-wrap: wrap;
+      cursor: grab; transition: box-shadow 0.15s, opacity 0.15s;
     }
-    .mat-row.editing { border-color: var(--gold); }
+    .mat-row:hover { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+    .mat-row.editing { border-color: var(--gold); cursor: default; }
+    .mat-row.dragging { opacity: 0.45; cursor: grabbing; }
+    .mat-row.drop-target { border-color: var(--green); box-shadow: 0 0 0 2px rgba(2,70,56,.15); }
     .mat-icon { font-size: 18px; flex-shrink: 0; }
     .mat-name-en { font-size: 13px; font-weight: 600; flex: 1; min-width: 100px; }
     .mat-name-ar { font-size: 12px; direction: rtl; }
@@ -334,6 +464,18 @@ type Tab = 'colors' | 'materials' | 'sizes';
       background: var(--bg-2); border: 1px solid var(--border);
       border-radius: 6px; padding: 3px 10px; color: var(--ink-2);
     }
+    .size-chip--reorder {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 2px 4px 2px 8px;
+    }
+    .chip-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 13px; line-height: 1;
+      padding: 0 2px; border-radius: 3px; transition: color .1s;
+    }
+    .chip-btn:hover:not(:disabled) { color: var(--ink); }
+    .chip-btn:disabled { opacity: 0.25; cursor: default; }
+    .chip-btn--rm:hover:not(:disabled) { color: var(--danger); }
 
     /* ── Mobile ── */
     @media (max-width: 600px) {
@@ -346,27 +488,35 @@ type Tab = 'colors' | 'materials' | 'sizes';
   `],
 })
 export class ReferenceComponent implements OnInit {
-  private readonly refApi = inject(AdminRefService);
-  private readonly toast  = inject(ToastService);
-  private readonly i18n   = inject(I18nService);
+  private readonly refApi  = inject(AdminRefService);
+  private readonly toast   = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
+  private readonly router  = inject(Router);
 
-  readonly tab      = signal<Tab>('colors');
-  readonly loading  = signal(true);
-  readonly saving   = signal(false);
-  readonly editingId = signal<string | null>(null);
+  readonly tab       = signal<Tab>('colors');
+  readonly loading   = signal(true);
+  readonly saving    = signal(false);
+  readonly savingSort = signal(false);
+  readonly editingId  = signal<string | null>(null);
 
   readonly colors    = signal<RefColor[]>([]);
   readonly materials = signal<RefMaterial[]>([]);
   readonly sizeSets  = signal<RefSizeSet[]>([]);
 
-  // Mutable edit buffers (plain objects, not signals — they change frequently)
-  editColor:    Omit<RefColor, 'id'>    = { name_en: '', name_ar: '', hex: '#000000', sort_order: 0 };
-  editMaterial: Omit<RefMaterial, 'id'> = { name_en: '', name_ar: '', sort_order: 0 };
-  editSizeSet:  Omit<RefSizeSet, 'id'>  = { name: '', sizes: [], sort_order: 0 };
+  // Drag state — colors
+  readonly draggingColorId   = signal<string | null>(null);
+  readonly dropTargetColorId = signal<string | null>(null);
 
-  async ngOnInit(): Promise<void> {
-    await this.reload();
-  }
+  // Drag state — materials
+  readonly draggingMatId   = signal<string | null>(null);
+  readonly dropTargetMatId = signal<string | null>(null);
+
+  // Edit buffers (plain objects — they change on every keystroke)
+  editColor: Omit<RefColor, 'id' | 'variant_count'> = { name_en: '', name_ar: '', hex: '#000000', swatch_image_url: null, sort_order: 0 };
+  editMaterial: Omit<RefMaterial, 'id' | 'variant_count'> = { name_en: '', name_ar: '', sort_order: 0 };
+  editSizeSet: Omit<RefSizeSet, 'id'> = { name: '', sizes: [], sort_order: 0 };
+
+  async ngOnInit(): Promise<void> { await this.reload(); }
 
   private async reload(): Promise<void> {
     this.loading.set(true);
@@ -388,15 +538,30 @@ export class ReferenceComponent implements OnInit {
 
   cancelEdit(): void { this.editingId.set(null); }
 
+  goToCatalogFilter(colorName: string): void {
+    void this.router.navigate(['/catalog'], { queryParams: { color: colorName } });
+  }
+
+  materialIcon(name: string): string {
+    const n = name.toLowerCase();
+    if (n.includes('suede') || n.includes('nubuck'))   return '🪨';
+    if (n.includes('patent'))                           return '✨';
+    if (n.includes('exotic') || n.includes('croc') || n.includes('ostrich')) return '🐊';
+    if (n.includes('velvet'))                           return '🟣';
+    if (n.includes('canvas'))                           return '🎨';
+    if (n.includes('leather'))                          return '🟤';
+    return '🧵';
+  }
+
   // ── Colors ────────────────────────────────────────────────────────────────
 
   addColor(): void {
-    this.editColor = { name_en: '', name_ar: '', hex: '#C9A84C', sort_order: this.colors().length };
+    this.editColor = { name_en: '', name_ar: '', hex: '#C9A84C', swatch_image_url: null, sort_order: this.colors().length };
     this.editingId.set('__new_color__');
   }
 
   startEditColor(c: RefColor): void {
-    this.editColor = { name_en: c.name_en, name_ar: c.name_ar, hex: c.hex, sort_order: c.sort_order };
+    this.editColor = { name_en: c.name_en, name_ar: c.name_ar, hex: c.hex, swatch_image_url: c.swatch_image_url ?? null, sort_order: c.sort_order };
     this.editingId.set(c.id);
   }
 
@@ -404,12 +569,19 @@ export class ReferenceComponent implements OnInit {
     if (!this.editColor.name_en.trim()) { this.toast.error('Color name (EN) is required'); return; }
     this.saving.set(true);
     try {
+      const payload = {
+        name_en:          this.editColor.name_en.trim(),
+        name_ar:          this.editColor.name_ar,
+        hex:              this.editColor.hex,
+        swatch_image_url: this.editColor.swatch_image_url || null,
+        sort_order:       this.editColor.sort_order,
+      };
       if (existingId && existingId !== '__new_color__') {
-        const updated = await this.refApi.updateColor(existingId, this.editColor);
-        this.colors.update(list => list.map(c => c.id === existingId ? { ...updated } : c));
+        const updated = await this.refApi.updateColor(existingId, payload);
+        this.colors.update(list => list.map(c => c.id === existingId ? { ...c, ...updated } : c));
       } else {
-        const created = await this.refApi.createColor(this.editColor);
-        this.colors.update(list => [...list, created]);
+        const created = await this.refApi.createColor(payload);
+        this.colors.update(list => [...list, { ...created, variant_count: 0 }]);
       }
       this.editingId.set(null);
       this.toast.success('Color saved');
@@ -417,13 +589,68 @@ export class ReferenceComponent implements OnInit {
     finally { this.saving.set(false); }
   }
 
-  async deleteColor(id: string): Promise<void> {
-    if (!confirm('Delete this color?')) return;
+  async deleteColor(c: RefColor): Promise<void> {
+    const count = c.variant_count ?? 0;
+    const message = count > 0
+      ? `"${c.name_en}" is used by ${count} variant${count !== 1 ? 's' : ''}. Deleting will unlink those variants from this color but will NOT delete them.\n\nYou can re-open those products to re-assign a color.`
+      : `Delete "${c.name_en}"? This cannot be undone.`;
+
+    const confirmed = await this.confirm.ask({
+      title:        count > 0 ? `Delete color in use` : `Delete "${c.name_en}"`,
+      message,
+      variant:      'danger',
+      confirmLabel: count > 0 ? 'Force Delete' : 'Delete',
+      cancelLabel:  'Cancel',
+    });
+    if (!confirmed) return;
+
     try {
-      await this.refApi.deleteColor(id);
-      this.colors.update(list => list.filter(c => c.id !== id));
+      await this.refApi.deleteColor(c.id, count > 0);
+      this.colors.update(list => list.filter(x => x.id !== c.id));
       this.toast.success('Color deleted');
     } catch { this.toast.error('Could not delete color'); }
+  }
+
+  // ── Color drag-to-reorder ─────────────────────────────────────────────────
+
+  onColorDragStart(id: string): void { this.draggingColorId.set(id); }
+
+  onColorDragOver(e: DragEvent, id: string): void {
+    e.preventDefault();
+    this.dropTargetColorId.set(id);
+  }
+
+  onColorDrop(e: DragEvent, targetId: string): void {
+    e.preventDefault();
+    const fromId = this.draggingColorId();
+    this.onColorDragEnd();
+    if (!fromId || fromId === targetId) return;
+
+    this.colors.update(list => {
+      const next = [...list];
+      const fromIdx = next.findIndex(c => c.id === fromId);
+      const toIdx   = next.findIndex(c => c.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return list;
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next.map((c, i) => ({ ...c, sort_order: i }));
+    });
+
+    void this.saveColorOrder();
+  }
+
+  onColorDragEnd(): void {
+    this.draggingColorId.set(null);
+    this.dropTargetColorId.set(null);
+  }
+
+  private async saveColorOrder(): Promise<void> {
+    this.savingSort.set(true);
+    try {
+      const items = this.colors().map((c, i) => ({ id: c.id, sort_order: i }));
+      await this.refApi.saveColorSortOrders(items);
+    } catch { this.toast.error('Could not save color order'); }
+    finally { this.savingSort.set(false); }
   }
 
   // ── Materials ─────────────────────────────────────────────────────────────
@@ -444,10 +671,10 @@ export class ReferenceComponent implements OnInit {
     try {
       if (existingId && existingId !== '__new_material__') {
         const updated = await this.refApi.updateMaterial(existingId, this.editMaterial);
-        this.materials.update(list => list.map(m => m.id === existingId ? { ...updated } : m));
+        this.materials.update(list => list.map(m => m.id === existingId ? { ...m, ...updated } : m));
       } else {
         const created = await this.refApi.createMaterial(this.editMaterial);
-        this.materials.update(list => [...list, created]);
+        this.materials.update(list => [...list, { ...created, variant_count: 0 }]);
       }
       this.editingId.set(null);
       this.toast.success('Material saved');
@@ -455,13 +682,68 @@ export class ReferenceComponent implements OnInit {
     finally { this.saving.set(false); }
   }
 
-  async deleteMaterial(id: string): Promise<void> {
-    if (!confirm('Delete this material?')) return;
+  async deleteMaterial(m: RefMaterial): Promise<void> {
+    const count = m.variant_count ?? 0;
+    const message = count > 0
+      ? `"${m.name_en}" is used by ${count} variant${count !== 1 ? 's' : ''}. Deleting will clear the material field on those variants but will NOT delete them.`
+      : `Delete "${m.name_en}"? This cannot be undone.`;
+
+    const confirmed = await this.confirm.ask({
+      title:        count > 0 ? `Delete material in use` : `Delete "${m.name_en}"`,
+      message,
+      variant:      'danger',
+      confirmLabel: count > 0 ? 'Force Delete' : 'Delete',
+      cancelLabel:  'Cancel',
+    });
+    if (!confirmed) return;
+
     try {
-      await this.refApi.deleteMaterial(id);
-      this.materials.update(list => list.filter(m => m.id !== id));
+      await this.refApi.deleteMaterial(m.id, count > 0);
+      this.materials.update(list => list.filter(x => x.id !== m.id));
       this.toast.success('Material deleted');
     } catch { this.toast.error('Could not delete material'); }
+  }
+
+  // ── Material drag-to-reorder ──────────────────────────────────────────────
+
+  onMatDragStart(id: string): void { this.draggingMatId.set(id); }
+
+  onMatDragOver(e: DragEvent, id: string): void {
+    e.preventDefault();
+    this.dropTargetMatId.set(id);
+  }
+
+  onMatDrop(e: DragEvent, targetId: string): void {
+    e.preventDefault();
+    const fromId = this.draggingMatId();
+    this.onMatDragEnd();
+    if (!fromId || fromId === targetId) return;
+
+    this.materials.update(list => {
+      const next = [...list];
+      const fromIdx = next.findIndex(m => m.id === fromId);
+      const toIdx   = next.findIndex(m => m.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return list;
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next.map((m, i) => ({ ...m, sort_order: i }));
+    });
+
+    void this.saveMatOrder();
+  }
+
+  onMatDragEnd(): void {
+    this.draggingMatId.set(null);
+    this.dropTargetMatId.set(null);
+  }
+
+  private async saveMatOrder(): Promise<void> {
+    this.savingSort.set(true);
+    try {
+      const items = this.materials().map((m, i) => ({ id: m.id, sort_order: i }));
+      await this.refApi.saveMaterialSortOrders(items);
+    } catch { this.toast.error('Could not save material order'); }
+    finally { this.savingSort.set(false); }
   }
 
   // ── Size Sets ─────────────────────────────────────────────────────────────
@@ -485,6 +767,27 @@ export class ReferenceComponent implements OnInit {
     };
   }
 
+  moveSizeChip(index: number, dir: -1 | 1): void {
+    const sizes = [...this.editSizeSet.sizes];
+    const target = index + dir;
+    if (target < 0 || target >= sizes.length) return;
+    [sizes[index], sizes[target]] = [sizes[target], sizes[index]];
+    this.editSizeSet = { ...this.editSizeSet, sizes };
+  }
+
+  removeSizeChip(index: number): void {
+    const sizes = this.editSizeSet.sizes.filter((_, i) => i !== index);
+    this.editSizeSet = { ...this.editSizeSet, sizes };
+  }
+
+  async duplicateSizeSet(id: string): Promise<void> {
+    try {
+      const created = await this.refApi.duplicateSizeSet(id);
+      this.sizeSets.update(list => [...list, created]);
+      this.toast.success('Size set duplicated');
+    } catch { this.toast.error('Could not duplicate size set'); }
+  }
+
   async saveSizeSet(existingId?: string): Promise<void> {
     if (!this.editSizeSet.name.trim()) { this.toast.error('Size set name is required'); return; }
     this.saving.set(true);
@@ -503,7 +806,13 @@ export class ReferenceComponent implements OnInit {
   }
 
   async deleteSizeSet(id: string): Promise<void> {
-    if (!confirm('Delete this size set?')) return;
+    const confirmed = await this.confirm.ask({
+      title: 'Delete size set',
+      message: 'Delete this size set? This cannot be undone.',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     try {
       await this.refApi.deleteSizeSet(id);
       this.sizeSets.update(list => list.filter(s => s.id !== id));

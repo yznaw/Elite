@@ -79,6 +79,50 @@ async function ensureAllMigrations(client) {
       ADD COLUMN IF NOT EXISTS cost_price_cents INTEGER
   `);
 
+  // ── Migration 010: color-image pivot + swatch image + color FK ─────────────
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS product_color_images (
+      id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id    uuid        NOT NULL REFERENCES tenants(id)      ON DELETE CASCADE,
+      product_id   uuid        NOT NULL REFERENCES products(id)     ON DELETE CASCADE,
+      color        text        NOT NULL,
+      media_id     uuid        NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+      sort_order   integer     NOT NULL DEFAULT 0,
+      created_at   timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT product_color_images_unique UNIQUE (product_id, color, sort_order)
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS product_color_images_product_idx
+      ON product_color_images (product_id)
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS product_color_images_tenant_idx
+      ON product_color_images (tenant_id)
+  `);
+  await client.query(`
+    ALTER TABLE ref_colors
+      ADD COLUMN IF NOT EXISTS swatch_image_url text
+  `);
+  await client.query(`
+    ALTER TABLE product_variants
+      ADD COLUMN IF NOT EXISTS color_ref_id uuid REFERENCES ref_colors(id) ON DELETE SET NULL
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS product_variants_color_ref_idx
+      ON product_variants (color_ref_id)
+      WHERE color_ref_id IS NOT NULL
+  `);
+  await client.query(`
+    UPDATE product_variants pv
+    SET    color_ref_id = rc.id
+    FROM   ref_colors rc
+    WHERE  rc.tenant_id = pv.tenant_id
+      AND  lower(trim(pv.color)) = lower(trim(rc.name_en))
+      AND  pv.color IS NOT NULL
+      AND  pv.color_ref_id IS NULL
+  `);
+
   _done = true;
 }
 

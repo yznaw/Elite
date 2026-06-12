@@ -131,14 +131,48 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
               </select>
             </div>
 
-            <div class="fp-group">
+            <div class="fp-group cf-wrap" (click)="$event.stopPropagation()">
               <label class="fp-label">Color</label>
-              <select class="inp inp-sm" [ngModel]="colorFilter()" (ngModelChange)="colorFilter.set($event); page.set(0)">
-                <option value="all">All colors</option>
-                @for (c of refColors(); track c.id) {
-                  <option [value]="c.name_en">{{ c.name_en }}</option>
+              <!-- Trigger button -->
+              <button type="button" class="inp inp-sm cf-trigger"
+                      [class.cf-active]="colorFilter() !== 'all'"
+                      (click)="colorFilterOpen.set(!colorFilterOpen())">
+                @if (colorFilter() !== 'all') {
+                  @if (colorSwatchImageFor(colorFilter()); as swatchImg) {
+                    <img class="cf-swatch cf-swatch--img" [src]="swatchImg" [alt]="colorFilter()"/>
+                  } @else {
+                    <span class="cf-swatch" [style.background]="colorHexFor(colorFilter())"></span>
+                  }
+                  <span class="cf-trigger-name">{{ colorFilter() }}</span>
+                } @else {
+                  <span class="cf-trigger-name muted">All colors</span>
                 }
-              </select>
+                <ap-icon name="arrowDn" [size]="10" class="cf-chev"
+                         [class.open]="colorFilterOpen()"/>
+              </button>
+              <!-- Dropdown panel -->
+              @if (colorFilterOpen()) {
+                <div class="cf-panel">
+                  <button type="button" class="cf-option"
+                          [class.cf-option--sel]="colorFilter() === 'all'"
+                          (click)="colorFilter.set('all'); colorFilterOpen.set(false); page.set(0)">
+                    <span class="cf-swatch cf-swatch--all">✕</span>
+                    All colors
+                  </button>
+                  @for (c of refColors(); track c.id) {
+                    <button type="button" class="cf-option"
+                            [class.cf-option--sel]="colorFilter() === c.name_en"
+                            (click)="colorFilter.set(c.name_en); colorFilterOpen.set(false); page.set(0)">
+                      @if (c.swatch_image_url) {
+                        <img class="cf-swatch cf-swatch--img" [src]="c.swatch_image_url" [alt]="c.name_en"/>
+                      } @else {
+                        <span class="cf-swatch" [style.background]="c.hex"></span>
+                      }
+                      {{ c.name_en }}
+                    </button>
+                  }
+                </div>
+              }
             </div>
 
             <div class="fp-group fp-price">
@@ -173,7 +207,15 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                 <span class="fchip">Brand: {{ brandFilter() }} <button (click)="brandFilter.set('all')">×</button></span>
               }
               @if (colorFilter() !== 'all') {
-                <span class="fchip">Color: {{ colorFilter() }} <button (click)="colorFilter.set('all')">×</button></span>
+                <span class="fchip fchip--color">
+                  @if (colorSwatchImageFor(colorFilter()); as swatchImg) {
+                    <img class="fchip-swatch fchip-swatch--img" [src]="swatchImg" [alt]="colorFilter()"/>
+                  } @else {
+                    <span class="fchip-swatch" [style.background]="colorHexFor(colorFilter())"></span>
+                  }
+                  {{ colorFilter() }}
+                  <button (click)="colorFilter.set('all'); colorFilterOpen.set(false)">×</button>
+                </span>
               }
               @if (priceMin() > 0 || priceMax() > 0) {
                 <span class="fchip">Price: {{ priceMin() }}–{{ priceMax() || '∞' }} QAR <button (click)="priceMin.set(0);priceMax.set(0)">×</button></span>
@@ -383,6 +425,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
         (currentIdChange)="activeId.set($event)"
         (deleted)="onDeleted($event)"
         (duplicated)="onDuplicated($event)"
+        (productSaved)="onProductSaved($event)"
       />
     }
   `,
@@ -464,6 +507,53 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       font-size: 14px; line-height: 1; padding: 0 0 0 4px;
     }
     .fchip button:hover { color: var(--danger); }
+    .fchip--color { gap: 6px; }
+    .fchip-swatch {
+      width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,.1); display: inline-block;
+    }
+    .fchip-swatch--img { object-fit: cover; }
+
+    /* ── Custom color filter picker ─────────────────────────── */
+    .cf-wrap { position: relative; }
+
+    .cf-trigger {
+      display: flex; align-items: center; gap: 6px;
+      text-align: left; cursor: pointer; width: 100%;
+      background: var(--surface);
+    }
+    .cf-trigger.cf-active { border-color: var(--gold); background: rgba(201,168,76,.04); }
+    .cf-trigger-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cf-chev { color: var(--muted); transition: transform .2s; flex-shrink: 0; }
+    .cf-chev.open { transform: rotate(180deg); }
+
+    .cf-swatch {
+      width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,.1); display: inline-flex;
+      align-items: center; justify-content: center;
+    }
+    .cf-swatch--img { object-fit: cover; }
+    .cf-swatch--all {
+      font-size: 9px; color: var(--muted); background: var(--bg-2);
+      border-style: dashed;
+    }
+
+    .cf-panel {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+      z-index: 200; max-height: 240px; overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+    .cf-option {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; font-size: 13px; text-align: left;
+      background: none; border: none; cursor: pointer;
+      color: var(--ink); transition: background .1s;
+    }
+    .cf-option:hover { background: var(--bg-2); }
+    .cf-option--sel { background: rgba(2,70,56,.06); color: var(--green); font-weight: 600; }
+    .cf-option--sel:hover { background: rgba(2,70,56,.1); }
 
     /* ── Selection toolbar ── */
     .sel-bar {
@@ -653,6 +743,8 @@ export class CatalogComponent implements OnInit {
     }
     const stockParam = this.route.snapshot.queryParamMap.get('stock');
     if (stockParam === 'low') this.statusFilter.set('low-stock');
+    const colorParam = this.route.snapshot.queryParamMap.get('color');
+    if (colorParam) { this.colorFilter.set(colorParam); this.showFilters.set(true); }
   }
 
   // ── Filter / sort / view state ────────────────────────────────────────────
@@ -674,12 +766,23 @@ export class CatalogComponent implements OnInit {
   @HostListener('window:resize')
   onResize(): void { this.isMobile.set(window.innerWidth <= 768); }
 
+  @HostListener('document:click')
+  onDocClick(): void { this.colorFilterOpen.set(false); }
+
   readonly effectiveView = computed<ViewMode>(() =>
     this.isMobile() ? 'grid' : this.viewMode()
   );
   readonly page          = signal(0);
   readonly pageSize      = signal(25);
-  readonly refColors     = signal<RefColor[]>([]);
+  readonly refColors        = signal<RefColor[]>([]);
+  readonly colorFilterOpen  = signal(false);
+
+  colorHexFor(name: string): string {
+    return this.refColors().find(c => c.name_en === name)?.hex ?? '#e5e7eb';
+  }
+  colorSwatchImageFor(name: string): string | null {
+    return this.refColors().find(c => c.name_en === name)?.swatch_image_url ?? null;
+  }
 
   readonly activeId        = signal<string | null>(null);
   readonly showBulkImport  = signal(false);
@@ -887,6 +990,16 @@ export class CatalogComponent implements OnInit {
     this.activeId.set(null);
   }
 
+  onProductSaved(saved: Product): void {
+    this._products.update(all => {
+      const idx = all.findIndex(p => p.id === saved.id);
+      if (idx === -1) return [saved, ...all];
+      const next = [...all];
+      next[idx] = saved;
+      return next;
+    });
+  }
+
   createProduct(): void {
     const id = 'P-NEW-' + Date.now().toString(36).slice(-5).toUpperCase();
     const draft: Product = {
@@ -906,6 +1019,7 @@ export class CatalogComponent implements OnInit {
     this.brandFilter.set('all');
     this.statusFilter.set('all');
     this.colorFilter.set('all');
+    this.colorFilterOpen.set(false);
     this.priceMin.set(0);
     this.priceMax.set(0);
     this.page.set(0);

@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Elite — Variant · Color · Image System Plan</title>
+<style>
+  :root {
+    --green:   #024638;
+    --green-2: #036350;
+    --green-3: #012b23;
+    --gold:    #c5a572;
+    --gold-2:  #d6bc91;
+    --bg:      #f5f6fa;
+    --bg-2:    #eef0f7;
+    --surface: #ffffff;
+    --ink:     #1a1f36;
+    --ink-2:   #3d4159;
+    --muted:   #6b7088;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger:  #ef4444;
+    --info:    #3b82f6;
+    --purple:  #8b5cf6;
+    --border:  #e2e5f0;
+    --radius:  10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  .page-header {
+    background: var(--green);
+    padding: 32px 40px;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+  }
+  .page-header__brand { color: var(--gold); font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase; margin-bottom: 6px; }
+  .page-header__title { color: #fff; font-size: 26px; font-weight: 700; }
+  .page-header__sub   { color: rgba(255,255,255,.55); font-size: 13px; margin-top: 4px; }
+  .overall-ring {
+    flex-shrink: 0; width: 90px; height: 90px; border-radius: 50%;
+    border: 3px solid rgba(197,165,114,.25);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(197,165,114,.08);
+  }
+  .overall-ring__pct { font-size: 26px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .overall-ring__lbl { font-size: 9px; letter-spacing: .15em; color: rgba(255,255,255,.5); text-transform: uppercase; margin-top: 2px; }
+
+  /* ── Progress Strip ──────────────────────────────────────── */
+  .progress-strip {
+    background: var(--green-3); padding: 0 40px;
+    display: flex; align-items: center; gap: 16px; height: 40px;
+  }
+  .progress-bar { flex: 1; height: 6px; background: rgba(255,255,255,.1); border-radius: 99px; overflow: hidden; }
+  .progress-bar__fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold), var(--gold-2));
+    border-radius: 99px; transition: width .6s ease; width: 0%;
+  }
+  .progress-strip__label { font-size: 11px; color: rgba(255,255,255,.5); white-space: nowrap; }
+
+  /* ── Legend ──────────────────────────────────────────────── */
+  .legend {
+    display: flex; gap: 20px; padding: 14px 40px;
+    background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot--done    { background: var(--success); }
+  .dot--active  { background: var(--warning); }
+  .dot--pending { background: var(--border); border: 1px solid #ccc; }
+  .dot--blocked { background: var(--danger); }
+
+  /* ── Content ─────────────────────────────────────────────── */
+  .content { padding: 32px 40px; display: flex; flex-direction: column; gap: 32px; max-width: 1360px; }
+
+  /* ── Phase Label ─────────────────────────────────────────── */
+  .phase-label {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .phase-label::before, .phase-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ── Feature Card ────────────────────────────────────────── */
+  .feature {
+    background: var(--surface); border-radius: var(--radius);
+    border: 1px solid var(--border); overflow: hidden;
+  }
+  .feature.done-feature { border-left: 4px solid var(--success); }
+  .feature.active-feature { border-left: 4px solid var(--warning); }
+  .feature.blocked-feature { border-left: 4px solid var(--danger); }
+
+  .feature__head {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 22px; border-bottom: 1px solid var(--border);
+    background: #fcfcfd; cursor: pointer; user-select: none;
+  }
+  .feature__head:hover { background: #f8f9fc; }
+  .feature__num {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--green); color: var(--gold);
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .feature__num.done-num { background: var(--success); color: #fff; }
+  .feature__title { font-size: 15px; font-weight: 700; flex: 1; }
+  .feature__subtitle { font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+
+  .layer-badge {
+    font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 5px; white-space: nowrap;
+  }
+  .layer-badge--db     { background: #ede9fe; color: #5b21b6; }
+  .layer-badge--server { background: #dbeafe; color: #1e40af; }
+  .layer-badge--admin  { background: #fef9c3; color: #713f12; }
+  .layer-badge--web    { background: #dcfce7; color: #14532d; }
+  .layer-badge--full   { background: #fce7f3; color: #9d174d; }
+
+  .status-badge {
+    font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 99px; white-space: nowrap; flex-shrink: 0;
+  }
+  .status-badge--pending  { background: #f0f1f8; color: var(--muted); }
+  .status-badge--active   { background: #fef3c7; color: #92400e; }
+  .status-badge--done     { background: #d1fae5; color: #065f46; }
+  .status-badge--blocked  { background: #fee2e2; color: #991b1b; }
+
+  .feature__progress-wrap { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+  .feature__progress-bar  { flex: 1; height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .feature__progress-bar__fill { height: 100%; background: var(--success); border-radius: 99px; transition: width .4s; }
+  .feature__progress-pct { font-size: 11px; color: var(--muted); min-width: 28px; text-align: right; }
+
+  .feature__body { display: none; }
+  .feature__body.open { display: block; }
+
+  /* ── Validation Strip ────────────────────────────────────── */
+  .validation-strip {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 22px 14px;
+    border-top: 1px dashed var(--border);
+    margin-top: 4px;
+  }
+  .validation-check {
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 2px solid var(--success); cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+    background: #fff; flex-shrink: 0; transition: all .15s;
+    display: inline-block; vertical-align: middle; position: relative;
+  }
+  .validation-check:checked { background: var(--success); border-color: var(--success); }
+  .validation-check:checked::after {
+    content: '✓'; position: absolute; top: -1px; left: 1px;
+    font-size: 11px; color: #fff; font-weight: 700;
+  }
+  .validation-label {
+    font-size: 12px; color: var(--muted); font-style: italic;
+    transition: color .15s;
+  }
+  .validation-label.validated { color: var(--success); font-style: normal; font-weight: 600; }
+
+  /* ── Context Box ─────────────────────────────────────────── */
+  .context-box {
+    margin: 16px 22px 0;
+    padding: 14px 18px;
+    background: #f8f9fc;
+    border-radius: 8px;
+    border-left: 3px solid var(--gold);
+    font-size: 13px; color: var(--ink-2); line-height: 1.6;
+  }
+  .context-box strong { color: var(--ink); }
+
+  /* ── Leather Note ────────────────────────────────────────── */
+  .leather-note {
+    margin: 12px 22px 0;
+    padding: 12px 16px;
+    background: #fef9f0;
+    border-radius: 8px;
+    border: 1px solid #fde68a;
+    font-size: 12px; color: #78350f; line-height: 1.6;
+  }
+  .leather-note__title { font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; color: #92400e; }
+
+  /* ── Tasks Table ─────────────────────────────────────────── */
+  .tasks-wrap { overflow-x: auto; }
+  .tasks { width: 100%; border-collapse: collapse; }
+  .tasks th {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); padding: 8px 16px; text-align: left;
+    background: #f8f9fc; border-bottom: 1px solid var(--border);
+  }
+  .tasks td { padding: 11px 16px; font-size: 13px; border-bottom: 1px solid #f0f1f8; vertical-align: top; }
+  .tasks tr:last-child td { border-bottom: none; }
+  .tasks tr:hover td { background: #fafbff; }
+
+  .task-check {
+    width: 16px; height: 16px; border-radius: 4px; border: 2px solid var(--border);
+    cursor: pointer; appearance: none; -webkit-appearance: none;
+    background: #fff; flex-shrink: 0; transition: all .15s;
+    display: inline-block; vertical-align: middle; position: relative;
+  }
+  .task-check:checked { background: var(--success); border-color: var(--success); }
+  .task-check:checked::after {
+    content: '✓'; position: absolute; top: -1px; left: 1px;
+    font-size: 11px; color: #fff; font-weight: 700;
+  }
+
+  .task-name { font-size: 13px; font-weight: 500; }
+  .task-name.checked { text-decoration: line-through; color: var(--muted); }
+
+  .layer-tag {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .layer-tag--db     { background: #ede9fe; color: #5b21b6; }
+  .layer-tag--server { background: #dbeafe; color: #1e40af; }
+  .layer-tag--admin  { background: #fef9c3; color: #713f12; }
+  .layer-tag--web    { background: #dcfce7; color: #14532d; }
+  .layer-tag--css    { background: #fde8d8; color: #9a3412; }
+  .layer-tag--model  { background: #fce7f3; color: #9d174d; }
+
+  .file-ref {
+    font-size: 11px; color: var(--muted);
+    font-family: 'SF Mono', Menlo, monospace; word-break: break-all;
+  }
+  .file-ref a { color: var(--info); text-decoration: none; }
+  .file-ref a:hover { text-decoration: underline; }
+
+  .notes-cell { font-size: 12px; color: var(--muted); max-width: 280px; line-height: 1.5; }
+
+  /* ── Gap Alert ───────────────────────────────────────────── */
+  .gap-alert {
+    margin: 12px 22px;
+    padding: 10px 14px;
+    background: #fff7ed; border-radius: 8px; border: 1px solid #fed7aa;
+    font-size: 12px; color: #92400e; line-height: 1.5;
+  }
+  .gap-alert__icon { font-size: 14px; margin-right: 4px; }
+
+  /* ── Integration Map ─────────────────────────────────────── */
+  .integration-map {
+    margin: 16px 22px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;
+  }
+  .int-card {
+    padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: #fafbfc; font-size: 12px; line-height: 1.5;
+  }
+  .int-card__title { font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 5px; color: var(--ink); }
+  .int-card--db    { border-top: 3px solid #8b5cf6; }
+  .int-card--server{ border-top: 3px solid #3b82f6; }
+  .int-card--admin { border-top: 3px solid #f59e0b; }
+  .int-card--web   { border-top: 3px solid #10b981; }
+  .int-card--cache { border-top: 3px solid #ec4899; }
+
+  /* ── Summary Footer ──────────────────────────────────────── */
+  .summary {
+    margin: 0 40px 40px;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 1px; background: var(--border); border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .summary-cell {
+    background: var(--surface); padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .summary-cell__value { font-size: 28px; font-weight: 700; }
+  .summary-cell__label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .summary-cell--done    .summary-cell__value { color: var(--success); }
+  .summary-cell--active  .summary-cell__value { color: var(--warning); }
+  .summary-cell--pending .summary-cell__value { color: var(--muted); }
+  .summary-cell--total   .summary-cell__value { color: var(--green); }
+  .summary-cell--phases  .summary-cell__value { color: var(--purple); }
+
+  .last-updated { text-align: center; font-size: 11px; color: var(--muted); padding: 0 40px 32px; }
+
+  /* ── Responsive ──────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .page-header { padding: 24px 20px; }
+    .content { padding: 20px; }
+    .legend { padding: 12px 20px; }
+    .progress-strip { padding: 0 20px; }
+    .summary { margin: 0 20px 24px; grid-template-columns: repeat(2, 1fr); }
+    .tasks th:nth-child(4), .tasks td:nth-child(4) { display: none; }
+    .integration-map { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════════════════ -->
+<header class="page-header">
+  <div>
+    <p class="page-header__brand">Elite Collection · Full-Stack Feature Plan</p>
+    <h1 class="page-header__title">Variant · Color · Image System</h1>
+    <p class="page-header__sub">Reference Page · Product Drawer · Storefront · DB · API — 8 Phases · 52 Tasks</p>
+  </div>
+  <div class="overall-ring">
+    <span class="overall-ring__pct" id="overall-pct">0%</span>
+    <span class="overall-ring__lbl">Overall</span>
+  </div>
+</header>
+
+<div class="progress-strip">
+  <div class="progress-bar"><div class="progress-bar__fill" id="overall-bar"></div></div>
+  <span class="progress-strip__label" id="overall-label">0 of 52 tasks done</span>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     LEGEND
+═══════════════════════════════════════════════════════════ -->
+<div class="legend">
+  <div class="legend-item"><div class="dot dot--done"></div> Done</div>
+  <div class="legend-item"><div class="dot dot--active"></div> In Progress</div>
+  <div class="legend-item"><div class="dot dot--pending"></div> Pending</div>
+  <div class="legend-item"><div class="dot dot--blocked"></div> Blocked</div>
+  &nbsp;·&nbsp;
+  <div class="legend-item"><span class="layer-tag layer-tag--db">DB</span> Migration</div>
+  <div class="legend-item"><span class="layer-tag layer-tag--server">Server</span> Express API</div>
+  <div class="legend-item"><span class="layer-tag layer-tag--admin">Admin</span> Admin Portal</div>
+  <div class="legend-item"><span class="layer-tag layer-tag--web">Web</span> Storefront</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     CONTENT
+═══════════════════════════════════════════════════════════ -->
+<div class="content">
+
+  <!-- ──────────────────────────────────────────────────────
+       INTEGRATION MAP
+  ─────────────────────────────────────────────────────── -->
+  <div class="feature" style="border-left: 4px solid var(--gold);">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" style="background:var(--gold);color:var(--green);">★</div>
+      <div style="flex:1;">
+        <div class="feature__title">System Integration Map — Read Before Coding</div>
+        <div class="feature__subtitle">Every touchpoint between Reference data, Variants, Images, and the Storefront</div>
+      </div>
+      <span style="color:var(--muted); font-size:18px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body open">
+      <div class="context-box">
+        <strong>The chain:</strong> <code>ref_colors</code> → <code>product_variants.color</code> (text FK, unforced) → <code>media_assets.metadata.color</code> (JSON) → <code>imageColors</code> map in admin form → <code>colorImages</code> in public API → storefront swatch → image gallery swap.<br><br>
+        <strong>Every phase below must keep this chain intact.</strong> A color rename in ref_colors currently does NOT propagate to variant rows — that is a known gap addressed in Phase 2.
+      </div>
+      <div class="leather-note">
+        <div class="leather-note__title">⚠ Leather &amp; Footwear Color Considerations</div>
+        Leather goods present unique color challenges not seen in apparel:<br>
+        • <strong>Finish variation</strong> — "Camel Smooth" vs "Camel Pebbled" are the same hex but different texture. The hex alone is insufficient for product photography matching.<br>
+        • <strong>Aging/patina</strong> — full-grain leather darkens with use; product images show new leather, not aged. Color swatches should show "new" state.<br>
+        • <strong>Lighting sensitivity</strong> — a single leather color can look tan, brown, or golden under different lighting. Use a neutral-lit reference photo as the swatch source, not just a CSS hex.<br>
+        • <strong>Exotic leathers</strong> (crocodile, ostrich) have pattern-based appearance, not solid color. These need a thumbnail swatch image, not a flat hex circle.<br>
+        • <strong>Bi-color products</strong> — sandal strap + sole may be different colors. The variant model (one color per variant) covers this only if the "primary" color convention is documented.<br>
+        <strong>Solution in this plan:</strong> Phase 3 adds an optional <code>swatch_image_url</code> field to <code>ref_colors</code> — when set it overrides the flat hex circle in swatches everywhere.
+      </div>
+      <div class="integration-map">
+        <div class="int-card int-card--db">
+          <div class="int-card__title">Database</div>
+          <code>ref_colors</code> — master color list<br>
+          <code>product_variants.color</code> — text, unforced<br>
+          <code>media_assets.metadata.color</code> — JSON blob<br>
+          <code>media_links</code> — product↔image join<br>
+          <strong>NEW:</strong> <code>product_color_images</code> pivot<br>
+          <strong>NEW:</strong> <code>ref_colors.swatch_image_url</code>
+        </div>
+        <div class="int-card int-card--server">
+          <div class="int-card__title">Express API</div>
+          <code>GET /admin/ref/colors</code> — admin CRUD<br>
+          <code>GET /api/ref/colors</code> — public, 1hr cache<br>
+          <code>PATCH /admin/products/:id</code> — saves imageColors<br>
+          <code>GET /api/products/:id</code> — returns colorImages<br>
+          <strong>NEW:</strong> usage-count guard on DELETE<br>
+          <strong>NEW:</strong> replaceColorImages() via pivot
+        </div>
+        <div class="int-card int-card--admin">
+          <div class="int-card__title">Admin Portal</div>
+          <code>/reference</code> — Colors / Materials / Sizes tabs<br>
+          <code>/catalog</code> → product drawer → variants grid<br>
+          Catalog filter: color chip from ref_colors<br>
+          Image gallery: color badge per linked image<br>
+          <strong>NEW:</strong> usage count per color<br>
+          <strong>NEW:</strong> color-grouped variant table
+        </div>
+        <div class="int-card int-card--web">
+          <div class="int-card__title">Storefront</div>
+          <code>ReferenceDataService.colorHexByName</code><br>
+          <code>product.colorImages</code> → image swap<br>
+          <code>sizeInStock(product, size)</code> — partial fix<br>
+          <strong>NEW:</strong> sizes filtered by selected color<br>
+          <strong>NEW:</strong> <code>?color=camel</code> URL param<br>
+          <strong>NEW:</strong> product-card hover swatch
+        </div>
+        <div class="int-card int-card--cache">
+          <div class="int-card__title">Cache &amp; Consistency</div>
+          Public colors API: 1hr + 24hr SWR<br>
+          After color rename → must bust cache<br>
+          After delete → variants show stale color<br>
+          <strong>NEW:</strong> PATCH color propagates to variants<br>
+          <strong>NEW:</strong> DELETE blocked if used
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 1
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 1 — Database Foundation</div>
+
+  <!-- P1 F1 -->
+  <div class="feature" id="f1">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f1">1</div>
+      <div style="flex:1;">
+        <div class="feature__title">Migration 010 — Color-Image Pivot + Swatch Image</div>
+        <div class="feature__subtitle">Replace fragile JSON metadata color linking with a proper relational table</div>
+      </div>
+      <span class="layer-badge layer-badge--db">DB</span>
+      <span class="status-badge status-badge--pending" id="badge-f1">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f1" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f1">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f1">
+      <div class="context-box">
+        Currently <code>media_assets.metadata->>'color'</code> (a JSON blob field) is the only link between an image and a color. It has no FK, no cascade, no integrity. This migration adds a proper pivot table and an optional swatch image field so exotic leathers can display a texture thumbnail instead of a flat hex circle.
+      </div>
+      <div class="gap-alert">
+        <span class="gap-alert__icon">⚡</span>
+        <strong>Zero-downtime strategy:</strong> New table is additive. During Phase 2 the API writes to BOTH the old metadata path AND the new pivot. Rollback = drop the migration. The old metadata path stays working until Phase 7 cleanup.
+      </div>
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead>
+            <tr>
+              <th style="width:32px;"></th>
+              <th>Task</th>
+              <th>Layer</th>
+              <th>File</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f1" onchange="updateFeature('f1')"/></td>
+              <td><span class="task-name">Create <code>server/db/migrations/010_color_images.sql</code></span></td>
+              <td><span class="layer-tag layer-tag--db">DB</span></td>
+              <td class="file-ref">server/db/migrations/</td>
+              <td class="notes-cell">New file; do not edit existing migrations</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f1" onchange="updateFeature('f1')"/></td>
+              <td><span class="task-name">CREATE TABLE <code>product_color_images</code> with tenant_id, product_id, color (text, lowercase), media_id FK, sort_order, UNIQUE(product_id, color, sort_order)</span></td>
+              <td><span class="layer-tag layer-tag--db">DB</span></td>
+              <td class="file-ref">010_color_images.sql</td>
+              <td class="notes-cell">CASCADE on product + media delete. Index on product_id and tenant_id.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f1" onchange="updateFeature('f1')"/></td>
+              <td><span class="task-name">ALTER TABLE <code>ref_colors</code> ADD COLUMN <code>swatch_image_url text</code> (nullable)</span></td>
+              <td><span class="layer-tag layer-tag--db">DB</span></td>
+              <td class="file-ref">010_color_images.sql</td>
+              <td class="notes-cell">Nullable — when NULL, hex circle is shown. When set, a texture thumbnail is shown (exotic leathers).</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f1" onchange="updateFeature('f1')"/></td>
+              <td><span class="task-name">ALTER TABLE <code>product_variants</code> ADD COLUMN <code>color_ref_id uuid REFERENCES ref_colors(id) ON DELETE SET NULL</code></span></td>
+              <td><span class="layer-tag layer-tag--db">DB</span></td>
+              <td class="file-ref">010_color_images.sql</td>
+              <td class="notes-cell">Nullable for backward compat. The text <code>color</code> field stays as display value; this FK enables integrity checks.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f1" onchange="updateFeature('f1')"/></td>
+              <td><span class="task-name">Backfill <code>color_ref_id</code> from existing text colors via case-insensitive join to ref_colors.name_en</span></td>
+              <td><span class="layer-tag layer-tag--db">DB</span></td>
+              <td class="file-ref">010_color_images.sql</td>
+              <td class="notes-cell"><code>UPDATE product_variants SET color_ref_id = rc.id FROM ref_colors rc WHERE lower(trim(pv.color)) = lower(trim(rc.name_en))</code></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f1" onchange="updateFeature('f1')"/></td>
+              <td><span class="task-name">Add migration to <code>server/db/run-migrations.js</code> (or equivalent runner)</span></td>
+              <td><span class="layer-tag layer-tag--db">DB</span></td>
+              <td class="file-ref">server/db/</td>
+              <td class="notes-cell">Verify migration runner picks up file by name convention.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="validation-strip">
+        <input type="checkbox" class="validation-check" id="val-f1" onchange="toggleValidation('f1')"/>
+        <label class="validation-label" id="val-label-f1" for="val-f1">
+          ✓ I tested this phase in the app
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 2
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 2 — Server API</div>
+
+  <!-- P2 F2 -->
+  <div class="feature" id="f2">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f2">2</div>
+      <div style="flex:1;">
+        <div class="feature__title">admin-ref route — Usage Guard + Rename Propagation</div>
+        <div class="feature__subtitle">Prevent deleting a color used by variants; propagate renames to variant rows</div>
+      </div>
+      <span class="layer-badge layer-badge--server">Server</span>
+      <span class="status-badge status-badge--pending" id="badge-f2">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f2" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f2">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f2">
+      <div class="context-box">
+        Today deleting "Camel" from ref_colors silently leaves all variants with <code>color = 'Camel'</code> orphaned — they still exist but map to nothing in the storefront. The same issue exists for materials. We need a usage-count check on DELETE and a rename propagation on PUT.
+      </div>
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f2" onchange="updateFeature('f2')"/></td>
+              <td><span class="task-name">Add <code>GET /admin/ref/colors/:id/usage</code> endpoint returning <code>{ variantCount, productIds[] }</code></span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-ref.route.js</td>
+              <td class="notes-cell">COUNT from product_variants WHERE color_ref_id = :id (after migration) or lower(color) = name_en</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f2" onchange="updateFeature('f2')"/></td>
+              <td><span class="task-name">Guard <code>DELETE /admin/ref/colors/:id</code> — return 409 with <code>{ variantCount }</code> if used; allow force-delete with <code>?force=true</code></span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-ref.route.js</td>
+              <td class="notes-cell">Force-delete clears color + color_ref_id on variants (does not delete variants). Matches WooCommerce behaviour.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f2" onchange="updateFeature('f2')"/></td>
+              <td><span class="task-name">In <code>PUT /admin/ref/colors/:id</code> — when name_en changes, propagate to <code>product_variants.color</code> via UPDATE WHERE color_ref_id = :id</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-ref.route.js</td>
+              <td class="notes-cell">Run in same transaction as the ref_colors update. Bust the public /api/ref/colors cache after rename.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f2" onchange="updateFeature('f2')"/></td>
+              <td><span class="task-name">Add <code>swatch_image_url</code> to ref_colors GET/POST/PUT response shape in admin-ref route</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-ref.route.js</td>
+              <td class="notes-cell">Include in SELECT and accept in INSERT/UPDATE.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f2" onchange="updateFeature('f2')"/></td>
+              <td><span class="task-name">Same usage guard on <code>DELETE /admin/ref/materials/:id</code></span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-ref.route.js</td>
+              <td class="notes-cell">Check product_variants.material (text) count.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f2" onchange="updateFeature('f2')"/></td>
+              <td><span class="task-name">Replace <code>replaceImages()</code> color logic — write to <code>product_color_images</code> pivot IN ADDITION to metadata (dual-write for safe rollout)</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-products.route.js</td>
+              <td class="notes-cell">New <code>replaceColorImages()</code> function. Keep existing metadata write so old products still work during rollout.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f2" onchange="updateFeature('f2')"/></td>
+              <td><span class="task-name">Update public products route colorImages query to prefer <code>product_color_images</code> pivot, fall back to metadata</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/products.route.js</td>
+              <td class="notes-cell">Use COALESCE: pivot JOIN first, existing JSONB query as fallback subquery.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="validation-strip">
+        <input type="checkbox" class="validation-check" id="val-f2" onchange="toggleValidation('f2')"/>
+        <label class="validation-label" id="val-label-f2" for="val-f2">
+          ✓ I tested this phase in the app
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 3
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 3 — Reference Page: Colors Tab</div>
+
+  <!-- P3 F3 -->
+  <div class="feature" id="f3">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f3">3</div>
+      <div style="flex:1;">
+        <div class="feature__title">Colors Tab — Usage Counts, Swatch Image, Delete Protection</div>
+        <div class="feature__subtitle">Admin sees product usage per color; exotic leathers get texture thumbnails</div>
+      </div>
+      <span class="layer-badge layer-badge--admin">Admin</span>
+      <span class="status-badge status-badge--pending" id="badge-f3">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f3" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f3">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f3">
+      <div class="context-box">
+        The current reference page (<code>reference.component.ts</code>) shows a 260px grid of color cards with inline edit. The UX improvements below are incremental — no component rebuild, just additions to the existing template and ngOnInit.
+      </div>
+      <div class="leather-note">
+        <div class="leather-note__title">Leather Swatch Strategy</div>
+        For smooth/box leather: flat hex circle is fine.<br>
+        For textured leathers (pebble, croc, ostrich, suede, nubuck): upload a 48×48px texture crop to /media, paste the URL into the new "Swatch Image" field. The storefront and admin both render it as <code>&lt;img&gt;</code> instead of a CSS background color div.
+      </div>
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f3" onchange="updateFeature('f3')"/></td>
+              <td><span class="task-name">Add <code>usageCount?: number</code> to <code>RefColor</code> interface in <code>admin-ref.service.ts</code></span></td>
+              <td><span class="layer-tag layer-tag--model">Model</span></td>
+              <td class="file-ref">services/admin-ref.service.ts</td>
+              <td class="notes-cell">Also add <code>swatch_image_url?: string</code></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f3" onchange="updateFeature('f3')"/></td>
+              <td><span class="task-name">Load usage counts in <code>ngOnInit</code> — call <code>GET /admin/ref/colors</code> (server returns count in same response to avoid N+1)</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Server-side: JOIN COUNT in the existing colors SELECT query. No extra API call needed.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f3" onchange="updateFeature('f3')"/></td>
+              <td><span class="task-name">Show usage count badge on each color card — "Used in 14 variants" chip (muted when 0, amber when &gt;0)</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Click badge navigates to <code>/catalog?color=Camel</code></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f3" onchange="updateFeature('f3')"/></td>
+              <td><span class="task-name">Replace <code>confirm()</code> dialog on deleteColor with <code>ConfirmDialogService</code> that shows usage count and lists affected products</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">"Camel is used by 14 variants across 3 products. Deleting will unlink those variants." Two buttons: Cancel | Force Delete.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f3" onchange="updateFeature('f3')"/></td>
+              <td><span class="task-name">Add "Swatch Image URL" field to color edit form — shows image preview next to hex picker if URL is set</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Small input + 40×40 img preview. Tooltip: "Use for textured leathers (suede, croc, ostrich)."</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f3" onchange="updateFeature('f3')"/></td>
+              <td><span class="task-name">Render swatch: if <code>swatch_image_url</code> set → show img thumbnail; else show hex div (current behavior)</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Same logic applies to the product-drawer color swatch dots and storefront swatches.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f3" onchange="updateFeature('f3')"/></td>
+              <td><span class="task-name">Add drag-to-reorder on color cards using existing drag infrastructure (HTML5 drag or CDK) — replaces sort_order number input</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">PATCH sort_orders in bulk on drop. On mobile: up/down arrow buttons instead of drag.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="validation-strip">
+        <input type="checkbox" class="validation-check" id="val-f3" onchange="toggleValidation('f3')"/>
+        <label class="validation-label" id="val-label-f3" for="val-f3">
+          ✓ I tested this phase in the app
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 4
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 4 — Reference Page: Materials + Size Sets</div>
+
+  <!-- P4 F4 -->
+  <div class="feature" id="f4">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f4">4</div>
+      <div style="flex:1;">
+        <div class="feature__title">Materials Tab — Usage Guard + Visual Icon</div>
+        <div class="feature__subtitle">Block deleting used materials; replace emoji icon with a material-specific visual</div>
+      </div>
+      <span class="layer-badge layer-badge--admin">Admin</span>
+      <span class="status-badge status-badge--pending" id="badge-f4">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f4" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f4">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f4">
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f4" onchange="updateFeature('f4')"/></td>
+              <td><span class="task-name">Add variant_count to <code>GET /admin/ref/materials</code> response (JOIN COUNT from product_variants.material)</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-ref.route.js</td>
+              <td class="notes-cell"></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f4" onchange="updateFeature('f4')"/></td>
+              <td><span class="task-name">Usage count chip on each material row ("Used in X variants")</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell"></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f4" onchange="updateFeature('f4')"/></td>
+              <td><span class="task-name">Delete guard — show confirm dialog with usage count before deleting a material</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Force-delete clears material field on variants.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f4" onchange="updateFeature('f4')"/></td>
+              <td><span class="task-name">Replace 🧵 emoji with per-material icon map (leather icon for *Leather, fabric icon for Canvas/Velvet, etc.) using existing <code>ap-icon</code> or SVG inline</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Fallback to 🧵 if no match. Aligns with the elite luxury aesthetic.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- P4 F5 -->
+  <div class="feature" id="f5">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f5">5</div>
+      <div style="flex:1;">
+        <div class="feature__title">Size Sets Tab — Usage Guard + Duplicate + Per-Color Availability</div>
+        <div class="feature__subtitle">Protect used size sets; add duplicate; prep for per-color size availability display</div>
+      </div>
+      <span class="layer-badge layer-badge--admin">Admin</span>
+      <span class="status-badge status-badge--pending" id="badge-f5">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f5" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f5">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f5">
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f5" onchange="updateFeature('f5')"/></td>
+              <td><span class="task-name">Size sets currently have no FK relationship to products — add a usage indicator by counting products whose variants contain any size from this set</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-ref.route.js</td>
+              <td class="notes-cell">Heuristic: count products where variant sizes overlap the set's sizes array. Not FK-based since sizes are free-text.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f5" onchange="updateFeature('f5')"/></td>
+              <td><span class="task-name">Add "Duplicate" button on each size set card — clones with name "Copy of X"</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Useful for "Men's Footwear Wide" variant of the standard set.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f5" onchange="updateFeature('f5')"/></td>
+              <td><span class="task-name">Add size chip reordering in edit mode — drag chips left/right to reorder before saving</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/reference/reference.component.ts</td>
+              <td class="notes-cell">Alternative: comma-sorted auto-sort button. Comma input stays as primary entry method.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="validation-strip">
+        <input type="checkbox" class="validation-check" id="val-f5" onchange="toggleValidation('f5')"/>
+        <label class="validation-label" id="val-label-f5" for="val-f5">
+          ✓ I tested this phase in the app
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 5
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 5 — Product Drawer: Color-Grouped Variant Table</div>
+
+  <!-- P5 F6 -->
+  <div class="feature" id="f6">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f6">6</div>
+      <div style="flex:1;">
+        <div class="feature__title">Color-Grouped Variant Table in Product Drawer</div>
+        <div class="feature__subtitle">Replace 20-row flat grid with color groups — one image picker per color, sizes nested inside</div>
+      </div>
+      <span class="layer-badge layer-badge--admin">Admin</span>
+      <span class="status-badge status-badge--pending" id="badge-f6">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f6" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f6">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f6">
+      <div class="context-box">
+        <strong>Core insight:</strong> A product with 4 colors × 5 sizes has 20 variant rows today. The admin must click the photo cell on each of the 5 "Camel" rows to assign the same image — 5 redundant actions. The grouped layout reduces that to 1 action per color. The save payload <code>{ variants[], imageColors{} }</code> does NOT change — grouping is purely a view transformation computed from the flat array.
+      </div>
+      <div class="gap-alert">
+        <span class="gap-alert__icon">⚡</span>
+        <strong>No API contract change.</strong> The <code>variants[]</code> flat array is preserved in the form model. The grouped view is a <code>computed()</code> signal derived from it. Saving still sends the same flat array to the server.
+      </div>
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Add <code>colorGroups = computed()</code> signal that groups <code>form().variants</code> by <code>color.toLowerCase().trim()</code></span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Returns <code>{ colorKey, colorName, colorHex, image, variants[] }[]</code>. Ungrouped variants (no color) go into a separate "__none__" group rendered last.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Render color group header row: hex swatch + color name + image picker button + stock total badge + expand/collapse toggle</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Image picker opens the same gallery popover but calls <code>setColorImage(colorName, url)</code> once for the whole group.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Render size rows inside each color group: Size | Stock | Price | SKU | Actions (same columns, no photo/color column needed)</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Collapsible detail row (Material, Cost, Margin) stays per-size row.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Add "+ Add Size" button inside each color group — creates a new variant pre-filled with that color</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Calls existing <code>addVariant()</code> with <code>{ color: colorName }</code> pre-set.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Move "Generate sizes" wizard to the color group header level — when triggered it generates sizes for that color only</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Keeps current <code>generateSizes(sizeSetId)</code> logic; just scopes it to a color.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Add "+ Add Color" button below all groups — creates first size variant for a new color (color selector opens immediately)</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Dropdown shows ref_colors not yet used in this product.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Bulk price per color group — optional "Set price for all [Camel] sizes" input in the group header</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Updates all size rows in the group. Per-size override still possible. Useful when color = material (e.g., croc costs more).</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f6" onchange="updateFeature('f6')"/></td>
+              <td><span class="task-name">Render swatch_image_url thumbnail in group header (not just hex circle) when available from ref_colors</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/product-drawer.component.ts</td>
+              <td class="notes-cell">Uses <code>colorHex(name)</code> lookup — extend to also check <code>colorSwatchImage(name)</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="validation-strip">
+        <input type="checkbox" class="validation-check" id="val-f6" onchange="toggleValidation('f6')"/>
+        <label class="validation-label" id="val-label-f6" for="val-f6">
+          ✓ I tested this phase in the app
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 6
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 6 — Catalog Page: Color Filter Integration</div>
+
+  <!-- P6 F7 -->
+  <div class="feature" id="f7">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f7">7</div>
+      <div style="flex:1;">
+        <div class="feature__title">Catalog Color Filter — Swatch Dots + Normalized Match</div>
+        <div class="feature__subtitle">Color filter already uses ref_colors — add swatch dots and ensure case-insensitive match</div>
+      </div>
+      <span class="layer-badge layer-badge--admin">Admin</span>
+      <span class="status-badge status-badge--pending" id="badge-f7">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f7" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f7">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f7">
+      <div class="context-box">
+        The catalog advanced filter panel already has a color dropdown populated from <code>ref_colors</code>. The gap: it currently shows color names as plain text. This phase adds the hex swatch dot next to each option (matching the product drawer style) and ensures the server-side filter uses case-insensitive comparison.
+      </div>
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f7" onchange="updateFeature('f7')"/></td>
+              <td><span class="task-name">In catalog filter panel: render color filter options with hex swatch dot (or swatch_image thumbnail if set) before the name</span></td>
+              <td><span class="layer-tag layer-tag--admin">Admin</span></td>
+              <td class="file-ref">pages/catalog/catalog.component.ts</td>
+              <td class="notes-cell">Same swatch rendering helper used in reference page and product drawer.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f7" onchange="updateFeature('f7')"/></td>
+              <td><span class="task-name">Ensure server-side product list color filter uses <code>lower(trim(v.color)) = lower(trim($color))</code> comparison</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-products.route.js</td>
+              <td class="notes-cell">Prevents filter breaking when admin previously typed "camel" vs "Camel" in variant rows.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="validation-strip">
+        <input type="checkbox" class="validation-check" id="val-f7" onchange="toggleValidation('f7')"/>
+        <label class="validation-label" id="val-label-f7" for="val-f7">
+          ✓ I tested this phase in the app
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 7
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 7 — Storefront: Correct Color → Size + Swatch + URL</div>
+
+  <!-- P7 F8 -->
+  <div class="feature" id="f8">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f8">8</div>
+      <div style="flex:1;">
+        <div class="feature__title">Storefront PDP — Correct Size Filtering + URL Param + Swatch Image</div>
+        <div class="feature__subtitle">Size chips filter to selected color's stock; ?color=camel in URL; texture swatches for leather</div>
+      </div>
+      <span class="layer-badge layer-badge--web">Web</span>
+      <span class="status-badge status-badge--pending" id="badge-f8">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f8" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f8">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f8">
+      <div class="context-box">
+        Today <code>sizeInStock()</code> partially checks stock per color but the displayed size chip list is not filtered — all sizes appear regardless of color. The fix: compute <code>availableSizes</code> as a derived signal that depends on <code>selectedColor()</code>. Sizes not existing for the selected color show as greyed-out (not hidden — this is the Shopify/WooCommerce standard: hide nothing, grey what's unavailable).
+      </div>
+      <div class="leather-note">
+        <div class="leather-note__title">Leather PDP Color UX Note</div>
+        Luxury leather customers expect to see ALL colorways upfront (not hidden on a dropdown). The swatch strip below the product title is the primary color navigation. Selecting a color should:<br>
+        1. Swap the hero image to that color's photo<br>
+        2. Filter sizes to show only what exists in that color<br>
+        3. Grey-out sizes with stock=0 in that color (not remove them — "coming back" signal)<br>
+        4. Update the URL: <code>?color=camel</code> for sharing
+      </div>
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f8" onchange="updateFeature('f8')"/></td>
+              <td><span class="task-name">Replace <code>sizeInStock()</code> heuristic with <code>availableSizes = computed()</code> signal returning <code>{ size, inStock, available }[]</code></span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/product/product.component.ts</td>
+              <td class="notes-cell"><code>available=false</code> when size doesn't exist for selected color. <code>inStock=false</code> when stock=0. Covers no-variant products too.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f8" onchange="updateFeature('f8')"/></td>
+              <td><span class="task-name">Update size chip template: <code>[class.unavailable]="!s.available"</code> adds strikethrough style; <code>[class.out-of-stock]="!s.inStock"</code> adds grey dot</span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/product/product.component.html</td>
+              <td class="notes-cell">Do NOT disable unavailable sizes — show them greyed. Clicking an unavailable size shows "Not available in [Color]."</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f8" onchange="updateFeature('f8')"/></td>
+              <td><span class="task-name">Read <code>?color=</code> query param in <code>ngOnInit</code> and pre-select matching color on load</span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/product/product.component.ts</td>
+              <td class="notes-cell">Use <code>ActivatedRoute.queryParamMap</code>. Case-insensitive match against <code>product.colors</code>.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f8" onchange="updateFeature('f8')"/></td>
+              <td><span class="task-name">When user selects a color, update URL with <code>Router.navigate([], { queryParams: { color: colorKey } })</code> without page reload</span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/product/product.component.ts</td>
+              <td class="notes-cell">Use <code>replaceUrl: true</code> so Back button still works cleanly.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f8" onchange="updateFeature('f8')"/></td>
+              <td><span class="task-name">Render color swatch using <code>swatch_image_url</code> from <code>ReferenceDataService</code> when set — falls back to hex circle</span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/product/product.component.html</td>
+              <td class="notes-cell">Update <code>ReferenceDataService</code> to also expose swatch_image_url in its color map.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f8" onchange="updateFeature('f8')"/></td>
+              <td><span class="task-name">Update <code>ReferenceDataService</code> public API response model to include <code>swatch_image_url</code></span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">services/reference-data.service.ts</td>
+              <td class="notes-cell">Server <code>GET /api/ref/colors</code> must include swatch_image_url in SELECT.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       PHASE 8
+  ════════════════════════════════════════════════ -->
+  <div class="phase-label">Phase 8 — Storefront: Product Card Hover Swatch + Cleanup</div>
+
+  <!-- P8 F9 -->
+  <div class="feature" id="f9">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f9">9</div>
+      <div style="flex:1;">
+        <div class="feature__title">Product Card — Color Dot Swatches + Hover Image Swap</div>
+        <div class="feature__subtitle">Show color dots on product cards; hover a dot to preview that color's image without navigating</div>
+      </div>
+      <span class="layer-badge layer-badge--web">Web</span>
+      <span class="status-badge status-badge--pending" id="badge-f9">Pending</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f9" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f9">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f9">
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f9" onchange="updateFeature('f9')"/></td>
+              <td><span class="task-name">Add color swatch strip (max 5 dots, "+N" overflow badge) below product name on product cards in grid/list view</span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/collection/collection.component.html</td>
+              <td class="notes-cell">Dots use hex from colorHexByName. Swatch image as background-image when set.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f9" onchange="updateFeature('f9')"/></td>
+              <td><span class="task-name">On hover/touch of a swatch dot, swap the card's hero image to that color's image from <code>product.colorImages</code></span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/collection/collection.component.ts</td>
+              <td class="notes-cell">Track <code>hoveredColor</code> per card. CSS transition crossfade on image swap. On mouse-leave, revert to primary image.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f9" onchange="updateFeature('f9')"/></td>
+              <td><span class="task-name">Clicking a swatch dot navigates to <code>/products/:slug?color=camel</code> (pre-selects that color on PDP)</span></td>
+              <td><span class="layer-tag layer-tag--web">Web</span></td>
+              <td class="file-ref">pages/collection/collection.component.html</td>
+              <td class="notes-cell">Integrate with Phase 7 URL param feature.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- P8 F10 -->
+  <div class="feature" id="f10">
+    <div class="feature__head" onclick="toggleBody(this)">
+      <div class="feature__num" id="num-f10">10</div>
+      <div style="flex:1;">
+        <div class="feature__title">Cleanup — Remove Legacy Metadata JSON Color Path</div>
+        <div class="feature__subtitle">Once all products have been re-saved with the pivot table, remove the dual-write and fallback query</div>
+      </div>
+      <span class="layer-badge layer-badge--full">Full Stack</span>
+      <span class="status-badge status-badge--blocked" id="badge-f10">Blocked — After Phases 1–7</span>
+      <div class="feature__progress-wrap">
+        <div class="feature__progress-bar"><div class="feature__progress-bar__fill" id="bar-f10" style="width:0%"></div></div>
+        <span class="feature__progress-pct" id="pct-f10">0%</span>
+      </div>
+      <span style="color:var(--muted); font-size:18px; margin-left:8px;" class="toggle-icon">▼</span>
+    </div>
+    <div class="feature__body" id="body-f10">
+      <div class="gap-alert">
+        <span class="gap-alert__icon">⏳</span>
+        Only do this after ALL products have been resaved at least once (triggering <code>replaceColorImages()</code> to write pivot rows). Can run a one-time backfill script instead of waiting.
+      </div>
+      <div class="tasks-wrap">
+        <table class="tasks">
+          <thead><tr><th></th><th>Task</th><th>Layer</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f10" onchange="updateFeature('f10')"/></td>
+              <td><span class="task-name">Backfill script — populate <code>product_color_images</code> from existing <code>media_assets.metadata.color</code> for all products</span></td>
+              <td><span class="layer-tag layer-tag--db">DB</span></td>
+              <td class="file-ref">server/db/scripts/backfill-color-images.js</td>
+              <td class="notes-cell">One-off Node script. Run manually on production. Log count of rows created.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f10" onchange="updateFeature('f10')"/></td>
+              <td><span class="task-name">Remove metadata dual-write from <code>replaceImages()</code> — write ONLY to pivot table</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/admin-products.route.js</td>
+              <td class="notes-cell">Keep metadata field for other uses (storagePath, imageVariants) — only remove the color key.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f10" onchange="updateFeature('f10')"/></td>
+              <td><span class="task-name">Remove fallback JSONB path from public products colorImages query</span></td>
+              <td><span class="layer-tag layer-tag--server">Server</span></td>
+              <td class="file-ref">server/routes/products.route.js</td>
+              <td class="notes-cell">Replace complex JSONB COALESCE with clean pivot JOIN.</td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" class="task-check" data-feature="f10" onchange="updateFeature('f10')"/></td>
+              <td><span class="task-name">Update docs/05-api-server.md and docs/08-database-api-implementation.md to reflect new pivot-based color-image architecture</span></td>
+              <td><span class="layer-tag layer-tag--admin">Docs</span></td>
+              <td class="file-ref">docs/05-api-server.md, docs/08-database-api-implementation.md</td>
+              <td class="notes-cell">Always update docs after architectural changes per project rules.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<!-- ════════════════════════════════════════════════════════
+     SUMMARY
+═══════════════════════════════════════════════════════════ -->
+<div class="summary">
+  <div class="summary-cell summary-cell--done">
+    <span class="summary-cell__value" id="sum-done">0</span>
+    <span class="summary-cell__label">Tasks Done</span>
+  </div>
+  <div class="summary-cell summary-cell--pending">
+    <span class="summary-cell__value" id="sum-pending">52</span>
+    <span class="summary-cell__label">Remaining</span>
+  </div>
+  <div class="summary-cell summary-cell--phases">
+    <span class="summary-cell__value">8</span>
+    <span class="summary-cell__label">Phases</span>
+  </div>
+  <div class="summary-cell summary-cell--active">
+    <span class="summary-cell__value" id="sum-features">10</span>
+    <span class="summary-cell__label">Features</span>
+  </div>
+  <div class="summary-cell summary-cell--total">
+    <span class="summary-cell__value">52</span>
+    <span class="summary-cell__label">Total Tasks</span>
+  </div>
+</div>
+
+<div class="last-updated" id="last-updated">Updated: <span id="updated-time">—</span></div>
+
+<!-- ════════════════════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════════════════════ -->
+<script>
+  // ── Feature task counts ──────────────────────────────────────
+  const FEATURE_TOTALS = {
+    f1: 6, f2: 7, f3: 7, f4: 4, f5: 3, f6: 8, f7: 2, f8: 6, f9: 3, f10: 4
+  };
+  const TOTAL_TASKS = Object.values(FEATURE_TOTALS).reduce((a, b) => a + b, 0);
+
+  // ── Persist state ────────────────────────────────────────────
+  const STORAGE_KEY = 'elite-variant-color-plan-v1';
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+  }
+
+  function saveState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  // ── Init checkboxes from storage ─────────────────────────────
+  // Uses per-feature local index so keys match those written by updateFeature()
+  // and the PHASE_DONE seed arrays (both use feature-scoped 0-based index).
+  function initCheckboxes() {
+    const state = loadState();
+    const localCounters = {};
+    document.querySelectorAll('.task-check').forEach((cb) => {
+      const fid = cb.dataset.feature;
+      if (localCounters[fid] === undefined) localCounters[fid] = 0;
+      const key = fid + '_' + localCounters[fid]++;
+      if (state[key]) {
+        cb.checked = true;
+        const nameEl = cb.closest('tr').querySelector('.task-name');
+        if (nameEl) nameEl.classList.add('checked');
+      }
+    });
+  }
+
+  // ── Update a feature's progress ──────────────────────────────
+  function updateFeature(fid) {
+    const state = loadState();
+    const checks = document.querySelectorAll(`.task-check[data-feature="${fid}"]`);
+    let done = 0;
+
+    checks.forEach((cb, idx) => {
+      const key = fid + '_' + idx;
+      state[key] = cb.checked;
+      if (cb.checked) done++;
+      const nameEl = cb.closest('tr').querySelector('.task-name');
+      if (nameEl) nameEl.classList.toggle('checked', cb.checked);
+    });
+
+    saveState(state);
+
+    const total  = FEATURE_TOTALS[fid];
+    const pct    = total ? Math.round((done / total) * 100) : 0;
+
+    document.getElementById('bar-' + fid).style.width = pct + '%';
+    document.getElementById('pct-' + fid).textContent = pct + '%';
+
+    const badge  = document.getElementById('badge-' + fid);
+    const numEl  = document.getElementById('num-' + fid);
+
+    if (done === total) {
+      badge.className  = 'status-badge status-badge--done';
+      badge.textContent = 'Done';
+      numEl.classList.add('done-num');
+      document.getElementById(fid).classList.add('done-feature');
+    } else if (done > 0) {
+      badge.className  = 'status-badge status-badge--active';
+      badge.textContent = 'In Progress';
+      document.getElementById(fid).classList.remove('done-feature');
+    } else {
+      badge.className  = 'status-badge status-badge--pending';
+      badge.textContent = 'Pending';
+      document.getElementById(fid).classList.remove('done-feature');
+    }
+
+    updateOverall();
+  }
+
+  // ── Update overall progress ───────────────────────────────────
+  function updateOverall() {
+    const allChecks = document.querySelectorAll('.task-check');
+    const done = [...allChecks].filter(c => c.checked).length;
+    const pct  = Math.round((done / TOTAL_TASKS) * 100);
+
+    document.getElementById('overall-bar').style.width  = pct + '%';
+    document.getElementById('overall-pct').textContent  = pct + '%';
+    document.getElementById('overall-label').textContent = done + ' of ' + TOTAL_TASKS + ' tasks done';
+    document.getElementById('sum-done').textContent    = done;
+    document.getElementById('sum-pending').textContent = TOTAL_TASKS - done;
+
+    const now = new Date();
+    document.getElementById('updated-time').textContent =
+      now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
+      ' ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ── Toggle body visibility ────────────────────────────────────
+  function toggleBody(headEl) {
+    const feature = headEl.closest('.feature');
+    const body    = feature.querySelector('.feature__body');
+    const icon    = headEl.querySelector('.toggle-icon');
+    body.classList.toggle('open');
+    if (icon) icon.textContent = body.classList.contains('open') ? '▲' : '▼';
+  }
+
+  // ── Phase 1 pre-complete (all 6 tasks shipped 2026-06-12) ────
+  const PHASE1_DONE = ['f1_0','f1_1','f1_2','f1_3','f1_4','f1_5'];
+
+  // ── Validation toggle ────────────────────────────────────────
+  function toggleValidation(fid) {
+    const cb    = document.getElementById('val-' + fid);
+    const label = document.getElementById('val-label-' + fid);
+    if (!cb || !label) return;
+    const state = loadState();
+    state['val_' + fid] = cb.checked;
+    saveState(state);
+    label.classList.toggle('validated', cb.checked);
+    label.textContent = cb.checked
+      ? '✓ Verified in the app'
+      : '✓ I tested this phase in the app';
+  }
+
+  function initValidations() {
+    const state = loadState();
+    ['f1','f2','f3','f4','f5','f6','f7','f8','f9','f10'].forEach(fid => {
+      const cb    = document.getElementById('val-' + fid);
+      const label = document.getElementById('val-label-' + fid);
+      if (!cb || !label) return;
+      if (state['val_' + fid]) {
+        cb.checked = true;
+        label.classList.add('validated');
+        label.textContent = '✓ Verified in the app';
+      }
+    });
+  }
+
+  // ── Phase 2 pre-complete (all 7 tasks shipped 2026-06-12) ────
+  // f2: 0=usage endpoint, 1=delete guard colors, 2=rename propagation,
+  //     3=swatch_image_url in route, 4=material guard, 5=replaceColorImages pivot, 6=public pivot query
+  const PHASE2_DONE = ['f2_0','f2_1','f2_2','f2_3','f2_4','f2_5','f2_6'];
+
+  // ── Phase 3 pre-complete (all tasks shipped 2026-06-12) ──────
+  // f3: 0=interface, 1=load counts, 2=badge, 3=confirm, 4=swatch field, 5=swatch render, 6=drag-reorder
+  // f4: 0=server count, 1=usage chip, 2=delete guard, 3=icon map
+  const PHASE3_DONE = ['f3_0','f3_1','f3_2','f3_3','f3_4','f3_5','f3_6','f4_0','f4_1','f4_2','f4_3'];
+
+  // ── Phase 4 pre-complete (all tasks shipped 2026-06-12) ──────
+  // f5: 0=usage count server, 1=duplicate button, 2=chip reorder
+  const PHASE4_DONE = ['f5_0','f5_1','f5_2'];
+
+  // ── Phase 5 pre-complete (all tasks shipped 2026-06-12) ──────
+  // f6: 0=colorGroups signal, 1=group header, 2=size rows, 3=add size, 4=gen sizes, 5=add color, 6=bulk price, 7=swatch img
+  const PHASE5_DONE = ['f6_0','f6_1','f6_2','f6_3','f6_4','f6_5','f6_6','f6_7'];
+
+  // ── Phase 6 pre-complete (all tasks shipped 2026-06-12) ──────
+  // f7: 0=swatch dots in filter, 1=case-insensitive server match
+  const PHASE6_DONE = ['f7_0','f7_1'];
+
+  // ── Bootstrap ────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    const state = loadState();
+    PHASE1_DONE.forEach(k => { if (!(k in state)) state[k] = true; });
+    PHASE2_DONE.forEach(k => { if (!(k in state)) state[k] = true; });
+    PHASE3_DONE.forEach(k => { if (!(k in state)) state[k] = true; });
+    PHASE4_DONE.forEach(k => { if (!(k in state)) state[k] = true; });
+    PHASE5_DONE.forEach(k => { if (!(k in state)) state[k] = true; });
+    PHASE6_DONE.forEach(k => { if (!(k in state)) state[k] = true; });
+    saveState(state);
+    initCheckboxes();
+    initValidations();
+    Object.keys(FEATURE_TOTALS).forEach(fid => updateFeature(fid));
+  });
+</script>
+
+</body>
+</html>

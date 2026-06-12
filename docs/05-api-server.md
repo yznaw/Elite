@@ -463,24 +463,40 @@ Admin authentication uses **server-side sessions** (no JWT):
 
 ### Reference data endpoints (`/api/admin/ref/*`)
 
-Full CRUD for all three reference tables. All endpoints are tenant-scoped.
+Full CRUD for all three reference tables. All endpoints are tenant-scoped. Requires active admin session.
+
+**Colors** — response shape: `{ id, name_en, name_ar, hex, swatch_image_url, sort_order, variant_count }`.  
+`variant_count` is a live JOIN count of `product_variants` rows using this color (via `color_ref_id` FK or name match).  
+`swatch_image_url` is optional — when set, UIs render a texture thumbnail instead of the flat hex circle (for exotic leathers: suede, croc, ostrich).
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/admin/ref/colors` | List all brand colors (id, name_en, name_ar, hex, sort_order) |
-| `POST` | `/api/admin/ref/colors` | Create color — body: `{ name_en, name_ar?, hex?, sort_order? }` |
-| `PUT` | `/api/admin/ref/colors/:id` | Replace a color |
-| `DELETE` | `/api/admin/ref/colors/:id` | Delete a color |
-| `GET` | `/api/admin/ref/materials` | List all materials (id, name_en, name_ar, sort_order) |
-| `POST` | `/api/admin/ref/materials` | Create material |
+| `GET` | `/api/admin/ref/colors` | List all brand colors with live `variant_count` and `swatch_image_url` |
+| `POST` | `/api/admin/ref/colors` | Create color — body: `{ name_en, name_ar?, hex?, swatch_image_url?, sort_order? }` |
+| `PUT` | `/api/admin/ref/colors/:id` | Replace a color. **Name propagation:** if `name_en` changes, all `product_variants.color` rows linked via `color_ref_id` are updated in the same transaction. |
+| `DELETE` | `/api/admin/ref/colors/:id` | **Usage guard:** returns `409 { error, variantCount }` if any variants use this color. Pass `?force=true` to override — clears `color_ref_id` on affected variants but does NOT delete the variants. |
+
+**Materials** — response shape: `{ id, name_en, name_ar, sort_order, variant_count }`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/ref/materials` | List all materials with live `variant_count` |
+| `POST` | `/api/admin/ref/materials` | Create material — body: `{ name_en, name_ar?, sort_order? }` |
 | `PUT` | `/api/admin/ref/materials/:id` | Replace a material |
-| `DELETE` | `/api/admin/ref/materials/:id` | Delete a material |
+| `DELETE` | `/api/admin/ref/materials/:id` | **Usage guard:** returns `409 { error, variantCount }` if in use. `?force=true` clears the material field on affected variants. |
+
+**Size Sets**
+
+| Method | Path | Description |
+|---|---|---|
 | `GET` | `/api/admin/ref/size-sets` | List all size sets (id, name, sizes JSON array, sort_order) |
 | `POST` | `/api/admin/ref/size-sets` | Create size set — body: `{ name, sizes: string[], sort_order? }` |
 | `PUT` | `/api/admin/ref/size-sets/:id` | Replace a size set |
 | `DELETE` | `/api/admin/ref/size-sets/:id` | Delete a size set |
 
-**DB tables:** `ref_colors`, `ref_materials`, `ref_size_sets` — created by migration `003_ref_tables.sql`. Seeded with 13 colors, 8 materials, and 5 size sets for the `elite` tenant.
+**DB tables:** `ref_colors`, `ref_materials`, `ref_size_sets` — created by `003_ref_tables.sql`. `ref_colors` extended by `010_color_images.sql` with `swatch_image_url`. Seeded with 13 colors, 8 materials, and 5 size sets.
+
+**Color-image pivot** (`product_color_images`) — created by `010_color_images.sql`. Written by `replaceColorImages()` in `admin-products.route.js` on every product save alongside the legacy `media_assets.metadata.color` path (dual-write for zero-downtime rollout). Public `products.route.js` prefers the pivot JOIN; falls back to metadata JSONB for products not yet re-saved.
 
 ---
 
