@@ -28,10 +28,19 @@ export class AppComponent {
 
   private readonly currentUrl = signal<string>(this.router.url);
   private readonly authRoutes = ['/login', '/forgot-password', '/reset-password'];
+  /** Pages that have their own full-width sticky sub-toolbar need the
+      scroll-area top padding removed so the sub-toolbar clips flush
+      against the topbar with no visible gap. */
+  private readonly flushTopRoutes = ['/storefront'];
 
   readonly showShell = computed(() => {
     const u = this.currentUrl();
     return !this.authRoutes.some((r) => u.startsWith(r));
+  });
+
+  readonly flushTop = computed(() => {
+    const u = this.currentUrl();
+    return this.flushTopRoutes.some((r) => u.startsWith(r));
   });
 
   readonly sidebarCollapsed = this.sidebarToggle.collapsed;

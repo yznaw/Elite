@@ -25,10 +25,26 @@
   padding: 28px 32px 40px;
 }
 
+/* Pages with their own full-width sticky sub-toolbar (e.g. storefront)
+   need zero top padding so the sub-toolbar clips flush under the topbar. */
+.scroll-area--flush-top {
+  padding-top: 0;
+}
+
 /* On mobile/tablet the sidebar becomes a fixed drawer — grid is 1 column */
 @media (max-width: 1024px) {
   .app {
     grid-template-columns: 1fr !important;
   }
   .scroll-area { padding: 18px; }
+  .scroll-area--flush-top { padding-top: 0; }
+}
+
+/* Phone: smooth momentum scroll, tighter padding */
+@media (max-width: 768px) {
+  .scroll-area {
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 16px 32px;
+  }
+  .scroll-area--flush-top { padding-top: 0; }
 }

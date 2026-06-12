@@ -869,7 +869,12 @@ interface StorefrontContent {
   }
   `,
   styles: [`
-    .sf-shell { padding-bottom: 60px; }
+    /* Height tokens — change here and sticky tops update automatically */
+    .sf-shell {
+      --pubbar-h:    52px;
+      --pagetabs-h:  48px;   /* ptab: 14px + ~18px text + 14px + 2px border */
+      padding-bottom: 60px;
+    }
 
     /* ── Unified storefront action bar ─────────────────────────── */
     /*  Always sticky at the top of the scroll area — needs strong
@@ -949,11 +954,15 @@ interface StorefrontContent {
     }
 
     /* ── Page tabs ──────────────────────────────── */
+    /* ── Page tabs (Home Page / Our Story / Contact Us) — sticky tier 2 */
     .page-tabs {
       display: flex; gap: 0;
       border-bottom: 2px solid var(--border);
       padding: 0 32px;
       background: var(--surface);
+      position: sticky;
+      top: var(--pubbar-h, 52px);
+      z-index: 39;
     }
     .ptab {
       display: inline-flex; align-items: center; gap: 6px;
@@ -965,17 +974,24 @@ interface StorefrontContent {
       margin-bottom: -2px;
       cursor: pointer;
       transition: all 0.15s;
+      white-space: nowrap;
     }
     .ptab:hover { color: var(--ink); }
     .ptab.active { color: var(--green); border-bottom-color: var(--green); }
 
-    /* ── Sub tabs ───────────────────────────────── */
+    /* ── Sub tabs (section pills) — sticky tier 3 */
     .sub-tabs {
-      display: flex; gap: 4px; flex-wrap: wrap;
-      padding: 12px 32px;
+      display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto;
+      padding: 10px 32px;
       background: var(--bg);
       border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: calc(var(--pubbar-h, 52px) + var(--pagetabs-h, 48px));
+      z-index: 38;
+      /* hide scrollbar but keep scrollability on narrow screens */
+      scrollbar-width: none;
     }
+    .sub-tabs::-webkit-scrollbar { display: none; }
     .stab {
       padding: 6px 14px;
       font-size: 12px; font-weight: 500;
@@ -985,6 +1001,8 @@ interface StorefrontContent {
       color: var(--muted);
       cursor: pointer;
       transition: all 0.12s;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .stab:hover { border-color: var(--green); color: var(--green); }
     .stab.active { background: var(--green); color: #fff; border-color: var(--green); }

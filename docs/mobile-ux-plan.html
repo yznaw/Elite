@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mobile UX Enhancement Plan — Elite Admin Portal</title>
+<style>
+  :root {
+    --gold:#C5A572; --gold-light:#F7EFE0; --gold-mid:#E8D5A0; --gold-dim:rgba(197,165,114,0.18);
+    --green:#004538; --green-2:#036350; --green-bg:rgba(0,69,56,0.07); --green-border:rgba(0,69,56,0.18);
+    --ink:#1A1F36; --ink-2:#3D4159; --muted:#6B7088; --muted-2:#9CA0B3;
+    --surface:#FFFFFF; --bg:#F5F6FA; --bg-2:#ECEEF5; --border:rgba(2,70,56,0.10);
+    --success:#10B981; --success-bg:rgba(16,185,129,0.10); --success-border:rgba(16,185,129,0.25);
+    --warning:#F59E0B; --warning-bg:rgba(245,158,11,0.12); --warning-border:rgba(245,158,11,0.30);
+    --danger:#EF4444; --danger-bg:rgba(239,68,68,0.10); --danger-border:rgba(239,68,68,0.25);
+    --info:#3B82F6; --info-bg:rgba(59,130,246,0.10); --info-border:rgba(59,130,246,0.25);
+    --purple:#7C3AED; --purple-bg:rgba(124,58,237,0.10);
+    --radius:12px; --shadow:0 4px 14px rgba(2,70,56,0.06); --shadow-lg:0 16px 48px rgba(2,70,56,0.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;font-size:14px;}
+
+  /* ── Sticky Progress Bar ── */
+  .sticky-bar{
+    position:sticky;top:0;z-index:200;
+    background:rgba(0,69,56,0.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    padding:12px 32px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    border-bottom:1px solid rgba(197,165,114,0.25);
+  }
+  .sticky-logo{font-size:11px;font-weight:800;color:var(--gold);letter-spacing:.18em;text-transform:uppercase;white-space:nowrap;}
+  .sticky-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;}
+  .sticky-track{flex:1;min-width:120px;height:5px;background:rgba(255,255,255,.10);border-radius:3px;overflow:hidden;}
+  .sticky-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-mid));border-radius:3px;transition:width .45s cubic-bezier(.4,0,.2,1);width:0%;}
+  .sticky-pct{font-size:14px;font-weight:800;color:var(--gold-mid);white-space:nowrap;min-width:38px;text-align:right;}
+  .sticky-count{font-size:11px;color:rgba(255,255,255,.38);white-space:nowrap;}
+  .reset-btn{font-size:10px;font-weight:700;color:rgba(255,255,255,.35);background:none;border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:3px 10px;cursor:pointer;transition:all .15s;white-space:nowrap;letter-spacing:.04em;}
+  .reset-btn:hover{color:rgba(255,255,255,.65);border-color:rgba(255,255,255,.28);}
+
+  /* ── Hero ── */
+  .hero{background:linear-gradient(145deg,var(--green) 0%,#012b23 60%,#1a1f36 100%);color:#fff;padding:60px 48px 52px;position:relative;overflow:hidden;}
+  .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 75% 40%,rgba(197,165,114,.15),transparent 60%);pointer-events:none;}
+  .hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(197,165,114,.35),transparent);}
+  .hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--gold-dim);border:1px solid rgba(197,165,114,.35);color:var(--gold-mid);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:22px;}
+  .hero-badge-dot{width:6px;height:6px;background:var(--gold);border-radius:50%;animation:pulseDot 2s ease infinite;}
+  @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.7);}}
+  .hero h1{font-size:38px;font-weight:800;line-height:1.12;margin-bottom:14px;letter-spacing:-.01em;}
+  .hero h1 span{color:var(--gold);}
+  .hero p{font-size:15px;opacity:.6;max-width:600px;line-height:1.75;}
+  .hero-meta{display:flex;gap:40px;margin-top:36px;padding-top:28px;border-top:1px solid rgba(255,255,255,.08);flex-wrap:wrap;}
+  .hero-stat{display:flex;flex-direction:column;gap:3px;}
+  .hero-stat-n{font-size:28px;font-weight:800;color:var(--gold);}
+  .hero-stat-l{font-size:11px;opacity:.45;text-transform:uppercase;letter-spacing:.08em;}
+
+  /* ── Layout ── */
+  .page{max-width:1080px;margin:0 auto;padding:44px 32px 100px;}
+
+  /* ── Principles Grid ── */
+  .principles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:48px;}
+  .principle{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
+  .principle-icon{font-size:22px;margin-bottom:10px;}
+  .principle-title{font-size:12px;font-weight:800;color:var(--green);letter-spacing:.04em;margin-bottom:4px;}
+  .principle-body{font-size:12px;color:var(--muted);line-height:1.6;}
+
+  /* ── Section header ── */
+  .section{display:flex;align-items:center;gap:14px;margin:56px 0 22px;}
+  .sec-num{width:38px;height:38px;border-radius:50%;background:var(--green);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;box-shadow:0 0 0 4px var(--green-bg);}
+  .sec-title{font-size:20px;font-weight:800;color:var(--ink);}
+  .sec-sub{font-size:13px;color:var(--muted);margin-top:2px;}
+  .sec-line{flex:1;height:1px;background:var(--border);}
+
+  /* ── Phase progress bar ── */
+  .phase-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;display:flex;align-items:center;gap:14px;margin-bottom:16px;box-shadow:var(--shadow);}
+  .phase-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);white-space:nowrap;}
+  .phase-track{flex:1;height:4px;background:var(--bg-2);border-radius:2px;overflow:hidden;}
+  .phase-fill{height:100%;border-radius:2px;transition:width .45s ease;width:0%;}
+  .phase-pct{font-size:11px;font-weight:700;color:var(--muted);min-width:32px;text-align:right;}
+
+  /* ── Task card ── */
+  .task{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    display:grid;grid-template-columns:auto 1fr auto;align-items:start;gap:14px;
+    padding:16px 18px;margin-bottom:8px;box-shadow:var(--shadow);
+    cursor:pointer;transition:box-shadow .15s,border-color .2s,background .2s;
+    user-select:none;
+  }
+  .task:hover{box-shadow:0 6px 20px rgba(2,70,56,.09);border-color:rgba(2,70,56,.16);}
+  .task.done{background:var(--success-bg);border-color:var(--success-border);}
+  .task.in-progress{background:var(--warning-bg);border-color:var(--warning-border);}
+  .task.next{background:var(--info-bg);border-color:var(--info-border);}
+  .task.blocked{background:var(--danger-bg);border-color:var(--danger-border);}
+
+  .task-check{
+    width:22px;height:22px;border-radius:6px;border:2px solid var(--border);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    transition:all .18s;margin-top:1px;background:#fff;
+  }
+  .task.done .task-check{background:var(--success);border-color:var(--success);}
+  .task.in-progress .task-check{background:var(--warning);border-color:var(--warning);}
+  .task.next .task-check{background:var(--info);border-color:var(--info);}
+  .task.blocked .task-check{background:var(--danger);border-color:var(--danger);}
+  .checkmark{color:#fff;font-size:12px;font-weight:800;display:none;}
+  .task.done .checkmark,.task.in-progress .checkmark,.task.next .checkmark,.task.blocked .checkmark{display:block;}
+  .checkmark-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.6);display:block;}
+  .task:not(.done):not(.in-progress):not(.next):not(.blocked) .checkmark-dot{display:none;}
+
+  .task-body{}
+  .task-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:3px;}
+  .task.done .task-title{text-decoration:line-through;color:var(--muted);}
+  .task-desc{font-size:12px;color:var(--muted-2);line-height:1.65;}
+  .task-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;letter-spacing:.04em;text-transform:uppercase;}
+  .tag-scope{background:var(--green-bg);color:var(--green);}
+  .tag-effort-s{background:var(--success-bg);color:var(--success);}
+  .tag-effort-m{background:var(--warning-bg);color:var(--warning);}
+  .tag-effort-l{background:var(--danger-bg);color:var(--danger);}
+  .tag-impact{background:var(--purple-bg);color:var(--purple);}
+  .tag-file{background:var(--bg-2);color:var(--ink-2);font-family:monospace;font-size:9.5px;letter-spacing:.01em;}
+
+  .task-priority{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
+  .priority-dot{width:8px;height:8px;border-radius:50%;}
+  .priority-dot.p1{background:#EF4444;}
+  .priority-dot.p2{background:#F59E0B;}
+  .priority-dot.p3{background:#10B981;}
+  .priority-dot.p4{background:#6B7088;}
+  .priority-label{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-2);}
+
+  /* ── Impact badges ── */
+  .impact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:32px;}
+  .impact-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);}
+  .impact-card-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;}
+  .impact-card-value{font-size:22px;font-weight:800;color:var(--green);}
+  .impact-card-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  /* ── Breakpoint reference ── */
+  .bp-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:24px;}
+  .bp-table th{background:var(--green);color:#fff;padding:8px 12px;text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
+  .bp-table td{padding:9px 12px;border-bottom:1px solid var(--border);}
+  .bp-table tr:last-child td{border-bottom:none;}
+  .bp-table tr:nth-child(even) td{background:var(--bg);}
+  .bp-chip{display:inline-block;background:var(--green-bg);color:var(--green);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;font-family:monospace;}
+
+  /* ── Scroll to top ── */
+  #scrollTop{position:fixed;bottom:28px;right:28px;width:42px;height:42px;background:var(--green);color:var(--gold);border:none;border-radius:50%;font-size:18px;cursor:pointer;box-shadow:var(--shadow-lg);display:none;align-items:center;justify-content:center;z-index:500;transition:all .2s;}
+  #scrollTop.vis{display:flex;}
+  #scrollTop:hover{background:var(--green-2);transform:translateY(-2px);}
+
+  /* ── Filter bar ── */
+  .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;align-items:center;}
+  .filter-chip{font-size:11px;font-weight:700;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.03em;}
+  .filter-chip.active{background:var(--green);border-color:var(--green);color:#fff;}
+  .filter-chip:hover:not(.active){background:var(--bg-2);border-color:var(--border);}
+
+  /* ── Done banner ── */
+  .done-banner{background:var(--success-bg);border:1px solid var(--success-border);border-radius:var(--radius);padding:14px 18px;display:flex;gap:12px;align-items:center;margin-bottom:20px;}
+  .done-banner-icon{font-size:18px;flex-shrink:0;}
+  .done-banner-text{font-size:13px;font-weight:600;color:var(--success);}
+
+  /* ── Screen preview boxes ── */
+  .screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin:16px 0;}
+  .screen-box{background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;}
+  .screen-frame{width:60px;height:100px;background:var(--surface);border:2px solid var(--ink-2);border-radius:8px;margin:0 auto 8px;position:relative;overflow:hidden;display:flex;flex-direction:column;}
+  .screen-notch{width:24px;height:4px;background:var(--ink-2);border-radius:2px;margin:4px auto;}
+  .screen-content{flex:1;padding:4px;display:flex;flex-direction:column;gap:2px;}
+  .screen-bar{height:6px;background:var(--green);border-radius:2px;width:100%;}
+  .screen-row{height:4px;background:var(--border);border-radius:2px;}
+  .screen-row.gold{background:var(--gold-dim);}
+  .screen-bottom{height:10px;background:var(--bg-2);border-top:1px solid var(--border);display:flex;gap:3px;align-items:center;justify-content:center;padding:0 4px;}
+  .screen-bottom-dot{width:4px;height:4px;background:var(--border);border-radius:50%;}
+  .screen-bottom-dot.active{background:var(--green);}
+  .screen-label{font-size:11px;font-weight:700;color:var(--ink-2);}
+  .screen-sub{font-size:10px;color:var(--muted);}
+
+  @media (max-width:640px){
+    .hero{padding:40px 20px 36px;}
+    .hero h1{font-size:26px;}
+    .hero-meta{gap:24px;}
+    .page{padding:28px 16px 80px;}
+    .sticky-bar{padding:10px 16px;}
+    .principles{grid-template-columns:1fr 1fr;}
+    .impact-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     STICKY PROGRESS BAR
+═══════════════════════════════════════════════════════════════ -->
+<div class="sticky-bar">
+  <span class="sticky-logo">Elite</span>
+  <span class="sticky-label">Mobile UX Plan</span>
+  <div class="sticky-track"><div class="sticky-fill" id="globalFill"></div></div>
+  <span class="sticky-pct" id="globalPct">0%</span>
+  <span class="sticky-count" id="globalCount">0 / 0 done</span>
+  <button class="reset-btn" onclick="resetAll()">Reset All</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     HERO
+═══════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-badge">
+    <span class="hero-badge-dot"></span>
+    Mobile UX Enhancement Initiative
+  </div>
+  <h1>Admin Portal<br/><span>Mobile Redesign</span></h1>
+  <p>A comprehensive 6-phase plan to elevate the Elite Collection admin portal into a world-class mobile-first experience — from navigation architecture to micro-interactions, every touch is intentional.</p>
+  <div class="hero-meta">
+    <div class="hero-stat"><div class="hero-stat-n">6</div><div class="hero-stat-l">Phases</div></div>
+    <div class="hero-stat"><div class="hero-stat-n" id="heroTotal">34</div><div class="hero-stat-l">Total Tasks</div></div>
+    <div class="hero-stat"><div class="hero-stat-n" id="heroDone">0</div><div class="hero-stat-l">Completed</div></div>
+    <div class="hero-stat"><div class="hero-stat-n">3 BP</div><div class="hero-stat-l">Breakpoints</div></div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ═══ GUIDING PRINCIPLES ═══ -->
+  <div style="margin-bottom:48px;margin-top:44px;">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:16px;">Design Principles</div>
+    <div class="principles">
+      <div class="principle">
+        <div class="principle-icon">👆</div>
+        <div class="principle-title">Touch-First</div>
+        <div class="principle-body">Minimum 48×48px tap targets. Thumb-reachable primary actions. No hover-only affordances.</div>
+      </div>
+      <div class="principle">
+        <div class="principle-icon">⚡</div>
+        <div class="principle-title">Perceived Speed</div>
+        <div class="principle-body">Skeleton screens, optimistic UI, sub-200ms micro-interactions. Never show a spinner where a skeleton works.</div>
+      </div>
+      <div class="principle">
+        <div class="principle-icon">💎</div>
+        <div class="principle-title">Luxury Tone</div>
+        <div class="principle-body">Every animation, spacing, and shadow must feel premium. No generic admin aesthetics. Gold on green.</div>
+      </div>
+      <div class="principle">
+        <div class="principle-icon">🌐</div>
+        <div class="principle-title">RTL-Safe</div>
+        <div class="principle-body">Every mobile pattern uses logical CSS properties (inset-inline, padding-inline). Never directional hacks.</div>
+      </div>
+      <div class="principle">
+        <div class="principle-icon">♿</div>
+        <div class="principle-title">Accessible</div>
+        <div class="principle-body">Focus rings on keyboard, ARIA labels, reduced-motion variants for every animation.</div>
+      </div>
+      <div class="principle">
+        <div class="principle-icon">📐</div>
+        <div class="principle-title">Content-First</div>
+        <div class="principle-body">Chrome collapses on mobile. Nav hides. Headers compact. Content gets the screen.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ BREAKPOINTS REFERENCE ═══ -->
+  <div style="margin-bottom:48px;">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px;">Target Breakpoints</div>
+    <table class="bp-table">
+      <thead><tr><th>Name</th><th>Range</th><th>Device</th><th>Layout Model</th><th>Nav Model</th></tr></thead>
+      <tbody>
+        <tr><td><span class="bp-chip">xs</span></td><td>≤ 480px</td><td>Small phone (iPhone SE, Galaxy A)</td><td>1-column stack, full-width cards</td><td>Bottom tab bar</td></tr>
+        <tr><td><span class="bp-chip">sm</span></td><td>481–768px</td><td>Large phone (iPhone 15, Pixel 8)</td><td>1-column, comfortable spacing</td><td>Bottom tab bar</td></tr>
+        <tr><td><span class="bp-chip">md</span></td><td>769–1024px</td><td>Tablet (iPad Mini/Air, Android tab)</td><td>2-column where appropriate</td><td>Sidebar drawer (current)</td></tr>
+        <tr><td><span class="bp-chip">lg</span></td><td>≥ 1025px</td><td>Desktop / large tablet</td><td>Fixed sidebar + content grid</td><td>Fixed sidebar (current)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ═══ FILTER BAR ═══ -->
+  <div class="filter-bar" id="filterBar">
+    <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;">FILTER:</span>
+    <button class="filter-chip active" onclick="filterTasks('all',this)">All Tasks</button>
+    <button class="filter-chip" onclick="filterTasks('todo',this)">To Do</button>
+    <button class="filter-chip" onclick="filterTasks('done',this)">Done</button>
+    <button class="filter-chip" onclick="filterTasks('in-progress',this)">In Progress</button>
+    <button class="filter-chip" onclick="filterTasks('p1',this)">🔴 P1 Critical</button>
+    <button class="filter-chip" onclick="filterTasks('p2',this)">🟡 P2 High</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PHASE 1 — FOUNDATION & APP SHELL
+  ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-num">1</div>
+    <div>
+      <div class="sec-title">Foundation & App Shell</div>
+      <div class="sec-sub">Core layout, typography, touch targets — the baseline everything else builds on</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-bar">
+    <span class="phase-label">Phase 1 Progress</span>
+    <div class="phase-track"><div class="phase-fill" id="phase1Fill" style="background:var(--success);"></div></div>
+    <span class="phase-pct" id="phase1Pct">0%</span>
+  </div>
+
+  <div class="task" data-phase="1" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Fix body overflow-hidden on mobile</div>
+      <div class="task-desc">Currently <code>body { overflow: hidden }</code> prevents native scroll momentum on iOS/Android. On mobile (≤1024px), move overflow control to the <code>.scroll-area</code> container only, and allow body to be scrollable. This fixes iOS rubber-band scroll issues and enables pull-to-refresh patterns.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">app shell</span>
+        <span class="tag tag-effort-s">S — 30min</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">styles.scss</span>
+        <span class="tag tag-file">app.component.scss</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="1" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Compact topbar on mobile (64px → 52px)</div>
+      <div class="task-desc">Reduce topbar height from 64px to 52px on ≤768px, font from 24px to 18px. Crumb text hidden on xs (≤480px). Padding 32px → 16px on mobile. Frees 12px of vertical real estate — significant on 667px-tall phones. Burger button gets 44×44px tap target.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">topbar</span>
+        <span class="tag tag-effort-s">S — 45min</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">topbar.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="1" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Base font size 13px → 14px on mobile + better line-height</div>
+      <div class="task-desc">The global base font is 13px — too small for mobile reading. On ≤768px, bump body font-size to 14px and card-title to 16px. Update scroll-area padding from 18px to 20px 16px. Small change, massive readability gain. Adjust label sizes to match (10px → 11px).</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">typography</span>
+        <span class="tag tag-effort-s">S — 20min</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">styles.scss</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="1" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Universal touch target audit — all interactive elements 48px</div>
+      <div class="task-desc">Audit every .icon-btn, .x-btn, tab, chip, and toggle. Currently set at 44px — Apple/Google both recommend 48px minimum. Update the global mobile touch-target rule in styles.scss to 48px min-height/width. Verify pagination buttons, language switcher, and notification bell are compliant.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">accessibility</span>
+        <span class="tag tag-effort-s">S — 1hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">styles.scss</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="1" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Full-screen search overlay on mobile</div>
+      <div class="task-desc">The current mobile search opens a small pane below the topbar. Replace with a full-screen overlay (position:fixed, inset:0) triggered by the topbar search icon. Includes: large input with autofocus, recent searches list, keyboard-aware bottom padding (visualViewport API), and escape-to-close. Premium feel with backdrop blur.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">topbar</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">topbar.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PHASE 2 — NAVIGATION ARCHITECTURE
+  ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-num">2</div>
+    <div>
+      <div class="sec-title">Navigation Architecture</div>
+      <div class="sec-sub">Replace hamburger-drawer with a native mobile bottom tab bar — the single biggest UX leap</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div style="margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px;">Target Mobile Navigation Pattern</div>
+    <div class="screens">
+      <div class="screen-box">
+        <div class="screen-frame">
+          <div class="screen-notch"></div>
+          <div class="screen-content">
+            <div class="screen-bar"></div>
+            <div class="screen-row"></div>
+            <div class="screen-row gold"></div>
+            <div class="screen-row"></div>
+            <div class="screen-row gold"></div>
+            <div class="screen-row"></div>
+          </div>
+          <div class="screen-bottom">
+            <div class="screen-bottom-dot active"></div>
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot"></div>
+          </div>
+        </div>
+        <div class="screen-label">Dashboard</div>
+        <div class="screen-sub">Active tab state</div>
+      </div>
+      <div class="screen-box">
+        <div class="screen-frame">
+          <div class="screen-notch"></div>
+          <div class="screen-content">
+            <div class="screen-bar"></div>
+            <div class="screen-row"></div>
+            <div class="screen-row"></div>
+            <div class="screen-row gold"></div>
+            <div class="screen-row"></div>
+          </div>
+          <div class="screen-bottom">
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot active"></div>
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot"></div>
+          </div>
+        </div>
+        <div class="screen-label">Catalog</div>
+        <div class="screen-sub">Product list</div>
+      </div>
+      <div class="screen-box">
+        <div class="screen-frame">
+          <div class="screen-notch"></div>
+          <div class="screen-content">
+            <div class="screen-bar"></div>
+            <div style="flex:1;background:var(--bg-2);border-radius:4px;margin:2px 0;display:flex;align-items:flex-end;">
+              <div style="width:100%;height:60%;background:linear-gradient(to top,rgba(0,69,56,.3),transparent);border-radius:4px;"></div>
+            </div>
+          </div>
+          <div class="screen-bottom">
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot"></div>
+            <div class="screen-bottom-dot active"></div>
+            <div class="screen-bottom-dot"></div>
+          </div>
+        </div>
+        <div class="screen-label">More Menu</div>
+        <div class="screen-sub">Slide-up sheet</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-bar">
+    <span class="phase-label">Phase 2 Progress</span>
+    <div class="phase-track"><div class="phase-fill" id="phase2Fill" style="background:var(--info);"></div></div>
+    <span class="phase-pct" id="phase2Pct">0%</span>
+  </div>
+
+  <div class="task" data-phase="2" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Build mobile bottom navigation bar component</div>
+      <div class="task-desc">Create <code>BottomNavComponent</code> (ap-bottom-nav) visible only on ≤768px. 5 tabs: Dashboard · Catalog · Orders · Customers · More. Active tab uses gold color + bottom indicator line. Each tab: 52px height, icon (20px) + label (10px below). Fixed to bottom with safe-area-inset-bottom for iPhone notch. Hides on scroll-down, shows on scroll-up (smart hide). Badge support for unread notifications count on More tab.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">navigation</span>
+        <span class="tag tag-effort-l">L — 4hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">shared/bottom-nav/</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="2" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Build "More" slide-up bottom sheet for secondary nav items</div>
+      <div class="task-desc">Tapping "More" tab opens a slide-up sheet (translateY animation, 280px height) showing secondary nav items: Media · Storefront · Analytics · Reference · Settings + Logout. Sheet has drag handle indicator at top, backdrop closes on tap. Each item shows icon + label + sub-label (same sidebar data). Correct active highlighting. RTL-safe layout.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">navigation</span>
+        <span class="tag tag-effort-l">L — 3hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">shared/bottom-nav/</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="2" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Add bottom nav safe-area padding to scroll-area</div>
+      <div class="task-desc">When bottom nav is visible, add <code>padding-bottom: calc(56px + env(safe-area-inset-bottom))</code> to <code>.scroll-area</code> on mobile so content is never hidden behind the bottom bar. This must be coordinated with app.component.scss and conditionally applied when on mobile breakpoints.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">layout</span>
+        <span class="tag tag-effort-s">S — 30min</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">app.component.scss</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="2" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Improve sidebar drawer animation and UX (tablet)</div>
+      <div class="task-desc">On tablet (769–1024px), keep the sidebar drawer but improve it: add spring-physics feel to the slide (cubic-bezier .34,1.56,.64,1), increase backdrop blur to 6px, add subtle scale on brand mark when opening. Close on nav item tap is already implemented — add close on backdrop swipe-right gesture (Touch API, delta > 80px). Width 260px on tablet.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">sidebar</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">sidebar.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PHASE 3 — TABLES & LISTS (CARD VIEWS)
+  ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-num">3</div>
+    <div>
+      <div class="sec-title">Tables & Lists → Card Views</div>
+      <div class="sec-sub">Tables don't belong on phones — replace with scannable card layouts for every data page</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-bar">
+    <span class="phase-label">Phase 3 Progress</span>
+    <div class="phase-track"><div class="phase-fill" id="phase3Fill" style="background:var(--warning);"></div></div>
+    <span class="phase-pct" id="phase3Pct">0%</span>
+  </div>
+
+  <div class="task" data-phase="3" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Catalog — mobile card view (default on ≤768px)</div>
+      <div class="task-desc">On mobile, product list renders as stacked cards instead of table rows. Each card: product thumbnail (64×64px, left) + Name, Brand, SKU (right column) + price row (bottom) + status pill + stock badge. Quick-action row: Edit · Duplicate · Archive (tap to show). Card tap opens the product drawer. Checkbox for bulk select moves to card top-left. View toggle (grid/list) hides on mobile — card is the only mobile view.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">catalog</span>
+        <span class="tag tag-effort-l">L — 5hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">pages/catalog/catalog.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="3" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Catalog — mobile filter panel as bottom sheet</div>
+      <div class="task-desc">The advanced filter panel is a collapsed card on desktop. On mobile, replace with a "Filter" button in the toolbar that opens a bottom sheet (full-width, 85vh max). Filter groups are accordions. Active filter count badge on the Filter button. "Apply Filters" CTA at bottom of sheet. Dismiss via swipe-down or Cancel. Active filter chips still shown as a scrollable horizontal row above the results.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">catalog</span>
+        <span class="tag tag-effort-l">L — 4hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">pages/catalog/catalog.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="3" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Orders — mobile card list with status color-coding</div>
+      <div class="task-desc">Replace the orders table on mobile with full-width cards. Each card: Order # (bold) + customer name + date (right-aligned) in row 1; total amount (gold) + fulfillment pill + payment pill in row 2. Left border (4px) colored by fulfillment status (green=fulfilled, amber=processing, red=cancelled). Tap to open order drawer. Search bar stays at top, date filter as a chip row below it.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">orders</span>
+        <span class="tag tag-effort-m">M — 3hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">pages/orders/orders.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="3" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Customers — mobile card list with tier badge</div>
+      <div class="task-desc">Replace customer table on mobile with cards: Avatar + Name + Email (row 1); Tier badge + Orders count + LTV (row 2). Gold accent on VIP tier badge. Tap opens customer drawer. The "Add Customer" FAB floats bottom-right at 56px, green background, gold plus icon — accessible as primary action without reaching for the header toolbar.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">customers</span>
+        <span class="tag tag-effort-m">M — 2.5hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">pages/customers/customers.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="3" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Media library — 2-column grid on mobile with tap-to-preview</div>
+      <div class="task-desc">The media grid is already visual, but column count and card size need tuning for phone. On ≤480px: 2 columns. On 481–768px: 3 columns. Tap a media card to preview full-size in a bottom-sheet viewer (image fills sheet, metadata below: filename, size, linked product). Upload button becomes a prominent FAB (bottom-right, 56px, green/gold). Drag-and-drop hides on mobile — replaced by FAB.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">media</span>
+        <span class="tag tag-effort-m">M — 3hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">pages/media/media.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="3" data-priority="p3" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Reference page — stack accordion layout on mobile</div>
+      <div class="task-desc">Colors / Materials / Size Charts currently shown as side-by-side panels. On mobile, stack them vertically. Each section is a collapsible accordion card with row count badge. Add/Edit/Delete actions use bottom sheet for the form on mobile instead of inline editing — larger touch targets, more spacious forms.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">reference</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">Low</span>
+        <span class="tag tag-file">pages/reference/reference.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p3"></div><div class="priority-label">P3</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PHASE 4 — DRAWERS & FORMS
+  ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-num">4</div>
+    <div>
+      <div class="sec-title">Drawers & Forms</div>
+      <div class="sec-sub">Full-screen drawers, collapsible sections, keyboard-aware layout, and larger form controls</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-bar">
+    <span class="phase-label">Phase 4 Progress</span>
+    <div class="phase-track"><div class="phase-fill" id="phase4Fill" style="background:var(--purple);"></div></div>
+    <span class="phase-pct" id="phase4Pct">0%</span>
+  </div>
+
+  <div class="task" data-phase="4" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Full-screen drawers on mobile (all drawers)</div>
+      <div class="task-desc">On ≤768px, all drawers (product, collection, customer, order) switch from right-side partial overlay to full-screen: width:100vw, height:100vh, no border-radius on left side. Slide-in from bottom (translateY) instead of from right (translateX). Close button (×) anchors top-right with 52×52px target. The drawer header gets a thin bottom border + page title. This pattern matches iOS/Android native modal sheets. Also apply to the confirm dialog on mobile (bottom sheet instead of center modal).</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">drawers</span>
+        <span class="tag tag-effort-l">L — 4hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">styles.scss (.drawer, .overlay)</span>
+        <span class="tag tag-file">shared/confirm-dialog/</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="4" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Product drawer — collapsible sections on mobile</div>
+      <div class="task-desc">The 9-section product drawer (Gallery → Danger Zone) is overwhelming on mobile. Wrap each section in a collapsible <code>&lt;details&gt;</code> / accordion with section header always visible. Image Gallery and Product Info auto-open; the rest collapse by default. Section headers are 52px with section name + item count badge + chevron icon. Tap to expand — smooth max-height transition. Reduces initial scroll depth from ~3000px to ~600px.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">product drawer</span>
+        <span class="tag tag-effort-l">L — 5hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">pages/catalog/product-drawer.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="4" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Variant table → card stack on mobile (≤600px)</div>
+      <div class="task-desc">The variant table with 7 columns (Photo, Color, Size, Stock, Price, SKU, Actions) is unreadable on phone even with horizontal scroll. On ≤600px, replace with stacked variant cards: image thumbnail (left, 56px) + Color + Size tags (right column top) + Price (gold) + Stock badge (live color) + SKU mono below. Expand icon opens the cost/margin/material detail. "Add variant" is a full-width + button at the bottom. This is already partially done (SKU hidden at ≤600px) — complete the transformation.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">product drawer</span>
+        <span class="tag tag-effort-l">L — 5hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">pages/catalog/product-drawer.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="4" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Form input height 36px → 48px on mobile + larger labels</div>
+      <div class="task-desc">All .inp elements currently have no fixed height — they rely on padding. On mobile (≤768px), add <code>min-height: 48px</code> to inputs, selects, textareas. Label font-size 11px → 12px. Gap between label and input 4px → 6px. This applies globally via styles.scss mobile rules and affects product drawer, settings, customer drawer, collection drawer, order notes. Select dropdowns need matching height.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">forms</span>
+        <span class="tag tag-effort-s">S — 1hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">styles.scss</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="4" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Keyboard-aware save bar & drawer scrolling</div>
+      <div class="task-desc">When the soft keyboard opens on mobile, the save bar (ap-save-bar) can be hidden behind it. Use the <code>visualViewport</code> API to detect keyboard presence and temporarily position save-bar at the top of the visible viewport instead of the bottom. Also ensure the drawer's scroll area adjusts padding-bottom when keyboard is open. Affects all pages using ap-save-bar.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">forms</span>
+        <span class="tag tag-effort-m">M — 3hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">shared/save-bar/save-bar.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PHASE 5 — PAGE-SPECIFIC POLISH
+  ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-num">5</div>
+    <div>
+      <div class="sec-title">Page-Specific Polish</div>
+      <div class="sec-sub">Tailored mobile improvements for Dashboard, Analytics, Storefront, Settings, and Auth pages</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-bar">
+    <span class="phase-label">Phase 5 Progress</span>
+    <div class="phase-track"><div class="phase-fill" id="phase5Fill" style="background:var(--gold);"></div></div>
+    <span class="phase-pct" id="phase5Pct">0%</span>
+  </div>
+
+  <div class="task" data-phase="5" data-priority="p1" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Dashboard — responsive KPI grid and touch-friendly chart</div>
+      <div class="task-desc">KPI grid currently 2-col on tablet, 1-col on small phones. Improve: on 481–768px use 2-col with reduced card padding (14px vs 22px). Date range filter pill-bar becomes a horizontal scroll row (overflow-x:auto, no-wrap) on mobile. Revenue chart: limit to 7 data points on mobile with a "30 days" view toggle above. Chart height 200px on mobile (vs 280px desktop). All chart tooltips use touch-friendly 44px tap targets.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">dashboard</span>
+        <span class="tag tag-effort-m">M — 3hr</span>
+        <span class="tag tag-impact">High Impact</span>
+        <span class="tag tag-file">pages/dashboard/dashboard.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p1"></div><div class="priority-label">P1</div></div>
+  </div>
+
+  <div class="task" data-phase="5" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Analytics — horizontally scrollable chart area on mobile</div>
+      <div class="task-desc">Analytics charts overflow on narrow screens. Wrap chart canvases in a horizontal scroll container on ≤768px with a minimum canvas width of 480px and a "scroll for more →" hint indicator (fades after first scroll). Traffic source and funnel sections stack to 1-column. Conversion funnel uses a vertical orientation on mobile (top→bottom steps instead of left→right).</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">analytics</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">pages/analytics/analytics.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="5" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Storefront editor — mobile-friendly section management</div>
+      <div class="task-desc">The 3-tab storefront editor has complex sub-tabs and dense forms. On mobile: tabs become a full-width scrollable pill row. Sub-tabs become a horizontal chip scroll. The publish bar (already sticky) gets taller touch targets (52px). Section order drag/drop is replaced with Up/Down arrow buttons on mobile (drag is unreliable on touch). Image slot upload buttons are 52px height with icon + "Upload" label. Preview button opens a new tab (existing behavior is fine).</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">storefront</span>
+        <span class="tag tag-effort-m">M — 3hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">pages/storefront/storefront.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="5" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Settings — accordion grouping on mobile</div>
+      <div class="task-desc">Settings has tabs (General / Team / Integrations). On mobile, replace tab navigation with a vertically stacked accordion list: each tab becomes an always-visible section header that expands its content. The team member table becomes a card list on mobile. Invitation form fields stack 1-column. Grid layouts (.grid-2, .grid-3) are already 1-col on ≤600px — extend to ≤768px for tablets.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">settings</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">pages/settings/settings.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="5" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Auth pages — centered card, safe-area padding, auto-fill friendly</div>
+      <div class="task-desc">Login, Forgot Password, Reset Password, and Accept Invite pages need mobile polish: center card vertically using flexbox, max-width 400px, padding 32px on mobile (vs 48px desktop). Add <code>autocomplete</code> attributes to all inputs (email, current-password, new-password) for password manager auto-fill. Ensure the Submit button stays visible when keyboard opens by scrolling the form up. Logo/brand mark scales down on xs screens.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">auth</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">pages/login/ pages/forgot-password/</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="5" data-priority="p3" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Collections page — card list and cover image touch-upload</div>
+      <div class="task-desc">Collections list becomes card view on mobile: cover image thumbnail (60×60px rounded) + title + product count + handle. Tap opens collection drawer. Drag-to-reorder products within a collection uses long-press (400ms) to activate drag mode on mobile, with visual "drag active" highlight. Cover image upload button is a full-width 52px slot with camera icon on mobile.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">collections</span>
+        <span class="tag tag-effort-m">M — 2.5hr</span>
+        <span class="tag tag-impact">Low</span>
+        <span class="tag tag-file">pages/collections/collections.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p3"></div><div class="priority-label">P3</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PHASE 6 — LUXURY MICRO-INTERACTIONS & UX DETAILS
+  ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="sec-num">6</div>
+    <div>
+      <div class="sec-title">Luxury Micro-Interactions & UX Details</div>
+      <div class="sec-sub">The premium layer — animations, haptics, feedback patterns that set this apart from generic admin tools</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="phase-bar">
+    <span class="phase-label">Phase 6 Progress</span>
+    <div class="phase-track"><div class="phase-fill" id="phase6Fill" style="background:var(--danger);"></div></div>
+    <span class="phase-pct" id="phase6Pct">0%</span>
+  </div>
+
+  <div class="task" data-phase="6" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Toast notifications — bottom positioning on mobile</div>
+      <div class="task-desc">Toasts currently appear top-right. On mobile, move to bottom-center (above the bottom nav bar) with <code>bottom: calc(68px + env(safe-area-inset-bottom))</code>. This is the native app pattern (iOS/Android place toasts at bottom). Toast width 100% on xs, auto on larger. Swipe-up to dismiss gesture. Success toasts appear for 2.5s, errors persist until dismissed. "Undo" action toast has a 48px tap target for the undo button.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">toast</span>
+        <span class="tag tag-effort-s">S — 1.5hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">shared/toast/toast.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="6" data-priority="p2" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Skeleton screens — mobile-optimized layouts for all data pages</div>
+      <div class="task-desc">The existing SkeletonComponent renders desktop-style skeleton rows. On mobile: catalog skeleton shows card-shaped skeletons (not table rows); orders shows card skeletons; dashboard KPIs show compact 2-col card skeletons. Use the existing CSS shimmer animation — just update the skeleton HTML templates to match the new mobile card layouts from Phase 3. This ensures no layout shift when data loads.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">loading states</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">shared/skeleton/skeleton.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p2"></div><div class="priority-label">P2</div></div>
+  </div>
+
+  <div class="task" data-phase="6" data-priority="p3" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Reduced-motion respect — @prefers-reduced-motion throughout</div>
+      <div class="task-desc">Add <code>@media (prefers-reduced-motion: reduce)</code> blocks to: pageFade animation (disable), drawer slide transitions (instant), bottom nav transitions (instant), toast animation (instant), save bar slide (instant). All existing keyframe animations need this guard. Currently none of the scss files honour this preference. This is an accessibility requirement (WCAG 2.1 AA).</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">accessibility</span>
+        <span class="tag tag-effort-s">S — 1hr</span>
+        <span class="tag tag-impact">Low</span>
+        <span class="tag tag-file">styles.scss + all component styles</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p3"></div><div class="priority-label">P3</div></div>
+  </div>
+
+  <div class="task" data-phase="6" data-priority="p3" onclick="toggleTask(this)">
+    <div class="task-check"><span class="checkmark">✓</span><span class="checkmark-dot"></span></div>
+    <div class="task-body">
+      <div class="task-title">Page header — compact sticky header on mobile with back button</div>
+      <div class="task-desc">Add a reusable mobile page header pattern: when navigating to a sub-section on mobile (e.g., a settings sub-page or a standalone page), show a sticky 52px header with a back chevron (←) + page title. This is already partially handled by the topbar crumb/title, but it needs a proper back-navigation affordance on mobile. Extend TopbarComponent to accept an optional backRoute input that shows the back button on mobile.</div>
+      <div class="task-tags">
+        <span class="tag tag-scope">navigation</span>
+        <span class="tag tag-effort-m">M — 2hr</span>
+        <span class="tag tag-impact">Medium</span>
+        <span class="tag tag-file">shared/topbar/topbar.component.ts</span>
+      </div>
+    </div>
+    <div class="task-priority"><div class="priority-dot p3"></div><div class="priority-label">P3</div></div>
+  </div>
+
+  <!-- ═══ IMPACT SUMMARY ═══ -->
+  <div class="section" style="margin-top:64px;">
+    <div class="sec-num" style="background:var(--gold);color:var(--green);">★</div>
+    <div>
+      <div class="sec-title">Expected Impact</div>
+      <div class="sec-sub">What completing all 6 phases delivers</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="impact-grid">
+    <div class="impact-card">
+      <div class="impact-card-label">Navigation Speed</div>
+      <div class="impact-card-value">3× faster</div>
+      <div class="impact-card-sub">Bottom tab → primary pages in 1 tap vs 2+ taps via hamburger</div>
+    </div>
+    <div class="impact-card">
+      <div class="impact-card-label">Data Scanning</div>
+      <div class="impact-card-value">60% easier</div>
+      <div class="impact-card-sub">Card layouts replace scrollable tables — context is visible at-a-glance</div>
+    </div>
+    <div class="impact-card">
+      <div class="impact-card-label">Form Errors</div>
+      <div class="impact-card-value">↓ 40%</div>
+      <div class="impact-card-sub">48px inputs + keyboard awareness reduces accidental taps on wrong fields</div>
+    </div>
+    <div class="impact-card">
+      <div class="impact-card-label">Product Drawer</div>
+      <div class="impact-card-value">↓ 80% scroll</div>
+      <div class="impact-card-sub">Collapsible sections collapse 9 sections to 2 open — immediate focus</div>
+    </div>
+    <div class="impact-card">
+      <div class="impact-card-label">Brand Perception</div>
+      <div class="impact-card-value">Premium feel</div>
+      <div class="impact-card-sub">Micro-animations + luxury spacing signal quality to the admin user</div>
+    </div>
+    <div class="impact-card">
+      <div class="impact-card-label">Accessibility</div>
+      <div class="impact-card-value">WCAG 2.1 AA</div>
+      <div class="impact-card-sub">Reduced-motion, 48px targets, keyboard focus rings, ARIA labels</div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<button id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+const STORAGE_KEY = 'elite-mobile-ux-plan-v1';
+const PHASES = ['phase1','phase2','phase3','phase4','phase5','phase6'];
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// ── Init ───────────────────────────────────────────────────────
+(function init() {
+  const state = loadState();
+  document.querySelectorAll('.task').forEach(el => {
+    const id = taskId(el);
+    if (state[id]) el.classList.add('done');
+  });
+  updateAll();
+})();
+
+function taskId(el) {
+  return el.querySelector('.task-title').textContent.trim().slice(0,40);
+}
+
+// ── Toggle ─────────────────────────────────────────────────────
+function toggleTask(el) {
+  el.classList.toggle('done');
+  if (el.classList.contains('done')) {
+    el.classList.remove('in-progress','next','blocked');
+  }
+  const state = loadState();
+  state[taskId(el)] = el.classList.contains('done');
+  saveState(state);
+  updateAll();
+}
+
+// ── Reset ──────────────────────────────────────────────────────
+function resetAll() {
+  if (!confirm('Reset all progress?')) return;
+  document.querySelectorAll('.task').forEach(el => {
+    el.classList.remove('done','in-progress','next','blocked');
+  });
+  localStorage.removeItem(STORAGE_KEY);
+  updateAll();
+}
+
+// ── Update progress bars ───────────────────────────────────────
+function updateAll() {
+  const allTasks = document.querySelectorAll('.task');
+  const doneTasks = document.querySelectorAll('.task.done');
+  const total = allTasks.length;
+  const done = doneTasks.length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  document.getElementById('globalFill').style.width = pct + '%';
+  document.getElementById('globalPct').textContent = pct + '%';
+  document.getElementById('globalCount').textContent = `${done} / ${total} done`;
+  document.getElementById('heroDone').textContent = done;
+  document.getElementById('heroTotal').textContent = total;
+
+  PHASES.forEach((phase, i) => {
+    const n = i + 1;
+    const phaseTasks = document.querySelectorAll(`.task[data-phase="${n}"]`);
+    const phaseDone = document.querySelectorAll(`.task[data-phase="${n}"].done`);
+    const pp = phaseTasks.length ? Math.round((phaseDone.length / phaseTasks.length) * 100) : 0;
+    const fill = document.getElementById(`phase${n}Fill`);
+    const pctEl = document.getElementById(`phase${n}Pct`);
+    if (fill) fill.style.width = pp + '%';
+    if (pctEl) pctEl.textContent = pp + '%';
+  });
+}
+
+// ── Filter ─────────────────────────────────────────────────────
+function filterTasks(type, btn) {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.task').forEach(el => {
+    let show = true;
+    if (type === 'done') show = el.classList.contains('done');
+    else if (type === 'todo') show = !el.classList.contains('done');
+    else if (type === 'in-progress') show = el.classList.contains('in-progress');
+    else if (type === 'p1') show = el.dataset.priority === 'p1';
+    else if (type === 'p2') show = el.dataset.priority === 'p2';
+    el.style.display = show ? '' : 'none';
+  });
+}
+
+// ── Scroll to top button ───────────────────────────────────────
+window.addEventListener('scroll', () => {
+  const btn = document.getElementById('scrollTop');
+  if (window.scrollY > 400) btn.classList.add('vis');
+  else btn.classList.remove('vis');
+});
+</script>
+</body>
+</html>

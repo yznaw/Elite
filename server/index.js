@@ -13,6 +13,7 @@ const { ensureDefaultTenant } = require('./db/tenant');
 const { ensureReferenceSchema } = require('./db/reference-schema');
 const { ensureProductRecommendationsSchema } = require('./db/product-recommendations-schema');
 const { ensureRestockNotificationsSchema } = require('./db/restock-notifications-schema');
+const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 
 const app = express();
@@ -162,6 +163,7 @@ async function bootstrap() {
     const client = await db.pool.connect();
     try {
       const tenant = await ensureDefaultTenant(client);
+      await ensureAllMigrations(client);           // migrations 002 – 006
       await ensureReferenceSchema(client, tenant.id);
       await ensureProductRecommendationsSchema(client);
       await ensureRestockNotificationsSchema(client);

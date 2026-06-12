@@ -481,6 +481,21 @@ Global responsive rules are in `client/projects/admin-portal/src/styles.scss`:
 - **Date range pills (Orders):** wrap on ≤600px
 - **Settings grids (`.grid-2`, `.grid-3`):** stack to 1 column on ≤600px
 
+### Mobile UX Enhancement Plan
+
+A comprehensive 6-phase mobile redesign initiative is tracked in [`docs/mobile-ux-plan.html`](./mobile-ux-plan.html). The plan covers 34 tasks across:
+
+| Phase | Focus | Tasks |
+|---|---|---|
+| 1 — Foundation | Body overflow fix, compact topbar (52px), 14px base font, 48px touch targets, full-screen search overlay | 5 |
+| 2 — Navigation | Bottom tab bar (≤768px), "More" slide-up sheet, safe-area padding, tablet drawer polish | 4 |
+| 3 — Tables & Lists | Card views for catalog/orders/customers, mobile filter bottom sheet, media 2-col grid, reference accordion | 6 |
+| 4 — Drawers & Forms | Full-screen drawers (slide-from-bottom), collapsible product drawer sections, variant table→card stack, 48px inputs, keyboard-aware save bar | 5 |
+| 5 — Page Polish | Dashboard responsive chart, analytics horizontal scroll, storefront Up/Down reorder, settings accordion, auth page mobile, collections card list | 6 |
+| 6 — Luxury Details | Bottom toasts, mobile-optimized skeletons, prefers-reduced-motion, mobile back-button header | 4 |
+
+**Breakpoints:** xs ≤480px (bottom nav), sm 481–768px (bottom nav), md 769–1024px (drawer), lg ≥1025px (fixed sidebar)
+
 ---
 
 ## Storefront Editor Architecture
