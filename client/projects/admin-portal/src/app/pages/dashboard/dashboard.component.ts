@@ -38,6 +38,13 @@ import { IconComponent } from '../../shared/icons/icon.component';
     }
     .kpi-clickable { cursor: pointer; transition: box-shadow .15s, transform .1s; }
     .kpi-clickable:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); }
+
+    /* Mobile: heat-rows tighter + chart card legend wraps */
+    @media (max-width: 640px) {
+      .heat-row { gap: 8px; padding: 7px 0; }
+      .heat-thumb { width: 32px; height: 32px; flex-shrink: 0; }
+      .card-header .row.gap-sm.small { display: none; } /* hide chart legend on phone */
+    }
   `],
   template: `
     <div class="page-fade">

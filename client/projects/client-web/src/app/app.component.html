@@ -1,3 +1,31 @@
+<!-- Preview banner — only shown when accessed directly in a tab (not embedded in admin iframe) -->
+@if (homeContent.isPreviewMode() && !isEmbedded) {
+  @if (bannerVisible()) {
+    <div class="preview-banner" role="banner">
+      <div class="preview-banner__inner">
+        <div class="preview-banner__left">
+          <span class="preview-banner__dot"></span>
+          <span class="preview-banner__label">Draft Preview</span>
+          <span class="preview-banner__sub">Unpublished — not visible to customers</span>
+        </div>
+        <button class="preview-banner__exit" type="button" (click)="exitPreview()">
+          Exit preview
+        </button>
+        <button class="preview-banner__hide" type="button" (click)="toggleBanner()" title="Minimise">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 15l-6-6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  }
+  @if (!bannerVisible()) {
+    <button class="preview-pill" type="button" (click)="toggleBanner()">
+      <span class="preview-pill__dot"></span>
+      <span class="preview-pill__label">DRAFT</span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+  }
+}
+
 <cw-nav />
 
 <main>

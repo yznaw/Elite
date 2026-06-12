@@ -44,9 +44,9 @@ All pages are lazy-loaded:
 | `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
 | `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
 | `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, top-products-by-price heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. **Date Range Filter** (Today / 7 Days / 30 Days / 90 Days) pill-bar above KPIs. **Low Stock KPI card** — shows count of products with stock between 1 and the configurable threshold (default: 8, set via `StoreConfigService`). Clicking the card navigates to `/catalog?stock=low`. Card shows 0 when all items are stocked. |
-| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted via `StorageService` — tenant-scoped). Search (matches name, SKU, **and brand**), status quick-filter (All / Active / Hidden / **Out of Stock** (red badge) / **Low Stock** (amber badge)), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill is pre-activated via `?stock=low` from the dashboard KPI card. Low-stock threshold from `StoreConfigService.lowStockThreshold()`. **Advanced filter panel**: collection, **brand** (auto-populated from loaded products), color (from `ref_colors`), price range, page size (25/50/100/All). Active filters shown as dismissible chips. **Bulk Select**: Select All, Set Status, Delete with confirm. **Export CSV** (SKU, Name, Brand, Price, Stock, Status, Variants). **Product drawer** section order (Shopify-style): ① Image Gallery ② Product Info (title EN/AR, brand, SKU) ③ Pricing & Stock ④ Variants ⑤ Description ⑥ Organization (collections + related) ⑦ SEO ⑧ Sync ⑨ Danger Zone. **Variant table** (compact single-row per variant, researched against Shopify / WooCommerce / BigCommerce / Etsy): always-visible columns — Photo · Color · Size · Stock · Price · SKU; collapsible columns (⌄ expand) — Material · Cost · Margin (auto-calculated). Stock input turns red when 0 / amber when < 5. Price shows inline "QAR" prefix. SKU is always visible (used for warehouse/POS daily). Color→image linking: click the photo cell in each variant row to open an image picker popover — maps `imageColors[imageUrl] = colorName` so the storefront shows the correct image per color. Image gallery thumbnails show a read-only color badge for linked images. "Generate sizes" wizard. **`ap-save-bar` component**: green sliding bar with Discard / Save changes; appears when the form is dirty, hides when idle. **Arabic Name field** (`nameAr`) stored in `product_translations`. **Cost price per variant** (`cost_price_cents`) with real-time **margin formula** (color-coded pill: green ≥ 40 %, amber 20–40 %, red < 20 %). **Stock is auto-computed** from variant sum when variants exist. **SEO fields** (`meta_title`, `meta_desc` 160-char counter, slug). **Duplicate Product**. **Bulk Import** + **Stock Update mode** (Dry-Run, Retry Failed, Import History). |
+| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted via `StorageService` — tenant-scoped). Search (matches name, SKU, **and brand**), status quick-filter (All / Active / Hidden / **Out of Stock** (red badge) / **Low Stock** (amber badge)), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill is pre-activated via `?stock=low` from the dashboard KPI card. Low-stock threshold from `StoreConfigService.lowStockThreshold()`. **Advanced filter panel**: collection, **brand** (auto-populated from loaded products), **color** (custom swatch picker — hex dot or texture thumbnail per color, from `ref_colors`; supports `?color=X` URL param from reference page usage badge), price range, page size (25/50/100/All). Active filters shown as dismissible chips with color swatch dot. **Bulk Select**: Select All, Set Status, Delete with confirm. **Export CSV** (SKU, Name, Brand, Price, Stock, Status, Variants). **Product drawer** section order (Shopify-style): ① Image Gallery ② Product Info (title EN/AR, brand, SKU) ③ Pricing & Stock ④ Variants ⑤ Description ⑥ Organization (collections + related) ⑦ SEO ⑧ Sync ⑨ Danger Zone. **Variant table** (compact single-row per variant, researched against Shopify / WooCommerce / BigCommerce / Etsy): always-visible columns — Photo · Color · Size · Stock · Price · SKU; collapsible columns (⌄ expand) — Material · Cost · Margin (auto-calculated). Stock input turns red when 0 / amber when < 5. Price shows inline "QAR" prefix. SKU is always visible (used for warehouse/POS daily). Color→image linking: click the photo cell in each variant row to open an image picker popover — maps `imageColors[imageUrl] = colorName` so the storefront shows the correct image per color. Image gallery thumbnails show a read-only color badge for linked images. "Generate sizes" wizard. **`ap-save-bar` component**: green sliding bar with Discard / Save changes; appears when the form is dirty, hides when idle. **Arabic Name field** (`nameAr`) stored in `product_translations`. **Cost price per variant** (`cost_price_cents`) with real-time **margin formula** (color-coded pill: green ≥ 40 %, amber 20–40 %, red < 20 %). **Stock is auto-computed** from variant sum when variants exist. **SEO fields** (`meta_title`, `meta_desc` 160-char counter, slug). **Duplicate Product**. **Bulk Import** + **Stock Update mode** (Dry-Run, Retry Failed, Import History). |
 | `/reference` | `ReferenceComponent` | Reference data management — **Colors** (name EN/AR + hex, inline color picker, swatch preview), **Materials** (name EN/AR), **Size Charts** (named size sets with comma-editable size arrays). Full CRUD for each, changes immediately available as dropdowns in the product drawer and filters in the catalog. Owner/admin only. |
-| `/collections` | `CollectionsComponent` | Grouping products into collections, title/desc, cover image (drag/drop + URL paste), drag-to-reorder linked products. **Collection drawer:** editable **URL Handle** field (auto-slugged from title, `/collection/{handle}` live preview, reset-to-auto button). Handle is saved to the DB `handle` column and used by the storefront Featured Collections panel. |
+| `/collections` | `CollectionsComponent` | Grouping products into collections with **sub-collection hierarchy**. Top-level collections show sub-collections as chips below their card; clicking a chip opens it. **"Add sub-collection"** quick-add button per parent. Search mode switches to flat list. **Collection drawer:** editable **URL Handle** (`/collection/{handle}` preview), **Parent Collection** selector (dropdown, self + descendants excluded, cycle-protected on server), cover image (drag/drop + URL paste). **Manage Products section:** grid/list view toggle — grid cards are draggable; list view shows explicit drag handles + ↑/↓ buttons for precise reordering (touch-friendly). Order is persisted to `collection_products.sort_order`. **Product drawer Organization section** now groups collections by parent with indented sub-collection checkboxes. DB migration: `007_sub_collections.sql` adds `parent_id` to `collections`. |
 | `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, real multipart upload (drag/drop or browse, per-file progress), auto-link by SKU, detail drawer. **Google Drive import:** "Google Drive" button opens a modal — paste a file or folder URL (folder requires `GOOGLE_DRIVE_API_KEY` env var). Images are downloaded, saved to storage, and **auto-linked by SKU** via 4-tier matching: (1) folder name = SKU, (2) filename stem = SKU, (3) filename contains SKU, (4) two-segment prefix matches SKU start. Success toast reports how many were auto-linked. **Set as Default Fallback** button in the detail drawer saves the image URL to tenant config (`PATCH /api/admin/settings/store { config: { defaultImage } }`). Delete removes the DB row and the file from storage. |
 | `/storefront` | `StorefrontComponent` | **3-tab unified content editor** with sticky Publish/Preview bar. **Tab: Home Page** — sub-tabs: Section Order (drag/drop visibility), Landing Hero (heroSlider items + feature callouts, EN/AR CTA), Collections (3 tiles + featured collections picker), Promotion Section (image/title/body/CTA), Craft Promise (3 cards EN/AR), Stats Reel (4 values EN/AR). **Tab: Our Story** — sub-tabs: Hero, Intro, Chapters (4), Quote, Atelier. **Tab: Contact Us** — sub-tabs: Page Header (EN/AR headline), Info Blocks (3 blocks with lines), Phone & Promise. All image slots have Upload + Pick from Media. Save Content writes to `PATCH /api/admin/storefront-content`; Publish Layout writes to `POST /api/admin/storefront/publish`. |
 | `/home-content` | — | **Redirects to `/storefront`** (deprecated — all editing moved into the Storefront tabs). |
@@ -70,8 +70,9 @@ Located in `app/shared/`:
 
 | Component | Folder | Description |
 |---|---|---|
-| `SidebarComponent` | `sidebar/` | Fixed left navigation with workspace sections, active route highlighting. Footer card shows the live signed-in user (avatar initials, full name, translated role, email) with a Sign-out button — sourced from `AuthService.user()`, not hardcoded. |
-| `TopbarComponent` | `topbar/` | Top bar with title/breadcrumb, search, language switcher, and notification bell. The avatar + sign-out used to live here too — both moved to the sidebar to remove the duplicate. |
+| `SidebarComponent` | `sidebar/` | Fixed left navigation (desktop) / spring-physics drawer (tablet). Footer card shows signed-in user with Sign-out. On ≤768 px forced off-screen — bottom nav owns mobile navigation. |
+| `TopbarComponent` | `topbar/` | Top bar with title/breadcrumb, search overlay, language switcher, notification bell, and **avatar dropdown** (name/role/email/logout). On phone shows a `←` back button (via `Location.back()`) on secondary pages; hidden on primary tab pages. |
+| `BottomNavComponent` | `bottom-nav/` | **Phone-only** (`display: none` at ≥769 px). Fixed 56 px tab bar: Dashboard · Catalog · Orders · Customers · More. Smart-hide on scroll-down. Unread badge from `NotificationService`. More tab opens a slide-up sheet with 6 secondary nav items + logout. |
 
 ### Data Display
 
@@ -86,15 +87,16 @@ Located in `app/shared/`:
 | `AvatarComponent` | `avatar/` | User avatar with initials |
 | `TriggerBadgeComponent` | `trigger-badge/` | Shows who triggered an action (manual vs auto) |
 | `EmptyStateComponent` | `empty-state/` | Empty data state with icon and message |
-| `IconsComponent` | `icons/` | Centralized SVG icon library. Available icon names include: `warning` (triangle + exclamation, used for low-stock), `mail` (envelope), `team` (users group), plus all original icons (edit, trash, eye, etc.). |
+| `IconsComponent` | `icons/` | Centralized SVG icon library. Available icon names: `dash`, `catalog`, `collections` (envelope stack — sidebar nav for Collections, collection empty states), `store`, `orders`, `users`, `chart`, `sync`, `settings`, `media`, `search`, `bell`, `plus`, `x`, `drag`, `edit`, `trash`, `eye`, `upload`, `download`, `cube`, `link`, `unlink`, `wand`, `check`, `arrow`, `arrowUp`, `arrowDn`, `csv`, `clock`, `spinner`, `list`, `filter`, `grid`, `rows`, `copy`, `print`, `warning`, `mail`, `info`, `team`, `reference` (tag/label — sidebar nav for Reference data), `hierarchy` (nested-list — sub-collection tree). See `icon.component.ts` for SVG definitions. |
 | `RichTextComponent` | `rich-text/` | Lightweight `contenteditable` editor with bold/italic/underline/list/link/clear toolbar. Honours `dir` for RTL editing. Used for product descriptions (EN + AR). |
 
 ### Feedback
 
 | Component | Folder | Description |
 |---|---|---|
-| `ToastComponent` | `toast/` | Stackable toast notifications with auto-dismiss |
+| `ToastComponent` | `toast/` | Stackable toast notifications. On ≤768 px stack anchors bottom-centre above the bottom nav bar (safe-area aware). |
 | `SpinnerComponent` | `spinner/` | Loading spinner overlay |
+| `SkeletonComponent` | `skeleton/` | Shimmer loading placeholders. Variants: `line`, `card`, `table-row` (stacks vertically on mobile), `kpi`, `chart`, `order-card` (matches Phase 3 mobile order card layout). All variants respect `prefers-reduced-motion`. |
 | `ConfirmDialogComponent` | `confirm-dialog/` | Modal confirmation dialog with customizable title/message/buttons |
 | `LanguageSwitcherComponent` | `language-switcher/` | Language toggle dropdown |
 
@@ -138,6 +140,8 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **File:** `services/admin-collections.service.ts`
 - **Purpose:** CRUD for product collections — list, create, update, delete, reorder products within a collection
+- **`SaveCollectionPayload`** now accepts `parentId?: string | null` — server validates it (not self, not descendant, must exist in same tenant)
+- Product `sort_order` within a collection is set server-side from the `productIds` array index
 
 ### `AdminOrdersService`
 
@@ -469,32 +473,66 @@ All fonts are self-hosted from `assets/fonts/thmanyah/` (woff2). The Thmanyah fa
 | `.save-bar-top` / `.save-bar-top.dirty` / `.save-bar-top.shake` | Global CSS: green sliding bar (height 0→54px), shake animation on validation error |
 | `.overlay` / `.drawer` | Drawer/modal overlays |
 
-### Mobile Responsiveness
+### Mobile Responsiveness — Implemented Architecture
 
-Global responsive rules are in `client/projects/admin-portal/src/styles.scss`:
+All 6 phases of the mobile UX plan are **complete** as of 2026-06-12. See [`docs/mobile-ux-plan.html`](./mobile-ux-plan.html) for the full interactive task tracker.
 
-- **Touch targets:** All `button`, `input`, `select`, `textarea` have a minimum size of 44×44px on mobile (`@media (max-width: 768px)`)
-- **Tables:** `ap-sortable-table` has `overflow-x: auto`; `.tbl` enforces `min-width: 600px` so columns scroll within the container rather than overflowing the page
-- **KPI grid:** 2-col on tablet (≤900px), 1-col on small phones (≤390px)
-- **Catalog top-bar:** wraps to multi-line on ≤768px
-- **Filter panel:** stacks to 1 column on ≤600px
-- **Date range pills (Orders):** wrap on ≤600px
-- **Settings grids (`.grid-2`, `.grid-3`):** stack to 1 column on ≤600px
+#### Breakpoints
 
-### Mobile UX Enhancement Plan
+| Token | Range | Device | Nav model |
+|---|---|---|---|
+| `xs` | ≤ 480 px | Small phone | Bottom tab bar |
+| `sm` | 481–768 px | Large phone | Bottom tab bar |
+| `md` | 769–1024 px | Tablet | Sidebar drawer |
+| `lg` | ≥ 1025 px | Desktop | Fixed sidebar |
 
-A comprehensive 6-phase mobile redesign initiative is tracked in [`docs/mobile-ux-plan.html`](./mobile-ux-plan.html). The plan covers 34 tasks across:
+#### Phase 1 — Foundation (`styles.scss`, `app.component.scss`, `topbar.component.ts`)
 
-| Phase | Focus | Tasks |
-|---|---|---|
-| 1 — Foundation | Body overflow fix, compact topbar (52px), 14px base font, 48px touch targets, full-screen search overlay | 5 |
-| 2 — Navigation | Bottom tab bar (≤768px), "More" slide-up sheet, safe-area padding, tablet drawer polish | 4 |
-| 3 — Tables & Lists | Card views for catalog/orders/customers, mobile filter bottom sheet, media 2-col grid, reference accordion | 6 |
-| 4 — Drawers & Forms | Full-screen drawers (slide-from-bottom), collapsible product drawer sections, variant table→card stack, 48px inputs, keyboard-aware save bar | 5 |
-| 5 — Page Polish | Dashboard responsive chart, analytics horizontal scroll, storefront Up/Down reorder, settings accordion, auth page mobile, collections card list | 6 |
-| 6 — Luxury Details | Bottom toasts, mobile-optimized skeletons, prefers-reduced-motion, mobile back-button header | 4 |
+- **Body scroll:** `overflow: hidden` stays on body (viewport-locked); `-webkit-overflow-scrolling: touch` added to `.scroll-area` for iOS momentum
+- **Topbar:** 64 px (desktop) → 60 px (tablet) → **52 px** (phone); crumb hidden at ≤480 px
+- **Base font:** 13 px (desktop/tablet) → **14 px** (≤768 px); inputs stay at `font-size: 16px` to prevent iOS auto-zoom
+- **Touch targets:** `min-height/width: 44 px` at ≤1024 px; upgraded to **48 px** at ≤768 px for primary controls; `inp-sm` stays 38 px
+- **Search overlay:** tapping the search icon on phone opens a `position: fixed; inset: 0` full-screen overlay with 52 px input and a back-arrow close button. Escape key dismisses it. Desktop retains the inline pane below the topbar.
 
-**Breakpoints:** xs ≤480px (bottom nav), sm 481–768px (bottom nav), md 769–1024px (drawer), lg ≥1025px (fixed sidebar)
+#### Phase 2 — Navigation (`bottom-nav.component.ts`, `sidebar.component.ts`)
+
+- **`BottomNavComponent` (`ap-bottom-nav`)** — fixed 56 px tab bar, visible only at ≤768 px via CSS. Five tabs: Dashboard · Catalog · Orders · Customers · More. Gold indicator line on the active tab. Smart-hide on scroll-down / show on scroll-up (passive listener on `.scroll-area`). Unread badge on More tab from `NotificationService.unreadCount`. Closes on `NavigationEnd`.
+- **More slide-up sheet** — 6 secondary items (Media · Storefront · Collections · Analytics · Reference · Settings), drag handle, backdrop blur, Logout button in footer. Spring-physics animation `cubic-bezier(.34,1.1,.64,1)`.
+- **Sidebar on phone (≤768 px):** forced off-screen (`inset-inline-start: -280px !important; visibility: hidden`) regardless of toggle signal — bottom nav is the sole mobile nav. Hamburger hidden via `display: none !important`.
+- **Sidebar on tablet (769–1024 px):** drawer upgraded to 260 px width, spring-physics transition, backdrop blur 4 px, swipe-right gesture (80 px delta, RTL-aware) closes it.
+- **Scroll-area safe-area padding:** `padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 16px)` on ≤768 px so content is never hidden behind the nav bar.
+
+#### Phase 3 — Card views (`catalog`, `orders`, `customers`, `media`, `collections`)
+
+- **Catalog:** `effectiveView` computed forces `'grid'` on ≤768 px regardless of the persisted toggle. View toggle hidden on phone. Advanced filter panel becomes a `position: fixed` bottom sheet with backdrop + `sheetUp` animation on ≤768 px. Filter button shows active-filter badge.
+- **Orders:** `isMobile` signal; on ≤768 px renders `.order-cards` stacked list instead of `ap-sortable-table`. Each card has a 4 px inline-start border coloured by fulfillment status (amber / blue / green / grey).
+- **Customers:** `effectiveView` forces cards at ≤900 px (already existing). Gold/green 56 px FAB (`customers-fab`) floats bottom-right above the nav bar; toolbar Add button hidden on mobile.
+- **Media:** 2-column grid on ≤480 px (3-col on 481–720 px, auto-fill on wider).
+- **Collections:** `.sub-col-chips` become a single horizontal scroll row on ≤640 px instead of a multi-row wrap.
+- **Pagination:** `«` / `»` first/last jump buttons hidden on ≤600 px — only Prev / Next shown.
+
+#### Phase 4 — Drawers & Forms (`styles.scss`, `product-drawer.component.ts`)
+
+- **Drawer animation:** all `.drawer` elements slide from the **bottom** on ≤768 px (`@keyframes drawerUp`, `inset: 0`), replacing the desktop `slideRight`. RTL `slideLeft` also overridden with `drawerUp` on phone. Safe-area bottom padding added to `.drawer-foot`.
+- **Inputs:** `min-height: 48 px` for `input.inp`, `select.inp`, `textarea.inp` at ≤768 px.
+- **Product drawer sections:** 7 of the 9 sections (Pricing, Variants, Description, Organization, SEO, Sync, Danger Zone) are collapsible on mobile. Toggling uses `openSections = signal(new Set(['gallery', 'basics', 'pricing', 'variants']))` — first four open by default. `[style.display]` binding keeps DOM alive so form state is never lost on collapse. Chevron icon rotates 180° when open.
+
+#### Phase 5 — Page Polish
+
+- **Dashboard:** Chart card legend row hidden on ≤640 px. Heat-row thumbnails 32 px, gap 8 px on phone. Date range pills full-width equal-flex on ≤768 px. Custom date inputs full-width (`width: 100%; flex: 1`).
+- **Analytics:** Traffic sources card replaced inline `grid-template-columns: auto 1fr` with `.traffic-inner` class that stacks pie + legend vertically on ≤600 px. Range filter row scrolls horizontally on ≤640 px.
+- **Settings:** `.tabs` bar scrolls horizontally on ≤640 px (`overflow-x: auto; flex-wrap: nowrap`); each `.tab` is `flex-shrink: 0`.
+- **Collections:** Sub-collection chips horizontal scroll on ≤640 px.
+- **Login / Auth:** Shell padding uses `env(safe-area-inset-*)` on all four sides for iPhone notch / Dynamic Island. All inputs already have `autocomplete` attributes.
+- **Orders toolbar:** Row 1 = Search (flex:1) + Export. Row 2 = Payment filter + Fulfillment filter. Export label hidden at ≤480 px (icon-only).
+- **Catalog toolbar:** 3-row structure — Row 1: search (full width) · Row 2: status pills (scrollable) · Row 3: sort/view/filter/select (left) + export/import/+New (right). On ≤640 px text labels hidden, New Product button gets `flex: 2`.
+
+#### Phase 6 — Luxury Details
+
+- **Toast position:** on ≤768 px stack anchors `bottom: calc(64px + env(safe-area-inset-bottom))`, `inset-inline: 12px`, each toast `width: 100%` — native bottom-notification pattern.
+- **Skeleton:** new `'order-card'` variant matching Phase 3 mobile order card. `'table-row'` stacks vertically on ≤768 px. Both freeze shimmer under `prefers-reduced-motion`.
+- **`prefers-reduced-motion`:** Single `@media (prefers-reduced-motion: reduce)` block in `styles.scss` disables: `pageFade`, drawer/sheet animations, toast entrance, bottom-nav transition, save-bar expand, filter sheet, sidebar backdrop, nav-tab & chevron transitions.
+- **Back button (`topbar.component.ts`):** `showBack` computed returns `true` on ≤768 px when the current route is NOT a primary tab page (dashboard / catalog / orders / customers). `← ` chevron button calls `Location.back()`. Hidden on desktop via CSS.
 
 ---
 
@@ -584,7 +622,7 @@ Each admin section maps to one or more PostgreSQL tables defined in `server/db/m
 | POS | `pos_transactions`, `pos_transaction_items`, `pos_z_reports`, `pos_parked_carts`, `product_variants.barcode` (added column), `admin_users.pos_pin_hash` (added column) |
 | Dashboard KPIs / charts | `daily_metrics`, `orders`, `analytics_events`, `product_interactions` |
 | Catalog · Product editor | `products`, `product_translations`, `product_variants`, `media_assets`, `media_links` (gallery role), `inventory_movements` |
-| Collections | `collections`, `collection_translations`, `collection_products` (`sort_order` drives storefront order), `media_assets` (cover image) |
+| Collections | `collections` (`parent_id` self-ref FK added in migration `007_sub_collections.sql`), `collection_translations`, `collection_products` (`sort_order` drives storefront order), `media_assets` (cover image) |
 | Media library | `media_assets`, `media_links`, plus disk storage under `server/uploads/` (served as `/uploads/*`) via the storage adapter in `server/lib/storage.js` |
 | Storefront editor | `storefront_snapshots`, `storefront_blocks`, `storefront_block_products` |
 | Orders · drawer | `orders`, `order_items`, `payments`, `shipments` (tracking number), `order_timeline_entries`, `order_notes` |

@@ -1,5 +1,5 @@
 import {
-  Component, EventEmitter, Input, OnDestroy, OnInit, Output,
+  Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -255,7 +255,7 @@ function readPreview(file: File): Promise<string> {
 
         <!-- ② Section: Basics — title + identity fields -->
         <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
+          <ap-icon name="edit" [size]="14"/>
           <span>{{ t('product.section.basics') }}</span>
         </div>
 
@@ -278,12 +278,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- ③ Section: Pricing & Stock -->
-        <div class="section-title">
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('pricing')" (click)="toggleSection('pricing')">
           <ap-icon name="chart" [size]="14"/>
           <span>{{ t('product.section.pricing') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('pricing')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('pricing') ? 'none' : ''"  >
           <div class="grid-2">
             <div>
               <label class="lbl">{{ t('product.field.price') }} (QAR)</label>
@@ -307,15 +308,16 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- Section: Variants -->
-        <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('variants')" (click)="toggleSection('variants')">
+          <ap-icon name="grid" [size]="14"/>
           <span>{{ t('product.section.variants') }}</span>
           @if (form().variants.length > 0) {
             <span class="muted small" style="font-weight:400;margin-inline-start:auto;">{{ variantsSummary() }} · {{ variantsTotalStock() }} {{ t('product.field.stock') }}</span>
           }
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('variants')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24" style="position:relative;">
+        <div class="mb-24" style="position:relative;" [style.display]="isMobile() && !openSections().has('variants') ? 'none' : ''"  >
           @if (form().variants.length === 0) {
             <div class="variants-empty">
               <div class="strong">{{ t('product.variants.empty.title') }}</div>
@@ -329,59 +331,89 @@ function readPreview(file: File): Promise<string> {
             @if (variantPickerOpenId()) {
               <div class="vc-backdrop" (click)="closeVariantPicker()"></div>
             }
+
             <div class="variants-cards">
-              <!-- Column headers: Photo | Color | Size | Stock | Price | SKU | Actions -->
-              <div class="vc-header">
-                <span>{{ t('product.gallery.primary') }}</span>
-                <span>{{ t('product.variants.col.color') }}</span>
-                <span>{{ t('product.variants.col.size') }}</span>
-                <span>{{ t('product.variants.col.stock') }}</span>
-                <span>{{ t('product.variants.col.price') }}</span>
-                <span>{{ t('product.variants.col.sku') }}</span>
-                <span></span>
-              </div>
+              <datalist id="size-options">
+                @for (ss of refSizeSets(); track ss.id) {
+                  @for (sz of ss.sizes; track sz) { <option [value]="sz">{{ sz }}</option> }
+                }
+              </datalist>
 
-              @for (v of form().variants; track v.id; let i = $index) {
-                <div class="vc" [class.vc-expanded]="expandedVariants().has(v.id)" [class.vc-no-id]="!v.color && !v.size">
+              <!-- ══ Color groups accordion ══ -->
+              @for (group of colorGroups(); track group.colorKey) {
+                <div class="vcg" [class.vcg--open]="expandedGroups().has(group.colorKey)">
 
-                  <!-- Compact row: always visible -->
-                  <div class="vc-row">
+                  <!-- Group header row -->
+                  <div class="vcg-head" (click)="toggleGroup(group.colorKey)">
+                    <!-- Expand chevron -->
+                    <ap-icon name="arrowDn" [size]="11" class="vcg-chev"
+                             [class.open]="expandedGroups().has(group.colorKey)"/>
 
-                    <!-- ① Photo — image linked to this color variant -->
-                    <div class="vc-cell vc-cell--img">
-                      <div class="vc-img-cell"
-                           [class.has-img]="!!imageForColor(v.color)"
-                           [class.no-color]="!v.color"
-                           [attr.title]="v.color ? ('Link photo · ' + v.color) : 'Set a color first to link a photo'"
-                           (click)="v.color ? toggleVariantPicker(v.id) : null">
-                        @if (imageForColor(v.color); as linkedImg) {
-                          <img class="vc-img-thumb" [src]="linkedImg" [alt]="v.color"/>
-                          <span class="vc-img-edit-icon"><ap-icon name="edit" [size]="10"/></span>
+                    <!-- Color swatch (updates live as selector changes) -->
+                    @if (colorSwatchImage(group.colorName); as swatchImg) {
+                      <img class="vcg-swatch vcg-swatch--img" [src]="swatchImg" [alt]="group.colorName"/>
+                    } @else {
+                      <span class="vcg-swatch" [style.background]="colorHex(group.colorName)"></span>
+                    }
+
+                    <!-- Color selector — click stops group toggle, select changes all variants in group -->
+                    <div class="vcg-color-wrap" (click)="$event.stopPropagation()">
+                      @if (refColors().length > 0) {
+                        <select class="inp inp-sm vcg-color-sel"
+                                [ngModel]="group.colorName"
+                                (ngModelChange)="renameGroupColor(group.colorKey, $event)">
+                          <option value="">— no color —</option>
+                          @for (c of refColors(); track c.id) {
+                            <option [value]="c.name_en">{{ c.name_en }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input class="inp inp-sm vcg-color-sel"
+                               [placeholder]="'Color name'"
+                               [ngModel]="group.colorName"
+                               (ngModelChange)="renameGroupColor(group.colorKey, $event)"/>
+                      }
+                    </div>
+
+                    <!-- Stock total badge -->
+                    <span class="vcg-stock-badge"
+                          [class.vcg-stock--out]="groupStock(group.items) === 0">
+                      {{ groupStock(group.items) }} in stock
+                    </span>
+
+                    <!-- Image picker trigger + popover, wrapped so picker anchors to button -->
+                    <div class="vcg-img-wrap" (click)="$event.stopPropagation()">
+                      <button class="vcg-img-btn" type="button"
+                              (click)="toggleVariantPicker('group-' + group.colorKey)"
+                              [class.has-img]="!!imageForColor(group.colorName)"
+                              [attr.title]="group.colorName ? 'Link photo for ' + group.colorName : 'Link photo'">
+                        @if (imageForColor(group.colorName); as img) {
+                          <img [src]="img" [alt]="group.colorName" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>
+                          <span class="vc-img-edit-icon"><ap-icon name="edit" [size]="9"/></span>
                         } @else {
-                          <span class="vc-img-placeholder">
-                            <ap-icon name="media" [size]="14"/>
-                          </span>
+                          <ap-icon name="media" [size]="13"/>
                         }
-                      </div>
-                      <!-- Image picker popover -->
-                      @if (variantPickerOpenId() === v.id) {
-                        <div class="vc-img-picker" (click)="$event.stopPropagation()">
+                      </button>
+
+                      @if (variantPickerOpenId() === 'group-' + group.colorKey) {
+                        <div class="vc-img-picker vc-img-picker--group" (click)="$event.stopPropagation()">
                           <div class="vc-img-picker-head">
-                            Link photo for <strong>{{ v.color }}</strong>
+                            Link photo for <strong>{{ group.colorName }}</strong>
                             <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
                           </div>
                           @if (form().images.length === 0) {
                             <p class="vc-img-picker-empty">Upload gallery images first</p>
                           } @else {
                             <div class="vc-img-picker-grid">
-                              <button class="vc-img-opt vc-img-opt--none" type="button" [class.is-sel]="!imageForColor(v.color)"
-                                      (click)="setColorImage(v.color, ''); closeVariantPicker()">
+                              <button class="vc-img-opt vc-img-opt--none" type="button"
+                                      [class.is-sel]="!imageForColor(group.colorName)"
+                                      (click)="setColorImage(group.colorName, ''); closeVariantPicker()">
                                 <span class="vc-img-none-label">None</span>
                               </button>
                               @for (img of form().images; track img) {
                                 <button class="vc-img-opt" type="button"
-                                        [class.is-sel]="imageForColor(v.color) === img"
-                                        (click)="setColorImage(v.color, img); closeVariantPicker()">
+                                        [class.is-sel]="imageForColor(group.colorName) === img"
+                                        (click)="setColorImage(group.colorName, img); closeVariantPicker()">
                                   <img [src]="img" [alt]="''"/>
                                 </button>
                               }
@@ -391,117 +423,146 @@ function readPreview(file: File): Promise<string> {
                       }
                     </div>
 
-                    <!-- ② Color — swatch + select -->
-                    <div class="vc-cell vc-cell--color">
-                      @if (refColors().length > 0) {
-                        <div class="color-select-wrap">
-                          <span class="color-dot" [style.background]="colorHex(v.color)"></span>
-                          <select class="inp inp-sm color-select" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })">
-                            <option value="">—</option>
-                            @for (c of refColors(); track c.id) {
-                              <option [value]="c.name_en">{{ c.name_en }}</option>
-                            }
-                          </select>
-                        </div>
-                      } @else {
-                        <input class="inp inp-sm" [placeholder]="'—'" [ngModel]="v.color" (ngModelChange)="updateVariant(i, { color: $event })"/>
-                      }
-                    </div>
+                    <!-- Spacer -->
+                    <span style="flex:1;"></span>
 
-                    <!-- ③ Size — text input with datalist -->
-                    <div class="vc-cell vc-cell--size">
-                      <input class="inp inp-sm vc-size-inp" list="size-options"
-                             [placeholder]="'—'"
-                             [ngModel]="v.size" (ngModelChange)="updateVariant(i, { size: $event })"/>
-                    </div>
-
-                    <!-- ④ Stock — with live out/low-stock colouring -->
-                    <div class="vc-cell vc-cell--num">
-                      <input class="inp inp-sm mono vc-stock-inp"
-                             [class.stock-out]="v.stock === 0"
-                             [class.stock-low]="v.stock > 0 && v.stock < 5"
-                             type="number" min="0"
-                             [ngModel]="v.stock" (ngModelChange)="updateVariant(i, { stock: +$event || 0 })"/>
-                    </div>
-
-                    <!-- ⑤ Price — QAR prefixed -->
-                    <div class="vc-cell vc-cell--num vc-cell--price">
-                      <div class="vc-price-wrap">
-                        <span class="vc-price-pfx">QAR</span>
-                        <input class="inp inp-sm mono" type="number" min="0"
-                               [ngModel]="v.price" (ngModelChange)="updateVariant(i, { price: +$event || 0 })"/>
+                    <!-- Generate sizes for this color -->
+                    @if (refSizeSets().length > 0 && expandedGroups().has(group.colorKey)) {
+                      <div class="gen-sizes-wrap" (click)="$event.stopPropagation()">
+                        <select class="inp inp-sm" #grpSizeSetSel style="font-size:11px;">
+                          <option value="">Generate sizes…</option>
+                          @for (ss of refSizeSets(); track ss.id) {
+                            <option [value]="ss.id">{{ ss.name }}</option>
+                          }
+                        </select>
+                        <button class="btn btn-outline btn-sm" [disabled]="!grpSizeSetSel.value"
+                                (click)="generateSizesForColor(grpSizeSetSel.value, group.colorName); grpSizeSetSel.value=''">
+                          <ap-icon name="wand" [size]="12"/>
+                        </button>
                       </div>
-                    </div>
+                    }
 
-                    <!-- ⑥ SKU — always visible (warehouse / POS reference) -->
-                    <div class="vc-cell vc-cell--sku">
-                      <input class="inp inp-sm mono" [placeholder]="'SKU'"
-                             [ngModel]="v.sku" (ngModelChange)="updateVariant(i, { sku: $event })"/>
-                    </div>
-
-                    <!-- Actions: expand (Material + Cost inside) + delete -->
-                    <div class="vc-cell vc-cell--actions">
-                      <button class="vt-expand" type="button"
-                              [class.is-open]="expandedVariants().has(v.id)"
-                              (click)="toggleVariantExpand(v.id)"
-                              [attr.title]="expandedVariants().has(v.id) ? 'Collapse' : 'Material · Cost · Margin'">
-                        <ap-icon name="arrowDn" [size]="12"/>
+                    <!-- Add size in this color -->
+                    @if (expandedGroups().has(group.colorKey)) {
+                      <button class="btn btn-outline btn-sm" type="button"
+                              (click)="$event.stopPropagation(); addVariantForColor(group.colorName)">
+                        <ap-icon name="plus" [size]="11"/> Size
                       </button>
-                      <button class="vt-remove" type="button" (click)="removeVariant(i)" [attr.aria-label]="t('common.remove')">
-                        <ap-icon name="trash" [size]="12"/>
-                      </button>
-                    </div>
+                    }
                   </div>
 
-                  <!-- Validation hint -->
-                  @if (!v.color && !v.size) {
-                    <div class="vc-hint">Add a color or size so this variant can be distinguished</div>
-                  }
-
-                  <!-- Expandable detail: Material | Cost | Margin (calculated) -->
-                  @if (expandedVariants().has(v.id)) {
-                    <div class="vc-detail">
-                      <div class="vc-field">
-                        <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
-                        @if (refMaterials().length > 0) {
-                          <select class="inp inp-sm" [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })">
-                            <option value="">—</option>
-                            @for (m of refMaterials(); track m.id) {
-                              <option [value]="m.name_en">{{ m.name_en }}</option>
-                            }
-                          </select>
-                        } @else {
-                          <input class="inp inp-sm" [placeholder]="t('product.variants.placeholder.material')"
-                                 [ngModel]="v.material" (ngModelChange)="updateVariant(i, { material: $event })"/>
-                        }
-                      </div>
-                      <div class="vc-field">
-                        <label class="vc-lbl">{{ t('product.variants.col.cost') }} (QAR)</label>
-                        <input class="inp inp-sm mono" type="number" min="0" step="0.01" [placeholder]="'—'"
-                               [ngModel]="v.costPrice ?? null"
-                               (ngModelChange)="updateVariant(i, { costPrice: $event !== null && $event !== '' ? +$event : undefined })"/>
-                      </div>
-                      <div class="vc-field vc-field--margin">
-                        <label class="vc-lbl">{{ t('product.variants.col.margin') }}</label>
-                        @if (variantMargin(v); as m) {
-                          <span class="margin-pill" [class.margin-green]="m >= 40" [class.margin-amber]="m >= 20 && m < 40" [class.margin-red]="m < 20">{{ m }}%</span>
-                        } @else {
-                          <span class="margin-dash muted small">— set cost to calculate</span>
-                        }
-                      </div>
+                  <!-- Size rows — shown only when group is expanded -->
+                  @if (expandedGroups().has(group.colorKey)) {
+                    <!-- Column headers -->
+                    <div class="vc-header vc-header--group">
+                      <span>{{ t('product.variants.col.size') }}</span>
+                      <span>{{ t('product.variants.col.stock') }}</span>
+                      <span>{{ t('product.variants.col.price') }}</span>
+                      <span>{{ t('product.variants.col.sku') }}</span>
+                      <span></span>
                     </div>
-                  }
 
+                    @for (item of group.items; track item.v.id) {
+                      <div class="vc vc--grouped" [class.vc-expanded]="expandedVariants().has(item.v.id)">
+                        <div class="vc-row vc-row--grouped">
+
+                          <!-- Size -->
+                          <div class="vc-cell vc-cell--size">
+                            <input class="inp inp-sm vc-size-inp" list="size-options"
+                                   [placeholder]="'—'"
+                                   [ngModel]="item.v.size"
+                                   (ngModelChange)="updateVariant(item.globalIndex, { size: $event })"/>
+                          </div>
+
+                          <!-- Stock -->
+                          <div class="vc-cell vc-cell--num">
+                            <input class="inp inp-sm mono vc-stock-inp"
+                                   [class.stock-out]="item.v.stock === 0"
+                                   [class.stock-low]="item.v.stock > 0 && item.v.stock < 5"
+                                   type="number" min="0"
+                                   [ngModel]="item.v.stock"
+                                   (ngModelChange)="updateVariant(item.globalIndex, { stock: +$event || 0 })"/>
+                          </div>
+
+                          <!-- Price -->
+                          <div class="vc-cell vc-cell--num vc-cell--price">
+                            <div class="vc-price-wrap">
+                              <span class="vc-price-pfx">QAR</span>
+                              <input class="inp inp-sm mono" type="number" min="0"
+                                     [ngModel]="item.v.price"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { price: +$event || 0 })"/>
+                            </div>
+                          </div>
+
+                          <!-- SKU -->
+                          <div class="vc-cell vc-cell--sku">
+                            <input class="inp inp-sm mono" placeholder="SKU"
+                                   [ngModel]="item.v.sku"
+                                   (ngModelChange)="updateVariant(item.globalIndex, { sku: $event })"/>
+                          </div>
+
+                          <!-- Actions -->
+                          <div class="vc-cell vc-cell--actions">
+                            <button class="vt-expand" type="button"
+                                    [class.is-open]="expandedVariants().has(item.v.id)"
+                                    (click)="toggleVariantExpand(item.v.id)"
+                                    title="Material · Cost · Margin">
+                              <ap-icon name="arrowDn" [size]="12"/>
+                            </button>
+                            <button class="vt-remove" type="button"
+                                    (click)="removeVariant(item.globalIndex)"
+                                    [attr.aria-label]="t('common.remove')">
+                              <ap-icon name="trash" [size]="12"/>
+                            </button>
+                          </div>
+                        </div>
+
+                        <!-- Expandable detail: Material | Cost | Margin -->
+                        @if (expandedVariants().has(item.v.id)) {
+                          <div class="vc-detail">
+                            <div class="vc-field">
+                              <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
+                              @if (refMaterials().length > 0) {
+                                <select class="inp inp-sm" [ngModel]="item.v.material"
+                                        (ngModelChange)="updateVariant(item.globalIndex, { material: $event })">
+                                  <option value="">—</option>
+                                  @for (m of refMaterials(); track m.id) {
+                                    <option [value]="m.name_en">{{ m.name_en }}</option>
+                                  }
+                                </select>
+                              } @else {
+                                <input class="inp inp-sm"
+                                       [placeholder]="t('product.variants.placeholder.material')"
+                                       [ngModel]="item.v.material"
+                                       (ngModelChange)="updateVariant(item.globalIndex, { material: $event })"/>
+                              }
+                            </div>
+                            <div class="vc-field">
+                              <label class="vc-lbl">{{ t('product.variants.col.cost') }} (QAR)</label>
+                              <input class="inp inp-sm mono" type="number" min="0" step="0.01" placeholder="—"
+                                     [ngModel]="item.v.costPrice ?? null"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { costPrice: $event !== null && $event !== '' ? +$event : undefined })"/>
+                            </div>
+                            <div class="vc-field vc-field--margin">
+                              <label class="vc-lbl">{{ t('product.variants.col.margin') }}</label>
+                              @if (variantMargin(item.v); as m) {
+                                <span class="margin-pill"
+                                      [class.margin-green]="m >= 40"
+                                      [class.margin-amber]="m >= 20 && m < 40"
+                                      [class.margin-red]="m < 20">{{ m }}%</span>
+                              } @else {
+                                <span class="margin-dash muted small">— set cost to calculate</span>
+                              }
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    }
+                  }
                 </div>
               }
 
-              <!-- Size datalist for free-text with suggestions -->
-              <datalist id="size-options">
-                @for (ss of refSizeSets(); track ss.id) {
-                  @for (sz of ss.sizes; track sz) { <option [value]="sz">{{ sz }}</option> }
-                }
-              </datalist>
-
+              <!-- Footer: global stats + add color -->
               <div class="vt-foot">
                 <div class="muted small" style="display:flex;gap:16px;flex-wrap:wrap;">
                   @if (variantsPriceRange()) {
@@ -512,20 +573,6 @@ function readPreview(file: File): Promise<string> {
                   }
                 </div>
                 <div class="row gap-sm" style="flex-wrap:wrap;">
-                  @if (refSizeSets().length > 0) {
-                    <div class="gen-sizes-wrap">
-                      <select class="inp inp-sm" #sizeSetSel style="font-size:11px;">
-                        <option value="">Generate sizes…</option>
-                        @for (ss of refSizeSets(); track ss.id) {
-                          <option [value]="ss.id">{{ ss.name }}</option>
-                        }
-                      </select>
-                      <button class="btn btn-outline btn-sm" [disabled]="!sizeSetSel.value"
-                              (click)="generateSizes(sizeSetSel.value); sizeSetSel.value=''">
-                        <ap-icon name="wand" [size]="12"/> Go
-                      </button>
-                    </div>
-                  }
                   <button class="btn btn-outline btn-sm" (click)="addVariant()">
                     <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
                   </button>
@@ -535,45 +582,55 @@ function readPreview(file: File): Promise<string> {
           }
         </div>
 
-        <!-- ⑤ Section: Description —rich content after key commerce fields -->
-        <!-- Section: Description -->
-        <div class="section-title">
+        <!-- ⑤ Section: Description -->
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('desc')" (click)="toggleSection('desc')">
           <ap-icon name="edit" [size]="14"/>
           <span>{{ t('product.section.description') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('desc')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
-          <label class="lbl">{{ t('product.field.descEn') }}</label>
-          <ap-rich-text
-            dir="ltr"
-            [value]="form().enDesc"
-            [ariaLabel]="t('product.field.descEn')"
-            (valueChange)="set('enDesc', $event)"/>
-        </div>
-        <div class="mb-24">
-          <label class="lbl">{{ t('product.field.descAr') }}</label>
-          <ap-rich-text
-            dir="rtl"
-            [value]="form().arDesc"
-            [ariaLabel]="t('product.field.descAr')"
-            (valueChange)="set('arDesc', $event)"/>
+        <div [style.display]="isMobile() && !openSections().has('desc') ? 'none' : ''">
+          <div class="mb-24">
+            <label class="lbl">{{ t('product.field.descEn') }}</label>
+            <ap-rich-text
+              dir="ltr"
+              [value]="form().enDesc"
+              [ariaLabel]="t('product.field.descEn')"
+              (valueChange)="set('enDesc', $event)"/>
+          </div>
+          <div class="mb-24">
+            <label class="lbl">{{ t('product.field.descAr') }}</label>
+            <ap-rich-text
+              dir="rtl"
+              [value]="form().arDesc"
+              [ariaLabel]="t('product.field.descAr')"
+              (valueChange)="set('arDesc', $event)"/>
+          </div>
         </div>
 
         <!-- ⑥ Section: Organization — collections & related products -->
-        <div class="section-title">
-          <ap-icon name="list" [size]="14"/>
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('org')" (click)="toggleSection('org')">
+          <ap-icon name="collections" [size]="14"/>
           <span>{{ t('product.section.organization') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('org')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('org') ? 'none' : ''"  >
           <div class="mb-16">
             <label class="lbl">{{ t('nav.collections') }}</label>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
-              @for (c of collections; track c.id) {
-                <label class="row gap-sm" style="align-items:center;background:var(--bg-2);padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--border-2);transition:0.12s;" [style.border-color]="form().collectionIds.includes(c.id) ? 'var(--gold)' : ''" [style.background]="form().collectionIds.includes(c.id) ? 'var(--gold-3)' : ''">
-                  <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;"/>
-                  <span class="small">{{ c.title }}</span>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+              @for (c of topLevelCollections(); track c.id) {
+                <label class="col-check-row" [class.col-check-selected]="form().collectionIds.includes(c.id)">
+                  <input type="checkbox" [checked]="form().collectionIds.includes(c.id)" (change)="toggleCollection(c.id)" style="margin:0;flex-shrink:0;"/>
+                  <span class="small strong">{{ c.title }}</span>
                 </label>
+                @for (child of subCollectionsOf(c.id); track child.id) {
+                  <label class="col-check-row col-check-sub" [class.col-check-selected]="form().collectionIds.includes(child.id)">
+                    <ap-icon name="hierarchy" [size]="10" style="color:var(--muted);flex-shrink:0;"/>
+                    <input type="checkbox" [checked]="form().collectionIds.includes(child.id)" (change)="toggleCollection(child.id)" style="margin:0;flex-shrink:0;"/>
+                    <span class="small">{{ child.title }}</span>
+                  </label>
+                }
               }
             </div>
           </div>
@@ -606,12 +663,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- ⑦ Section: SEO -->
-        <div class="section-title">
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('seo')" (click)="toggleSection('seo')">
           <ap-icon name="search" [size]="14"/>
           <span>{{ t('product.section.seo') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('seo')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('seo') ? 'none' : ''"  >
           <label class="lbl">{{ t('product.field.metaTitle') }}</label>
           <input class="inp mb-16" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
           <label class="lbl">{{ t('product.field.metaDesc') }}</label>
@@ -627,12 +685,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- Section: Sync -->
-        <div class="section-title">
+        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('sync')" (click)="toggleSection('sync')">
           <ap-icon name="sync" [size]="14"/>
           <span>{{ t('product.section.sync') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('sync')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="mb-24">
+        <div class="mb-24" [style.display]="isMobile() && !openSections().has('sync') ? 'none' : ''"  >
           <div class="ms-block">
             <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
               <div>
@@ -675,12 +734,13 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <!-- Section: Danger zone -->
-        <div class="section-title danger-section">
+        <div class="section-title danger-section" [class.sec-collapsed]="isMobile() && !openSections().has('danger')" (click)="toggleSection('danger')">
           <ap-icon name="trash" [size]="14"/>
           <span>{{ t('product.section.danger') }}</span>
+          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('danger')" [style.display]="isMobile() ? 'block' : 'none'"/>
         </div>
 
-        <div class="danger-zone mb-24">
+        <div class="danger-zone mb-24" [style.display]="isMobile() && !openSections().has('danger') ? 'none' : ''"  >
           <div style="flex:1;min-width:0;">
             <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">{{ t('product.delete.title') }}</div>
             <div class="muted small">{{ t('product.delete.sub') }}</div>
@@ -747,8 +807,8 @@ function readPreview(file: File): Promise<string> {
   `,
   styles: [`
     /* Wider drawer for the editor — full screen on phones */
-    .drawer-wide { width: min(720px, 100vw); }
-    @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
+    .drawer-wide { width: min(800px, 100vw); }
+    @media (max-width: 800px) { .drawer-wide { width: 100vw; } }
 
     .product-head {
       gap: 12px;
@@ -1095,6 +1155,73 @@ function readPreview(file: File): Promise<string> {
     .variants-cards > .vc-header { border-radius: 10px 10px 0 0; }
     .variants-cards > .vc:last-of-type { border-radius: 0 0 10px 10px; }
 
+    /* ── Color group accordion ──────────────────────────────── */
+    .vcg {
+      border-bottom: 1px solid var(--border-2);
+    }
+    .vcg:last-child { border-bottom: none; }
+
+    .vcg-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; cursor: pointer;
+      background: var(--bg); transition: background .12s;
+      position: relative;
+    }
+    .vcg-head:hover { background: var(--bg-2); }
+    .vcg--open .vcg-head { background: var(--bg-2); border-bottom: 1px solid var(--border-2); }
+
+    .vcg-chev {
+      color: var(--muted); transition: transform .2s; flex-shrink: 0;
+    }
+    .vcg-chev.open { transform: rotate(180deg); }
+
+    .vcg-swatch {
+      width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,.1);
+    }
+    .vcg-swatch--img { object-fit: cover; }
+
+    .vcg-name {
+      font-size: 13px; font-weight: 600; min-width: 80px;
+    }
+    .vcg-color-wrap { display: flex; align-items: center; }
+    .vcg-color-sel {
+      font-size: 13px; font-weight: 600;
+      min-width: 100px; max-width: 160px;
+      padding-inline-start: 6px;
+      border-color: transparent; background: transparent;
+      cursor: pointer;
+    }
+    .vcg-color-sel:hover,
+    .vcg-color-sel:focus { border-color: var(--border); background: var(--surface); }
+
+    .vcg-stock-badge {
+      font-size: 11px; color: var(--muted);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 99px; padding: 1px 8px; white-space: nowrap;
+    }
+    .vcg-stock--out { color: var(--danger); border-color: rgba(239,68,68,.3); }
+
+    /* Wrapper gives the picker a tight anchor right next to the button */
+    .vcg-img-wrap { position: relative; flex-shrink: 0; }
+
+    .vcg-img-btn {
+      width: 32px; height: 32px; border-radius: 6px;
+      border: 1px dashed var(--border); background: var(--bg);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); position: relative; overflow: hidden;
+      transition: border-color .12s;
+    }
+    .vcg-img-btn.has-img { border-style: solid; border-color: var(--gold); }
+    .vcg-img-btn.no-color { opacity: 0.3; cursor: not-allowed; }
+
+    /* Grouped size rows use narrower grid (no photo/color columns) */
+    .vc-header--group,
+    .vc-row--grouped {
+      grid-template-columns: 80px 80px 1fr 1fr 56px !important;
+    }
+    .vc--grouped { border-radius: 0 !important; }
+
     /* Grid: Photo | Color | Size | Stock | Price | SKU | Actions
        Rationale:
          - Photo 44px   : thumbnail, fixed
@@ -1218,6 +1345,20 @@ function readPreview(file: File): Promise<string> {
       box-shadow: 0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
       min-width: 224px;
       max-width: 280px;
+    }
+    /* Group picker anchors to .vcg-img-wrap (32 px button).
+       Opens downward; right edge aligns with button right edge.
+       Extends leftward so it never escapes the drawer. */
+    .vc-img-picker--group {
+      top: calc(100% + 6px);
+      left: auto;
+      right: 0;
+      min-width: 260px;
+      max-width: 300px;
+    }
+    .vc-img-picker--group .vc-img-picker-grid {
+      max-height: 220px;
+      overflow-y: auto;
     }
     .vc-img-picker-head {
       display: flex; align-items: center; justify-content: space-between;
@@ -1458,10 +1599,34 @@ function readPreview(file: File): Promise<string> {
       color: var(--green);
       font-weight: 800;
     }
+    /* Collection hierarchy checkboxes */
+    .col-check-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border-2); background: var(--bg-2);
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .col-check-row:hover { border-color: var(--gold); }
+    .col-check-selected { border-color: var(--gold) !important; background: var(--gold-3) !important; }
+    .col-check-sub { margin-inline-start: 20px; }
+
     @media (max-width: 720px) {
       .nav-pos { padding: 0 4px; min-width: 28px; font-size: 10px; }
       .section-title { font-size: 15px; padding: 14px 0 10px; }
       .save-bar-hint .kbd { display: none; }
+    }
+
+    /* ── Collapsible sections (mobile only) ── */
+    @media (max-width: 768px) {
+      /* Make section headers feel tappable */
+      .section-title { cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; }
+      /* Chevron icon: rotates open/closed */
+      .sec-chev { flex-shrink: 0; opacity: 0.45; transition: transform 0.2s ease; }
+      .sec-chev.open { transform: rotate(180deg); }
+      /* Muted look when collapsed */
+      .section-title.sec-collapsed { opacity: 0.72; }
+      /* Prevent chevron overlapping the variant summary text */
+      .section-title .sec-chev { margin-inline-start: 8px; }
     }
   `],
 })
@@ -1497,6 +1662,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   @Output() deleted = new EventEmitter<Product>();
   /** Emitted when a duplicate is created — carries the new product so the parent can add it. */
   @Output() duplicated = new EventEmitter<Product>();
+  /** Emitted after a successful save so the catalog can update _products signal. */
+  @Output() productSaved = new EventEmitter<Product>();
 
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -1524,6 +1691,23 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // ── Media picker ──────────────────────────────────────────────────────────
   readonly mediaPicker = signal(false);
   readonly mediaFiles = signal<import('../../models').MediaFile[]>([]);
+
+  /* ── Mobile collapsible sections ── */
+  readonly isMobile = signal(window.innerWidth <= 768);
+  // Gallery and Basics are always open; the rest start collapsed on mobile.
+  readonly openSections = signal(new Set(['gallery', 'basics', 'pricing', 'variants']));
+
+  @HostListener('window:resize')
+  onDrawerResize(): void { this.isMobile.set(window.innerWidth <= 768); }
+
+  toggleSection(id: string): void {
+    if (!this.isMobile()) return;
+    this.openSections.update(s => {
+      const next = new Set(s);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }
   readonly mediaLoading = signal(false);
   readonly mediaSearch = signal('');
   readonly mediaSelected = signal(new Set<string>());
@@ -1929,6 +2113,102 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return this.refColors().find(c => c.name_en === name)?.hex ?? '#e5e7eb';
   }
 
+  colorSwatchImage(name: string | undefined): string | null {
+    if (!name) return null;
+    return this.refColors().find(c => c.name_en === name)?.swatch_image_url ?? null;
+  }
+
+  // Groups the flat variants[] by color for the accordion UI.
+  // The underlying flat array is preserved — this is purely a computed view.
+  readonly colorGroups = computed(() => {
+    const variants = this.form().variants;
+    const map = new Map<string, {
+      colorKey:  string;
+      colorName: string;
+      items:     { v: ProductVariant; globalIndex: number }[];
+    }>();
+
+    variants.forEach((v, globalIndex) => {
+      const key = (v.color || '').trim().toLowerCase() || '__none__';
+      if (!map.has(key)) map.set(key, { colorKey: key, colorName: v.color || '', items: [] });
+      map.get(key)!.items.push({ v, globalIndex });
+    });
+
+    return [...map.values()];
+  });
+
+  readonly expandedGroups = signal<Set<string>>(new Set());
+
+  toggleGroup(key: string): void {
+    this.expandedGroups.update(s => {
+      const next = new Set(s);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  addVariantForColor(colorName: string): void {
+    const f = this.form();
+    const next: ProductVariant = {
+      id:       'V-' + Date.now().toString(36),
+      sku:      f.sku ? `${f.sku}-${colorName.toUpperCase().slice(0,3)}-NEW` : '',
+      size:     '',
+      color:    colorName,
+      material: '',
+      price:    f.price || 0,
+      stock:    0,
+    };
+    this.set('variants', [...f.variants, next]);
+    // Ensure the group is expanded so the new row is visible
+    this.expandedGroups.update(s => {
+      const next = new Set(s);
+      next.add(colorName.trim().toLowerCase() || '__none__');
+      return next;
+    });
+  }
+
+  generateSizesForColor(sizeSetId: string, colorName: string): void {
+    const ss = this.refSizeSets().find(s => s.id === sizeSetId);
+    if (!ss) return;
+    const f = this.form();
+    const existingSizes = new Set(
+      f.variants.filter(v => v.color === colorName).map(v => v.size)
+    );
+    const toAdd = ss.sizes.filter(sz => !existingSizes.has(sz));
+    if (toAdd.length === 0) { this.toast.info('All sizes already added', ss.name); return; }
+    const newVariants: ProductVariant[] = toAdd.map(sz => ({
+      id:       'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
+      sku:      f.sku ? `${f.sku}-${colorName.toUpperCase().slice(0,3)}-${sz}` : '',
+      size:     sz,
+      color:    colorName,
+      material: '',
+      price:    f.price || 0,
+      stock:    0,
+    }));
+    this.set('variants', [...f.variants, ...newVariants]);
+    this.toast.success(`${newVariants.length} sizes added`, `${colorName} · ${ss.name}`);
+  }
+
+  setBulkPriceForColor(colorName: string, price: number): void {
+    const next = this.form().variants.map(v =>
+      v.color === colorName ? { ...v, price } : v
+    );
+    this.set('variants', next);
+  }
+
+  groupStock(items: { v: ProductVariant; globalIndex: number }[]): number {
+    return items.reduce((sum, item) => sum + (Number(item.v.stock) || 0), 0);
+  }
+
+  /** Renames all variants in a color group to a new color name. */
+  renameGroupColor(colorKey: string, newColor: string): void {
+    const next = this.form().variants.map(v => {
+      const key = (v.color || '').trim().toLowerCase() || '__none__';
+      return key === colorKey ? { ...v, color: newColor } : v;
+    });
+    this.set('variants', next);
+  }
+
   generateSizes(sizeSetId: string): void {
     const ss = this.refSizeSets().find(s => s.id === sizeSetId);
     if (!ss) return;
@@ -2069,6 +2349,14 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.set('collectionIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   }
 
+  topLevelCollections(): Collection[] {
+    return this.collections.filter(c => !c.parentId);
+  }
+
+  subCollectionsOf(parentId: string): Collection[] {
+    return this.collections.filter(c => c.parentId === parentId);
+  }
+
   relatedOptions(): Product[] {
     const currentId = this.product?.id;
     return this._products().filter((product) => product.id !== currentId && !product.id.startsWith('P-NEW-'));
@@ -2144,6 +2432,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
         this.currentIdChange.emit(saved.id);
       }
       
+      this.productSaved.emit({ ...this.product });
       this.toast.success(this.t('product.toast.saved.title'), `${this.form().name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
       this.feedbackTimer = window.setTimeout(() => this.saveState.set('idle'), 1800);

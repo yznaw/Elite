@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Elite — Feedback Feature Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+/* ── Shell ────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Montserrat', sans-serif; background: #0c0e14; color: #e2e8f0; min-height: 100vh; }
+
+/* ── Top nav ──────────────────────────────────────────────────────── */
+.top-nav {
+  position: sticky; top: 0; z-index: 200;
+  background: #13151f;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex; align-items: center; gap: 0;
+  padding: 0 28px; overflow-x: auto;
+}
+.nav-brand {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #b8924a;
+  padding: 0 24px 0 0; margin-right: 20px;
+  border-right: 1px solid rgba(255,255,255,0.08);
+  white-space: nowrap; line-height: 56px;
+}
+.tab { padding: 0 22px; line-height: 56px; font-size: 12px; font-weight: 500;
+  color: rgba(255,255,255,0.4); border: none; background: none;
+  border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all .15s; }
+.tab:hover { color: rgba(255,255,255,0.75); }
+.tab.on { color: #b8924a; border-bottom-color: #b8924a; }
+
+/* ── Page sections ────────────────────────────────────────────────── */
+.pg { display: none; padding: 48px 32px; max-width: 1500px; margin: 0 auto; }
+.pg.on { display: block; }
+.pg-title { font-size: 24px; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; }
+.pg-sub   { font-size: 13px; color: rgba(255,255,255,0.38); margin-bottom: 40px; line-height: 1.6; }
+
+/* ── Two-panel layout ─────────────────────────────────────────────── */
+.panels { display: grid; grid-template-columns: 1fr 400px; gap: 40px; align-items: start; }
+@media(max-width:960px){ .panels { grid-template-columns: 1fr; } }
+.panel-label {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+  color: rgba(255,255,255,0.25); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.panel-label::after { content:''; flex:1; height:1px; background:rgba(255,255,255,0.06); }
+
+/* ── Desktop chrome ───────────────────────────────────────────────── */
+.chrome-d {
+  border-radius: 10px; overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,0.05);
+  background: #eee9df;
+}
+.chrome-d-bar {
+  background: #024638; padding: 0 32px; height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.chrome-d-bar-logo { font-size: 16px; font-weight: 700; font-style: italic; color: #d4a853; letter-spacing: -0.02em; }
+.chrome-d-bar-nav { display: flex; gap: 28px; }
+.chrome-d-bar-nav span { font-size: 10px; letter-spacing: 0.1em; font-weight: 600; color: rgba(255,255,255,0.7); }
+.chrome-d-bar-icons { display: flex; gap: 14px; color: rgba(255,255,255,0.7); font-size: 14px; }
+
+/* ── Mobile chrome ────────────────────────────────────────────────── */
+.chrome-m-wrap { display: flex; justify-content: center; }
+.chrome-m {
+  width: 390px;
+  border-radius: 44px; overflow: hidden;
+  box-shadow: 0 0 0 10px #1c1f2e, 0 0 0 11px rgba(255,255,255,0.06), 0 28px 64px rgba(0,0,0,.6);
+  background: #eee9df;
+  max-height: 820px; overflow-y: auto;
+}
+.chrome-m-bar {
+  background: #024638; padding: 14px 20px 10px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.chrome-m-logo { font-size: 18px; font-weight: 700; font-style: italic; color: #d4a853; }
+.chrome-m-icons { display: flex; gap: 12px; color: rgba(255,255,255,0.8); font-size: 16px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ELITE STOREFRONT DESIGN SYSTEM (exact match)
+═══════════════════════════════════════════════════════════════════ */
+.ep { background: #eee9df; font-family: 'Montserrat', sans-serif; color: #1a1208; }
+.ep-breadcrumb { padding: 12px 32px; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8a7a62; display: flex; gap: 8px; align-items: center; }
+.ep-breadcrumb strong { color: #1a1208; }
+
+/* PDP grid */
+.ep-pdp { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding: 0 32px 32px; }
+.ep-gallery { background: #e0d8cc; border-radius: 6px; aspect-ratio: 4/3; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.ep-gallery img { width: 80%; object-fit: contain; }
+.ep-gallery-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,0.85); border: none; cursor: pointer;
+  font-size: 16px; display: flex; align-items: center; justify-content: center;
+  color: #1a1208;
+}
+.ep-gallery-arrow.prev { left: 12px; }
+.ep-gallery-arrow.next { right: 12px; }
+.ep-thumbs { display: flex; gap: 6px; margin-top: 8px; }
+.ep-thumb {
+  width: 52px; height: 52px; border-radius: 4px; border: 2px solid transparent;
+  background: #e0d8cc; overflow: hidden; cursor: pointer; flex-shrink: 0;
+}
+.ep-thumb.active { border-color: #b8924a; }
+.ep-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Details panel */
+.ep-details {}
+.ep-name { font-size: 30px; font-weight: 700; line-height: 1.15; color: #1a1208; margin-bottom: 12px; }
+.ep-price { font-size: 20px; font-weight: 600; color: #b8924a; margin-bottom: 16px; }
+.ep-desc { font-size: 12px; color: #6b5c45; line-height: 1.8; margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 16px; }
+.ep-section-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #8a7a62; margin-bottom: 10px; }
+.ep-colors { display: flex; gap: 8px; margin-bottom: 20px; }
+.ep-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.ep-swatch.active { box-shadow: 0 0 0 2px #eee9df, 0 0 0 4px #b8924a; }
+.ep-qty-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.ep-qty-btns { display: flex; align-items: center; gap: 0; border: 1px solid rgba(0,0,0,0.15); border-radius: 3px; overflow: hidden; }
+.ep-qty-btn { width: 34px; height: 34px; background: #e0d8cc; border: none; font-size: 16px; cursor: pointer; color: #1a1208; }
+.ep-qty-val { width: 44px; text-align: center; font-size: 14px; font-weight: 600; border: none; background: transparent; }
+.ep-notify-btn {
+  width: 100%; padding: 17px; border: none; border-radius: 3px;
+  background: #f0e6ce; color: #5c3d11;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; transition: all .2s;
+}
+.ep-notify-btn:hover { background: #e8d9b7; }
+.ep-notify-btn .right { font-size: 9px; color: #9a7535; letter-spacing: 0.08em; }
+
+/* Accordion rows */
+.ep-accord { border-top: 1px solid rgba(0,0,0,0.10); }
+.ep-accord-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 0; border-bottom: 1px solid rgba(0,0,0,0.10);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #1a1208; cursor: pointer;
+}
+.ep-accord-row span { color: #b8924a; font-size: 16px; font-weight: 300; }
+
+/* ── REVIEW BAR (the new element, like NOTIFY ME) ─────────────────── */
+.ep-review-bar {
+  margin-top: 14px;
+  border: 1.5px solid rgba(184,146,74,0.35);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(184,146,74,0.04);
+  transition: border-color .2s;
+}
+.ep-review-bar:hover { border-color: rgba(184,146,74,0.6); }
+
+.ep-review-trigger {
+  width: 100%; padding: 15px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: transparent; border: none; cursor: pointer;
+  text-align: left;
+}
+.ep-review-trigger-left { display: flex; align-items: center; gap: 12px; }
+.ep-review-trigger-diamond {
+  width: 28px; height: 28px; border-radius: 4px;
+  background: linear-gradient(135deg, #c9a96e, #a07840);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; flex-shrink: 0;
+}
+.ep-review-trigger-text { }
+.ep-review-trigger-title {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #1a1208;
+}
+.ep-review-trigger-sub { font-size: 10px; color: #8a7a62; margin-top: 1px; }
+.ep-review-trigger-arrow {
+  font-size: 18px; color: #b8924a; transition: transform .25s cubic-bezier(.22,1,.36,1);
+}
+.ep-review-trigger-arrow.open { transform: rotate(180deg); }
+
+/* Review form body (hidden by default) */
+.ep-review-body {
+  padding: 0 18px;
+  max-height: 0; overflow: hidden;
+  transition: max-height .35s cubic-bezier(.22,1,.36,1), padding .3s;
+}
+.ep-review-body.open { max-height: 800px; padding: 0 18px 20px; }
+
+.ep-review-divider { height: 1px; background: rgba(0,0,0,0.08); margin-bottom: 18px; }
+
+/* Stars */
+.ep-stars-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8a7a62; margin-bottom: 10px; }
+.ep-stars { display: flex; gap: 2px; margin-bottom: 18px; }
+.ep-star { font-size: 30px; color: #ddd0bb; cursor: pointer; transition: color .12s, transform .1s; line-height: 1; user-select: none; }
+.ep-star.on { color: #b8924a; }
+.ep-star:hover { transform: scale(1.18); }
+
+/* Text inputs */
+.ep-field { margin-bottom: 14px; }
+.ep-field-label { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8a7a62; margin-bottom: 7px; }
+.ep-input, .ep-textarea {
+  width: 100%; padding: 11px 14px;
+  border: 1px solid rgba(0,0,0,0.12); border-radius: 3px;
+  font-size: 12px; color: #1a1208; background: rgba(255,255,255,0.6);
+  font-family: 'Montserrat', sans-serif;
+  transition: border-color .15s, box-shadow .15s; outline: none;
+}
+.ep-input:focus, .ep-textarea:focus {
+  border-color: #b8924a; background: #fff;
+  box-shadow: 0 0 0 3px rgba(184,146,74,0.12);
+}
+.ep-textarea { resize: vertical; min-height: 90px; }
+
+/* Contact toggle */
+.ep-contact-toggle {
+  width: 100%; padding: 10px 0; border: none; background: transparent;
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase;
+  color: #8a7a62; margin-bottom: 10px;
+  border-bottom: 1px dashed rgba(0,0,0,0.10);
+}
+.ep-contact-toggle span.arr { margin-left: auto; font-size: 12px; transition: transform .2s; }
+.ep-contact-toggle.open span.arr { transform: rotate(180deg); }
+.ep-contact-fields { display: none; }
+.ep-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Submit */
+.ep-submit {
+  width: 100%; padding: 14px;
+  background: linear-gradient(135deg, #c9a96e, #9a7535);
+  color: #0d0b08; border: none; border-radius: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  cursor: pointer; margin-top: 6px;
+  transition: filter .2s, transform .15s;
+}
+.ep-submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* Success state */
+.ep-success {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px;
+  background: rgba(184,146,74,0.07);
+  border-radius: 4px; border: 1px solid rgba(184,146,74,0.22);
+}
+.ep-success-icon {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #c9a96e, #9a7535);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 14px;
+}
+.ep-success-title { font-size: 11px; font-weight: 700; color: #1a1208; margin-bottom: 2px; }
+.ep-success-sub { font-size: 10px; color: #8a7a62; line-height: 1.5; }
+
+/* ── Mobile product page ──────────────────────────────────────────── */
+.mp { background: #eee9df; font-family: 'Montserrat', sans-serif; color: #1a1208; }
+.mp-gallery { background: #e0d8cc; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; position: relative; }
+.mp-gallery img { width: 70%; object-fit: contain; }
+.mp-thumbs { display: flex; gap: 5px; padding: 8px 14px; overflow-x: auto; }
+.mp-thumb { width: 50px; height: 50px; border-radius: 4px; border: 2px solid transparent; background: #e0d8cc; flex-shrink: 0; overflow: hidden; }
+.mp-thumb.active { border-color: #b8924a; }
+.mp-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.mp-content { padding: 16px; }
+.mp-name { font-size: 22px; font-weight: 700; line-height: 1.2; margin-bottom: 8px; }
+.mp-price { font-size: 18px; font-weight: 600; color: #b8924a; margin-bottom: 10px; }
+.mp-desc { font-size: 11px; color: #6b5c45; line-height: 1.8; margin-bottom: 16px; }
+.mp-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8a7a62; margin-bottom: 8px; }
+.mp-qty { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.mp-qty-ctrl { display: flex; border: 1px solid rgba(0,0,0,0.14); border-radius: 3px; overflow: hidden; }
+.mp-qty-btn { width: 36px; height: 36px; background: #e0d8cc; border: none; font-size: 16px; color: #1a1208; }
+.mp-qty-v { width: 40px; text-align: center; font-size: 14px; font-weight: 600; }
+.mp-accord { border-top: 1px solid rgba(0,0,0,0.10); }
+.mp-accord-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid rgba(0,0,0,0.10); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #1a1208; }
+.mp-accord-row span { color: #b8924a; font-size: 16px; font-weight: 300; }
+.mp-notify {
+  width: 100%; padding: 15px; background: #f0e6ce;
+  border: none; border-radius: 3px; color: #5c3d11;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
+  margin-top: 12px; display: flex; align-items: center; justify-content: space-between;
+}
+.mp-notify .right { font-size: 8px; color: #9a7535; }
+
+/* Mobile review bar */
+.mp-review-bar {
+  margin-top: 10px; border: 1.5px solid rgba(184,146,74,0.35);
+  border-radius: 4px; overflow: hidden;
+  background: rgba(184,146,74,0.04);
+}
+.mp-review-trigger {
+  width: 100%; padding: 13px 14px;
+  background: transparent; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.mp-review-trigger-left { display: flex; align-items: center; gap: 10px; }
+.mp-review-diamond {
+  width: 26px; height: 26px; border-radius: 4px; flex-shrink: 0;
+  background: linear-gradient(135deg, #c9a96e, #a07840);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 11px;
+}
+.mp-review-title { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #1a1208; text-align: left; }
+.mp-review-sub { font-size: 9px; color: #8a7a62; margin-top: 1px; text-align: left; }
+.mp-review-arrow { color: #b8924a; font-size: 16px; transition: transform .25s; }
+.mp-review-arrow.open { transform: rotate(180deg); }
+.mp-review-body { max-height: 0; overflow: hidden; transition: max-height .35s cubic-bezier(.22,1,.36,1); }
+.mp-review-body.open { max-height: 700px; padding: 0 14px 16px; }
+.mp-review-div { height: 1px; background: rgba(0,0,0,0.08); margin-bottom: 14px; }
+.mp-stars { display: flex; gap: 3px; margin-bottom: 16px; justify-content: center; }
+.mp-star { font-size: 36px; color: #ddd0bb; cursor: pointer; transition: color .12s; }
+.mp-star.on { color: #b8924a; }
+.mp-field { margin-bottom: 12px; }
+.mp-field-label { font-size: 9px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: #8a7a62; margin-bottom: 6px; display: block; }
+.mp-input, .mp-textarea { width: 100%; padding: 11px 13px; border: 1px solid rgba(0,0,0,0.12); border-radius: 3px; font-size: 12px; color: #1a1208; background: rgba(255,255,255,0.6); font-family: 'Montserrat', sans-serif; }
+.mp-textarea { resize: vertical; min-height: 80px; }
+.mp-contact-toggle { width: 100%; padding: 9px 0; border: none; background: transparent; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 9px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: #8a7a62; margin-bottom: 10px; border-bottom: 1px dashed rgba(0,0,0,0.10); }
+.mp-submit { width: 100%; padding: 14px; background: linear-gradient(135deg, #c9a96e, #9a7535); color: #0d0b08; border: none; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; margin-top: 6px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ADMIN PAGES
+═══════════════════════════════════════════════════════════════════ */
+:root {
+  --ag: #024638; --agold: #c5a572; --abg: #f5f6fa;
+  --as: #fff; --ab: rgba(0,0,0,0.08); --ai: #1a1f36;
+  --am: #6b7088; --adanger: #ef4444;
+}
+.a-shell { display: flex; min-height: 600px; background: var(--abg); }
+.a-sidebar {
+  width: 210px; flex-shrink: 0; background: var(--ag); padding: 18px 0;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.a-sidebar-brand { padding: 0 18px 18px; font-size: 13px; font-weight: 800; letter-spacing: 0.06em; color: var(--agold); border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 10px; }
+.a-nav { display: flex; align-items: center; gap: 9px; padding: 9px 18px; font-size: 12px; color: rgba(255,255,255,0.45); cursor: pointer; transition: all .12s; }
+.a-nav:hover { color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.04); }
+.a-nav.on { color: #fff; background: rgba(197,165,114,0.14); border-left: 3px solid var(--agold); padding-left: 15px; font-weight: 600; }
+.a-main { flex: 1; min-width: 0; padding: 26px 26px; overflow-y: auto; }
+.a-page-h { margin-bottom: 22px; }
+.a-page-title { font-size: 19px; font-weight: 700; color: var(--ai); }
+.a-page-sub { font-size: 11px; color: var(--am); margin-top: 3px; }
+.a-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 22px; }
+.a-stat { background: var(--as); border: 1px solid var(--ab); border-radius: 10px; padding: 15px 18px; }
+.a-stat-v { font-size: 26px; font-weight: 700; color: var(--ai); }
+.a-stat-l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--am); margin-top: 3px; }
+.a-stat-s { font-size: 11px; color: var(--agold); margin-top: 3px; font-weight: 600; }
+.a-card { background: var(--as); border: 1px solid var(--ab); border-radius: 10px; overflow: hidden; }
+.a-card-h { display: flex; align-items: center; justify-content: space-between; padding: 15px 20px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.a-card-title { font-size: 13px; font-weight: 700; color: var(--ai); }
+.a-card-sub { font-size: 11px; color: var(--am); margin-top: 2px; }
+.a-row {
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 20px; border-bottom: 1px solid rgba(0,0,0,0.05);
+  cursor: pointer; transition: background .1s;
+}
+.a-row:last-child { border-bottom: none; }
+.a-row:hover { background: var(--abg); }
+.a-img { width: 44px; height: 44px; border-radius: 7px; background: var(--abg); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid var(--ab); }
+.a-info { flex: 1; min-width: 0; }
+.a-name { font-size: 13px; font-weight: 600; color: var(--ai); }
+.a-meta { font-size: 11px; color: var(--am); margin-top: 3px; }
+.a-stars-g { color: #f59e0b; font-size: 12px; }
+.a-stars-e { color: #d1d5db; }
+.badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+.badge-g { background: rgba(2,70,56,0.07); color: var(--ag); border: 1px solid rgba(2,70,56,0.14); }
+.badge-a { background: rgba(197,165,114,0.1); color: #9a7535; border: 1px solid rgba(197,165,114,0.22); }
+.a-arrow { color: var(--am); font-size: 14px; flex-shrink: 0; }
+.a-back { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--am); background: none; border: none; cursor: pointer; margin-bottom: 18px; transition: color .12s; }
+.a-back:hover { color: var(--ai); }
+.a-prod-sum { display: flex; align-items: center; gap: 14px; background: var(--as); border: 1px solid var(--ab); border-radius: 10px; padding: 15px 18px; margin-bottom: 20px; }
+.a-prod-sum-img { width: 52px; height: 52px; border-radius: 8px; background: var(--abg); font-size: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--ab); flex-shrink: 0; }
+.a-prod-sum-name { font-size: 15px; font-weight: 700; color: var(--ai); }
+.a-prod-sum-meta { font-size: 11px; color: var(--am); margin-top: 4px; }
+.a-rev { background: var(--as); border: 1px solid var(--ab); border-radius: 10px; padding: 17px 20px; margin-bottom: 11px; }
+.a-rev-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 9px; }
+.a-rev-stars { color: #f59e0b; font-size: 15px; letter-spacing: 1px; }
+.a-rev-date { font-size: 11px; color: var(--am); }
+.a-rev-title { font-size: 13px; font-weight: 700; color: var(--ai); margin-bottom: 5px; }
+.a-rev-body { font-size: 12px; color: #374151; line-height: 1.65; margin-bottom: 13px; }
+.a-rev-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 11px; border-top: 1px solid rgba(0,0,0,0.05); }
+.a-contact-chip { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--am); }
+.a-contact-chip strong { color: var(--ai); font-weight: 500; }
+.a-copy-btn { padding: 3px 9px; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; background: rgba(2,70,56,0.06); border: 1px solid rgba(2,70,56,0.14); border-radius: 4px; color: var(--ag); cursor: pointer; transition: all .12s; }
+.a-copy-btn:hover { background: rgba(2,70,56,0.12); }
+.a-del { margin-left: auto; padding: 5px 12px; font-size: 10px; font-weight: 700; background: transparent; border: 1px solid rgba(239,68,68,0.28); border-radius: 6px; color: var(--adanger); cursor: pointer; }
+.a-del:hover { background: rgba(239,68,68,0.07); }
+/* Mobile admin */
+.am-bar { background: var(--ag); padding: 14px 16px; display: flex; align-items: center; gap: 11px; }
+.am-bar-back { color: rgba(255,255,255,0.65); font-size: 20px; }
+.am-bar-title { font-size: 14px; font-weight: 700; color: #fff; }
+.am-bar-sub { font-size: 10px; color: rgba(255,255,255,0.45); margin-top: 1px; }
+.am-body { padding: 14px; background: var(--abg); min-height: 600px; }
+.am-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 14px; }
+.am-stat { background: var(--as); border: 1px solid var(--ab); border-radius: 8px; padding: 11px 13px; }
+.am-stat-v { font-size: 20px; font-weight: 700; color: var(--ai); }
+.am-stat-l { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--am); margin-top: 2px; }
+.am-card { background: var(--as); border: 1px solid var(--ab); border-radius: 9px; padding: 13px; margin-bottom: 9px; display: flex; align-items: center; gap: 11px; cursor: pointer; }
+.am-card-img { width: 42px; height: 42px; border-radius: 6px; background: var(--abg); font-size: 18px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--ab); flex-shrink: 0; }
+.am-card-name { font-size: 12px; font-weight: 600; color: var(--ai); }
+.am-card-stars { color: #f59e0b; font-size: 11px; margin: 2px 0; }
+.am-card-meta { font-size: 10px; color: var(--am); }
+.am-arr { color: var(--am); font-size: 16px; align-self: center; flex-shrink: 0; }
+.am-rev { background: var(--as); border: 1px solid var(--ab); border-radius: 9px; padding: 13px; margin-bottom: 10px; }
+.am-rev-top { display: flex; justify-content: space-between; margin-bottom: 7px; }
+.am-rev-stars { color: #f59e0b; font-size: 13px; }
+.am-rev-date { font-size: 10px; color: var(--am); }
+.am-rev-title { font-size: 12px; font-weight: 700; color: var(--ai); margin-bottom: 4px; }
+.am-rev-body { font-size: 11px; color: #374151; line-height: 1.6; margin-bottom: 9px; }
+.am-rev-foot { padding-top: 9px; border-top: 1px solid rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 3px; }
+.am-rev-contact { font-size: 10px; color: var(--am); }
+.am-rev-contact strong { color: var(--ai); }
+.am-del { margin-top: 8px; width: 100%; padding: 7px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; background: transparent; border: 1px solid rgba(239,68,68,0.28); border-radius: 6px; color: var(--adanger); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   IPAD KIOSK
+═══════════════════════════════════════════════════════════════════ */
+.ipad-wrap {
+  display: flex; justify-content: center; padding: 0;
+}
+.ipad-shell {
+  width: 100%; max-width: 1024px;
+  border-radius: 18px; overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 12px #1e2230, 0 0 0 14px rgba(255,255,255,0.04);
+  aspect-ratio: 4/3;
+  position: relative;
+}
+
+/* Kiosk screens */
+.kiosk { display: none; width: 100%; height: 100%; position: absolute; inset: 0; flex-direction: column; font-family: 'Montserrat', sans-serif; }
+.kiosk.on { display: flex; }
+
+/* Screen 1 — Welcome */
+.k-welcome {
+  background: #024638;
+  align-items: center; justify-content: center;
+  text-align: center; position: relative;
+}
+.k-welcome-bg {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 60% 40%, rgba(184,146,74,0.18) 0%, transparent 65%),
+              linear-gradient(160deg, #024638 0%, #012a22 100%);
+}
+.k-logo { font-size: clamp(32px,4vw,52px); font-weight: 700; font-style: italic; color: #d4a853; letter-spacing: -0.02em; position: relative; z-index: 1; margin-bottom: 6px; }
+.k-logo-sub { font-size: clamp(8px,1vw,11px); font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(184,146,74,0.6); position: relative; z-index: 1; margin-bottom: clamp(28px,4vh,48px); }
+.k-diamond-line {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  position: relative; z-index: 1; margin-bottom: clamp(20px,3vh,36px);
+}
+.k-diamond-line::before, .k-diamond-line::after { content: ''; flex: 1; max-width: 80px; height: 1px; background: rgba(184,146,74,0.4); }
+.k-diamond { color: #d4a853; font-size: 16px; }
+.k-welcome-title {
+  font-size: clamp(20px,3vw,36px); font-weight: 700; color: #fff;
+  position: relative; z-index: 1; margin-bottom: 10px; line-height: 1.25;
+}
+.k-welcome-sub {
+  font-size: clamp(11px,1.2vw,15px); color: rgba(255,255,255,0.55);
+  position: relative; z-index: 1; margin-bottom: clamp(28px,4vh,48px);
+  max-width: 480px; line-height: 1.6;
+}
+.k-start-btn {
+  padding: clamp(14px,2vh,20px) clamp(36px,5vw,64px);
+  background: linear-gradient(135deg, #c9a96e, #9a7535);
+  border: none; border-radius: 6px; cursor: pointer;
+  font-size: clamp(11px,1.3vw,14px); font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  color: #0d0b08; position: relative; z-index: 1;
+  transition: all .25s; font-family: 'Montserrat', sans-serif;
+  box-shadow: 0 8px 32px rgba(184,146,74,0.35);
+}
+.k-start-btn:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(184,146,74,0.45); }
+.k-privacy { position: absolute; bottom: clamp(12px,2vh,20px); left: 0; right: 0; text-align: center; font-size: clamp(9px,1vw,11px); color: rgba(255,255,255,0.25); z-index: 1; letter-spacing: 0.06em; }
+
+/* Screen 2 — Rating */
+.k-rating {
+  background: #eee9df; align-items: center; justify-content: center; text-align: center;
+}
+.k-step-header {
+  position: absolute; top: 0; left: 0; right: 0;
+  background: #024638; padding: clamp(10px,1.5vh,16px) clamp(20px,3vw,40px);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.k-step-logo { font-size: clamp(16px,2vw,22px); font-weight: 700; font-style: italic; color: #d4a853; }
+.k-step-progress { display: flex; gap: 6px; }
+.k-step-dot { width: clamp(6px,1vw,8px); height: clamp(6px,1vw,8px); border-radius: 50%; background: rgba(255,255,255,0.2); }
+.k-step-dot.on { background: #d4a853; }
+.k-step-skip { font-size: clamp(10px,1.2vw,13px); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.45); background: none; border: none; cursor: pointer; font-family: 'Montserrat', sans-serif; }
+.k-step-skip:hover { color: rgba(255,255,255,0.75); }
+.k-rating-content { padding-top: clamp(50px,8vh,90px); }
+.k-rate-eyebrow { font-size: clamp(9px,1vw,11px); font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #b8924a; margin-bottom: 8px; }
+.k-rate-title { font-size: clamp(18px,2.8vw,34px); font-weight: 700; color: #1a1208; margin-bottom: clamp(20px,3vh,36px); }
+.k-big-stars { display: flex; gap: clamp(8px,1.5vw,20px); justify-content: center; margin-bottom: clamp(12px,2vh,24px); }
+.k-big-star { font-size: clamp(40px,8vw,72px); color: #ddd0bb; cursor: pointer; transition: color .12s, transform .12s; line-height: 1; user-select: none; }
+.k-big-star.on { color: #b8924a; }
+.k-big-star:hover { transform: scale(1.15); }
+.k-rate-hint { font-size: clamp(10px,1.2vw,13px); color: #8a7a62; letter-spacing: 0.04em; margin-bottom: clamp(20px,3vh,36px); }
+.k-rate-labels { display: flex; justify-content: space-between; width: clamp(200px,40vw,360px); margin: 0 auto clamp(24px,3.5vh,40px); }
+.k-rate-label { font-size: clamp(8px,1vw,10px); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #8a7a62; }
+.k-next-btn {
+  padding: clamp(13px,1.8vh,18px) clamp(40px,6vw,80px);
+  background: linear-gradient(135deg, #c9a96e, #9a7535);
+  border: none; border-radius: 5px; cursor: pointer;
+  font-size: clamp(10px,1.2vw,13px); font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #0d0b08; font-family: 'Montserrat', sans-serif;
+  transition: all .2s; box-shadow: 0 6px 24px rgba(184,146,74,0.28);
+}
+.k-next-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* Screen 3 — Feedback text */
+.k-feedback { background: #eee9df; }
+.k-feedback-content {
+  padding: clamp(60px,9vh,100px) clamp(40px,6vw,100px) clamp(20px,3vh,40px);
+  display: flex; flex-direction: column; align-items: center; flex: 1;
+}
+.k-feedback-title { font-size: clamp(18px,2.5vw,30px); font-weight: 700; color: #1a1208; margin-bottom: 6px; }
+.k-feedback-sub { font-size: clamp(11px,1.2vw,14px); color: #8a7a62; margin-bottom: clamp(20px,3vh,32px); }
+.k-textarea {
+  width: 100%; max-width: 640px;
+  min-height: clamp(100px,15vh,180px);
+  padding: clamp(16px,2vh,22px) clamp(18px,2.5vw,26px);
+  border: 2px solid rgba(0,0,0,0.1); border-radius: 6px;
+  font-size: clamp(14px,1.8vw,18px); color: #1a1208; background: rgba(255,255,255,0.7);
+  font-family: 'Montserrat', sans-serif; resize: none;
+  transition: border-color .15s, box-shadow .15s; outline: none;
+  margin-bottom: clamp(14px,2vh,24px);
+}
+.k-textarea:focus { border-color: #b8924a; background: #fff; box-shadow: 0 0 0 4px rgba(184,146,74,0.12); }
+.k-char-count { font-size: clamp(9px,1vw,11px); color: #8a7a62; align-self: flex-end; margin-bottom: clamp(14px,2vh,24px); max-width: 640px; width: 100%; text-align: right; }
+.k-btns { display: flex; gap: 14px; justify-content: center; width: 100%; max-width: 640px; }
+.k-btn-outline {
+  flex: 1; padding: clamp(13px,1.8vh,18px);
+  border: 2px solid rgba(0,0,0,0.12); border-radius: 5px; background: transparent;
+  font-size: clamp(9px,1.1vw,12px); font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #8a7a62; cursor: pointer; font-family: 'Montserrat', sans-serif; transition: all .15s;
+}
+.k-btn-outline:hover { border-color: #b8924a; color: #1a1208; }
+.k-btn-gold {
+  flex: 2; padding: clamp(13px,1.8vh,18px);
+  background: linear-gradient(135deg, #c9a96e, #9a7535); border: none; border-radius: 5px;
+  font-size: clamp(9px,1.1vw,12px); font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #0d0b08; cursor: pointer; font-family: 'Montserrat', sans-serif;
+  box-shadow: 0 6px 20px rgba(184,146,74,0.25); transition: all .2s;
+}
+.k-btn-gold:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* Screen 4 — Contact */
+.k-contact { background: #eee9df; }
+.k-contact-content {
+  padding: clamp(60px,9vh,100px) clamp(40px,6vw,100px) clamp(20px,3vh,40px);
+  display: flex; flex-direction: column; align-items: center; flex: 1;
+}
+.k-contact-title { font-size: clamp(18px,2.5vw,28px); font-weight: 700; color: #1a1208; margin-bottom: 5px; }
+.k-contact-sub { font-size: clamp(11px,1.2vw,14px); color: #8a7a62; margin-bottom: clamp(20px,3vh,32px); text-align: center; }
+.k-contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px,1.5vw,16px); width: 100%; max-width: 580px; margin-bottom: clamp(14px,2vh,24px); }
+.k-contact-field { display: flex; flex-direction: column; gap: 7px; }
+.k-contact-label { font-size: clamp(8px,1vw,10px); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8a7a62; }
+.k-contact-input {
+  padding: clamp(13px,1.8vh,18px) clamp(14px,1.8vw,20px);
+  border: 2px solid rgba(0,0,0,0.1); border-radius: 5px;
+  font-size: clamp(14px,1.8vw,17px); color: #1a1208; background: rgba(255,255,255,0.7);
+  font-family: 'Montserrat', sans-serif; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.k-contact-input:focus { border-color: #b8924a; background: #fff; box-shadow: 0 0 0 4px rgba(184,146,74,0.12); }
+.k-contact-full { grid-column: 1 / -1; }
+.k-skip-note { font-size: clamp(9px,1vw,11px); color: #8a7a62; text-align: center; margin-bottom: clamp(14px,2vh,24px); max-width: 580px; width: 100%; }
+
+/* Screen 5 — Thank you */
+.k-thanks {
+  background: #024638; align-items: center; justify-content: center; text-align: center;
+  position: relative;
+}
+.k-thanks-bg {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, rgba(184,146,74,0.2) 0%, transparent 65%);
+}
+.k-thanks-icon {
+  width: clamp(60px,9vw,90px); height: clamp(60px,9vw,90px); border-radius: 50%;
+  background: linear-gradient(135deg, #c9a96e, #9a7535);
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(24px,4vw,40px); color: #fff;
+  margin-bottom: clamp(16px,2.5vh,28px); position: relative; z-index: 1;
+  box-shadow: 0 12px 40px rgba(184,146,74,0.4);
+}
+.k-thanks-title { font-size: clamp(22px,3.5vw,44px); font-weight: 700; color: #fff; position: relative; z-index: 1; margin-bottom: 10px; }
+.k-thanks-sub { font-size: clamp(12px,1.4vw,17px); color: rgba(255,255,255,0.55); position: relative; z-index: 1; max-width: 440px; line-height: 1.65; margin-bottom: clamp(20px,3vh,36px); }
+.k-thanks-restart {
+  padding: clamp(11px,1.5vh,16px) clamp(32px,4vw,56px);
+  background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.18); border-radius: 5px;
+  font-size: clamp(9px,1.1vw,12px); font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(255,255,255,0.75); cursor: pointer; font-family: 'Montserrat', sans-serif;
+  position: relative; z-index: 1; transition: all .2s;
+}
+.k-thanks-restart:hover { background: rgba(255,255,255,0.18); color: #fff; }
+
+/* Kiosk nav buttons */
+.kiosk-nav { display: flex; justify-content: center; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.kiosk-nav button {
+  padding: 8px 18px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.65);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer;
+  font-family: 'Montserrat', sans-serif; transition: all .14s;
+}
+.kiosk-nav button:hover { background: rgba(255,255,255,0.14); color: #fff; }
+.kiosk-nav button.on { background: rgba(197,165,114,0.2); border-color: rgba(197,165,114,0.4); color: #c5a572; }
+</style>
+</head>
+<body>
+
+<!-- ── Navigation ──────────────────────────────────────────────────── -->
+<nav class="top-nav">
+  <div class="nav-brand">Elite · Feedback</div>
+  <button class="tab on" onclick="show('storefront-bar')">① Storefront Form</button>
+  <button class="tab" onclick="show('admin-index')">② Admin — Index</button>
+  <button class="tab" onclick="show('admin-detail')">③ Admin — Reviews</button>
+  <button class="tab" onclick="show('ipad')">④ iPad Kiosk</button>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ① STOREFRONT — Review bar (like "Notify Me")
+══════════════════════════════════════════════════════════════════════ -->
+<div id="storefront-bar" class="pg on">
+  <div class="pg-title">Storefront — Review Bar on Product Page</div>
+  <div class="pg-sub">Styled like the existing "NOTIFY ME" bar. Collapsed by default, expands on tap. Placed below the accordion sections.</div>
+
+  <div class="panels">
+    <!-- Desktop -->
+    <div>
+      <div class="panel-label">Desktop — product page (scrolled to review section)</div>
+      <div class="chrome-d">
+        <div class="chrome-d-bar">
+          <div class="chrome-d-bar-logo">elite</div>
+          <div class="chrome-d-bar-nav">
+            <span>HOME</span><span>COLLECTION</span><span>OUR STORY</span><span>CONTACT</span>
+          </div>
+          <div class="chrome-d-bar-icons">🔍 EN عربي 🛒</div>
+        </div>
+
+        <div class="ep">
+          <div class="ep-breadcrumb">COLLECTION <span>›</span> <strong>MISSTITCH OSTRICH</strong></div>
+
+          <div class="ep-pdp">
+            <!-- Gallery -->
+            <div>
+              <div class="ep-gallery">
+                <img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80" alt="Product" onerror="this.style.display='none';this.parentNode.style.fontSize='48px'"/>
+                <button class="ep-gallery-arrow prev">‹</button>
+                <button class="ep-gallery-arrow next">›</button>
+              </div>
+              <div class="ep-thumbs">
+                <div class="ep-thumb active"><img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=80&q=60" alt="" onerror="this.style.display='none'"/></div>
+                <div class="ep-thumb"><img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=80&q=60" alt="" onerror="this.style.display='none'"/></div>
+                <div class="ep-thumb"></div>
+                <div class="ep-thumb"></div>
+                <div class="ep-thumb"></div>
+              </div>
+            </div>
+
+            <!-- Details -->
+            <div class="ep-details">
+              <div class="ep-name">MisStitch Ostrich</div>
+              <div class="ep-price">QAR 1,080</div>
+              <div class="ep-desc">A statement of understated authority. The MisStitch Ostrich is individually shaped on a hand-carved wooden last, requiring 48 hours of continuous attention from a single master artisan.</div>
+
+              <div class="ep-section-label">SELECT COLOR</div>
+              <div class="ep-colors">
+                <div class="ep-swatch active" style="background:#7c5a30;"></div>
+              </div>
+
+              <div class="ep-qty-row">
+                <div class="ep-section-label" style="margin-bottom:0">QTY</div>
+                <div class="ep-qty-btns">
+                  <button class="ep-qty-btn">−</button>
+                  <div class="ep-qty-val">1</div>
+                  <button class="ep-qty-btn">+</button>
+                </div>
+              </div>
+
+              <!-- Accordions -->
+              <div class="ep-accord">
+                <div class="ep-accord-row">MATERIAL & CARE <span>+</span></div>
+                <div class="ep-accord-row">DELIVERY & PACKAGING <span>+</span></div>
+                <div class="ep-accord-row">SIZING & FIT <span>+</span></div>
+              </div>
+
+              <!-- NOTIFY ME -->
+              <button class="ep-notify-btn" style="margin-top:14px;">
+                <span>NOTIFY ME</span>
+                <span class="right">SIZE —</span>
+              </button>
+
+              <!-- ★ REVIEW BAR ★ -->
+              <div class="ep-review-bar">
+                <button class="ep-review-trigger" onclick="toggleReview('d')">
+                  <div class="ep-review-trigger-left">
+                    <div class="ep-review-trigger-diamond">★</div>
+                    <div class="ep-review-trigger-text">
+                      <div class="ep-review-trigger-title">Worn it? Tell us your story</div>
+                      <div class="ep-review-trigger-sub">Takes 60 seconds · stays completely private</div>
+                    </div>
+                  </div>
+                  <div class="ep-review-trigger-arrow" id="arr-d">▾</div>
+                </button>
+
+                <div class="ep-review-body" id="rbody-d">
+                  <div class="ep-review-divider"></div>
+
+                  <div class="ep-stars-label">Rate this product (optional)</div>
+                  <div class="ep-stars" id="dstars">
+                    <span class="ep-star on" onclick="rateD(1)">★</span>
+                    <span class="ep-star on" onclick="rateD(2)">★</span>
+                    <span class="ep-star on" onclick="rateD(3)">★</span>
+                    <span class="ep-star on" onclick="rateD(4)">★</span>
+                    <span class="ep-star" onclick="rateD(5)">★</span>
+                  </div>
+
+                  <div class="ep-field">
+                    <label class="ep-field-label">Your feedback <span style="color:#b8924a">*</span></label>
+                    <textarea class="ep-textarea" placeholder="Fit, quality, comfort, style — anything helps…" maxlength="600"></textarea>
+                  </div>
+
+                  <button class="ep-contact-toggle" id="ctog-d" onclick="toggleContact('d')">
+                    ◇ &nbsp;Add your contact details
+                    <span class="arr">▾</span>
+                  </button>
+                  <div class="ep-contact-fields" id="cfields-d">
+                    <div class="ep-two-col" style="margin-bottom:10px;">
+                      <div class="ep-field">
+                        <label class="ep-field-label">Name (optional)</label>
+                        <input class="ep-input" placeholder="Your name"/>
+                      </div>
+                      <div class="ep-field">
+                        <label class="ep-field-label">Email (optional)</label>
+                        <input class="ep-input" type="email" placeholder="your@email.com"/>
+                      </div>
+                    </div>
+                    <div class="ep-field">
+                      <label class="ep-field-label">Phone (optional)</label>
+                      <input class="ep-input" type="tel" placeholder="+974 XXXX XXXX"/>
+                    </div>
+                  </div>
+
+                  <button class="ep-submit">Submit Feedback →</button>
+                </div>
+              </div><!-- /review bar -->
+
+            </div><!-- /details -->
+          </div><!-- /pdp grid -->
+        </div><!-- /ep -->
+      </div><!-- /chrome-d -->
+    </div>
+
+    <!-- Mobile -->
+    <div>
+      <div class="panel-label">Mobile — 390px</div>
+      <div class="chrome-m-wrap">
+        <div class="chrome-m">
+          <div class="chrome-m-bar">
+            <div class="chrome-m-logo">elite</div>
+            <div class="chrome-m-icons">🔍 🛒 —</div>
+          </div>
+          <div class="mp">
+            <div class="mp-gallery">
+              <img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80" alt="" style="width:65%;object-fit:contain;" onerror="this.style.display='none'"/>
+            </div>
+            <div class="mp-thumbs">
+              <div class="mp-thumb active"></div>
+              <div class="mp-thumb"></div>
+              <div class="mp-thumb"></div>
+              <div class="mp-thumb"></div>
+              <div class="mp-thumb"></div>
+            </div>
+            <div class="mp-content">
+              <div class="mp-name">MisStitch Ostrich</div>
+              <div class="mp-price">QAR 1,080</div>
+              <div class="mp-desc">A statement of understated authority, shaped on a hand-carved wooden last.</div>
+              <div class="mp-label">SELECT COLOR</div>
+              <div style="display:flex;gap:7px;margin-bottom:16px;"><div style="width:26px;height:26px;border-radius:50%;background:#7c5a30;box-shadow:0 0 0 2px #eee9df,0 0 0 4px #b8924a;"></div></div>
+              <div class="mp-qty">
+                <div class="mp-label" style="margin-bottom:0">QTY</div>
+                <div class="mp-qty-ctrl">
+                  <button class="mp-qty-btn">−</button>
+                  <div class="mp-qty-v">1</div>
+                  <button class="mp-qty-btn">+</button>
+                </div>
+              </div>
+              <div class="mp-accord">
+                <div class="mp-accord-row">MATERIAL & CARE <span>+</span></div>
+                <div class="mp-accord-row">DELIVERY & PACKAGING <span>+</span></div>
+                <div class="mp-accord-row">SIZING & FIT <span>+</span></div>
+              </div>
+              <button class="mp-notify">NOTIFY ME <span class="right">SIZE —</span></button>
+
+              <!-- ★ MOBILE REVIEW BAR ★ -->
+              <div class="mp-review-bar">
+                <button class="mp-review-trigger" onclick="toggleReview('m')">
+                  <div class="mp-review-trigger-left">
+                    <div class="mp-review-diamond">★</div>
+                    <div>
+                      <div class="mp-review-title">Worn it? Tell us your story</div>
+                      <div class="mp-review-sub">60 seconds · stays private</div>
+                    </div>
+                  </div>
+                  <div class="mp-review-arrow" id="arr-m">▾</div>
+                </button>
+
+                <div class="mp-review-body" id="rbody-m">
+                  <div class="mp-review-div"></div>
+                  <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8a7a62;margin-bottom:8px;text-align:center;">Rate this product (optional)</div>
+                  <div class="mp-stars" id="mstars">
+                    <span class="mp-star on" onclick="rateM(1)">★</span>
+                    <span class="mp-star on" onclick="rateM(2)">★</span>
+                    <span class="mp-star on" onclick="rateM(3)">★</span>
+                    <span class="mp-star on" onclick="rateM(4)">★</span>
+                    <span class="mp-star" onclick="rateM(5)">★</span>
+                  </div>
+                  <div class="mp-field">
+                    <label class="mp-field-label">Your feedback <span style="color:#b8924a">*</span></label>
+                    <textarea class="mp-textarea" placeholder="Fit, quality, style…"></textarea>
+                  </div>
+                  <button class="mp-contact-toggle">◇ &nbsp;Add contact details (optional) ▾</button>
+                  <div style="display:none;" id="mp-cfields">
+                    <div class="mp-field"><label class="mp-field-label">Name</label><input class="mp-input" placeholder="Your name"/></div>
+                    <div class="mp-field"><label class="mp-field-label">Email</label><input class="mp-input" placeholder="your@email.com"/></div>
+                    <div class="mp-field"><label class="mp-field-label">Phone</label><input class="mp-input" placeholder="+974 XXXX XXXX"/></div>
+                  </div>
+                  <button class="mp-submit">Submit Feedback →</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ② ADMIN — Index
+══════════════════════════════════════════════════════════════════════ -->
+<div id="admin-index" class="pg">
+  <div class="pg-title">Admin Portal — Feedback Index</div>
+  <div class="pg-sub">New "Feedback" page in the admin sidebar. Stats summary + list of products sorted by latest review.</div>
+  <div class="panels">
+    <div>
+      <div class="panel-label">Desktop</div>
+      <div class="chrome-d" style="background:var(--abg)">
+        <div class="a-shell">
+          <aside class="a-sidebar">
+            <div class="a-sidebar-brand">ELITE</div>
+            <div class="a-nav">⊞ Dashboard</div>
+            <div class="a-nav">◈ Catalog</div>
+            <div class="a-nav">◇ Collections</div>
+            <div class="a-nav">◉ Storefront</div>
+            <div class="a-nav">≡ Orders</div>
+            <div class="a-nav">◎ Customers</div>
+            <div class="a-nav on">★ Feedback</div>
+            <div class="a-nav">⚙ Settings</div>
+          </aside>
+          <main class="a-main">
+            <div class="a-page-h">
+              <div class="a-page-title">Customer Feedback</div>
+              <div class="a-page-sub">Private — collected from storefront visitors, never shown publicly</div>
+            </div>
+            <div class="a-stats">
+              <div class="a-stat"><div class="a-stat-v">47</div><div class="a-stat-l">Total Reviews</div><div class="a-stat-s">+8 this week</div></div>
+              <div class="a-stat"><div class="a-stat-v" style="color:#f59e0b">★ 4.3</div><div class="a-stat-l">Average Rating</div><div class="a-stat-s">Across all products</div></div>
+              <div class="a-stat"><div class="a-stat-v">8</div><div class="a-stat-l">Products</div><div class="a-stat-s">With feedback</div></div>
+            </div>
+            <div class="a-card">
+              <div class="a-card-h">
+                <div><div class="a-card-title">Products with Feedback</div><div class="a-card-sub">Click any row to see all reviews for that product</div></div>
+              </div>
+              <div class="a-row"><div class="a-img">👟</div><div class="a-info"><div class="a-name">MisStitch Ostrich</div><div class="a-meta"><span class="a-stars-g">★★★★</span><span class="a-stars-e">★</span> 4.4 avg</div></div><span class="badge badge-g">12 reviews</span><span class="badge badge-a">2d ago</span><span class="a-arrow">›</span></div>
+              <div class="a-row"><div class="a-img">👟</div><div class="a-info"><div class="a-name">Brown Leather Sandals</div><div class="a-meta"><span class="a-stars-g">★★★★★</span> 5.0 avg</div></div><span class="badge badge-g">8 reviews</span><span class="badge badge-a">5d ago</span><span class="a-arrow">›</span></div>
+              <div class="a-row"><div class="a-img">👞</div><div class="a-info"><div class="a-name">Classic Oxford — Midnight</div><div class="a-meta"><span class="a-stars-g">★★★</span><span class="a-stars-e">★★</span> 3.1 avg</div></div><span class="badge badge-g">6 reviews</span><span class="badge badge-a">1w ago</span><span class="a-arrow">›</span></div>
+              <div class="a-row" style="opacity:.5"><div class="a-img">🥿</div><div class="a-info"><div class="a-name">Camel Leather Loafer</div><div class="a-meta"><span class="a-stars-g">★★★★</span><span class="a-stars-e">★</span> 4.2 avg</div></div><span class="badge badge-g">4 reviews</span><span class="badge badge-a">2w ago</span><span class="a-arrow">›</span></div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel-label">Mobile</div>
+      <div class="chrome-m-wrap"><div class="chrome-m" style="background:var(--abg)">
+        <div class="am-bar"><div><div class="am-bar-title">Customer Feedback</div><div class="am-bar-sub">Private — not shown publicly</div></div></div>
+        <div class="am-body">
+          <div class="am-stats">
+            <div class="am-stat"><div class="am-stat-v">47</div><div class="am-stat-l">Reviews</div></div>
+            <div class="am-stat"><div class="am-stat-v" style="color:#f59e0b;font-size:17px;">★ 4.3</div><div class="am-stat-l">Avg Rating</div></div>
+          </div>
+          <div style="font-size:9px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:var(--am);margin-bottom:10px;">Products with reviews</div>
+          <div class="am-card"><div class="am-card-img">👟</div><div style="flex:1"><div class="am-card-name">MisStitch Ostrich</div><div class="am-card-stars">★★★★<span style="color:#e5e7eb">★</span> 4.4</div><div class="am-card-meta">12 reviews · 2 days ago</div></div><span class="am-arr">›</span></div>
+          <div class="am-card"><div class="am-card-img">👟</div><div style="flex:1"><div class="am-card-name">Brown Leather Sandals</div><div class="am-card-stars">★★★★★ 5.0</div><div class="am-card-meta">8 reviews · 5 days ago</div></div><span class="am-arr">›</span></div>
+          <div class="am-card"><div class="am-card-img">👞</div><div style="flex:1"><div class="am-card-name">Classic Oxford — Midnight</div><div class="am-card-stars">★★★<span style="color:#e5e7eb">★★</span> 3.1</div><div class="am-card-meta">6 reviews · 1 week ago</div></div><span class="am-arr">›</span></div>
+          <div class="am-card"><div class="am-card-img">🥿</div><div style="flex:1"><div class="am-card-name">Camel Leather Loafer</div><div class="am-card-stars">★★★★<span style="color:#e5e7eb">★</span> 4.2</div><div class="am-card-meta">4 reviews · 2 weeks ago</div></div><span class="am-arr">›</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ③ ADMIN — Detail page
+══════════════════════════════════════════════════════════════════════ -->
+<div id="admin-detail" class="pg">
+  <div class="pg-title">Admin Portal — Product Reviews Detail</div>
+  <div class="pg-sub">All reviews for one product. Copy email for follow-up. Delete unwanted entries.</div>
+  <div class="panels">
+    <div>
+      <div class="panel-label">Desktop</div>
+      <div class="chrome-d" style="background:var(--abg)">
+        <div class="a-shell">
+          <aside class="a-sidebar">
+            <div class="a-sidebar-brand">ELITE</div>
+            <div class="a-nav">⊞ Dashboard</div><div class="a-nav">◈ Catalog</div><div class="a-nav">◇ Collections</div><div class="a-nav">◉ Storefront</div><div class="a-nav">≡ Orders</div><div class="a-nav">◎ Customers</div>
+            <div class="a-nav on">★ Feedback</div>
+            <div class="a-nav">⚙ Settings</div>
+          </aside>
+          <main class="a-main">
+            <button class="a-back">← Back to Feedback</button>
+            <div class="a-prod-sum"><div class="a-prod-sum-img">👟</div><div><div class="a-prod-sum-name">MisStitch Ostrich</div><div class="a-prod-sum-meta"><span style="color:#f59e0b">★★★★</span><span style="color:#d1d5db">★</span> &nbsp;<strong>4.4</strong> average &nbsp;·&nbsp; <strong>12</strong> reviews</div></div></div>
+            <div class="a-rev">
+              <div class="a-rev-head"><div><div class="a-rev-stars">★★★★★</div></div><div class="a-rev-date">Jun 10, 2026</div></div>
+              <div class="a-rev-title">"Perfect fit, elegant finish"</div>
+              <div class="a-rev-body">Ordered for a wedding in Doha. The leather quality exceeded every expectation — supple, well-finished, immaculate stitching. True to size.</div>
+              <div class="a-rev-foot">
+                <div class="a-contact-chip">◎ <strong>Ahmed Al-Mansoori</strong></div>
+                <div class="a-contact-chip">✉ <strong>ahmed@example.com</strong> <button class="a-copy-btn">Copy</button></div>
+                <div class="a-contact-chip">✆ <strong>+974 5512 3456</strong></div>
+                <button class="a-del">Delete</button>
+              </div>
+            </div>
+            <div class="a-rev">
+              <div class="a-rev-head"><div><div class="a-rev-stars">★★★★<span style="color:#d1d5db">★</span></div></div><div class="a-rev-date">Jun 8, 2026</div></div>
+              <div class="a-rev-title">"Great quality, fast delivery"</div>
+              <div class="a-rev-body">Very comfortable right out of the box. The camel leather is soft and has a premium feel. Sizing accurate.</div>
+              <div class="a-rev-foot">
+                <div class="a-contact-chip">◎ <strong>Sara K.</strong></div>
+                <div class="a-contact-chip">✉ <strong>sara.k@example.com</strong> <button class="a-copy-btn">Copy</button></div>
+                <button class="a-del">Delete</button>
+              </div>
+            </div>
+            <div class="a-rev">
+              <div class="a-rev-head"><div><div class="a-rev-stars">★★★<span style="color:#d1d5db">★★</span></div></div><div class="a-rev-date">Jun 5, 2026</div></div>
+              <div class="a-rev-body">Good quality but sole feels stiff initially. Needs a few days to break in. Overall satisfied.</div>
+              <div class="a-rev-foot">
+                <div class="a-contact-chip" style="color:var(--am);font-style:italic;">(anonymous — no contact details provided)</div>
+                <button class="a-del">Delete</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel-label">Mobile</div>
+      <div class="chrome-m-wrap"><div class="chrome-m" style="background:var(--abg)">
+        <div class="am-bar">
+          <span class="am-bar-back">‹</span>
+          <div><div class="am-bar-title">MisStitch Ostrich</div><div class="am-bar-sub"><span style="color:#f59e0b">★★★★</span><span style="color:rgba(255,255,255,0.2)">★</span> 4.4 avg · 12 reviews</div></div>
+        </div>
+        <div class="am-body">
+          <div class="am-rev"><div class="am-rev-top"><div class="am-rev-stars">★★★★★</div><div class="am-rev-date">Jun 10</div></div><div class="am-rev-title">"Perfect fit, elegant finish"</div><div class="am-rev-body">Leather quality exceeded expectations — supple, immaculate stitching.</div><div class="am-rev-foot"><div class="am-rev-contact"><strong>Ahmed Al-Mansoori</strong></div><div class="am-rev-contact">ahmed@example.com</div><div class="am-rev-contact">+974 5512 3456</div></div><button class="am-del">Delete review</button></div>
+          <div class="am-rev"><div class="am-rev-top"><div class="am-rev-stars">★★★★<span style="color:#e5e7eb">★</span></div><div class="am-rev-date">Jun 8</div></div><div class="am-rev-title">"Great quality"</div><div class="am-rev-body">Very comfortable right out of the box. Sizing accurate. Happy with the purchase.</div><div class="am-rev-foot"><div class="am-rev-contact"><strong>Sara K.</strong></div><div class="am-rev-contact">sara.k@example.com</div></div><button class="am-del">Delete review</button></div>
+          <div class="am-rev"><div class="am-rev-top"><div class="am-rev-stars">★★★<span style="color:#e5e7eb">★★</span></div><div class="am-rev-date">Jun 5</div></div><div class="am-rev-body">Good quality but sole feels stiff initially. Needs a few days.</div><div class="am-rev-foot"><div class="am-rev-contact" style="font-style:italic">Anonymous</div></div><button class="am-del">Delete review</button></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ④ IPAD KIOSK
+══════════════════════════════════════════════════════════════════════ -->
+<div id="ipad" class="pg">
+  <div class="pg-title">In-Store iPad Review Kiosk</div>
+  <div class="pg-sub">Fullscreen, touch-optimized. 5-step flow: Welcome → Rating → Feedback text → Contact details → Thank you. All tap targets ≥ 60px.</div>
+
+  <div class="kiosk-nav">
+    <button class="on" onclick="showKiosk('k1')">① Welcome</button>
+    <button onclick="showKiosk('k2')">② Rating</button>
+    <button onclick="showKiosk('k3')">③ Feedback</button>
+    <button onclick="showKiosk('k4')">④ Contact</button>
+    <button onclick="showKiosk('k5')">⑤ Thank you</button>
+  </div>
+  <div style="margin-top:24px;" class="ipad-wrap">
+    <div class="ipad-shell">
+
+      <!-- Screen 1 — Welcome -->
+      <div class="kiosk k-welcome on" id="k1">
+        <div class="k-welcome-bg"></div>
+        <div class="k-logo">elite</div>
+        <div class="k-logo-sub">Arabic Leather Artisans</div>
+        <div class="k-diamond-line"><span class="k-diamond">◇</span></div>
+        <div class="k-welcome-title">How was your experience<br/>with us today?</div>
+        <div class="k-welcome-sub">Your feedback helps our artisans refine every detail. It takes less than a minute and is completely private.</div>
+        <button class="k-start-btn" onclick="showKiosk('k2')">Share Your Feedback</button>
+        <div class="k-privacy">Your responses are private and used only by the Elite team</div>
+      </div>
+
+      <!-- Screen 2 — Rating -->
+      <div class="kiosk k-rating" id="k2">
+        <div class="k-step-header">
+          <div class="k-step-logo">elite</div>
+          <div class="k-step-progress">
+            <div class="k-step-dot on"></div><div class="k-step-dot on"></div>
+            <div class="k-step-dot"></div><div class="k-step-dot"></div>
+          </div>
+          <button class="k-step-skip" onclick="showKiosk('k3')">Skip →</button>
+        </div>
+        <div class="k-rating-content">
+          <div class="k-rate-eyebrow">Step 1 of 3</div>
+          <div class="k-rate-title">How would you rate<br/>your purchase?</div>
+          <div class="k-big-stars" id="kstars">
+            <span class="k-big-star on" onclick="rateK(1)">★</span>
+            <span class="k-big-star on" onclick="rateK(2)">★</span>
+            <span class="k-big-star on" onclick="rateK(3)">★</span>
+            <span class="k-big-star on" onclick="rateK(4)">★</span>
+            <span class="k-big-star" onclick="rateK(5)">★</span>
+          </div>
+          <div class="k-rate-labels">
+            <span class="k-rate-label">Poor</span>
+            <span class="k-rate-label">Excellent</span>
+          </div>
+          <div class="k-rate-hint">Tap a star to rate</div>
+          <button class="k-next-btn" onclick="showKiosk('k3')">Continue →</button>
+        </div>
+      </div>
+
+      <!-- Screen 3 — Feedback text -->
+      <div class="kiosk k-feedback" id="k3">
+        <div class="k-step-header">
+          <div class="k-step-logo">elite</div>
+          <div class="k-step-progress">
+            <div class="k-step-dot on"></div><div class="k-step-dot on"></div>
+            <div class="k-step-dot on"></div><div class="k-step-dot"></div>
+          </div>
+          <button class="k-step-skip" onclick="showKiosk('k4')">Skip →</button>
+        </div>
+        <div class="k-feedback-content">
+          <div class="k-feedback-title">Tell us more</div>
+          <div class="k-feedback-sub">What did you love? What could be better?</div>
+          <textarea class="k-textarea" placeholder="Fit, leather quality, service, packaging — anything you'd like us to know…" maxlength="600" oninput="updateCount(this)"></textarea>
+          <div class="k-char-count" id="kcount">0 / 600</div>
+          <div class="k-btns">
+            <button class="k-btn-outline" onclick="showKiosk('k4')">Skip</button>
+            <button class="k-btn-gold" onclick="showKiosk('k4')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen 4 — Contact -->
+      <div class="kiosk k-contact" id="k4">
+        <div class="k-step-header">
+          <div class="k-step-logo">elite</div>
+          <div class="k-step-progress">
+            <div class="k-step-dot on"></div><div class="k-step-dot on"></div>
+            <div class="k-step-dot on"></div><div class="k-step-dot on"></div>
+          </div>
+          <button class="k-step-skip" onclick="showKiosk('k5')">Skip →</button>
+        </div>
+        <div class="k-contact-content">
+          <div class="k-contact-title">May we reach out?</div>
+          <div class="k-contact-sub">Completely optional. We may contact you to follow up on your feedback<br/>or share an exclusive offer as a thank-you.</div>
+          <div class="k-contact-grid">
+            <div class="k-contact-field">
+              <div class="k-contact-label">Name</div>
+              <input class="k-contact-input" placeholder="Your name" type="text"/>
+            </div>
+            <div class="k-contact-field">
+              <div class="k-contact-label">Phone</div>
+              <input class="k-contact-input" placeholder="+974 XXXX XXXX" type="tel"/>
+            </div>
+            <div class="k-contact-field k-contact-full">
+              <div class="k-contact-label">Email</div>
+              <input class="k-contact-input" placeholder="your@email.com" type="email"/>
+            </div>
+          </div>
+          <div class="k-skip-note">◇ &nbsp;Your details are private and never shared with third parties</div>
+          <div class="k-btns">
+            <button class="k-btn-outline" onclick="showKiosk('k5')">Skip</button>
+            <button class="k-btn-gold" onclick="showKiosk('k5')">Submit Feedback →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen 5 — Thank you -->
+      <div class="kiosk k-thanks" id="k5">
+        <div class="k-thanks-bg"></div>
+        <div class="k-thanks-icon" style="position:relative;z-index:1;">✓</div>
+        <div class="k-thanks-title">Thank you</div>
+        <div class="k-thanks-sub">Your feedback has been recorded. Our artisans and team read every response personally — it helps us refine every detail of our craft.</div>
+        <button class="k-thanks-restart" onclick="showKiosk('k1')">New Response</button>
+      </div>
+
+    </div><!-- /ipad-shell -->
+  </div><!-- /ipad-wrap -->
+</div>
+
+<script>
+/* Tab switching */
+function show(id) {
+  document.querySelectorAll('.pg').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  const idx = ['storefront-bar','admin-index','admin-detail','ipad'].indexOf(id);
+  document.querySelectorAll('.tab')[idx].classList.add('on');
+}
+
+/* Review bar toggle */
+function toggleReview(v) {
+  const body = document.getElementById('rbody-' + v);
+  const arr  = document.getElementById('arr-' + v);
+  const open = body.classList.toggle('open');
+  arr.classList.toggle('open', open);
+}
+
+/* Star rating (desktop product) */
+let dRating = 4;
+function rateD(n) {
+  dRating = n;
+  document.querySelectorAll('#dstars .ep-star').forEach((s,i) => s.classList.toggle('on', i < n));
+}
+
+/* Star rating (mobile product) */
+let mRating = 4;
+function rateM(n) {
+  mRating = n;
+  document.querySelectorAll('#mstars .mp-star').forEach((s,i) => s.classList.toggle('on', i < n));
+}
+
+/* Contact toggle (desktop) */
+function toggleContact(v) {
+  const fields = document.getElementById('cfields-' + v);
+  const tog    = document.getElementById('ctog-' + v);
+  const open   = fields.style.display !== 'none';
+  fields.style.display = open ? 'none' : 'block';
+  tog && tog.classList.toggle('open', !open);
+}
+
+/* Kiosk screen */
+function showKiosk(id) {
+  document.querySelectorAll('.kiosk').forEach(k => k.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  const idx = ['k1','k2','k3','k4','k5'].indexOf(id);
+  document.querySelectorAll('.kiosk-nav button').forEach((b,i) => b.classList.toggle('on', i === idx));
+}
+
+/* Kiosk stars */
+let kRating = 4;
+function rateK(n) {
+  kRating = n;
+  document.querySelectorAll('#kstars .k-big-star').forEach((s,i) => s.classList.toggle('on', i < n));
+}
+
+/* Char count */
+function updateCount(el) {
+  document.getElementById('kcount').textContent = el.value.length + ' / 600';
+}
+</script>
+</body>
+</html>

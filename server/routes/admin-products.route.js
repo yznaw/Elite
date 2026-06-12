@@ -85,20 +85,26 @@ async function replaceVariants(client, tenantId, productId, variants) {
       ? Math.max(0, Math.round(Number(variant.costPrice) * 100))
       : null;
 
+    const colorText = String(variant.color || '').trim() || null;
+
     await client.query(
       `
         INSERT INTO product_variants (
           tenant_id, product_id, sku, size, color, material,
-          price_cents, cost_price_cents, stock_quantity, sort_order, is_active
+          price_cents, cost_price_cents, stock_quantity, sort_order, is_active,
+          color_ref_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true,
+          (SELECT id FROM ref_colors
+           WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($5))
+           LIMIT 1))
       `,
       [
         tenantId,
         productId,
         sku,
         String(variant.size || '').trim() || null,
-        String(variant.color || '').trim() || null,
+        colorText,
         String(variant.material || '').trim() || null,
         toCents(variant.price),
         costCents,
@@ -110,17 +116,21 @@ async function replaceVariants(client, tenantId, productId, variants) {
 }
 
 async function findOrCreateImageAsset(client, tenantId, url, index) {
+  // The Angular client normalises /uploads/ paths to /api/uploads/ for proxy
+  // routing, so strip that prefix before DB lookup to avoid duplicate assets.
+  const rawUrl = url.startsWith('/api/') ? url.slice(4) : url;
   const existing = await client.query(
     `
       SELECT id
       FROM media_assets
       WHERE tenant_id = $1
         AND kind = 'image'
-        AND (storage_url = $2 OR preview_url = $2)
+        AND (storage_url = $2 OR preview_url = $2
+             OR storage_url = $3 OR preview_url = $3)
       ORDER BY created_at
       LIMIT 1
     `,
-    [tenantId, url],
+    [tenantId, url, rawUrl],
   );
   if (existing.rowCount > 0) return existing.rows[0].id;
 
@@ -187,6 +197,44 @@ async function replaceImages(client, tenantId, productId, images, imageColors = 
     'UPDATE products SET primary_media_id = $1, updated_at = now() WHERE tenant_id = $2 AND id = $3',
     [mediaIds[0] || null, tenantId, productId],
   );
+
+  // Dual-write: also populate product_color_images pivot (migration 010).
+  // Falls back gracefully if the table doesn't exist yet on older environments.
+  await replaceColorImages(client, tenantId, productId, urls, colorsByUrl);
+}
+
+async function replaceColorImages(client, tenantId, productId, urls, colorsByUrl) {
+  try {
+    await client.query(
+      'DELETE FROM product_color_images WHERE tenant_id = $1 AND product_id = $2',
+      [tenantId, productId],
+    );
+
+    for (const [url, color] of Object.entries(colorsByUrl)) {
+      const colorKey = String(color).trim().toLowerCase();
+      if (!colorKey) continue;
+
+      const { rows } = await client.query(
+        `SELECT id FROM media_assets
+         WHERE tenant_id = $1 AND (storage_url = $2 OR preview_url = $2)
+         LIMIT 1`,
+        [tenantId, url],
+      );
+      if (!rows[0]) continue;
+
+      const sortOrder = urls.indexOf(url);
+      await client.query(
+        `INSERT INTO product_color_images (tenant_id, product_id, color, media_id, sort_order)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (product_id, color, sort_order)
+         DO UPDATE SET media_id = EXCLUDED.media_id`,
+        [tenantId, productId, colorKey, rows[0].id, sortOrder >= 0 ? sortOrder : 999],
+      );
+    }
+  } catch (err) {
+    // Non-fatal: pivot table may not exist on environments that haven't run migration 010 yet.
+    if (err.code !== '42P01') throw err; // 42P01 = undefined_table
+  }
 }
 
 async function replaceRecommendations(client, tenantId, productId, relatedProductIds) {
@@ -629,8 +677,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       metaTitle: req.body.metaTitle ?? existing.meta_title,
       metaDesc: req.body.metaDesc ?? existing.meta_desc,
       id: req.params.id,
+      nameAr: req.body.nameAr,
       variants: patchVariants,
       images: req.body.images,
+      imageColors: req.body.imageColors,
       relatedProductIds: req.body.relatedProductIds,
     };
 

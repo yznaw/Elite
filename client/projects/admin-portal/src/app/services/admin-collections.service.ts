@@ -10,6 +10,7 @@ export interface SaveCollectionPayload {
   productIds: string[];
   hidden: boolean;
   handle?: string;
+  parentId?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

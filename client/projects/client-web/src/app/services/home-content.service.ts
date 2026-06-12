@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { DEFAULT_HOME_CONTENT, HomeContentData } from '../models/home-content.model';
 
@@ -33,16 +33,38 @@ export class HomeContentService {
   private readonly apiBase = this.resolveApiBase();
   private readonly _contentData = signal<HomeContentData>(this.cloneContent(DEFAULT_HOME_CONTENT));
   private readonly _layoutSections = signal<HomeLayoutSection[]>(this.cloneLayout(DEFAULT_HOME_LAYOUT));
+  private readonly _previewToken = signal<string | null>(this.detectPreviewToken());
   private loadPromise: Promise<HomeContentData> | null = null;
 
   readonly contentData = this._contentData.asReadonly();
   readonly layoutSections = this._layoutSections.asReadonly();
+  /** Non-null when the storefront is rendering a preview draft. */
+  readonly previewToken = this._previewToken.asReadonly();
+  readonly isPreviewMode = computed(() => this._previewToken() !== null);
 
   async refresh(force = false): Promise<HomeContentData> {
+    const token = this._previewToken();
+
+    if (token) {
+      // Preview mode: never cache — always fetch the latest saved draft
+      // so re-opening preview always reflects the most recent Save Draft.
+      const bust = `&t=${Date.now()}`;
+      return firstValueFrom(
+        this.http.get<ApiResponse<HomeContentData>>(
+          `${this.apiBase}/storefront-content/draft?token=${encodeURIComponent(token)}${bust}`,
+        ),
+      )
+        .then((res) => {
+          if (res.data?.hero) this._contentData.set(this.normalizeContentImages(res.data));
+          return this._contentData();
+        })
+        .catch(() => this._contentData());
+    }
+
     if (force) this.loadPromise = null;
     if (this.loadPromise) return this.loadPromise;
 
-    // Append timestamp when force=true to bypass any residual HTTP cache
+    // Normal mode: load live content + layout
     const bust = force ? `?t=${Date.now()}` : '';
 
     this.loadPromise = Promise.allSettled([
@@ -66,6 +88,13 @@ export class HomeContentService {
       .catch(() => this._contentData());
 
     return this.loadPromise;
+  }
+
+  private detectPreviewToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('preview');
+    return token && token.length > 0 ? token : null;
   }
 
   private resolveApiBase(): string {

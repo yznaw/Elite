@@ -1,7 +1,7 @@
 # 08 — Database & API Implementation
 
 > **Audience:** Backend developers, frontend developers wiring pages to API  
-> **Last updated:** June 2026 — StorageService tenant-scoped localStorage, StoreConfigService, migration 004 (meta_title/meta_desc), production FK bug fixes (bulk-delete + product save)
+> **Last updated:** June 2026 — Migration 010: color-image pivot table, swatch_image_url, color_ref_id FK on variants; Phase 2 API: usage guards, rename propagation, replaceColorImages() dual-write
 
 ---
 
@@ -25,6 +25,9 @@ The implementation added:
 
 **June 2026 — Feature batch additions:**
 
+- Migration `007_sub_collections.sql` — `parent_id uuid REFERENCES collections(id) ON DELETE SET NULL` added to `collections`. Enables parent-child hierarchy. Server validates cycle-safety (`resolveParentId` walks ancestor chain). `GET/POST/PATCH /api/admin/collections` now read/write `parentId`. Angular `Collection` model has `parentId?: string | null`. Collections page shows hierarchy groups (chips); drawer has parent picker; product drawer Organization section shows indented sub-collection checkboxes.
+- Product reorder inside collections: list-view mode added to collection drawer (grid/list toggle). List view has drag handles + ↑/↓ buttons. `sort_order` persisted via existing `replaceProducts` helper.
+- Icon system: added `collections` (envelope stack), `reference` (tag/label), `hierarchy` (nested list) icons to `icon.component.ts`. Sidebar/bottom-nav icons corrected — `/collections` now uses `collections`, `/reference` now uses `reference`. Section icons in product/collection/order drawers corrected.
 - Migration `006_cost_price.sql` — `cost_price_cents integer` (nullable) added to `product_variants`. CHECK constraint `product_variants_cost_nonneg`.
 - `nameAr` (Arabic product name) stored in `product_translations (locale='ar')`. Upserted on every product save via `admin-products.route.js`. Returned via LEFT JOIN in all product SELECT queries.
 - Stock aggregation: when variants are present, `products.stock_quantity` is auto-computed as `SUM(variant.stock_quantity)` on every save. The product-level stock input is hidden in the admin UI when variants exist.
@@ -64,6 +67,10 @@ The implementation added:
 | `server/db/migrations/004_product_seo_fields.sql` | `ALTER TABLE products ADD COLUMN meta_title text, meta_desc text` |
 | `server/db/migrations/005_team_invitations.sql` | `team_invitations` table — UUID PK, `token_hash` TEXT, 48h `expires_at`, single-use |
 | `server/db/migrations/006_cost_price.sql` | `ALTER TABLE product_variants ADD COLUMN cost_price_cents integer` (nullable) + CHECK constraint |
+| `server/db/migrations/007_sub_collections.sql` | `ALTER TABLE collections ADD COLUMN parent_id uuid REFERENCES collections(id) ON DELETE SET NULL` + index |
+| `server/db/migrations/009_product_reviews.sql` | `product_reviews` table — rating 1–5, optional contact, indexed by `(tenant_id, product_id, created_at DESC)` |
+| `server/db/migrations/010_color_images.sql` | **Color-image pivot:** `CREATE TABLE product_color_images (tenant_id, product_id, color text, media_id FK, sort_order)` — replaces fragile JSON metadata color linking. `ALTER TABLE ref_colors ADD COLUMN swatch_image_url text` (nullable — for textured leather thumbnail). `ALTER TABLE product_variants ADD COLUMN color_ref_id uuid REFERENCES ref_colors(id) ON DELETE SET NULL` + backfill. |
+| `server/db/ensure-migrations.js` | Idempotent `IF NOT EXISTS` runner — includes all migrations up to 010. Called on every server boot. |
 | `server/db/client.js` | Shared `pg` connection pool |
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
 | `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |

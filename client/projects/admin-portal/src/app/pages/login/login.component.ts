@@ -85,7 +85,11 @@ import { LocaleService } from '../../services/locale.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      /* Safe-area insets for iPhone notch / Dynamic Island */
+      padding: calc(env(safe-area-inset-top, 0px) + 24px)
+               calc(env(safe-area-inset-right, 0px) + 24px)
+               calc(env(safe-area-inset-bottom, 0px) + 24px)
+               calc(env(safe-area-inset-left, 0px) + 24px);
       background:
         radial-gradient(circle at 30% 20%, rgba(2, 70, 56, 0.08), transparent 55%),
         radial-gradient(circle at 80% 80%, rgba(193, 154, 91, 0.12), transparent 55%),

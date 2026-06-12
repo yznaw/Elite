@@ -40,6 +40,7 @@ export interface Collection {
   imageUrl: string | null;
   productIds: string[];
   hidden: boolean;
+  parentId?: string | null;
   system?: boolean;
 }
 

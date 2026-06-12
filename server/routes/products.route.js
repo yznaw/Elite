@@ -21,6 +21,14 @@ async function getDefaultImage(client, tenantId) {
 }
 const COLOR_IMAGES_SELECT = `
           COALESCE(
+            -- Prefer pivot table written by migration 010 + replaceColorImages()
+            (
+              SELECT jsonb_object_agg(pci.color, ${pdpUrl('m')})
+              FROM product_color_images pci
+              JOIN media_assets m ON m.id = pci.media_id
+              WHERE pci.product_id = p.id
+            ),
+            -- Fall back to legacy media_assets.metadata->>'color' JSON path
             (
               SELECT jsonb_object_agg(color_key, url)
               FROM (

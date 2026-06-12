@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { firstValueFrom } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
@@ -60,38 +61,87 @@ interface StorefrontContent {
   template: `
   <div class="page-fade sf-shell">
 
-    <!-- ── Single unified action bar (Shopify-style) ─────────── -->
-    <div class="pub-bar" [class.pub-bar--content-dirty]="contentDirty()">
+    <!-- ── Action bar ──────────────────────────────────────────── -->
+    <div class="pub-bar"
+         [class.pub-bar--dirty]="contentDirty()"
+         [class.pub-bar--draft]="draftUnpublished() && !contentDirty()">
+
+      <!-- Left: title + status chip -->
       <div class="pub-bar__left">
-        <div class="pub-bar__title">Storefront Editor</div>
+        <span class="pub-bar__title">Storefront Editor</span>
         @if (contentDirty()) {
-          <span class="pub-bar__badge pub-bar__badge--content">Content unsaved</span>
+          <span class="pub-bar__chip pub-bar__chip--unsaved">Unsaved edits</span>
+        } @else if (draftUnpublished()) {
+          <span class="pub-bar__chip pub-bar__chip--draft">Draft — not live</span>
         } @else if (storefront.hasUnpublishedChanges()) {
-          <span class="pub-bar__badge pub-bar__badge--layout">Layout unpublished</span>
+          <span class="pub-bar__chip pub-bar__chip--layout">Layout unpublished</span>
         }
       </div>
+
+      <!-- Right: actions -->
       <div class="pub-bar__actions">
-        <button class="btn btn-outline btn-sm" type="button" (click)="viewStorefront()">
-          <ap-icon name="eye" [size]="13"/> Preview
+
+        <!-- Preview — always shown -->
+        <button class="pub-bar__btn pub-bar__btn--ghost" type="button"
+                [disabled]="generatingToken()" (click)="openPreview()"
+                title="Open a fresh preview tab showing the current saved draft">
+          @if (generatingToken()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="eye" [size]="14"/> }
+          <span class="pub-bar__btn-label">Preview</span>
         </button>
-        <!-- Content actions — appear only when dirty -->
+
+        <!-- Dirty state: Discard edits + Save Draft -->
         @if (contentDirty()) {
           <div class="pub-bar__divider"></div>
-          <button class="btn btn-ghost btn-sm pub-bar__discard" type="button"
-                  [disabled]="savingContent()" (click)="discardContent()">
-            Discard
+          <button class="pub-bar__btn pub-bar__btn--discard" type="button"
+                  [disabled]="savingDraft()" (click)="discardContent()"
+                  title="Discard unsaved edits and reload last saved state">
+            <ap-icon name="x" [size]="13"/>
+            <span class="pub-bar__btn-label">Discard edits</span>
           </button>
-          <button class="btn btn-primary btn-sm" type="button"
-                  [disabled]="savingContent()" (click)="saveContent()">
-            @if (savingContent()) { <ap-spinner [size]="12"/> Saving… } @else { Save content }
+          <button class="pub-bar__btn pub-bar__btn--save" type="button"
+                  [disabled]="savingDraft()" (click)="saveDraftContent()">
+            @if (savingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="edit" [size]="13"/> }
+            <span class="pub-bar__btn-label">@if (savingDraft()) { Saving… } @else { Save Draft }</span>
           </button>
         }
-        <!-- Layout publish — always available -->
-        <button class="btn btn-gold btn-sm" type="button" [disabled]="publishing()" (click)="publish()">
-          @if (publishing()) { <ap-spinner [size]="12"/> Publishing… } @else { Publish Layout }
+
+        <!-- Draft saved state: Revert to live + Publish Content -->
+        @if (draftUnpublished() && !contentDirty()) {
+          <div class="pub-bar__divider"></div>
+          <button class="pub-bar__btn pub-bar__btn--revert" type="button"
+                  [disabled]="revertingDraft()" (click)="revertToLive()"
+                  title="Discard this draft and go back to the published live content">
+            @if (revertingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="x" [size]="13"/> }
+            <span class="pub-bar__btn-label">Revert to live</span>
+          </button>
+          <button class="pub-bar__btn pub-bar__btn--publish-content" type="button"
+                  [disabled]="publishingContent()" (click)="publishContent()">
+            @if (publishingContent()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="check" [size]="13"/> }
+            <span class="pub-bar__btn-label">@if (publishingContent()) { Publishing… } @else { Publish Content }</span>
+          </button>
+        }
+
+        <div class="pub-bar__divider pub-bar__divider--layout"></div>
+
+        <!-- Publish layout — always available -->
+        <button class="pub-bar__btn pub-bar__btn--layout" type="button"
+                [disabled]="publishing()" (click)="publish()"
+                title="Publish section order and visibility to the live storefront">
+          @if (publishing()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="sync" [size]="13"/> }
+          <span class="pub-bar__btn-label">@if (publishing()) { Publishing… } @else { Publish Layout }</span>
         </button>
+
       </div>
     </div>
+
+    <!-- Draft saved hint: tells user to reopen preview tab -->
+    @if (showPreviewHint()) {
+      <div class="preview-hint-bar">
+        <ap-icon name="eye" [size]="12"/>
+        Draft saved — click <strong>Preview</strong> to open a fresh tab with your latest changes.
+        <button class="preview-hint-dismiss" type="button" (click)="showPreviewHint.set(false)">✕</button>
+      </div>
+    }
 
     <!-- ── Page tabs ───────────────────────────────────────── -->
     <div class="page-tabs">
@@ -210,7 +260,7 @@ interface StorefrontContent {
                   <button class="callouts-toggle" type="button" (click)="toggleSlideCallouts(i)"
                           [attr.aria-expanded]="expandedSlide() === i">
                     <span class="callouts-toggle__icon">
-                      <ap-icon name="catalog" [size]="12"/>
+                      <ap-icon name="list" [size]="12"/>
                     </span>
                     <span class="callouts-toggle__label">Feature Callouts</span>
                     <span class="callouts-toggle__count">{{ item.callouts.length }}</span>
@@ -304,7 +354,7 @@ interface StorefrontContent {
                   }
                 </div>
               } @else {
-                <div class="feat-empty mb-16"><ap-icon name="catalog" [size]="20"/><span>No collections featured yet.</span></div>
+                <div class="feat-empty mb-16"><ap-icon name="collections" [size]="20"/><span>No collections featured yet.</span></div>
               }
               @if (showCollectionPicker()) {
                 <div class="col-picker mb-16">
@@ -318,7 +368,7 @@ interface StorefrontContent {
                       @for (col of filteredPickerCollections(); track col.id) {
                         <div class="col-picker-row" [class.selected]="featuredRefs().includes(col.id)" (click)="toggleFeatured(col.id)">
                           @if (col.imageUrl) { <img [src]="col.imageUrl" [alt]="col.title" class="col-picker-img"/> }
-                          @else { <div class="col-picker-img-empty"><ap-icon name="catalog" [size]="14"/></div> }
+                          @else { <div class="col-picker-img-empty"><ap-icon name="collections" [size]="14"/></div> }
                           <div class="col-picker-info"><div class="col-picker-name">{{ col.title }}</div><div class="col-picker-path mono">/collection/{{ col.handle }}</div></div>
                           <div class="col-picker-check" [class.on]="featuredRefs().includes(col.id)"></div>
                         </div>
@@ -867,6 +917,91 @@ interface StorefrontContent {
 
     </div>
   }
+
+  <!-- ══════════════════════════════════════════════════════════════
+       PREVIEW MODAL — fullscreen iframe, Shopify-style
+  ═══════════════════════════════════════════════════════════════ -->
+  @if (previewOpen()) {
+    <div class="pv-modal" role="dialog" aria-label="Storefront preview">
+
+      <!-- Toolbar -->
+      <div class="pv-toolbar">
+        <button class="pv-back" type="button" (click)="closePreview()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          <span>Back to editing</span>
+        </button>
+
+        <div class="pv-device-group">
+          <button class="pv-device-btn" [class.active]="previewDevice() === 'desktop'"
+                  (click)="previewDevice.set('desktop')" title="Desktop (full width)">
+            <svg width="16" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+            </svg>
+            Desktop
+          </button>
+          <button class="pv-device-btn" [class.active]="previewDevice() === 'mobile'"
+                  (click)="previewDevice.set('mobile')" title="Mobile (393 px — iPhone 14)">
+            <svg width="11" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/>
+            </svg>
+            Mobile
+          </button>
+        </div>
+
+        <div class="pv-toolbar-right">
+          <button class="pv-newtab" type="button" (click)="openPreviewInNewTab()" title="Open in a new browser tab">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            New tab
+          </button>
+          @if (previewDevice() === 'mobile') {
+            <span class="pv-size-badge">393 × 852</span>
+          }
+        </div>
+      </div>
+
+      <!-- Stage -->
+      <div class="pv-stage" [class.pv-stage--mobile]="previewDevice() === 'mobile'">
+
+        @if (previewDevice() === 'desktop') {
+          <!-- Desktop: full-width iframe -->
+          <iframe class="pv-iframe-desktop"
+                  [src]="previewSafeUrl()"
+                  title="Storefront preview"
+                  allow="same-origin"></iframe>
+        }
+
+        @if (previewDevice() === 'mobile') {
+          <!-- Mobile: realistic phone frame -->
+          <div class="pv-phone">
+            <!-- Side buttons (decorative) -->
+            <div class="pv-phone__side-l">
+              <div class="pv-phone__btn"></div>
+              <div class="pv-phone__btn"></div>
+              <div class="pv-phone__btn"></div>
+            </div>
+            <div class="pv-phone__side-r">
+              <div class="pv-phone__btn pv-phone__btn--power"></div>
+            </div>
+            <!-- Screen -->
+            <div class="pv-phone__screen">
+              <!-- Dynamic island -->
+              <div class="pv-phone__island" aria-hidden="true"></div>
+              <!-- Storefront iframe -->
+              <iframe class="pv-phone__iframe"
+                      [src]="previewSafeUrl()"
+                      title="Storefront mobile preview"
+                      allow="same-origin"></iframe>
+              <!-- Home indicator -->
+              <div class="pv-phone__home" aria-hidden="true"></div>
+            </div>
+          </div>
+        }
+
+      </div>
+    </div>
+  }
   `,
   styles: [`
     /* Height tokens — change here and sticky tops update automatically */
@@ -876,81 +1011,213 @@ interface StorefrontContent {
       padding-bottom: 60px;
     }
 
-    /* ── Unified storefront action bar ─────────────────────────── */
-    /*  Always sticky at the top of the scroll area — needs strong
-        depth cues so scrolled content doesn't bleed through it.     */
+    /* ── Action bar ─────────────────────────────────────────────── */
     .pub-bar {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 28px;
-      height: 52px;
+      padding: 0 16px;
+      min-height: 52px;
       background: var(--surface);
-      /* Crisp 1 px separator + soft depth shadow so the bar always
-         "floats" above content as you scroll */
       border-bottom: 1.5px solid var(--border-2);
       box-shadow: 0 2px 12px rgba(0,0,0,0.07);
       position: sticky; top: 0; z-index: 40;
-      gap: 12px; flex-wrap: wrap;
-      transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
+      gap: 8px; flex-wrap: wrap;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
     }
+    @media (min-width: 640px) { .pub-bar { padding: 0 28px; } }
 
-    /* Content-dirty: green bar — Shopify-style contextual save */
-    .pub-bar--content-dirty {
+    /* State: dirty — green Shopify-style */
+    .pub-bar--dirty {
       background: var(--green);
-      border-bottom-color: rgba(0,0,0,0.12);
-      box-shadow: 0 4px 20px rgba(2,70,56,0.22);
+      border-bottom-color: rgba(0,0,0,0.10);
+      box-shadow: 0 4px 20px rgba(2,70,56,0.25);
     }
-    .pub-bar--content-dirty .pub-bar__title { color: #fff; }
+    .pub-bar--dirty .pub-bar__title { color: #fff; }
 
-    .pub-bar__left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .pub-bar__title { font-size: 14px; font-weight: 700; transition: color 0.2s; white-space: nowrap; }
-    .pub-bar__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    /* State: draft saved but not live — amber */
+    .pub-bar--draft {
+      background: #78350f;
+      border-bottom-color: rgba(0,0,0,0.10);
+      box-shadow: 0 4px 20px rgba(120,53,15,0.25);
+    }
+    .pub-bar--draft .pub-bar__title { color: #fef3c7; }
 
-    /* Status badges */
-    .pub-bar__badge {
-      font-size: 10px; font-weight: 700;
+    /* Left group */
+    .pub-bar__left {
+      display: flex; align-items: center; gap: 8px;
+      min-width: 0; flex-shrink: 0;
+      padding: 6px 0;
+    }
+    .pub-bar__title {
+      font-size: 13px; font-weight: 700;
+      transition: color 0.2s; white-space: nowrap;
+    }
+    @media (min-width: 480px) { .pub-bar__title { font-size: 14px; } }
+
+    /* Status chips */
+    .pub-bar__chip {
+      display: inline-flex; align-items: center;
+      font-size: 9px; font-weight: 700;
       letter-spacing: 0.06em; text-transform: uppercase;
-      padding: 3px 9px; border-radius: 99px;
+      padding: 3px 8px; border-radius: 99px;
       white-space: nowrap;
     }
-    .pub-bar__badge--content {
-      background: rgba(255,255,255,0.18);
-      color: rgba(255,255,255,0.92);
+    @media (min-width: 480px) { .pub-bar__chip { font-size: 10px; padding: 3px 9px; } }
+    .pub-bar__chip--unsaved {
+      background: rgba(255,255,255,0.18); color: rgba(255,255,255,0.92);
       border: 1px solid rgba(255,255,255,0.28);
     }
-    .pub-bar__badge--layout {
-      background: rgba(193,154,91,0.1);
-      color: var(--gold);
+    .pub-bar__chip--draft {
+      background: rgba(251,191,36,0.2); color: #fbbf24;
+      border: 1px solid rgba(251,191,36,0.35);
+    }
+    .pub-bar__chip--layout {
+      background: rgba(193,154,91,0.1); color: var(--gold);
       border: 1px solid rgba(193,154,91,0.28);
     }
 
-    /* Button overrides when bar is green */
-    .pub-bar--content-dirty .pub-bar__discard {
-      background: rgba(255,255,255,0.12);
-      border-color: rgba(255,255,255,0.3);
-      color: rgba(255,255,255,0.88);
+    /* Right action group */
+    .pub-bar__actions {
+      display: flex; align-items: center; gap: 4px;
+      flex-shrink: 0; padding: 6px 0;
+      flex-wrap: nowrap;
     }
-    .pub-bar--content-dirty .pub-bar__discard:hover {
-      background: rgba(239,68,68,0.22);
-      border-color: rgba(239,68,68,0.5);
-      color: #fff;
+
+    /* Generic pub-bar button */
+    .pub-bar__btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 10px;
+      font-size: 12px; font-weight: 600;
+      border-radius: 7px; border: 1.5px solid transparent;
+      cursor: pointer; white-space: nowrap;
+      transition: all 0.14s;
+      line-height: 1;
+      flex-shrink: 0;
     }
-    .pub-bar--content-dirty .btn-primary {
-      background: #fff; color: var(--green); font-weight: 700;
+    @media (min-width: 480px) { .pub-bar__btn { padding: 7px 13px; font-size: 13px; gap: 6px; } }
+
+    /* On mobile, hide text labels; show only on ≥ 480px */
+    .pub-bar__btn-label { display: none; }
+    @media (min-width: 480px) { .pub-bar__btn-label { display: inline; } }
+
+    /* Ghost (Preview) */
+    .pub-bar__btn--ghost {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.80);
     }
-    .pub-bar--content-dirty .btn-primary:hover { background: var(--gold-3); }
-    .pub-bar--content-dirty .btn-outline {
-      border-color: rgba(255,255,255,0.3);
+    .pub-bar--dirty .pub-bar__btn--ghost,
+    .pub-bar--draft .pub-bar__btn--ghost {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.25);
       color: rgba(255,255,255,0.85);
-      background: transparent;
     }
-    .pub-bar--content-dirty .btn-outline:hover {
-      border-color: rgba(255,255,255,0.65);
+    /* When bar is default (no state), ghost is grey */
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__btn--ghost {
+      background: transparent;
+      border-color: var(--border-2);
+      color: var(--ink-2);
+    }
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__btn--ghost:hover {
+      border-color: var(--green); color: var(--green);
+    }
+    .pub-bar--dirty .pub-bar__btn--ghost:hover,
+    .pub-bar--draft .pub-bar__btn--ghost:hover {
+      background: rgba(255,255,255,0.18); color: #fff;
+    }
+
+    /* Discard */
+    .pub-bar__btn--discard {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.80);
+    }
+    .pub-bar__btn--discard:hover {
+      background: rgba(239,68,68,0.25);
+      border-color: rgba(239,68,68,0.55);
       color: #fff;
     }
+
+    /* Save Draft */
+    .pub-bar__btn--save {
+      background: #fff;
+      border-color: rgba(255,255,255,0.5);
+      color: var(--green);
+      font-weight: 700;
+    }
+    .pub-bar__btn--save:hover { background: var(--gold-3); }
+
+    /* Revert to live (subtle danger-outline) */
+    .pub-bar__btn--revert {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.20);
+      color: rgba(255,255,255,0.70);
+    }
+    .pub-bar__btn--revert:hover {
+      background: rgba(239,68,68,0.20);
+      border-color: rgba(239,68,68,0.45);
+      color: #fff;
+    }
+
+    /* Publish Content (amber → white pill) */
+    .pub-bar__btn--publish-content {
+      background: #fbbf24;
+      border-color: #f59e0b;
+      color: #1c1917;
+      font-weight: 700;
+    }
+    .pub-bar__btn--publish-content:hover { background: #f59e0b; }
+
+    /* Draft saved hint bar */
+    .preview-hint-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 20px;
+      background: rgba(2,70,56,0.07);
+      border-bottom: 1px solid rgba(2,70,56,0.12);
+      font-size: 12px; color: var(--ink-2);
+    }
+    @media (min-width: 640px) { .preview-hint-bar { padding: 8px 28px; } }
+    .preview-hint-bar strong { color: var(--green); font-weight: 700; }
+    .preview-hint-dismiss {
+      margin-left: auto; background: none; border: none;
+      font-size: 13px; color: var(--muted); cursor: pointer; padding: 0 4px;
+      line-height: 1; transition: color 0.12s;
+    }
+    .preview-hint-dismiss:hover { color: var(--ink); }
+
+    /* Publish Layout (gold — always available) */
+    .pub-bar__btn--layout {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #fff;
+      font-weight: 700;
+    }
+    .pub-bar--dirty .pub-bar__btn--layout,
+    .pub-bar--draft .pub-bar__btn--layout {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.28);
+      color: rgba(255,255,255,0.82);
+    }
+    .pub-bar--dirty .pub-bar__btn--layout:hover,
+    .pub-bar--draft .pub-bar__btn--layout:hover {
+      background: rgba(255,255,255,0.22); color: #fff;
+    }
+    .pub-bar__btn--layout:not(:disabled):hover { filter: brightness(1.1); }
+    .pub-bar__btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* Dividers */
     .pub-bar__divider {
-      width: 1px; height: 20px;
-      background: rgba(255,255,255,0.22);
+      width: 1px; height: 18px; flex-shrink: 0;
+      background: rgba(255,255,255,0.20);
       margin: 0 2px;
+    }
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__divider {
+      background: var(--border-2);
+    }
+    .pub-bar__divider--layout {
+      background: rgba(255,255,255,0.14);
+    }
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__divider--layout {
+      background: var(--border-2);
     }
 
     /* ── Page tabs ──────────────────────────────── */
@@ -1399,19 +1666,192 @@ interface StorefrontContent {
       background: var(--surface);
       line-height: 1.3;
     }
+
+    /* ══════════════════════════════════════════════════════════════
+       PREVIEW MODAL
+    ═══════════════════════════════════════════════════════════════ */
+    .pv-modal {
+      position: fixed; inset: 0; z-index: 900;
+      display: flex; flex-direction: column;
+      background: #0c0e14;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────────────────── */
+    .pv-toolbar {
+      display: flex; align-items: center;
+      height: 52px; flex-shrink: 0;
+      padding: 0 20px; gap: 12px;
+      background: #13151f;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .pv-back {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 14px; border-radius: 7px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: transparent; color: rgba(255,255,255,0.65);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: all 0.14s; white-space: nowrap;
+    }
+    .pv-back:hover { background: rgba(255,255,255,0.07); color: #fff; border-color: rgba(255,255,255,0.2); }
+
+    .pv-device-group {
+      display: flex; align-items: center; gap: 1px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 8px; padding: 3px; margin: 0 auto;
+    }
+
+    .pv-device-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 5px; border: none;
+      background: transparent; color: rgba(255,255,255,0.4);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: all 0.13s; white-space: nowrap;
+    }
+    .pv-device-btn:hover { color: rgba(255,255,255,0.8); }
+    .pv-device-btn.active {
+      background: var(--green, #024638); color: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    .pv-toolbar-right {
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    }
+
+    .pv-newtab {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 13px; border-radius: 7px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: transparent; color: rgba(255,255,255,0.5);
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.14s;
+    }
+    .pv-newtab:hover { color: #fff; border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); }
+
+    .pv-size-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.25);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Stage ───────────────────────────────────────────────────── */
+    .pv-stage {
+      flex: 1; overflow: hidden;
+      display: flex; align-items: stretch; justify-content: center;
+      background: #0c0e14;
+    }
+
+    /* Desktop: full iframe */
+    .pv-iframe-desktop {
+      width: 100%; height: 100%;
+      border: none; background: #fff; display: block;
+    }
+
+    /* Mobile stage: dark studio */
+    .pv-stage--mobile {
+      align-items: center;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(193,154,91,0.07) 0%, transparent 55%),
+        linear-gradient(180deg, #111008 0%, #0a0a0a 100%);
+      padding: 20px 0 36px;
+    }
+
+    /* ── Phone hardware ──────────────────────────────────────────── */
+    .pv-phone {
+      position: relative;
+      /* iPhone 14 proportions: 393×852 logical pixels */
+      width: 393px;
+      height: min(852px, calc(100% - 0px));
+      flex-shrink: 0;
+    }
+
+    /* Side buttons — left (volume + silent) */
+    .pv-phone__side-l {
+      position: absolute; left: -3.5px; top: 120px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .pv-phone__side-r {
+      position: absolute; right: -3.5px; top: 160px;
+    }
+    .pv-phone__btn {
+      width: 3.5px; height: 36px;
+      background: #2a2a2c;
+      border-radius: 2px;
+    }
+    .pv-phone__btn--power { height: 64px; }
+
+    /* Screen + bezel */
+    .pv-phone__screen {
+      position: absolute; inset: 0;
+      border-radius: 50px;
+      background: #000;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      /* Bezel layers:
+         1. screen edge (bright specular)
+         2. aluminum body (dark)
+         3. outer edge
+         4. ground shadow                */
+      box-shadow:
+        0 0 0 1.5px rgba(255,255,255,0.22),
+        0 0 0 13px #1c1c1e,
+        0 0 0 14px rgba(255,255,255,0.06),
+        0 60px 130px -10px rgba(0,0,0,1),
+        0 24px 60px rgba(0,0,0,0.6);
+    }
+
+    /* Dynamic island notch */
+    .pv-phone__island {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      width: 120px; height: 34px;
+      background: #000;
+      border-radius: 20px;
+      z-index: 10;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.8);
+    }
+
+    /* The actual storefront — fills remaining screen */
+    .pv-phone__iframe {
+      flex: 1; width: 100%; border: none;
+      display: block; background: #fff;
+      /* top padding so content starts below the island */
+      padding-top: 0;
+    }
+
+    /* Home indicator */
+    .pv-phone__home {
+      height: 28px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #000;
+    }
+    .pv-phone__home::after {
+      content: '';
+      width: 130px; height: 5px;
+      background: rgba(255,255,255,0.32);
+      border-radius: 99px;
+    }
   `],
 })
 export class StorefrontComponent implements OnInit, OnDestroy {
-  private readonly toast         = inject(ToastService);
-  private readonly confirm       = inject(ConfirmService);
-  private readonly i18n          = inject(I18nService);
+  private readonly toast          = inject(ToastService);
+  private readonly confirm        = inject(ConfirmService);
+  private readonly i18n           = inject(I18nService);
   private readonly collectionsApi = inject(AdminCollectionsService);
-  private readonly api           = inject(ApiClient);
-  private readonly mediaApi      = inject(AdminMediaService);
-  private readonly uploadApi     = inject(MediaUploadService);
-  readonly storefront            = inject(StorefrontService);
+  private readonly api            = inject(ApiClient);
+  private readonly mediaApi       = inject(AdminMediaService);
+  private readonly uploadApi      = inject(MediaUploadService);
+  private readonly sanitizer      = inject(DomSanitizer);
+  readonly storefront             = inject(StorefrontService);
 
   readonly t = (key: string): string => this.i18n.t(key);
+
+  // ── Preview modal ─────────────────────────────────────────────────────
+  readonly previewOpen   = signal(false);
+  readonly previewDevice = signal<'desktop' | 'mobile'>('desktop');
+  private  _previewUrl   = signal('');
+  readonly previewSafeUrl = computed<SafeResourceUrl>(() =>
+    this.sanitizer.bypassSecurityTrustResourceUrl(this._previewUrl()),
+  );
 
   // ── Tab state ─────────────────────────────────────────────────────────
   readonly pageTab     = signal<PageTab>('home');
@@ -1468,10 +1908,15 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   }
 
   // ── Storefront content (home page + story + contact) ──────────────────
-  readonly content       = signal<StorefrontContent>({} as StorefrontContent);
-  readonly contentDirty  = signal(false);
-  readonly savingContent = signal(false);
-  private contentLoaded  = false;
+  readonly content           = signal<StorefrontContent>({} as StorefrontContent);
+  readonly contentDirty      = signal(false);
+  readonly draftUnpublished  = signal(false);
+  readonly savingDraft       = signal(false);
+  readonly publishingContent = signal(false);
+  readonly generatingToken   = signal(false);
+  readonly revertingDraft    = signal(false);
+  readonly showPreviewHint   = signal(false);
+  private contentLoaded      = false;
 
   // ── Media picker ──────────────────────────────────────────────────────
   readonly mediaPickerTarget = signal<string | null>(null);
@@ -1507,10 +1952,16 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.draftLoaded.set(true);
     }
 
-    // Load content data
+    // Load content: prefer saved draft so edits are not lost on reload
     try {
-      const data = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
-      this.content.set(data);
+      const draft = await firstValueFrom(this.api.get<StorefrontContent | null>('/admin/storefront-content/draft'));
+      if (draft && draft.hero) {
+        this.content.set(draft);
+        this.draftUnpublished.set(true);
+      } else {
+        const live = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
+        this.content.set(live);
+      }
       this.contentLoaded = true;
     } catch {
       this.toast.warning('Could not load content', 'Using defaults.');
@@ -1521,22 +1972,118 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     if (this.draftSaveTimer) window.clearTimeout(this.draftSaveTimer);
   }
 
-  // ── Content save ──────────────────────────────────────────────────────
-  async saveContent(): Promise<void> {
-    if (this.savingContent()) return;
-    this.savingContent.set(true);
+  // ── Draft save ────────────────────────────────────────────────────────
+  async saveDraftContent(): Promise<void> {
+    if (this.savingDraft()) return;
+    this.savingDraft.set(true);
     try {
-      await firstValueFrom(this.api.patch<StorefrontContent>('/admin/storefront-content', this.content()));
+      await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/draft', this.content()));
       this.contentDirty.set(false);
-      this.toast.success('Content saved', 'Changes are now live on the storefront.');
+      this.draftUnpublished.set(true);
+      this.showPreviewHint.set(true);
     } catch {
-      this.toast.error('Save failed', 'Could not save content changes.');
+      this.toast.error('Save failed', 'Could not save draft.');
     } finally {
-      this.savingContent.set(false);
+      this.savingDraft.set(false);
     }
   }
 
-  discardContent(): void { this.contentDirty.set(false); }
+  // ── Revert draft to live content ──────────────────────────────────────
+  async revertToLive(): Promise<void> {
+    if (this.revertingDraft()) return;
+    const ok = await this.confirm.ask({
+      title: 'Revert to live content?',
+      message: 'Your saved draft will be discarded and the editor will reload the current live content.',
+      confirmLabel: 'Revert',
+      cancelLabel: 'Cancel',
+      variant: 'info',
+    });
+    if (!ok) return;
+    this.revertingDraft.set(true);
+    try {
+      await firstValueFrom(this.api.delete('/admin/storefront-content/draft'));
+      const live = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
+      this.content.set(live);
+      this.draftUnpublished.set(false);
+      this.contentDirty.set(false);
+      this.showPreviewHint.set(false);
+      this.toast.success('Draft discarded', 'Editor reloaded with live content.');
+    } catch {
+      this.toast.error('Revert failed', 'Could not discard draft.');
+    } finally {
+      this.revertingDraft.set(false);
+    }
+  }
+
+  // ── Publish draft to live ─────────────────────────────────────────────
+  async publishContent(): Promise<void> {
+    if (this.publishingContent()) return;
+    const ok = await this.confirm.ask({
+      title: 'Publish content?',
+      message: 'This will replace the live storefront content with your saved draft.',
+      confirmLabel: 'Publish now',
+      cancelLabel: 'Cancel',
+      variant: 'info',
+    });
+    if (!ok) return;
+    this.publishingContent.set(true);
+    try {
+      await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/publish', {}));
+      this.draftUnpublished.set(false);
+      this.toast.success('Content published', 'Your draft is now live on the storefront.');
+    } catch {
+      this.toast.error('Publish failed', 'Could not publish content.');
+    } finally {
+      this.publishingContent.set(false);
+    }
+  }
+
+  // ── Preview modal — opens iframe overlay ─────────────────────────────
+  async openPreview(): Promise<void> {
+    if (this.generatingToken()) return;
+    this.generatingToken.set(true);
+    try {
+      const { token } = await firstValueFrom(
+        this.api.post<{ token: string; ttlSeconds: number }>('/admin/storefront-content/preview-token', {}),
+      );
+      const base = this.storefront.storefrontUrl();
+      const sep  = base.includes('?') ? '&' : '?';
+      // embedded=1 tells the storefront to suppress its own preview banner
+      this._previewUrl.set(`${base}${sep}preview=${token}&embedded=1`);
+      this.previewOpen.set(true);
+      this.previewDevice.set('desktop');
+    } catch {
+      this.toast.error('Preview failed', 'Could not generate a preview link.');
+    } finally {
+      this.generatingToken.set(false);
+    }
+  }
+
+  closePreview(): void { this.previewOpen.set(false); }
+
+  openPreviewInNewTab(): void {
+    // Strip embedded flag when opening in a real tab
+    const url = this._previewUrl().replace('&embedded=1', '').replace('?embedded=1&', '?');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  // ── Discard unsaved edits — reload last saved state ───────────────────
+  async discardContent(): Promise<void> {
+    if (this.savingDraft()) return;
+    try {
+      // Prefer draft if one exists, fall back to live
+      const draft = await firstValueFrom(this.api.get<StorefrontContent | null>('/admin/storefront-content/draft'));
+      if (draft && draft.hero) {
+        this.content.set(draft);
+      } else {
+        const live = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
+        this.content.set(live);
+      }
+      this.contentDirty.set(false);
+    } catch {
+      this.toast.error('Discard failed', 'Could not reload content.');
+    }
+  }
 
   // ── Patch helpers ─────────────────────────────────────────────────────
   private markDirty(): void { this.contentDirty.set(true); }
@@ -1867,9 +2414,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.blocks.set(HOME_LAYOUT_BLOCKS.map((b) => ({ ...b })));
   }
 
-  viewStorefront(): void {
-    window.open(this.storefront.storefrontUrl(), '_blank', 'noopener,noreferrer');
-  }
 
   async publish(): Promise<void> {
     if (this.publishing()) return;

@@ -231,6 +231,12 @@ type Tab = 'general' | 'team' | 'integrations';
     .inv-link-input { flex: 1; min-width: 180px; border: none; background: transparent; font-size: 12px; font-family: monospace; color: var(--ink-2); cursor: pointer; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .inv-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border,#e4e4e7); }
     .inv-info { flex: 1; }
+    /* Mobile: tabs scroll horizontally so they never wrap or truncate */
+    @media (max-width: 640px) {
+      .tabs { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tab { flex-shrink: 0; white-space: nowrap; padding: 10px 14px; }
+    }
   `],
 })
 export class SettingsComponent implements OnInit {

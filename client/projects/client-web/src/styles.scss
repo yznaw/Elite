@@ -427,3 +427,6 @@ body::before {
     max-width: none !important;
   }
 }
+
+/* Mobile preview is handled by the admin's iframe approach —
+   no CSS phone-frame rules needed in the storefront stylesheet. */

@@ -2,10 +2,11 @@ import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export type IconName =
-  | 'dash' | 'catalog' | 'store' | 'orders' | 'users' | 'chart' | 'sync' | 'settings'
+  | 'dash' | 'catalog' | 'collections' | 'store' | 'orders' | 'users' | 'chart' | 'sync' | 'settings'
   | 'media' | 'search' | 'bell' | 'plus' | 'x' | 'drag' | 'edit' | 'trash' | 'eye'
   | 'upload' | 'download' | 'cube' | 'link' | 'unlink' | 'wand' | 'check' | 'arrow' | 'arrowUp' | 'arrowDn'
-  | 'csv' | 'clock' | 'spinner' | 'list' | 'filter' | 'grid' | 'rows' | 'copy' | 'print' | 'warning' | 'mail' | 'info' | 'team';
+  | 'csv' | 'clock' | 'spinner' | 'list' | 'filter' | 'grid' | 'rows' | 'copy' | 'print' | 'warning' | 'mail' | 'info' | 'team'
+  | 'reference' | 'hierarchy';
 
 @Component({
   selector: 'ap-icon',
@@ -21,6 +22,22 @@ export type IconName =
       @case ('catalog') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
           <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+        </svg>
+      }
+      @case ('collections') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <path d="M2 7a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7z"/><path d="M2 7l10 6 10-6"/><path d="M6 3h12"/>
+        </svg>
+      }
+      @case ('reference') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
+        </svg>
+      }
+      @case ('hierarchy') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>
+          <path d="M6 9v6"/><path d="M6 15h3"/>
         </svg>
       }
       @case ('store') {

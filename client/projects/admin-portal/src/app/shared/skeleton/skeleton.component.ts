@@ -60,6 +60,23 @@ import { CommonModule } from '@angular/common';
           <div class="sk-shimmer" style="width:100%;height:180px;border-radius:8px;"></div>
         </div>
       }
+      @case ('order-card') {
+        @for (_ of repeats; track $index) {
+          <div class="sk-order-card">
+            <div class="sk-order-row1">
+              <div class="sk-shimmer" style="width:110px;height:12px;border-radius:6px;"></div>
+              <div class="sk-shimmer" style="width:70px;height:10px;border-radius:6px;"></div>
+            </div>
+            <div class="sk-shimmer" style="width:60%;height:14px;border-radius:6px;margin:8px 0;"></div>
+            <div class="sk-order-row3">
+              <div class="sk-shimmer" style="width:50px;height:10px;border-radius:6px;"></div>
+              <div class="sk-shimmer" style="width:80px;height:12px;border-radius:6px;"></div>
+              <div class="sk-shimmer" style="width:56px;height:20px;border-radius:10px;"></div>
+              <div class="sk-shimmer" style="width:56px;height:20px;border-radius:10px;"></div>
+            </div>
+          </div>
+        }
+      }
       @default {
         @for (_ of repeats; track $index) {
           <div class="sk-shimmer sk-inline"
@@ -130,10 +147,40 @@ import { CommonModule } from '@angular/common';
       border-radius: 14px;
       padding: 22px;
     }
+
+    /* Order card variant — matches Phase 3 mobile order cards */
+    .sk-order-card {
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #e5e7ec);
+      border-inline-start: 4px solid var(--border, #e5e7ec);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .sk-order-row1 { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .sk-order-row3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* Table-row: on mobile become a card-like stack */
+    @media (max-width: 768px) {
+      .sk-table-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 14px 16px;
+        border: 1px solid var(--border, #e5e7ec);
+        border-radius: 10px;
+        margin-bottom: 8px;
+      }
+      .sk-table-row:last-child { border-bottom: 1px solid var(--border, #e5e7ec); }
+    }
+
+    /* Reduced-motion: freeze shimmer */
+    @media (prefers-reduced-motion: reduce) {
+      .sk-shimmer { animation: none; background: var(--border-2, #eef0f4); }
+    }
   `],
 })
 export class SkeletonComponent {
-  @Input() variant: 'line' | 'card' | 'table-row' | 'kpi' | 'chart' = 'line';
+  @Input() variant: 'line' | 'card' | 'table-row' | 'kpi' | 'chart' | 'order-card' = 'line';
   @Input() repeat = 1;
   @Input() width = '100%';
   @Input() height = '14px';
