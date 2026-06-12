@@ -30,6 +30,8 @@ interface NavLink {
       class="sidebar sidebar-host"
       [class.open]="toggle.open()"
       [class.collapsed]="toggle.collapsed()"
+      (touchstart)="onTouchStart($event)"
+      (touchend)="onTouchEnd($event)"
     >
       <!-- Brand + collapse button -->
       <div class="sidebar-brand">
@@ -322,29 +324,41 @@ interface NavLink {
       .sidebar.collapsed .sidebar-footer { padding-inline: 4px; }
     }
 
-    /* ── Mobile drawer ─────────────────── */
+    /* ── Tablet drawer (769–1024px) ────── */
     @media (max-width: 1024px) {
       .sidebar {
         position: fixed;
         inset-block: 0;
-        inset-inline-start: -260px;
+        inset-inline-start: -280px;
         z-index: 200;
-        width: 240px;
-        transition: inset-inline-start 0.25s ease;
+        width: 260px;
+        /* spring-physics feel on open */
+        transition: inset-inline-start 0.3s cubic-bezier(.34,1.15,.64,1),
+                    box-shadow 0.3s ease;
         box-shadow: none;
       }
       .sidebar.open {
         inset-inline-start: 0;
-        box-shadow: 4px 0 24px rgba(0,0,0,0.3);
+        box-shadow: 6px 0 32px rgba(0,0,0,0.28);
       }
     }
 
-    /* ── Mobile backdrop ───────────────── */
+    /* ── Phone (≤768px): bottom nav owns navigation.
+          Sidebar and backdrop are unconditionally hidden so the
+          hamburger drawer can never appear even if the signal fires. ── */
+    @media (max-width: 768px) {
+      .sidebar           { inset-inline-start: -280px !important; visibility: hidden; }
+      .sidebar-backdrop  { display: none !important; }
+    }
+
+    /* ── Tablet/desktop backdrop ────────── */
     .sidebar-backdrop {
       position: fixed; inset: 0;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0,0,0,0.42);
       z-index: 199;
-      backdrop-filter: blur(2px);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      animation: fadeIn 0.2s ease;
     }
   `],
 })
@@ -357,6 +371,21 @@ export class SidebarComponent {
 
   readonly t    = (k: string): string => this.i18n.t(k);
   readonly user = this.auth.user;
+
+  private swipeStartX = 0;
+
+  onTouchStart(e: TouchEvent): void {
+    this.swipeStartX = e.touches[0].clientX;
+  }
+
+  onTouchEnd(e: TouchEvent): void {
+    const deltaX = e.changedTouches[0].clientX - this.swipeStartX;
+    // Swipe right (LTR) or left (RTL) to close — 80px threshold
+    const dir = document.documentElement.dir === 'rtl' ? -1 : 1;
+    if (deltaX * dir > 80) {
+      this.toggle.close();
+    }
+  }
 
   async logout(): Promise<void> {
     try {

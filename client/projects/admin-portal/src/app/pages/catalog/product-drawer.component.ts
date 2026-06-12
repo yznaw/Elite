@@ -1681,16 +1681,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.mediaSelected.set(new Set());
     this.mediaSearch.set('');
     this.mediaPicker.set(true);
-    if (this.mediaFiles().length === 0) {
-      this.mediaLoading.set(true);
-      try {
-        const files = await this.mediaApi.list();
-        this.mediaFiles.set(files);
-      } catch {
-        this.toast.error('Could not load media library');
-      } finally {
-        this.mediaLoading.set(false);
-      }
+    // Always fetch fresh — user may have uploaded images in another tab
+    this.mediaLoading.set(true);
+    try {
+      const files = await this.mediaApi.list();
+      this.mediaFiles.set(files);
+    } catch {
+      this.toast.error('Could not load media library');
+    } finally {
+      this.mediaLoading.set(false);
     }
   }
 

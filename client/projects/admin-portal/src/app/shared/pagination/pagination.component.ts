@@ -85,6 +85,8 @@ import { FormsModule } from '@angular/forms';
       .pg-info { font-size: 11px; order: 2; width: 100%; text-align: center; }
       .pg-controls { margin: 0; order: 1; width: 100%; justify-content: space-between; }
       .pg-btn-label { display: none; }
+      /* First « and Last » are redundant on phone — hide them */
+      .pg-jump { display: none; }
     }
   `],
 })

@@ -66,9 +66,18 @@ const MOBILE_BP = 900;
           </div>
         }
 
-        <button class="btn btn-outline" title="Export"><ap-icon name="arrowDn" [size]="14"/> <span class="btn-lbl">{{ t('common.export') }}</span></button>
-        <button class="btn btn-gold" (click)="createCustomer()" title="Add Customer"><ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('customers.add') }}</span></button>
+        <button class="btn btn-outline" title="Export"><ap-icon name="download" [size]="14"/> <span class="btn-lbl">{{ t('common.export') }}</span></button>
+        @if (!isMobile()) {
+          <button class="btn btn-gold" (click)="createCustomer()" title="Add Customer"><ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('customers.add') }}</span></button>
+        }
       </div>
+
+      <!-- FAB: phone only -->
+      @if (isMobile()) {
+        <button class="customers-fab" (click)="createCustomer()" [attr.aria-label]="t('customers.add')">
+          <ap-icon name="plus" [size]="22"/>
+        </button>
+      }
 
       @if (filtered().length === 0) {
         <div class="card">
@@ -263,6 +272,27 @@ const MOBILE_BP = 900;
     /* RTL: arrow flip */
     html[dir='rtl'] .customer-card-foot { transform: scaleX(1); }
     html[dir='rtl'] .customer-card-foot .muted::after { content: ''; }
+
+    /* ── Add Customer FAB (phone only) ── */
+    .customers-fab {
+      position: fixed;
+      bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+      inset-inline-end: 20px;
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: var(--green);
+      color: var(--gold);
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 20px rgba(0,69,56,.35);
+      cursor: pointer;
+      z-index: 120;
+      transition: transform 0.15s, box-shadow 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .customers-fab:active { transform: scale(.94); box-shadow: 0 2px 10px rgba(0,69,56,.25); }
   `],
 })
 export class CustomersComponent implements OnInit {

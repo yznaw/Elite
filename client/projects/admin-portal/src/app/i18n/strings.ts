@@ -34,6 +34,8 @@ const EN = {
   'nav.reference.sub': 'Colors · Materials · Sizes',
   'nav.settings': 'Settings',
   'nav.settings.sub': 'Access & Config',
+  'nav.more': 'More',
+  'nav.more.sub': 'All sections',
 
   // ── Page titles ──
   'page.dashboard.title': 'Dashboard',
@@ -801,6 +803,8 @@ const AR: Record<keyof typeof EN, string> = {
   'nav.analytics.sub': 'تحليلات ورؤى',
   'nav.reference': 'القوائم المرجعية',
   'nav.reference.sub': 'الألوان · المواد · المقاسات',
+  'nav.more': 'المزيد',
+  'nav.more.sub': 'جميع الأقسام',
   'nav.settings': 'إعدادات النظام',
   'nav.settings.sub': 'التهيئة والصلاحيات',
 

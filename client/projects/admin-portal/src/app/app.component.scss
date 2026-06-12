@@ -40,11 +40,12 @@
   .scroll-area--flush-top { padding-top: 0; }
 }
 
-/* Phone: smooth momentum scroll, tighter padding */
+/* Phone: smooth momentum scroll, tighter padding + room for bottom nav */
 @media (max-width: 768px) {
   .scroll-area {
     -webkit-overflow-scrolling: touch;
-    padding: 16px 16px 32px;
+    /* extra bottom padding = nav bar (56px) + safe area + breathing room */
+    padding: 16px 16px calc(56px + env(safe-area-inset-bottom, 0px) + 16px);
   }
   .scroll-area--flush-top { padding-top: 0; }
 }

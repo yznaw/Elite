@@ -1,5 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { KpiComponent } from '../../shared/kpi/kpi.component';
 import { LineChartComponent } from '../../shared/charts/line-chart.component';
@@ -17,16 +18,24 @@ import { IconComponent } from '../../shared/icons/icon.component';
 @Component({
   selector: 'ap-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent],
   styles: [`
-    .range-bar { display: flex; align-items: center; gap: 10px; }
-    .range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; }
+    .range-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
     .range-pill {
-      border: none; background: none; padding: 5px 14px;
+      border: none; background: none; padding: 5px 12px;
       font-size: 12px; font-weight: 600; border-radius: 6px;
       cursor: pointer; color: var(--muted); transition: all 0.13s;
     }
     .range-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .range-dates { display: flex; align-items: center; gap: 8px; width: 100%; }
+    .range-dates .inp { flex: 1; min-width: 0; font-size: 12px; padding: 5px 10px; }
+
+    @media (max-width: 768px) {
+      .range-bar { gap: 0; }
+      .range-pills { width: 100%; }
+      .range-pill { flex: 1; text-align: center; padding: 7px 4px; }
+    }
     .kpi-clickable { cursor: pointer; transition: box-shadow .15s, transform .1s; }
     .kpi-clickable:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); }
   `],
@@ -34,11 +43,19 @@ import { IconComponent } from '../../shared/icons/icon.component';
     <div class="page-fade">
       <div class="range-bar mb-16">
         <div class="range-pills">
-          <button class="range-pill" [class.active]="dateRange() === 'today'" (click)="dateRange.set('today')">Today</button>
-          <button class="range-pill" [class.active]="dateRange() === '7d'" (click)="dateRange.set('7d')">7 Days</button>
-          <button class="range-pill" [class.active]="dateRange() === '30d'" (click)="dateRange.set('30d')">30 Days</button>
-          <button class="range-pill" [class.active]="dateRange() === '90d'" (click)="dateRange.set('90d')">90 Days</button>
+          <button class="range-pill" [class.active]="dateRange() === 'today'"  (click)="dateRange.set('today')">Today</button>
+          <button class="range-pill" [class.active]="dateRange() === '7d'"     (click)="dateRange.set('7d')">7D</button>
+          <button class="range-pill" [class.active]="dateRange() === '30d'"    (click)="dateRange.set('30d')">30D</button>
+          <button class="range-pill" [class.active]="dateRange() === '90d'"    (click)="dateRange.set('90d')">90D</button>
+          <button class="range-pill" [class.active]="dateRange() === 'custom'" (click)="dateRange.set('custom')">Custom</button>
         </div>
+        @if (dateRange() === 'custom') {
+          <div class="range-dates">
+            <input class="inp" type="date" [ngModel]="customFrom()" (ngModelChange)="customFrom.set($event)"/>
+            <span class="muted small">–</span>
+            <input class="inp" type="date" [ngModel]="customTo()" (ngModelChange)="customTo.set($event)"/>
+          </div>
+        }
       </div>
 
       <div class="kpi-grid mb-24">
@@ -164,7 +181,9 @@ export class DashboardComponent implements OnInit {
   readonly products = signal<Product[]>([]);
   readonly customers = signal<{ id: string; joined?: string }[]>([]);
 
-  readonly dateRange = signal<'today' | '7d' | '30d' | '90d'>('30d');
+  readonly dateRange  = signal<'today' | '7d' | '30d' | '90d' | 'custom'>('30d');
+  readonly customFrom = signal('');
+  readonly customTo   = signal('');
 
   readonly rangeDays = computed(() => {
     switch (this.dateRange()) {
@@ -182,6 +201,12 @@ export class DashboardComponent implements OnInit {
   });
 
   readonly dateFilter = computed<(date: string) => boolean>(() => {
+    if (this.dateRange() === 'custom') {
+      const from = this.customFrom();
+      const to   = this.customTo() || new Date().toISOString().slice(0, 10);
+      if (!from) return () => true;
+      return (date: string) => date >= from && date <= to;
+    }
     const latest = this.latestDate();
     if (!latest) return () => false;
     const days = this.rangeDays();
@@ -195,10 +220,14 @@ export class DashboardComponent implements OnInit {
 
   revRangeLabel(): string {
     switch (this.dateRange()) {
-      case 'today': return this.t('dash.todayRevenue');
-      case '7d': return 'Revenue · 7 Days';
-      case '30d': return 'Revenue · 30 Days';
-      case '90d': return 'Revenue · 90 Days';
+      case 'today':  return this.t('dash.todayRevenue');
+      case '7d':     return 'Revenue · 7D';
+      case '30d':    return 'Revenue · 30D';
+      case '90d':    return 'Revenue · 90D';
+      case 'custom': {
+        const f = this.customFrom(); const t = this.customTo();
+        return f ? `Revenue · ${f}${t ? ' – ' + t : ''}` : 'Revenue · Custom';
+      }
     }
   }
 
