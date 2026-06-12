@@ -1,5 +1,6 @@
 import { Component, computed, ElementRef, HostListener, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Location } from '@angular/common';
 import { NavigationEnd, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs/operators';
@@ -36,6 +37,7 @@ const META: Record<string, PageMeta> = {
   template: `
     <div class="topbar">
       <div class="row gap-sm" style="min-width:0;align-items:center;">
+        <!-- Desktop/tablet: hamburger for sidebar drawer -->
         <button class="topbar-burger" (click)="toggle.toggle()" [attr.aria-label]="t('topbar.openMenu')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
             <line x1="3" y1="6" x2="21" y2="6"/>
@@ -43,6 +45,16 @@ const META: Record<string, PageMeta> = {
             <line x1="3" y1="18" x2="21" y2="18"/>
           </svg>
         </button>
+        <!-- Phone only: back chevron for secondary pages (hidden on primary tab pages) -->
+        @if (showBack()) {
+          <button class="topbar-back" (click)="goBack()" aria-label="Go back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 width="18" height="18">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+        }
         <div style="min-width:0;">
           <div class="crumb">{{ t(meta().crumbKey) }}</div>
           <h1>{{ t(meta().titleKey) }}</h1>
@@ -207,6 +219,29 @@ const META: Record<string, PageMeta> = {
       to   { opacity: 1; transform: translateY(0); }
     }
 
+    /* ── Back button (phone only — shows on secondary pages) ── */
+    .topbar-back {
+      display: none;
+    }
+    @media (max-width: 768px) {
+      .topbar-back {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--ink-2);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .topbar-back:active { background: var(--bg); }
+    }
+
     /* ── Avatar button ── */
     .user-menu-wrap { position: relative; }
     .avatar-btn {
@@ -292,18 +327,34 @@ const META: Record<string, PageMeta> = {
   `],
 })
 export class TopbarComponent {
-  private readonly i18n   = inject(I18nService);
-  private readonly auth   = inject(AuthService);
-  private readonly toast  = inject(ToastService);
-  private readonly elRef  = inject(ElementRef);
+  private readonly i18n     = inject(I18nService);
+  private readonly auth     = inject(AuthService);
+  private readonly toast    = inject(ToastService);
+  private readonly elRef    = inject(ElementRef);
+  private readonly location = inject(Location);
   readonly toggle = inject(SidebarToggleService);
   private readonly router = inject(Router);
 
-  readonly searchOpen  = signal(false);
+  readonly searchOpen   = signal(false);
   readonly userDropOpen = signal(false);
+  readonly isMobile     = signal(window.innerWidth <= 768);
+
+  @HostListener('window:resize')
+  onWinResize(): void { this.isMobile.set(window.innerWidth <= 768); }
 
   readonly t    = (k: string): string => this.i18n.t(k);
   readonly user = this.auth.user;
+
+  // Primary tab pages — no back button needed (bottom nav handles them)
+  private readonly PRIMARY_PATHS = new Set(['/dashboard', '/catalog', '/orders', '/customers']);
+
+  readonly showBack = computed(() => {
+    if (!this.isMobile()) return false;
+    const path = '/' + (this.url().split('/')[1] || 'dashboard');
+    return !this.PRIMARY_PATHS.has(path);
+  });
+
+  goBack(): void { this.location.back(); }
 
   toggleSearch(): void  { this.searchOpen.update((o) => !o); }
   toggleUserDrop(): void { this.userDropOpen.update((v) => !v); }

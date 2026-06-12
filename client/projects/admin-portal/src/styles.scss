@@ -2915,3 +2915,44 @@ ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling
   /* Small variants in compact grids stay smaller */
   input.inp-sm, select.inp-sm { min-height: 38px; }
 }
+
+/* ── Task 6.1: Toast — bottom-center above bottom nav on phone ── */
+@media (max-width: 768px) {
+  .toast-stack {
+    /* Centre horizontally, float above the 56px bottom nav */
+    inset-inline: 12px;
+    right: 12px;              /* fallback for browsers without inset-inline */
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    align-items: stretch;     /* toasts fill the width */
+    max-width: none;
+  }
+  .toast {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    border-radius: 12px;
+  }
+}
+
+/* ── Task 6.3: prefers-reduced-motion — disable non-essential animations ── */
+@media (prefers-reduced-motion: reduce) {
+  /* Page entrance */
+  .page-fade                    { animation: none; opacity: 1; transform: none; }
+  /* Drawer / sheet slide-ins */
+  .drawer, .more-sheet          { animation: none; transition: none; }
+  .sidebar                      { transition: none; }
+  /* Toast entrance */
+  .toast                        { animation: none; }
+  /* Bottom nav hide/show */
+  .bottom-nav                   { transition: none; }
+  /* Save bar expand */
+  .save-bar-top                 { transition: none; }
+  /* Catalog filter sheet */
+  .filter-panel                 { animation: none; }
+  /* Sidebar backdrop */
+  .sidebar-backdrop             { animation: none; }
+  /* Nav-tab indicator */
+  .nav-tab, .sec-chev           { transition: none; }
+  /* Product image thumbnails */
+  .kpi-clickable                { transition: none; }
+}
