@@ -1,17 +1,62 @@
 @if (homeContent.isPreviewMode()) {
-  <div class="preview-banner" role="banner" aria-label="Draft preview mode">
-    <div class="preview-banner__inner">
-      <div class="preview-banner__left">
-        <span class="preview-banner__dot"></span>
-        <span class="preview-banner__label">Draft Preview</span>
-        <span class="preview-banner__sub">This page shows unpublished content — not visible to customers.</span>
+
+  <!-- ── Expanded banner ─────────────────────────────────────── -->
+  @if (bannerVisible()) {
+    <div class="preview-banner" role="banner" aria-label="Draft preview mode">
+      <div class="preview-banner__inner">
+
+        <!-- Left: status -->
+        <div class="preview-banner__left">
+          <span class="preview-banner__dot"></span>
+          <span class="preview-banner__label">Draft Preview</span>
+          <span class="preview-banner__sub">Unpublished — not visible to customers</span>
+        </div>
+
+        <!-- Centre: viewport toggle -->
+        <div class="preview-banner__viewport">
+          <button class="preview-banner__vp-btn"
+                  [class.active]="viewport() === 'desktop'"
+                  (click)="setViewport('desktop')"
+                  title="Desktop view">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+            </svg>
+            <span class="preview-banner__vp-label">Desktop</span>
+          </button>
+          <button class="preview-banner__vp-btn"
+                  [class.active]="viewport() === 'mobile'"
+                  (click)="setViewport('mobile')"
+                  title="Mobile view">
+            <svg width="12" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/>
+            </svg>
+            <span class="preview-banner__vp-label">Mobile</span>
+          </button>
+        </div>
+
+        <!-- Right: actions -->
+        <div class="preview-banner__actions">
+          <button class="preview-banner__exit" type="button" (click)="exitPreview()">
+            Exit preview
+          </button>
+          <button class="preview-banner__hide" type="button" (click)="toggleBanner()" title="Minimise banner">
+            ↑
+          </button>
+        </div>
+
       </div>
-      <button class="preview-banner__exit" type="button" (click)="exitPreview()"
-              aria-label="Exit preview mode">
-        Exit preview ✕
-      </button>
     </div>
-  </div>
+  }
+
+  <!-- ── Minimised pill (shown when banner is hidden) ─────────── -->
+  @if (!bannerVisible()) {
+    <button class="preview-pill" type="button" (click)="toggleBanner()" aria-label="Show preview banner">
+      <span class="preview-pill__dot"></span>
+      <span class="preview-pill__label">DRAFT</span>
+      <span class="preview-pill__expand">↓</span>
+    </button>
+  }
+
 }
 
 <cw-nav />

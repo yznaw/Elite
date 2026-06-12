@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -17,9 +17,9 @@ import { HomeContentService } from './services/home-content.service';
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
-  private readonly router = inject(Router);
-  private readonly locale = inject(LocaleService);
-  readonly homeContent = inject(HomeContentService);
+  private readonly router    = inject(Router);
+  private readonly locale    = inject(LocaleService);
+  readonly homeContent       = inject(HomeContentService);
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -32,7 +32,29 @@ export class AppComponent {
 
   readonly hideFooter = computed(() => this.currentUrl().startsWith('/checkout'));
 
+  // Preview banner state
+  readonly bannerVisible = signal(true);
+  readonly viewport      = signal<'desktop' | 'mobile'>('desktop');
+
+  constructor() {
+    // Apply/remove mobile-preview class on <html> when viewport changes
+    effect(() => {
+      if (!this.homeContent.isPreviewMode()) return;
+      const html = document.documentElement;
+      if (this.viewport() === 'mobile') {
+        html.classList.add('preview-mobile');
+      } else {
+        html.classList.remove('preview-mobile');
+      }
+    });
+  }
+
+  toggleBanner(): void { this.bannerVisible.update(v => !v); }
+
+  setViewport(v: 'desktop' | 'mobile'): void { this.viewport.set(v); }
+
   exitPreview(): void {
+    document.documentElement.classList.remove('preview-mobile');
     const url = new URL(window.location.href);
     url.searchParams.delete('preview');
     window.location.href = url.toString();

@@ -83,22 +83,19 @@ interface StorefrontContent {
         <!-- Preview — always shown -->
         <button class="pub-bar__btn pub-bar__btn--ghost" type="button"
                 [disabled]="generatingToken()" (click)="openPreview()"
-                title="Preview draft in storefront">
-          @if (generatingToken()) {
-            <ap-spinner [size]="12"/>
-          } @else {
-            <ap-icon name="eye" [size]="14"/>
-          }
+                title="Open a fresh preview tab showing the current saved draft">
+          @if (generatingToken()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="eye" [size]="14"/> }
           <span class="pub-bar__btn-label">Preview</span>
         </button>
 
-        <!-- Divider shown when content is dirty -->
+        <!-- Dirty state: Discard edits + Save Draft -->
         @if (contentDirty()) {
           <div class="pub-bar__divider"></div>
           <button class="pub-bar__btn pub-bar__btn--discard" type="button"
-                  [disabled]="savingDraft()" (click)="discardContent()">
+                  [disabled]="savingDraft()" (click)="discardContent()"
+                  title="Discard unsaved edits and reload last saved state">
             <ap-icon name="x" [size]="13"/>
-            <span class="pub-bar__btn-label">Discard</span>
+            <span class="pub-bar__btn-label">Discard edits</span>
           </button>
           <button class="pub-bar__btn pub-bar__btn--save" type="button"
                   [disabled]="savingDraft()" (click)="saveDraftContent()">
@@ -107,8 +104,15 @@ interface StorefrontContent {
           </button>
         }
 
-        <!-- Publish content — shown when draft is saved but not live -->
+        <!-- Draft saved state: Revert to live + Publish Content -->
         @if (draftUnpublished() && !contentDirty()) {
+          <div class="pub-bar__divider"></div>
+          <button class="pub-bar__btn pub-bar__btn--revert" type="button"
+                  [disabled]="revertingDraft()" (click)="revertToLive()"
+                  title="Discard this draft and go back to the published live content">
+            @if (revertingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="x" [size]="13"/> }
+            <span class="pub-bar__btn-label">Revert to live</span>
+          </button>
           <button class="pub-bar__btn pub-bar__btn--publish-content" type="button"
                   [disabled]="publishingContent()" (click)="publishContent()">
             @if (publishingContent()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="check" [size]="13"/> }
@@ -121,13 +125,22 @@ interface StorefrontContent {
         <!-- Publish layout — always available -->
         <button class="pub-bar__btn pub-bar__btn--layout" type="button"
                 [disabled]="publishing()" (click)="publish()"
-                title="Publish section order and visibility">
+                title="Publish section order and visibility to the live storefront">
           @if (publishing()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="sync" [size]="13"/> }
           <span class="pub-bar__btn-label">@if (publishing()) { Publishing… } @else { Publish Layout }</span>
         </button>
 
       </div>
     </div>
+
+    <!-- Draft saved hint: tells user to reopen preview tab -->
+    @if (showPreviewHint()) {
+      <div class="preview-hint-bar">
+        <ap-icon name="eye" [size]="12"/>
+        Draft saved — click <strong>Preview</strong> to open a fresh tab with your latest changes.
+        <button class="preview-hint-dismiss" type="button" (click)="showPreviewHint.set(false)">✕</button>
+      </div>
+    }
 
     <!-- ── Page tabs ───────────────────────────────────────── -->
     <div class="page-tabs">
@@ -1047,6 +1060,18 @@ interface StorefrontContent {
     }
     .pub-bar__btn--save:hover { background: var(--gold-3); }
 
+    /* Revert to live (subtle danger-outline) */
+    .pub-bar__btn--revert {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.20);
+      color: rgba(255,255,255,0.70);
+    }
+    .pub-bar__btn--revert:hover {
+      background: rgba(239,68,68,0.20);
+      border-color: rgba(239,68,68,0.45);
+      color: #fff;
+    }
+
     /* Publish Content (amber → white pill) */
     .pub-bar__btn--publish-content {
       background: #fbbf24;
@@ -1055,6 +1080,23 @@ interface StorefrontContent {
       font-weight: 700;
     }
     .pub-bar__btn--publish-content:hover { background: #f59e0b; }
+
+    /* Draft saved hint bar */
+    .preview-hint-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 20px;
+      background: rgba(2,70,56,0.07);
+      border-bottom: 1px solid rgba(2,70,56,0.12);
+      font-size: 12px; color: var(--ink-2);
+    }
+    @media (min-width: 640px) { .preview-hint-bar { padding: 8px 28px; } }
+    .preview-hint-bar strong { color: var(--green); font-weight: 700; }
+    .preview-hint-dismiss {
+      margin-left: auto; background: none; border: none;
+      font-size: 13px; color: var(--muted); cursor: pointer; padding: 0 4px;
+      line-height: 1; transition: color 0.12s;
+    }
+    .preview-hint-dismiss:hover { color: var(--ink); }
 
     /* Publish Layout (gold — always available) */
     .pub-bar__btn--layout {
@@ -1613,6 +1655,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   readonly savingDraft       = signal(false);
   readonly publishingContent = signal(false);
   readonly generatingToken   = signal(false);
+  readonly revertingDraft    = signal(false);
+  readonly showPreviewHint   = signal(false);
   private contentLoaded      = false;
 
   // ── Media picker ──────────────────────────────────────────────────────
@@ -1677,11 +1721,38 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/draft', this.content()));
       this.contentDirty.set(false);
       this.draftUnpublished.set(true);
-      this.toast.success('Draft saved', 'Preview your changes before publishing live.');
+      this.showPreviewHint.set(true);
     } catch {
       this.toast.error('Save failed', 'Could not save draft.');
     } finally {
       this.savingDraft.set(false);
+    }
+  }
+
+  // ── Revert draft to live content ──────────────────────────────────────
+  async revertToLive(): Promise<void> {
+    if (this.revertingDraft()) return;
+    const ok = await this.confirm.ask({
+      title: 'Revert to live content?',
+      message: 'Your saved draft will be discarded and the editor will reload the current live content.',
+      confirmLabel: 'Revert',
+      cancelLabel: 'Cancel',
+      variant: 'info',
+    });
+    if (!ok) return;
+    this.revertingDraft.set(true);
+    try {
+      await firstValueFrom(this.api.delete('/admin/storefront-content/draft'));
+      const live = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
+      this.content.set(live);
+      this.draftUnpublished.set(false);
+      this.contentDirty.set(false);
+      this.showPreviewHint.set(false);
+      this.toast.success('Draft discarded', 'Editor reloaded with live content.');
+    } catch {
+      this.toast.error('Revert failed', 'Could not discard draft.');
+    } finally {
+      this.revertingDraft.set(false);
     }
   }
 

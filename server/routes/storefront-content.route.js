@@ -687,6 +687,27 @@ function registerSaveDraft(router) {
   );
 }
 
+// ── Admin: DELETE /admin/storefront-content/draft ───────────────────────────
+function registerDeleteDraft(router) {
+  router.delete(
+    '/draft',
+    asyncHandler(async (_req, res) => {
+      const client = await db.pool.connect();
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        await ensureDraftColumn(client);
+        await client.query(
+          'UPDATE store_settings SET home_content_draft = NULL WHERE tenant_id = $1',
+          [tenant.id],
+        );
+        ok(res, null, 'Draft discarded.');
+      } finally {
+        client.release();
+      }
+    }),
+  );
+}
+
 // ── Admin: POST /admin/storefront-content/publish ───────────────────────────
 function registerPublishContent(router) {
   router.post(
@@ -749,6 +770,7 @@ registerGet(adminRouter);
 registerPatch(adminRouter);
 registerGetDraft(adminRouter);
 registerSaveDraft(adminRouter);
+registerDeleteDraft(adminRouter);
 registerPublishContent(adminRouter);
 registerPreviewToken(adminRouter);
 

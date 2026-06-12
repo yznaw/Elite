@@ -43,16 +43,15 @@ export class HomeContentService {
   readonly isPreviewMode = computed(() => this._previewToken() !== null);
 
   async refresh(force = false): Promise<HomeContentData> {
-    if (force) this.loadPromise = null;
-    if (this.loadPromise) return this.loadPromise;
-
     const token = this._previewToken();
 
     if (token) {
-      // Preview mode: load draft content using the short-lived token
-      this.loadPromise = firstValueFrom(
+      // Preview mode: never cache — always fetch the latest saved draft
+      // so re-opening preview always reflects the most recent Save Draft.
+      const bust = `&t=${Date.now()}`;
+      return firstValueFrom(
         this.http.get<ApiResponse<HomeContentData>>(
-          `${this.apiBase}/storefront-content/draft?token=${encodeURIComponent(token)}`,
+          `${this.apiBase}/storefront-content/draft?token=${encodeURIComponent(token)}${bust}`,
         ),
       )
         .then((res) => {
@@ -60,9 +59,10 @@ export class HomeContentService {
           return this._contentData();
         })
         .catch(() => this._contentData());
-
-      return this.loadPromise;
     }
+
+    if (force) this.loadPromise = null;
+    if (this.loadPromise) return this.loadPromise;
 
     // Normal mode: load live content + layout
     const bust = force ? `?t=${Date.now()}` : '';
