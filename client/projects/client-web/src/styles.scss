@@ -427,3 +427,21 @@ body::before {
     max-width: none !important;
   }
 }
+
+/* ── Admin draft preview — mobile viewport simulation ────────────────
+   Added to global styles so the html/body selectors are not scoped
+   by Angular's component encapsulation.
+──────────────────────────────────────────────────────────────────── */
+html.preview-mobile {
+  background: #111 !important;
+}
+
+html.preview-mobile body {
+  max-width: 390px !important;
+  margin: 0 auto !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 24px 64px rgba(0, 0, 0, 0.7) !important;
+  min-height: 100vh;
+  position: relative;
+}

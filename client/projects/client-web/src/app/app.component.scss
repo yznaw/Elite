@@ -210,22 +210,5 @@
   margin-left: 2px;
 }
 
-/* ── Mobile viewport simulation ───────────────────────────────── */
-/*
-  When the admin opens Preview and switches to "Mobile",
-  we add .preview-mobile to <html>. This wraps the page
-  content in a 390px container so you can see the mobile
-  layout without resizing the browser window.
-*/
-:global(html.preview-mobile) {
-  background: #0f0f0f;
-}
-
-:global(html.preview-mobile body) {
-  max-width: 390px;
-  margin: 0 auto;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06),
-              0 20px 60px rgba(0, 0, 0, 0.6);
-  min-height: 100vh;
-  position: relative;
-}
+/* Mobile viewport simulation styles live in global styles.scss
+   so they can target <html> and <body> without encapsulation issues. */
