@@ -116,7 +116,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
 
         <!-- Line items + summary -->
         <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
+          <ap-icon name="orders" [size]="14"/>
           <span>{{ t('orderModal.lineItems') }}</span>
         </div>
 

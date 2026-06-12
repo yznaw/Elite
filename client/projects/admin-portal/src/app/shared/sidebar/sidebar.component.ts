@@ -399,13 +399,13 @@ export class SidebarComponent {
   readonly links: NavLink[] = [
     { path: '/dashboard',   labelKey: 'nav.dashboard',   subKey: 'nav.dashboard.sub',   icon: 'dash' },
     { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
-    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'catalog' },
+    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
     { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
     { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store' },
     { path: '/orders',      labelKey: 'nav.orders',      subKey: 'nav.orders.sub',      icon: 'orders' },
     { path: '/customers',   labelKey: 'nav.customers',   subKey: 'nav.customers.sub',   icon: 'users' },
     { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart' },
-    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'list' },
+    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
     { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
   ];
 

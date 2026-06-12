@@ -14,6 +14,7 @@ function mapCollection(row) {
     imageUrl: row.image_url || null,
     productIds: row.product_ids || [],
     hidden: row.status === 'hidden',
+    parentId: row.parent_id || null,
   };
 }
 
@@ -26,6 +27,7 @@ router.get('/', asyncHandler(async (_req, res) => {
         SELECT
           c.*,
           c.seo->>'imageUrl' AS image_url,
+          c.parent_id,
           COALESCE(array_agg(cp.product_id::text ORDER BY cp.sort_order) FILTER (WHERE cp.product_id IS NOT NULL), ARRAY[]::text[]) AS product_ids
         FROM collections c
         LEFT JOIN collection_products cp ON cp.collection_id = c.id
@@ -49,10 +51,11 @@ router.post('/', asyncHandler(async (req, res) => {
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
+    const parentId = await resolveParentId(client, tenant.id, req.body.parentId, null);
     const saved = await client.query(
       `
-        INSERT INTO collections (tenant_id, handle, title, description, status, seo)
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        INSERT INTO collections (tenant_id, handle, title, description, status, seo, parent_id)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
         RETURNING *
       `,
       [
@@ -62,6 +65,7 @@ router.post('/', asyncHandler(async (req, res) => {
         String(req.body.description || ''),
         req.body.hidden ? 'hidden' : 'active',
         JSON.stringify({ imageUrl: req.body.imageUrl || null }),
+        parentId,
       ],
     );
 
@@ -89,6 +93,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
     const row = current.rows[0];
     const title = req.body.title ?? row.title;
+    const parentId = 'parentId' in req.body
+      ? await resolveParentId(client, tenant.id, req.body.parentId, req.params.id)
+      : row.parent_id;
+
     const saved = await client.query(
       `
         UPDATE collections
@@ -96,7 +104,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
             handle = $4,
             description = $5,
             status = $6,
-            seo = $7::jsonb
+            seo = $7::jsonb,
+            parent_id = $8
         WHERE tenant_id = $1 AND id = $2
         RETURNING *
       `,
@@ -108,6 +117,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         req.body.description ?? row.description,
         (req.body.hidden ?? row.status === 'hidden') ? 'hidden' : 'active',
         JSON.stringify({ ...(row.seo || {}), imageUrl: req.body.imageUrl ?? row.seo?.imageUrl ?? null }),
+        parentId,
       ],
     );
 
@@ -156,6 +166,37 @@ async function replaceProducts(client, tenantId, collectionId, productIds) {
   }
 
   return validProductIds;
+}
+
+/** Validate parentId — must belong to this tenant, not be the collection itself,
+ *  and not create a cycle (i.e. the proposed parent is not a descendant of selfId). */
+async function resolveParentId(client, tenantId, parentId, selfId) {
+  if (!parentId) return null;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(String(parentId))) return null;
+  if (selfId && parentId === selfId) return null;
+
+  // Walk up the ancestor chain to detect cycles.
+  if (selfId) {
+    let cursor = parentId;
+    const visited = new Set();
+    while (cursor) {
+      if (cursor === selfId) return null; // cycle detected
+      if (visited.has(cursor)) break;
+      visited.add(cursor);
+      const row = await client.query(
+        'SELECT parent_id FROM collections WHERE tenant_id = $1 AND id = $2',
+        [tenantId, cursor],
+      );
+      cursor = row.rows[0]?.parent_id ?? null;
+    }
+  }
+
+  const check = await client.query(
+    "SELECT id FROM collections WHERE tenant_id = $1 AND id = $2 AND status <> 'archived'",
+    [tenantId, parentId],
+  );
+  return check.rowCount > 0 ? parentId : null;
 }
 
 async function filterExistingProductIds(client, tenantId, productIds) {

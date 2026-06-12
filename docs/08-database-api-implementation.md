@@ -25,6 +25,9 @@ The implementation added:
 
 **June 2026 — Feature batch additions:**
 
+- Migration `007_sub_collections.sql` — `parent_id uuid REFERENCES collections(id) ON DELETE SET NULL` added to `collections`. Enables parent-child hierarchy. Server validates cycle-safety (`resolveParentId` walks ancestor chain). `GET/POST/PATCH /api/admin/collections` now read/write `parentId`. Angular `Collection` model has `parentId?: string | null`. Collections page shows hierarchy groups (chips); drawer has parent picker; product drawer Organization section shows indented sub-collection checkboxes.
+- Product reorder inside collections: list-view mode added to collection drawer (grid/list toggle). List view has drag handles + ↑/↓ buttons. `sort_order` persisted via existing `replaceProducts` helper.
+- Icon system: added `collections` (envelope stack), `reference` (tag/label), `hierarchy` (nested list) icons to `icon.component.ts`. Sidebar/bottom-nav icons corrected — `/collections` now uses `collections`, `/reference` now uses `reference`. Section icons in product/collection/order drawers corrected.
 - Migration `006_cost_price.sql` — `cost_price_cents integer` (nullable) added to `product_variants`. CHECK constraint `product_variants_cost_nonneg`.
 - `nameAr` (Arabic product name) stored in `product_translations (locale='ar')`. Upserted on every product save via `admin-products.route.js`. Returned via LEFT JOIN in all product SELECT queries.
 - Stock aggregation: when variants are present, `products.stock_quantity` is auto-computed as `SUM(variant.stock_quantity)` on every save. The product-level stock input is hidden in the admin UI when variants exist.
@@ -64,6 +67,7 @@ The implementation added:
 | `server/db/migrations/004_product_seo_fields.sql` | `ALTER TABLE products ADD COLUMN meta_title text, meta_desc text` |
 | `server/db/migrations/005_team_invitations.sql` | `team_invitations` table — UUID PK, `token_hash` TEXT, 48h `expires_at`, single-use |
 | `server/db/migrations/006_cost_price.sql` | `ALTER TABLE product_variants ADD COLUMN cost_price_cents integer` (nullable) + CHECK constraint |
+| `server/db/migrations/007_sub_collections.sql` | `ALTER TABLE collections ADD COLUMN parent_id uuid REFERENCES collections(id) ON DELETE SET NULL` + index |
 | `server/db/client.js` | Shared `pg` connection pool |
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
 | `server/db/seed.js` | Idempotent fixture (8 products + variants, 3 collections, 6 customers, 8 orders) |

@@ -60,36 +60,72 @@ interface StorefrontContent {
   template: `
   <div class="page-fade sf-shell">
 
-    <!-- ── Single unified action bar (Shopify-style) ─────────── -->
-    <div class="pub-bar" [class.pub-bar--content-dirty]="contentDirty()">
+    <!-- ── Action bar ──────────────────────────────────────────── -->
+    <div class="pub-bar"
+         [class.pub-bar--dirty]="contentDirty()"
+         [class.pub-bar--draft]="draftUnpublished() && !contentDirty()">
+
+      <!-- Left: title + status chip -->
       <div class="pub-bar__left">
-        <div class="pub-bar__title">Storefront Editor</div>
+        <span class="pub-bar__title">Storefront Editor</span>
         @if (contentDirty()) {
-          <span class="pub-bar__badge pub-bar__badge--content">Content unsaved</span>
+          <span class="pub-bar__chip pub-bar__chip--unsaved">Unsaved edits</span>
+        } @else if (draftUnpublished()) {
+          <span class="pub-bar__chip pub-bar__chip--draft">Draft — not live</span>
         } @else if (storefront.hasUnpublishedChanges()) {
-          <span class="pub-bar__badge pub-bar__badge--layout">Layout unpublished</span>
+          <span class="pub-bar__chip pub-bar__chip--layout">Layout unpublished</span>
         }
       </div>
+
+      <!-- Right: actions -->
       <div class="pub-bar__actions">
-        <button class="btn btn-outline btn-sm" type="button" (click)="viewStorefront()">
-          <ap-icon name="eye" [size]="13"/> Preview
+
+        <!-- Preview — always shown -->
+        <button class="pub-bar__btn pub-bar__btn--ghost" type="button"
+                [disabled]="generatingToken()" (click)="openPreview()"
+                title="Preview draft in storefront">
+          @if (generatingToken()) {
+            <ap-spinner [size]="12"/>
+          } @else {
+            <ap-icon name="eye" [size]="14"/>
+          }
+          <span class="pub-bar__btn-label">Preview</span>
         </button>
-        <!-- Content actions — appear only when dirty -->
+
+        <!-- Divider shown when content is dirty -->
         @if (contentDirty()) {
           <div class="pub-bar__divider"></div>
-          <button class="btn btn-ghost btn-sm pub-bar__discard" type="button"
-                  [disabled]="savingContent()" (click)="discardContent()">
-            Discard
+          <button class="pub-bar__btn pub-bar__btn--discard" type="button"
+                  [disabled]="savingDraft()" (click)="discardContent()">
+            <ap-icon name="x" [size]="13"/>
+            <span class="pub-bar__btn-label">Discard</span>
           </button>
-          <button class="btn btn-primary btn-sm" type="button"
-                  [disabled]="savingContent()" (click)="saveContent()">
-            @if (savingContent()) { <ap-spinner [size]="12"/> Saving… } @else { Save content }
+          <button class="pub-bar__btn pub-bar__btn--save" type="button"
+                  [disabled]="savingDraft()" (click)="saveDraftContent()">
+            @if (savingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="edit" [size]="13"/> }
+            <span class="pub-bar__btn-label">@if (savingDraft()) { Saving… } @else { Save Draft }</span>
           </button>
         }
-        <!-- Layout publish — always available -->
-        <button class="btn btn-gold btn-sm" type="button" [disabled]="publishing()" (click)="publish()">
-          @if (publishing()) { <ap-spinner [size]="12"/> Publishing… } @else { Publish Layout }
+
+        <!-- Publish content — shown when draft is saved but not live -->
+        @if (draftUnpublished() && !contentDirty()) {
+          <button class="pub-bar__btn pub-bar__btn--publish-content" type="button"
+                  [disabled]="publishingContent()" (click)="publishContent()">
+            @if (publishingContent()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="check" [size]="13"/> }
+            <span class="pub-bar__btn-label">@if (publishingContent()) { Publishing… } @else { Publish Content }</span>
+          </button>
+        }
+
+        <div class="pub-bar__divider pub-bar__divider--layout"></div>
+
+        <!-- Publish layout — always available -->
+        <button class="pub-bar__btn pub-bar__btn--layout" type="button"
+                [disabled]="publishing()" (click)="publish()"
+                title="Publish section order and visibility">
+          @if (publishing()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="sync" [size]="13"/> }
+          <span class="pub-bar__btn-label">@if (publishing()) { Publishing… } @else { Publish Layout }</span>
         </button>
+
       </div>
     </div>
 
@@ -210,7 +246,7 @@ interface StorefrontContent {
                   <button class="callouts-toggle" type="button" (click)="toggleSlideCallouts(i)"
                           [attr.aria-expanded]="expandedSlide() === i">
                     <span class="callouts-toggle__icon">
-                      <ap-icon name="catalog" [size]="12"/>
+                      <ap-icon name="list" [size]="12"/>
                     </span>
                     <span class="callouts-toggle__label">Feature Callouts</span>
                     <span class="callouts-toggle__count">{{ item.callouts.length }}</span>
@@ -304,7 +340,7 @@ interface StorefrontContent {
                   }
                 </div>
               } @else {
-                <div class="feat-empty mb-16"><ap-icon name="catalog" [size]="20"/><span>No collections featured yet.</span></div>
+                <div class="feat-empty mb-16"><ap-icon name="collections" [size]="20"/><span>No collections featured yet.</span></div>
               }
               @if (showCollectionPicker()) {
                 <div class="col-picker mb-16">
@@ -318,7 +354,7 @@ interface StorefrontContent {
                       @for (col of filteredPickerCollections(); track col.id) {
                         <div class="col-picker-row" [class.selected]="featuredRefs().includes(col.id)" (click)="toggleFeatured(col.id)">
                           @if (col.imageUrl) { <img [src]="col.imageUrl" [alt]="col.title" class="col-picker-img"/> }
-                          @else { <div class="col-picker-img-empty"><ap-icon name="catalog" [size]="14"/></div> }
+                          @else { <div class="col-picker-img-empty"><ap-icon name="collections" [size]="14"/></div> }
                           <div class="col-picker-info"><div class="col-picker-name">{{ col.title }}</div><div class="col-picker-path mono">/collection/{{ col.handle }}</div></div>
                           <div class="col-picker-check" [class.on]="featuredRefs().includes(col.id)"></div>
                         </div>
@@ -876,81 +912,184 @@ interface StorefrontContent {
       padding-bottom: 60px;
     }
 
-    /* ── Unified storefront action bar ─────────────────────────── */
-    /*  Always sticky at the top of the scroll area — needs strong
-        depth cues so scrolled content doesn't bleed through it.     */
+    /* ── Action bar ─────────────────────────────────────────────── */
     .pub-bar {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 28px;
-      height: 52px;
+      padding: 0 16px;
+      min-height: 52px;
       background: var(--surface);
-      /* Crisp 1 px separator + soft depth shadow so the bar always
-         "floats" above content as you scroll */
       border-bottom: 1.5px solid var(--border-2);
       box-shadow: 0 2px 12px rgba(0,0,0,0.07);
       position: sticky; top: 0; z-index: 40;
-      gap: 12px; flex-wrap: wrap;
-      transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
+      gap: 8px; flex-wrap: wrap;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
     }
+    @media (min-width: 640px) { .pub-bar { padding: 0 28px; } }
 
-    /* Content-dirty: green bar — Shopify-style contextual save */
-    .pub-bar--content-dirty {
+    /* State: dirty — green Shopify-style */
+    .pub-bar--dirty {
       background: var(--green);
-      border-bottom-color: rgba(0,0,0,0.12);
-      box-shadow: 0 4px 20px rgba(2,70,56,0.22);
+      border-bottom-color: rgba(0,0,0,0.10);
+      box-shadow: 0 4px 20px rgba(2,70,56,0.25);
     }
-    .pub-bar--content-dirty .pub-bar__title { color: #fff; }
+    .pub-bar--dirty .pub-bar__title { color: #fff; }
 
-    .pub-bar__left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .pub-bar__title { font-size: 14px; font-weight: 700; transition: color 0.2s; white-space: nowrap; }
-    .pub-bar__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    /* State: draft saved but not live — amber */
+    .pub-bar--draft {
+      background: #78350f;
+      border-bottom-color: rgba(0,0,0,0.10);
+      box-shadow: 0 4px 20px rgba(120,53,15,0.25);
+    }
+    .pub-bar--draft .pub-bar__title { color: #fef3c7; }
 
-    /* Status badges */
-    .pub-bar__badge {
-      font-size: 10px; font-weight: 700;
+    /* Left group */
+    .pub-bar__left {
+      display: flex; align-items: center; gap: 8px;
+      min-width: 0; flex-shrink: 0;
+      padding: 6px 0;
+    }
+    .pub-bar__title {
+      font-size: 13px; font-weight: 700;
+      transition: color 0.2s; white-space: nowrap;
+    }
+    @media (min-width: 480px) { .pub-bar__title { font-size: 14px; } }
+
+    /* Status chips */
+    .pub-bar__chip {
+      display: inline-flex; align-items: center;
+      font-size: 9px; font-weight: 700;
       letter-spacing: 0.06em; text-transform: uppercase;
-      padding: 3px 9px; border-radius: 99px;
+      padding: 3px 8px; border-radius: 99px;
       white-space: nowrap;
     }
-    .pub-bar__badge--content {
-      background: rgba(255,255,255,0.18);
-      color: rgba(255,255,255,0.92);
+    @media (min-width: 480px) { .pub-bar__chip { font-size: 10px; padding: 3px 9px; } }
+    .pub-bar__chip--unsaved {
+      background: rgba(255,255,255,0.18); color: rgba(255,255,255,0.92);
       border: 1px solid rgba(255,255,255,0.28);
     }
-    .pub-bar__badge--layout {
-      background: rgba(193,154,91,0.1);
-      color: var(--gold);
+    .pub-bar__chip--draft {
+      background: rgba(251,191,36,0.2); color: #fbbf24;
+      border: 1px solid rgba(251,191,36,0.35);
+    }
+    .pub-bar__chip--layout {
+      background: rgba(193,154,91,0.1); color: var(--gold);
       border: 1px solid rgba(193,154,91,0.28);
     }
 
-    /* Button overrides when bar is green */
-    .pub-bar--content-dirty .pub-bar__discard {
-      background: rgba(255,255,255,0.12);
-      border-color: rgba(255,255,255,0.3);
-      color: rgba(255,255,255,0.88);
+    /* Right action group */
+    .pub-bar__actions {
+      display: flex; align-items: center; gap: 4px;
+      flex-shrink: 0; padding: 6px 0;
+      flex-wrap: nowrap;
     }
-    .pub-bar--content-dirty .pub-bar__discard:hover {
-      background: rgba(239,68,68,0.22);
-      border-color: rgba(239,68,68,0.5);
-      color: #fff;
+
+    /* Generic pub-bar button */
+    .pub-bar__btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 10px;
+      font-size: 12px; font-weight: 600;
+      border-radius: 7px; border: 1.5px solid transparent;
+      cursor: pointer; white-space: nowrap;
+      transition: all 0.14s;
+      line-height: 1;
+      flex-shrink: 0;
     }
-    .pub-bar--content-dirty .btn-primary {
-      background: #fff; color: var(--green); font-weight: 700;
+    @media (min-width: 480px) { .pub-bar__btn { padding: 7px 13px; font-size: 13px; gap: 6px; } }
+
+    /* On mobile, hide text labels; show only on ≥ 480px */
+    .pub-bar__btn-label { display: none; }
+    @media (min-width: 480px) { .pub-bar__btn-label { display: inline; } }
+
+    /* Ghost (Preview) */
+    .pub-bar__btn--ghost {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.80);
     }
-    .pub-bar--content-dirty .btn-primary:hover { background: var(--gold-3); }
-    .pub-bar--content-dirty .btn-outline {
-      border-color: rgba(255,255,255,0.3);
+    .pub-bar--dirty .pub-bar__btn--ghost,
+    .pub-bar--draft .pub-bar__btn--ghost {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.25);
       color: rgba(255,255,255,0.85);
-      background: transparent;
     }
-    .pub-bar--content-dirty .btn-outline:hover {
-      border-color: rgba(255,255,255,0.65);
+    /* When bar is default (no state), ghost is grey */
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__btn--ghost {
+      background: transparent;
+      border-color: var(--border-2);
+      color: var(--ink-2);
+    }
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__btn--ghost:hover {
+      border-color: var(--green); color: var(--green);
+    }
+    .pub-bar--dirty .pub-bar__btn--ghost:hover,
+    .pub-bar--draft .pub-bar__btn--ghost:hover {
+      background: rgba(255,255,255,0.18); color: #fff;
+    }
+
+    /* Discard */
+    .pub-bar__btn--discard {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.80);
+    }
+    .pub-bar__btn--discard:hover {
+      background: rgba(239,68,68,0.25);
+      border-color: rgba(239,68,68,0.55);
       color: #fff;
     }
+
+    /* Save Draft */
+    .pub-bar__btn--save {
+      background: #fff;
+      border-color: rgba(255,255,255,0.5);
+      color: var(--green);
+      font-weight: 700;
+    }
+    .pub-bar__btn--save:hover { background: var(--gold-3); }
+
+    /* Publish Content (amber → white pill) */
+    .pub-bar__btn--publish-content {
+      background: #fbbf24;
+      border-color: #f59e0b;
+      color: #1c1917;
+      font-weight: 700;
+    }
+    .pub-bar__btn--publish-content:hover { background: #f59e0b; }
+
+    /* Publish Layout (gold — always available) */
+    .pub-bar__btn--layout {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #fff;
+      font-weight: 700;
+    }
+    .pub-bar--dirty .pub-bar__btn--layout,
+    .pub-bar--draft .pub-bar__btn--layout {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.28);
+      color: rgba(255,255,255,0.82);
+    }
+    .pub-bar--dirty .pub-bar__btn--layout:hover,
+    .pub-bar--draft .pub-bar__btn--layout:hover {
+      background: rgba(255,255,255,0.22); color: #fff;
+    }
+    .pub-bar__btn--layout:not(:disabled):hover { filter: brightness(1.1); }
+    .pub-bar__btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* Dividers */
     .pub-bar__divider {
-      width: 1px; height: 20px;
-      background: rgba(255,255,255,0.22);
+      width: 1px; height: 18px; flex-shrink: 0;
+      background: rgba(255,255,255,0.20);
       margin: 0 2px;
+    }
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__divider {
+      background: var(--border-2);
+    }
+    .pub-bar__divider--layout {
+      background: rgba(255,255,255,0.14);
+    }
+    .pub-bar:not(.pub-bar--dirty):not(.pub-bar--draft) .pub-bar__divider--layout {
+      background: var(--border-2);
     }
 
     /* ── Page tabs ──────────────────────────────── */
@@ -1468,10 +1607,13 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   }
 
   // ── Storefront content (home page + story + contact) ──────────────────
-  readonly content       = signal<StorefrontContent>({} as StorefrontContent);
-  readonly contentDirty  = signal(false);
-  readonly savingContent = signal(false);
-  private contentLoaded  = false;
+  readonly content           = signal<StorefrontContent>({} as StorefrontContent);
+  readonly contentDirty      = signal(false);
+  readonly draftUnpublished  = signal(false);
+  readonly savingDraft       = signal(false);
+  readonly publishingContent = signal(false);
+  readonly generatingToken   = signal(false);
+  private contentLoaded      = false;
 
   // ── Media picker ──────────────────────────────────────────────────────
   readonly mediaPickerTarget = signal<string | null>(null);
@@ -1507,10 +1649,16 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.draftLoaded.set(true);
     }
 
-    // Load content data
+    // Load content: prefer saved draft so edits are not lost on reload
     try {
-      const data = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
-      this.content.set(data);
+      const draft = await firstValueFrom(this.api.get<StorefrontContent | null>('/admin/storefront-content/draft'));
+      if (draft && draft.hero) {
+        this.content.set(draft);
+        this.draftUnpublished.set(true);
+      } else {
+        const live = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
+        this.content.set(live);
+      }
       this.contentLoaded = true;
     } catch {
       this.toast.warning('Could not load content', 'Using defaults.');
@@ -1521,22 +1669,80 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     if (this.draftSaveTimer) window.clearTimeout(this.draftSaveTimer);
   }
 
-  // ── Content save ──────────────────────────────────────────────────────
-  async saveContent(): Promise<void> {
-    if (this.savingContent()) return;
-    this.savingContent.set(true);
+  // ── Draft save ────────────────────────────────────────────────────────
+  async saveDraftContent(): Promise<void> {
+    if (this.savingDraft()) return;
+    this.savingDraft.set(true);
     try {
-      await firstValueFrom(this.api.patch<StorefrontContent>('/admin/storefront-content', this.content()));
+      await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/draft', this.content()));
       this.contentDirty.set(false);
-      this.toast.success('Content saved', 'Changes are now live on the storefront.');
+      this.draftUnpublished.set(true);
+      this.toast.success('Draft saved', 'Preview your changes before publishing live.');
     } catch {
-      this.toast.error('Save failed', 'Could not save content changes.');
+      this.toast.error('Save failed', 'Could not save draft.');
     } finally {
-      this.savingContent.set(false);
+      this.savingDraft.set(false);
     }
   }
 
-  discardContent(): void { this.contentDirty.set(false); }
+  // ── Publish draft to live ─────────────────────────────────────────────
+  async publishContent(): Promise<void> {
+    if (this.publishingContent()) return;
+    const ok = await this.confirm.ask({
+      title: 'Publish content?',
+      message: 'This will replace the live storefront content with your saved draft.',
+      confirmLabel: 'Publish now',
+      cancelLabel: 'Cancel',
+      variant: 'info',
+    });
+    if (!ok) return;
+    this.publishingContent.set(true);
+    try {
+      await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/publish', {}));
+      this.draftUnpublished.set(false);
+      this.toast.success('Content published', 'Your draft is now live on the storefront.');
+    } catch {
+      this.toast.error('Publish failed', 'Could not publish content.');
+    } finally {
+      this.publishingContent.set(false);
+    }
+  }
+
+  // ── Preview draft in storefront with a secure short-lived token ───────
+  async openPreview(): Promise<void> {
+    if (this.generatingToken()) return;
+    this.generatingToken.set(true);
+    try {
+      const { token } = await firstValueFrom(
+        this.api.post<{ token: string; ttlSeconds: number }>('/admin/storefront-content/preview-token', {}),
+      );
+      const base = this.storefront.storefrontUrl();
+      const sep  = base.includes('?') ? '&' : '?';
+      window.open(`${base}${sep}preview=${token}`, '_blank', 'noopener,noreferrer');
+    } catch {
+      this.toast.error('Preview failed', 'Could not generate a preview link.');
+    } finally {
+      this.generatingToken.set(false);
+    }
+  }
+
+  // ── Discard unsaved edits — reload last saved state ───────────────────
+  async discardContent(): Promise<void> {
+    if (this.savingDraft()) return;
+    try {
+      // Prefer draft if one exists, fall back to live
+      const draft = await firstValueFrom(this.api.get<StorefrontContent | null>('/admin/storefront-content/draft'));
+      if (draft && draft.hero) {
+        this.content.set(draft);
+      } else {
+        const live = await firstValueFrom(this.api.get<StorefrontContent>('/admin/storefront-content'));
+        this.content.set(live);
+      }
+      this.contentDirty.set(false);
+    } catch {
+      this.toast.error('Discard failed', 'Could not reload content.');
+    }
+  }
 
   // ── Patch helpers ─────────────────────────────────────────────────────
   private markDirty(): void { this.contentDirty.set(true); }
@@ -1867,9 +2073,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.blocks.set(HOME_LAYOUT_BLOCKS.map((b) => ({ ...b })));
   }
 
-  viewStorefront(): void {
-    window.open(this.storefront.storefrontUrl(), '_blank', 'noopener,noreferrer');
-  }
 
   async publish(): Promise<void> {
     if (this.publishing()) return;

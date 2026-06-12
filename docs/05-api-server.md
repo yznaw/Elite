@@ -411,7 +411,7 @@ server/
     ├── admin-bulk-import.route.js   ← CSV upload → NDJSON streaming
     ├── admin-ref.route.js           ← Colors, materials, size sets CRUD
     ├── admin-media.route.js         ← Media library upload/delete
-    ├── admin-collections.route.js   ← Collections CRUD
+    ├── admin-collections.route.js   ← Collections CRUD + sub-collection hierarchy (parentId)
     ├── admin-orders.route.js        ← Orders + status workflow + notes + timeline
     ├── admin-customers.route.js     ← Customers CRUD + order history
     ├── admin-analytics.route.js     ← KPI + chart data

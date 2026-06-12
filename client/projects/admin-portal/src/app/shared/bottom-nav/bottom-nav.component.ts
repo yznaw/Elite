@@ -338,9 +338,9 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
   readonly secondaryItems: SecondaryItem[] = [
     { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media'    },
     { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store'    },
-    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'catalog'  },
+    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections'  },
     { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart'    },
-    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'list'     },
+    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference'     },
     { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
   ];
 

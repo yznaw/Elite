@@ -22,6 +22,7 @@ interface FormShape {
   imageUrl: string | null;
   productIds: string[];
   hidden: boolean;
+  parentId: string | null;
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -122,6 +123,23 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           <label class="lbl">{{ t('collections.drawer.desc') }}</label>
           <textarea class="inp mb-16" rows="3" [placeholder]="t('collections.drawer.descHolder')" [ngModel]="form().description" (ngModelChange)="set('description', $event)"></textarea>
 
+          <label class="lbl">{{ t('collections.drawer.parent') }}</label>
+          <div class="parent-row mb-16">
+            <ap-icon name="hierarchy" [size]="14" style="color:var(--muted);flex-shrink:0;"/>
+            <select class="inp" style="flex:1;" [ngModel]="form().parentId" (ngModelChange)="set('parentId', $event || null)">
+              <option [value]="null">{{ t('collections.drawer.parent.none') }}</option>
+              @for (c of parentOptions(); track c.id) {
+                <option [value]="c.id">{{ c.title }}</option>
+              }
+            </select>
+          </div>
+          @if (form().parentId) {
+            <div class="parent-breadcrumb mb-16">
+              <ap-icon name="hierarchy" [size]="11"/>
+              <span class="muted small">Sub-collection of <strong>{{ parentTitle() }}</strong> · /collection/{{ parentHandle() }}/{{ form().handle || 'this-collection' }}</span>
+            </div>
+          }
+
           <label class="lbl">{{ t('collections.cover.title') }}</label>
           <div class="cover-drop"
                [class.has-image]="!!form().imageUrl"
@@ -154,23 +172,63 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         </div>
 
         <div class="section-title">
-          <ap-icon name="catalog" [size]="14"/>
+          <ap-icon name="link" [size]="14"/>
           <span>{{ t('collections.drawer.manageProducts') }}</span>
         </div>
 
         <div class="mb-24">
-          <div class="row gap-sm mb-16" style="justify-content:space-between;align-items:center;">
+          <div class="row gap-sm mb-16" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
             <div class="strong">{{ form().productIds.length }} {{ t('collections.products') }}</div>
-            <button class="btn btn-outline btn-sm" (click)="pickingProducts.set(true)">{{ t('collections.drawer.linkProducts') }}</button>
+            <div class="row gap-sm">
+              @if (form().productIds.length > 1) {
+                <div class="view-toggle">
+                  <button class="view-toggle-btn" [class.active]="reorderView() === 'grid'" (click)="reorderView.set('grid')" title="Grid view">
+                    <ap-icon name="grid" [size]="13"/>
+                  </button>
+                  <button class="view-toggle-btn" [class.active]="reorderView() === 'list'" (click)="reorderView.set('list')" title="List view — drag handles">
+                    <ap-icon name="rows" [size]="13"/>
+                  </button>
+                </div>
+              }
+              <button class="btn btn-outline btn-sm" (click)="pickingProducts.set(true)">{{ t('collections.drawer.linkProducts') }}</button>
+            </div>
           </div>
-          
+
           @if (form().productIds.length === 0) {
             <div style="padding:24px;border:1px solid var(--border);border-radius:10px;text-align:center;background:var(--bg);">
-              <div class="muted mb-8"><ap-icon name="catalog" [size]="24"/></div>
+              <div class="muted mb-8"><ap-icon name="collections" [size]="24"/></div>
               <div class="strong">{{ t('collections.drawer.noProducts') }}</div>
               <div class="muted small">{{ t('collections.drawer.noProducts.sub') }}</div>
             </div>
+          } @else if (reorderView() === 'list') {
+            <!-- List view: explicit drag handle + up/down buttons for precise reordering -->
+            <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
+            <div class="reorder-list">
+              @for (p of linkedProducts(); track p.id; let i = $index; let first = $first; let last = $last) {
+                <div class="reorder-row"
+                     draggable="true"
+                     (dragstart)="onProductDragStart(i, $event)"
+                     (dragover)="onReorderRowDragOver($event, i)"
+                     (dragleave)="dragOverIndex.set(-1)"
+                     (drop)="onProductDrop(i, $event)"
+                     [class.drag-over]="dragOverIndex() === i">
+                  <span class="reorder-handle" title="Drag to reorder"><ap-icon name="drag" [size]="14"/></span>
+                  <span class="reorder-pos">{{ i + 1 }}</span>
+                  <img [src]="p.image" [alt]="p.name" class="reorder-thumb"/>
+                  <div class="reorder-info">
+                    <div class="strong small" style="font-size:13px;">{{ p.name }}</div>
+                    <div class="muted mono" style="font-size:11px;">{{ p.sku }}</div>
+                  </div>
+                  <div class="reorder-actions">
+                    <button class="icon-btn" [disabled]="first" (click)="moveProduct(i, -1)" title="Move up"><ap-icon name="arrowUp" [size]="12"/></button>
+                    <button class="icon-btn" [disabled]="last" (click)="moveProduct(i, 1)" title="Move down"><ap-icon name="arrowDn" [size]="12"/></button>
+                    <button class="icon-btn" style="color:var(--danger);" (click)="removeProduct(p.id)" title="Remove"><ap-icon name="x" [size]="12"/></button>
+                  </div>
+                </div>
+              }
+            </div>
           } @else {
+            <!-- Grid view: drag the card -->
             <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
             <div class="grid-cards collection-products-grid" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
               @for (p of linkedProducts(); track p.id; let i = $index) {
@@ -340,6 +398,57 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
       transition: transform 0.12s, box-shadow 0.12s;
     }
     .collection-prod:active { cursor: grabbing; transform: scale(0.98); }
+
+    /* View toggle (grid / list) */
+    .view-toggle {
+      display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden;
+    }
+    .view-toggle-btn {
+      padding: 0 9px; height: 30px; display: inline-flex; align-items: center;
+      background: transparent; border: none; color: var(--muted); cursor: pointer; transition: all 0.12s;
+    }
+    .view-toggle-btn:hover { color: var(--ink); }
+    .view-toggle-btn.active { background: var(--green); color: #fff; }
+
+    /* List-mode reorder */
+    .reorder-list { display: flex; flex-direction: column; gap: 4px; }
+    .reorder-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); cursor: grab; transition: background 0.12s, border-color 0.12s;
+      user-select: none;
+    }
+    .reorder-row:active { cursor: grabbing; }
+    .reorder-row.drag-over { border-color: var(--gold); background: var(--gold-3); }
+    .reorder-handle { color: var(--muted); flex-shrink: 0; cursor: grab; }
+    .reorder-pos {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      min-width: 18px; text-align: center; flex-shrink: 0;
+    }
+    .reorder-thumb {
+      width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0;
+    }
+    .reorder-info { flex: 1; min-width: 0; }
+    .reorder-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+    .reorder-actions .icon-btn {
+      width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+      background: transparent; border: 1px solid transparent; border-radius: 6px;
+      color: var(--ink-2); cursor: pointer; transition: all 0.12s;
+    }
+    .reorder-actions .icon-btn:hover:not(:disabled) { background: var(--bg); border-color: var(--border); }
+    .reorder-actions .icon-btn:disabled { color: var(--muted-2); cursor: not-allowed; opacity: 0.4; }
+
+    /* Parent collection picker */
+    .parent-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .parent-breadcrumb {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 12px; border-radius: 8px;
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--ink-2);
+    }
+    .parent-breadcrumb ap-icon { color: var(--green); flex-shrink: 0; }
   `],
 })
 export class CollectionDrawerComponent implements OnInit, OnDestroy {
@@ -365,8 +474,8 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private readonly productsApi = inject(AdminProductsService);
   readonly t = (k: string): string => this.i18n.t(k);
 
-  private readonly initial = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false });
-  readonly form = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false });
+  private readonly initial = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false, parentId: null });
+  readonly form = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false, parentId: null });
   readonly handleManual = signal(false);
   readonly saveState = signal<SaveState>('idle');
   readonly shakeSaveBar = signal(false);
@@ -374,6 +483,8 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   readonly pickingProducts = signal(false);
   readonly pickerSearch = signal('');
   readonly products = signal<Product[]>([]);
+  readonly reorderView = signal<'grid' | 'list'>('grid');
+  readonly dragOverIndex = signal(-1);
 
   readonly currentIndex = computed(() => this._collections().findIndex((c) => c.id === this._currentId()));
   readonly canPrev = computed(() => this.currentIndex() > 0);
@@ -383,6 +494,31 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   });
 
   readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
+
+  /** Collections eligible to be the parent of the current one — excludes self and all descendants. */
+  readonly parentOptions = computed(() => {
+    const selfId = this._currentId();
+    const all = this._collections();
+    const descendants = new Set<string>();
+    const collectDescendants = (id: string) => {
+      all.filter(c => c.parentId === id).forEach(c => {
+        descendants.add(c.id);
+        collectDescendants(c.id);
+      });
+    };
+    collectDescendants(selfId);
+    return all.filter(c => c.id !== selfId && !descendants.has(c.id) && !c.id.startsWith('COL-NEW-'));
+  });
+
+  readonly parentTitle = computed(() => {
+    const pid = this.form().parentId;
+    return this._collections().find(c => c.id === pid)?.title ?? '';
+  });
+
+  readonly parentHandle = computed(() => {
+    const pid = this.form().parentId;
+    return this._collections().find(c => c.id === pid)?.handle ?? '';
+  });
 
   get collection(): Collection {
     const list = this._collections();
@@ -427,7 +563,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private resetForCurrent(): void {
     const c = this.collection;
     if (!c) return;
-    this.initial.set({ title: c.title, handle: c.handle || '', description: c.description, imageUrl: c.imageUrl, productIds: [...c.productIds], hidden: c.hidden });
+    this.initial.set({ title: c.title, handle: c.handle || '', description: c.description, imageUrl: c.imageUrl, productIds: [...c.productIds], hidden: c.hidden, parentId: c.parentId ?? null });
     this.handleManual.set(!!c.handle);
     this.form.set({ ...this.initial() });
     this.saveState.set('idle');
@@ -541,12 +677,27 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
 
   onProductDrop(targetIndex: number, ev: DragEvent): void {
     ev.preventDefault();
+    this.dragOverIndex.set(-1);
     const from = this.dragFromIndex ?? Number(ev.dataTransfer?.getData('text/plain'));
     this.dragFromIndex = null;
     if (Number.isNaN(from) || from === targetIndex) return;
     const ids = [...this.form().productIds];
     const [moved] = ids.splice(from, 1);
     ids.splice(targetIndex, 0, moved);
+    this.set('productIds', ids);
+  }
+
+  onReorderRowDragOver(ev: DragEvent, index: number): void {
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+    this.dragOverIndex.set(index);
+  }
+
+  moveProduct(index: number, dir: -1 | 1): void {
+    const ids = [...this.form().productIds];
+    const targetIndex = index + dir;
+    if (targetIndex < 0 || targetIndex >= ids.length) return;
+    [ids[index], ids[targetIndex]] = [ids[targetIndex], ids[index]];
     this.set('productIds', ids);
   }
 
@@ -575,6 +726,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
       imageUrl: f.imageUrl,
       productIds: f.productIds,
       hidden: f.hidden,
+      parentId: f.parentId,
     };
     const id = this.collection.id;
     const isDraft = !id || id.startsWith('COL-NEW-');
