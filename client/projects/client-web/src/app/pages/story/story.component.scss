@@ -4,7 +4,7 @@
 
 .story-page {
   min-height: 100vh;
-  padding-top: 80px;
+  // padding-top: 80px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--bg) 38%),
     var(--bg);
@@ -49,7 +49,7 @@
 .story-hero__content {
   width: min(1080px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 72px 0 118px;
+  padding: 135px 0 118px;
 }
 
 .story-kicker {
@@ -75,7 +75,7 @@
 
 .story-hero h1 {
   max-width: 760px;
-  font-size: clamp(48px, 8vw, 112px);
+  font-size: clamp(48px, 8vw, 105px);
   line-height: 0.9;
 }
 
