@@ -30,21 +30,26 @@ export class AppComponent {
     { initialValue: this.router.url },
   );
 
-  readonly hideFooter = computed(() => this.currentUrl().startsWith('/checkout'));
+  readonly hideFooter    = computed(() => this.currentUrl().startsWith('/checkout'));
 
   // Preview banner state
   readonly bannerVisible = signal(true);
   readonly viewport      = signal<'desktop' | 'mobile'>('desktop');
+  readonly isPhonePreview = computed(() =>
+    this.homeContent.isPreviewMode() && this.viewport() === 'mobile',
+  );
 
   constructor() {
-    // Apply/remove mobile-preview class on <html> when viewport changes
+    // Keep <html> class in sync — used by global CSS for outer shell styling
     effect(() => {
-      if (!this.homeContent.isPreviewMode()) return;
-      const html = document.documentElement;
+      if (!this.homeContent.isPreviewMode()) {
+        document.documentElement.classList.remove('preview-mobile');
+        return;
+      }
       if (this.viewport() === 'mobile') {
-        html.classList.add('preview-mobile');
+        document.documentElement.classList.add('preview-mobile');
       } else {
-        html.classList.remove('preview-mobile');
+        document.documentElement.classList.remove('preview-mobile');
       }
     });
   }

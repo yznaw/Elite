@@ -1,46 +1,41 @@
 @if (homeContent.isPreviewMode()) {
 
-  <!-- ── Expanded banner ─────────────────────────────────────── -->
+  <!-- ── Banner (stays outside the phone frame) ─────────────── -->
   @if (bannerVisible()) {
-    <div class="preview-banner" role="banner" aria-label="Draft preview mode">
+    <div class="preview-banner" role="banner">
       <div class="preview-banner__inner">
 
-        <!-- Left: status -->
         <div class="preview-banner__left">
           <span class="preview-banner__dot"></span>
           <span class="preview-banner__label">Draft Preview</span>
           <span class="preview-banner__sub">Unpublished — not visible to customers</span>
         </div>
 
-        <!-- Centre: viewport toggle -->
         <div class="preview-banner__viewport">
-          <button class="preview-banner__vp-btn"
-                  [class.active]="viewport() === 'desktop'"
-                  (click)="setViewport('desktop')"
-                  title="Desktop view">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button class="preview-banner__vp-btn" [class.active]="viewport() === 'desktop'"
+                  (click)="setViewport('desktop')" title="Desktop view">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
             </svg>
             <span class="preview-banner__vp-label">Desktop</span>
           </button>
-          <button class="preview-banner__vp-btn"
-                  [class.active]="viewport() === 'mobile'"
-                  (click)="setViewport('mobile')"
-                  title="Mobile view">
-            <svg width="12" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/>
+          <button class="preview-banner__vp-btn" [class.active]="viewport() === 'mobile'"
+                  (click)="setViewport('mobile')" title="Mobile view (390px)">
+            <svg width="11" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
             </svg>
             <span class="preview-banner__vp-label">Mobile</span>
           </button>
         </div>
 
-        <!-- Right: actions -->
         <div class="preview-banner__actions">
           <button class="preview-banner__exit" type="button" (click)="exitPreview()">
             Exit preview
           </button>
-          <button class="preview-banner__hide" type="button" (click)="toggleBanner()" title="Minimise banner">
-            ↑
+          <button class="preview-banner__hide" type="button" (click)="toggleBanner()" title="Minimise">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M18 15l-6-6-6 6"/>
+            </svg>
           </button>
         </div>
 
@@ -48,25 +43,65 @@
     </div>
   }
 
-  <!-- ── Minimised pill (shown when banner is hidden) ─────────── -->
+  <!-- ── Minimised pill ──────────────────────────────────────── -->
   @if (!bannerVisible()) {
-    <button class="preview-pill" type="button" (click)="toggleBanner()" aria-label="Show preview banner">
+    <button class="preview-pill" type="button" (click)="toggleBanner()" aria-label="Expand preview banner">
       <span class="preview-pill__dot"></span>
       <span class="preview-pill__label">DRAFT</span>
-      <span class="preview-pill__expand">↓</span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
     </button>
   }
 
 }
 
-<cw-nav />
+<!--
+  .site-frame wraps all actual site content.
+  In mobile preview it becomes the "phone" — overflow-y:auto + transform
+  makes it a scroll container that also traps position:sticky/fixed children
+  so the site nav stays inside the phone rather than escaping to the viewport.
+-->
+<div class="site-frame" [class.site-frame--phone]="isPhonePreview()">
 
-<main>
-  <router-outlet />
-</main>
+  @if (isPhonePreview()) {
+    <!-- Status-bar strip (mimics iOS status bar) -->
+    <div class="phone-statusbar" aria-hidden="true">
+      <span class="phone-statusbar__time">9:41</span>
+      <span class="phone-statusbar__icons">
+        <!-- Signal -->
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor">
+          <rect x="0"  y="7" width="3" height="4" rx="0.5"/>
+          <rect x="4"  y="5" width="3" height="6" rx="0.5"/>
+          <rect x="8"  y="2" width="3" height="9" rx="0.5"/>
+          <rect x="12" y="0" width="3" height="11" rx="0.5"/>
+        </svg>
+        <!-- Wi-Fi -->
+        <svg width="15" height="11" viewBox="0 0 24 17" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <path d="M1 6C5.5 1.5 18.5 1.5 23 6"/>
+          <path d="M4 10C7 7 17 7 20 10"/>
+          <path d="M7.5 14C9.5 12 14.5 12 16.5 14"/>
+          <circle cx="12" cy="17" r="1.5" fill="currentColor" stroke="none"/>
+        </svg>
+        <!-- Battery -->
+        <svg width="22" height="11" viewBox="0 0 22 11" fill="none">
+          <rect x="0.5" y="0.5" width="18" height="10" rx="2.5" stroke="currentColor" stroke-width="1.2"/>
+          <rect x="2" y="2" width="13" height="7" rx="1.5" fill="currentColor"/>
+          <path d="M19.5 3.5v4a1.5 1.5 0 000-4z" fill="currentColor" opacity=".5"/>
+        </svg>
+      </span>
+    </div>
+  }
 
-@if (!hideFooter()) {
-  <cw-footer />
-}
+  <cw-nav />
 
-<cw-cart-drawer />
+  <main>
+    <router-outlet />
+  </main>
+
+  @if (!hideFooter()) {
+    <cw-footer />
+  }
+
+  <cw-cart-drawer />
+</div>

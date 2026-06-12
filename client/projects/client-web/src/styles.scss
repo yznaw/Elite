@@ -428,20 +428,121 @@ body::before {
   }
 }
 
-/* ── Admin draft preview — mobile viewport simulation ────────────────
-   Added to global styles so the html/body selectors are not scoped
-   by Angular's component encapsulation.
-──────────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════
+   ADMIN DRAFT PREVIEW — MOBILE PHONE FRAME
+   All rules here target the live Angular DOM via global selectors.
+   The component-scoped SCSS in app.component.scss cannot reach
+   <html>/<body> or sibling elements; these rules can.
+══════════════════════════════════════════════════════════════════ */
+
+/* Outer shell — dark studio background */
 html.preview-mobile {
-  background: #111 !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(193,154,91,0.08) 0%, transparent 55%),
+    linear-gradient(180deg, #111008 0%, #0a0a0a 100%) !important;
+  min-height: 100dvh;
 }
 
 html.preview-mobile body {
-  max-width: 390px !important;
-  margin: 0 auto !important;
+  background: transparent !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  min-height: 100dvh;
+  padding-bottom: 48px !important;
+  /* Reset any existing max-width constraint */
+  max-width: none !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+
+/* cw-root acts as a column flex child — full width for the banner */
+html.preview-mobile cw-root {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100%;
+}
+
+/* Preview banner stays full-width, naturally above the phone */
+html.preview-mobile cw-root > .preview-banner {
+  align-self: stretch !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 9999 !important;
+}
+
+/* Minimised pill: fixed so it floats above everything */
+html.preview-mobile cw-root > .preview-pill {
+  position: fixed !important;
+  top: 10px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 9999 !important;
+}
+
+/* ── The phone frame ───────────────────────────────────────────── */
+html.preview-mobile .site-frame--phone {
+  /* Dimensions */
+  width: 393px !important;
+  max-width: 393px !important;
+  flex-shrink: 0 !important;
+
+  /* Scrolling: content scrolls INSIDE the frame, not the viewport */
+  max-height: calc(100dvh - 52px - 24px) !important; /* 52 = banner, 24 = gap below */
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: none !important;
+
+  /* KEY: transform creates a new stacking context.
+     position:sticky elements inside now stick to the TOP of THIS
+     container, not the viewport — so the site nav stays inside the phone. */
+  transform: translateZ(0) !important;
+
+  /* Phone bezel — layered box-shadows:
+     1. screen inner glow edge
+     2. aluminum body
+     3. body outer edge highlight
+     4. ground shadow
+  */
+  border-radius: 50px !important;
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 24px 64px rgba(0, 0, 0, 0.7) !important;
-  min-height: 100vh;
-  position: relative;
+    0 0 0 2px rgba(255,255,255,0.18),
+    0 0 0 14px #1a1a1c,
+    0 0 0 15px rgba(255,255,255,0.06),
+    0 0 0 15.5px rgba(0,0,0,0.5),
+    0 50px 120px -10px rgba(0,0,0,0.98),
+    0 20px 50px rgba(0,0,0,0.5) !important;
+
+  /* Small gap below banner */
+  margin-top: 20px !important;
+
+  /* Home-indicator pill via outline offset trick */
+  outline: none;
+  position: relative !important;
+}
+
+html.preview-mobile .site-frame--phone::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* Home-indicator bar at the bottom of the phone */
+html.preview-mobile .site-frame--phone::after {
+  content: '';
+  display: block;
+  width: 140px;
+  height: 5px;
+  background: rgba(255,255,255,0.28);
+  border-radius: 99px;
+  margin: 12px auto 20px;
+}
+
+/* Status bar background matches the site's nav color */
+html.preview-mobile .phone-statusbar {
+  background: #024638 !important; /* Elite green */
+}
+
+/* Desktop mode: no phone frame — just normal content flow */
+html:not(.preview-mobile) .site-frame {
+  display: contents !important;
 }
