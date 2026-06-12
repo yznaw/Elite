@@ -86,12 +86,12 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly gallery = computed(() => {
     const p = this.product();
     if (!p) return [FALLBACK_IMAGE];
-    const selectedColorImage = this.selectedColor()
-      ? this.productImageForColor(p, this.selectedColor() || '')
-      : null;
     const images = [...(p.images ?? []), p.image]
       .map((src) => String(src || '').trim())
       .filter(Boolean);
+    const selectedColorImage = this.selectedColor()
+      ? this.productImageForColor(p, this.selectedColor() || '', images)
+      : null;
     const galleryImages = [selectedColorImage, ...images]
       .map((src) => String(src || '').trim())
       .filter(Boolean);
@@ -383,19 +383,64 @@ export class ProductComponent implements OnInit, OnDestroy {
     return this.compact([product.color, ...(product.colors || [])]);
   }
 
-  private productImageForColor(product: Product, color: string): string | null {
+  private productImageForColor(product: Product, color: string, galleryImages: string[]): string | null {
     const key = this.colorKey(color);
-    const mappedImage = product.colorImages?.[key];
-    if (mappedImage) return mappedImage;
+    const mappedImage = this.mappedImageForColor(product, key);
+    if (mappedImage) return this.resolveGalleryImage(product, mappedImage, galleryImages);
+
+    const hintedImage = galleryImages.find((image) => this.urlContainsColor(image, key));
+    if (hintedImage) return hintedImage;
 
     const colors = this.productColors(product);
-    const images = product.images || [];
     const colorIndex = colors.findIndex((item) => this.colorKey(item) === key);
-    return colorIndex >= 0 && images.length >= colors.length ? images[colorIndex] || null : null;
+    return colorIndex >= 0 && galleryImages.length >= colors.length ? galleryImages[colorIndex] || null : null;
+  }
+
+  private mappedImageForColor(product: Product, key: string): string | null {
+    const colorImages = product.colorImages || {};
+    const direct = colorImages[key];
+    if (direct) return direct;
+
+    const target = this.colorSlug(key);
+    const match = Object.entries(colorImages).find(([color]) => this.colorSlug(color) === target);
+    return match?.[1] || null;
+  }
+
+  private resolveGalleryImage(product: Product, mappedImage: string, galleryImages: string[]): string {
+    const mapped = String(mappedImage || '').trim();
+    if (!mapped) return mapped;
+    if (galleryImages.includes(mapped)) return mapped;
+
+    const normalizedMapped = this.mediaIdentity(mapped);
+    const galleryMatch = galleryImages.find((image) => this.mediaIdentity(image) === normalizedMapped);
+    if (galleryMatch) return galleryMatch;
+
+    const variants = product.imageVariants?.[mapped];
+    const variantMatch = ['pdp', 'zoom', 'grid', 'card', 'thumb']
+      .map((name) => variants?.[name]?.url)
+      .find((url): url is string => !!url && galleryImages.includes(url));
+    return variantMatch || mapped;
+  }
+
+  private urlContainsColor(url: string, colorKey: string): boolean {
+    const color = this.colorSlug(colorKey);
+    if (!color) return false;
+    return this.colorSlug(decodeURIComponent(String(url || ''))).includes(color);
   }
 
   private colorKey(value: string): string {
     return String(value || '').trim().toLowerCase();
+  }
+
+  private colorSlug(value: string): string {
+    return this.colorKey(value).replace(/[^a-z0-9]+/g, '');
+  }
+
+  private mediaIdentity(url: string): string {
+    return String(url || '')
+      .trim()
+      .split('?')[0]
+      .replace(/-(thumb|card|grid|pdp|zoom)(?=\.[a-z0-9]+$)/i, '');
   }
 
   private compact(values: Array<string | null | undefined>): string[] {
