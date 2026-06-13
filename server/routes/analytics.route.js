@@ -58,7 +58,7 @@ router.post('/collect', asyncHandler(async (req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
 
-    const cols = 11; // tenant_id is fixed, the rest come per-row below
+    const cols = 10; // per-row params ($1 is the shared tenant_id, 10 cols per row)
     const values = [tenant.id];
     const placeholders = events.map((e, i) => {
       const base = i * cols + 2; // $1 is tenant.id
