@@ -20,7 +20,7 @@
 
               <div class="hero-brand">
                 <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
-                <span>{{ activeHeroItem().subtitle }}</span>
+                <span>{{ heroSubtitle(activeHeroItem()) }}</span>
               </div>
 
               <div
@@ -87,8 +87,8 @@
                         <img [src]="callout.thumbnail" [alt]="callout.alt" loading="lazy" decoding="async" />
                       </picture>
                       <div>
-                        <strong>{{ callout.titleAr }}</strong>
-                        <span>{{ callout.subtitleEn }}</span>
+                        <strong>{{ calloutTitle(callout) }}</strong>
+                        <span>{{ calloutSubtitle(callout) }}</span>
                       </div>
                     </div>
                   </article>
@@ -106,8 +106,8 @@
                       <img [src]="callout.thumbnail" [alt]="callout.alt" loading="lazy" decoding="async" />
                     </picture>
                     <div>
-                      <strong>{{ callout.titleAr }}</strong>
-                      <span>{{ callout.subtitleEn }}</span>
+                      <strong>{{ calloutTitle(callout) }}</strong>
+                      <span>{{ calloutSubtitle(callout) }}</span>
                     </div>
                   </article>
                 }

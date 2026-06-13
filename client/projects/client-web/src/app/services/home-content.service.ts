@@ -201,6 +201,8 @@ export class HomeContentService {
       imageUrl: this.resolveMediaUrl(item.imageUrl),
       callouts: (item.callouts ?? []).map((cl) => ({
         ...cl,
+        titleEn: cl.titleEn || cl.subtitleEn || cl.titleAr || '',
+        subtitleAr: cl.subtitleAr || '',
         thumbnail: this.resolveMediaUrl(cl.thumbnail),
       })),
     }));

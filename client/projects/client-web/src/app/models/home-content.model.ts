@@ -70,8 +70,10 @@ export interface StoryContentData {
 
 export interface HeroCalloutContent {
   id: string;
+  titleEn: string;
   titleAr: string;
   subtitleEn: string;
+  subtitleAr: string;
   thumbnail: string;
   alt: string;
 }

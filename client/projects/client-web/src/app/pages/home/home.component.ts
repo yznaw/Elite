@@ -72,8 +72,30 @@ export class HomeComponent implements OnInit, OnDestroy {
     strap: '0.34s', buckle: '0.48s', sole: '0.76s', stitching: '0.62s',
   };
 
+  readonly isArabic = computed(() => this.locale.locale() === 'ar');
+
   calloutDelay(id: string): string {
     return this._calloutDelays[id] ?? '0.5s';
+  }
+
+  calloutTitle(callout: { titleEn?: string; titleAr?: string; subtitleEn?: string }): string {
+    return this.isArabic()
+      ? (callout.titleAr || callout.subtitleEn || '')
+      : (callout.titleEn || callout.subtitleEn || callout.titleAr || '');
+  }
+
+  calloutSubtitle(callout: { subtitleEn?: string; subtitleAr?: string }): string {
+    return this.isArabic()
+      ? (callout.subtitleAr || '')
+      : (callout.subtitleEn || '');
+  }
+
+  heroSubtitle(item: { subtitle?: string }): string {
+    const value = (item.subtitle || '').trim();
+    if (!value) return '';
+    const parts = value.split('/').map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 2) return value;
+    return this.isArabic() ? parts[0] : parts[1];
   }
 
   ngOnInit(): void {
