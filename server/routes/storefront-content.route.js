@@ -232,7 +232,7 @@ async function loadContent(client, tenantId) {
     [tenantId],
   );
   const raw = result.rows[0]?.home_content;
-  const content = raw ? normalizeContent(raw) : clone(DEFAULT_HOME_CONTENT);
+  const content = raw ? normalizeContent(raw) : createEmptyHomeContent();
 
   // Resolve linked collection tiles with live data so catalog updates are always reflected
   const collectionIds = content.collections
@@ -312,6 +312,72 @@ async function promoteDraftToLive(client, tenantId) {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function createEmptyHomeContent() {
+  return {
+    hero: {
+      imageUrl: '',
+      title: '',
+      body: '',
+      discountText: '',
+      ctaText: '',
+      ctaLink: '',
+    },
+    collections: [],
+    story: {
+      hero: {
+        kicker: '',
+        title: '',
+        accent: '',
+        body: '',
+        imageUrl: '',
+        imageAlt: '',
+      },
+      chapters: [],
+      quote: {
+        text: '',
+        accent: '',
+        author: '',
+      },
+      atelier: {
+        kicker: '',
+        title: '',
+        body: '',
+        items: [],
+      },
+      intro: {
+        kicker: '',
+        headline: '',
+        body: '',
+      },
+      heroFacts: [],
+    },
+    heroSlider: {
+      ctaEn: '',
+      ctaAr: '',
+      items: [],
+    },
+    promise: {
+      cards: [],
+    },
+    stats: [],
+    contact: {
+      kicker: '',
+      headlineEn: '',
+      headlineAccentEn: '',
+      headlineAr: '',
+      headlineAccentAr: '',
+      subhead: '',
+      email: '',
+      phone: '',
+      whatsapp: '',
+      promiseLine: '',
+      promiseSignature: '',
+      infoBlocks: [],
+      socialLinks: [],
+    },
+  };
 }
 
 function asText(value, fallback = '') {

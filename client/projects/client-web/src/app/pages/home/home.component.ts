@@ -1,10 +1,27 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { HomeCollectionTileContent } from '../../models/home-content.model';
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+interface StorefrontCollection {
+  id: string;
+  handle: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  productIds: string[];
+}
 
 @Component({
   selector: 'cw-home',
@@ -15,9 +32,11 @@ import { HomeCollectionTileContent } from '../../models/home-content.model';
 })
 export class HomeComponent implements OnInit, OnDestroy {
   private readonly router       = inject(Router);
+  private readonly http         = inject(HttpClient);
   private readonly i18n         = inject(I18nService);
   readonly locale               = inject(LocaleService);
-  private readonly homeContent  = inject(HomeContentService);
+  readonly homeContent          = inject(HomeContentService);
+  private readonly apiBase      = this.resolveApiBase();
 
   private metaTimer: number | undefined;
   private heroSwipeStart: { x: number; y: number; pointerId: number } | null = null;
@@ -26,6 +45,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly activeHeroItemIndex = signal(0);
   readonly contentData         = this.homeContent.contentData;
   readonly layoutSections      = this.homeContent.layoutSections;
+  readonly collectionTiles     = signal<HomeCollectionTileContent[]>([]);
+  readonly collectionsLoaded   = signal(false);
+  readonly pageReady           = computed(() => !this.homeContent.loading() && this.collectionsLoaded());
 
   // ── Hero slider — read from API, fallback to model defaults ─────────────
   readonly heroItems    = computed(() => this.contentData().heroSlider.items);
@@ -53,8 +75,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    void this.homeContent.refresh(true);
-    this.preloadHeroAssets();
+    void this.loadCollectionTiles();
+    void this.homeContent.refresh(true).then(() => this.preloadHeroAssets());
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
   }
 
@@ -122,6 +144,27 @@ export class HomeComponent implements OnInit, OnDestroy {
     return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'collection';
   }
 
+  private async loadCollectionTiles(): Promise<void> {
+    this.collectionsLoaded.set(false);
+
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<StorefrontCollection[]>>(`${this.apiBase}/collections?limit=3`),
+      );
+      const rows = Array.isArray(res.data) ? res.data : [];
+      this.collectionTiles.set(rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        imageUrl: this.resolveMediaUrl(row.imageUrl),
+        link: row.handle === 'all-products' ? '/collection' : `/collection/${row.handle}`,
+      })));
+    } catch {
+      this.collectionTiles.set([]);
+    } finally {
+      this.collectionsLoaded.set(true);
+    }
+  }
+
   private isHeroControl(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && target.closest('button') !== null;
   }
@@ -137,5 +180,26 @@ export class HomeComponent implements OnInit, OnDestroy {
     link.rel = 'preload'; link.as = 'image'; link.type = 'image/webp';
     link.href = this.toWebp(firstUrl);
     document.head.appendChild(link);
+  }
+
+  private resolveApiBase(): string {
+    const { hostname, protocol } = window.location;
+    const isLocal =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '[::1]' ||
+      /^10\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
+  }
+
+  private resolveMediaUrl(url: string | null): string {
+    const value = (url || '').trim();
+    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
+    if (!value.startsWith('/uploads/')) return value;
+
+    return `${this.apiBase}${value}`;
   }
 }

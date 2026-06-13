@@ -1,5 +1,35 @@
 :host { display: block; }
 
+.home-loading-shell {
+  min-height: 68vh;
+  display: grid;
+  place-items: center;
+  padding: 48px 18px;
+}
+
+.home-loading-shell__card {
+  width: min(520px, 100%);
+  padding: 28px 24px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 252, 246, 0.88);
+  box-shadow: 0 22px 54px rgba(26, 18, 8, 0.08);
+  text-align: center;
+}
+
+.home-loading-shell__card p {
+  margin: 0 0 6px;
+  color: var(--cream);
+  font-family: var(--ff-serif);
+  font-size: 28px;
+  font-weight: 400;
+}
+
+.home-loading-shell__card span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .home-commerce {
   width: min(1220px, 100%);
   margin: 0 auto;
@@ -627,6 +657,32 @@
 .collection-grid {
   display: grid;
   gap: 14px;
+}
+
+.collection-grid-loading {
+  grid-column: 1 / -1;
+  padding: 48px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.68);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.hero--empty {
+  min-height: 60svh;
+  display: grid;
+  place-items: center;
+}
+
+.hero-empty-state {
+  padding: 24px 28px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 252, 246, 0.82);
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .collection-tile {
