@@ -38,6 +38,12 @@ body {
   overflow-x: hidden;
 }
 
+/* Reset storefront letter-spacing site-wide. */
+body,
+body * {
+  letter-spacing: 0 !important;
+}
+
 img,
 svg,
 video,
