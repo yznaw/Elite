@@ -8,6 +8,7 @@ import { ProductsService } from '../../services/products.service';
 import { Product, ProductVariant } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
+import { AnalyticsService } from '../../services/analytics.service';
 
 interface Accordion {
   id: string;
@@ -44,6 +45,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly productsSvc = inject(ProductsService);
   private readonly i18n = inject(I18nService);
   private readonly referenceData = inject(ReferenceDataService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly apiBase = this.resolveApiBase();
 
   private feedbackTimer: number | undefined;
@@ -217,6 +219,9 @@ export class ProductComponent implements OnInit, OnDestroy {
       return;
     }
     this.product.set(nextProduct);
+    // Record a product view so "Most Engaged Products" reflects views, not just
+    // cart clicks. Fired here (canonical load path) to avoid double counting.
+    this.analytics.track('product_view', { productId: nextProduct.id });
     this.galleryIdx.set(0);
     this.selectedColor.set(null);
     this.applyColorParam(this.route.snapshot.queryParamMap.get('color'), nextProduct);

@@ -84,7 +84,7 @@ import { I18nService } from '../../services/i18n.service';
 
               <div class="divider" style="margin-bottom: 20px;"></div>
 
-              <button class="btn-gold" (click)="goToCheckout()"
+              <button class="btn-gold" (click)="goToCheckout()" data-track="cart-checkout"
                 style="width: 100%; padding: 16px; font-size: 11px; letter-spacing: 0.16em;">
                 {{ t('cart.proceedToCheckout') }}
               </button>

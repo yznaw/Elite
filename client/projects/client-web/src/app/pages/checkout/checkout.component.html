@@ -498,6 +498,7 @@
             class="btn-gold"
             [disabled]="placing() || redirecting() || cart.items().length === 0"
             (click)="next()"
+            [attr.data-track]="step() < steps.length - 1 ? 'checkout-continue' : 'checkout-place-order'"
             style="
               padding: 16px;
               flex: 2;

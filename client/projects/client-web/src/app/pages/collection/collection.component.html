@@ -197,7 +197,7 @@
                   (mouseleave)="onProductTileLeave(p)"
                   [style.animation-delay]="i * 0.035 + 's'"
                 >
-                  <button type="button" class="product-link" (click)="goToProduct(p)">
+                  <button type="button" class="product-link" (click)="goToProduct(p)" data-track="product-card" [attr.data-track-product]="p.id">
                     <span class="product-image-wrap">
                       <img
                         [src]="selectedProductImage(p)"
@@ -263,7 +263,7 @@
                       </div>
                     </div>
 
-                    <button type="button" class="quick-add" (click)="addToCart(p)">
+                    <button type="button" class="quick-add" (click)="addToCart(p)" data-track="quick-add" [attr.data-track-product]="p.id">
                       @if (addedProductId() === p.id) {
                         <span>{{ t("collection.quickAdd.added") }}</span>
                         <span class="quick-add-icon">✓</span>

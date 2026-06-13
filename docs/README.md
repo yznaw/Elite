@@ -19,6 +19,7 @@
 | 8 | [Database & API Implementation](./08-database-api-implementation.md) | Backend/Frontend Devs | PostgreSQL schema, endpoint map, SQL behavior, wired UI state |
 | 9 | [Nginx HTTPS](./09-nginx-https.md) | DevOps | Production Nginx reverse proxy, HTTPS termination, Certbot, and upload routing |
 | 10 | [NBOX Integration](./10-nbox-integration.md) | Backend/DevOps | Delivery quote, shipment booking, and shipment status webhook flow |
+| 11 | [Storefront Analytics](./11-storefront-analytics.md) | Frontend/Backend Devs | First-party click/session/visitor tracking, ingestion, and the live admin analytics page |
 
 ---
 
@@ -47,3 +48,4 @@
 - **Working with database-backed features?** See [08 – Database & API Implementation](./08-database-api-implementation.md).
 - **Deploying HTTPS with Nginx?** See [09 – Nginx HTTPS](./09-nginx-https.md).
 - **Connecting NBOX delivery?** See [10 – NBOX Integration](./10-nbox-integration.md).
+- **Tracking storefront visits/clicks?** See [11 – Storefront Analytics](./11-storefront-analytics.md).

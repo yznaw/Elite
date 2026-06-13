@@ -22,7 +22,7 @@ const FALLBACK_SEARCH_IMAGE =
   imports: [CommonModule, RouterLink, RouterLinkActive],
   template: `
     <nav class="nav-shell" [class.is-scrolled]="scrolled()" [attr.aria-label]="t('nav.menu')">
-      <a routerLink="/" class="brand-link" [attr.aria-label]="t('brand.name')">
+      <a routerLink="/" class="brand-link" [attr.aria-label]="t('brand.name')" data-track="nav-brand">
         <span class="brand-logo-wrap">
           <img class="brand-logo" src="assets/brand/elite-logo-cream.png" [alt]="t('brand.name')" />
         </span>
@@ -40,6 +40,7 @@ const FALLBACK_SEARCH_IMAGE =
             #rla="routerLinkActive"
             class="nav-link"
             [class.is-active]="rla.isActive"
+            [attr.data-track]="'nav:' + l.path"
           >
             {{ t(l.labelKey) }}
           </a>
@@ -54,6 +55,7 @@ const FALLBACK_SEARCH_IMAGE =
             (click)="toggleSearch()"
             [attr.aria-label]="t('nav.search')"
             [attr.aria-expanded]="searchOpen()"
+            data-track="search-open"
           >
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
@@ -85,7 +87,7 @@ const FALLBACK_SEARCH_IMAGE =
                     <p class="search-kicker">{{ searchResults().length }} {{ t('nav.searchResults') }}</p>
                     <div class="search-results">
                       @for (item of searchResults(); track item.id) {
-                        <button type="button" class="search-result" (click)="selectSearchResult(item)">
+                        <button type="button" class="search-result" (click)="selectSearchResult(item)" data-track="search-result" [attr.data-track-product]="item.id">
                           <span class="search-thumb">
                             <img [src]="item.image" alt="" (error)="onSearchImgError($event)" />
                           </span>
@@ -121,7 +123,7 @@ const FALLBACK_SEARCH_IMAGE =
           </button>
         </div>
 
-        <button type="button" class="icon-btn cart-btn" (click)="cart.openDrawer()" [attr.aria-label]="t('nav.cart')">
+        <button type="button" class="icon-btn cart-btn" (click)="cart.openDrawer()" [attr.aria-label]="t('nav.cart')" data-track="nav-cart">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
             <line x1="3" y1="6" x2="21" y2="6" />

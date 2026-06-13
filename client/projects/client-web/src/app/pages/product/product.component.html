@@ -256,7 +256,7 @@
 
           <div class="cta-stack">
             @if (selectedSizeInStock()) {
-              <button type="button" class="add-cart-btn" (click)="add()">
+              <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart" [attr.data-track-product]="p.id">
                 @if (addedFeedback()) {
                   <span>✓ {{ t("product.cta.added") }}</span>
                 } @else {
@@ -264,7 +264,7 @@
                   <small>{{ price(p.price * qty()) }}</small>
                 }
               </button>
-              <button type="button" class="buy-now-btn" (click)="buyNow()">
+              <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now" [attr.data-track-product]="p.id">
                 <span>{{ t("product.cta.buyNow") }}</span>
                 <small>{{ price(p.price * qty()) }}</small>
               </button>
@@ -451,14 +451,14 @@
 
     <div class="sticky-atc" id="sticky-atc">
       @if (selectedSizeInStock()) {
-        <button type="button" class="add-cart-btn" (click)="add()">
+        <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart-sticky" [attr.data-track-product]="p.id">
           @if (addedFeedback()) {
             <ng-container>{{ t("product.sticky.added") }}</ng-container>
           } @else {
             <ng-container>{{ t("product.sticky.addToCart") }}</ng-container>
           }
         </button>
-        <button type="button" class="buy-now-btn" (click)="buyNow()">
+        <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now-sticky" [attr.data-track-product]="p.id">
           {{ t("product.sticky.buyNow") }}
         </button>
       } @else {
