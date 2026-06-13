@@ -23,6 +23,8 @@ interface StorefrontCollection {
   productIds: string[];
 }
 
+const FEATURED_COLLECTION_HANDLES = ['men', 'sunglasses', 'kids'];
+
 @Component({
   selector: 'cw-home',
   standalone: true,
@@ -149,14 +151,28 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     try {
       const res = await firstValueFrom(
-        this.http.get<ApiResponse<StorefrontCollection[]>>(`${this.apiBase}/collections?limit=3`),
+        this.http.get<ApiResponse<StorefrontCollection[]>>(`${this.apiBase}/collections?limit=12`),
       );
       const rows = Array.isArray(res.data) ? res.data : [];
-      this.collectionTiles.set(rows.map((row) => ({
+      const filtered = rows.filter((row) => row.handle !== 'all-products');
+      const ordered: StorefrontCollection[] = [];
+
+      for (const handle of FEATURED_COLLECTION_HANDLES) {
+        const match = filtered.find((row) => row.handle === handle);
+        if (match && !ordered.some((row) => row.id === match.id)) ordered.push(match);
+      }
+
+      for (const row of filtered) {
+        if (ordered.length >= 3) break;
+        if (ordered.some((item) => item.id === row.id)) continue;
+        ordered.push(row);
+      }
+
+      this.collectionTiles.set(ordered.slice(0, 3).map((row) => ({
         id: row.id,
         title: row.title,
         imageUrl: this.resolveMediaUrl(row.imageUrl),
-        link: row.handle === 'all-products' ? '/collection' : `/collection/${row.handle}`,
+        link: `/collection/${row.handle}`,
       })));
     } catch {
       this.collectionTiles.set([]);
