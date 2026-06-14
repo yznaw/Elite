@@ -22,6 +22,7 @@ const storefrontContentRouter = require('./storefront-content.route');
 const nboxWebhookRouter = require('./nbox-webhook.route');
 const paymentsRouter = require('./payments.route');
 const invitationsRouter = require('./invitations.route');
+const { router: reviewsPublicRouter, adminRouter: reviewsAdminRouter } = require('./product-reviews.route');
 const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
@@ -32,6 +33,7 @@ router.use('/config', configRouter);
 router.use('/auth', authRouter);
 router.use('/invitations', invitationsRouter);
 router.use('/products', productsRouter);
+router.use('/products', reviewsPublicRouter);
 router.use('/collections', collectionsRouter);
 router.use('/storefront', storefrontRouter.router);
 router.use('/ref', refRouter);
@@ -57,6 +59,7 @@ admin.use('/ref', adminRefRouter);
 // Settings includes role-sensitive endpoints (team management). Owners and
 // admins can manage everything; viewers/managers can read store settings.
 admin.use('/settings', adminSettingsRouter);
+admin.use('/', reviewsAdminRouter);
 
 router.use('/admin', admin);
 

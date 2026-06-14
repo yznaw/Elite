@@ -65,6 +65,16 @@ export const routes: Routes = [
           import('./pages/customers/customers.component').then((m) => m.CustomersComponent),
       },
       {
+        path: 'feedback',
+        loadComponent: () =>
+          import('./pages/feedback/feedback.component').then((m) => m.FeedbackComponent),
+      },
+      {
+        path: 'feedback/:productId',
+        loadComponent: () =>
+          import('./pages/feedback/feedback-detail.component').then((m) => m.FeedbackDetailComponent),
+      },
+      {
         path: 'analytics',
         loadComponent: () =>
           import('./pages/analytics/analytics.component').then((m) => m.AnalyticsComponent),
