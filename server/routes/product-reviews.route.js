@@ -3,7 +3,33 @@ const { asyncHandler, ok, created, notFound, validationError } = require('./lib'
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 
-// ── Public: POST /api/products/:id/reviews ────────────────────────────────────
+// ── Shared helpers ────────────────────────────────────────────────────────────
+function validateRating(rating, res) {
+  if (rating !== undefined && rating !== null) {
+    const r = Number(rating);
+    if (!Number.isInteger(r) || r < 1 || r > 5) {
+      validationError(res, { rating: 'Rating must be 1–5.' });
+      return false;
+    }
+  }
+  return true;
+}
+
+function mapReview(r) {
+  return {
+    id:          r.id,
+    rating:      r.rating,
+    title:       r.title,
+    body:        r.body,
+    authorName:  r.author_name,
+    authorEmail: r.author_email,
+    authorPhone: r.author_phone,
+    source:      r.source || 'storefront',
+    createdAt:   r.created_at,
+  };
+}
+
+// ── Public: POST /api/products/:id/reviews  (product-linked) ─────────────────
 const router = Router();
 
 router.post('/:id/reviews', asyncHandler(async (req, res) => {
@@ -12,12 +38,7 @@ router.post('/:id/reviews', asyncHandler(async (req, res) => {
   if (!body || typeof body !== 'string' || !body.trim()) {
     return validationError(res, { body: 'A message is required.' });
   }
-  if (rating !== undefined && rating !== null) {
-    const r = Number(rating);
-    if (!Number.isInteger(r) || r < 1 || r > 5) {
-      return validationError(res, { rating: 'Rating must be 1–5.' });
-    }
-  }
+  if (!validateRating(rating, res)) return;
 
   const client = await db.pool.connect();
   try {
@@ -53,15 +74,58 @@ router.post('/:id/reviews', asyncHandler(async (req, res) => {
   }
 }));
 
+// ── Public: POST /api/reviews  (general — no product) ────────────────────────
+const generalRouter = Router();
+
+generalRouter.post('/', asyncHandler(async (req, res) => {
+  const { body, rating, title, authorName, authorEmail, authorPhone, source } = req.body;
+
+  const bodyText = typeof body === 'string' ? body.trim() : null;
+  if (!validateRating(rating, res)) return;
+
+  // At least a rating or a message is required
+  if (!bodyText && (rating === undefined || rating === null)) {
+    return validationError(res, { base: 'Please provide a rating or a message.' });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+
+    const result = await client.query(
+      `INSERT INTO product_reviews
+         (tenant_id, product_id, rating, title, body, author_name, author_email, author_phone, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id, created_at`,
+      [
+        tenant.id,
+        null,                              // no product
+        rating ?? null,
+        title?.trim() || null,
+        bodyText || null,
+        authorName?.trim()  || null,
+        authorEmail?.trim() || null,
+        authorPhone?.trim() || null,
+        source === 'kiosk' ? 'kiosk' : 'storefront',
+      ],
+    );
+
+    created(res, { id: result.rows[0].id, createdAt: result.rows[0].created_at });
+  } finally {
+    client.release();
+  }
+}));
+
 // ── Admin routes ──────────────────────────────────────────────────────────────
 const adminRouter = Router();
 
-// GET /admin/reviews — products with review counts + avg rating
+// GET /admin/reviews — products with review counts + avg + general feedback totals
 adminRouter.get('/reviews', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
 
+    // Product-linked reviews grouped by product
     const products = await client.query(
       `SELECT
          p.id                                                        AS product_id,
@@ -80,6 +144,17 @@ adminRouter.get('/reviews', asyncHandler(async (req, res) => {
       [tenant.id],
     );
 
+    // General (product-less) reviews
+    const general = await client.query(
+      `SELECT COUNT(*)::int AS count,
+              ROUND(AVG(rating)::numeric, 1) AS avg,
+              MAX(created_at) AS latest_at
+       FROM product_reviews
+       WHERE tenant_id = $1 AND product_id IS NULL`,
+      [tenant.id],
+    );
+
+    // Overall totals
     const totals = await client.query(
       `SELECT COUNT(*)::int                       AS total,
               ROUND(AVG(rating)::numeric, 1)      AS avg_all
@@ -90,18 +165,63 @@ adminRouter.get('/reviews', asyncHandler(async (req, res) => {
 
     ok(res, {
       summary: {
-        totalReviews:  totals.rows[0].total,
-        avgRating:     totals.rows[0].avg_all ? Number(totals.rows[0].avg_all) : null,
-        productCount:  products.rowCount,
+        totalReviews: totals.rows[0].total,
+        avgRating:    totals.rows[0].avg_all ? Number(totals.rows[0].avg_all) : null,
+        productCount: products.rowCount,
+        generalCount: general.rows[0].count,
       },
+      general: general.rows[0].count > 0 ? {
+        reviewCount: general.rows[0].count,
+        avgRating:   general.rows[0].avg ? Number(general.rows[0].avg) : null,
+        latestAt:    general.rows[0].latest_at,
+      } : null,
       products: products.rows.map((r) => ({
         productId:    r.product_id,
         productName:  r.product_name,
         productImage: r.product_image,
-        reviewCount:   r.review_count,
-        avgRating:     r.avg_rating ? Number(r.avg_rating) : null,
-        latestAt:      r.latest_at,
+        reviewCount:  r.review_count,
+        avgRating:    r.avg_rating ? Number(r.avg_rating) : null,
+        latestAt:     r.latest_at,
       })),
+    });
+  } finally {
+    client.release();
+  }
+}));
+
+// GET /admin/reviews/general — all reviews without a product
+adminRouter.get('/reviews/general', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+
+    const reviews = await client.query(
+      `SELECT id, rating, title, body,
+              author_name, author_email, author_phone,
+              source, created_at
+       FROM product_reviews
+       WHERE tenant_id = $1 AND product_id IS NULL
+       ORDER BY created_at DESC`,
+      [tenant.id],
+    );
+
+    const stats = await client.query(
+      `SELECT COUNT(*)::int AS count,
+              ROUND(AVG(rating)::numeric,1) AS avg
+       FROM product_reviews
+       WHERE tenant_id = $1 AND product_id IS NULL`,
+      [tenant.id],
+    );
+
+    ok(res, {
+      product: {
+        id:          'general',
+        name:        'General Feedback',
+        image:       null,
+        reviewCount: stats.rows[0].count,
+        avgRating:   stats.rows[0].avg ? Number(stats.rows[0].avg) : null,
+      },
+      reviews: reviews.rows.map(mapReview),
     });
   } finally {
     client.release();
@@ -143,23 +263,13 @@ adminRouter.get('/reviews/:productId', asyncHandler(async (req, res) => {
 
     ok(res, {
       product: {
-        id:    prod.rows[0].id,
-        name:  prod.rows[0].name,
-        image: prod.rows[0].image,
+        id:          prod.rows[0].id,
+        name:        prod.rows[0].name,
+        image:       prod.rows[0].image,
         reviewCount: stats.rows[0].count,
         avgRating:   stats.rows[0].avg ? Number(stats.rows[0].avg) : null,
       },
-      reviews: reviews.rows.map((r) => ({
-        id:          r.id,
-        rating:      r.rating,
-        title:       r.title,
-        body:        r.body,
-        authorName:  r.author_name,
-        authorEmail: r.author_email,
-        authorPhone: r.author_phone,
-        source:      r.source || 'storefront',
-        createdAt:   r.created_at,
-      })),
+      reviews: reviews.rows.map(mapReview),
     });
   } finally {
     client.release();
@@ -182,4 +292,4 @@ adminRouter.delete('/reviews/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-module.exports = { router, adminRouter };
+module.exports = { router, generalRouter, adminRouter };

@@ -9,8 +9,7 @@ import { ApiClient } from '../../services/api-client.service';
 interface ReviewProduct {
   id:          string;
   name:        string;
-  nameAr:      string;
-  image:       string;
+  image:       string | null;
   reviewCount: number;
   avgRating:   number | null;
 }
@@ -19,7 +18,7 @@ interface Review {
   id:          string;
   rating:      number | null;
   title:       string | null;
-  body:        string;
+  body:        string | null;
   authorName:  string | null;
   authorEmail: string | null;
   authorPhone: string | null;
@@ -37,18 +36,18 @@ interface Review {
 
       <!-- Back -->
       <button class="fbd-back" type="button" (click)="goBack()">
-        <ap-icon name="arrow" [size]="14" style="transform:rotate(90deg)"/>
+        <ap-icon name="arrow" [size]="14" style="transform:rotate(180deg)"/>
         Back to Feedback
       </button>
 
       <!-- Product summary -->
       @if (product()) {
         <div class="card card-pad fbd-product-bar">
-          <div class="fbd-prod-thumb">
-            @if (product()!.image) {
-              <img [src]="imgUrl(product()!.image)" [alt]="product()!.name" class="fbd-prod-img"/>
+          <div class="fbd-prod-thumb" [class.fbd-general-thumb]="isGeneral">
+            @if (!isGeneral && product()!.image) {
+              <img [src]="imgUrl(product()!.image!)" [alt]="product()!.name" class="fbd-prod-img"/>
             } @else {
-              <ap-icon name="catalog" [size]="20"/>
+              <ap-icon [name]="isGeneral ? 'users' : 'catalog'" [size]="20"/>
             }
           </div>
           <div class="fbd-prod-info">
@@ -62,21 +61,23 @@ interface Review {
               <span>{{ product()!.reviewCount }} {{ product()!.reviewCount === 1 ? 'review' : 'reviews' }}</span>
             </div>
           </div>
-          <!-- iPad Kiosk actions -->
-          <div class="fbd-kiosk-actions">
-            <a [href]="kioskUrl(product()!.id)" target="_blank" rel="noopener noreferrer"
-               class="fbd-action-btn fbd-kiosk-open" title="Open kiosk for this product">
-              <ap-icon name="phone" [size]="12"/>
-              iPad Kiosk
-            </a>
-            <button class="fbd-action-btn" type="button"
-                    [class.copied]="kioskLinkCopied()"
-                    (click)="copyKioskLink(product()!.id)"
-                    title="Copy kiosk URL for iPad setup">
-              <ap-icon [name]="kioskLinkCopied() ? 'check' : 'copy'" [size]="12"/>
-              {{ kioskLinkCopied() ? 'Copied!' : 'Copy Link' }}
-            </button>
-          </div>
+          <!-- Kiosk actions (product only) -->
+          @if (!isGeneral) {
+            <div class="fbd-kiosk-actions">
+              <a [href]="kioskUrl(product()!.id)" target="_blank" rel="noopener noreferrer"
+                 class="fbd-action-btn fbd-kiosk-open" title="Open kiosk for this product">
+                <ap-icon name="phone" [size]="12"/>
+                iPad Kiosk
+              </a>
+              <button class="fbd-action-btn" type="button"
+                      [class.copied]="kioskLinkCopied()"
+                      (click)="copyKioskLink(product()!.id)"
+                      title="Copy kiosk URL for iPad setup">
+                <ap-icon [name]="kioskLinkCopied() ? 'check' : 'copy'" [size]="12"/>
+                {{ kioskLinkCopied() ? 'Copied!' : 'Copy Link' }}
+              </button>
+            </div>
+          }
         </div>
       }
 
@@ -123,7 +124,9 @@ interface Review {
               }
 
               <!-- Body -->
-              <div class="fbd-rev-body">{{ r.body }}</div>
+              @if (r.body) {
+                <div class="fbd-rev-body">{{ r.body }}</div>
+              }
 
               <!-- Contact info -->
               @if (r.authorName || r.authorEmail || r.authorPhone) {
@@ -140,7 +143,6 @@ interface Review {
                       <ap-icon name="phone" [size]="13"/>
                       <span class="fbd-contact-val">{{ r.authorPhone }}</span>
                       <div class="fbd-contact-actions">
-                        <!-- WhatsApp -->
                         <a [href]="whatsappUrl(r.authorPhone)"
                            target="_blank" rel="noopener noreferrer"
                            class="fbd-action-btn fbd-wa"
@@ -148,7 +150,6 @@ interface Review {
                           <ap-icon name="whatsapp" [size]="13"/>
                           WhatsApp
                         </a>
-                        <!-- Copy phone -->
                         <button class="fbd-action-btn"
                                 [class.copied]="r._copied === 'phone'"
                                 type="button"
@@ -186,6 +187,11 @@ interface Review {
                 </div>
               }
 
+              <!-- No contact info -->
+              @if (!r.authorName && !r.authorEmail && !r.authorPhone) {
+                <div class="fbd-anon">Anonymous</div>
+              }
+
               <!-- Delete -->
               <div class="fbd-rev-foot">
                 <button class="fbd-delete" type="button" (click)="deleteReview(r)">
@@ -213,18 +219,16 @@ interface Review {
     .fbd-product-bar {
       display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap;
     }
-    .fbd-kiosk-actions {
-      display: flex; gap: 6px; margin-inline-start: auto; flex-shrink: 0;
-    }
-    .fbd-kiosk-open {
-      color: #7c5cbf; border-color: rgba(124,92,191,.3); background: rgba(124,92,191,.06);
-    }
-    .fbd-kiosk-open:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
     .fbd-prod-thumb {
       width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
       background: var(--bg); border: 1px solid var(--border);
       display: flex; align-items: center; justify-content: center;
       overflow: hidden; color: var(--muted);
+    }
+    .fbd-general-thumb {
+      background: rgba(184,146,74,.1) !important;
+      border-color: rgba(184,146,74,.2) !important;
+      color: var(--gold) !important;
     }
     .fbd-prod-img  { width: 100%; height: 100%; object-fit: cover; }
     .fbd-prod-name { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
@@ -232,9 +236,17 @@ interface Review {
     .fbd-avg       { font-weight: 700; color: var(--ink); }
     .fbd-sep       { opacity: .4; }
 
+    /* Kiosk actions */
+    .fbd-kiosk-actions {
+      display: flex; gap: 6px; margin-inline-start: auto; flex-shrink: 0;
+    }
+    .fbd-kiosk-open {
+      color: #7c5cbf; border-color: rgba(124,92,191,.3); background: rgba(124,92,191,.06);
+    }
+    .fbd-kiosk-open:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
+
     /* Review cards */
     .fbd-reviews   { display: flex; flex-direction: column; gap: 14px; }
-
     .fbd-rev { display: flex; flex-direction: column; gap: 10px; }
 
     .fbd-rev-head  { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
@@ -246,10 +258,12 @@ interface Review {
       border-radius: 99px; background: rgba(2,70,56,.06); color: var(--green);
       border: 1px solid rgba(2,70,56,.12);
     }
-    .fbd-source-badge.kiosk { background: rgba(184,146,74,.08); color: var(--gold-dim); border-color: rgba(184,146,74,.2); }
+    .fbd-source-badge.kiosk { background: rgba(184,146,74,.08); color: var(--gold-dim, #8a7a62); border-color: rgba(184,146,74,.2); }
 
     .fbd-rev-title { font-size: 14px; font-weight: 700; color: var(--ink); font-style: italic; }
     .fbd-rev-body  { font-size: 13px; color: var(--ink-2); line-height: 1.65; }
+
+    .fbd-anon { font-size: 12px; color: var(--muted); font-style: italic; }
 
     /* Contact block */
     .fbd-contact {
@@ -277,7 +291,6 @@ interface Review {
     .fbd-action-btn:hover { border-color: var(--gold); color: var(--gold); }
     .fbd-action-btn.copied { border-color: var(--green); color: var(--green); background: rgba(2,70,56,.05); }
 
-    /* WhatsApp button */
     .fbd-wa { color: #25d366; border-color: rgba(37,211,102,.3); background: rgba(37,211,102,.06); }
     .fbd-wa:hover { background: rgba(37,211,102,.12); border-color: #25d366; color: #1aad57; }
 
@@ -311,15 +324,17 @@ interface Review {
   `],
 })
 export class FeedbackDetailComponent implements OnInit {
-  private readonly api   = inject(ApiClient);
-  private readonly route = inject(ActivatedRoute);
+  private readonly api    = inject(ApiClient);
+  private readonly route  = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly toast = inject(ToastService);
+  private readonly toast  = inject(ToastService);
 
   readonly loading         = signal(true);
   readonly product         = signal<ReviewProduct | null>(null);
   readonly reviews         = signal<Review[]>([]);
   readonly kioskLinkCopied = signal(false);
+
+  isGeneral = false;
 
   private readonly storefrontBase = (() => {
     if (typeof window === 'undefined') return '';
@@ -332,16 +347,18 @@ export class FeedbackDetailComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const productId = this.route.snapshot.paramMap.get('productId')!;
+    this.isGeneral  = productId === 'general';
+    const url = this.isGeneral ? '/admin/reviews/general' : `/admin/reviews/${productId}`;
     try {
       const data = await this.api
-        .get<{ product: ReviewProduct; reviews: Review[] }>(`/admin/reviews/${productId}`)
+        .get<{ product: ReviewProduct; reviews: Review[] }>(url)
         .toPromise();
       if (data) {
         this.product.set(data.product);
         this.reviews.set(data.reviews);
       }
     } catch {
-      this.toast.error('Failed to load', 'Could not load reviews for this product.');
+      this.toast.error('Failed to load', 'Could not load reviews.');
     } finally {
       this.loading.set(false);
     }
@@ -349,17 +366,6 @@ export class FeedbackDetailComponent implements OnInit {
 
   goBack(): void {
     void this.router.navigate(['/feedback']);
-  }
-
-  kioskUrl(productId: string): string {
-    return `${this.storefrontBase}/kiosk?product=${productId}`;
-  }
-
-  copyKioskLink(productId: string): void {
-    navigator.clipboard.writeText(this.kioskUrl(productId)).then(() => {
-      this.kioskLinkCopied.set(true);
-      setTimeout(() => this.kioskLinkCopied.set(false), 2000);
-    });
   }
 
   imgUrl(path: string): string {
@@ -373,8 +379,18 @@ export class FeedbackDetailComponent implements OnInit {
   }
 
   whatsappUrl(phone: string): string {
-    const clean = phone.replace(/\D/g, '');
-    return `https://wa.me/${clean}`;
+    return `https://wa.me/${phone.replace(/\D/g, '')}`;
+  }
+
+  kioskUrl(productId: string): string {
+    return `${this.storefrontBase}/kiosk?product=${productId}`;
+  }
+
+  copyKioskLink(productId: string): void {
+    navigator.clipboard.writeText(this.kioskUrl(productId)).then(() => {
+      this.kioskLinkCopied.set(true);
+      setTimeout(() => this.kioskLinkCopied.set(false), 2000);
+    });
   }
 
   copyPhone(r: Review): void {

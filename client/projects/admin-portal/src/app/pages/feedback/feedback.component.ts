@@ -1,25 +1,32 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { ApiClient } from '../../services/api-client.service';
+import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
 
 interface FeedbackProduct {
-  productId:     string;
-  productName:   string;
-  productNameAr: string;
-  productImage:  string;
-  reviewCount:   number;
-  avgRating:     number | null;
-  latestAt:      string;
+  productId:    string;
+  productName:  string;
+  productImage: string;
+  reviewCount:  number;
+  avgRating:    number | null;
+  latestAt:     string;
+}
+
+interface GeneralFeedback {
+  reviewCount: number;
+  avgRating:   number | null;
+  latestAt:    string;
 }
 
 interface FeedbackSummary {
   totalReviews: number;
   avgRating:    number | null;
   productCount: number;
+  generalCount: number;
 }
 
 @Component({
@@ -42,7 +49,7 @@ interface FeedbackSummary {
       </div>
 
       <!-- Stats row -->
-      @if (!loading() && products().length > 0) {
+      @if (!loading() && (products().length > 0 || general())) {
         <div class="fb-stats">
           <div class="card card-pad fb-stat">
             <div class="fb-stat-val">{{ summary().totalReviews }}</div>
@@ -81,9 +88,35 @@ interface FeedbackSummary {
       }
 
       <!-- Empty -->
-      @if (!loading() && products().length === 0) {
+      @if (!loading() && products().length === 0 && !general()) {
         <div class="card">
           <ap-empty-state icon="star" title="No feedback yet" sub="Feedback submitted through the storefront or in-store kiosk will appear here."/>
+        </div>
+      }
+
+      <!-- General feedback row -->
+      @if (!loading() && general()) {
+        <div class="card fb-general-card">
+          <button class="fb-row fb-general-row" type="button" (click)="openGeneral()">
+            <div class="fb-thumb fb-general-thumb">
+              <ap-icon name="users" [size]="18"/>
+            </div>
+            <div class="fb-row-info">
+              <div class="fb-row-name">General Feedback</div>
+              <div class="fb-row-meta">
+                <span class="fb-stars">{{ starsLabel(general()!.avgRating) }}</span>
+                @if (general()!.avgRating) {
+                  <span class="fb-avg-num">{{ general()!.avgRating | number:'1.1-1' }}</span>
+                }
+                <span class="fb-sep">·</span>
+                <span>{{ general()!.reviewCount }} {{ general()!.reviewCount === 1 ? 'review' : 'reviews' }}</span>
+                <span class="fb-sep">·</span>
+                <span class="muted">{{ general()!.latestAt | date:'d MMM y' }}</span>
+              </div>
+            </div>
+            <span class="fb-general-badge">Not product-specific</span>
+            <ap-icon name="arrow" [size]="16" class="fb-row-arrow"/>
+          </button>
         </div>
       }
 
@@ -159,6 +192,23 @@ interface FeedbackSummary {
     .fb-stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: 4px; }
     .fb-avg      { color: var(--gold); }
 
+    /* General feedback card */
+    .fb-general-card { margin-bottom: 14px; }
+    .fb-general-row {
+      background: linear-gradient(135deg, rgba(184,146,74,.04), rgba(184,146,74,.02));
+    }
+    .fb-general-thumb {
+      background: rgba(184,146,74,.1) !important;
+      border-color: rgba(184,146,74,.2) !important;
+      color: var(--gold) !important;
+    }
+    .fb-general-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 99px; background: rgba(184,146,74,.1);
+      color: var(--gold-dim, #8a7a62); border: 1px solid rgba(184,146,74,.2);
+      white-space: nowrap; flex-shrink: 0;
+    }
+
     /* List rows */
     .fb-row {
       display: flex; align-items: center; gap: 14px;
@@ -196,10 +246,10 @@ interface FeedbackSummary {
     .fb-skeleton-row:last-child { border-bottom: none; }
     .fb-skeleton-img {
       width: 44px; height: 44px; border-radius: 8px;
-      background: var(--bg); flex-shrink: 0;
-      animation: shimmer 1.5s linear infinite;
+      flex-shrink: 0;
       background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
       background-size: 200% 100%;
+      animation: shimmer 1.5s linear infinite;
     }
     .fb-skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .fb-skeleton-line {
@@ -216,13 +266,15 @@ interface FeedbackSummary {
 export class FeedbackComponent implements OnInit {
   private readonly api    = inject(ApiClient);
   private readonly router = inject(Router);
+  private readonly toast  = inject(ToastService);
   private readonly i18n   = inject(I18nService);
 
   readonly t = (k: string) => this.i18n.t(k);
 
   readonly loading  = signal(true);
   readonly products = signal<FeedbackProduct[]>([]);
-  readonly summary  = signal<FeedbackSummary>({ totalReviews: 0, avgRating: null, productCount: 0 });
+  readonly general  = signal<GeneralFeedback | null>(null);
+  readonly summary  = signal<FeedbackSummary>({ totalReviews: 0, avgRating: null, productCount: 0, generalCount: 0 });
 
   readonly kioskBaseUrl = (() => {
     if (typeof window === 'undefined') return '/kiosk';
@@ -235,11 +287,16 @@ export class FeedbackComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const data = await this.api.get<{ summary: FeedbackSummary; products: FeedbackProduct[] }>('/admin/reviews').toPromise();
+      const data = await this.api
+        .get<{ summary: FeedbackSummary; general: GeneralFeedback | null; products: FeedbackProduct[] }>('/admin/reviews')
+        .toPromise();
       if (data) {
         this.summary.set(data.summary);
+        this.general.set(data.general);
         this.products.set(data.products);
       }
+    } catch {
+      this.toast.error('Failed to load', 'Could not load feedback data.');
     } finally {
       this.loading.set(false);
     }
@@ -247,6 +304,10 @@ export class FeedbackComponent implements OnInit {
 
   openDetail(productId: string): void {
     void this.router.navigate(['/feedback', productId]);
+  }
+
+  openGeneral(): void {
+    void this.router.navigate(['/feedback', 'general']);
   }
 
   imgUrl(path: string): string {

@@ -22,7 +22,7 @@ const storefrontContentRouter = require('./storefront-content.route');
 const nboxWebhookRouter = require('./nbox-webhook.route');
 const paymentsRouter = require('./payments.route');
 const invitationsRouter = require('./invitations.route');
-const { router: reviewsPublicRouter, adminRouter: reviewsAdminRouter } = require('./product-reviews.route');
+const { router: reviewsPublicRouter, generalRouter: reviewsGeneralRouter, adminRouter: reviewsAdminRouter } = require('./product-reviews.route');
 const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
@@ -34,6 +34,7 @@ router.use('/auth', authRouter);
 router.use('/invitations', invitationsRouter);
 router.use('/products', productsRouter);
 router.use('/products', reviewsPublicRouter);
+router.use('/reviews', reviewsGeneralRouter);
 router.use('/collections', collectionsRouter);
 router.use('/storefront', storefrontRouter.router);
 router.use('/ref', refRouter);

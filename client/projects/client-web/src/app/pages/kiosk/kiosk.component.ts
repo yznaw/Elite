@@ -51,6 +51,12 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
             <div class="k-rate-title">Which item are you reviewing?</div>
             @if (loadingProducts()) {
               <div class="k-loading-dots"><span></span><span></span><span></span></div>
+            } @else if (products().length === 0) {
+              <div class="k-empty-products">
+                <div class="k-empty-icon">◈</div>
+                <div class="k-empty-text">No products available right now</div>
+                <div class="k-empty-sub">You can still leave us general feedback below</div>
+              </div>
             } @else {
               <div class="k-product-grid">
                 @for (p of products(); track p.id) {
@@ -68,7 +74,7 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
               </div>
             }
             <div class="k-btns">
-              <button class="k-btn-outline" type="button" (click)="skipProduct()">Skip</button>
+              <button class="k-btn-outline" type="button" (click)="skipProduct()">General feedback</button>
               <button class="k-btn-gold" type="button"
                       [disabled]="!selectedProductId()"
                       (click)="goTo('rating')">Continue →</button>
@@ -502,6 +508,21 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       position: relative; z-index: 1;
     }
 
+    /* ── Empty products state ────────────────── */
+    .k-empty-products {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 8px; padding: clamp(24px,4%,48px) 0;
+    }
+    .k-empty-icon {
+      font-size: 36px; color: rgba(184,146,74,.35); margin-bottom: 4px;
+    }
+    .k-empty-text {
+      font-size: clamp(13px,1.6vw,18px); font-weight: 600; color: #1a1208;
+    }
+    .k-empty-sub {
+      font-size: clamp(10px,1.2vw,14px); color: #8a7a62; font-style: italic;
+    }
+
     /* ── Loading dots ─────────────────────── */
     .k-loading-dots {
       display: flex; gap: 8px; justify-content: center; margin: 32px 0;
@@ -563,12 +584,17 @@ export class KioskComponent implements OnInit, OnDestroy {
       this.steps = [0, 1, 2, 3]; // 4 steps: product, rating, message, contact
       this.loadingProducts.set(true);
       try {
-        const res = await firstValueFrom(
-          this.http.get<ApiEnvelope<{ items: KioskProduct[] }>>(`${this.apiBase}/products?limit=20`),
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 6000),
         );
-        this.products.set(res.data?.items ?? []);
+        const fetch = firstValueFrom(
+          this.http.get<ApiEnvelope<KioskProduct[]>>(`${this.apiBase}/products`),
+        );
+        const res = await Promise.race([fetch, timeout]);
+        this.products.set(Array.isArray(res.data) ? res.data : []);
       } catch {
-        // If products fail to load, allow skipping
+        // timeout or network error — show empty state, user can still leave general feedback
+        this.products.set([]);
       } finally {
         this.loadingProducts.set(false);
       }
@@ -619,15 +645,20 @@ export class KioskComponent implements OnInit, OnDestroy {
   async submit(): Promise<void> {
     if (this.submitting()) return;
     const pid = this.selectedProductId();
-    if (!pid) { this.goTo('thanks'); return; }
 
     this.submitting.set(true);
     try {
+      const endpoint = pid
+        ? `${this.apiBase}/products/${pid}/reviews`
+        : `${this.apiBase}/reviews`;
+
+      const bodyText = this.message().trim() || null;
+
       await firstValueFrom(
-        this.http.post(`${this.apiBase}/products/${pid}/reviews`, {
+        this.http.post(endpoint, {
           rating:      this.rating() || null,
-          body:        this.message().trim() || 'No message provided.',
-          authorName:  this.contactName().trim() || null,
+          body:        pid ? (bodyText ?? 'No message provided.') : bodyText,
+          authorName:  this.contactName().trim()  || null,
           authorPhone: this.contactPhone().trim() || null,
           authorEmail: this.contactEmail().trim() || null,
           source:      'kiosk',
