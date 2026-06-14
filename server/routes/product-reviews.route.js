@@ -64,18 +64,18 @@ adminRouter.get('/reviews', asyncHandler(async (req, res) => {
 
     const products = await client.query(
       `SELECT
-         p.id                                      AS product_id,
-         p.name                                    AS product_name,
-         p.name_ar                                 AS product_name_ar,
-         p.image                                   AS product_image,
-         COUNT(r.id)::int                          AS review_count,
-         ROUND(AVG(r.rating)::numeric, 1)          AS avg_rating,
-         MAX(r.created_at)                         AS latest_at
+         p.id                                                        AS product_id,
+         p.name                                                      AS product_name,
+         COALESCE(pm.preview_url, pm.storage_url, '')               AS product_image,
+         COUNT(r.id)::int                                            AS review_count,
+         ROUND(AVG(r.rating)::numeric, 1)                           AS avg_rating,
+         MAX(r.created_at)                                          AS latest_at
        FROM products p
        JOIN product_reviews r
          ON r.product_id = p.id AND r.tenant_id = $1
+       LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE p.tenant_id = $1
-       GROUP BY p.id, p.name, p.name_ar, p.image
+       GROUP BY p.id, p.name, pm.preview_url, pm.storage_url
        ORDER BY MAX(r.created_at) DESC`,
       [tenant.id],
     );
@@ -95,10 +95,9 @@ adminRouter.get('/reviews', asyncHandler(async (req, res) => {
         productCount:  products.rowCount,
       },
       products: products.rows.map((r) => ({
-        productId:     r.product_id,
-        productName:   r.product_name,
-        productNameAr: r.product_name_ar,
-        productImage:  r.product_image,
+        productId:    r.product_id,
+        productName:  r.product_name,
+        productImage: r.product_image,
         reviewCount:   r.review_count,
         avgRating:     r.avg_rating ? Number(r.avg_rating) : null,
         latestAt:      r.latest_at,
@@ -116,7 +115,10 @@ adminRouter.get('/reviews/:productId', asyncHandler(async (req, res) => {
     const tenant = await ensureDefaultTenant(client);
 
     const prod = await client.query(
-      'SELECT id, name, name_ar, image FROM products WHERE id=$1 AND tenant_id=$2',
+      `SELECT p.id, p.name, COALESCE(pm.preview_url, pm.storage_url, '') AS image
+       FROM products p
+       LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
+       WHERE p.id=$1 AND p.tenant_id=$2`,
       [req.params.productId, tenant.id],
     );
     if (prod.rowCount === 0) return notFound(res, 'Product not found.');
@@ -141,10 +143,9 @@ adminRouter.get('/reviews/:productId', asyncHandler(async (req, res) => {
 
     ok(res, {
       product: {
-        id:          prod.rows[0].id,
-        name:        prod.rows[0].name,
-        nameAr:      prod.rows[0].name_ar,
-        image:       prod.rows[0].image,
+        id:    prod.rows[0].id,
+        name:  prod.rows[0].name,
+        image: prod.rows[0].image,
         reviewCount: stats.rows[0].count,
         avgRating:   stats.rows[0].avg ? Number(stats.rows[0].avg) : null,
       },
