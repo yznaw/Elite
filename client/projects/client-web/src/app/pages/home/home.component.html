@@ -99,27 +99,74 @@
                 class="hero-mobile-features"
                 aria-label="Product craft details"
               >
-                @for (callout of activeHeroCallouts(); track callout.id) {
-                  <article class="mobile-feature-card">
-                    <picture>
-                      <source [srcset]="toWebp(callout.thumbnail)" type="image/webp" />
-                      <img [src]="callout.thumbnail" [alt]="callout.alt" loading="lazy" decoding="async" />
-                    </picture>
-                    <div>
-                      <strong>{{ calloutTitle(callout) }}</strong>
-                      <span>{{ calloutSubtitle(callout) }}</span>
-                    </div>
-                  </article>
-                }
-              </div>
+                <div class="mobile-feature-sheet">
+                  <div class="mobile-feature-sheet__header">
+                    <p>{{ activeHeroItem().name }}</p>
+                    @if (heroSubtitle(activeHeroItem())) {
+                      <span>{{ heroSubtitle(activeHeroItem()) }}</span>
+                    }
+                  </div>
 
-              <button
-                type="button"
-                class="hero-cta"
-                (click)="goTo('/collection')"
-              >
-                <span>{{ heroCtaLabel() }}</span>
-              </button>
+                  <div class="mobile-feature-sheet__rows">
+                    @for (callout of activeHeroCallouts(); track callout.id) {
+                      <article class="mobile-feature-row">
+                        <span class="mobile-feature-icon" [ngClass]="'mobile-feature-icon--' + callout.id" aria-hidden="true">
+                          @switch (callout.id) {
+                            @case ("strap") {
+                              <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
+                                <path d="M9.5 9.5h5" />
+                                <path d="M9.5 12h5" />
+                                <path d="M11.2 7.6h1.6" />
+                              </svg>
+                            }
+                            @case ("buckle") {
+                              <svg viewBox="0 0 24 24" fill="none">
+                                <rect x="5.5" y="6" width="13" height="12" rx="3" />
+                                <path d="M8 12h8" />
+                                <path d="M8 8.5v7" />
+                              </svg>
+                            }
+                            @case ("sole") {
+                              <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M8 5.5c2.8 0 5 2.2 5 5V15c0 1.4-.7 2.8-1.8 3.6l-1.5 1.2c-.7.6-1.6.9-2.5.9H6.6c-1.4 0-2.6-1.2-2.6-2.6V10.5c0-2.8 2.2-5 5-5Z" />
+                                <path d="M8 9.2h2.8" />
+                                <path d="M8 12.1h2.8" />
+                                <path d="M8 15h2" />
+                              </svg>
+                            }
+                            @case ("stitching") {
+                              <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M14.7 4.6c1.1 1.1 1.2 2.8.1 3.9L7 16.3c-.7.7-1.8.7-2.5 0s-.7-1.8 0-2.5l7.8-7.8c1.1-1.1 2.8-1.2 3.9-.1Z" />
+                                <path d="M10.4 10.1l3.6 3.6" />
+                                <path d="M6.8 17.1l2 2" />
+                              </svg>
+                            }
+                            @default {
+                              <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M12 4v16" />
+                                <path d="M4 12h16" />
+                              </svg>
+                            }
+                          }
+                        </span>
+
+                        <div class="mobile-feature-copy">
+                          <strong>{{ calloutTitle(callout) }}</strong>
+                        </div>
+                      </article>
+                    }
+                  </div>
+
+                  <button
+                    type="button"
+                    class="hero-cta hero-cta--mobile"
+                    (click)="goTo('/collection')"
+                  >
+                    <span>{{ heroCtaLabel() }}</span>
+                  </button>
+                </div>
+              </div>
             </section>
           } @else {
             <section class="hero hero--empty" aria-labelledby="home-hero-brand">
