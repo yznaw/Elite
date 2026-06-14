@@ -35,6 +35,10 @@ interface FeedbackSummary {
           <h1 class="fb-title">{{ t('nav.feedback') }}</h1>
           <p class="fb-sub">Private — collected from storefront visitors and in-store kiosk. Never shown publicly.</p>
         </div>
+        <a [href]="kioskBaseUrl" target="_blank" rel="noopener noreferrer" class="fb-kiosk-btn">
+          <ap-icon name="phone" [size]="13"/>
+          Open Kiosk
+        </a>
       </div>
 
       <!-- Stats row -->
@@ -125,9 +129,19 @@ interface FeedbackSummary {
     </div>
   `,
   styles: [`
-    .fb-header { margin-bottom: 24px; }
+    .fb-header { margin-bottom: 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .fb-title  { font-size: 22px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
     .fb-sub    { font-size: 12px; color: var(--muted); }
+
+    .fb-kiosk-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; font-size: 12px; font-weight: 700;
+      border-radius: 6px; border: 1px solid rgba(124,92,191,.3);
+      background: rgba(124,92,191,.06); color: #7c5cbf;
+      text-decoration: none; white-space: nowrap; flex-shrink: 0;
+      transition: all .13s;
+    }
+    .fb-kiosk-btn:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
 
     .fb-stats {
       display: grid;
@@ -209,6 +223,15 @@ export class FeedbackComponent implements OnInit {
   readonly loading  = signal(true);
   readonly products = signal<FeedbackProduct[]>([]);
   readonly summary  = signal<FeedbackSummary>({ totalReviews: 0, avgRating: null, productCount: 0 });
+
+  readonly kioskBaseUrl = (() => {
+    if (typeof window === 'undefined') return '/kiosk';
+    const h = window.location.hostname;
+    const base = (h === 'localhost' || h === '127.0.0.1')
+      ? `${window.location.protocol}//${h}:4200`
+      : window.location.origin;
+    return `${base}/kiosk`;
+  })();
 
   async ngOnInit(): Promise<void> {
     try {

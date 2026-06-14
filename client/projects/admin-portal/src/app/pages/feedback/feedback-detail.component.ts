@@ -62,6 +62,21 @@ interface Review {
               <span>{{ product()!.reviewCount }} {{ product()!.reviewCount === 1 ? 'review' : 'reviews' }}</span>
             </div>
           </div>
+          <!-- iPad Kiosk actions -->
+          <div class="fbd-kiosk-actions">
+            <a [href]="kioskUrl(product()!.id)" target="_blank" rel="noopener noreferrer"
+               class="fbd-action-btn fbd-kiosk-open" title="Open kiosk for this product">
+              <ap-icon name="phone" [size]="12"/>
+              iPad Kiosk
+            </a>
+            <button class="fbd-action-btn" type="button"
+                    [class.copied]="kioskLinkCopied()"
+                    (click)="copyKioskLink(product()!.id)"
+                    title="Copy kiosk URL for iPad setup">
+              <ap-icon [name]="kioskLinkCopied() ? 'check' : 'copy'" [size]="12"/>
+              {{ kioskLinkCopied() ? 'Copied!' : 'Copy Link' }}
+            </button>
+          </div>
         </div>
       }
 
@@ -196,8 +211,15 @@ interface Review {
 
     /* Product bar */
     .fbd-product-bar {
-      display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap;
     }
+    .fbd-kiosk-actions {
+      display: flex; gap: 6px; margin-inline-start: auto; flex-shrink: 0;
+    }
+    .fbd-kiosk-open {
+      color: #7c5cbf; border-color: rgba(124,92,191,.3); background: rgba(124,92,191,.06);
+    }
+    .fbd-kiosk-open:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
     .fbd-prod-thumb {
       width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
       background: var(--bg); border: 1px solid var(--border);
@@ -294,9 +316,19 @@ export class FeedbackDetailComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
 
-  readonly loading  = signal(true);
-  readonly product  = signal<ReviewProduct | null>(null);
-  readonly reviews  = signal<Review[]>([]);
+  readonly loading         = signal(true);
+  readonly product         = signal<ReviewProduct | null>(null);
+  readonly reviews         = signal<Review[]>([]);
+  readonly kioskLinkCopied = signal(false);
+
+  private readonly storefrontBase = (() => {
+    if (typeof window === 'undefined') return '';
+    const h = window.location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') {
+      return `${window.location.protocol}//${h}:4200`;
+    }
+    return window.location.origin;
+  })();
 
   async ngOnInit(): Promise<void> {
     const productId = this.route.snapshot.paramMap.get('productId')!;
@@ -317,6 +349,17 @@ export class FeedbackDetailComponent implements OnInit {
 
   goBack(): void {
     void this.router.navigate(['/feedback']);
+  }
+
+  kioskUrl(productId: string): string {
+    return `${this.storefrontBase}/kiosk?product=${productId}`;
+  }
+
+  copyKioskLink(productId: string): void {
+    navigator.clipboard.writeText(this.kioskUrl(productId)).then(() => {
+      this.kioskLinkCopied.set(true);
+      setTimeout(() => this.kioskLinkCopied.set(false), 2000);
+    });
   }
 
   imgUrl(path: string): string {
