@@ -6,6 +6,7 @@ import { I18nService } from '../../services/i18n.service';
 interface FooterLink {
   labelKey: string;
   path: string;
+  queryParams?: Record<string, string>;
 }
 
 interface FooterColumn {
@@ -34,7 +35,7 @@ interface FooterColumn {
           <div class="footer-column">
             <div class="footer-column-title">{{ t(col.titleKey) }}</div>
             @for (l of col.links; track l.labelKey) {
-              <a [routerLink]="l.path" class="footer-link">
+              <a [routerLink]="l.path" [queryParams]="l.queryParams || null" class="footer-link">
                 {{ t(l.labelKey) }}
               </a>
             }
@@ -225,10 +226,10 @@ export class FooterComponent {
     {
       titleKey: 'footer.col.collection',
       links: [
-        { labelKey: 'footer.link.allPieces', path: '/collection' },
-        { labelKey: 'footer.link.newArrivals', path: '/collection' },
-        { labelKey: 'footer.link.signature', path: '/collection' },
-        { labelKey: 'footer.link.limitedEdition', path: '/collection' },
+        { labelKey: 'footer.link.allPieces', path: '/collection/all-products' },
+        { labelKey: 'footer.link.newArrivals', path: '/collection/all-products', queryParams: { sort: 'Newest' } },
+        { labelKey: 'footer.link.signature', path: '/collection/all-products', queryParams: { tag: 'signature' } },
+        { labelKey: 'footer.link.limitedEdition', path: '/collection/all-products', queryParams: { tag: 'limited' } },
       ],
     },
     {

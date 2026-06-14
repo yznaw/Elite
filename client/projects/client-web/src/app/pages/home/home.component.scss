@@ -1064,7 +1064,7 @@
     box-sizing: border-box;
     position: relative;
     z-index: 1;
-    margin-top: clamp(-18px, -2.2svh, -8px);
+    margin-top: 0;
   }
 
   .mobile-feature-sheet {
@@ -1096,7 +1096,7 @@
   }
 
   .mobile-feature-sheet__header {
-    display: grid;
+    display: none;
     gap: 6px;
     padding-bottom: 6px;
     border-bottom: 1px solid rgba(184, 150, 90, 0.2);
@@ -1145,34 +1145,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 999px;
-    background: rgba(11, 111, 98, 0.08);
-    color: var(--claude-crystal-green);
     flex-shrink: 0;
+    background: transparent;
   }
 
-  .mobile-feature-icon svg {
-    width: 18px;
-    height: 18px;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .mobile-feature-icon--buckle {
-    background: rgba(184, 150, 90, 0.12);
-    color: var(--claude-text-gold);
-  }
-
-  .mobile-feature-icon--sole {
-    background: rgba(10, 90, 77, 0.1);
-    color: #0a5a4d;
-  }
-
-  .mobile-feature-icon--stitching {
-    background: rgba(184, 150, 90, 0.1);
-    color: #9a7a3b;
+  .mobile-feature-icon img {
+    width: 28px;
+    height: 28px;
+    display: block;
+    object-fit: contain;
   }
 
   .mobile-feature-copy {
@@ -1229,6 +1210,7 @@
     text-align: start;
     text-transform: uppercase;
     white-space: normal;
+    font-weight: 600;
   }
 
   .hero-cta:hover,

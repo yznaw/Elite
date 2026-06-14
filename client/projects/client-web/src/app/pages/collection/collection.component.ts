@@ -2,8 +2,8 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { Subscription, combineLatest, firstValueFrom } from 'rxjs';
 import { ProductsService } from '../../services/products.service';
 import { Product, ProductVariant } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
@@ -75,6 +75,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private addedTimer: number | undefined;
   private mobileMediaQuery?: MediaQueryList;
   private mobileMediaQueryHandler?: () => void;
+  private routeSyncSub?: Subscription;
 
   readonly sortOptions = SORT_OPTIONS;
   readonly sort = signal<SortOption>('Featured');
@@ -193,15 +194,13 @@ export class CollectionComponent implements OnInit, OnDestroy {
     void this.loadCollections();
     void this.referenceData.ensureColors();
     this.setupMobilePagination();
-    this.route.paramMap.subscribe((params) => {
-      this.activeCollectionKey.set(params.get('collection'));
-      this.selectedFilters.set(this.emptySelectedFilters());
-      this.filtersOpen.set(false);
-      this.mobilePage.set(0);
+    this.routeSyncSub = combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([params, query]) => {
+      this.syncRouteState(params, query);
     });
   }
 
   ngOnDestroy(): void {
+    this.routeSyncSub?.unsubscribe();
     if (this.mobileMediaQuery && this.mobileMediaQueryHandler) {
       this.mobileMediaQuery.removeEventListener('change', this.mobileMediaQueryHandler);
     }
@@ -445,6 +444,31 @@ export class CollectionComponent implements OnInit, OnDestroy {
     return this.t(keys[value]);
   }
 
+  private syncRouteState(params: ParamMap, query: ParamMap): void {
+    const collectionKey = params.get('collection');
+    const hasQueryFilter = query.has('sort') || query.has('tag');
+    this.activeCollectionKey.set(collectionKey || (hasQueryFilter ? 'all-products' : null));
+    this.selectedFilters.set(this.emptySelectedFilters());
+    this.filtersOpen.set(false);
+    this.mobilePage.set(0);
+
+    const sort = query.get('sort');
+    if (sort) {
+      const normalizedSort = this.normalizeSort(sort);
+      if (normalizedSort) this.sort.set(normalizedSort);
+    } else {
+      this.sort.set('Featured');
+    }
+
+    const tag = query.get('tag');
+    if (tag) {
+      this.selectedFilters.update((filters) => ({
+        ...filters,
+        tag: [this.normalizeTag(tag)],
+      }));
+    }
+  }
+
   onImgError(e: Event): void {
     const img = e.target as HTMLImageElement;
     if (img.src !== FALLBACK_IMAGE) {
@@ -622,6 +646,24 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   private colorSlug(value: string): string {
     return this.colorKey(value).replace(/[^a-z0-9]+/g, '');
+  }
+
+  private normalizeSort(value: string): SortOption | null {
+    const normalized = this.colorKey(value);
+    if (normalized === 'featured') return 'Featured';
+    if (normalized === 'price lowhigh' || normalized === 'price low high') return 'Price: Low–High';
+    if (normalized === 'price highlow' || normalized === 'price high low') return 'Price: High–Low';
+    if (normalized === 'newest') return 'Newest';
+    return null;
+  }
+
+  private normalizeTag(value: string): string {
+    const normalized = this.colorKey(value);
+    if (normalized === 'signature') return 'Signature';
+    if (normalized === 'limited') return 'Limited';
+    if (normalized === 'limitededition') return 'Limited';
+    if (normalized === 'newarrival' || normalized === 'new arrivals' || normalized === 'newarrival') return 'New Arrival';
+    return value.trim();
   }
 
   private mappedImageForColor(product: Product, key: string): string | null {

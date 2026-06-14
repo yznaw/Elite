@@ -73,6 +73,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   };
 
   readonly isArabic = computed(() => this.locale.locale() === 'ar');
+  private readonly mobileFeatureIcons: Record<string, string> = {
+    strap: 'assets/home-feature-icons/leather.svg',
+    buckle: 'assets/home-feature-icons/buckle.svg',
+    sole: 'assets/home-feature-icons/sole.svg',
+    stitching: 'assets/home-feature-icons/stitching.svg',
+  };
 
   calloutDelay(id: string): string {
     return this._calloutDelays[id] ?? '0.5s';
@@ -88,6 +94,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.isArabic()
       ? (callout.subtitleAr || '')
       : (callout.subtitleEn || '');
+  }
+
+  mobileFeatureIcon(calloutId: string): string {
+    return this.mobileFeatureIcons[calloutId] || this.mobileFeatureIcons['strap'];
   }
 
   heroSubtitle(item: { subtitle?: string }): string {
