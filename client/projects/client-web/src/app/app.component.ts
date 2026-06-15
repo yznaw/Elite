@@ -30,7 +30,8 @@ export class AppComponent {
     { initialValue: this.router.url },
   );
 
-  readonly hideFooter = computed(() => this.currentUrl().startsWith('/checkout'));
+  readonly isKiosk    = computed(() => this.currentUrl().startsWith('/kiosk'));
+  readonly hideFooter = computed(() => this.currentUrl().startsWith('/checkout') || this.isKiosk());
 
   // True when loaded inside the admin's preview iframe (suppresses the banner)
   readonly isEmbedded = typeof window !== 'undefined' && window !== window.parent;

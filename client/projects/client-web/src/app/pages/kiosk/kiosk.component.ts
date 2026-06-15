@@ -8,61 +8,164 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 type KioskStep = 'welcome' | 'product' | 'rating' | 'message' | 'contact' | 'thanks';
+type KioskLang = 'en' | 'ar';
 
 interface KioskProduct { id: string; name: string; image: string; }
-
 interface ApiEnvelope<T> { success: boolean; data: T; }
+
+// ── All UI strings in both languages ─────────────────────────────────────────
+const STRINGS: Record<KioskLang, Record<string, string>> = {
+  en: {
+    logoSub:         'Arabic Leather Artisans',
+    welcomeTitle:    'How was your experience\nwith us today?',
+    welcomeSub:      'Every word you share helps our artisans perfect\ntheir craft. It takes less than a minute.',
+    welcomeBtn:      'Share Your Thoughts',
+    privacy:         'Your responses are private and seen only by the Elite team',
+
+    selectEyebrow:   'Step 1',
+    selectTitle:     'Which piece caught your heart?',
+    selectSkip:      'General feedback',
+    selectContinue:  'Continue',
+
+    ratingEyebrow:   'Your impression',
+    ratingTitle:     'How would you rate\nyour experience?',
+    ratingPoor:      'Disappointing',
+    ratingExcellent: 'Exceptional',
+    ratingHint:      'Touch a star to share your impression',
+
+    messageTitle:    'Tell us your story',
+    messageSub:      'What moved you? What could be more refined?',
+    messagePlaceholder: 'Craftsmanship, comfort, service, presentation — your words matter to us…',
+    messageSkip:     'Skip',
+    messageContinue: 'Continue',
+
+    contactTitle:    'May we reach out?',
+    contactSub:      'Entirely optional. We may offer a personal thank-you\nor exclusive care for your Elite pieces.',
+    contactName:     'Your name',
+    contactPhone:    'Mobile number',
+    contactEmail:    'Email address',
+    contactNote:     'Your details are held in the strictest confidence',
+    contactSkip:     'Keep anonymous',
+    contactSubmit:   'Submit',
+    contactSending:  'Sending…',
+
+    thanksTitle:     'Shukran',
+    thanksSub:       'Your words reach our artisans personally. Every detail you share inspires the next piece we create.',
+    thanksRestart:   'New Response',
+    thanksCountdown: 'Returning to start in',
+    thanksSeconds:   's…',
+
+    noProducts:      'No collections available right now',
+    noProductsSub:   'You may still leave us your thoughts below',
+
+    langToggle:      'عربي',
+  },
+  ar: {
+    logoSub:         'حِرَفيّو الجِلد العربي',
+    welcomeTitle:    'كيف كانت تجربتكم\nمعنا اليوم؟',
+    welcomeSub:      'كل كلمة تشاركونها تُلهم حِرَفيّينا نحو الكمال.\nلن يستغرق الأمر سوى لحظات.',
+    welcomeBtn:      'شاركونا رأيكم',
+    privacy:         'ردودكم سرية ولا يطّلع عليها سوى فريق إيليت',
+
+    selectEyebrow:   'الخطوة الأولى',
+    selectTitle:     'أيّ قطعة أسرت قلبكم؟',
+    selectSkip:      'رأي عام',
+    selectContinue:  'متابعة',
+
+    ratingEyebrow:   'انطباعكم',
+    ratingTitle:     'كيف تقيّمون\nتجربتكم معنا؟',
+    ratingPoor:      'مخيّبة',
+    ratingExcellent: 'استثنائية',
+    ratingHint:      'المسّ على نجمة للتعبير عن انطباعكم',
+
+    messageTitle:    'احكوا لنا قصّتكم',
+    messageSub:      'ما الذي أثار إعجابكم؟ وما الذي يستحق مزيداً من الرقيّ؟',
+    messagePlaceholder: 'الحِرَفية، الراحة، الخدمة، الإخراج — كلماتكم بالغة الأهمية لنا…',
+    messageSkip:     'تخطّي',
+    messageContinue: 'متابعة',
+
+    contactTitle:    'هل نتواصل معكم؟',
+    contactSub:      'اختياري تماماً. قد نتواصل معكم شكراً خالصاً\nأو رعاية حصرية لقطعكم من إيليت.',
+    contactName:     'الاسم الكريم',
+    contactPhone:    'رقم الجوال',
+    contactEmail:    'البريد الإلكتروني',
+    contactNote:     'بياناتكم محفوظة بمنتهى الخصوصية والأمانة',
+    contactSkip:     'الإبقاء على السرية',
+    contactSubmit:   'إرسال',
+    contactSending:  'جارٍ الإرسال…',
+
+    thanksTitle:     'شكراً',
+    thanksSub:       'تصل كلماتكم إلى حِرَفيّينا شخصياً. كل تفصيل تشاركونه يُلهم القطعة القادمة.',
+    thanksRestart:   'رأي جديد',
+    thanksCountdown: 'العودة للبداية بعد',
+    thanksSeconds:   'ث…',
+
+    noProducts:      'لا توجد مجموعات متاحة حالياً',
+    noProductsSub:   'يمكنكم إبداء رأيكم العام أدناه',
+
+    langToggle:      'English',
+  },
+};
 
 @Component({
   selector: 'app-kiosk',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="k-shell" (click)="resetActivity()" (touchstart)="resetActivity()">
+    <div class="k-shell" [attr.dir]="lang() === 'ar' ? 'rtl' : 'ltr'"
+         (click)="resetActivity()" (touchstart)="resetActivity()">
 
       <!-- ── Screen 1: Welcome ─────────────────────────────────── -->
       @if (step() === 'welcome') {
         <div class="kiosk k-welcome">
           <div class="k-welcome-bg"></div>
-          <div class="k-logo">elite</div>
-          <div class="k-logo-sub">Arabic Leather Artisans</div>
+          <button class="k-lang-pill k-lang-welcome" type="button" (click)="$event.stopPropagation(); toggleLang()">
+            {{ s('langToggle') }}
+          </button>
+          <img src="/assets/brand/elite-logo-cream.png" alt="Elite Collection" class="k-logo-img"/>
+          <div class="k-logo-sub">{{ s('logoSub') }}</div>
           <div class="k-diamond-line"><span class="k-diamond">◇</span></div>
-          <div class="k-welcome-title">How was your experience<br/>with us today?</div>
-          <div class="k-welcome-sub">Your feedback helps our artisans refine every detail.<br/>It takes less than a minute and is completely private.</div>
-          <button class="k-start-btn" (click)="startFlow()">Share Your Feedback</button>
-          <div class="k-privacy">◇ &nbsp; Your responses are private and used only by the Elite team</div>
+          <div class="k-welcome-title" [innerHTML]="s('welcomeTitle').replace('\\n','<br>')"></div>
+          <div class="k-welcome-sub" [innerHTML]="s('welcomeSub').replace('\\n','<br>')"></div>
+          <button class="k-start-btn" (click)="startFlow()">{{ s('welcomeBtn') }}</button>
+          <div class="k-privacy">◇ &nbsp; {{ s('privacy') }}</div>
         </div>
       }
 
-      <!-- ── Screen 2: Product picker (when no product in URL) ── -->
+      <!-- ── Screen 2: Product picker ──────────────────────────── -->
       @if (step() === 'product') {
         <div class="kiosk k-product">
           <div class="k-step-header">
-            <div class="k-step-logo">elite</div>
+            <img src="/assets/brand/elite-logo-cream.png" alt="Elite Collection" class="k-step-logo-img"/>
             <div class="k-step-progress">
               @for (_ of steps; track $index) {
                 <div class="k-step-dot" [class.on]="$index === 0"></div>
               }
             </div>
-            <button class="k-step-skip" type="button" (click)="skipProduct()">Skip →</button>
+            <div class="k-step-header-right">
+              <button class="k-lang-pill" type="button" (click)="$event.stopPropagation(); toggleLang()">
+                {{ s('langToggle') }}
+              </button>
+              <button class="k-step-skip" type="button" (click)="skipProduct()">{{ s('selectSkip') }}</button>
+            </div>
           </div>
           <div class="k-product-content">
-            <div class="k-rate-eyebrow">Select a product</div>
-            <div class="k-rate-title">Which item are you reviewing?</div>
+            <div class="k-rate-eyebrow">{{ s('selectEyebrow') }}</div>
+            <div class="k-rate-title">{{ s('selectTitle') }}</div>
             @if (loadingProducts()) {
               <div class="k-loading-dots"><span></span><span></span><span></span></div>
             } @else if (products().length === 0) {
               <div class="k-empty-products">
                 <div class="k-empty-icon">◈</div>
-                <div class="k-empty-text">No products available right now</div>
-                <div class="k-empty-sub">You can still leave us general feedback below</div>
+                <div class="k-empty-text">{{ s('noProducts') }}</div>
+                <div class="k-empty-sub">{{ s('noProductsSub') }}</div>
               </div>
             } @else {
               <div class="k-product-grid">
                 @for (p of products(); track p.id) {
                   <button class="k-product-card" type="button"
                           [class.on]="selectedProductId() === p.id"
-                          (click)="selectProduct(p.id)">
+                          (click)="selectAndAdvance(p.id)">
                     @if (p.image) {
                       <img [src]="p.image" [alt]="p.name" class="k-product-img"/>
                     } @else {
@@ -73,12 +176,12 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
                 }
               </div>
             }
-            <div class="k-btns">
-              <button class="k-btn-outline" type="button" (click)="skipProduct()">General feedback</button>
-              <button class="k-btn-gold" type="button"
-                      [disabled]="!selectedProductId()"
-                      (click)="goTo('rating')">Continue →</button>
-            </div>
+            <!-- Only show continue if products loaded but none selected yet -->
+            @if (!loadingProducts() && products().length > 0 && !selectedProductId()) {
+              <div class="k-btns">
+                <button class="k-btn-outline" type="button" (click)="skipProduct()">{{ s('selectSkip') }}</button>
+              </div>
+            }
           </div>
         </div>
       }
@@ -87,32 +190,36 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       @if (step() === 'rating') {
         <div class="kiosk k-rating">
           <div class="k-step-header">
-            <div class="k-step-logo">elite</div>
+            <img src="/assets/brand/elite-logo-cream.png" alt="Elite Collection" class="k-step-logo-img"/>
             <div class="k-step-progress">
               @for (_ of steps; track $index) {
                 <div class="k-step-dot" [class.on]="$index <= ratingStepIdx()"></div>
               }
             </div>
-            <button class="k-step-skip" type="button" (click)="goTo('message')">Skip →</button>
+            <div class="k-step-header-right">
+              <button class="k-lang-pill" type="button" (click)="$event.stopPropagation(); toggleLang()">
+                {{ s('langToggle') }}
+              </button>
+              <button class="k-step-skip" type="button" (click)="goTo('message')">Skip →</button>
+            </div>
           </div>
           <div class="k-rating-content">
-            <div class="k-rate-eyebrow">Step {{ ratingStepIdx() + 1 }} of {{ steps.length }}</div>
-            <div class="k-rate-title">How would you rate<br/>your purchase?</div>
+            <div class="k-rate-eyebrow">{{ s('ratingEyebrow') }}</div>
+            <div class="k-rate-title" [innerHTML]="s('ratingTitle').replace('\\n','<br>')"></div>
             <div class="k-big-stars">
               @for (n of [1,2,3,4,5]; track n) {
                 <span class="k-big-star"
                       [class.on]="n <= (hoverRating() || rating())"
                       (mouseenter)="hoverRating.set(n)"
                       (mouseleave)="hoverRating.set(0)"
-                      (click)="setRating(n)">★</span>
+                      (click)="setRatingAndAdvance(n)">★</span>
               }
             </div>
             <div class="k-rate-labels">
-              <span class="k-rate-label">Poor</span>
-              <span class="k-rate-label">Excellent</span>
+              <span class="k-rate-label">{{ s('ratingPoor') }}</span>
+              <span class="k-rate-label">{{ s('ratingExcellent') }}</span>
             </div>
-            <div class="k-rate-hint">Tap a star to rate</div>
-            <button class="k-next-btn" type="button" (click)="goTo('message')">Continue →</button>
+            <div class="k-rate-hint">{{ s('ratingHint') }}</div>
           </div>
         </div>
       }
@@ -121,26 +228,31 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       @if (step() === 'message') {
         <div class="kiosk k-feedback">
           <div class="k-step-header">
-            <div class="k-step-logo">elite</div>
+            <img src="/assets/brand/elite-logo-cream.png" alt="Elite Collection" class="k-step-logo-img"/>
             <div class="k-step-progress">
               @for (_ of steps; track $index) {
                 <div class="k-step-dot" [class.on]="$index <= messageStepIdx()"></div>
               }
             </div>
-            <button class="k-step-skip" type="button" (click)="goTo('contact')">Skip →</button>
+            <div class="k-step-header-right">
+              <button class="k-lang-pill" type="button" (click)="$event.stopPropagation(); toggleLang()">
+                {{ s('langToggle') }}
+              </button>
+              <button class="k-step-skip" type="button" (click)="goTo('contact')">{{ s('messageSkip') }}</button>
+            </div>
           </div>
           <div class="k-feedback-content">
-            <div class="k-feedback-title">Tell us more</div>
-            <div class="k-feedback-sub">What did you love? What could be better?</div>
+            <div class="k-feedback-title">{{ s('messageTitle') }}</div>
+            <div class="k-feedback-sub">{{ s('messageSub') }}</div>
             <textarea class="k-textarea"
-                      placeholder="Fit, leather quality, service, packaging — anything you'd like us to know…"
+                      [placeholder]="s('messagePlaceholder')"
                       maxlength="600"
                       [(ngModel)]="messageText"
                       (ngModelChange)="message.set($event)"></textarea>
             <div class="k-char-count">{{ message().length }} / 600</div>
             <div class="k-btns">
-              <button class="k-btn-outline" type="button" (click)="goTo('contact')">Skip</button>
-              <button class="k-btn-gold" type="button" (click)="goTo('contact')">Continue →</button>
+              <button class="k-btn-outline" type="button" (click)="goTo('contact')">{{ s('messageSkip') }}</button>
+              <button class="k-btn-gold" type="button" (click)="goTo('contact')">{{ s('messageContinue') }} →</button>
             </div>
           </div>
         </div>
@@ -150,39 +262,44 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       @if (step() === 'contact') {
         <div class="kiosk k-contact">
           <div class="k-step-header">
-            <div class="k-step-logo">elite</div>
+            <img src="/assets/brand/elite-logo-cream.png" alt="Elite Collection" class="k-step-logo-img"/>
             <div class="k-step-progress">
               @for (_ of steps; track $index) {
                 <div class="k-step-dot on"></div>
               }
             </div>
-            <button class="k-step-skip" type="button" (click)="submit()">Skip →</button>
+            <div class="k-step-header-right">
+              <button class="k-lang-pill" type="button" (click)="$event.stopPropagation(); toggleLang()">
+                {{ s('langToggle') }}
+              </button>
+              <button class="k-step-skip" type="button" (click)="submit()">{{ s('contactSkip') }}</button>
+            </div>
           </div>
           <div class="k-contact-content">
-            <div class="k-contact-title">May we reach out?</div>
-            <div class="k-contact-sub">Completely optional. We may contact you to follow up on your feedback<br/>or share an exclusive offer as a thank-you.</div>
+            <div class="k-contact-title">{{ s('contactTitle') }}</div>
+            <div class="k-contact-sub" [innerHTML]="s('contactSub').replace('\\n','<br>')"></div>
             <div class="k-contact-grid">
               <div class="k-contact-field">
-                <div class="k-contact-label">Name</div>
-                <input class="k-contact-input" placeholder="Your name" type="text"
+                <div class="k-contact-label">{{ s('contactName') }}</div>
+                <input class="k-contact-input" [placeholder]="s('contactName')" type="text"
                        [(ngModel)]="contactNameText" (ngModelChange)="contactName.set($event)"/>
               </div>
               <div class="k-contact-field">
-                <div class="k-contact-label">Mobile Number</div>
+                <div class="k-contact-label">{{ s('contactPhone') }}</div>
                 <input class="k-contact-input" placeholder="+974 XXXX XXXX" type="tel"
                        [(ngModel)]="contactPhoneText" (ngModelChange)="contactPhone.set($event)"/>
               </div>
               <div class="k-contact-field k-contact-full">
-                <div class="k-contact-label">Email</div>
+                <div class="k-contact-label">{{ s('contactEmail') }}</div>
                 <input class="k-contact-input" placeholder="your@email.com" type="email"
                        [(ngModel)]="contactEmailText" (ngModelChange)="contactEmail.set($event)"/>
               </div>
             </div>
-            <div class="k-skip-note">◇ &nbsp;Your details are private and never shared with third parties</div>
+            <div class="k-skip-note">◇ &nbsp; {{ s('contactNote') }}</div>
             <div class="k-btns">
-              <button class="k-btn-outline" type="button" (click)="submit()" [disabled]="submitting()">Skip</button>
+              <button class="k-btn-outline" type="button" (click)="submit()" [disabled]="submitting()">{{ s('contactSkip') }}</button>
               <button class="k-btn-gold" type="button" (click)="submit()" [disabled]="submitting()">
-                {{ submitting() ? 'Submitting…' : 'Submit Feedback →' }}
+                {{ submitting() ? s('contactSending') : s('contactSubmit') + ' →' }}
               </button>
             </div>
           </div>
@@ -194,12 +311,12 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
         <div class="kiosk k-thanks">
           <div class="k-thanks-bg"></div>
           <div class="k-thanks-icon">✓</div>
-          <div class="k-thanks-title">Thank you</div>
-          <div class="k-thanks-sub">Your feedback has been recorded. Our artisans and team read every response personally — it helps us refine every detail of our craft.</div>
+          <div class="k-thanks-title">{{ s('thanksTitle') }}</div>
+          <div class="k-thanks-sub">{{ s('thanksSub') }}</div>
           <button class="k-thanks-restart" type="button" (click)="restart()">
-            New Response &nbsp;↺
+            {{ s('thanksRestart') }} &nbsp;↺
           </button>
-          <div class="k-thanks-countdown">Returning to start in {{ countdown() }}s…</div>
+          <div class="k-thanks-countdown">{{ s('thanksCountdown') }} {{ countdown() }}{{ s('thanksSeconds') }}</div>
         </div>
       }
 
@@ -222,6 +339,46 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       overflow: hidden;
     }
 
+    /* ── Language pill ────────────────────── */
+    .k-lang-pill {
+      font-family: 'Montserrat', sans-serif;
+      font-size: clamp(9px,.9vw,11px); font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase;
+      padding: 6px 14px; border-radius: 99px;
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.08);
+      color: rgba(255,255,255,.6);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .k-lang-pill:hover { background: rgba(255,255,255,.16); color: rgba(255,255,255,.9); }
+
+    /* Welcome screen pill (same dark bg) */
+    .k-lang-welcome {
+      position: absolute; top: clamp(14px,2%,24px); inset-inline-end: clamp(16px,3%,36px);
+      z-index: 2;
+    }
+
+    /* Step screen pill sits inside the header */
+    .k-step-header-right {
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    /* Step screens: pill uses darker text on light bg — override */
+    .k-product .k-lang-pill,
+    .k-rating .k-lang-pill,
+    .k-feedback .k-lang-pill,
+    .k-contact .k-lang-pill {
+      border-color: rgba(0,0,0,.12);
+      background: rgba(0,0,0,.04);
+      color: rgba(26,18,8,.45);
+    }
+    .k-product .k-lang-pill:hover,
+    .k-rating .k-lang-pill:hover,
+    .k-feedback .k-lang-pill:hover,
+    .k-contact .k-lang-pill:hover {
+      background: rgba(0,0,0,.09); color: rgba(26,18,8,.8);
+    }
+
     /* ── Welcome ──────────────────────────── */
     .k-welcome {
       background: #024638;
@@ -233,10 +390,9 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       background: radial-gradient(ellipse at 50% 30%, rgba(184,146,74,.18), transparent 60%);
       pointer-events: none;
     }
-    .k-logo {
-      font-family: 'Cormorant Garamond', 'Georgia', serif;
-      font-size: clamp(28px,4vw,52px); font-style: italic;
-      color: #d4a853; position: relative; z-index: 1; margin-bottom: 4px;
+    .k-logo-img {
+      height: clamp(40px,6vw,72px); width: auto;
+      object-fit: contain; position: relative; z-index: 1; margin-bottom: 4px;
     }
     .k-logo-sub {
       font-size: clamp(8px,1vw,11px); font-weight: 700;
@@ -247,11 +403,11 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
     .k-diamond { color: rgba(184,146,74,.45); font-size: 18px; }
     .k-welcome-title {
       font-size: clamp(18px,3vw,40px); font-weight: 300; color: #fff;
-      line-height: 1.3; margin-bottom: 10px; position: relative; z-index: 1;
+      line-height: 1.4; margin-bottom: 12px; position: relative; z-index: 1;
     }
     .k-welcome-sub {
       font-size: clamp(10px,1.3vw,16px); color: rgba(255,255,255,.45);
-      line-height: 1.65; margin-bottom: clamp(20px,4%,44px);
+      line-height: 1.75; margin-bottom: clamp(20px,4%,44px);
       position: relative; z-index: 1; max-width: 560px;
     }
     .k-start-btn {
@@ -278,9 +434,8 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       display: flex; align-items: center; justify-content: space-between;
       z-index: 10;
     }
-    .k-step-logo {
-      font-family: 'Cormorant Garamond','Georgia',serif;
-      font-size: clamp(16px,2vw,24px); font-style: italic; color: #d4a853;
+    .k-step-logo-img {
+      height: clamp(22px,3vw,36px); width: auto; object-fit: contain;
     }
     .k-step-progress { display: flex; gap: 6px; }
     .k-step-dot {
@@ -291,7 +446,7 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
     .k-step-skip {
       font-size: clamp(9px,1vw,12px); font-weight: 600;
       color: rgba(255,255,255,.35); background: none; border: none;
-      cursor: pointer; font-family: inherit; transition: color .14s;
+      cursor: pointer; font-family: inherit; transition: color .14s; white-space: nowrap;
     }
     .k-step-skip:hover { color: rgba(255,255,255,.7); }
 
@@ -315,10 +470,8 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       display: flex; flex-direction: column; align-items: center; gap: 10px;
     }
     .k-product-card.on { border-color: #b8924a; background: #fff; box-shadow: 0 0 0 3px rgba(184,146,74,.15); }
-    .k-product-card:hover { border-color: #b8924a; }
-    .k-product-img {
-      width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px;
-    }
+    .k-product-card:hover { border-color: #b8924a; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+    .k-product-img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
     .k-product-placeholder {
       width: 100%; aspect-ratio: 1; display: flex; align-items: center;
       justify-content: center; font-size: 32px; color: #b8924a;
@@ -328,6 +481,15 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       font-size: clamp(10px,1.2vw,13px); font-weight: 600; color: #1a1208;
       text-align: center; line-height: 1.3;
     }
+
+    /* ── Empty products ───────────────────── */
+    .k-empty-products {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 8px; padding: clamp(24px,4%,48px) 0;
+    }
+    .k-empty-icon { font-size: 36px; color: rgba(184,146,74,.35); margin-bottom: 4px; }
+    .k-empty-text { font-size: clamp(13px,1.6vw,18px); font-weight: 600; color: #1a1208; }
+    .k-empty-sub  { font-size: clamp(10px,1.2vw,14px); color: #8a7a62; font-style: italic; }
 
     /* ── Rating ───────────────────────────── */
     .k-rating { background: #eee9df; }
@@ -341,18 +503,18 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
     }
     .k-rate-title {
       font-size: clamp(20px,3vw,36px); font-weight: 600; color: #1a1208;
-      line-height: 1.3; margin-bottom: clamp(20px,4%,44px);
+      line-height: 1.4; margin-bottom: clamp(20px,4%,44px);
     }
     .k-big-stars {
       display: flex; gap: clamp(8px,2vw,24px); justify-content: center;
       margin-bottom: clamp(10px,2%,20px);
     }
     .k-big-star {
-      font-size: clamp(36px,7vw,72px); color: #ddd0bb;
-      cursor: pointer; user-select: none; transition: color .1s, transform .1s;
+      font-size: clamp(40px,8vw,80px); color: #ddd0bb;
+      cursor: pointer; user-select: none; transition: color .12s, transform .12s;
     }
     .k-big-star.on { color: #b8924a; }
-    .k-big-star:hover { transform: scale(1.1); }
+    .k-big-star:hover { transform: scale(1.15); color: #b8924a; }
     .k-rate-labels {
       display: flex; justify-content: space-between;
       width: clamp(180px,40vw,360px); margin: 0 auto clamp(10px,2%,20px);
@@ -365,15 +527,6 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       font-size: clamp(9px,1.1vw,13px); color: #b8924a;
       margin-bottom: clamp(16px,3%,36px); font-style: italic;
     }
-    .k-next-btn {
-      padding: clamp(12px,1.8%,18px) clamp(40px,7%,88px);
-      background: linear-gradient(135deg,#c9a96e,#9a7535);
-      border: none; border-radius: 4px; color: #0d0b08;
-      font-size: clamp(9px,1.1vw,13px); font-weight: 700;
-      letter-spacing: .16em; text-transform: uppercase;
-      cursor: pointer; font-family: inherit; transition: transform .14s;
-    }
-    .k-next-btn:hover { transform: translateY(-1px); }
 
     /* ── Message ──────────────────────────── */
     .k-feedback { background: #eee9df; }
@@ -399,7 +552,7 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
     }
     .k-textarea:focus { outline: none; border-color: #b8924a; background: #fff; }
     .k-char-count {
-      text-align: right; font-size: clamp(9px,1vw,12px); color: #8a7a62;
+      text-align: end; font-size: clamp(9px,1vw,12px); color: #8a7a62;
       margin-bottom: clamp(16px,3%,32px);
     }
 
@@ -414,13 +567,13 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       font-size: clamp(20px,2.8vw,34px); font-weight: 700; color: #1a1208; margin-bottom: 6px;
     }
     .k-contact-sub {
-      font-size: clamp(10px,1.2vw,14px); color: #8a7a62; line-height: 1.6;
+      font-size: clamp(10px,1.2vw,14px); color: #8a7a62; line-height: 1.7;
       margin-bottom: clamp(20px,3%,36px);
     }
     .k-contact-grid {
       display: grid; grid-template-columns: 1fr 1fr;
       gap: clamp(10px,1.5vw,18px); margin-bottom: clamp(12px,2%,20px);
-      text-align: left;
+      text-align: start;
     }
     @media (max-width: 600px) { .k-contact-grid { grid-template-columns: 1fr; } }
     .k-contact-full { grid-column: 1 / -1; }
@@ -443,7 +596,7 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
     }
 
     /* ── Shared buttons ───────────────────── */
-    .k-btns { display: flex; gap: clamp(10px,1.5%,16px); justify-content: center; }
+    .k-btns { display: flex; gap: clamp(10px,1.5%,16px); justify-content: center; margin-top: clamp(12px,2%,20px); }
     .k-btn-outline {
       padding: clamp(11px,1.6%,17px) clamp(24px,4%,56px);
       background: transparent; border: 1.5px solid rgba(0,0,0,.12);
@@ -485,42 +638,29 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
       box-shadow: 0 10px 32px rgba(184,146,74,.45);
     }
     .k-thanks-title {
-      font-size: clamp(24px,4vw,52px); font-weight: 700; color: #fff;
-      margin-bottom: 12px; position: relative; z-index: 1;
+      font-family: 'Cormorant Garamond','Georgia',serif;
+      font-size: clamp(32px,6vw,72px); font-style: italic;
+      font-weight: 400; color: #d4a853;
+      margin-bottom: 14px; position: relative; z-index: 1;
     }
     .k-thanks-sub {
       font-size: clamp(11px,1.4vw,17px); color: rgba(255,255,255,.5);
-      line-height: 1.65; max-width: 500px; margin-bottom: clamp(20px,4%,48px);
+      line-height: 1.75; max-width: 520px; margin-bottom: clamp(20px,4%,48px);
       position: relative; z-index: 1;
     }
     .k-thanks-restart {
       padding: clamp(11px,1.6%,16px) clamp(24px,4%,52px);
-      background: rgba(255,255,255,.1); border: 1.5px solid rgba(255,255,255,.2);
+      background: rgba(255,255,255,.08); border: 1.5px solid rgba(255,255,255,.2);
       border-radius: 4px; color: rgba(255,255,255,.7);
       font-size: clamp(9px,1.1vw,12px); font-weight: 700; letter-spacing: .16em;
       text-transform: uppercase; cursor: pointer; font-family: inherit;
       position: relative; z-index: 1; margin-bottom: clamp(12px,2%,24px);
       transition: all .15s;
     }
-    .k-thanks-restart:hover { background: rgba(255,255,255,.18); color: #fff; }
+    .k-thanks-restart:hover { background: rgba(255,255,255,.16); color: #fff; }
     .k-thanks-countdown {
       font-size: clamp(9px,1vw,12px); color: rgba(255,255,255,.22);
       position: relative; z-index: 1;
-    }
-
-    /* ── Empty products state ────────────────── */
-    .k-empty-products {
-      display: flex; flex-direction: column; align-items: center;
-      gap: 8px; padding: clamp(24px,4%,48px) 0;
-    }
-    .k-empty-icon {
-      font-size: 36px; color: rgba(184,146,74,.35); margin-bottom: 4px;
-    }
-    .k-empty-text {
-      font-size: clamp(13px,1.6vw,18px); font-weight: 600; color: #1a1208;
-    }
-    .k-empty-sub {
-      font-size: clamp(10px,1.2vw,14px); color: #8a7a62; font-style: italic;
     }
 
     /* ── Loading dots ─────────────────────── */
@@ -540,27 +680,32 @@ export class KioskComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly http  = inject(HttpClient);
 
-  // ── State ──────────────────────────────────────────────────
-  readonly step             = signal<KioskStep>('welcome');
-  readonly products         = signal<KioskProduct[]>([]);
-  readonly loadingProducts  = signal(false);
-  readonly selectedProductId = signal<string | null>(null);
-  readonly rating           = signal(0);
-  readonly hoverRating      = signal(0);
-  readonly message          = signal('');
-  readonly contactName      = signal('');
-  readonly contactPhone     = signal('');
-  readonly contactEmail     = signal('');
-  readonly submitting       = signal(false);
-  readonly countdown        = signal(10);
+  // ── Lang ───────────────────────────────────────────────────
+  readonly lang = signal<KioskLang>('en');
+  s = (key: string): string => STRINGS[this.lang()][key] ?? key;
+  toggleLang(): void {
+    this.lang.update((l) => l === 'en' ? 'ar' : 'en');
+  }
 
-  // Two-way bound model strings (ngModel bridge for signals)
+  // ── State ──────────────────────────────────────────────────
+  readonly step              = signal<KioskStep>('welcome');
+  readonly products          = signal<KioskProduct[]>([]);
+  readonly loadingProducts   = signal(false);
+  readonly selectedProductId = signal<string | null>(null);
+  readonly rating            = signal(0);
+  readonly hoverRating       = signal(0);
+  readonly message           = signal('');
+  readonly contactName       = signal('');
+  readonly contactPhone      = signal('');
+  readonly contactEmail      = signal('');
+  readonly submitting        = signal(false);
+  readonly countdown         = signal(10);
+
   messageText      = '';
   contactNameText  = '';
   contactPhoneText = '';
   contactEmailText = '';
 
-  // Steps for progress dots (3 = no product picker, 4 = with picker)
   steps: number[] = [];
 
   private preselectedProductId: string | null = null;
@@ -579,9 +724,9 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.preselectedProductId = this.route.snapshot.queryParamMap.get('product');
     if (this.preselectedProductId) {
       this.selectedProductId.set(this.preselectedProductId);
-      this.steps = [0, 1, 2]; // 3 steps: rating, message, contact
+      this.steps = [0, 1, 2];
     } else {
-      this.steps = [0, 1, 2, 3]; // 4 steps: product, rating, message, contact
+      this.steps = [0, 1, 2, 3];
       this.loadingProducts.set(true);
       try {
         const timeout = new Promise<never>((_, reject) =>
@@ -593,7 +738,6 @@ export class KioskComponent implements OnInit, OnDestroy {
         const res = await Promise.race([fetch, timeout]);
         this.products.set(Array.isArray(res.data) ? res.data : []);
       } catch {
-        // timeout or network error — show empty state, user can still leave general feedback
         this.products.set([]);
       } finally {
         this.loadingProducts.set(false);
@@ -601,17 +745,11 @@ export class KioskComponent implements OnInit, OnDestroy {
     }
   }
 
-  ngOnDestroy(): void {
-    this.clearTimers();
-  }
+  ngOnDestroy(): void { this.clearTimers(); }
 
-  // ── Step index helpers (for progress dots) ─────────────────
-  ratingStepIdx(): number {
-    return this.preselectedProductId ? 0 : 1;
-  }
-  messageStepIdx(): number {
-    return this.preselectedProductId ? 1 : 2;
-  }
+  // ── Step index helpers ─────────────────────────────────────
+  ratingStepIdx():  number { return this.preselectedProductId ? 0 : 1; }
+  messageStepIdx(): number { return this.preselectedProductId ? 1 : 2; }
 
   // ── Navigation ─────────────────────────────────────────────
   startFlow(): void {
@@ -628,8 +766,10 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.resetActivity();
   }
 
-  selectProduct(id: string): void {
+  // Auto-advance to rating immediately on product tap
+  selectAndAdvance(id: string): void {
     this.selectedProductId.set(id);
+    setTimeout(() => this.goTo('rating'), 120);
   }
 
   skipProduct(): void {
@@ -637,8 +777,10 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.goTo('rating');
   }
 
-  setRating(n: number): void {
+  // Rating tap auto-advances to message
+  setRatingAndAdvance(n: number): void {
     this.rating.set(n);
+    setTimeout(() => this.goTo('message'), 350);
   }
 
   // ── Submit ─────────────────────────────────────────────────
@@ -676,7 +818,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.clearTimers();
     this.rating.set(0);
     this.hoverRating.set(0);
-    this.message.set(''); this.messageText = '';
+    this.message.set('');      this.messageText = '';
     this.contactName.set('');  this.contactNameText = '';
     this.contactPhone.set(''); this.contactPhoneText = '';
     this.contactEmail.set(''); this.contactEmailText = '';
