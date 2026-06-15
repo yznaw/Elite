@@ -10,6 +10,25 @@ import { firstValueFrom } from 'rxjs';
 type KioskStep = 'welcome' | 'product' | 'rating' | 'message' | 'contact' | 'thanks';
 type KioskLang = 'en' | 'ar';
 
+interface Particle { svg: string; style: string; }
+
+const PARTICLE_ICONS = [
+  // Sandal — sole + three straps
+  `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="24" viewBox="0 0 42 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17C11 12 31 12 38 17"/><path d="M12 12L15 5M21 12V5M30 12L27 5"/><path d="M4 17Q21 22 38 17"/></svg>`,
+  // Scissors — blades + rings
+  `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="6" cy="7" r="4.5"/><circle cx="6" cy="23" r="4.5"/><path d="M11 9.5L28 20M11 20.5L28 10"/></svg>`,
+  // Needle with thread
+  `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="42" viewBox="0 0 10 42" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><ellipse cx="5" cy="5" rx="3" ry="4.5"/><line x1="3" y1="5" x2="7" y2="5"/><line x1="5" y1="9.5" x2="5" y2="38"/><path d="M5 38Q3 40 2 42"/></svg>`,
+  // Leaf / hide silhouette
+  `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="32" viewBox="0 0 22 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M11 30C11 30 1 21 1 12 1 5 6 1 11 1 16 1 21 5 21 12 21 21 11 30 11 30Z"/><line x1="11" y1="30" x2="11" y2="9"/><path d="M11 22L6 15M11 16L16 9"/></svg>`,
+  // Diamond ◇
+  `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11 1L21 11L11 21L1 11Z"/></svg>`,
+  // Thread spool
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="28" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><ellipse cx="12" cy="5" rx="10" ry="4"/><ellipse cx="12" cy="23" rx="10" ry="4"/><line x1="2" y1="5" x2="2" y2="23"/><line x1="22" y1="5" x2="22" y2="23"/><ellipse cx="12" cy="14" rx="6" ry="2.5"/></svg>`,
+  // Stitch line
+  `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="14" viewBox="0 0 36 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="4 4"><line x1="2" y1="7" x2="34" y2="7"/><path d="M6 2L6 12M12 2L12 12M18 2L18 12M24 2L24 12M30 2L30 12" stroke-dasharray="none" stroke-width="1"/></svg>`,
+];
+
 interface KioskProduct { id: string; name: string; image: string; }
 interface ApiEnvelope<T> { success: boolean; data: T; }
 
@@ -310,6 +329,12 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
       @if (step() === 'thanks') {
         <div class="kiosk k-thanks">
           <div class="k-thanks-bg"></div>
+          <!-- Falling particles -->
+          <div class="k-particles" aria-hidden="true">
+            @for (p of particles(); track $index) {
+              <div class="k-particle" [style]="p.style" [innerHTML]="p.svg"></div>
+            }
+          </div>
           <div class="k-thanks-icon">✓</div>
           <div class="k-thanks-title">{{ s('thanksTitle') }}</div>
           <div class="k-thanks-sub">{{ s('thanksSub') }}</div>
@@ -663,6 +688,28 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
       position: relative; z-index: 1;
     }
 
+    /* ── Falling particles ────────────────── */
+    .k-particles {
+      position: absolute; inset: 0; overflow: hidden;
+      pointer-events: none; z-index: 2;
+    }
+    .k-particle {
+      position: absolute; top: 0;
+      color: rgba(212,168,83,.5);
+      animation: k-fall linear infinite;
+      will-change: transform, opacity;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .k-particle svg { display: block; }
+    @keyframes k-fall {
+      0%   { transform: translateY(-70px) translateX(0px) rotate(0deg); opacity: 0; }
+      8%   { opacity: .8; }
+      30%  { transform: translateY(28vh) translateX(var(--sw, 20px)) rotate(115deg); }
+      55%  { transform: translateY(55vh) translateX(calc(var(--sw, 20px) * -0.8)) rotate(235deg); }
+      80%  { opacity: .55; }
+      100% { transform: translateY(108vh) translateX(calc(var(--sw, 20px) * 0.5)) rotate(360deg); opacity: 0; }
+    }
+
     /* ── Loading dots ─────────────────────── */
     .k-loading-dots {
       display: flex; gap: 8px; justify-content: center; margin: 32px 0;
@@ -700,6 +747,7 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly contactEmail      = signal('');
   readonly submitting        = signal(false);
   readonly countdown         = signal(10);
+  readonly particles         = signal<Particle[]>([]);
 
   messageText      = '';
   contactNameText  = '';
@@ -810,7 +858,25 @@ export class KioskComponent implements OnInit, OnDestroy {
       this.submitting.set(false);
       this.goTo('thanks');
       this.startCountdown();
+      this.spawnParticles();
     }
+  }
+
+  private spawnParticles(): void {
+    const count = 28;
+    const list: Particle[] = Array.from({ length: count }, (_, i) => {
+      const svg   = PARTICLE_ICONS[i % PARTICLE_ICONS.length];
+      const x     = Math.round(Math.random() * 94);
+      const dur   = (3.5 + Math.random() * 5).toFixed(1);
+      const delay = (Math.random() * 8).toFixed(1);
+      const sw    = Math.round(12 + Math.random() * 28);
+      const sz    = Math.round(13 + Math.random() * 20);
+      return {
+        svg,
+        style: `left:${x}%;width:${sz}px;height:${sz}px;animation-duration:${dur}s;animation-delay:-${delay}s;--sw:${sw}px`,
+      };
+    });
+    this.particles.set(list);
   }
 
   // ── Restart ────────────────────────────────────────────────
@@ -824,6 +890,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.contactEmail.set(''); this.contactEmailText = '';
     this.selectedProductId.set(this.preselectedProductId);
     this.countdown.set(10);
+    this.particles.set([]);
     this.step.set('welcome');
   }
 
