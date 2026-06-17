@@ -73,29 +73,47 @@ function csvToObjects(text) {
   if (rows.length < 2) return [];
   const headers = rows[0].map(h => h.trim().toLowerCase());
   const idx = {
-    sku:    headers.findIndex(h => ['sku','product list sku','kids sku','sunglasses sku'].includes(h)),
-    name:   headers.findIndex(h => h === 'english name' || h === 'name'),
-    desc:   headers.findIndex(h => h === 'description' || h === 'desc'),
-    color:  headers.findIndex(h => h === 'english color' || h === 'color'),
-    nameAr: headers.findIndex(h => h === 'arabic name' || h === 'name_ar'),
-    price:  headers.findIndex(h => h === 'price'),
-    image:  headers.findIndex(h => h === 'picture' || h === 'image' || h === 'images'),
+    sku:          headers.findIndex(h => ['sku','new sku','product list sku','kids sku','sunglasses sku'].includes(h)),
+    name:         headers.findIndex(h => h === 'english name' || h === 'name'),
+    desc:         headers.findIndex(h => h === 'description' || h === 'desc'),
+    color:        headers.findIndex(h => h === 'english color' || h === 'color'),
+    nameAr:       headers.findIndex(h => h === 'arabic name' || h === 'name_ar'),
+    price:        headers.findIndex(h => h === 'selling price' || h === 'price'),
+    image:        headers.findIndex(h => h === 'picture' || h === 'image' || h === 'images'),
+    size:         headers.findIndex(h => h === 'size'),
+    qty:          headers.findIndex(h => h === 'quantity' || h === 'qty' || h === 'stock'),
+    cost:         headers.findIndex(h => h === 'cost-qar' || h === 'cost_qar' || h === 'cost qar' || h === 'cost'),
+    shippingCost: headers.findIndex(h => h === 'shipping cost' || h === 'shipping_cost' || h === 'shipping'),
+    collection:   headers.findIndex(h => h === 'collections' || h === 'collection'),
   };
   const objects = [];
-  let lastDesc = '';
+  let lastDesc = '', lastName = '', lastNameAr = '', lastCollection = '', lastImage = '';
   for (const row of rows.slice(1)) {
     const sku = (row[idx.sku] || '').trim();
     if (!sku || SECTION_HEADERS.has(sku.toLowerCase())) continue;
     const rawDesc = idx.desc >= 0 ? (row[idx.desc] || '').trim() : '';
     if (rawDesc) lastDesc = rawDesc;
+    const rawName = idx.name >= 0 ? (row[idx.name] || '').trim() : '';
+    if (rawName) lastName = rawName;
+    const rawNameAr = idx.nameAr >= 0 ? (row[idx.nameAr] || '').trim() : '';
+    if (rawNameAr) lastNameAr = rawNameAr;
+    const rawCollection = idx.collection >= 0 ? (row[idx.collection] || '').trim() : '';
+    if (rawCollection) lastCollection = rawCollection;
+    const rawImage = idx.image >= 0 ? (row[idx.image] || '').trim() : '';
+    if (rawImage) lastImage = rawImage;
     objects.push({
       sku,
-      name:     idx.name  >= 0 ? (row[idx.name]  || '').trim() : '',
-      color:    idx.color >= 0 ? (row[idx.color] || '').trim() : '',
-      desc:     rawDesc || lastDesc,
-      nameAr:   idx.nameAr >= 0 ? (row[idx.nameAr] || '').trim() : '',
-      priceRaw: idx.price >= 0 ? (row[idx.price]  || '').trim() : '',
-      imageUrl: idx.image >= 0 ? (row[idx.image]  || '').trim() : '',
+      name:         rawName || lastName,
+      color:        idx.color >= 0 ? (row[idx.color] || '').trim() : '',
+      desc:         rawDesc || lastDesc,
+      nameAr:       rawNameAr || lastNameAr,
+      priceRaw:     idx.price >= 0 ? (row[idx.price] || '').trim() : '',
+      imageUrl:     rawImage || lastImage,
+      size:         idx.size >= 0 ? (row[idx.size] || '').trim() : '',
+      qtyRaw:       idx.qty >= 0 ? (row[idx.qty] || '').trim() : '',
+      costRaw:      idx.cost >= 0 ? (row[idx.cost] || '').trim() : '',
+      shippingRaw:  idx.shippingCost >= 0 ? (row[idx.shippingCost] || '').trim() : '',
+      collection:   rawCollection || lastCollection,
     });
   }
   return objects;
@@ -182,8 +200,8 @@ async function resolveImageUrls(rawUrl, apiKey) {
 
 // ── Template download ─────────────────────────────────────────────────────────
 router.get('/template', (_req, res) => {
-  const header  = 'SKU,English Name,Description,English Color,Arabic Name,Price,Picture';
-  const example = '2BAWHT,Signature II Luxe,"Classic Arabic slippers.",White,سيغنتشر اا لوكس – نعال أبيض,QAR 980.00,https://drive.google.com/drive/folders/YOUR_FOLDER_ID';
+  const header  = 'New SKU,English Name,Size,Description,English Color,Arabic Name,Selling Price,Cost-QAR,Shipping cost,quantity,collections,Picture';
+  const example = '2BAWHT-5,Signature II Luxe,5,"Classic Arabic slippers.",White,سيغنتشر اا لوكس – نعال أبيض,QAR 980.00,QAR 359.55,QAR 50.54,0,Classic,https://drive.google.com/drive/folders/YOUR_FOLDER_ID';
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="elite-products-template.csv"');
   res.send(`${header}\n${example}\n`);
@@ -285,7 +303,28 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           );
         }
 
-        // Each color row → one product_variant
+        // Resolve collection membership
+        const collectionName = (firstRow.collection || '').trim();
+        let collectionId = null;
+        if (collectionName && !dryRun) {
+          const collHandle = collectionName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const collRes = await client.query(
+            `INSERT INTO collections (tenant_id, handle, title, status)
+             VALUES ($1,$2,$3,'active')
+             ON CONFLICT (tenant_id, handle) DO UPDATE SET title = EXCLUDED.title
+             RETURNING id`,
+            [tenant.id, collHandle, collectionName]
+          );
+          collectionId = collRes.rows[0].id;
+          await client.query(
+            `INSERT INTO collection_products (tenant_id, collection_id, product_id)
+             VALUES ($1,$2,$3)
+             ON CONFLICT (collection_id, product_id) DO NOTHING`,
+            [tenant.id, collectionId, productId]
+          );
+        }
+
+        // Each row → one product_variant (color + size)
         let variantsCreated = 0, variantsUpdated = 0;
         let imagesUploaded  = 0, imagesFailed    = 0;
         let firstMediaId    = null;
@@ -297,19 +336,34 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
         );
         const skipImages = !wasInserted && Number(imgCheck.rows[0].cnt) > 0;
 
+        // Track which color URLs have already been queued this import (avoid re-downloading same folder)
+        const processedColorImages = new Set();
+
         for (const [varIdx, row] of groupRows.entries()) {
+          const priceCents    = toCents(parsePrice(row.priceRaw));
+          const costCents     = row.costRaw     ? toCents(parsePrice(row.costRaw))     : null;
+          const shippingCents = row.shippingRaw ? toCents(parsePrice(row.shippingRaw)) : null;
+          const stockQty      = row.qtyRaw !== '' ? Math.max(0, parseInt(row.qtyRaw, 10) || 0) : 0;
+          const sizeVal       = row.size || null;
+
           const varResult = await client.query(
-            `INSERT INTO product_variants (tenant_id, product_id, sku, color, price_cents, sort_order)
-             VALUES ($1,$2,$3,$4,$5,$6)
+            `INSERT INTO product_variants
+               (tenant_id, product_id, sku, color, size, price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
              ON CONFLICT (tenant_id, sku) DO UPDATE SET
-               product_id=$2, color=$4, price_cents=$5, sort_order=$6, updated_at=NOW()
+               product_id=$2, color=$4, size=$5, price_cents=$6,
+               cost_price_cents=$7, shipping_cost_cents=$8, stock_quantity=$9,
+               sort_order=$10, updated_at=NOW()
              RETURNING id, (xmax=0) AS inserted`,
-            [tenant.id, productId, row.sku, row.color || null, toCents(parsePrice(row.priceRaw)), varIdx]
+            [tenant.id, productId, row.sku, row.color || null, sizeVal,
+             priceCents, costCents, shippingCents, stockQty, varIdx]
           );
           const variantId = varResult.rows[0].id;
           if (varResult.rows[0].inserted) variantsCreated++; else variantsUpdated++;
 
-          if (!skipImages) {
+          // Images: only download for the first row that introduces this Drive URL
+          if (!skipImages && row.imageUrl && !processedColorImages.has(row.imageUrl)) {
+            processedColorImages.add(row.imageUrl);
             const imageUrls = await resolveImageUrls(row.imageUrl, apiKey);
             if (imageUrls.length > 0) {
               const orderRes = await client.query(

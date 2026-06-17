@@ -73,8 +73,9 @@ interface Summary { total: number; created: number; updated: number; failed: num
               <div class="info-title">How it works</div>
               <div class="how-grid">
                 <div class="how-step"><span class="how-n">1</span> Rows with the same <code>English Name</code> → grouped into one product</div>
-                <div class="how-step"><span class="how-n">2</span> Each color row → a <strong>variant</strong> (SKU + color)</div>
-                <div class="how-step"><span class="how-n">3</span> Images downloaded from Drive folders automatically</div>
+                <div class="how-step"><span class="how-n">2</span> Each row → a <strong>variant</strong> (SKU + color + size)</div>
+                <div class="how-step"><span class="how-n">3</span> <code>Cost-QAR</code> + <code>Shipping cost</code> → stored separately; <strong>Total Cost</strong> auto-calculated</div>
+                <div class="how-step"><span class="how-n">4</span> Images downloaded from Drive folders automatically</div>
               </div>
               <div class="col-grid" style="margin-top:10px;">
                 @for (c of columns; track c.n) {
@@ -505,13 +506,18 @@ export class BulkImportDialogComponent {
   readonly templateUrl = this.api.url('/admin/bulk-import/template');
 
   readonly columns = [
-    { n: 'SKU',           req: true  },
-    { n: 'English Name',  req: true  },
-    { n: 'Description',   req: false },
-    { n: 'English Color', req: false },
-    { n: 'Arabic Name',   req: false },
-    { n: 'Price',         req: false },
-    { n: 'Picture',       req: false },
+    { n: 'New SKU',        req: true  },
+    { n: 'English Name',   req: true  },
+    { n: 'Size',           req: false },
+    { n: 'Description',    req: false },
+    { n: 'English Color',  req: false },
+    { n: 'Arabic Name',    req: false },
+    { n: 'Selling Price',  req: false },
+    { n: 'Cost-QAR',       req: false },
+    { n: 'Shipping cost',  req: false },
+    { n: 'quantity',       req: false },
+    { n: 'collections',    req: false },
+    { n: 'Picture',        req: false },
   ];
 
   onOverlayClick(_e: MouseEvent) { if (this.step() !== 'importing') this.close(); }

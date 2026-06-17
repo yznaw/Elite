@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Elite — Feedback Feature · Full Plan</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--gold:#b8924a;--green:#024638;--ink:#0d0b08;--muted:#8a7a62;--cream:#eee9df;--ag:#024638;--agold:#c5a572;--abg:#f5f6fa;--as:#fff;--ab:rgba(0,0,0,.08);--ai:#1a1f36;--am:#6b7088}
+html{scroll-behavior:smooth}
+body{font-family:'Montserrat',sans-serif;background:#0a0c12;color:#e2e8f0;min-height:100vh;line-height:1.6}
+
+/* ── Shell nav ──────────────────────────────────────────────── */
+.snav{position:sticky;top:0;z-index:200;background:rgba(10,12,18,.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;padding:0 32px;overflow-x:auto;scrollbar-width:none}
+.snav::-webkit-scrollbar{display:none}
+.snav-brand{font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;color:#b8924a;padding:0 28px 0 0;margin-right:24px;border-right:1px solid rgba(255,255,255,.07);line-height:60px;white-space:nowrap;flex-shrink:0}
+.stab{line-height:60px;padding:0 18px;font-size:11px;font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.35);border:none;background:none;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all .15s;flex-shrink:0}
+.stab:hover{color:rgba(255,255,255,.7)}.stab.on{color:#b8924a;border-bottom-color:#b8924a}
+
+/* ── Page ───────────────────────────────────────────────────── */
+.pg{display:none;max-width:1400px;margin:0 auto;padding:56px 40px 80px}
+.pg.on{display:block}
+@media(max-width:640px){.pg{padding:32px 16px 60px}}
+
+.pg-eyebrow{font-size:9px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#b8924a;margin-bottom:10px}
+.pg-title{font-family:'Cormorant Garamond',serif;font-size:clamp(28px,4vw,52px);font-weight:300;color:#f1f5f9;line-height:1.1;margin-bottom:12px}
+.pg-sub{font-size:13px;color:rgba(255,255,255,.38);max-width:640px;line-height:1.75;margin-bottom:48px}
+
+/* ── Section headers ─────────────────────────────────────────── */
+.sh{margin-bottom:28px}
+.sh-label{font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.25);margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.sh-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
+.sh-title{font-size:18px;font-weight:700;color:#f1f5f9}
+.sh-sub{font-size:12px;color:rgba(255,255,255,.35);margin-top:4px}
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;margin-bottom:48px}
+.card{background:#13151f;border:1px solid rgba(255,255,255,.06);border-radius:14px;overflow:hidden}
+.card-head{padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.05)}
+.card-label{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#b8924a;margin-bottom:4px}
+.card-title{font-size:14px;font-weight:700;color:#f1f5f9}
+.card-body{padding:18px 20px;font-size:12px;color:rgba(255,255,255,.45);line-height:1.75}
+.card-body strong{color:#f1f5f9;font-weight:600}
+.card-body code{font-family:monospace;font-size:11px;background:rgba(255,255,255,.07);padding:2px 6px;border-radius:3px;color:#b8924a}
+
+/* ── Two panels ──────────────────────────────────────────────── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;margin-bottom:48px}
+@media(max-width:900px){.two-col{grid-template-columns:1fr}}
+.panel-label{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.25);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.panel-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.05)}
+
+/* ── Step list ───────────────────────────────────────────────── */
+.steps{display:flex;flex-direction:column;gap:0;margin-bottom:48px}
+.step{display:grid;grid-template-columns:44px 1fr;gap:16px;padding:20px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.step:last-child{border-bottom:none}
+.step-num{width:36px;height:36px;border-radius:50%;background:rgba(184,146,74,.12);border:1.5px solid rgba(184,146,74,.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#b8924a;flex-shrink:0;margin-top:2px}
+.step-title{font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:4px}
+.step-body{font-size:12px;color:rgba(255,255,255,.4);line-height:1.7}
+.step-body strong{color:#b8924a}
+.step-body code{font-family:monospace;font-size:11px;color:#7dd3fc;background:rgba(125,211,252,.06);padding:1px 5px;border-radius:3px}
+
+/* ── Checklist ───────────────────────────────────────────────── */
+.checklist{display:flex;flex-direction:column;gap:8px;margin-bottom:48px}
+.check-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.05);background:#13151f;font-size:12px;color:rgba(255,255,255,.5);line-height:1.6}
+.check-item.done{border-color:rgba(74,222,128,.15);background:rgba(74,222,128,.04)}
+.check-item.done .ci-icon{color:#4ade80}
+.check-item.todo .ci-icon{color:rgba(255,255,255,.2)}
+.check-item.warn .ci-icon{color:#fbbf24}
+.ci-icon{flex-shrink:0;margin-top:1px;font-size:14px}
+.ci-text strong{color:#f1f5f9;display:block;margin-bottom:2px}
+
+/* ── Badge row ───────────────────────────────────────────────── */
+.badge-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.05em}
+.badge-g{background:rgba(2,70,56,.15);color:#4ade80;border:1px solid rgba(74,222,128,.2)}
+.badge-a{background:rgba(184,146,74,.1);color:#b8924a;border:1px solid rgba(184,146,74,.2)}
+.badge-b{background:rgba(59,130,246,.1);color:#7dd3fc;border:1px solid rgba(125,211,252,.2)}
+.badge-r{background:rgba(239,68,68,.08);color:#f87171;border:1px solid rgba(248,113,113,.2)}
+
+/* ── Divider ─────────────────────────────────────────────────── */
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(184,146,74,.2),transparent);margin:48px 0}
+
+/* ── Highlight box ───────────────────────────────────────────── */
+.hl{padding:18px 22px;border-radius:10px;border:1px solid rgba(184,146,74,.2);background:rgba(184,146,74,.04);margin-bottom:28px}
+.hl-title{font-size:12px;font-weight:700;color:#b8924a;margin-bottom:6px}
+.hl-body{font-size:12px;color:rgba(255,255,255,.45);line-height:1.7}
+.hl-body strong{color:#f1f5f9}
+.hl-body code{font-family:monospace;font-size:11px;color:#7dd3fc;background:rgba(125,211,252,.06);padding:1px 5px;border-radius:3px}
+.hl.blue{border-color:rgba(125,211,252,.2);background:rgba(125,211,252,.04)}
+.hl.blue .hl-title{color:#7dd3fc}
+.hl.green{border-color:rgba(74,222,128,.15);background:rgba(74,222,128,.03)}
+.hl.green .hl-title{color:#4ade80}
+.hl.red{border-color:rgba(248,113,113,.15);background:rgba(248,113,113,.03)}
+.hl.red .hl-title{color:#f87171}
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN DESIGN SYSTEM MOCKUPS
+═══════════════════════════════════════════════════════════ */
+.dframe{border-radius:10px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04);background:var(--abg)}
+.a-bar{background:var(--ag);padding:0 20px;height:48px;display:flex;align-items:center;justify-content:space-between}
+.a-bar-logo{font-size:14px;font-weight:800;letter-spacing:.06em;color:var(--agold)}
+.a-bar-right{display:flex;gap:12px;font-size:11px;color:rgba(255,255,255,.5)}
+.a-shell{display:flex;min-height:420px}
+.a-side{width:180px;flex-shrink:0;background:var(--ag);padding:14px 0;display:flex;flex-direction:column;gap:1px}
+.a-nav{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:11px;color:rgba(255,255,255,.4);cursor:pointer}
+.a-nav.on{color:#fff;background:rgba(197,165,114,.14);border-left:3px solid var(--agold);padding-left:13px;font-weight:600}
+.a-main{flex:1;min-width:0;padding:20px;overflow:hidden;background:var(--abg)}
+.a-page-title{font-size:16px;font-weight:700;color:var(--ai);margin-bottom:3px}
+.a-page-sub{font-size:10px;color:var(--am);margin-bottom:16px}
+.a-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.a-stat{background:var(--as);border:1px solid var(--ab);border-radius:8px;padding:12px 14px}
+.a-stat-v{font-size:22px;font-weight:700;color:var(--ai)}
+.a-stat-l{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--am);margin-top:2px}
+.a-card{background:var(--as);border:1px solid var(--ab);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.a-ch{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid rgba(0,0,0,.05)}
+.a-ct{font-size:12px;font-weight:700;color:var(--ai)}
+.a-cs{font-size:10px;color:var(--am)}
+.a-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(0,0,0,.04);cursor:pointer}
+.a-row:last-child{border-bottom:none}
+.a-row:hover{background:var(--abg)}
+.a-img{width:38px;height:38px;border-radius:6px;background:var(--abg);font-size:16px;display:flex;align-items:center;justify-content:center;border:1px solid var(--ab);flex-shrink:0}
+.a-name{font-size:12px;font-weight:600;color:var(--ai)}
+.a-meta{font-size:10px;color:var(--am)}
+.a-stars{color:#f59e0b;font-size:11px}
+.a-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:700}
+.a-badge-g{background:rgba(2,70,56,.07);color:var(--ag);border:1px solid rgba(2,70,56,.14)}
+.a-badge-a{background:rgba(197,165,114,.1);color:#9a7535;border:1px solid rgba(197,165,114,.22)}
+.a-arrow{color:var(--am);font-size:12px;flex-shrink:0;margin-left:auto}
+.a-back{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--am);background:none;border:none;cursor:pointer;margin-bottom:12px}
+.a-prod-sum{display:flex;align-items:center;gap:12px;background:var(--as);border:1px solid var(--ab);border-radius:8px;padding:12px 14px;margin-bottom:14px}
+.a-ps-img{width:44px;height:44px;border-radius:6px;background:var(--abg);font-size:20px;display:flex;align-items:center;justify-content:center;border:1px solid var(--ab);flex-shrink:0}
+.a-ps-name{font-size:13px;font-weight:700;color:var(--ai)}
+.a-ps-meta{font-size:10px;color:var(--am);margin-top:2px}
+.a-rev{background:var(--as);border:1px solid var(--ab);border-radius:8px;padding:12px 14px;margin-bottom:8px}
+.a-rev-head{display:flex;justify-content:space-between;margin-bottom:6px}
+.a-rev-stars{color:#f59e0b;font-size:13px;letter-spacing:1px}
+.a-rev-date{font-size:10px;color:var(--am)}
+.a-rev-title{font-size:12px;font-weight:700;color:var(--ai);margin-bottom:4px}
+.a-rev-body{font-size:11px;color:#374151;line-height:1.6;margin-bottom:10px}
+.a-rev-foot{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding-top:8px;border-top:1px solid rgba(0,0,0,.05)}
+.a-contact{font-size:10px;color:var(--am)}
+.a-contact strong{color:var(--ai)}
+.a-copy{padding:2px 8px;font-size:9px;font-weight:700;background:rgba(2,70,56,.06);border:1px solid rgba(2,70,56,.14);border-radius:3px;color:var(--ag);cursor:pointer}
+.a-del{margin-left:auto;padding:4px 10px;font-size:9px;font-weight:700;background:transparent;border:1px solid rgba(239,68,68,.25);border-radius:5px;color:#ef4444;cursor:pointer}
+
+/* ═══════════════════════════════════════════════════════════
+   STOREFRONT MOCKUP
+═══════════════════════════════════════════════════════════ */
+.sf-frame{border-radius:10px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04);background:#eee9df}
+.sf-bar{background:#024638;padding:0 20px;height:44px;display:flex;align-items:center;justify-content:space-between}
+.sf-logo{font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;color:#d4a853}
+.sf-nav{display:flex;gap:16px;font-size:9px;letter-spacing:.1em;font-weight:600;color:rgba(255,255,255,.6)}
+.sf-body{padding:16px;font-family:'Montserrat',sans-serif;color:#1a1208}
+.sf-pdp{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:0}
+.sf-gallery{aspect-ratio:4/3;background:#e0d8cc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:40px}
+.sf-details{}
+.sf-name{font-size:18px;font-weight:700;color:#1a1208;margin-bottom:4px}
+.sf-price{font-size:14px;color:#b8924a;font-weight:600;margin-bottom:10px}
+.sf-desc{font-size:10px;color:#6b5c45;line-height:1.7;margin-bottom:12px}
+.sf-add{width:100%;padding:12px;background:#242424;border:none;border-radius:3px;color:#fff;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+.sf-accord{border-top:1px solid rgba(0,0,0,.1);margin-top:10px}
+.sf-arow{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#1a1208}
+.sf-arow span{color:#b8924a}
+
+/* Review bar (Concept C — Mood tiles) */
+.sf-review-bar{margin-top:12px;border:1.5px solid rgba(184,146,74,.3);border-radius:4px;overflow:hidden;background:rgba(184,146,74,.03)}
+.sf-rb-trigger{width:100%;padding:12px 14px;background:transparent;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.sf-rb-left{display:flex;align-items:center;gap:10px}
+.sf-rb-icon{width:24px;height:24px;border-radius:4px;background:linear-gradient(135deg,#c9a96e,#9a7535);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;flex-shrink:0}
+.sf-rb-title{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#1a1208;text-align:left}
+.sf-rb-sub{font-size:8px;color:#8a7a62;margin-top:1px;text-align:left}
+.sf-rb-arrow{color:#b8924a;font-size:13px}
+.sf-rb-body{padding:0 14px 14px;border-top:1px solid rgba(0,0,0,.07)}
+.sf-mood-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.sf-mood{padding:12px 8px;border-radius:6px;border:1.5px solid rgba(0,0,0,.1);background:rgba(255,255,255,.5);text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+.sf-mood.on{border-color:#b8924a;background:#fff}
+.sf-mood-emoji{font-size:22px}
+.sf-mood-label{font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a7a62}
+.sf-mood.on .sf-mood-label{color:#b8924a}
+.sf-ta{width:100%;padding:10px 12px;border:1px solid rgba(0,0,0,.1);border-radius:4px;font-size:11px;font-family:'Montserrat',sans-serif;color:#1a1208;resize:none;height:60px;background:rgba(255,255,255,.6);margin-bottom:8px}
+.sf-inp{width:100%;padding:9px 12px;border:1px solid rgba(0,0,0,.1);border-radius:4px;font-size:11px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);color:#1a1208;margin-bottom:10px}
+.sf-sub{width:100%;padding:12px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:3px;color:#0d0b08;font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
+
+/* Mobile frame */
+.mframe{width:100%;max-width:360px;border-radius:36px;overflow:hidden;box-shadow:0 0 0 8px #1c1f2e,0 0 0 9px rgba(255,255,255,.05),0 20px 50px rgba(0,0,0,.6);background:#eee9df;font-family:'Montserrat',sans-serif}
+.mf-bar{background:#024638;padding:12px 16px 10px;display:flex;align-items:center;justify-content:space-between}
+.mf-logo{font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;color:#d4a853}
+.mf-icons{font-size:13px;color:rgba(255,255,255,.7);display:flex;gap:8px}
+.mf-body{padding:14px}
+
+/* ═══════════════════════════════════════════════════════════
+   IPAD KIOSK MOCKUP
+═══════════════════════════════════════════════════════════ */
+.ipad-frame{border-radius:22px;overflow:hidden;box-shadow:0 0 0 12px #1c1c1e,0 0 0 13px rgba(255,255,255,.05),0 40px 100px rgba(0,0,0,.8);aspect-ratio:4/3;position:relative;font-family:'Montserrat',sans-serif}
+.ipad-portrait{aspect-ratio:3/4}
+
+/* Kiosk Welcome */
+.k-welcome{background:#024638;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:clamp(20px,5%,60px);position:relative}
+.k-bg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(184,146,74,.15),transparent 60%)}
+.k-logo{font-family:'Cormorant Garamond',serif;font-size:clamp(24px,4vw,44px);font-style:italic;color:#d4a853;position:relative;z-index:1;margin-bottom:4px}
+.k-divider{color:rgba(184,146,74,.4);margin:10px 0;position:relative;z-index:1}
+.k-title{font-size:clamp(14px,2.5vw,28px);font-weight:300;color:#fff;margin-bottom:8px;line-height:1.3;position:relative;z-index:1}
+.k-sub{font-size:clamp(9px,1.2vw,14px);color:rgba(255,255,255,.45);position:relative;z-index:1;margin-bottom:clamp(16px,4%,36px)}
+.k-start{padding:clamp(11px,1.8%,18px) clamp(28px,5%,64px);background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:5px;color:#0d0b08;font-size:clamp(9px,1.2vw,13px);font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;position:relative;z-index:1;box-shadow:0 6px 24px rgba(184,146,74,.3)}
+.k-privacy{position:absolute;bottom:clamp(10px,2%,20px);left:0;right:0;text-align:center;font-size:clamp(8px,1vw,10px);color:rgba(255,255,255,.2);z-index:1}
+
+/* Kiosk Rating */
+.k-rating{background:#eee9df;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:clamp(16px,3%,48px);position:relative}
+.k-header{position:absolute;top:0;left:0;right:0;background:#024638;padding:clamp(8px,1.5%,14px) clamp(14px,2.5%,32px);display:flex;align-items:center;justify-content:space-between}
+.k-hlogo{font-family:'Cormorant Garamond',serif;font-size:clamp(14px,2vw,22px);font-style:italic;color:#d4a853}
+.k-hprog{display:flex;gap:5px}
+.k-hdot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}
+.k-hdot.on{background:#d4a853}
+.k-hskip{font-size:clamp(8px,1.1vw,11px);font-weight:600;color:rgba(255,255,255,.35);background:none;border:none;cursor:pointer;font-family:'Montserrat',sans-serif}
+.k-eyebrow{font-size:clamp(8px,1vw,10px);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#b8924a;margin-bottom:8px;padding-top:clamp(40px,8%,70px)}
+.k-q{font-size:clamp(14px,2.2vw,28px);font-weight:600;color:#1a1208;margin-bottom:clamp(16px,3%,32px);line-height:1.3}
+.k-stars{display:flex;gap:clamp(6px,1.5vw,18px);justify-content:center;margin-bottom:clamp(10px,2%,20px)}
+.k-star{font-size:clamp(32px,6vw,60px);color:#ddd0bb;cursor:pointer;user-select:none}
+.k-star.on{color:#b8924a}
+.k-lbls{display:flex;justify-content:space-between;width:clamp(160px,35vw,320px);margin:0 auto clamp(14px,3%,28px)}
+.k-lbl{font-size:clamp(7px,1vw,10px);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a7a62}
+.k-next{padding:clamp(10px,1.8%,16px) clamp(32px,6%,72px);background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:#0d0b08;font-size:clamp(9px,1.1vw,12px);font-weight:700;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif}
+</style>
+</head>
+<body>
+
+<nav class="snav">
+  <div class="snav-brand">elite</div>
+  <button class="stab on" onclick="show('overview')">Overview</button>
+  <button class="stab" onclick="show('admin')">Admin Pages</button>
+  <button class="stab" onclick="show('storefront')">Storefront Form</button>
+  <button class="stab" onclick="show('kiosk-design')">iPad Kiosk Design</button>
+  <button class="stab" onclick="show('kiosk-deploy')">iPad Deployment</button>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════
+     OVERVIEW
+══════════════════════════════════════════════════════════ -->
+<div id="overview" class="pg on">
+  <div class="pg-eyebrow">Feedback Feature · Full Plan</div>
+  <div class="pg-title">Three surfaces.<br/>One feedback system.</div>
+  <div class="pg-sub">Feedback is collected privately from three entry points: the online product page, the in-store iPad kiosk, and optionally a QR code. All data flows into a single database table and surfaces in the admin portal.</div>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label">Surface 1 — Online</div>
+        <div class="card-title">Storefront Product Page</div>
+      </div>
+      <div class="card-body">
+        A collapsible feedback bar below the product accordions — same style as "NOTIFY ME". Tap to expand → mood emoji tiles → optional text + contact details.<br/><br/>
+        <strong>Who:</strong> Any visitor — browsing, buying, or just curious.<br/>
+        <strong>Auth:</strong> None. Public endpoint.<br/>
+        <strong>Shows publicly:</strong> Never. Admin-only.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label">Surface 2 — In-store</div>
+        <div class="card-title">iPad Kiosk</div>
+      </div>
+      <div class="card-body">
+        A dedicated fullscreen touch app at the checkout counter. Staff hands the iPad to the customer after purchase. 5-step flow: Welcome → Rating → Message → Contact → Thank you.<br/><br/>
+        <strong>Who:</strong> Walk-in customers at the physical store.<br/>
+        <strong>Auth:</strong> None. Kiosk is locked to a single URL.<br/>
+        <strong>Deployment:</strong> Subdomain + Nginx + Guided Access on iPad.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label">Surface 3 — Admin</div>
+        <div class="card-title">Feedback Portal Pages</div>
+      </div>
+      <div class="card-body">
+        Two new admin pages: <strong>/feedback</strong> (all products with review counts + avg rating) and <strong>/feedback/:productId</strong> (all reviews for one product with contact info + delete).<br/><br/>
+        <strong>Who:</strong> Admin team only.<br/>
+        <strong>Features:</strong> Copy email, delete review, average rating, latest date.
+      </div>
+    </div>
+  </div>
+
+  <div class="sh">
+    <div class="sh-label">What's already done</div>
+  </div>
+  <div class="checklist">
+    <div class="check-item done"><div class="ci-icon">✅</div><div class="ci-text"><strong>DB migration 009</strong> — product_reviews table with tenant_id, product_id, rating, title, body, author_name, author_email, author_phone, created_at</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Server routes</strong> — POST /api/products/:id/reviews · GET /admin/reviews · GET /admin/reviews/:productId · DELETE /admin/reviews/:id</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Admin: Feedback index page</strong> — /feedback with stats + product list</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Admin: Feedback detail page</strong> — /feedback/:productId with review cards</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Admin: nav link + star icon + i18n</strong></div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Storefront: review bar</strong> on product page — Mood tile concept</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>iPad kiosk page</strong> — dedicated Angular route + fullscreen UI</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>iPad deployment</strong> — subdomain DNS + Nginx + Guided Access config</div></div>
+  </div>
+
+  <div class="sh">
+    <div class="sh-label">Data model (already migrated)</div>
+  </div>
+  <div class="hl blue">
+    <div class="hl-title">product_reviews table</div>
+    <div class="hl-body">
+      <code>id</code> uuid PK · <code>tenant_id</code> → tenants · <code>product_id</code> → products · <code>rating</code> smallint 1–5 (nullable) · <code>title</code> text (nullable) · <code>body</code> text NOT NULL · <code>author_name</code> text (nullable) · <code>author_email</code> text (nullable) · <code>author_phone</code> text (nullable) · <code>created_at</code> timestamptz
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     ADMIN PAGES
+══════════════════════════════════════════════════════════ -->
+<div id="admin" class="pg">
+  <div class="pg-eyebrow">Admin Portal</div>
+  <div class="pg-title">Feedback pages</div>
+  <div class="pg-sub">Two new pages wired to /feedback and /feedback/:productId. Same design system as existing admin pages. The ★ icon added to the sidebar and bottom nav.</div>
+
+  <!-- Page 1: Index -->
+  <div class="sh"><div class="sh-label">Page 1 — /feedback (index)</div><div class="sh-title">All products with feedback</div><div class="sh-sub">Sorted by most recent review. Click a row → detail page.</div></div>
+
+  <div class="two-col">
+    <div>
+      <div class="panel-label">Desktop view</div>
+      <div class="dframe">
+        <div class="a-bar"><div class="a-bar-logo">ELITE</div><div class="a-bar-right">Quick search… · 🔔 · YH</div></div>
+        <div class="a-shell">
+          <div class="a-side">
+            <div class="a-nav">⊞ Dashboard</div>
+            <div class="a-nav">◈ Catalog</div>
+            <div class="a-nav">◉ Storefront</div>
+            <div class="a-nav">≡ Orders</div>
+            <div class="a-nav">◎ Customers</div>
+            <div class="a-nav on">★ Feedback</div>
+            <div class="a-nav">⚙ Settings</div>
+          </div>
+          <div class="a-main">
+            <div class="a-page-title">Customer Feedback</div>
+            <div class="a-page-sub">Private — collected from storefront visitors and in-store kiosk. Never shown publicly.</div>
+            <div class="a-stats">
+              <div class="a-stat"><div class="a-stat-v">47</div><div class="a-stat-l">Total Reviews</div></div>
+              <div class="a-stat"><div class="a-stat-v" style="color:#f59e0b">★ 4.3</div><div class="a-stat-l">Average Rating</div></div>
+              <div class="a-stat"><div class="a-stat-v">8</div><div class="a-stat-l">Products</div></div>
+            </div>
+            <div class="a-card">
+              <div class="a-ch"><div class="a-ct">Products with Feedback</div><div class="a-cs">Click to see reviews</div></div>
+              <div class="a-row"><div class="a-img">👟</div><div style="flex:1"><div class="a-name">MisStitch Ostrich</div><div class="a-meta"><span class="a-stars">★★★★</span>☆ 4.4 avg</div></div><span class="a-badge a-badge-g">12 reviews</span><span class="a-badge a-badge-a" style="margin-left:6px">2d ago</span><span class="a-arrow">›</span></div>
+              <div class="a-row"><div class="a-img">👟</div><div style="flex:1"><div class="a-name">Brown Leather Sandals</div><div class="a-meta"><span class="a-stars">★★★★★</span> 5.0 avg</div></div><span class="a-badge a-badge-g">8 reviews</span><span class="a-badge a-badge-a" style="margin-left:6px">5d ago</span><span class="a-arrow">›</span></div>
+              <div class="a-row"><div class="a-img">👞</div><div style="flex:1"><div class="a-name">Classic Oxford — Midnight</div><div class="a-meta"><span class="a-stars">★★★</span>☆☆ 3.1 avg</div></div><span class="a-badge a-badge-g">6 reviews</span><span class="a-badge a-badge-a" style="margin-left:6px">1w ago</span><span class="a-arrow">›</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel-label">Mobile view (bottom nav)</div>
+      <div style="display:flex;justify-content:center">
+        <div class="mframe">
+          <div class="mf-bar"><div class="mf-logo">elite</div><div class="mf-icons">🔍 🔔</div></div>
+          <div class="mf-body">
+            <div style="font-size:15px;font-weight:700;color:var(--ai);margin-bottom:2px">Customer Feedback</div>
+            <div style="font-size:10px;color:var(--am);margin-bottom:14px">Private — not shown publicly</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+              <div class="a-stat"><div class="a-stat-v">47</div><div class="a-stat-l">Reviews</div></div>
+              <div class="a-stat"><div class="a-stat-v" style="color:#f59e0b;font-size:17px">★ 4.3</div><div class="a-stat-l">Avg Rating</div></div>
+            </div>
+            <div class="a-card">
+              <div class="a-row"><div class="a-img">👟</div><div style="flex:1"><div class="a-name" style="font-size:11px">MisStitch Ostrich</div><div class="a-meta"><span class="a-stars" style="font-size:10px">★★★★</span>☆ · 12 reviews · 2d ago</div></div><span class="a-arrow">›</span></div>
+              <div class="a-row"><div class="a-img">👟</div><div style="flex:1"><div class="a-name" style="font-size:11px">Brown Leather Sandals</div><div class="a-meta"><span class="a-stars" style="font-size:10px">★★★★★</span> · 8 reviews · 5d ago</div></div><span class="a-arrow">›</span></div>
+              <div class="a-row"><div class="a-img">👞</div><div style="flex:1"><div class="a-name" style="font-size:11px">Classic Oxford — Midnight</div><div class="a-meta"><span class="a-stars" style="font-size:10px">★★★</span>☆☆ · 6 reviews · 1w ago</div></div><span class="a-arrow">›</span></div>
+            </div>
+          </div>
+          <div style="background:var(--as);border-top:1px solid var(--ab);display:flex;justify-content:space-around;padding:10px 0">
+            <div style="text-align:center;font-size:8px;color:var(--am)">⊞<br/>Dash</div>
+            <div style="text-align:center;font-size:8px;color:var(--am)">◈<br/>Catalog</div>
+            <div style="text-align:center;font-size:8px;color:var(--am)">≡<br/>Orders</div>
+            <div style="text-align:center;font-size:8px;color:var(--ag);font-weight:700">★<br/>Feedback</div>
+            <div style="text-align:center;font-size:8px;color:var(--am)">⚙<br/>Settings</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Page 2: Detail -->
+  <div class="sh"><div class="sh-label">Page 2 — /feedback/:productId (detail)</div><div class="sh-title">All reviews for one product</div><div class="sh-sub">Copy email for follow-up. Delete unwanted entries. Source tag shows "Storefront" or "Kiosk".</div></div>
+
+  <div class="two-col">
+    <div>
+      <div class="panel-label">Desktop view</div>
+      <div class="dframe">
+        <div class="a-bar"><div class="a-bar-logo">ELITE</div><div class="a-bar-right">★ Feedback</div></div>
+        <div class="a-shell">
+          <div class="a-side">
+            <div class="a-nav">⊞ Dashboard</div><div class="a-nav">◈ Catalog</div>
+            <div class="a-nav on">★ Feedback</div>
+            <div class="a-nav">⚙ Settings</div>
+          </div>
+          <div class="a-main">
+            <button class="a-back">← Back to Feedback</button>
+            <div class="a-prod-sum">
+              <div class="a-ps-img">👟</div>
+              <div><div class="a-ps-name">MisStitch Ostrich</div><div class="a-ps-meta"><span style="color:#f59e0b">★★★★</span>☆ &nbsp;<strong>4.4</strong> avg · <strong>12</strong> reviews</div></div>
+            </div>
+            <div class="a-rev">
+              <div class="a-rev-head"><div><div class="a-rev-stars">★★★★★</div></div><div class="a-rev-date">Jun 10, 2026 · 🖥 Storefront</div></div>
+              <div class="a-rev-title">"Perfect fit, elegant finish"</div>
+              <div class="a-rev-body">Ordered for a wedding. Leather quality exceeded expectations — immaculate stitching, true to size.</div>
+              <div class="a-rev-foot">
+                <div class="a-contact">◎ <strong>Ahmed Al-Mansoori</strong></div>
+                <div class="a-contact">✉ <strong>ahmed@example.com</strong> <button class="a-copy">Copy</button></div>
+                <div class="a-contact">✆ <strong>+974 5512 3456</strong></div>
+                <button class="a-del">Delete</button>
+              </div>
+            </div>
+            <div class="a-rev">
+              <div class="a-rev-head"><div><div class="a-rev-stars">★★★★<span style="color:#d1d5db">★</span></div></div><div class="a-rev-date">Jun 8, 2026 · 📱 Kiosk</div></div>
+              <div class="a-rev-body">Very comfortable. The camel leather is soft and premium. Happy with the purchase.</div>
+              <div class="a-rev-foot">
+                <div class="a-contact">◎ <strong>Sara K.</strong></div>
+                <div class="a-contact">✉ <strong>sara.k@example.com</strong> <button class="a-copy">Copy</button></div>
+                <button class="a-del">Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel-label">Mobile view</div>
+      <div style="display:flex;justify-content:center">
+        <div class="mframe">
+          <div class="mf-bar"><span style="color:rgba(255,255,255,.6);font-size:18px">‹</span><div class="mf-logo" style="font-size:13px">MisStitch Ostrich</div><div style="font-size:10px;color:rgba(255,255,255,.5)">★★★★☆ · 12</div></div>
+          <div class="mf-body">
+            <div class="a-rev" style="margin-bottom:8px">
+              <div class="a-rev-head"><div class="a-rev-stars" style="font-size:14px">★★★★★</div><div class="a-rev-date">Jun 10 · 🖥</div></div>
+              <div class="a-rev-title" style="font-size:11px">"Perfect fit, elegant finish"</div>
+              <div class="a-rev-body" style="font-size:10px">Leather quality exceeded expectations — immaculate stitching.</div>
+              <div style="padding-top:8px;border-top:1px solid rgba(0,0,0,.05);font-size:10px;color:var(--am)"><strong style="color:var(--ai)">Ahmed Al-Mansoori</strong><br/>ahmed@example.com · +974 5512 3456</div>
+              <button class="a-del" style="width:100%;margin-top:7px">Delete review</button>
+            </div>
+            <div class="a-rev">
+              <div class="a-rev-head"><div class="a-rev-stars" style="font-size:14px">★★★★<span style="color:#e5e7eb">★</span></div><div class="a-rev-date">Jun 8 · 📱</div></div>
+              <div class="a-rev-body" style="font-size:10px">Very comfortable. Camel leather is soft and premium.</div>
+              <div style="padding-top:8px;border-top:1px solid rgba(0,0,0,.05);font-size:10px;color:var(--am)"><strong style="color:var(--ai)">Sara K.</strong> · sara.k@example.com</div>
+              <button class="a-del" style="width:100%;margin-top:7px">Delete review</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     STOREFRONT FORM
+══════════════════════════════════════════════════════════ -->
+<div id="storefront" class="pg">
+  <div class="pg-eyebrow">Client-web · Product page</div>
+  <div class="pg-title">The Mood — review bar</div>
+  <div class="pg-sub">Collapsible bar styled like "NOTIFY ME". Tap to expand → 4 mood tiles → optional message + contact. Zero friction for any visitor — no purchase required.</div>
+
+  <div class="two-col">
+    <div>
+      <div class="panel-label">Desktop — product page</div>
+      <div class="sf-frame">
+        <div class="sf-bar"><div class="sf-logo">elite</div><div class="sf-nav"><span>HOME</span><span>COLLECTION</span><span>OUR STORY</span></div><div style="display:flex;gap:10px;font-size:12px;color:rgba(255,255,255,.7)">🔍 EN 🛒</div></div>
+        <div class="sf-body">
+          <div class="sf-pdp">
+            <div class="sf-gallery">👟</div>
+            <div class="sf-details">
+              <div class="sf-name">MisStitch Ostrich</div>
+              <div class="sf-price">QAR 1,080</div>
+              <div class="sf-desc">A statement of understated authority. Shaped on a hand-carved wooden last by a single artisan.</div>
+              <button class="sf-add">Add to Cart</button>
+              <div class="sf-accord">
+                <div class="sf-arow">MATERIAL & CARE <span>+</span></div>
+                <div class="sf-arow">SIZING & FIT <span>+</span></div>
+              </div>
+              <!-- REVIEW BAR -->
+              <div class="sf-review-bar">
+                <button class="sf-rb-trigger">
+                  <div class="sf-rb-left">
+                    <div class="sf-rb-icon">★</div>
+                    <div><div class="sf-rb-title">How do you feel about it?</div><div class="sf-rb-sub">Private · any visitor welcome · 30 seconds</div></div>
+                  </div>
+                  <div class="sf-rb-arrow">▾</div>
+                </button>
+                <div class="sf-rb-body">
+                  <div class="sf-mood-grid">
+                    <div class="sf-mood on"><div class="sf-mood-emoji">😍</div><div class="sf-mood-label">Love it</div></div>
+                    <div class="sf-mood"><div class="sf-mood-emoji">👍</div><div class="sf-mood-label">Like it</div></div>
+                    <div class="sf-mood"><div class="sf-mood-emoji">🤔</div><div class="sf-mood-label">Not sure</div></div>
+                    <div class="sf-mood"><div class="sf-mood-emoji">💬</div><div class="sf-mood-label">Tell us more</div></div>
+                  </div>
+                  <textarea class="sf-ta" placeholder="Add a note — optional…"></textarea>
+                  <input class="sf-inp" placeholder="Name or email (optional — for follow-up)"/>
+                  <button class="sf-sub">Submit →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel-label">Mobile — 390px</div>
+      <div style="display:flex;justify-content:center">
+        <div class="mframe">
+          <div class="mf-bar"><div class="mf-logo">elite</div><div class="mf-icons">🔍 🛒 —</div></div>
+          <div style="background:#e0d8cc;height:130px;display:flex;align-items:center;justify-content:center;font-size:40px">👟</div>
+          <div class="mf-body">
+            <div style="font-size:17px;font-weight:700;color:#1a1208;margin-bottom:3px">MisStitch Ostrich</div>
+            <div style="font-size:13px;color:#b8924a;font-weight:600;margin-bottom:10px">QAR 1,080</div>
+            <button style="width:100%;padding:13px;background:#242424;border:none;border-radius:3px;color:#fff;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px">ADD TO CART</button>
+            <div style="border-top:1px solid rgba(0,0,0,.1)">
+              <div class="sf-arow">MATERIAL & CARE <span>+</span></div>
+              <div class="sf-arow">SIZING & FIT <span>+</span></div>
+            </div>
+            <div class="sf-review-bar" style="margin-top:8px">
+              <button class="sf-rb-trigger">
+                <div class="sf-rb-left">
+                  <div class="sf-rb-icon">★</div>
+                  <div><div class="sf-rb-title">How do you feel about it?</div><div class="sf-rb-sub">Private · anyone welcome</div></div>
+                </div>
+                <div class="sf-rb-arrow">▾</div>
+              </button>
+              <div class="sf-rb-body">
+                <div class="sf-mood-grid" style="gap:6px">
+                  <div class="sf-mood"><div class="sf-mood-emoji" style="font-size:20px">😍</div><div class="sf-mood-label">Love it</div></div>
+                  <div class="sf-mood on"><div class="sf-mood-emoji" style="font-size:20px">👍</div><div class="sf-mood-label">Like it</div></div>
+                  <div class="sf-mood"><div class="sf-mood-emoji" style="font-size:20px">🤔</div><div class="sf-mood-label">Not sure</div></div>
+                  <div class="sf-mood"><div class="sf-mood-emoji" style="font-size:20px">💬</div><div class="sf-mood-label">Tell us</div></div>
+                </div>
+                <textarea class="sf-ta" style="height:50px;font-size:11px" placeholder="Add a note…"></textarea>
+                <input class="sf-inp" style="font-size:11px;margin-bottom:8px" placeholder="Name or email (optional)"/>
+                <button class="sf-sub">Submit →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     IPAD KIOSK DESIGN
+══════════════════════════════════════════════════════════ -->
+<div id="kiosk-design" class="pg">
+  <div class="pg-eyebrow">iPad Kiosk · In-store</div>
+  <div class="pg-title">The Concierge</div>
+  <div class="pg-sub">Portrait or landscape fullscreen kiosk. All-in-one screen: rating + optional message + optional contact. Staff hands the iPad to the customer. Auto-resets to welcome screen after 60 seconds of inactivity.</div>
+
+  <div class="two-col" style="margin-bottom:28px">
+    <div>
+      <div class="panel-label">Welcome screen — landscape (4:3)</div>
+      <div class="ipad-frame">
+        <div class="k-welcome">
+          <div class="k-bg"></div>
+          <div class="k-logo">elite</div>
+          <div style="font-size:clamp(7px,1vw,10px);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(184,146,74,.5);position:relative;z-index:1;margin-bottom:8px">ARABIC LEATHER ARTISANS</div>
+          <div class="k-divider">◇</div>
+          <div class="k-title">How was your experience<br/>with us today?</div>
+          <div class="k-sub">Takes less than a minute · completely private</div>
+          <button class="k-start">Share Your Feedback</button>
+          <div class="k-privacy">◇ &nbsp; Your responses are private — only the Elite team reads them</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel-label">Rating screen</div>
+      <div class="ipad-frame">
+        <div class="k-rating">
+          <div class="k-header">
+            <div class="k-hlogo">elite</div>
+            <div class="k-hprog"><div class="k-hdot on"></div><div class="k-hdot on"></div><div class="k-hdot"></div><div class="k-hdot"></div></div>
+            <button class="k-hskip">Skip →</button>
+          </div>
+          <div class="k-eyebrow">Step 1 of 3</div>
+          <div class="k-q">How would you rate<br/>your purchase today?</div>
+          <div class="k-stars" id="kstars">
+            <span class="k-star on" onclick="rateK(1)">★</span>
+            <span class="k-star on" onclick="rateK(2)">★</span>
+            <span class="k-star on" onclick="rateK(3)">★</span>
+            <span class="k-star on" onclick="rateK(4)">★</span>
+            <span class="k-star" onclick="rateK(5)">★</span>
+          </div>
+          <div class="k-lbls"><span class="k-lbl">Poor</span><span class="k-lbl">Excellent</span></div>
+          <button class="k-next">Continue →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="panel-label">Message + contact screen</div>
+      <div class="ipad-frame">
+        <div style="background:#eee9df;width:100%;height:100%;display:flex;flex-direction:column;font-family:'Montserrat',sans-serif;position:relative">
+          <div class="k-header">
+            <div class="k-hlogo">elite</div>
+            <div class="k-hprog"><div class="k-hdot on"></div><div class="k-hdot on"></div><div class="k-hdot on"></div><div class="k-hdot"></div></div>
+            <button class="k-hskip">Skip →</button>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:clamp(14px,3%,48px)">
+            <div style="font-size:clamp(13px,2vw,24px);font-weight:700;color:#1a1208;margin-bottom:5px;text-align:center">Tell us more</div>
+            <div style="font-size:clamp(9px,1.2vw,14px);color:#8a7a62;margin-bottom:clamp(14px,2.5%,28px);text-align:center">Optional — any detail helps</div>
+            <textarea style="width:100%;max-width:560px;height:clamp(70px,12%,140px);padding:clamp(12px,2%,20px);border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:clamp(12px,1.6vw,17px);font-family:'Montserrat',sans-serif;resize:none;background:rgba(255,255,255,.7);color:#1a1208;margin-bottom:clamp(10px,2%,18px)" placeholder="Fit, quality, service, packaging…"></textarea>
+            <input style="width:100%;max-width:560px;padding:clamp(11px,1.8%,17px);border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:clamp(12px,1.6vw,17px);font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.7);color:#1a1208;margin-bottom:clamp(14px,2.5%,24px)" placeholder="Name or phone (optional — for follow-up)"/>
+            <div style="display:flex;gap:10px;width:100%;max-width:560px">
+              <button style="flex:1;padding:clamp(10px,1.8%,16px);background:transparent;border:1.5px solid rgba(0,0,0,.1);border-radius:4px;font-size:clamp(8px,1.1vw,12px);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#8a7a62;font-family:'Montserrat',sans-serif">Skip</button>
+              <button style="flex:2;padding:clamp(10px,1.8%,16px);background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;font-size:clamp(8px,1.1vw,12px);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#0d0b08;font-family:'Montserrat',sans-serif">Submit Feedback →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel-label">Thank you screen (auto-resets in 10s)</div>
+      <div class="ipad-frame">
+        <div style="background:#024638;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:clamp(20px,4%,60px);position:relative">
+          <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(184,146,74,.18),transparent 60%)"></div>
+          <div style="width:clamp(50px,8vw,80px);height:clamp(50px,8vw,80px);border-radius:50%;background:linear-gradient(135deg,#c9a96e,#9a7535);display:flex;align-items:center;justify-content:center;font-size:clamp(20px,3.5vw,36px);color:#fff;margin-bottom:clamp(14px,2.5%,28px);position:relative;z-index:1;box-shadow:0 10px 32px rgba(184,146,74,.4)">✓</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,3.5vw,44px);font-weight:400;color:#fff;margin-bottom:8px;position:relative;z-index:1">Thank you</div>
+          <div style="font-size:clamp(10px,1.3vw,16px);color:rgba(255,255,255,.5);max-width:380px;line-height:1.65;margin-bottom:clamp(18px,3%,36px);position:relative;z-index:1">Our team reads every response personally. Your feedback shapes every detail of our craft.</div>
+          <button style="padding:clamp(10px,1.5%,15px) clamp(24px,4%,48px);background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.18);border-radius:4px;color:rgba(255,255,255,.65);font-size:clamp(8px,1.1vw,12px);font-weight:700;letter-spacing:.16em;text-transform:uppercase;font-family:'Montserrat',sans-serif;position:relative;z-index:1">New Response ↺</button>
+          <div style="font-size:clamp(8px,1vw,11px);color:rgba(255,255,255,.2);margin-top:clamp(12px,2%,22px);position:relative;z-index:1">Returning to welcome screen in 10 seconds…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hl">
+    <div class="hl-title">Flow summary</div>
+    <div class="hl-body">
+      Welcome screen → tap "Share Your Feedback" → Rating (1–5 stars, skip option) → Message + contact (both optional, skip option) → Thank you (auto-resets to welcome in 10 seconds).<br/><br/>
+      <strong>Source tag:</strong> Reviews submitted from the kiosk are tagged <code>source = 'kiosk'</code> in the DB so the admin can distinguish them from storefront submissions. The icon 📱 vs 🖥 appears next to each review date.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     IPAD DEPLOYMENT
+══════════════════════════════════════════════════════════ -->
+<div id="kiosk-deploy" class="pg">
+  <div class="pg-eyebrow">iPad Kiosk · Full Deployment Plan</div>
+  <div class="pg-title">From code to counter</div>
+  <div class="pg-sub">End-to-end plan: server config → subdomain → Angular route → iPad setup. No extra server, no extra hosting cost — everything runs on the existing server.</div>
+
+  <div class="hl blue" style="margin-bottom:40px">
+    <div class="hl-title">Architecture decision: subdomain vs route</div>
+    <div class="hl-body">
+      <strong>Recommended: subdomain</strong> — <code>kiosk.elitecollections.qa</code><br/>
+      Cleaner URL for the iPad bookmark, isolated from the main storefront, easier to give to staff ("just go to kiosk.elitecollections.qa"). Requires 1 DNS A record + 1 Nginx server block + 1 SSL cert.<br/><br/>
+      <strong>Alternative: route</strong> — <code>elitecollections.qa/kiosk</code><br/>
+      Zero DNS/Nginx changes — just add a new Angular route. But shares the storefront bundle and URL is longer.
+    </div>
+  </div>
+
+  <!-- Phase 1 -->
+  <div class="sh"><div class="sh-label">Phase 1 — Build the kiosk Angular page</div><div class="sh-title">New route in client-web</div></div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <div class="step-title">Create kiosk component</div>
+        <div class="step-body">New standalone Angular component at <code>client/projects/client-web/src/app/pages/kiosk/kiosk.component.ts</code>. Self-contained fullscreen template — no nav, no footer. Handles the 4-step flow internally with signals.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <div class="step-title">Add route</div>
+        <div class="step-body">In <code>app.routes.ts</code>: <code>{ path: 'kiosk', loadComponent: () => import('./pages/kiosk/kiosk.component') }</code>. Lazy-loaded so it doesn't bloat the main bundle.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <div class="step-title">Add source tag to submit endpoint</div>
+        <div class="step-body">The review form already hits <code>POST /api/products/:id/reviews</code>. The kiosk passes <strong><code>source: 'kiosk'</code></strong> in the body; the server stores it. The storefront passes <code>source: 'storefront'</code>. DB column added: <code>source text DEFAULT 'storefront'</code>.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div>
+        <div class="step-title">Auto-reset timer</div>
+        <div class="step-body">On the "Thank you" screen, start a 10-second countdown. If no tap in 60 seconds on any screen, reset to Welcome. Use <code>fromEvent(document, 'touchstart')</code> to detect activity and reset the timer. Standard kiosk pattern.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div>
+        <div class="step-title">PWA manifest entry (optional but recommended)</div>
+        <div class="step-body">Add to <code>manifest.webmanifest</code>: <code>display: "standalone"</code>, <code>start_url: "/kiosk"</code>, custom theme colour. Staff can then "Add to Home Screen" on the iPad and it launches fullscreen with no browser UI.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Phase 2 -->
+  <div class="sh"><div class="sh-label">Phase 2 — Server config (subdomain approach)</div><div class="sh-title">DNS + Nginx + SSL</div></div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">6</div>
+      <div>
+        <div class="step-title">Add DNS A record</div>
+        <div class="step-body">In your DNS provider (Cloudflare / GoDaddy / etc.) add:<br/><strong>Type:</strong> A &nbsp; <strong>Name:</strong> kiosk &nbsp; <strong>Value:</strong> [same server IP as elitecollections.qa] &nbsp; <strong>TTL:</strong> Auto<br/>Takes 1–30 minutes to propagate. Can test with <code>dig kiosk.elitecollections.qa</code>.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">7</div>
+      <div>
+        <div class="step-title">Nginx server block for kiosk subdomain</div>
+        <div class="step-body">Add to <code>/etc/nginx/sites-available/elite</code> (or create a new file). The kiosk subdomain serves the same Angular build but with a custom Content-Security-Policy that prevents navigation away from <code>/kiosk</code>:
+          <br/><br/><strong>server {</strong><br/>
+          &nbsp;&nbsp;server_name kiosk.elitecollections.qa;<br/>
+          &nbsp;&nbsp;root /var/www/elite/client-web;<br/>
+          &nbsp;&nbsp;add_header Content-Security-Policy "default-src 'self'; frame-ancestors 'none';";<br/>
+          &nbsp;&nbsp;location / { try_files $uri $uri/ /index.html; }<br/>
+          &nbsp;&nbsp;location /api { proxy_pass http://localhost:3000; }<br/>
+          <strong>}</strong>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">8</div>
+      <div>
+        <div class="step-title">SSL certificate</div>
+        <div class="step-body">Run: <code>sudo certbot --nginx -d kiosk.elitecollections.qa</code><br/>Certbot automatically edits the Nginx config and adds the HTTPS server block. Certificate is free (Let's Encrypt) and auto-renews every 90 days. Takes ~2 minutes.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">9</div>
+      <div>
+        <div class="step-title">Test the URL</div>
+        <div class="step-body">Visit <code>https://kiosk.elitecollections.qa/kiosk</code> in a browser — the kiosk welcome screen should load. Test form submission goes into the DB. Test auto-reset timer.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Phase 3 -->
+  <div class="sh"><div class="sh-label">Phase 3 — iPad physical setup</div><div class="sh-title">Lock the iPad to kiosk mode</div></div>
+
+  <div class="hl green" style="margin-bottom:20px">
+    <div class="hl-title">Recommended: iOS Guided Access (free, built-in)</div>
+    <div class="hl-body">
+      No third-party app needed. Locks the iPad to a single app and disables gestures. Staff set a PIN. Customers cannot leave the kiosk page.
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">10</div>
+      <div>
+        <div class="step-title">Open kiosk URL in Safari</div>
+        <div class="step-body">Open <code>https://kiosk.elitecollections.qa/kiosk</code> in Safari on the iPad. Tap <strong>Share → Add to Home Screen</strong>. Name it "Elite Feedback". Now it launches as a fullscreen PWA — no browser chrome, no URL bar, no tabs.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">11</div>
+      <div>
+        <div class="step-title">Enable Guided Access</div>
+        <div class="step-body"><strong>Settings → Accessibility → Guided Access → ON</strong><br/>Set a Passcode (staff only). Enable Face ID / Touch ID for ending sessions.<br/><br/>Then: open the Elite Feedback app → triple-click the Home button (or Side button on newer iPads) → tap <strong>Start</strong>. The iPad is now locked to the kiosk. Customers can tap within the app but cannot go home, use other apps, or access settings.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">12</div>
+      <div>
+        <div class="step-title">Disable auto-lock during kiosk hours</div>
+        <div class="step-body"><strong>Settings → Display & Brightness → Auto-Lock → Never</strong><br/>Prevents the screen from going dark between customers. Re-enable at the end of business hours if leaving the iPad unattended overnight.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">13</div>
+      <div>
+        <div class="step-title">(Optional) Apple Configurator for multiple iPads</div>
+        <div class="step-body">If you have 2+ iPads, use <strong>Apple Configurator 2</strong> (free Mac app) to deploy <strong>Single App Mode</strong> via MDM profile. This is the enterprise-grade version of Guided Access — it automatically locks the device to the kiosk app on boot, even after restart.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Summary checklist -->
+  <div class="sh"><div class="sh-label">Full launch checklist</div><div class="sh-title">Everything to go live</div></div>
+  <div class="checklist">
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Add source column to DB</strong> — migration: <code>ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS source text DEFAULT 'storefront'</code></div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Build server routes</strong> — POST /api/products/:id/reviews · GET+DELETE admin review endpoints</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Build admin feedback pages</strong> — index + detail + nav link + star icon + i18n keys</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Build storefront review bar</strong> — Mood tiles concept on product page</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Build iPad kiosk Angular page</strong> — /kiosk route + fullscreen 4-step flow + auto-reset timer</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Add DNS A record</strong> — kiosk → server IP (in DNS provider dashboard)</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Add Nginx server block</strong> — kiosk.elitecollections.qa → same Angular build</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>Run Certbot</strong> — SSL for kiosk subdomain (2 minutes)</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>iPad: Add to Home Screen PWA</strong> — via Safari Share menu</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>iPad: Enable Guided Access</strong> — lock to kiosk, set staff PIN</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>iPad: Set Auto-Lock to Never</strong> — during store hours</div></div>
+    <div class="check-item todo"><div class="ci-icon">○</div><div class="ci-text"><strong>End-to-end test</strong> — submit from kiosk → appears in admin with source=kiosk tag</div></div>
+  </div>
+
+  <div class="hl red">
+    <div class="hl-title">⚠ Rate limiting — add before launch</div>
+    <div class="hl-body">
+      The <code>POST /api/products/:id/reviews</code> endpoint is public (no auth). Before launching add a rate limit: <strong>max 5 submissions per IP per hour</strong>. Express: use <code>express-rate-limit</code> — already likely in the project, just configure it on this route. Prevents spam.
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'))
+  document.querySelectorAll('.stab').forEach(b=>b.classList.remove('on'))
+  document.getElementById(id).classList.add('on')
+  const tabs=['overview','admin','storefront','kiosk-design','kiosk-deploy']
+  document.querySelectorAll('.stab')[tabs.indexOf(id)].classList.add('on')
+  window.scrollTo(0,0)
+}
+let kR=4
+function rateK(n){kR=n;document.querySelectorAll('#kstars .k-star').forEach((s,i)=>s.classList.toggle('on',i<n))}
+</script>
+</body>
+</html>

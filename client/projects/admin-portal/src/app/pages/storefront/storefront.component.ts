@@ -988,8 +988,6 @@ interface StorefrontContent {
             </div>
             <!-- Screen -->
             <div class="pv-phone__screen">
-              <!-- Dynamic island -->
-              <div class="pv-phone__island" aria-hidden="true"></div>
               <!-- Storefront iframe -->
               <iframe class="pv-phone__iframe"
                       [src]="previewSafeUrl()"
@@ -1800,16 +1798,6 @@ interface StorefrontContent {
         0 0 0 14px rgba(255,255,255,0.06),
         0 60px 130px -10px rgba(0,0,0,1),
         0 24px 60px rgba(0,0,0,0.6);
-    }
-
-    /* Dynamic island notch */
-    .pv-phone__island {
-      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-      width: 120px; height: 34px;
-      background: #000;
-      border-radius: 20px;
-      z-index: 10;
-      box-shadow: 0 0 0 2px rgba(0,0,0,0.8);
     }
 
     /* The actual storefront — fills remaining screen */

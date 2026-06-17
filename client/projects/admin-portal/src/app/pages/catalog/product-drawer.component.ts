@@ -517,9 +517,9 @@ function readPreview(file: File): Promise<string> {
                           </div>
                         </div>
 
-                        <!-- Expandable detail: Material | Cost | Margin -->
+                        <!-- Expandable detail: Material | Cost | Shipping | Total Cost · Margin -->
                         @if (expandedVariants().has(item.v.id)) {
-                          <div class="vc-detail">
+                          <div class="vc-detail vc-detail--5col">
                             <div class="vc-field">
                               <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
                               @if (refMaterials().length > 0) {
@@ -542,6 +542,20 @@ function readPreview(file: File): Promise<string> {
                               <input class="inp inp-sm mono" type="number" min="0" step="0.01" placeholder="—"
                                      [ngModel]="item.v.costPrice ?? null"
                                      (ngModelChange)="updateVariant(item.globalIndex, { costPrice: $event !== null && $event !== '' ? +$event : undefined })"/>
+                            </div>
+                            <div class="vc-field">
+                              <label class="vc-lbl">Shipping (QAR)</label>
+                              <input class="inp inp-sm mono" type="number" min="0" step="0.01" placeholder="—"
+                                     [ngModel]="item.v.shippingCost ?? null"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { shippingCost: $event !== null && $event !== '' ? +$event : undefined })"/>
+                            </div>
+                            <div class="vc-field vc-field--total-cost">
+                              <label class="vc-lbl">Total Cost</label>
+                              @if (variantTotalCost(item.v); as tc) {
+                                <span class="total-cost-val mono">{{ tc | number:'1.2-2' }}</span>
+                              } @else {
+                                <span class="margin-dash muted small">—</span>
+                              }
                             </div>
                             <div class="vc-field vc-field--margin">
                               <label class="vc-lbl">{{ t('product.variants.col.margin') }}</label>
@@ -1432,8 +1446,11 @@ function readPreview(file: File): Promise<string> {
       margin-top: 8px;
       animation: vc-reveal 0.14s ease-out;
     }
-    /* Margin field inside detail: label + pill stacked */
-    .vc-field--margin { flex-direction: column; align-items: flex-start; gap: 5px; }
+    .vc-detail--5col { grid-template-columns: 1.4fr 1fr 1fr 0.9fr 0.9fr; }
+    /* Margin/total-cost fields inside detail: label + value stacked */
+    .vc-field--margin,
+    .vc-field--total-cost { flex-direction: column; align-items: flex-start; gap: 5px; }
+    .total-cost-val { font-size: 13px; font-weight: 700; color: var(--text); }
     @keyframes vc-reveal {
       from { opacity: 0; transform: translateY(-6px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -1533,7 +1550,9 @@ function readPreview(file: File): Promise<string> {
       .vc-cell--sku   { display: none; }
       .vc-cell--actions { grid-column: 5; grid-row: 1 / 3; align-self: center; flex-direction: column; }
       .vc-detail { grid-template-columns: 1fr 1fr; }
-      .vc-field--margin { display: none; }
+      .vc-detail--5col { grid-template-columns: 1fr 1fr 1fr; }
+      .vc-field--margin,
+      .vc-field--total-cost { display: none; }
     }
     .related-picker {
       display: grid;
@@ -2234,9 +2253,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly hasVariants = computed(() => this.form().variants.length > 0);
 
+  variantTotalCost(v: ProductVariant): number | null {
+    if (v.costPrice == null && v.shippingCost == null) return null;
+    return (v.costPrice ?? 0) + (v.shippingCost ?? 0);
+  }
+
   variantMargin(v: ProductVariant): number | null {
-    if (v.costPrice == null || !v.price) return null;
-    return Math.round(((v.price - v.costPrice) / v.price) * 100);
+    const cost = this.variantTotalCost(v) ?? v.costPrice;
+    if (cost == null || !v.price) return null;
+    return Math.round(((v.price - cost) / v.price) * 100);
   }
 
   readonly avgMargin = computed((): number | null => {

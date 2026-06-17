@@ -75,5 +75,10 @@ export const routes: Routes = [
         (m) => m.ContactComponent,
       ),
   },
+  {
+    path: 'kiosk',
+    loadComponent: () =>
+      import('./pages/kiosk/kiosk.component').then((m) => m.KioskComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

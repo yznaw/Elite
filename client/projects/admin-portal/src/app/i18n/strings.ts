@@ -36,6 +36,8 @@ const EN = {
   'nav.settings.sub': 'Access & Config',
   'nav.more': 'More',
   'nav.more.sub': 'All sections',
+  'nav.feedback': 'Feedback',
+  'nav.feedback.sub': 'Product reviews',
 
   // ── Page titles ──
   'page.dashboard.title': 'Dashboard',
@@ -808,6 +810,8 @@ const AR: Record<keyof typeof EN, string> = {
   'nav.reference.sub': 'الألوان · المواد · المقاسات',
   'nav.more': 'المزيد',
   'nav.more.sub': 'جميع الأقسام',
+  'nav.feedback': 'التقييمات',
+  'nav.feedback.sub': 'آراء العملاء',
   'nav.settings': 'إعدادات النظام',
   'nav.settings.sub': 'التهيئة والصلاحيات',
 

@@ -85,16 +85,20 @@ async function replaceVariants(client, tenantId, productId, variants) {
       ? Math.max(0, Math.round(Number(variant.costPrice) * 100))
       : null;
 
+    const shippingCents = variant.shippingCost != null && variant.shippingCost !== ''
+      ? Math.max(0, Math.round(Number(variant.shippingCost) * 100))
+      : null;
+
     const colorText = String(variant.color || '').trim() || null;
 
     await client.query(
       `
         INSERT INTO product_variants (
           tenant_id, product_id, sku, size, color, material,
-          price_cents, cost_price_cents, stock_quantity, sort_order, is_active,
+          price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order, is_active,
           color_ref_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true,
           (SELECT id FROM ref_colors
            WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($5))
            LIMIT 1))
@@ -108,6 +112,7 @@ async function replaceVariants(client, tenantId, productId, variants) {
         String(variant.material || '').trim() || null,
         toCents(variant.price),
         costCents,
+        shippingCents,
         Math.max(0, Number.parseInt(variant.stock, 10) || 0),
         index,
       ],
@@ -319,6 +324,8 @@ async function loadAdminProduct(client, tenantId, productId) {
               'material', pv.material,
               'price', round(pv.price_cents / 100.0),
               'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
+              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
+              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
               'stock', pv.stock_quantity
             )
           ) FILTER (WHERE pv.id IS NOT NULL),
