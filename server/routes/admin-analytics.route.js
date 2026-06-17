@@ -63,6 +63,91 @@ router.get('/overview', asyncHandler(async (_req, res) => {
   }
 }));
 
+// ── Cost & Margin Summary ─────────────────────────────────────────────────────
+// Returns catalog-level KPIs + per-product margin breakdown.
+// Only considers variants where total_cost_cents is not null.
+router.get('/cost-summary', asyncHandler(async (_req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+
+    const [catalog, perProduct] = await Promise.all([
+      client.query(
+        `
+          SELECT
+            COUNT(*)::integer                                             AS variants_with_cost,
+            round(AVG(pv.cost_price_cents)    / 100.0, 2)::float         AS avg_cost,
+            round(AVG(pv.shipping_cost_cents) / 100.0, 2)::float         AS avg_shipping,
+            round(AVG(pv.total_cost_cents)    / 100.0, 2)::float         AS avg_total_cost,
+            round(AVG(pv.price_cents)         / 100.0, 2)::float         AS avg_price,
+            round(
+              AVG(CASE WHEN pv.price_cents > 0
+                THEN (pv.price_cents - pv.total_cost_cents)::numeric / pv.price_cents * 100
+              END), 1
+            )::float                                                      AS avg_margin_pct
+          FROM product_variants pv
+          JOIN products p ON p.id = pv.product_id
+          WHERE pv.tenant_id = $1
+            AND pv.total_cost_cents IS NOT NULL
+            AND pv.price_cents > 0
+            AND p.status <> 'archived'
+        `,
+        [tenant.id],
+      ),
+      client.query(
+        `
+          SELECT
+            p.id                                                                AS product_id,
+            p.name,
+            COUNT(pv.id)::integer                                               AS variant_count,
+            round(AVG(pv.price_cents)         / 100.0, 2)::float               AS avg_price,
+            round(AVG(pv.cost_price_cents)    / 100.0, 2)::float               AS avg_cost,
+            round(AVG(pv.shipping_cost_cents) / 100.0, 2)::float               AS avg_shipping,
+            round(AVG(pv.total_cost_cents)    / 100.0, 2)::float               AS avg_total_cost,
+            round(
+              AVG(CASE WHEN pv.price_cents > 0
+                THEN (pv.price_cents - pv.total_cost_cents)::numeric / pv.price_cents * 100
+              END), 1
+            )::float                                                            AS margin_pct
+          FROM products p
+          JOIN product_variants pv ON pv.product_id = p.id
+          WHERE p.tenant_id = $1
+            AND pv.total_cost_cents IS NOT NULL
+            AND pv.price_cents > 0
+            AND p.status <> 'archived'
+          GROUP BY p.id, p.name
+          ORDER BY margin_pct ASC
+        `,
+        [tenant.id],
+      ),
+    ]);
+
+    const c = catalog.rows[0];
+    ok(res, {
+      catalog: {
+        variantsWithCost: c.variants_with_cost,
+        avgCost:          c.avg_cost,
+        avgShipping:      c.avg_shipping,
+        avgTotalCost:     c.avg_total_cost,
+        avgPrice:         c.avg_price,
+        avgMarginPct:     c.avg_margin_pct,
+      },
+      products: perProduct.rows.map(r => ({
+        productId:    r.product_id,
+        name:         r.name,
+        variantCount: r.variant_count,
+        avgPrice:     r.avg_price,
+        avgCost:      r.avg_cost,
+        avgShipping:  r.avg_shipping,
+        avgTotalCost: r.avg_total_cost,
+        marginPct:    r.margin_pct,
+      })),
+    });
+  } finally {
+    client.release();
+  }
+}));
+
 router.post('/events', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {

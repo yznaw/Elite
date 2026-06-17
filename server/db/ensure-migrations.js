@@ -123,6 +123,22 @@ async function ensureAllMigrations(client) {
       AND  pv.color_ref_id IS NULL
   `);
 
+  // ── Migration 012: shipping_cost_cents + total_cost_cents on product_variants ─
+  await client.query(`
+    ALTER TABLE product_variants
+      ADD COLUMN IF NOT EXISTS shipping_cost_cents integer
+  `);
+  await client.query(`
+    ALTER TABLE product_variants
+      ADD COLUMN IF NOT EXISTS total_cost_cents integer
+        GENERATED ALWAYS AS (
+          CASE
+            WHEN cost_price_cents IS NULL AND shipping_cost_cents IS NULL THEN NULL
+            ELSE COALESCE(cost_price_cents, 0) + COALESCE(shipping_cost_cents, 0)
+          END
+        ) STORED
+  `);
+
   _done = true;
 }
 

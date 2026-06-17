@@ -6,6 +6,8 @@ export interface ProductVariant {
   material: string;
   price: number;
   costPrice?: number;
+  shippingCost?: number;
+  totalCost?: number;
   stock: number;
 }
 
