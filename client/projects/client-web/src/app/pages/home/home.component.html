@@ -1,217 +1,289 @@
-<div>
-  @for (section of layoutSections(); track section.id) {
-    @if (section.visible) {
-      @switch (section.id) {
-        @case ("home-hero") {
-          <section class="hero" aria-labelledby="home-hero-brand">
-            <div class="hero-grain"></div>
-            <div class="hero-ring hero-ring--lg"></div>
-            <div class="hero-aura hero-aura--left"></div>
-            <div class="hero-aura hero-aura--right"></div>
+@if (!pageReady()) {
+  <section class="home-loading-shell" aria-live="polite">
+    <div class="home-loading-shell__card">
+      <p>Loading home content...</p>
+      <span>Fetching live collections and storefront content.</span>
+    </div>
+  </section>
+} @else {
+  <div>
+    @for (section of layoutSections(); track section.id) {
+      @if (section.visible) {
+        @switch (section.id) {
+          @case ("home-hero") {
+            @if (heroItems().length > 0) {
+              <section class="hero" aria-labelledby="home-hero-brand">
+                <div class="hero-grain"></div>
+                <div class="hero-ring hero-ring--lg"></div>
+                <div class="hero-aura hero-aura--left"></div>
+                <div class="hero-aura hero-aura--right"></div>
 
-            <div class="hero-brand">
-              <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
-              <span>{{ activeHeroItem().subtitle }}</span>
-            </div>
-
-            <div
-              class="hero-stage"
-              (pointerdown)="onHeroPointerDown($event)"
-              (pointerup)="onHeroPointerUp($event)"
-              (pointercancel)="onHeroPointerCancel($event)"
-            >
-              <button
-                type="button"
-                class="hero-arrow hero-arrow--prev"
-                aria-label="Previous hero item"
-                title="Previous"
-                (click)="selectAdjacentHeroItem(-1)"
-              >
-                <span aria-hidden="true">‹</span>
-              </button>
-
-              <figure
-                class="hero-product"
-                [attr.aria-label]="activeHeroItem().alt"
-              >
-                @for (item of heroItems(); track item.id; let first = $first) {
-                  <picture
-                    class="hero-product__image"
-                    [class.is-active]="item.id === activeHeroItem().id"
-                    [class.hero-product__image--photo]="item.id === 'white-leather'"
-                    [attr.aria-hidden]="item.id === activeHeroItem().id ? null : 'true'"
-                  >
-                    <source [srcset]="toWebp(item.imageUrl)" type="image/webp" />
-                    <img
-                      [src]="item.imageUrl"
-                      [alt]="item.alt"
-                      [attr.loading]="first ? 'eager' : 'lazy'"
-                      [attr.fetchpriority]="first ? 'high' : 'low'"
-                      decoding="async"
-                    />
-                  </picture>
-                }
-              </figure>
-
-              <button
-                type="button"
-                class="hero-arrow hero-arrow--next"
-                aria-label="Next hero item"
-                title="Next"
-                (click)="selectAdjacentHeroItem(1)"
-              >
-                <span aria-hidden="true">›</span>
-              </button>
-
-              @for (callout of activeHeroCallouts(); track callout.id) {
-                <article
-                  class="hero-callout"
-                  [ngClass]="'hero-callout--' + callout.id"
-                  [style.--delay]="calloutDelay(callout.id)"
-                >
-                  <span class="callout-line" aria-hidden="true"
-                    ><span></span
-                  ></span>
-                  <div class="callout-pill">
-                    <picture>
-                      <source [srcset]="toWebp(callout.thumbnail)" type="image/webp" />
-                      <img [src]="callout.thumbnail" [alt]="callout.alt" loading="lazy" decoding="async" />
-                    </picture>
-                    <div>
-                      <strong>{{ callout.titleAr }}</strong>
-                      <span>{{ callout.subtitleEn }}</span>
-                    </div>
-                  </div>
-                </article>
-              }
-            </div>
-
-            <div
-              class="hero-mobile-features"
-              aria-label="Product craft details"
-            >
-              @for (callout of activeHeroCallouts(); track callout.id) {
-                <article class="mobile-feature-card">
-                  <picture>
-                    <source [srcset]="toWebp(callout.thumbnail)" type="image/webp" />
-                    <img [src]="callout.thumbnail" [alt]="callout.alt" loading="lazy" decoding="async" />
-                  </picture>
-                  <div>
-                    <strong>{{ callout.titleAr }}</strong>
-                    <span>{{ callout.subtitleEn }}</span>
-                  </div>
-                </article>
-              }
-            </div>
-
-            <button
-              type="button"
-              class="hero-cta"
-              (click)="goTo('/collection')"
-            >
-              <span>{{ heroCtaLabel() }}</span>
-            </button>
-          </section>
-        }
-
-        @case ("home-collections") {
-          <section
-            class="home-commerce"
-            aria-labelledby="home-collection-title"
-          >
-            <div class="collection-showcase">
-              <div class="collection-heading">
-                <h2 id="home-collection-title">Featured Collections</h2>
-                <p>
-                  Dare to mix and match. Explore the latest edits by category.
-                </p>
-              </div>
-
-              <div class="collection-grid">
-                @for (tile of contentData().collections; track tile.id) {
-                  <button
-                    type="button"
-                    class="collection-tile"
-                    (click)="goToCollectionTile(tile)"
-                  >
-                    <img [src]="tile.imageUrl" [alt]="tile.title" />
-                    <span class="collection-overlay"></span>
-                    <span class="collection-title">{{ tile.title }}</span>
-                    @if (tile.ctaText) {
-                      <span class="collection-action">{{ tile.ctaText }}</span>
-                    }
-                  </button>
-                }
-              </div>
-            </div>
-          </section>
-        }
-
-        @case ("home-discount") {
-          <section class="home-commerce" aria-labelledby="home-discount-title">
-            <div class="discount-hero anim-fade-up">
-              <div class="discount-image">
-                <img
-                  [src]="contentData().hero.imageUrl"
-                  [alt]="contentData().hero.title"
-                />
-              </div>
-
-              <div class="discount-copy">
-                <p class="discount-kicker">Elite Collection</p>
-                <h2 id="home-discount-title">{{ contentData().hero.title }}</h2>
-                <p class="discount-body">{{ contentData().hero.body }}</p>
-
-                <div class="discount-callout">
-                  <span>Come and Enjoy Sale!</span>
-                  <strong>{{ contentData().hero.discountText }}</strong>
+                <div class="hero-brand">
+                  <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
+                  <span>{{ heroSubtitle(activeHeroItem()) }}</span>
                 </div>
 
+                <div
+                  class="hero-stage"
+                  (pointerdown)="onHeroPointerDown($event)"
+                  (pointerup)="onHeroPointerUp($event)"
+                  (pointercancel)="onHeroPointerCancel($event)"
+                >
+                  <button
+                    type="button"
+                    class="hero-arrow hero-arrow--prev"
+                    aria-label="Previous hero item"
+                    title="Previous"
+                    (click)="selectAdjacentHeroItem(-1)"
+                  >
+                    <span aria-hidden="true">‹</span>
+                  </button>
+
+                  <figure
+                    class="hero-product"
+                    [attr.aria-label]="activeHeroItem().alt"
+                  >
+                    @for (
+                      item of heroItems();
+                      track item.id;
+                      let first = $first
+                    ) {
+                      <picture
+                        class="hero-product__image"
+                        [class.is-active]="item.id === activeHeroItem().id"
+                        [class.hero-product__image--photo]="
+                          item.id === 'white-leather'
+                        "
+                        [attr.aria-hidden]="
+                          item.id === activeHeroItem().id ? null : 'true'
+                        "
+                      >
+                        <source
+                          [srcset]="toWebp(item.imageUrl)"
+                          type="image/webp"
+                        />
+                        <img
+                          [src]="item.imageUrl"
+                          [alt]="item.alt"
+                          [attr.loading]="first ? 'eager' : 'lazy'"
+                          [attr.fetchpriority]="first ? 'high' : 'low'"
+                          decoding="async"
+                        />
+                      </picture>
+                    }
+                  </figure>
+
+                  <button
+                    type="button"
+                    class="hero-arrow hero-arrow--next"
+                    aria-label="Next hero item"
+                    title="Next"
+                    (click)="selectAdjacentHeroItem(1)"
+                  >
+                    <span aria-hidden="true">›</span>
+                  </button>
+
+                  @for (callout of activeHeroCallouts(); track callout.id) {
+                    <article
+                      class="hero-callout"
+                      [ngClass]="'hero-callout--' + callout.id"
+                      [style.--delay]="calloutDelay(callout.id)"
+                    >
+                      <span class="callout-line" aria-hidden="true"
+                        ><span></span
+                      ></span>
+                      <div class="callout-pill">
+                        <picture>
+                          <source
+                            [srcset]="toWebp(callout.thumbnail)"
+                            type="image/webp"
+                          />
+                          <img
+                            [src]="callout.thumbnail"
+                            [alt]="callout.alt"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </picture>
+                        <div>
+                          <strong>{{ calloutTitle(callout) }}</strong>
+                          <span>{{ calloutSubtitle(callout) }}</span>
+                        </div>
+                      </div>
+                    </article>
+                  }
+                </div>
+
+                <div
+                  class="hero-mobile-features"
+                  aria-label="Product craft details"
+                >
+                  <div class="mobile-feature-sheet">
+                    <div class="mobile-feature-sheet__header">
+                      <p>{{ activeHeroItem().name }}</p>
+                      @if (heroSubtitle(activeHeroItem())) {
+                        <span>{{ heroSubtitle(activeHeroItem()) }}</span>
+                      }
+                    </div>
+
+                    <div class="mobile-feature-sheet__rows">
+                      @for (callout of activeHeroCallouts(); track callout.id) {
+                        <article class="mobile-feature-row">
+                          <span class="mobile-feature-icon" aria-hidden="true">
+                            <img [src]="mobileFeatureIcon(callout.id)" alt="" loading="lazy" decoding="async" />
+                          </span>
+
+                          <div class="mobile-feature-copy">
+                            <strong>{{ calloutTitle(callout) }}</strong>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  class="discount-cta"
-                  (click)="goToContentLink(contentData().hero.ctaLink)"
+                  class="hero-cta hero-cta--mobile"
+                  (click)="goTo('/collection')"
                 >
-                  {{ contentData().hero.ctaText }}
+                  <span>{{ heroCtaLabel() }}</span>
                 </button>
-              </div>
-            </div>
-          </section>
-        }
+              </section>
+            } @else {
+              <section
+                class="hero hero--empty"
+                aria-labelledby="home-hero-brand"
+              >
+                <div class="hero-empty-state">
+                  <p>Home hero is not configured yet.</p>
+                </div>
+              </section>
+            }
+          }
 
-        @case ("home-promise") {
-          <section class="home-commerce" aria-labelledby="home-promise-title">
-            <div class="promise-panel">
-              <div>
-                <p class="discount-kicker">{{ t("home.promise.kicker") }}</p>
-                <h2 id="home-promise-title" class="serif">{{ t("home.promise.title") }}</h2>
+          @case ("home-collections") {
+            <section
+              class="home-commerce"
+              aria-labelledby="home-collection-title"
+            >
+              <div class="collection-showcase">
+                <div class="collection-heading">
+                  <h2 id="home-collection-title">Featured Collections</h2>
+                  <p>
+                    Dare to mix and match. Explore the latest edits by category.
+                  </p>
+                </div>
+
+                <div class="collection-grid">
+                  @if (!collectionsLoaded()) {
+                    <div class="collection-grid-loading" aria-live="polite">
+                      Loading collections...
+                    </div>
+                  } @else if (collectionTiles().length > 0) {
+                    @for (tile of collectionTiles(); track tile.id) {
+                      <button
+                        type="button"
+                        class="collection-tile"
+                        (click)="goToCollectionTile(tile)"
+                      >
+                        @if (tile.imageUrl) {
+                          <img [src]="tile.imageUrl" [alt]="tile.title" />
+                        }
+                        <span class="collection-overlay"></span>
+                        <span class="collection-title">{{ tile.title }}</span>
+                      </button>
+                    }
+                  } @else {
+                    <div class="collection-grid-loading" aria-live="polite">
+                      No collections are available yet.
+                    </div>
+                  }
+                </div>
               </div>
-              <div class="promise-grid">
-                @for (card of promiseCards(); track card.id) {
-                  <article [class.is-visible]="metaVisible()">
-                    <span>{{ card.icon }}</span>
-                    <h3>{{ locale.locale() === 'ar' ? card.labelAr : card.labelEn }}</h3>
-                    <p>{{ locale.locale() === 'ar' ? card.subAr : card.subEn }}</p>
+            </section>
+          }
+
+          @case ("home-discount") {
+            <section
+              class="home-commerce"
+              aria-labelledby="home-discount-title"
+            >
+              <div class="discount-hero anim-fade-up">
+                <div class="discount-image">
+                  <img
+                    [src]="contentData().hero.imageUrl"
+                    [alt]="contentData().hero.title"
+                  />
+                </div>
+
+                <div class="discount-copy">
+                  <p class="discount-kicker">Elite Collection</p>
+                  <h2 id="home-discount-title">
+                    {{ contentData().hero.title }}
+                  </h2>
+                  <p class="discount-body">{{ contentData().hero.body }}</p>
+
+                  <div class="discount-callout">
+                    <span>Come and Enjoy Sale!</span>
+                    <strong>{{ contentData().hero.discountText }}</strong>
+                  </div>
+
+                  <button
+                    type="button"
+                    class="discount-cta"
+                    (click)="goToContentLink(contentData().hero.ctaLink)"
+                  >
+                    {{ contentData().hero.ctaText }}
+                  </button>
+                </div>
+              </div>
+            </section>
+          }
+
+          @case ("home-promise") {
+            <section class="home-commerce" aria-labelledby="home-promise-title">
+              <div class="promise-panel">
+                <div>
+                  <p class="discount-kicker">{{ t("home.promise.kicker") }}</p>
+                  <h2 id="home-promise-title" class="serif">
+                    {{ t("home.promise.title") }}
+                  </h2>
+                </div>
+                <div class="promise-grid">
+                  @for (card of promiseCards(); track card.id) {
+                    <article [class.is-visible]="metaVisible()">
+                      <span>{{ card.icon }}</span>
+                      <h3>
+                        {{
+                          locale.locale() === "ar" ? card.labelAr : card.labelEn
+                        }}
+                      </h3>
+                      <p>
+                        {{ locale.locale() === "ar" ? card.subAr : card.subEn }}
+                      </p>
+                    </article>
+                  }
+                </div>
+              </div>
+            </section>
+          }
+
+          @case ("home-reels") {
+            <section class="home-commerce">
+              <div class="stats-grid">
+                @for (stat of statItems(); track stat.id) {
+                  <article>
+                    <strong class="serif">{{ stat.value }}</strong>
+                    <span>{{
+                      locale.locale() === "ar" ? stat.labelAr : stat.labelEn
+                    }}</span>
                   </article>
                 }
               </div>
-            </div>
-          </section>
-        }
-
-        @case ("home-reels") {
-          <section class="home-commerce">
-            <div class="stats-grid">
-              @for (stat of statItems(); track stat.id) {
-                <article>
-                  <strong class="serif">{{ stat.value }}</strong>
-                  <span>{{ locale.locale() === 'ar' ? stat.labelAr : stat.labelEn }}</span>
-                </article>
-              }
-            </div>
-          </section>
+            </section>
+          }
         }
       }
     }
-  }
-</div>
+  </div>
+}

@@ -1,5 +1,12 @@
 :host { display: block; }
 
+.checkout-address-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 @media (max-width: 899px) {
   :host ::ng-deep .checkout-grid {
     padding: 24px 14px 58px !important;
@@ -13,6 +20,10 @@
 
   :host ::ng-deep .anim-fade-up[style*="grid-template-columns"] {
     grid-template-columns: 1fr !important;
+  }
+
+  .checkout-address-grid {
+    grid-template-columns: 1fr;
   }
 
   :host ::ng-deep .step-indicator + span {

@@ -245,14 +245,16 @@ cp server/.env.example server/.env
 | `SESSION_COOKIE_SAMESITE` | `lax` | No | Set `none` if admin and API are on different origins in prod |
 | `GOOGLE_DRIVE_API_KEY` | — | No (folder imports only) | Google Cloud API key with Google Drive API enabled. Required for `POST /api/admin/media/gdrive` when importing a folder. Single-file imports work without it via public share URL. Accepts `GOOGLE_DRIVE_API_KEY` or `GOOGLE_API_KEY` (the latter as a fallback). |
 | `NBOX_WEBHOOK_SECRET` | — | Yes for NBOX webhooks | Secret copied from the NBOX webhook page; used to verify inbound shipment updates |
-| `NBOX_API_BASE_URL` | — | Yes for NBOX checkout | NBOX API base URL from the merchant portal |
-| `NBOX_API_TOKEN` | — | Yes for NBOX checkout | NBOX API token used for outbound quote/shipment requests |
+| `NBOX_API_BASE_URL` | `https://nbox.now/api` | Yes for NBOX checkout | NBOX API base URL; use `https://staging.nbox.now/api` for staging |
+| `NBOX_API_TOKEN` | — | Yes for NBOX checkout | Raw token sent as `x-nbox-shop-token` |
+| `NBOX_SHOP_DOMAIN` | `elitecollections.qa` | Yes for NBOX checkout | Shop/store domain sent as `x-nbox-shop-domain`; must match the token in NBOX |
 | `NBOX_API_KEY` | — | If provided by NBOX | Optional API key header value |
-| `NBOX_AUTH_HEADER` | `Authorization` | No | Header used for `NBOX_API_TOKEN` |
-| `NBOX_AUTH_SCHEME` | `Bearer` | No | Auth scheme prepended to `NBOX_API_TOKEN`; set empty if NBOX expects the raw token |
-| `NBOX_RATE_ENDPOINT` | — | Yes for delivery quotes | NBOX endpoint path for delivery pricing/availability |
-| `NBOX_SHIPMENT_ENDPOINT` | — | Yes for shipment booking | NBOX endpoint path for creating a shipment after payment is confirmed |
+| `NBOX_AUTH_HEADER` | `x-nbox-shop-token` | No | Header used for `NBOX_API_TOKEN` |
+| `NBOX_AUTH_SCHEME` | empty | No | Auth scheme prepended to `NBOX_API_TOKEN`; keep empty for NBOX shop tokens |
+| `NBOX_RATE_ENDPOINT` | `/rates` | Yes for delivery quotes | NBOX endpoint path for delivery pricing/availability |
+| `NBOX_SHIPMENT_ENDPOINT` | `/order` | Yes for shipment booking | NBOX endpoint path for creating a shipment after payment is confirmed |
 | `NBOX_DEFAULT_ITEM_WEIGHT_GRAMS` | `1000` | No | Fallback item weight used when product weight is not available |
+| `NBOX_DEFAULT_ITEM_LENGTH_CM`, `NBOX_DEFAULT_ITEM_WIDTH_CM`, `NBOX_DEFAULT_ITEM_HEIGHT_CM` | `35`, `25`, `15` | No | Fallback product dimensions sent to NBOX when catalog dimensions are unavailable |
 | `NBOX_ORIGIN_*` | — | Yes for NBOX checkout | Pickup/origin contact and address fields sent to NBOX |
 | `DEFAULT_ADMIN_EMAIL` | `admin@elite.local` | No | Email for the auto-seeded admin user (first boot only) |
 | `DEFAULT_ADMIN_PASSWORD` | `elite-admin` | No | Password for the auto-seeded admin — **change immediately in production** |

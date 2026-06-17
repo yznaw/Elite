@@ -1,0 +1,21 @@
+<main class="thank-page">
+  <section class="thank-wrap anim-fade-up">
+    <div class="thank-mark" aria-hidden="true">✓</div>
+
+    <p class="thank-kicker">{{ t('thankYou.kicker') }}</p>
+    <h1 class="serif thank-title">{{ t('thankYou.title') }}</h1>
+    <p class="thank-copy">{{ t('thankYou.body') }}</p>
+
+    @if (orderNumber()) {
+      <div class="order-ref">
+        <div class="order-label">{{ t('thankYou.orderLabel') }}</div>
+        <div class="serif order-number">{{ orderNumber() }}</div>
+      </div>
+    }
+
+    <div class="thank-actions">
+      <a routerLink="/collection" class="btn-gold">{{ t('common.continueBrowsing') }}</a>
+      <a routerLink="/contact" class="btn-outline">{{ t('thankYou.contact') }}</a>
+    </div>
+  </section>
+</main>

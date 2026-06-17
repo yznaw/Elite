@@ -122,6 +122,9 @@ interface HierarchyGroup {
               <ap-icon name="hierarchy" [size]="9"/> {{ t('collections.sub') }}
             </span>
           }
+              @if (c.system) {
+                <span class="prod-3d-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">○ All Products</span>
+              }
         </div>
         <div class="prod-body">
           <div class="prod-name">{{ c.title }}</div>

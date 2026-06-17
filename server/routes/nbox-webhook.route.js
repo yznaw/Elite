@@ -5,6 +5,7 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler } = require('./lib');
 
 const router = Router();
+const WEBHOOK_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
 
 const SIGNATURE_HEADERS = [
   'x-nbox-signature',
@@ -17,17 +18,26 @@ const SIGNATURE_HEADERS = [
 ];
 
 const STATUS_MAP = new Map([
+  ['shipment.update', 'processing'],
+  ['shipment.new', 'processing'],
+  ['shipment.fulfilled', 'processing'],
   ['shipment.pickup', 'shipped'],
   ['shipment.picked_up', 'shipped'],
   ['shipment.in_transit', 'shipped'],
   ['shipment.completed', 'delivered'],
   ['shipment.delivered', 'delivered'],
   ['shipment.failed', 'returned'],
+  ['new', 'processing'],
+  ['fulfilled', 'processing'],
   ['pickup', 'shipped'],
   ['picked_up', 'shipped'],
   ['picked up', 'shipped'],
+  ['pickup_failed', 'processing'],
+  ['not_collected', 'processing'],
+  ['in_transit_pickup', 'processing'],
   ['in_transit', 'shipped'],
   ['in transit', 'shipped'],
+  ['intransit', 'shipped'],
   ['transit', 'shipped'],
   ['shipped', 'shipped'],
   ['completed', 'delivered'],
@@ -41,7 +51,12 @@ const STATUS_MAP = new Map([
   ['returned to sender', 'returned'],
   ['cancelled', 'cancelled'],
   ['canceled', 'cancelled'],
+  ['on_hold', 'processing'],
 ]);
+
+function env(name, fallback = '') {
+  return String(process.env[name] || fallback).trim();
+}
 
 function normalizeKey(value) {
   return String(value || '').trim().toLowerCase().replace(/-/g, '_');
@@ -73,6 +88,48 @@ function signatureCandidates(value) {
   return [...new Set(candidates.map((candidate) => candidate.replace(/^sha256=/i, '').trim()))];
 }
 
+function parseWebhookTimestamp(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) {
+    return numeric < 1e12 ? numeric * 1000 : numeric;
+  }
+
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function validateWebhookTimestamp(timestamp) {
+  const parsed = parseWebhookTimestamp(timestamp);
+  if (!parsed) {
+    return { ok: false, status: 401, message: 'Invalid webhook timestamp.' };
+  }
+
+  const age = Math.abs(Date.now() - parsed);
+  if (age > WEBHOOK_TIMESTAMP_TOLERANCE_MS) {
+    return { ok: false, status: 401, message: 'Webhook timestamp outside allowed window.' };
+  }
+
+  return { ok: true };
+}
+
+function hmacSignatures(secret, payload) {
+  const digest = crypto.createHmac('sha256', secret).update(payload).digest();
+  return [
+    { value: digest.toString('hex'), caseInsensitive: true },
+    { value: digest.toString('base64'), caseInsensitive: false },
+  ];
+}
+
+function signatureMatches(candidate, expected) {
+  if (expected.caseInsensitive) {
+    return timingSafeStringEqual(candidate.toLowerCase(), expected.value.toLowerCase());
+  }
+  return timingSafeStringEqual(candidate, expected.value);
+}
+
 function verifyWebhookSignature(req) {
   const secret = process.env.NBOX_WEBHOOK_SECRET;
   if (!secret) {
@@ -90,19 +147,29 @@ function verifyWebhookSignature(req) {
   }
 
   const timestamp = req.get('x-nbox-timestamp');
-  const signedPayloads = [rawBody];
+  const requireTimestamp = env('NBOX_WEBHOOK_REQUIRE_TIMESTAMP', 'true') !== 'false';
+  const allowLegacySignatures = env('NBOX_WEBHOOK_ALLOW_LEGACY_SIGNATURES') === 'true';
+
   if (timestamp) {
-    signedPayloads.push(Buffer.concat([Buffer.from(`${timestamp}.`, 'utf8'), rawBody]));
+    const timestampCheck = validateWebhookTimestamp(timestamp);
+    if (!timestampCheck.ok) return timestampCheck;
+  } else if (requireTimestamp) {
+    return { ok: false, status: 401, message: 'Missing webhook timestamp.' };
   }
 
-  const expectedSignatures = signedPayloads.flatMap((payload) => {
-    const digest = crypto.createHmac('sha256', secret).update(payload).digest();
-    return [digest.toString('hex'), digest.toString('base64')];
-  });
+  const expectedSignatures = [];
+  if (timestamp) {
+    expectedSignatures.push(...hmacSignatures(
+      secret,
+      Buffer.concat([Buffer.from(`${timestamp}.`, 'utf8'), rawBody]),
+    ));
+  }
+  if (!timestamp || allowLegacySignatures) {
+    expectedSignatures.push(...hmacSignatures(secret, rawBody));
+  }
 
   const matched = signatureCandidates(signatureHeader).some((candidate) => {
-    const normalized = candidate.toLowerCase();
-    return expectedSignatures.some((expected) => timingSafeStringEqual(normalized, expected.toLowerCase()));
+    return expectedSignatures.some((expected) => signatureMatches(candidate, expected));
   });
 
   if (!matched) {
@@ -132,6 +199,7 @@ function normalizePayload(body, req) {
   const order = asObject(data.order || payload.order || shipment.order);
 
   const event = firstString(
+    req.get('x-nbox-event-type'),
     req.get('x-nbox-event'),
     req.get('x-webhook-event'),
     payload.event,
@@ -141,9 +209,13 @@ function normalizePayload(body, req) {
     payload.event_type,
     data.event,
     data.type,
+    data.status_event,
+    shipment.status_event,
   );
 
   const statusText = firstString(
+    data.status_event,
+    shipment.status_event,
     shipment.status,
     shipment.statusCode,
     shipment.status_code,
@@ -151,6 +223,7 @@ function normalizePayload(body, req) {
     shipment.fulfillment_status,
     data.status,
     data.statusCode,
+    payload.status_event,
     payload.status,
   );
 
@@ -161,8 +234,10 @@ function normalizePayload(body, req) {
     shipment.awbNumber,
     shipment.waybill,
     shipment.waybillNumber,
+    data.awb,
     data.trackingNumber,
     data.tracking_number,
+    data.shipment_id,
     payload.trackingNumber,
     payload.tracking_number,
   );
@@ -188,7 +263,7 @@ function normalizePayload(body, req) {
 
   const orderId = firstString(order.id, order.orderId, order.order_id, data.orderId, data.order_id, payload.orderId, payload.order_id);
   const shipmentId = firstString(shipment.id, shipment.shipmentId, shipment.shipment_id, data.shipmentId, data.shipment_id, payload.shipmentId, payload.shipment_id);
-  const eventId = firstString(payload.id, payload.eventId, payload.event_id, data.eventId, data.event_id);
+  const eventId = firstString(req.get('x-nbox-delivery-id'), payload.id, payload.eventId, payload.event_id, data.eventId, data.event_id);
 
   return {
     event,
@@ -199,15 +274,16 @@ function normalizePayload(body, req) {
     shipmentId,
     trackingNumber,
     trackingUrl: firstString(shipment.trackingUrl, shipment.tracking_url, data.trackingUrl, data.tracking_url, payload.trackingUrl, payload.tracking_url),
-    carrier: firstString(shipment.carrier, shipment.carrierName, shipment.courier, data.carrier, data.courier, payload.carrier),
-    service: firstString(shipment.service, shipment.serviceName, shipment.service_code, data.service, data.serviceName, payload.service),
+    carrier: firstString(shipment.carrier, shipment.carrierName, shipment.courier, data.carrier, data.carrierName, data.courier, payload.carrier),
+    service: firstString(shipment.service, shipment.serviceName, shipment.service_code, data.service, data.serviceName, data.carrierName, payload.service),
     raw: payload,
   };
 }
 
 function mapFulfillmentStatus(event, statusText) {
-  const direct = STATUS_MAP.get(normalizeKey(event));
-  if (direct && direct !== 'shipment.update') return direct;
+  const eventKey = normalizeKey(event);
+  const direct = eventKey === 'shipment.update' ? null : STATUS_MAP.get(eventKey);
+  if (direct) return direct;
 
   return STATUS_MAP.get(normalizeKey(statusText)) || 'processing';
 }

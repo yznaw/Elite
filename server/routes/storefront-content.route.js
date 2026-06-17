@@ -118,10 +118,10 @@ const DEFAULT_HOME_CONTENT = {
         imageUrl: '/assets/hero-scroll/elite-hero-sandals-cutout.png',
         alt: 'Brown full-grain leather elite sandals made in Italy',
         callouts: [
-          { id: 'strap',     titleAr: 'جلد عجل طبيعي',   subtitleEn: 'Full-Grain Leather', thumbnail: '/assets/hero-scroll/elite-angle-single.png',  alt: 'Leather strap detail' },
-          { id: 'buckle',    titleAr: 'إبزيم معدني فاخر', subtitleEn: 'Premium Buckle',     thumbnail: '/assets/hero-scroll/elite-front-pair.png',   alt: 'Premium buckle detail' },
-          { id: 'sole',      titleAr: 'نعل مريح',          subtitleEn: 'Comfort Sole',       thumbnail: '/assets/hero-scroll/elite-side-single.jpeg', alt: 'Comfort sole' },
-          { id: 'stitching', titleAr: 'خياطة يدوية',       subtitleEn: 'Hand Stitched',      thumbnail: '/assets/hero-scroll/elite-top-pair.png',     alt: 'Hand-stitched edge' },
+          { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد عجل طبيعي',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-angle-single.png',  alt: 'Leather strap detail' },
+          { id: 'buckle',    titleEn: 'Premium Buckle',     titleAr: 'إبزيم معدني فاخر', subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-front-pair.png',   alt: 'Premium buckle detail' },
+          { id: 'sole',      titleEn: 'Comfort Sole',       titleAr: 'نعل مريح',          subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-side-single.jpeg', alt: 'Comfort sole' },
+          { id: 'stitching', titleEn: 'Hand Stitched',      titleAr: 'خياطة يدوية',       subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-top-pair.png',     alt: 'Hand-stitched edge' },
         ],
       },
       {
@@ -131,10 +131,10 @@ const DEFAULT_HOME_CONTENT = {
         imageUrl: '/assets/hero-scroll/elite-hero-white-sandals.png',
         alt: 'White leather elite sandals with silver buckle made in Italy',
         callouts: [
-          { id: 'strap',     titleAr: 'جلد طبيعي أبيض',   subtitleEn: 'Full-Grain Leather', thumbnail: '/assets/hero-scroll/elite-white-detail-leather.png',   alt: 'White leather texture' },
-          { id: 'buckle',    titleAr: 'إبزيم فضي فاخر',   subtitleEn: 'Silver Buckle',      thumbnail: '/assets/hero-scroll/elite-white-detail-buckle.png',    alt: 'Silver buckle detail' },
-          { id: 'sole',      titleAr: 'نعل مريح',          subtitleEn: 'Comfort Sole',       thumbnail: '/assets/hero-scroll/elite-white-detail-brand.png',     alt: 'Branded footbed' },
-          { id: 'stitching', titleAr: 'خياطة يدوية',       subtitleEn: 'Hand Stitched',      thumbnail: '/assets/hero-scroll/elite-white-detail-stitching.png', alt: 'White stitching' },
+          { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد طبيعي أبيض',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-leather.png',   alt: 'White leather texture' },
+          { id: 'buckle',    titleEn: 'Silver Buckle',      titleAr: 'إبزيم فضي فاخر',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-buckle.png',    alt: 'Silver buckle detail' },
+          { id: 'sole',      titleEn: 'Comfort Sole',       titleAr: 'نعل مريح',          subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-brand.png',     alt: 'Branded footbed' },
+          { id: 'stitching', titleEn: 'Hand Stitched',      titleAr: 'خياطة يدوية',       subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-stitching.png', alt: 'White stitching' },
         ],
       },
     ],
@@ -232,7 +232,7 @@ async function loadContent(client, tenantId) {
     [tenantId],
   );
   const raw = result.rows[0]?.home_content;
-  const content = raw ? normalizeContent(raw) : clone(DEFAULT_HOME_CONTENT);
+  const content = raw ? normalizeContent(raw) : createEmptyHomeContent();
 
   // Resolve linked collection tiles with live data so catalog updates are always reflected
   const collectionIds = content.collections
@@ -312,6 +312,72 @@ async function promoteDraftToLive(client, tenantId) {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function createEmptyHomeContent() {
+  return {
+    hero: {
+      imageUrl: '',
+      title: '',
+      body: '',
+      discountText: '',
+      ctaText: '',
+      ctaLink: '',
+    },
+    collections: [],
+    story: {
+      hero: {
+        kicker: '',
+        title: '',
+        accent: '',
+        body: '',
+        imageUrl: '',
+        imageAlt: '',
+      },
+      chapters: [],
+      quote: {
+        text: '',
+        accent: '',
+        author: '',
+      },
+      atelier: {
+        kicker: '',
+        title: '',
+        body: '',
+        items: [],
+      },
+      intro: {
+        kicker: '',
+        headline: '',
+        body: '',
+      },
+      heroFacts: [],
+    },
+    heroSlider: {
+      ctaEn: '',
+      ctaAr: '',
+      items: [],
+    },
+    promise: {
+      cards: [],
+    },
+    stats: [],
+    contact: {
+      kicker: '',
+      headlineEn: '',
+      headlineAccentEn: '',
+      headlineAr: '',
+      headlineAccentAr: '',
+      subhead: '',
+      email: '',
+      phone: '',
+      whatsapp: '',
+      promiseLine: '',
+      promiseSignature: '',
+      infoBlocks: [],
+      socialLinks: [],
+    },
+  };
 }
 
 function asText(value, fallback = '') {
@@ -485,8 +551,10 @@ function normalizeHeroSlider(heroSlider = {}) {
           .filter((c) => c && c.id)
           .map((c) => ({
             id:         c.id,
-            titleAr:    asText(c.titleAr,    ''),
-            subtitleEn: asText(c.subtitleEn, ''),
+            titleEn:    asText(c.titleEn,    fallback.titleEn || asText(c.subtitleEn, '')),
+            titleAr:    asText(c.titleAr,    fallback.titleAr || ''),
+            subtitleEn: asText(c.subtitleEn, fallback.subtitleEn || ''),
+            subtitleAr: asText(c.subtitleAr, fallback.subtitleAr || ''),
             thumbnail:  asText(c.thumbnail,  ''),
             alt:        asText(c.alt,        ''),
           })),

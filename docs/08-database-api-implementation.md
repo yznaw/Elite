@@ -152,16 +152,19 @@ GOOGLE_DRIVE_API_KEY=
 
 # NBOX delivery integration
 NBOX_WEBHOOK_SECRET=replace-with-nbox-webhook-secret
-NBOX_API_BASE_URL=https://uat.portal.nbox.qa
+NBOX_API_BASE_URL=https://nbox.now/api
 NBOX_API_TOKEN=replace-with-nbox-api-token
-NBOX_RATE_ENDPOINT=replace-with-rate-endpoint-path
-NBOX_SHIPMENT_ENDPOINT=replace-with-create-shipment-endpoint-path
+NBOX_SHOP_DOMAIN=elitecollections.qa
+NBOX_RATE_ENDPOINT=/rates
+NBOX_SHIPMENT_ENDPOINT=/order
 NBOX_ORIGIN_NAME=Elite Collections
 NBOX_ORIGIN_PHONE=
 NBOX_ORIGIN_EMAIL=admin@elitecollections.qa
-NBOX_ORIGIN_ADDRESS=
+NBOX_ORIGIN_ADDRESS=replace-with-pickup-address
 NBOX_ORIGIN_CITY=Doha
+NBOX_ORIGIN_STATE=Doha
 NBOX_ORIGIN_COUNTRY=QA
+NBOX_ORIGIN_ZIP=0000
 ```
 
 The API expects `DATABASE_URL` to be configured before database-backed routes can work.

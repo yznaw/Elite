@@ -29,6 +29,34 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'thank-you',
+    loadComponent: () =>
+      import('./pages/thank-you/thank-you.component').then(
+        (m) => m.ThankYouComponent,
+      ),
+  },
+  {
+    path: 'checkout/success',
+    loadComponent: () =>
+      import('./pages/thank-you/thank-you.component').then(
+        (m) => m.ThankYouComponent,
+      ),
+  },
+  {
+    path: 'checkout/failure',
+    loadComponent: () =>
+      import('./pages/checkout-result/checkout-result.component').then(
+        (m) => m.CheckoutResultComponent,
+      ),
+  },
+  {
+    path: 'checkout/pending',
+    loadComponent: () =>
+      import('./pages/checkout-result/checkout-result.component').then(
+        (m) => m.CheckoutResultComponent,
+      ),
+  },
+  {
     path: 'checkout',
     loadComponent: () =>
       import('./pages/checkout/checkout.component').then(

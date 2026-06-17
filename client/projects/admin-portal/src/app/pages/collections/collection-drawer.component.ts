@@ -86,11 +86,11 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         <div class="vis-block mb-24" [class.hidden-state]="form().hidden">
           <div>
             <div class="strong" style="font-size:13px;margin-bottom:2px;" [style.color]="form().hidden ? 'var(--danger)' : 'var(--ink)'">
-              {{ form().hidden ? t('collections.hidden') : t('collections.visible') }}
+              {{ isSystemCollection() ? 'Always visible' : (form().hidden ? t('collections.hidden') : t('collections.visible')) }}
             </div>
-            <div class="muted small">{{ t('collections.visibility') }}</div>
+            <div class="muted small">{{ isSystemCollection() ? 'Managed by the storefront and kept active.' : t('collections.visibility') }}</div>
           </div>
-          <button class="toggle" [class.on]="!form().hidden" (click)="toggle('hidden')"></button>
+          <button class="toggle" [class.on]="!form().hidden" (click)="toggle('hidden')" [disabled]="isSystemCollection()"></button>
         </div>
 
         <div class="section-title">
@@ -108,8 +108,9 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
             <input class="inp handle-inp"
                    [ngModel]="form().handle"
                    (ngModelChange)="setHandle($event)"
+                   [disabled]="isSystemCollection()"
                    placeholder="auto-generated-from-title"/>
-            @if (handleManual()) {
+            @if (handleManual() && !isSystemCollection()) {
               <button class="btn btn-ghost btn-sm" type="button" (click)="resetHandleToTitle()" title="Reset to auto-generated">
                 <ap-icon name="sync" [size]="12"/>
               </button>
@@ -177,8 +178,14 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         </div>
 
         <div class="mb-24">
-          <div class="row gap-sm mb-16" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
-            <div class="strong">{{ form().productIds.length }} {{ t('collections.products') }}</div>
+          @if (isSystemCollection()) {
+            <div style="padding:24px;border:1px solid var(--border);border-radius:10px;background:var(--bg);">
+              <div class="strong" style="margin-bottom:4px;">All Products is system-managed</div>
+              <div class="muted small">It always reflects the full active catalog, so the product list is read-only here.</div>
+            </div>
+          } @else {
+            <div class="row gap-sm mb-16" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
+              <div class="strong">{{ form().productIds.length }} {{ t('collections.products') }}</div>
             <div class="row gap-sm">
               @if (form().productIds.length > 1) {
                 <div class="view-toggle">
@@ -190,16 +197,16 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                   </button>
                 </div>
               }
-              <button class="btn btn-outline btn-sm" (click)="pickingProducts.set(true)">{{ t('collections.drawer.linkProducts') }}</button>
+                <button class="btn btn-outline btn-sm" (click)="pickingProducts.set(true)">{{ t('collections.drawer.linkProducts') }}</button>
             </div>
-          </div>
-
-          @if (form().productIds.length === 0) {
-            <div style="padding:24px;border:1px solid var(--border);border-radius:10px;text-align:center;background:var(--bg);">
-              <div class="muted mb-8"><ap-icon name="collections" [size]="24"/></div>
-              <div class="strong">{{ t('collections.drawer.noProducts') }}</div>
-              <div class="muted small">{{ t('collections.drawer.noProducts.sub') }}</div>
             </div>
+  
+            @if (form().productIds.length === 0) {
+              <div style="padding:24px;border:1px solid var(--border);border-radius:10px;text-align:center;background:var(--bg);">
+                <div class="muted mb-8"><ap-icon name="collections" [size]="24"/></div>
+                <div class="strong">{{ t('collections.drawer.noProducts') }}</div>
+                <div class="muted small">{{ t('collections.drawer.noProducts.sub') }}</div>
+              </div>
           } @else if (reorderView() === 'list') {
             <!-- List view: explicit drag handle + up/down buttons for precise reordering -->
             <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
@@ -227,28 +234,29 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                 </div>
               }
             </div>
-          } @else {
+            } @else {
             <!-- Grid view: drag the card -->
-            <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
-            <div class="grid-cards collection-products-grid" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
-              @for (p of linkedProducts(); track p.id; let i = $index) {
-                <div class="prod-card collection-prod"
-                     draggable="true"
-                     (dragstart)="onProductDragStart(i, $event)"
-                     (dragover)="onProductDragOver($event)"
-                     (drop)="onProductDrop(i, $event)">
-                  <div class="prod-img">
-                    <img [src]="p.image" [alt]="p.name"/>
-                    <span class="prod-3d-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
-                    <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)"><ap-icon name="x" [size]="12"/></button>
+              <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
+              <div class="grid-cards collection-products-grid" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
+                @for (p of linkedProducts(); track p.id; let i = $index) {
+                  <div class="prod-card collection-prod"
+                       draggable="true"
+                       (dragstart)="onProductDragStart(i, $event)"
+                       (dragover)="onProductDragOver($event)"
+                       (drop)="onProductDrop(i, $event)">
+                    <div class="prod-img">
+                      <img [src]="p.image" [alt]="p.name"/>
+                      <span class="prod-3d-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
+                      <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)"><ap-icon name="x" [size]="12"/></button>
+                    </div>
+                    <div class="prod-body">
+                      <div class="prod-name">{{ p.name }}</div>
+                      <div class="prod-sku">{{ p.sku }}</div>
+                    </div>
                   </div>
-                  <div class="prod-body">
-                    <div class="prod-name">{{ p.name }}</div>
-                    <div class="prod-sku">{{ p.sku }}</div>
-                  </div>
-                </div>
-              }
-            </div>
+                }
+              </div>
+            }
           }
         </div>
 
@@ -257,18 +265,20 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           <span>{{ t('product.section.danger') }}</span>
         </div>
 
-        <div class="danger-zone mb-24">
-          <div style="flex:1;min-width:0;">
-            <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">{{ t('collections.section.danger.title') }}</div>
+        @if (!isSystemCollection()) {
+          <div class="danger-zone mb-24">
+            <div style="flex:1;min-width:0;">
+              <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">{{ t('collections.section.danger.title') }}</div>
+            </div>
+            <button class="btn btn-danger" [disabled]="deleting()" (click)="onDelete()">
+              @if (deleting()) {
+                <ap-spinner/> {{ t('common.working') }}
+              } @else {
+                <ap-icon name="trash" [size]="12"/> {{ t('product.delete.button') }}
+              }
+            </button>
           </div>
-          <button class="btn btn-danger" [disabled]="deleting()" (click)="onDelete()">
-            @if (deleting()) {
-              <ap-spinner/> {{ t('common.working') }}
-            } @else {
-              <ap-icon name="trash" [size]="12"/> {{ t('product.delete.button') }}
-            }
-          </button>
-        </div>
+        }
       </div>
     </div>
 
@@ -492,6 +502,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     const idx = this.currentIndex();
     return idx >= 0 && idx < this._collections().length - 1;
   });
+  readonly isSystemCollection = computed(() => this.collection?.handle === 'all-products');
 
   readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
@@ -526,6 +537,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   }
 
   readonly linkedProducts = computed(() => {
+    if (this.isSystemCollection()) return [];
     // Render in the order saved on `productIds` so drag-to-reorder is
     // meaningful for storefront display order.
     const ids = this.form().productIds;
@@ -619,10 +631,12 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   toggle(k: 'hidden'): void { this.set(k, !this.form()[k] as never); }
 
   removeProduct(id: string): void {
+    if (this.isSystemCollection()) return;
     this.set('productIds', this.form().productIds.filter(pid => pid !== id));
   }
 
   toggleProduct(id: string): void {
+    if (this.isSystemCollection()) return;
     const ids = this.form().productIds;
     if (ids.includes(id)) this.set('productIds', ids.filter(pid => pid !== id));
     else this.set('productIds', [...ids, id]);
@@ -719,12 +733,13 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     this.saveState.set('saving');
 
     const f = this.form();
+    const system = this.isSystemCollection();
     const payload = {
       title: f.title,
       handle: f.handle || undefined,
       description: f.description,
       imageUrl: f.imageUrl,
-      productIds: f.productIds,
+      productIds: system ? [] : f.productIds,
       hidden: f.hidden,
       parentId: f.parentId,
     };
@@ -759,6 +774,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   }
 
   async onDelete(): Promise<void> {
+    if (this.isSystemCollection()) return;
     if (this.deleting()) return;
     const ok = await this.confirm.ask({
       title: this.t('collections.deleteConfirm.title'),

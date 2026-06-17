@@ -43,6 +43,7 @@ export interface Collection {
   productIds: string[];
   hidden: boolean;
   parentId?: string | null;
+  system?: boolean;
 }
 
 export interface MediaFile {

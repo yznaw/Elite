@@ -23,7 +23,7 @@ type StorySubTab = 'hero' | 'hero-facts' | 'intro' | 'chapters' | 'quote' | 'ate
 type ContactSubTab = 'header' | 'info' | 'phone';
 
 // ── Content data shapes (mirrors server defaults) ─────────────────────
-interface HeroCallout   { id: string; titleAr: string; subtitleEn: string; thumbnail: string; alt: string; }
+interface HeroCallout   { id: string; titleEn: string; titleAr: string; subtitleEn: string; subtitleAr: string; thumbnail: string; alt: string; }
 interface HeroSliderItem { id: string; name: string; subtitle: string; imageUrl: string; alt: string; callouts: HeroCallout[]; }
 interface PromiseCard   { id: string; icon: string; labelEn: string; labelAr: string; subEn: string; subAr: string; }
 interface StatItem      { id: string; value: string; labelEn: string; labelAr: string; }
@@ -283,8 +283,10 @@ interface StorefrontContent {
                             </button>
                           </div>
                           <div class="callout-row__fields">
+                            <label><span class="lbl">English label</span><input class="inp inp-sm" [ngModel]="callout.titleEn" (ngModelChange)="patchCallout(i,ci,'titleEn',$event)"/></label>
                             <label><span class="lbl">Arabic label</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.titleAr" (ngModelChange)="patchCallout(i,ci,'titleAr',$event)"/></label>
-                            <label><span class="lbl">English label</span><input class="inp inp-sm" [ngModel]="callout.subtitleEn" (ngModelChange)="patchCallout(i,ci,'subtitleEn',$event)"/></label>
+                            <label><span class="lbl">English subtitle</span><input class="inp inp-sm" [ngModel]="callout.subtitleEn" (ngModelChange)="patchCallout(i,ci,'subtitleEn',$event)"/></label>
+                            <label><span class="lbl">Arabic subtitle</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.subtitleAr" (ngModelChange)="patchCallout(i,ci,'subtitleAr',$event)"/></label>
                             <label>
                               <span class="lbl">Thumbnail</span>
                               <div class="callout-thumb-row">
@@ -2129,7 +2131,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.content.update((c) => {
       const items = c.heroSlider.items.map((item, si) => {
         if (si !== slideIdx) return item;
-        return { ...item, callouts: [...item.callouts, { id: newId, titleAr: '', subtitleEn: '', thumbnail: '', alt: '' }] };
+        return { ...item, callouts: [...item.callouts, { id: newId, titleEn: '', titleAr: '', subtitleEn: '', subtitleAr: '', thumbnail: '', alt: '' }] };
       });
       return { ...c, heroSlider: { ...c.heroSlider, items } };
     });

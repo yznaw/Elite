@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const nbox = require('../lib/nbox');
+const { bookNboxForPaidOrder, nboxQuoteMetadata } = require('../lib/order-delivery');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -40,10 +41,13 @@ function mapPublicCart(cart) {
     subtotal: fromCents(cart.subtotal_cents || 0),
     items: (cart.items || []).map((item) => ({
       id: String(item.product_id),
+      variantId: item.variant_id ? String(item.variant_id) : undefined,
+      sku: item.sku || '',
       name: item.product_name,
       price: fromCents(item.unit_price_cents),
       image: item.metadata?.image || '',
       leather: item.metadata?.leather || '',
+      color: item.metadata?.color || null,
       size: Number(item.size) || 0,
       qty: Number(item.quantity) || 1,
     })),
@@ -96,8 +100,17 @@ function normalizeCheckout(req) {
       fullName: fullName || 'Guest',
       phone: String(shippingAddress.phone || customer.phone || '').trim(),
       line1: String(shippingAddress.line1 || shippingAddress.address || '').trim(),
+      line2: String(shippingAddress.line2 || '').trim(),
+      zone: String(shippingAddress.zone || '').trim(),
+      street: String(shippingAddress.street || '').trim(),
+      building: String(shippingAddress.building || '').trim(),
+      additionalDetails: String(shippingAddress.additionalDetails || shippingAddress.notes || '').trim(),
       city: String(shippingAddress.city || '').trim(),
+      state: String(shippingAddress.state || shippingAddress.region || '').trim(),
+      zip: String(shippingAddress.zip || shippingAddress.postalCode || shippingAddress.postal_code || '').trim(),
       country: String(shippingAddress.country || '').trim(),
+      longitude: shippingAddress.longitude ?? shippingAddress.lng ?? null,
+      latitude: shippingAddress.latitude ?? shippingAddress.lat ?? null,
     },
     items,
     payment: req.body.payment || {},
@@ -107,81 +120,6 @@ function normalizeCheckout(req) {
 
 function isPaidPayment(payment) {
   return String(payment?.status || '').trim().toLowerCase() === 'paid';
-}
-
-function nboxQuoteMetadata(quote) {
-  if (!quote) return null;
-  return {
-    id: quote.id || quote.rateId || null,
-    serviceName: quote.serviceName || quote.service_name || null,
-    serviceCode: quote.serviceCode || quote.service_code || null,
-    amount: Number(quote.amount || 0),
-    currency: quote.currency || 'QAR',
-    eta: quote.eta || null,
-  };
-}
-
-async function attachNboxShipment(client, tenantId, order, checkout) {
-  const shipment = await nbox.createShipment({
-    orderNumber: order.public_number,
-    customer: checkout.customer,
-    shippingAddress: checkout.shippingAddress,
-    items: checkout.items,
-    shippingQuote: checkout.shippingQuote,
-  });
-
-  await client.query(
-    `
-      INSERT INTO shipments (
-        tenant_id, order_id, carrier, service, tracking_number, tracking_url, status, address
-      )
-      VALUES ($1, $2, 'nbox', $3, $4, $5, 'processing', $6::jsonb)
-      ON CONFLICT DO NOTHING
-    `,
-    [
-      tenantId,
-      order.id,
-      shipment.id || checkout.shippingQuote?.serviceName || 'NBOX',
-      shipment.trackingNumber || null,
-      shipment.trackingUrl || null,
-      JSON.stringify(checkout.shippingAddress),
-    ],
-  );
-
-  await client.query(
-    `
-      UPDATE orders
-      SET fulfillment_status = 'processing',
-          metadata = metadata || $3::jsonb
-      WHERE tenant_id = $1 AND id = $2
-    `,
-    [
-      tenantId,
-      order.id,
-      JSON.stringify({
-        nbox: {
-          quote: nboxQuoteMetadata(checkout.shippingQuote),
-          shipment,
-          bookedAt: new Date().toISOString(),
-        },
-      }),
-    ],
-  );
-
-  await client.query(
-    'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)',
-    [
-      tenantId,
-      order.id,
-      'processing',
-      shipment.trackingNumber
-        ? `NBOX shipment booked. Tracking: ${shipment.trackingNumber}`
-        : 'NBOX shipment booked.',
-      JSON.stringify({ provider: 'nbox', shipment }),
-    ],
-  );
-
-  return shipment;
 }
 
 async function upsertCustomer(client, tenantId, customer, shippingAddress) {
@@ -282,6 +220,7 @@ router.post('/current/items', asyncHandler(async (req, res) => {
         JSON.stringify({
           image: req.body.image || null,
           leather: req.body.leather || null,
+          color: req.body.color || null,
         }),
       ],
     );
@@ -302,14 +241,18 @@ router.delete('/current/items/:productId', asyncHandler(async (req, res) => {
     await client.query('BEGIN');
     const cart = await ensureSessionCart(client, req);
     const size = req.query.size == null ? null : String(req.query.size);
+    const variantId = isUuid(req.query.variantId) ? req.query.variantId : null;
+    const color = req.query.color == null ? null : String(req.query.color).trim().toLowerCase();
     await client.query(
       `
         DELETE FROM cart_items
         WHERE cart_id = $1
           AND product_id = $2
           AND ($3::text IS NULL OR size = $3)
+          AND ($4::uuid IS NULL OR variant_id = $4)
+          AND ($4::uuid IS NOT NULL OR $5::text IS NULL OR lower(metadata->>'color') = $5)
       `,
-      [cart.id, req.params.productId, size],
+      [cart.id, req.params.productId, size, variantId, color],
     );
     await refreshCartSubtotal(client, cart.id);
     await client.query('COMMIT');
@@ -350,6 +293,10 @@ router.post('/shipping-quote', asyncHandler(async (req, res) => {
   if (checkout.items.length === 0) errors.push('At least one cart item is required.');
   if (errors.length > 0) return validationError(res, errors);
 
+  if (!nbox.isConfigured()) {
+    return ok(res, { available: true, amount: 0, currency: 'QAR', serviceName: 'Standard Delivery', serviceCode: 'standard' }, 'Delivery quote ready.');
+  }
+
   try {
     const quote = await nbox.getDeliveryQuote(checkout);
     ok(res, quote, quote.available ? 'NBOX delivery quote ready.' : 'NBOX delivery is unavailable.');
@@ -375,7 +322,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     errors.push('Delivery address, city, and country are required.');
   }
   if (checkout.items.length === 0) errors.push('At least one cart item is required.');
-  if (!checkout.shippingQuote?.available) errors.push('A valid NBOX delivery quote is required.');
+  if (nbox.isConfigured() && !checkout.shippingQuote?.available) errors.push('A valid NBOX delivery quote is required.');
   if (errors.length > 0) return validationError(res, errors);
 
   const client = await db.pool.connect();
@@ -393,9 +340,10 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       const qty = Number(item.qty || item.quantity) || 1;
       return sum + toCents(item.price) * qty;
     }, 0);
-    const shippingCents = toCents(checkout.shippingQuote.amount || 0);
+    const shippingCents = toCents(checkout.shippingQuote?.amount || 0);
     const totalCents = subtotalCents + shippingCents;
     const paymentStatus = isPaidPayment(checkout.payment) ? 'paid' : 'pending';
+    const paidAt = paymentStatus === 'paid' ? new Date() : null;
 
     const order = await client.query(
       `
@@ -404,7 +352,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
           payment_status, paid_at, fulfillment_status, subtotal_cents, shipping_cents, total_cents, shipping_address, billing_address,
           metadata
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'paid' THEN now() ELSE NULL END, 'awaiting', $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'awaiting', $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb)
         RETURNING *
       `,
       [
@@ -415,6 +363,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         checkout.customer.name,
         checkout.customer.phone,
         paymentStatus,
+        paidAt,
         subtotalCents,
         shippingCents,
         totalCents,
@@ -458,7 +407,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
           unit,
           unit * qty,
           item.image || null,
-          JSON.stringify({ leather: item.leather || null }),
+          JSON.stringify({ leather: item.leather || null, color: item.color || null }),
         ],
       );
     }
@@ -511,41 +460,13 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     inTransaction = false;
 
     if (paymentStatus === 'paid') {
-      await client.query('BEGIN');
-      inTransaction = true;
-      try {
-        nboxShipment = await attachNboxShipment(client, tenantId, createdOrder, checkout);
-        await client.query('COMMIT');
-        inTransaction = false;
-      } catch (err) {
-        if (inTransaction) {
-          await client.query('ROLLBACK');
-          inTransaction = false;
-        }
-        await client.query(
-          `
-            UPDATE orders
-            SET metadata = metadata || $3::jsonb
-            WHERE tenant_id = $1 AND id = $2
-          `,
-          [
-            tenantId,
-            createdOrder.id,
-            JSON.stringify({
-              nbox: {
-                quote: nboxQuoteMetadata(checkout.shippingQuote),
-                bookingFailedAt: new Date().toISOString(),
-                bookingError: err.message,
-              },
-            }),
-          ],
-        );
-        throw err;
-      }
+      const deliveryResult = await bookNboxForPaidOrder(client, tenantId, createdOrder.id);
+      nboxShipment = deliveryResult.created ? deliveryResult.shipment : null;
     }
 
     created(res, {
-      id: createdOrder.public_number,
+      id: createdOrder.id,                   // UUID — used for payment initiation
+      orderNumber: createdOrder.public_number, // human-readable display reference
       total: fromCents(createdOrder.total_cents),
       delivery: fromCents(createdOrder.shipping_cents),
       payment: paymentStatus,

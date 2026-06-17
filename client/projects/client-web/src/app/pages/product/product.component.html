@@ -3,7 +3,7 @@
     <div class="product-shell">
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <button type="button" (click)="goCollection()">
-          {{ t("product.breadcrumb.collection") }}
+          {{ fromCollectionName() || t("product.breadcrumb.collection") }}
         </button>
         <span>/</span>
         <strong>{{ productName(p) }}</strong>
@@ -29,7 +29,7 @@
               <span class="tag-chip">{{ productTag(p.tag) }}</span>
             }
 
-            <button
+            <!-- <button
               type="button"
               class="wishlist-btn"
               [class.is-active]="wishlisted()"
@@ -37,7 +37,7 @@
               [attr.aria-label]="t('product.aria.wishlist')"
             >
               {{ wishlisted() ? "♥" : "♡" }}
-            </button>
+            </button> -->
 
             @if (gallery().length > 1) {
               <button
@@ -124,14 +124,18 @@
                   <button
                     type="button"
                     class="color-swatch"
-                    [class.is-selected]="selectedColor() === color"
-                    [style.background]="colorHex(color)"
+                    [class.is-selected]="colorSelected(color)"
+                    [class.has-image]="colorSwatchImage(color)"
+                    [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
                     [attr.title]="color"
                     [attr.aria-label]="t('product.color.choose', { color })"
-                    [attr.aria-pressed]="selectedColor() === color"
+                    [attr.aria-pressed]="colorSelected(color)"
                     (click)="selectProductColor(color)"
                     (keydown)="onProductColorKeydown(color, $event)"
                   >
+                    @if (colorSwatchImage(color); as swatchImage) {
+                      <img [src]="swatchImage" [alt]="color" loading="lazy" decoding="async" />
+                    }
                     <span class="sr-only">{{ color }}</span>
                   </button>
                 }
@@ -143,7 +147,7 @@
             <div id="size-section" class="size-section">
               <div class="section-label">
                 <span>{{ t("product.size.label") }}</span>
-                <button type="button">{{ t("product.size.guide") }}</button>
+                <button type="button" (click)="openSizeGuide()">{{ t("product.size.guide") }}</button>
               </div>
 
               <button
@@ -157,18 +161,20 @@
               </button>
 
               <div class="size-options">
-                @for (s of p.sizes; track s) {
+                @for (s of availableSizes(); track s.size) {
                   <button
                     type="button"
                     class="size-btn"
-                    [class.active]="selectedSize() === s"
-                    [class.out-of-stock]="!sizeInStock(p, s)"
-                    [attr.aria-pressed]="selectedSize() === s"
-                    (click)="selectSize(s)"
+                    [class.active]="selectedSize() === s.size"
+                    [class.unavailable]="!s.available"
+                    [class.out-of-stock]="s.available && !s.inStock"
+                    [disabled]="!s.available"
+                    [attr.aria-pressed]="selectedSize() === s.size"
+                    (click)="selectSize(s.size)"
                   >
-                    <span class="size-value">{{ s }}</span>
+                    <span class="size-value">{{ s.size }}</span>
                     <span class="size-state" aria-hidden="true">
-                      {{ selectedSize() === s ? "✓" : "" }}
+                      {{ selectedSize() === s.size ? "✓" : "" }}
                     </span>
                   </button>
                 }
@@ -204,18 +210,20 @@
                     </button>
                   </div>
                   <div class="size-list">
-                    @for (s of p.sizes; track s) {
+                    @for (s of availableSizes(); track s.size) {
                       <button
                         type="button"
                         class="size-btn"
-                        [class.active]="selectedSize() === s"
-                        [class.out-of-stock]="!sizeInStock(p, s)"
-                        [attr.aria-pressed]="selectedSize() === s"
-                        (click)="selectSize(s)"
+                        [class.active]="selectedSize() === s.size"
+                        [class.unavailable]="!s.available"
+                        [class.out-of-stock]="s.available && !s.inStock"
+                        [disabled]="!s.available"
+                        [attr.aria-pressed]="selectedSize() === s.size"
+                        (click)="selectSize(s.size)"
                       >
-                        <span class="size-value">{{ s }}</span>
+                        <span class="size-value">{{ s.size }}</span>
                         <span class="size-state" aria-hidden="true">{{
-                          selectedSize() === s ? "✓" : ""
+                          selectedSize() === s.size ? "✓" : ""
                         }}</span>
                       </button>
                     }
@@ -248,7 +256,7 @@
 
           <div class="cta-stack">
             @if (selectedSizeInStock()) {
-              <button type="button" class="add-cart-btn" (click)="add()">
+              <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart" [attr.data-track-product]="p.id">
                 @if (addedFeedback()) {
                   <span>✓ {{ t("product.cta.added") }}</span>
                 } @else {
@@ -256,7 +264,7 @@
                   <small>{{ price(p.price * qty()) }}</small>
                 }
               </button>
-              <button type="button" class="buy-now-btn" (click)="buyNow()">
+              <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now" [attr.data-track-product]="p.id">
                 <span>{{ t("product.cta.buyNow") }}</span>
                 <small>{{ price(p.price * qty()) }}</small>
               </button>
@@ -348,6 +356,58 @@
         </article>
       </section>
 
+      @if (sizeGuideOpen()) {
+        <div
+          class="size-guide-modal"
+          role="dialog"
+          aria-modal="true"
+          [attr.aria-label]="t('product.size.guide')"
+        >
+          <button
+            type="button"
+            class="size-guide-backdrop"
+            (click)="closeSizeGuide()"
+            [attr.aria-label]="t('common.close')"
+          ></button>
+
+          <section class="size-guide-panel">
+            <div class="size-guide-head">
+              <div>
+                <span>{{ t("product.size.label") }}</span>
+                <h2>{{ t("product.size.guide") }}</h2>
+              </div>
+              <button
+                type="button"
+                class="size-guide-close"
+                (click)="closeSizeGuide()"
+                [attr.aria-label]="t('common.close')"
+              >
+                ×
+              </button>
+            </div>
+
+            @if (sizeGuideLoading()) {
+              <p class="size-guide-state">{{ t("product.size.guideLoading") }}</p>
+            } @else if (sizeGuideError()) {
+              <p class="size-guide-state">{{ sizeGuideError() }}</p>
+            } @else {
+              <div class="size-guide-list">
+                @for (set of sizeSets(); track set.id) {
+                  <article class="size-guide-card">
+                    <h3>{{ set.name }}</h3>
+                    <div class="size-guide-chips">
+                      @for (size of set.sizes; track size) {
+                        <span>EU {{ size }}</span>
+                      }
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+          </section>
+        </div>
+      }
+
       @if (recommendedProducts().length > 0) {
         <section class="related-section" aria-labelledby="related-title">
           <div class="related-head">
@@ -391,14 +451,14 @@
 
     <div class="sticky-atc" id="sticky-atc">
       @if (selectedSizeInStock()) {
-        <button type="button" class="add-cart-btn" (click)="add()">
+        <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart-sticky" [attr.data-track-product]="p.id">
           @if (addedFeedback()) {
             <ng-container>{{ t("product.sticky.added") }}</ng-container>
           } @else {
             <ng-container>{{ t("product.sticky.addToCart") }}</ng-container>
           }
         </button>
-        <button type="button" class="buy-now-btn" (click)="buyNow()">
+        <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now-sticky" [attr.data-track-product]="p.id">
           {{ t("product.sticky.buyNow") }}
         </button>
       } @else {
@@ -418,7 +478,9 @@
           <p>{{ productError() || "Product not found." }}</p>
           <div class="product-state__actions">
             <button type="button" (click)="retryProduct()">Try again</button>
-            <button type="button" (click)="goCollection()">Back to collection</button>
+            <button type="button" (click)="goCollection()">
+              Back to collection
+            </button>
           </div>
         }
       </section>

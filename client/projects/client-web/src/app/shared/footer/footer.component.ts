@@ -6,6 +6,7 @@ import { I18nService } from '../../services/i18n.service';
 interface FooterLink {
   labelKey: string;
   path: string;
+  queryParams?: Record<string, string>;
 }
 
 interface FooterColumn {
@@ -34,7 +35,7 @@ interface FooterColumn {
           <div class="footer-column">
             <div class="footer-column-title">{{ t(col.titleKey) }}</div>
             @for (l of col.links; track l.labelKey) {
-              <a [routerLink]="l.path" class="footer-link">
+              <a [routerLink]="l.path" [queryParams]="l.queryParams || null" class="footer-link">
                 {{ t(l.labelKey) }}
               </a>
             }
@@ -46,10 +47,13 @@ interface FooterColumn {
 
       <div class="footer-bottom">
         <p>
-          {{ t('footer.copyright') }}
+          {{ t('footer.copyright', { year: currentYear }) }}
         </p>
         <p>
           {{ t('footer.cities') }}
+        </p>
+        <p>
+          {{ t('footer.poweredBy') }}
         </p>
       </div>
     </footer>
@@ -215,16 +219,17 @@ interface FooterColumn {
 })
 export class FooterComponent {
   private readonly i18n = inject(I18nService);
-  readonly t = (key: string): string => this.i18n.t(key);
+  readonly t = this.i18n.t;
+  readonly currentYear = new Date().getFullYear();
 
   readonly columns: FooterColumn[] = [
     {
       titleKey: 'footer.col.collection',
       links: [
-        { labelKey: 'footer.link.allPieces', path: '/collection' },
-        { labelKey: 'footer.link.newArrivals', path: '/collection' },
-        { labelKey: 'footer.link.signature', path: '/collection' },
-        { labelKey: 'footer.link.limitedEdition', path: '/collection' },
+        { labelKey: 'footer.link.allPieces', path: '/collection/all-products' },
+        { labelKey: 'footer.link.newArrivals', path: '/collection/all-products', queryParams: { sort: 'Newest' } },
+        { labelKey: 'footer.link.signature', path: '/collection/all-products', queryParams: { tag: 'signature' } },
+        { labelKey: 'footer.link.limitedEdition', path: '/collection/all-products', queryParams: { tag: 'limited' } },
       ],
     },
     {

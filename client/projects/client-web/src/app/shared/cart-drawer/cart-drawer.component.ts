@@ -34,7 +34,7 @@ import { I18nService } from '../../services/i18n.service';
                 </p>
               </div>
             } @else {
-              @for (item of cart.items(); track item.id + '-' + item.size; let idx = $index) {
+              @for (item of cart.items(); track item.id + '-' + item.size + '-' + (item.variantId || item.color || ''); let idx = $index) {
                 <div
                   style="padding: 20px 28px; border-bottom: 1px solid var(--border2); display: flex; gap: 16px; align-items: flex-start; animation: fadeUp 0.4s ease both;"
                   [style.animation-delay]="(idx * 0.06) + 's'"
@@ -49,7 +49,7 @@ import { I18nService } from '../../services/i18n.service';
                       {{ itemName(item) }}
                     </div>
                     <div style="font-family: var(--ff-sans); font-size: 10px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px;">
-                      {{ t('cart.size') }} {{ item.size }} · {{ leather(item.leather) }}
+                      {{ itemDetails(item) }}
                     </div>
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                       <span style="font-family: var(--ff-sans); font-size: 13px; color: var(--gold);">
@@ -59,7 +59,7 @@ import { I18nService } from '../../services/i18n.service';
                         <span style="font-family: var(--ff-sans); font-size: 12px; color: var(--cream-dim);">
                           {{ t('cart.qty') }} {{ item.qty }}
                         </span>
-                        <button (click)="cart.remove(item.id, item.size)"
+                        <button (click)="cart.remove(item.id, item.size, item.variantId, item.color)"
                           style="background: none; border: none; cursor: pointer; color: var(--muted); font-size: 12px; padding: 2px 6px; transition: color 0.2s;">
                           {{ t('cart.remove') }}
                         </button>
@@ -84,7 +84,7 @@ import { I18nService } from '../../services/i18n.service';
 
               <div class="divider" style="margin-bottom: 20px;"></div>
 
-              <button class="btn-gold" (click)="goToCheckout()"
+              <button class="btn-gold" (click)="goToCheckout()" data-track="cart-checkout"
                 style="width: 100%; padding: 16px; font-size: 11px; letter-spacing: 0.16em;">
                 {{ t('cart.proceedToCheckout') }}
               </button>
@@ -138,5 +138,13 @@ export class CartDrawerComponent {
 
   leather(value: string): string {
     return this.i18n.productLeather(value);
+  }
+
+  itemDetails(item: { size: number; color?: string | null; leather: string }): string {
+    return [
+      `${this.t('cart.size')} ${item.size}`,
+      item.color,
+      this.leather(item.leather),
+    ].filter(Boolean).join(' · ');
   }
 }

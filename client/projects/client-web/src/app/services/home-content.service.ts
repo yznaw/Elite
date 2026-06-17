@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { DEFAULT_HOME_CONTENT, HomeContentData } from '../models/home-content.model';
+import { EMPTY_HOME_CONTENT, HomeContentData, createEmptyHomeContent } from '../models/home-content.model';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -31,13 +31,17 @@ const DEFAULT_HOME_LAYOUT: HomeLayoutSection[] = [
 export class HomeContentService {
   private readonly http = inject(HttpClient);
   private readonly apiBase = this.resolveApiBase();
-  private readonly _contentData = signal<HomeContentData>(this.cloneContent(DEFAULT_HOME_CONTENT));
-  private readonly _layoutSections = signal<HomeLayoutSection[]>(this.cloneLayout(DEFAULT_HOME_LAYOUT));
+  private readonly _contentData = signal<HomeContentData>(this.cloneContent(EMPTY_HOME_CONTENT));
+  private readonly _layoutSections = signal<HomeLayoutSection[]>([]);
+  private readonly _loading = signal(true);
+  private readonly _loaded = signal(false);
   private readonly _previewToken = signal<string | null>(this.detectPreviewToken());
   private loadPromise: Promise<HomeContentData> | null = null;
 
   readonly contentData = this._contentData.asReadonly();
   readonly layoutSections = this._layoutSections.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly loaded = this._loaded.asReadonly();
   /** Non-null when the storefront is rendering a preview draft. */
   readonly previewToken = this._previewToken.asReadonly();
   readonly isPreviewMode = computed(() => this._previewToken() !== null);
@@ -48,6 +52,7 @@ export class HomeContentService {
     if (token) {
       // Preview mode: never cache — always fetch the latest saved draft
       // so re-opening preview always reflects the most recent Save Draft.
+      this._loading.set(true);
       const bust = `&t=${Date.now()}`;
       return firstValueFrom(
         this.http.get<ApiResponse<HomeContentData>>(
@@ -55,10 +60,14 @@ export class HomeContentService {
         ),
       )
         .then((res) => {
-          if (res.data?.hero) this._contentData.set(this.normalizeContentImages(res.data));
+          if (res.data) this._contentData.set(this.normalizeContentImages(res.data));
+          this._loaded.set(true);
           return this._contentData();
         })
-        .catch(() => this._contentData());
+        .catch(() => this._contentData())
+        .finally(() => {
+          this._loading.set(false);
+        });
     }
 
     if (force) this.loadPromise = null;
@@ -66,6 +75,8 @@ export class HomeContentService {
 
     // Normal mode: load live content + layout
     const bust = force ? `?t=${Date.now()}` : '';
+    this._loading.set(true);
+    this._loaded.set(false);
 
     this.loadPromise = Promise.allSettled([
       firstValueFrom(this.http.get<ApiResponse<HomeContentData>>(`${this.apiBase}/storefront-content${bust}`)),
@@ -73,7 +84,7 @@ export class HomeContentService {
     ])
       .then(([contentResult, layoutResult]) => {
         const content =
-          contentResult.status === 'fulfilled' && contentResult.value.data?.hero
+          contentResult.status === 'fulfilled' && contentResult.value.data
             ? contentResult.value.data
             : this._contentData();
 
@@ -83,9 +94,13 @@ export class HomeContentService {
           this._layoutSections.set(this.normalizeLayout(layoutResult.value.data?.blocks));
         }
 
+        this._loaded.set(true);
         return this._contentData();
       })
-      .catch(() => this._contentData());
+      .catch(() => this._contentData())
+      .finally(() => {
+        this._loading.set(false);
+      });
 
     return this.loadPromise;
   }
@@ -112,10 +127,6 @@ export class HomeContentService {
     return JSON.parse(JSON.stringify(content)) as HomeContentData;
   }
 
-  private cloneLayout(layout: HomeLayoutSection[]): HomeLayoutSection[] {
-    return layout.map((s) => ({ ...s }));
-  }
-
   private normalizeLayout(blocks: StorefrontSnapshot['blocks'] | undefined): HomeLayoutSection[] {
     const allowed = new Set(DEFAULT_HOME_LAYOUT.map((s) => s.id));
     const incoming = Array.isArray(blocks) ? blocks : [];
@@ -128,11 +139,11 @@ export class HomeContentService {
         return { ...fallback, title: b.title || fallback.title, visible: b.visible !== false };
       });
     const missing = DEFAULT_HOME_LAYOUT.filter((s) => !ordered.some((b) => b.id === s.id));
-    return [...ordered, ...this.cloneLayout(missing)];
+    return [...ordered, ...missing.map((s) => ({ ...s }))];
   }
 
   private normalizeContentImages(content: HomeContentData): HomeContentData {
-    const fallback = this.cloneContent(DEFAULT_HOME_CONTENT);
+    const fallback = this.cloneContent(createEmptyHomeContent());
     const next = this.cloneContent({
       ...fallback,
       ...content,
@@ -141,7 +152,7 @@ export class HomeContentService {
       heroSlider: {
         ctaEn: content.heroSlider?.ctaEn || fallback.heroSlider.ctaEn,
         ctaAr: content.heroSlider?.ctaAr || fallback.heroSlider.ctaAr,
-        items: Array.isArray(content.heroSlider?.items) && content.heroSlider.items.length > 0
+        items: Array.isArray(content.heroSlider?.items)
           ? content.heroSlider.items.map((item) => ({
               ...item,
               callouts: Array.isArray(item.callouts) ? item.callouts : [],
@@ -161,19 +172,19 @@ export class HomeContentService {
       story: {
         ...fallback.story,
         ...(content.story || {}),
-        heroFacts: Array.isArray(content.story?.heroFacts) && content.story.heroFacts.length > 0
+        heroFacts: Array.isArray(content.story?.heroFacts)
           ? content.story.heroFacts
           : fallback.story.heroFacts,
         hero:     { ...fallback.story.hero,     ...(content.story?.hero     || {}) },
         intro:    { ...fallback.story.intro,    ...(content.story?.intro    || {}) },
-        chapters: Array.isArray(content.story?.chapters) && content.story.chapters.length > 0
+        chapters: Array.isArray(content.story?.chapters)
           ? content.story.chapters
           : fallback.story.chapters,
         quote:    { ...fallback.story.quote,    ...(content.story?.quote    || {}) },
         atelier:  {
           ...fallback.story.atelier,
           ...(content.story?.atelier || {}),
-          items: Array.isArray(content.story?.atelier?.items) && content.story!.atelier.items.length > 0
+          items: Array.isArray(content.story?.atelier?.items)
             ? content.story!.atelier.items
             : fallback.story.atelier.items,
         },
@@ -190,6 +201,8 @@ export class HomeContentService {
       imageUrl: this.resolveMediaUrl(item.imageUrl),
       callouts: (item.callouts ?? []).map((cl) => ({
         ...cl,
+        titleEn: cl.titleEn || cl.subtitleEn || cl.titleAr || '',
+        subtitleAr: cl.subtitleAr || '',
         thumbnail: this.resolveMediaUrl(cl.thumbnail),
       })),
     }));

@@ -16,16 +16,16 @@ const WEBHOOK_URL = `${BASE_URL}/api/webhooks/nbox`;
 let passed = 0;
 let failed = 0;
 
-function sign(body, secret, { withTimestamp = false } = {}) {
+function sign(body, secret, { withTimestamp = true, timestamp = new Date().toISOString(), encoding = 'hex' } = {}) {
   const raw = typeof body === 'string' ? body : JSON.stringify(body);
   const buf = Buffer.from(raw, 'utf8');
   if (withTimestamp) {
-    const ts = Math.floor(Date.now() / 1000).toString();
+    const ts = timestamp;
     const payload = Buffer.concat([Buffer.from(`${ts}.`, 'utf8'), buf]);
-    const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    const sig = crypto.createHmac('sha256', secret).update(payload).digest(encoding);
     return { sig, ts };
   }
-  const sig = crypto.createHmac('sha256', secret).update(buf).digest('hex');
+  const sig = crypto.createHmac('sha256', secret).update(buf).digest(encoding);
   return { sig, ts: null };
 }
 
@@ -55,36 +55,30 @@ function assert(label, condition, actual) {
 
 function deliveredPayload(orderNumber = 'TEST-999') {
   return {
-    event: 'shipment.delivered',
+    event: 'shipment.update',
     id: `evt-${Date.now()}`,
     data: {
-      shipment: {
-        id: 'shp-abc-123',
-        status: 'delivered',
-        tracking_number: 'NBOX123456',
-        tracking_url: 'https://track.nbox.qa/NBOX123456',
-        carrier: 'NBOX',
-        service: 'Standard',
-      },
-      order: {
-        order_number: orderNumber,
-        reference: orderNumber,
-      },
+      status_event: 'delivered',
+      shipment_id: 'shp-abc-123',
+      order_reference: orderNumber,
+      awb: 'NBOX123456',
+      tracking_url: 'https://nbox.now/track/NBOX123456',
+      carrier: 'NBOX',
+      status: 'delivered',
     },
   };
 }
 
 function inTransitPayload(orderNumber = 'TEST-999') {
   return {
-    event: 'shipment.in_transit',
+    event: 'shipment.update',
     id: `evt-transit-${Date.now()}`,
     data: {
-      order: { order_number: orderNumber },
-      shipment: {
-        status: 'in_transit',
-        tracking_number: 'NBOX654321',
-        carrier: 'NBOX',
-      },
+      status_event: 'in_transit',
+      order_reference: orderNumber,
+      shipment_id: 'shp-transit-123',
+      awb: 'NBOX654321',
+      carrier: 'NBOX',
     },
   };
 }
@@ -118,7 +112,11 @@ async function run() {
   // ── 2. Wrong signature ────────────────────────────────────────────────────
   console.log('\n2. Wrong signature');
   {
-    const { status, data } = await post(deliveredPayload(), { 'x-nbox-signature': 'deadbeef' });
+    const { ts } = sign(deliveredPayload(), SECRET);
+    const { status, data } = await post(deliveredPayload(), {
+      'x-nbox-signature': 'deadbeef',
+      'x-nbox-timestamp': ts,
+    });
     assert('401 invalid signature', status === 401, status);
     assert('message mentions invalid', data?.message?.toLowerCase().includes('invalid'), data?.message);
   }
@@ -128,8 +126,13 @@ async function run() {
   {
     const body = deliveredPayload('ORDER-DOES-NOT-EXIST');
     const raw = JSON.stringify(body);
-    const { sig } = sign(raw, SECRET);
-    const { status, data } = await post(raw, { 'x-nbox-signature': sig });
+    const { sig, ts } = sign(raw, SECRET);
+    const { status, data } = await post(raw, {
+      'x-nbox-signature': sig,
+      'x-nbox-timestamp': ts,
+      'x-nbox-event-type': 'shipment.update',
+      'x-nbox-delivery-id': `test-${Date.now()}`,
+    });
     assert('200 or 202 accepted', [200, 202].includes(status), status);
     assert('success: true', data?.success === true, data?.success);
   }
@@ -139,9 +142,12 @@ async function run() {
   {
     const body = inTransitPayload('NO-SUCH-ORDER');
     const raw = JSON.stringify(body);
-    const buf = Buffer.from(raw, 'utf8');
-    const sig = crypto.createHmac('sha256', SECRET).update(buf).digest('base64');
-    const { status, data } = await post(raw, { 'x-nbox-webhook-signature': sig });
+    const { sig, ts } = sign(raw, SECRET, { encoding: 'base64' });
+    const { status, data } = await post(raw, {
+      'x-nbox-webhook-signature': sig,
+      'x-nbox-timestamp': ts,
+      'x-nbox-event-type': 'shipment.update',
+    });
     assert('200 or 202 accepted', [200, 202].includes(status), status);
     assert('success: true', data?.success === true, data?.success);
   }
@@ -151,7 +157,7 @@ async function run() {
   {
     const body = deliveredPayload('NO-ORDER-TS');
     const raw = JSON.stringify(body);
-    const { sig, ts } = sign(raw, SECRET, { withTimestamp: true });
+    const { sig, ts } = sign(raw, SECRET);
     const { status, data } = await post(raw, {
       'x-nbox-signature': sig,
       'x-nbox-timestamp': ts,
@@ -165,8 +171,11 @@ async function run() {
   {
     const body = deliveredPayload('NO-ORDER-PREFIX');
     const raw = JSON.stringify(body);
-    const { sig } = sign(raw, SECRET);
-    const { status, data } = await post(raw, { 'x-hub-signature-256': `sha256=${sig}` });
+    const { sig, ts } = sign(raw, SECRET);
+    const { status, data } = await post(raw, {
+      'x-hub-signature-256': `sha256=${sig}`,
+      'x-nbox-timestamp': ts,
+    });
     assert('200 or 202 accepted', [200, 202].includes(status), status);
     assert('success: true', data?.success === true, data?.success);
   }
@@ -176,13 +185,16 @@ async function run() {
   {
     const body = { status: 'delivered' };
     const raw = JSON.stringify(body);
-    const { sig } = sign(raw, SECRET);
-    const { status, data } = await post(raw, { 'x-nbox-signature': sig });
+    const { sig, ts } = sign(raw, SECRET);
+    const { status, data } = await post(raw, {
+      'x-nbox-signature': sig,
+      'x-nbox-timestamp': ts,
+    });
     assert('200 or 202 accepted', [200, 202].includes(status), status);
     assert('success: true', data?.success === true, data?.success);
   }
 
-  // ── 8. Status mapping — cancelled ────────────────────────────────────────
+  // ── 8. Status mapping — completed ────────────────────────────────────────
   console.log('\n8. Status mapping — event=shipment.completed → delivered');
   {
     const body = {
@@ -194,13 +206,31 @@ async function run() {
       },
     };
     const raw = JSON.stringify(body);
-    const { sig } = sign(raw, SECRET);
-    const { status, data } = await post(raw, { 'x-nbox-signature': sig });
+    const { sig, ts } = sign(raw, SECRET);
+    const { status, data } = await post(raw, {
+      'x-nbox-signature': sig,
+      'x-nbox-timestamp': ts,
+    });
     assert('200 or 202 accepted', [200, 202].includes(status), status);
   }
 
-  // ── 9. Idempotency — duplicate event ID ──────────────────────────────────
-  console.log('\n9. Idempotency — same eventId sent twice (if order exists in DB)');
+  // ── 9. Old timestamp rejected ─────────────────────────────────────────────
+  console.log('\n9. Old timestamp rejected');
+  {
+    const body = deliveredPayload('NO-ORDER-OLD-TS');
+    const raw = JSON.stringify(body);
+    const timestamp = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { sig, ts } = sign(raw, SECRET, { timestamp });
+    const { status, data } = await post(raw, {
+      'x-nbox-signature': sig,
+      'x-nbox-timestamp': ts,
+    });
+    assert('401 old timestamp', status === 401, status);
+    assert('message mentions timestamp', data?.message?.toLowerCase().includes('timestamp'), data?.message);
+  }
+
+  // ── 10. Idempotency — duplicate event ID ─────────────────────────────────
+  console.log('\n10. Idempotency — same eventId sent twice (if order exists in DB)');
   console.log('   (skipped — needs a real order in the database)');
 
   summary();

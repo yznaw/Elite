@@ -15,7 +15,21 @@ function mapCollection(row) {
     productIds: row.product_ids || [],
     hidden: row.status === 'hidden',
     parentId: row.parent_id || null,
+    system: row.handle === 'all-products',
   };
+}
+
+async function loadAllActiveProductIds(client, tenantId) {
+  const products = await client.query(
+    `
+      SELECT id::text
+      FROM products
+      WHERE tenant_id = $1 AND status <> 'archived'
+      ORDER BY created_at DESC
+    `,
+    [tenantId],
+  );
+  return products.rows.map((row) => row.id);
 }
 
 router.get('/', asyncHandler(async (_req, res) => {
@@ -37,7 +51,15 @@ router.get('/', asyncHandler(async (_req, res) => {
       `,
       [tenant.id],
     );
-    ok(res, result.rows.map(mapCollection));
+    const systemProductIds = result.rows.some((row) => row.handle === 'all-products')
+      ? await loadAllActiveProductIds(client, tenant.id)
+      : [];
+
+    ok(res, result.rows.map((row) => (
+      row.handle === 'all-products'
+        ? { ...mapCollection(row), productIds: systemProductIds }
+        : mapCollection(row)
+    )));
   } finally {
     client.release();
   }
@@ -97,6 +119,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       ? await resolveParentId(client, tenant.id, req.body.parentId, req.params.id)
       : row.parent_id;
 
+    const isSystem = row.handle === 'all-products';
+    const nextStatus = isSystem ? 'active' : ((req.body.hidden ?? row.status === 'hidden') ? 'hidden' : 'active');
     const saved = await client.query(
       `
         UPDATE collections
@@ -113,15 +137,17 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         tenant.id,
         req.params.id,
         title,
-        slugify(req.body.handle || row.handle || title),
+        isSystem ? 'all-products' : slugify(req.body.handle || row.handle || title),
         req.body.description ?? row.description,
-        (req.body.hidden ?? row.status === 'hidden') ? 'hidden' : 'active',
+        nextStatus,
         JSON.stringify({ ...(row.seo || {}), imageUrl: req.body.imageUrl ?? row.seo?.imageUrl ?? null }),
         parentId,
       ],
     );
 
-    const ids = Array.isArray(req.body.productIds)
+    const ids = isSystem
+      ? (await loadAllActiveProductIds(client, tenant.id))
+      : Array.isArray(req.body.productIds)
       ? await replaceProducts(client, tenant.id, req.params.id, req.body.productIds)
       : (await client.query('SELECT product_id::text FROM collection_products WHERE collection_id = $1 ORDER BY sort_order', [req.params.id])).rows.map((r) => r.product_id);
 
@@ -136,14 +162,19 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const client = await db.pool.connect();
-  try {
-    const tenant = await ensureDefaultTenant(client);
-    const result = await client.query(
-      "UPDATE collections SET status = 'archived' WHERE tenant_id = $1 AND id = $2 RETURNING id",
-      [tenant.id, req.params.id],
-    );
-    if (result.rowCount === 0) return notFound(res, 'Collection not found.');
+    const client = await db.pool.connect();
+    try {
+      const tenant = await ensureDefaultTenant(client);
+      const current = await client.query('SELECT id, handle FROM collections WHERE tenant_id = $1 AND id = $2', [tenant.id, req.params.id]);
+      if (current.rowCount === 0) return notFound(res, 'Collection not found.');
+      if (current.rows[0].handle === 'all-products') {
+        return validationError(res, ['The All Products collection cannot be deleted.']);
+      }
+      const result = await client.query(
+        "UPDATE collections SET status = 'archived' WHERE tenant_id = $1 AND id = $2 RETURNING id",
+        [tenant.id, req.params.id],
+      );
+      if (result.rowCount === 0) return notFound(res, 'Collection not found.');
     ok(res, { id: result.rows[0].id }, 'Collection archived.');
   } finally {
     client.release();

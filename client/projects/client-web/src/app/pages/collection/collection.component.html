@@ -16,6 +16,8 @@
             <button
               type="button"
               class="collection-card"
+              [class.collection-card--all]="collection.handle === 'all-products'"
+              [class.collection-card--full]="collection.handle === 'all-products'"
               (click)="selectCollection(collection)"
             >
               @if (collection.imageUrl) {
@@ -61,38 +63,98 @@
               <span>{{ activeFilterCount() }}</span>
             }
           </h1>
+          <div class="filter-bulk-actions" aria-label="Filter group controls">
+            <button
+              type="button"
+              class="filter-icon-action"
+              (click)="expandAllFilters()"
+              aria-label="Expand all filters"
+              title="Expand all"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 8l5 5 5-5" />
+                <path d="M7 13l5 5 5-5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="filter-icon-action"
+              (click)="collapseAllFilters()"
+              aria-label="Collapse all filters"
+              title="Collapse all"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 16l5-5 5 5" />
+                <path d="M7 11l5-5 5 5" />
+              </svg>
+            </button>
+          </div>
           <button type="button" class="filter-close" (click)="closeFilters()">
             Done
           </button>
 
           @for (group of filterGroups(); track group.id) {
-            <div class="filter-group">
-              <h2>{{ group.title }}</h2>
-              @for (option of group.options; track option.value) {
-                <label class="filter-option">
-                  <input
-                    type="checkbox"
-                    [checked]="isFilterSelected(group.id, option.value)"
-                    (change)="toggleFilter(group.id, option.value)"
-                  />
-                  <span>{{ option.label }}</span>
-                  <small>{{ option.count }}</small>
-                </label>
+            <div class="filter-group" [class.is-collapsed]="!isFilterGroupExpanded(group.id)">
+              <button
+                type="button"
+                class="filter-group-toggle"
+                (click)="toggleFilterGroup(group.id)"
+                [attr.aria-expanded]="isFilterGroupExpanded(group.id)"
+                [attr.aria-controls]="filterGroupPanelId(group.id)"
+              >
+                <span>{{ group.title }}</span>
+                @if (selectedFilterCount(group.id) > 0) {
+                  <small>{{ selectedFilterCount(group.id) }}</small>
+                }
+                <span class="filter-group-chevron" aria-hidden="true">⌄</span>
+              </button>
+
+              @if (isFilterGroupExpanded(group.id)) {
+                <div class="filter-options" [id]="filterGroupPanelId(group.id)">
+                  @for (option of group.options; track option.value) {
+                    <label class="filter-option">
+                      <input
+                        type="checkbox"
+                        [checked]="isFilterSelected(group.id, option.value)"
+                        (change)="toggleFilter(group.id, option.value)"
+                      />
+                      <span>{{ option.label }}</span>
+                      <small>{{ option.count }}</small>
+                    </label>
+                  }
+                </div>
               }
             </div>
           }
 
-          <div class="filter-group">
-            <h2>Sort</h2>
-            @for (o of sortOptions; track o) {
-              <label class="filter-option filter-option-sort">
-                <input
-                  type="checkbox"
-                  [checked]="sort() === o"
-                  (change)="setSort(o)"
-                />
-                <span>{{ sortLabel(o) }}</span>
-              </label>
+          <div class="filter-group" [class.is-collapsed]="!isFilterGroupExpanded('sort')">
+            <button
+              type="button"
+              class="filter-group-toggle"
+              (click)="toggleFilterGroup('sort')"
+              [attr.aria-expanded]="isFilterGroupExpanded('sort')"
+              [attr.aria-controls]="filterGroupPanelId('sort')"
+            >
+              <span>Sort</span>
+              @if (sort() !== 'Featured') {
+                <small>1</small>
+              }
+              <span class="filter-group-chevron" aria-hidden="true">⌄</span>
+            </button>
+
+            @if (isFilterGroupExpanded('sort')) {
+              <div class="filter-options" [id]="filterGroupPanelId('sort')">
+                @for (o of sortOptions; track o) {
+                  <label class="filter-option filter-option-sort">
+                    <input
+                      type="checkbox"
+                      [checked]="sort() === o"
+                      (change)="setSort(o)"
+                    />
+                    <span>{{ sortLabel(o) }}</span>
+                  </label>
+                }
+              </div>
             }
           </div>
 
@@ -128,14 +190,14 @@
             </div>
           } @else {
             <div class="product-grid">
-              @for (p of filtered(); track p.id; let i = $index) {
+              @for (p of visibleProducts(); track p.id; let i = $index) {
                 <article
                   class="product-tile"
                   (mouseenter)="hovered.set(p.id)"
-                  (mouseleave)="hovered.set(null)"
+                  (mouseleave)="onProductTileLeave(p)"
                   [style.animation-delay]="i * 0.035 + 's'"
                 >
-                  <button type="button" class="product-link" (click)="goToProduct(p)">
+                  <button type="button" class="product-link" (click)="goToProduct(p)" data-track="product-card" [attr.data-track-product]="p.id">
                     <span class="product-image-wrap">
                       <img
                         [src]="selectedProductImage(p)"
@@ -152,47 +214,56 @@
                       <span class="product-meta"
                         >{{ productStyle(p.style) }} Shoe</span
                       >
-                      @if (productColorNames(p).length > 0) {
-                        <span class="product-colors" aria-label="Available colors">
-                          @for (color of productColorNames(p); track color) {
-                            <span
-                              class="product-color-swatch"
-                              role="button"
-                              tabindex="0"
-                              [class.is-selected]="selectedProductColor(p) === color"
-                              [style.background]="colorHex(color)"
-                              [attr.title]="color"
-                              [attr.aria-label]="color"
-                              [attr.aria-pressed]="selectedProductColor(p) === color"
-                              (click)="selectProductColor(p, color, $event)"
-                              (keydown)="onProductColorKeydown(p, color, $event)"
-                            ></span>
-                          }
-                        </span>
-                      }
                       <span class="product-price">{{ price(p.price) }}</span>
                     </span>
                   </button>
 
+                  @if (productColorNames(p).length > 0) {
+                    <div class="product-colors" aria-label="Available colors">
+                      @for (color of productColorNames(p); track color) {
+                        <button
+                          type="button"
+                          class="product-color-swatch"
+                          [class.is-selected]="colorSelected(p, color)"
+                          [class.has-image]="colorSwatchImage(color)"
+                          [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
+                          [attr.title]="color"
+                          [attr.aria-label]="color"
+                          [attr.aria-pressed]="colorSelected(p, color)"
+                          (mouseenter)="previewProductColor(p, color, $event)"
+                          (focus)="previewProductColor(p, color, $event)"
+                          (click)="selectProductColor(p, color, $event)"
+                        >
+                          @if (colorSwatchImage(color); as swatchImage) {
+                            <img [src]="swatchImage" [alt]="color" loading="lazy" decoding="async" />
+                          }
+                        </button>
+                      }
+                    </div>
+                  }
+
                   <div class="purchase-panel">
                     <div class="size-picker" [attr.aria-label]="t('collection.quickAdd.size')">
-                      <span class="size-label">{{ t("collection.quickAdd.size") }}</span>
-                      <div class="size-options">
-                        @for (size of p.sizes; track size) {
-                          <button
-                            type="button"
-                            class="size-chip"
-                            [class.is-selected]="selectedSize(p) === size"
-                            [attr.aria-label]="t('collection.quickAdd.size') + ' ' + size"
-                            (click)="selectSize(p, size)"
-                          >
-                            {{ size }}
-                          </button>
-                        }
+                      <label class="size-label" [attr.for]="'size-select-' + p.id">
+                        {{ t("collection.quickAdd.size") }}
+                      </label>
+                      <div class="size-select-wrap">
+                        <select
+                          class="size-select"
+                          [id]="'size-select-' + p.id"
+                          [value]="selectedSize(p)"
+                          (change)="selectSize(p, sizeSelectValue($event))"
+                          [attr.aria-label]="t('collection.quickAdd.size')"
+                        >
+                          @for (size of availableSizes(p); track size) {
+                            <option [value]="size">EU {{ size }}</option>
+                          }
+                        </select>
+                        <span class="size-select-arrow" aria-hidden="true">⌄</span>
                       </div>
                     </div>
 
-                    <button type="button" class="quick-add" (click)="addToCart(p)">
+                    <button type="button" class="quick-add" (click)="addToCart(p)" data-track="quick-add" [attr.data-track-product]="p.id">
                       @if (addedProductId() === p.id) {
                         <span>{{ t("collection.quickAdd.added") }}</span>
                         <span class="quick-add-icon">✓</span>
@@ -210,6 +281,32 @@
                 </article>
               }
             </div>
+
+            @if (showMobilePagination()) {
+              <div class="mobile-pagination" aria-label="Collection pages">
+                <button
+                  type="button"
+                  class="mobile-page-btn"
+                  (click)="prevMobilePage()"
+                  [disabled]="mobilePage() === 0"
+                  aria-label="Previous page"
+                >
+                  ←
+                </button>
+                <span class="mobile-page-status">
+                  {{ mobilePage() + 1 }} / {{ mobileTotalPages() }}
+                </span>
+                <button
+                  type="button"
+                  class="mobile-page-btn"
+                  (click)="nextMobilePage()"
+                  [disabled]="mobilePage() >= mobileTotalPages() - 1"
+                  aria-label="Next page"
+                >
+                  →
+                </button>
+              </div>
+            }
           }
         </div>
       </div>

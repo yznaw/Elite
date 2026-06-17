@@ -8,6 +8,7 @@ import { FooterComponent } from './shared/footer/footer.component';
 import { CartDrawerComponent } from './shared/cart-drawer/cart-drawer.component';
 import { LocaleService } from './services/locale.service';
 import { HomeContentService } from './services/home-content.service';
+import { AnalyticsService } from './services/analytics.service';
 
 @Component({
   selector: 'cw-root',
@@ -17,9 +18,15 @@ import { HomeContentService } from './services/home-content.service';
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
-  private readonly router   = inject(Router);
-  private readonly locale   = inject(LocaleService);
-  readonly homeContent      = inject(HomeContentService);
+  private readonly router    = inject(Router);
+  private readonly locale    = inject(LocaleService);
+  private readonly analytics = inject(AnalyticsService);
+  readonly homeContent       = inject(HomeContentService);
+
+  constructor() {
+    // Track real visitors only — never the admin's preview iframe.
+    if (!this.isEmbedded) this.analytics.init();
+  }
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
