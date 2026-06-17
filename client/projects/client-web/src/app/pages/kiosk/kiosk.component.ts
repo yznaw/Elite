@@ -5,12 +5,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { firstValueFrom } from 'rxjs';
 
 type KioskStep = 'welcome' | 'product' | 'rating' | 'message' | 'contact' | 'thanks';
 type KioskLang = 'en' | 'ar';
 
-interface Particle { svg: string; style: string; }
+interface Particle { html: SafeHtml; style: string; }
 
 const PARTICLE_ICONS = [
   // Sandal — sole + three straps
@@ -332,7 +333,7 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
           <!-- Falling particles -->
           <div class="k-particles" aria-hidden="true">
             @for (p of particles(); track $index) {
-              <div class="k-particle" [style]="p.style" [innerHTML]="p.svg"></div>
+              <div class="k-particle" [style]="p.style" [innerHTML]="p.html"></div>
             }
           </div>
           <div class="k-thanks-icon">✓</div>
@@ -341,7 +342,15 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
           <button class="k-thanks-restart" type="button" (click)="restart()">
             {{ s('thanksRestart') }} &nbsp;↺
           </button>
-          <div class="k-thanks-countdown">{{ s('thanksCountdown') }} {{ countdown() }}{{ s('thanksSeconds') }}</div>
+          <div class="k-ring-wrap" aria-label="auto-restart countdown">
+            <svg class="k-ring-svg" viewBox="0 0 60 60">
+              <circle class="k-ring-track" cx="30" cy="30" r="26"/>
+              <circle class="k-ring-fill"  cx="30" cy="30" r="26"
+                      [style.stroke-dashoffset]="ringOffset()"/>
+            </svg>
+            <div class="k-ring-num">{{ countdown() }}</div>
+          </div>
+          <div class="k-ring-label">{{ s('thanksCountdown') }}</div>
         </div>
       }
 
@@ -683,9 +692,32 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
       transition: all .15s;
     }
     .k-thanks-restart:hover { background: rgba(255,255,255,.16); color: #fff; }
-    .k-thanks-countdown {
-      font-size: clamp(9px,1vw,12px); color: rgba(255,255,255,.22);
-      position: relative; z-index: 1;
+    .k-ring-wrap {
+      position: relative; width: clamp(64px,8vw,88px); height: clamp(64px,8vw,88px);
+      margin: clamp(12px,2.5%,28px) auto 6px; z-index: 1;
+    }
+    .k-ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .k-ring-track {
+      fill: none; stroke: rgba(255,255,255,.08); stroke-width: 2.5;
+    }
+    .k-ring-fill {
+      fill: none; stroke: #d4a853; stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-dasharray: 163.36;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.9s linear;
+    }
+    .k-ring-num {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Cormorant Garamond','Georgia',serif;
+      font-size: clamp(18px,3vw,28px); font-style: italic;
+      color: #d4a853; font-weight: 400;
+    }
+    .k-ring-label {
+      font-size: clamp(8px,.9vw,10px); letter-spacing: .16em; text-transform: uppercase;
+      color: rgba(255,255,255,.2); position: relative; z-index: 1;
+      margin-bottom: 4px;
     }
 
     /* ── Falling particles ────────────────── */
@@ -724,8 +756,9 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
   `],
 })
 export class KioskComponent implements OnInit, OnDestroy {
-  private readonly route = inject(ActivatedRoute);
-  private readonly http  = inject(HttpClient);
+  private readonly route     = inject(ActivatedRoute);
+  private readonly http      = inject(HttpClient);
+  private readonly sanitizer = inject(DomSanitizer);
 
   // ── Lang ───────────────────────────────────────────────────
   readonly lang = signal<KioskLang>('en');
@@ -746,8 +779,9 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly contactPhone      = signal('');
   readonly contactEmail      = signal('');
   readonly submitting        = signal(false);
-  readonly countdown         = signal(10);
+  readonly countdown         = signal(5);
   readonly particles         = signal<Particle[]>([]);
+  readonly ringOffset        = computed(() => 163.36 * (1 - this.countdown() / 5));
 
   messageText      = '';
   contactNameText  = '';
@@ -872,7 +906,7 @@ export class KioskComponent implements OnInit, OnDestroy {
       const sw    = Math.round(12 + Math.random() * 28);
       const sz    = Math.round(13 + Math.random() * 20);
       return {
-        svg,
+        html:  this.sanitizer.bypassSecurityTrustHtml(svg),
         style: `left:${x}%;width:${sz}px;height:${sz}px;animation-duration:${dur}s;animation-delay:-${delay}s;--sw:${sw}px`,
       };
     });
@@ -889,7 +923,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.contactPhone.set(''); this.contactPhoneText = '';
     this.contactEmail.set(''); this.contactEmailText = '';
     this.selectedProductId.set(this.preselectedProductId);
-    this.countdown.set(10);
+    this.countdown.set(5);
     this.particles.set([]);
     this.step.set('welcome');
   }
@@ -909,7 +943,7 @@ export class KioskComponent implements OnInit, OnDestroy {
   }
 
   private startCountdown(): void {
-    this.countdown.set(10);
+    this.countdown.set(5);
     this.countdownInterval = setInterval(() => {
       const v = this.countdown() - 1;
       this.countdown.set(v);
