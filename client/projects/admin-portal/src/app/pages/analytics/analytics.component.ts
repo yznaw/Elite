@@ -380,6 +380,15 @@ export class AnalyticsComponent implements OnInit {
 
   readonly costSummary = signal<CostSummary | null>(null);
   readonly costLoading = signal(false);
+  readonly money = (v: number): string => QAR(v);
+  readonly xLabel = (d: Record<string, unknown>): string => {
+    const day = d['day'];
+    if (typeof day !== 'string' || !day) return '';
+    const parsed = new Date(day);
+    return Number.isNaN(parsed.getTime())
+      ? day
+      : parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
 
   ngOnInit(): void {
     this.loadCostSummary();
