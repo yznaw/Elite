@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Elite — Storefront Feedback Integration Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0d0b08; --cream:#eee9df; --gold:#b8924a; --gold2:#c9a96e;
+  --green:#024638; --muted:#8a7a62; --border:rgba(0,0,0,.1);
+  --dk:#0a0c12; --card:#13151f; --cb:rgba(255,255,255,.06);
+  --dim:rgba(255,255,255,.35); --gold-a:rgba(184,146,74,.15);
+}
+html{scroll-behavior:smooth}
+body{font-family:'Montserrat',sans-serif;background:var(--dk);color:#e2e8f0;min-height:100vh}
+
+/* ── Nav ──────────────────────────────────────────── */
+.nav{
+  position:sticky;top:0;z-index:300;
+  background:rgba(10,12,18,.94);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex;align-items:center;padding:0 28px;gap:0;
+  overflow-x:auto;scrollbar-width:none;
+}
+.nav::-webkit-scrollbar{display:none}
+.nav-brand{
+  font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;
+  color:var(--gold);white-space:nowrap;padding-right:24px;margin-right:20px;
+  border-right:1px solid rgba(255,255,255,.07);line-height:60px;flex-shrink:0;
+}
+.nav-badge{
+  font-size:8px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  background:rgba(184,146,74,.15);color:var(--gold);border:1px solid rgba(184,146,74,.3);
+  border-radius:4px;padding:2px 8px;margin-right:20px;white-space:nowrap;
+}
+.tab{
+  line-height:60px;padding:0 18px;font-size:11px;font-weight:600;
+  letter-spacing:.05em;color:var(--dim);border:none;background:none;
+  cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;
+  transition:all .14s;font-family:'Montserrat',sans-serif;
+}
+.tab:hover{color:rgba(255,255,255,.7)}
+.tab.on{color:var(--gold);border-bottom-color:var(--gold)}
+
+/* ── Sections ─────────────────────────────────────── */
+.sec{display:none;max-width:1380px;margin:0 auto;padding:52px 36px 80px}
+.sec.on{display:block}
+@media(max-width:640px){.sec{padding:28px 16px 60px}}
+
+/* ── Headings ─────────────────────────────────────── */
+.sh{margin-bottom:44px}
+.sh-eyebrow{font-size:9px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.sh-title{font-family:'Cormorant Garamond',serif;font-size:clamp(26px,3.5vw,44px);font-weight:300;color:#f1f5f9;line-height:1.15;margin-bottom:10px}
+.sh-sub{font-size:13px;color:var(--dim);line-height:1.7;max-width:660px}
+
+/* ── Cards / boxes ────────────────────────────────── */
+.card{background:var(--card);border:1px solid var(--cb);border-radius:14px;padding:28px 32px;margin-bottom:20px}
+.card-sm{background:var(--card);border:1px solid var(--cb);border-radius:10px;padding:20px 24px}
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(184,146,74,.25),transparent);margin:40px 0}
+
+/* ── Grid helpers ─────────────────────────────────── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:800px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+/* ── Status pills ─────────────────────────────────── */
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;padding:3px 10px;border-radius:99px;
+  border:1px solid;white-space:nowrap}
+.pill-green{background:rgba(74,222,128,.08);color:#4ade80;border-color:rgba(74,222,128,.2)}
+.pill-gold{background:var(--gold-a);color:var(--gold);border-color:rgba(184,146,74,.3)}
+.pill-red{background:rgba(248,113,113,.08);color:#f87171;border-color:rgba(248,113,113,.2)}
+.pill-blue{background:rgba(96,165,250,.08);color:#60a5fa;border-color:rgba(96,165,250,.2)}
+
+/* ── Status dot ───────────────────────────────────── */
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot-green{background:#4ade80;box-shadow:0 0 6px rgba(74,222,128,.5)}
+.dot-red{background:#f87171}
+.dot-amber{background:#fbbf24}
+
+/* ── Code block ───────────────────────────────────── */
+.code{
+  background:#0d0f17;border:1px solid rgba(255,255,255,.07);border-radius:8px;
+  padding:20px 24px;font-family:'SF Mono','Fira Code',monospace;font-size:12.5px;
+  line-height:1.75;color:#c7d0e0;overflow-x:auto;white-space:pre;margin:14px 0;
+}
+.code .kw{color:#7dd3fc} /* keyword */
+.code .str{color:#86efac} /* string */
+.code .cm{color:rgba(255,255,255,.28)} /* comment */
+.code .fn{color:#c084fc} /* function */
+.code .nb{color:#fbbf24} /* number / const */
+
+/* ── Table ────────────────────────────────────────── */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--dim);padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07);text-align:left}
+.tbl td{padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.04);color:#c7d0e0;vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td:first-child{font-family:'SF Mono','Fira Code',monospace;font-size:11.5px;color:#7dd3fc}
+.tbl td.req{color:#f87171;font-size:10px;font-weight:700}
+.tbl td.opt{color:var(--dim);font-size:10px;font-weight:600}
+
+/* ── Concept cards ────────────────────────────────── */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px;margin-bottom:40px}
+@media(max-width:700px){.cgrid{grid-template-columns:1fr}}
+.cc{border-radius:14px;overflow:hidden;border:1px solid var(--cb);background:var(--card);
+  display:flex;flex-direction:column;transition:transform .18s,border-color .18s,box-shadow .18s;cursor:pointer}
+.cc:hover{transform:translateY(-4px);border-color:rgba(184,146,74,.35);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.cc-thumb{height:300px;position:relative;overflow:hidden;flex-shrink:0}
+.cc-body{padding:20px 22px 22px;display:flex;flex-direction:column;gap:8px}
+.cc-num{font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(184,146,74,.55)}
+.cc-name{font-family:'Cormorant Garamond',serif;font-size:21px;font-style:italic;color:#f1f5f9}
+.cc-desc{font-size:11px;color:var(--dim);line-height:1.65}
+.cc-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.cc-tag{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  padding:2px 9px;border-radius:99px;background:var(--gold-a);color:var(--gold);
+  border:1px solid rgba(184,146,74,.22)}
+.cc-tag.g{background:rgba(74,222,128,.08);color:#4ade80;border-color:rgba(74,222,128,.2)}
+.view-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;
+  border-radius:7px;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;cursor:pointer;background:var(--gold-a);
+  border:1px solid rgba(184,146,74,.25);color:var(--gold);transition:all .14s;
+  margin-top:4px;font-family:'Montserrat',sans-serif}
+.view-btn:hover{background:rgba(184,146,74,.25);border-color:var(--gold)}
+
+/* ── Modal ────────────────────────────────────────── */
+.modal{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.86);
+  backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:20px}
+.modal.on{display:flex}
+.mbox{width:100%;max-width:960px;max-height:92vh;overflow-y:auto;border-radius:18px;
+  border:1px solid rgba(255,255,255,.08);background:#13151f;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.mhead{display:flex;align-items:center;justify-content:space-between;padding:18px 26px;
+  border-bottom:1px solid rgba(255,255,255,.06);position:sticky;top:0;background:#13151f;z-index:2}
+.mtitle{font-size:12px;font-weight:700;color:#f1f5f9;letter-spacing:.02em}
+.mclose{width:30px;height:30px;border-radius:7px;border:1px solid rgba(255,255,255,.1);
+  background:transparent;color:var(--dim);cursor:pointer;font-size:15px;
+  display:flex;align-items:center;justify-content:center;transition:all .12s}
+.mclose:hover{background:rgba(255,255,255,.08);color:#fff}
+.mbody{padding:24px 26px}
+.mviews{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+@media(max-width:640px){.mviews{grid-template-columns:1fr}}
+.mlabel{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.mlabel::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.05)}
+
+/* ── Elite storefront tokens ──────────────────────── */
+.sf{background:var(--cream);font-family:'Montserrat',sans-serif;color:var(--ink)}
+.sf-nav{background:var(--green);padding:0 24px;height:46px;display:flex;align-items:center;justify-content:space-between}
+.sf-logo{font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;font-weight:700;color:#d4a853}
+.sf-nav-r{display:flex;gap:16px;font-size:11px;color:rgba(255,255,255,.6)}
+.sf-body{padding:16px 20px}
+.sf-name{font-size:18px;font-weight:700;color:var(--ink);margin-bottom:3px}
+.sf-price{font-size:15px;color:var(--gold);font-weight:600;margin-bottom:14px}
+.sf-accord{border-top:1px solid var(--border)}
+.sf-arow{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);
+  font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+.sf-arow span{color:var(--gold);font-size:13px;font-weight:300}
+.sf-cta{width:100%;padding:13px;background:linear-gradient(135deg,var(--green),#013028);
+  border:none;border-radius:3px;color:#fff;font-size:9px;font-weight:700;
+  letter-spacing:.18em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;margin-top:12px}
+.sf-stars{display:flex;gap:3px;font-size:18px;color:rgba(0,0,0,.12);margin-bottom:8px}
+.sf-stars .on{color:var(--gold)}
+.sf-inp{width:100%;padding:10px 13px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;
+  font-size:12px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);
+  color:var(--ink);outline:none;transition:border-color .15s}
+.sf-inp:focus{border-color:var(--gold);background:#fff}
+.sf-inp::placeholder{color:rgba(26,18,8,.3)}
+.sf-ta{width:100%;padding:11px 13px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;
+  font-size:12px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);
+  color:var(--ink);outline:none;resize:none;transition:border-color .15s}
+.sf-ta:focus{border-color:var(--gold);background:#fff}
+.sf-ta::placeholder{color:rgba(26,18,8,.3)}
+.sf-submit{width:100%;padding:12px;background:linear-gradient(135deg,#c9a96e,#9a7535);
+  border:none;border-radius:4px;color:var(--ink);font-size:9px;font-weight:700;
+  letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;margin-top:8px}
+.sf-skip{background:none;border:none;font-size:10px;color:var(--muted);
+  cursor:pointer;text-decoration:underline;font-family:'Montserrat',sans-serif;margin-top:6px}
+
+/* ── Chrome wrappers ──────────────────────────────── */
+.dframe{border-radius:10px;overflow:hidden;
+  box-shadow:0 16px 48px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04)}
+.mframe{width:340px;border-radius:36px;overflow:hidden;
+  box-shadow:0 0 0 8px #1c1f2e,0 0 0 9px rgba(255,255,255,.05),0 20px 50px rgba(0,0,0,.5)}
+.mframe-nav{background:var(--green);padding:12px 18px 10px;
+  display:flex;align-items:center;justify-content:space-between}
+.mframe-logo{font-family:'Cormorant Garamond',serif;font-size:15px;font-style:italic;color:#d4a853}
+.mframe-icons{font-size:12px;color:rgba(255,255,255,.7);display:flex;gap:8px}
+
+/* ─────────────────────────────────────────────────────────────────
+   CONCEPT A — Collapsible Accordion
+───────────────────────────────────────────────────────────────── */
+.acc-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 0;border-bottom:1px solid var(--border);
+  font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink);cursor:pointer;user-select:none;
+}
+.acc-row .acc-icon{color:var(--gold);font-size:13px;font-weight:300;transition:transform .2s}
+.acc-row.open .acc-icon{transform:rotate(45deg)}
+.acc-panel{display:none;padding:14px 0 6px;border-bottom:1px solid var(--border)}
+.acc-panel.on{display:block}
+.acc-label{font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:8px}
+.acc-stars{display:flex;gap:4px;margin-bottom:12px}
+.acc-star{font-size:24px;color:rgba(0,0,0,.1);cursor:pointer;transition:color .1s;user-select:none}
+.acc-star.on{color:var(--gold)}
+.acc-thanks{padding:14px 0;border-bottom:1px solid var(--border);
+  font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.acc-thanks-icon{width:22px;height:22px;border-radius:50%;
+  background:linear-gradient(135deg,#c9a96e,#9a7535);
+  display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0}
+
+/* ─────────────────────────────────────────────────────────────────
+   CONCEPT B — Sticky Floating Bar
+───────────────────────────────────────────────────────────────── */
+.fbar{
+  position:absolute;bottom:0;left:0;right:0;
+  background:rgba(2,70,56,.97);backdrop-filter:blur(12px);
+  border-top:1px solid rgba(184,146,74,.25);
+  padding:13px 18px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.fbar-text{font-size:10px;font-weight:600;color:#fff;letter-spacing:.04em}
+.fbar-sub{font-size:8px;color:rgba(255,255,255,.4);margin-top:1px}
+.fbar-btn{padding:8px 16px;border-radius:4px;border:1px solid rgba(184,146,74,.5);
+  background:rgba(184,146,74,.14);color:#c9a96e;font-size:8px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;
+  transition:all .14s;white-space:nowrap}
+.fbar-btn:hover{background:rgba(184,146,74,.26)}
+/* Slide-up panel */
+.fslide{
+  position:absolute;inset:0;background:rgba(2,70,56,.98);backdrop-filter:blur(16px);
+  padding:22px 18px;display:flex;flex-direction:column;gap:12px;
+  transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+}
+.fslide.on{transform:translateY(0)}
+.fslide-close{position:absolute;top:12px;right:14px;background:rgba(255,255,255,.1);
+  border:none;border-radius:6px;width:28px;height:28px;color:#fff;cursor:pointer;
+  font-size:13px;display:flex;align-items:center;justify-content:center}
+.fslide-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;color:#fff;line-height:1.2}
+.fslide-sub{font-size:9px;color:rgba(255,255,255,.4);letter-spacing:.04em}
+.fslide-stars{display:flex;gap:4px}
+.fslide-star{font-size:26px;color:rgba(255,255,255,.18);cursor:pointer;transition:color .1s;user-select:none}
+.fslide-star.on{color:#d4a853}
+.fslide-inp{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;
+  padding:10px 13px;color:#fff;font-size:11px;font-family:'Montserrat',sans-serif;width:100%;outline:none}
+.fslide-inp::placeholder{color:rgba(255,255,255,.3)}
+.fslide-ta{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;
+  padding:10px 13px;color:#fff;font-size:11px;font-family:'Montserrat',sans-serif;
+  width:100%;outline:none;resize:none;height:80px}
+.fslide-ta::placeholder{color:rgba(255,255,255,.3)}
+.fslide-submit{padding:12px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;
+  color:var(--ink);font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  cursor:pointer;font-family:'Montserrat',sans-serif}
+
+/* ─────────────────────────────────────────────────────────────────
+   CONCEPT C — Editorial Section
+───────────────────────────────────────────────────────────────── */
+.editorial{background:#1a1208;padding:40px 24px;text-align:center}
+.ed-qmark{font-family:'Cormorant Garamond',serif;font-size:100px;font-style:italic;
+  color:rgba(184,146,74,.1);line-height:.65;margin-bottom:6px}
+.ed-title{font-family:'Cormorant Garamond',serif;font-size:clamp(20px,3vw,30px);
+  font-weight:300;font-style:italic;color:#f0e6ce;margin-bottom:6px;line-height:1.25}
+.ed-sub{font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:rgba(184,146,74,.5);margin-bottom:22px}
+.ed-ta{width:100%;max-width:480px;background:transparent;border:none;
+  border-bottom:1px solid rgba(184,146,74,.25);padding:12px 0;
+  color:#f0e6ce;font-size:13px;font-family:'Cormorant Garamond',serif;
+  font-style:italic;resize:none;height:72px;outline:none;text-align:center;line-height:1.6}
+.ed-ta::placeholder{color:rgba(240,230,206,.22)}
+.ed-divider{width:50px;height:1px;background:rgba(184,146,74,.25);margin:18px auto}
+.ed-inputs{display:flex;gap:10px;width:100%;max-width:480px;margin:0 auto 18px}
+.ed-inp{flex:1;background:transparent;border-bottom:1px solid rgba(184,146,74,.18);
+  padding:9px 0;color:#f0e6ce;font-size:11px;font-family:'Montserrat',sans-serif;outline:none}
+.ed-inp::placeholder{color:rgba(240,230,206,.22);font-size:10px}
+.ed-btn{padding:11px 32px;background:transparent;border:1px solid rgba(184,146,74,.38);
+  border-radius:2px;color:var(--gold);font-size:8px;font-weight:700;
+  letter-spacing:.2em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;transition:all .18s}
+.ed-btn:hover{background:rgba(184,146,74,.1)}
+.ed-privacy{font-size:8px;color:rgba(240,230,206,.2);letter-spacing:.08em;margin-top:14px}
+
+/* ─────────────────────────────────────────────────────────────────
+   CONCEPT D — Side Drawer
+───────────────────────────────────────────────────────────────── */
+.drawer-trigger{
+  display:flex;align-items:center;gap:8px;width:100%;padding:11px 14px;
+  margin-top:10px;background:rgba(184,146,74,.06);
+  border:1.5px solid rgba(184,146,74,.2);border-radius:4px;
+  font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gold);cursor:pointer;font-family:'Montserrat',sans-serif;
+  transition:all .14s;justify-content:center;
+}
+.drawer-trigger:hover{background:rgba(184,146,74,.12);border-color:rgba(184,146,74,.45)}
+.drawer-overlay{
+  position:absolute;inset:0;background:rgba(0,0,0,.4);
+  opacity:0;pointer-events:none;transition:opacity .22s;
+}
+.drawer-overlay.on{opacity:1;pointer-events:all}
+.drawer{
+  position:absolute;top:0;right:0;bottom:0;width:72%;
+  background:var(--cream);padding:22px 18px;
+  display:flex;flex-direction:column;gap:12px;overflow-y:auto;
+  transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);
+}
+.drawer.on{transform:translateX(0)}
+.drawer-close{position:absolute;top:12px;right:12px;width:26px;height:26px;border-radius:6px;
+  background:rgba(0,0,0,.06);border:none;cursor:pointer;font-size:13px;
+  display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.drawer-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;color:var(--ink);padding-right:32px}
+.drawer-sub{font-size:9px;color:var(--muted);letter-spacing:.04em}
+.drawer-label{font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.drawer-stars{display:flex;gap:5px;margin-bottom:4px}
+.drawer-star{font-size:26px;color:rgba(0,0,0,.1);cursor:pointer;transition:color .1s;user-select:none}
+.drawer-star.on{color:var(--gold)}
+.drawer-row{display:flex;gap:8px}
+
+/* ── Checklist ────────────────────────────────────── */
+.chk{display:flex;flex-direction:column;gap:10px}
+.chk-item{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;
+  border-radius:9px;border:1px solid rgba(255,255,255,.05);background:rgba(255,255,255,.02)}
+.chk-num{width:26px;height:26px;border-radius:6px;
+  background:var(--gold-a);border:1px solid rgba(184,146,74,.3);
+  font-size:11px;font-weight:800;color:var(--gold);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.chk-txt{font-size:12px;color:#c7d0e0;line-height:1.6}
+.chk-txt strong{color:#f1f5f9;display:block;margin-bottom:2px}
+
+/* ── Info box ─────────────────────────────────────── */
+.info{display:flex;gap:14px;padding:16px 18px;border-radius:9px;
+  border:1px solid;margin-bottom:14px;align-items:flex-start}
+.info-gold{background:rgba(184,146,74,.06);border-color:rgba(184,146,74,.2);color:rgba(184,146,74,.8)}
+.info-blue{background:rgba(96,165,250,.06);border-color:rgba(96,165,250,.2);color:#60a5fa}
+.info-red{background:rgba(248,113,113,.06);border-color:rgba(248,113,113,.2);color:#f87171}
+.info-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.info-body{font-size:12px;line-height:1.65}
+.info-body strong{font-weight:700;display:block;margin-bottom:3px}
+
+/* ── Status grid ──────────────────────────────────── */
+.status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.status-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);
+  border-radius:10px;padding:18px 20px}
+.status-card-title{font-size:11px;font-weight:700;color:#f1f5f9;margin-bottom:4px}
+.status-card-sub{font-size:11px;color:var(--dim);line-height:1.5;margin-top:6px}
+
+/* ── Scrollbar ────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ NAV ══════════════════ -->
+<nav class="nav">
+  <div class="nav-brand">elite</div>
+  <div class="nav-badge">For Storefront Dev</div>
+  <button class="tab on" onclick="show('overview')">Overview</button>
+  <button class="tab" onclick="show('api')">API Reference</button>
+  <button class="tab" onclick="show('design')">Design Options</button>
+  <button class="tab" onclick="show('guide')">Implementation</button>
+</nav>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 1 — OVERVIEW
+════════════════════════════════════════════════════════════════ -->
+<div id="overview" class="sec on">
+  <div class="sh">
+    <div class="sh-eyebrow">Storefront Integration Brief</div>
+    <div class="sh-title">Feedback System —<br/>What you need to build</div>
+    <div class="sh-sub">Elite Collection has a private feedback system that collects reviews from customers across three surfaces. Two are already live. Your surface — the storefront product page — is the one remaining piece.</div>
+  </div>
+
+  <!-- Status grid -->
+  <div class="status-grid" style="margin-bottom:32px">
+    <div class="status-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="dot dot-green"></span>
+        <span class="status-card-title">iPad Kiosk</span>
+        <span class="pill pill-green" style="margin-left:auto">Live</span>
+      </div>
+      <div class="status-card-sub">Fullscreen multi-step form on in-store iPad. Bilingual EN/AR. Submits to <code style="font-size:10px;color:#7dd3fc">POST /api/products/:id/reviews</code> or general <code style="font-size:10px;color:#7dd3fc">POST /api/reviews</code>.</div>
+    </div>
+    <div class="status-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="dot dot-green"></span>
+        <span class="status-card-title">Admin Portal</span>
+        <span class="pill pill-green" style="margin-left:auto">Live</span>
+      </div>
+      <div class="status-card-sub">Elite team reads all feedback at <code style="font-size:10px;color:#7dd3fc">/feedback</code> in the admin portal. Shows product ratings, review text, author contact info. General (non-product) feedback has its own tab.</div>
+    </div>
+    <div class="status-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="dot dot-amber"></span>
+        <span class="status-card-title">Storefront Product Page</span>
+        <span class="pill pill-gold" style="margin-left:auto">Your job</span>
+      </div>
+      <div class="status-card-sub">A form — or collapsible section, or floating bar — on the product page that lets any visitor (buyer or not) leave a star rating and/or comment. Completely private, never shown publicly.</div>
+    </div>
+    <div class="status-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="dot dot-green"></span>
+        <span class="status-card-title">Backend API</span>
+        <span class="pill pill-green" style="margin-left:auto">Ready</span>
+      </div>
+      <div class="status-card-sub">Two endpoints accept submissions. No auth token required — open to any visitor. <code style="font-size:10px;color:#7dd3fc">source: 'storefront'</code> tags storefront reviews so the team can filter by channel.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Key rules -->
+  <div style="margin-bottom:8px;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)">Key rules to know</div>
+  <div class="g2" style="margin-bottom:32px">
+    <div class="info info-gold">
+      <div class="info-icon">◇</div>
+      <div class="info-body">
+        <strong>Feedback is always private</strong>
+        It is never shown publicly on the storefront. Do not build a public review display section. All submissions go straight to the admin portal for the team to read.
+      </div>
+    </div>
+    <div class="info info-blue">
+      <div class="info-icon">ℹ</div>
+      <div class="info-body">
+        <strong>No purchase required</strong>
+        Any visitor can submit — browsers, gift buyers, returning customers, first-timers. The form must not be gated behind login or purchase status.
+      </div>
+    </div>
+    <div class="info info-blue">
+      <div class="info-icon">ℹ</div>
+      <div class="info-body">
+        <strong>All fields are optional except the product ID</strong>
+        Rating and body are both optional. Name, phone, and email are always optional. A valid submission can be just a star with nothing else — or just a body with no rating.
+      </div>
+    </div>
+    <div class="info info-gold">
+      <div class="info-icon">◇</div>
+      <div class="info-body">
+        <strong>Set <code style="font-size:11px">source: 'storefront'</code></strong>
+        Always include this field in your POST body. The admin team uses it to distinguish storefront feedback from kiosk feedback.
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- What to build -->
+  <div style="margin-bottom:20px;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)">Minimum required deliverable</div>
+  <div class="chk">
+    <div class="chk-item">
+      <div class="chk-num">1</div>
+      <div class="chk-txt"><strong>A way to submit feedback from every product page</strong>Pick one of the 4 design patterns in the Design Options tab. The implementation details (stack, component name, placement) are yours to decide — the API shape is fixed.</div>
+    </div>
+    <div class="chk-item">
+      <div class="chk-num">2</div>
+      <div class="chk-txt"><strong>Read the product ID from the page context</strong>Each product page has a UUID (e.g. from the route params or page data). Pass it in the URL as <code style="font-size:11px;color:#7dd3fc">POST /api/products/&lt;UUID&gt;/reviews</code>.</div>
+    </div>
+    <div class="chk-item">
+      <div class="chk-num">3</div>
+      <div class="chk-txt"><strong>Show a success / thank-you state after submit</strong>No redirect needed. A small inline confirmation ("Thank you — your thoughts reach our artisans personally.") is enough. The form should reset if the user wants to submit again.</div>
+    </div>
+    <div class="chk-item">
+      <div class="chk-num">4</div>
+      <div class="chk-txt"><strong>Mobile-first tap targets</strong>All interactive elements must be ≥ 44 px tall on mobile. The form must work on phone browsers without horizontal scroll.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 2 — API REFERENCE
+════════════════════════════════════════════════════════════════ -->
+<div id="api" class="sec">
+  <div class="sh">
+    <div class="sh-eyebrow">API Reference</div>
+    <div class="sh-title">Two endpoints.<br/>No auth needed.</div>
+    <div class="sh-sub">Both endpoints are unauthenticated — any browser can call them. The tenant is resolved server-side from the request origin, so you don't need to pass a tenant ID.</div>
+  </div>
+
+  <!-- Base URL -->
+  <div class="card" style="margin-bottom:28px">
+    <div style="font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">Base URL</div>
+    <div class="code"><span class="cm">/* same origin as the storefront — no cross-origin needed */</span>
+<span class="kw">const</span> API = <span class="str">'/api'</span>;          <span class="cm">// production</span>
+<span class="kw">const</span> API = <span class="str">'http://localhost:3000/api'</span>;  <span class="cm">// dev (server on 3000)</span></div>
+  </div>
+
+  <!-- Endpoint 1 -->
+  <div class="card" style="margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+      <span class="pill pill-blue" style="font-size:11px;padding:4px 12px">POST</span>
+      <span style="font-family:'SF Mono','Fira Code',monospace;font-size:14px;color:#7dd3fc">/api/products/<span style="color:#fbbf24">:productId</span>/reviews</span>
+      <span class="pill pill-green">Product feedback</span>
+    </div>
+    <p style="font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:18px">Submit feedback linked to a specific product. Use this on the product detail page where you know the product ID. At least one of <code style="font-size:11px;color:#7dd3fc">rating</code> or <code style="font-size:11px;color:#7dd3fc">body</code> must be present.</p>
+
+    <div style="font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">Request body (JSON)</div>
+    <table class="tbl" style="margin-bottom:20px">
+      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>rating</td><td style="color:#c7d0e0">integer 1–5</td><td class="opt">Optional</td><td style="color:var(--dim)">Star rating. Omit or pass null if the user didn't rate.</td></tr>
+        <tr><td>body</td><td style="color:#c7d0e0">string</td><td class="opt">Optional</td><td style="color:var(--dim)">Free text. Omit or pass null if the user left nothing.</td></tr>
+        <tr><td>authorName</td><td style="color:#c7d0e0">string</td><td class="opt">Optional</td><td style="color:var(--dim)">Customer name.</td></tr>
+        <tr><td>authorPhone</td><td style="color:#c7d0e0">string</td><td class="opt">Optional</td><td style="color:var(--dim)">Mobile number. No format enforced by the API.</td></tr>
+        <tr><td>authorEmail</td><td style="color:#c7d0e0">string</td><td class="opt">Optional</td><td style="color:var(--dim)">Email address.</td></tr>
+        <tr><td>source</td><td style="color:#c7d0e0">string</td><td class="req">Required</td><td style="color:var(--dim)">Always pass <code style="font-size:11px;color:#86efac">"storefront"</code> — used for channel tracking.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="code"><span class="cm">// Example — product page, user rated 4 stars + left a message</span>
+<span class="kw">const</span> productId = <span class="str">'a1b2c3d4-...'</span>;  <span class="cm">// from page/route context</span>
+
+<span class="kw">await</span> fetch(<span class="str">`/api/products/<span style="color:#fbbf24">${productId}</span>/reviews`</span>, {
+  method: <span class="str">'POST'</span>,
+  headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> },
+  body: JSON.stringify({
+    rating:      <span class="nb">4</span>,
+    body:        <span class="str">'Incredible craftsmanship — the ostrich leather is stunning.'</span>,
+    authorName:  <span class="str">'Fatima Al-Sayed'</span>,
+    authorPhone: <span class="str">'+974 5555 1234'</span>,
+    authorEmail: <span class="nb">null</span>,
+    source:      <span class="str">'storefront'</span>,
+  }),
+});
+
+<span class="cm">// Success → 201 Created
+// { "success": true, "data": { "id": "...", "createdAt": "..." } }
+// Error   → 400 Bad Request (if both rating AND body are null/missing)</span></div>
+  </div>
+
+  <!-- Endpoint 2 -->
+  <div class="card" style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+      <span class="pill pill-blue" style="font-size:11px;padding:4px 12px">POST</span>
+      <span style="font-family:'SF Mono','Fira Code',monospace;font-size:14px;color:#7dd3fc">/api/reviews</span>
+      <span class="pill pill-gold">General feedback (no product)</span>
+    </div>
+    <p style="font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:18px">Submit feedback not linked to any product — useful for a general "Contact / Feedback" section, a footer form, or a standalone page. Same fields as above, no <code style="font-size:11px;color:#7dd3fc">productId</code> in URL.</p>
+
+    <div class="code"><span class="cm">// Example — general feedback form, just a message, no rating</span>
+<span class="kw">await</span> fetch(<span class="str">'/api/reviews'</span>, {
+  method: <span class="str">'POST'</span>,
+  headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> },
+  body: JSON.stringify({
+    rating:      <span class="nb">null</span>,
+    body:        <span class="str">'Wonderful experience, very helpful staff.'</span>,
+    authorName:  <span class="str">'Ahmed'</span>,
+    authorPhone: <span class="nb">null</span>,
+    authorEmail: <span class="nb">null</span>,
+    source:      <span class="str">'storefront'</span>,
+  }),
+});</div>
+  </div>
+
+  <!-- Response codes -->
+  <div class="card">
+    <div style="font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:16px">HTTP Status Codes</div>
+    <table class="tbl">
+      <thead><tr><th>Status</th><th>Meaning</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td style="color:#4ade80">201 Created</td><td style="color:#c7d0e0">Success</td><td style="color:var(--dim)">Review saved. Show your thank-you state.</td></tr>
+        <tr><td style="color:#f87171">400 Bad Request</td><td style="color:#c7d0e0">Validation error</td><td style="color:var(--dim)">Both <code style="font-size:11px;color:#7dd3fc">rating</code> and <code style="font-size:11px;color:#7dd3fc">body</code> are missing or null.</td></tr>
+        <tr><td style="color:#f87171">404 Not Found</td><td style="color:#c7d0e0">Bad product ID</td><td style="color:var(--dim)">The <code style="font-size:11px;color:#7dd3fc">:productId</code> UUID doesn't match any product in the tenant.</td></tr>
+        <tr><td style="color:#fbbf24">500</td><td style="color:#c7d0e0">Server error</td><td style="color:var(--dim)">Unexpected. Retry once, then fail silently — don't block the user.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 3 — DESIGN OPTIONS
+════════════════════════════════════════════════════════════════ -->
+<div id="design" class="sec">
+  <div class="sh">
+    <div class="sh-eyebrow">Design Options · 4 Patterns</div>
+    <div class="sh-title">Pick the one that<br/>fits the product page</div>
+    <div class="sh-sub">All four connect to the same API. The choice is about UX placement and level of interruption. Click any card to open an interactive demo.</div>
+  </div>
+
+  <div class="info info-gold" style="margin-bottom:28px">
+    <div class="info-icon">◇</div>
+    <div class="info-body"><strong>Recommendation</strong>Option A (Collapsible) is the safest starting point — it matches the existing product-page accordion pattern, adds zero layout shift, and works identically on mobile and desktop. Option B (Sticky Bar) gets the highest response rate on mobile. Mix is also valid: sticky bar on mobile, editorial section on desktop.</div>
+  </div>
+
+  <div class="cgrid">
+
+    <!-- Card A -->
+    <div class="cc" onclick="openM('ma')">
+      <div class="cc-thumb" style="background:var(--cream);padding:16px 18px;display:flex;flex-direction:column;justify-content:flex-end;gap:0">
+        <div style="padding:10px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink)">MATERIAL & CARE<span style="color:var(--gold);font-size:13px;font-weight:300">+</span></div>
+        <div style="padding:10px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink)">SIZING & FIT<span style="color:var(--gold);font-size:13px;font-weight:300">+</span></div>
+        <div style="padding:10px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)">
+          ★ &nbsp;SHARE YOUR THOUGHTS
+          <span style="font-size:13px;font-weight:300;transform:rotate(45deg);display:inline-block">+</span>
+        </div>
+        <!-- expanded state preview -->
+        <div style="padding:12px 0 6px;border-top:1px solid var(--border)">
+          <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Rating (optional)</div>
+          <div style="display:flex;gap:5px;font-size:22px;margin-bottom:12px">
+            <span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:rgba(0,0,0,.12)">★</span>
+          </div>
+          <div style="padding:9px 11px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:10px;font-family:'Cormorant Garamond',serif;font-style:italic;color:rgba(26,18,8,.3);background:rgba(255,255,255,.6)">Write anything — fit, quality, impression…</div>
+          <button style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:var(--ink);font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-family:'Montserrat',sans-serif;cursor:pointer">Submit →</button>
+        </div>
+      </div>
+      <div class="cc-body">
+        <div class="cc-num">Option A</div>
+        <div class="cc-name">Collapsible Accordion</div>
+        <div class="cc-desc">A fourth row in the existing product accordion — "Share Your Thoughts +" — that expands inline below the other spec rows. Fits perfectly with the Elite product page layout. Zero layout shift when closed.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">In-page</span><span class="cc-tag">Minimal</span><span class="cc-tag g">Recommended</span>
+        </div>
+        <button class="view-btn">Interactive demo →</button>
+      </div>
+    </div>
+
+    <!-- Card B -->
+    <div class="cc" onclick="openM('mb')">
+      <div class="cc-thumb" style="background:var(--cream);position:relative;overflow:hidden">
+        <div style="padding:14px 18px">
+          <div style="font-size:18px;font-weight:700;color:var(--ink);margin-bottom:3px">MisStitch Ostrich</div>
+          <div style="font-size:14px;color:var(--gold);font-weight:600;margin-bottom:12px">QAR 1,080</div>
+          <div style="padding:9px 0;border-top:1px solid var(--border);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);display:flex;justify-content:space-between">MATERIAL & CARE<span style="color:var(--gold);font-size:12px;font-weight:300">+</span></div>
+          <div style="padding:9px 0;border-top:1px solid var(--border);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);display:flex;justify-content:space-between">SIZING & FIT<span style="color:var(--gold);font-size:12px;font-weight:300">+</span></div>
+          <div style="width:100%;margin-top:14px;padding:12px;background:linear-gradient(135deg,var(--green),#013028);border-radius:3px;color:#fff;font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;text-align:center">Add to Bag</div>
+        </div>
+        <!-- sticky bar -->
+        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(2,70,56,.97);border-top:1px solid rgba(184,146,74,.25);padding:12px 16px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:10px;font-weight:600;color:#fff;letter-spacing:.03em">★ &nbsp;Leave a thought</div>
+            <div style="font-size:8px;color:rgba(255,255,255,.4);margin-top:1px">Private · 60 sec · anyone welcome</div>
+          </div>
+          <div style="padding:8px 16px;border-radius:4px;border:1px solid rgba(184,146,74,.45);background:rgba(184,146,74,.14);color:#c9a96e;font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">Share</div>
+        </div>
+      </div>
+      <div class="cc-body">
+        <div class="cc-num">Option B</div>
+        <div class="cc-name">Sticky Floating Bar</div>
+        <div class="cc-desc">A subtle dark green bar that sticks to the bottom of the viewport after the user scrolls past the Add to Cart button. Tap "Share" to open a slide-up form panel. Highest visibility without blocking content. Best on mobile.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">Scroll-triggered</span><span class="cc-tag">High visibility</span><span class="cc-tag g">Best on mobile</span>
+        </div>
+        <button class="view-btn">Interactive demo →</button>
+      </div>
+    </div>
+
+    <!-- Card C -->
+    <div class="cc" onclick="openM('mc')">
+      <div class="cc-thumb" style="background:#1a1208;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 22px;text-align:center">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:90px;font-style:italic;color:rgba(184,146,74,.1);line-height:.65;margin-bottom:6px">"</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:300;font-style:italic;color:#f0e6ce;margin-bottom:6px;line-height:1.3">What's your<br/>first impression?</div>
+        <div style="font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:rgba(184,146,74,.5);margin-bottom:18px">Any visitor welcome</div>
+        <div style="width:100%;max-width:300px;border-bottom:1px solid rgba(184,146,74,.25);padding-bottom:10px;margin-bottom:16px">
+          <div style="font-size:11px;color:rgba(240,230,206,.22);font-family:'Cormorant Garamond',serif;font-style:italic">Write anything — a feeling, a detail…</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <input style="flex:1;background:transparent;border-bottom:1px solid rgba(184,146,74,.15);padding:8px 0;color:#f0e6ce;font-size:10px;font-family:'Montserrat',sans-serif;outline:none" placeholder="Name or phone (optional)"/>
+          <button style="padding:9px 20px;background:transparent;border:1px solid rgba(184,146,74,.35);border-radius:2px;color:var(--gold);font-size:8px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif">Send</button>
+        </div>
+      </div>
+      <div class="cc-body">
+        <div class="cc-num">Option C</div>
+        <div class="cc-name">Editorial Section</div>
+        <div class="cc-desc">A full-width dark editorial block below the product details — like a luxury hotel guest book. Large Cormorant Garamond quote mark, one open text area, optional contact. No star rating required. Maximum brand presence, zero friction.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">Below the fold</span><span class="cc-tag">Luxury feel</span><span class="cc-tag g">Zero friction</span>
+        </div>
+        <button class="view-btn">Interactive demo →</button>
+      </div>
+    </div>
+
+    <!-- Card D -->
+    <div class="cc" onclick="openM('md')">
+      <div class="cc-thumb" style="background:var(--cream);padding:16px 18px;position:relative;overflow:hidden">
+        <div style="font-size:18px;font-weight:700;color:var(--ink);margin-bottom:3px">MisStitch Ostrich</div>
+        <div style="font-size:14px;color:var(--gold);font-weight:600;margin-bottom:12px">QAR 1,080</div>
+        <div style="width:100%;padding:12px;background:linear-gradient(135deg,var(--green),#013028);border-radius:3px;color:#fff;font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;text-align:center;margin-bottom:8px">Add to Bag</div>
+        <button style="width:100%;padding:10px 14px;border:1.5px solid rgba(184,146,74,.3);border-radius:4px;background:rgba(184,146,74,.06);color:var(--gold);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px">★ &nbsp;Share your thoughts</button>
+        <!-- drawer preview -->
+        <div style="position:absolute;top:0;right:0;bottom:0;width:68%;background:var(--cream);border-left:1px solid var(--border);padding:16px 14px;display:flex;flex-direction:column;gap:10px;box-shadow:-8px 0 24px rgba(0,0,0,.12)">
+          <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-style:italic;color:var(--ink)">Share your thoughts</div>
+          <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Rating</div>
+          <div style="display:flex;gap:4px;font-size:20px"><span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:rgba(0,0,0,.1)">★</span></div>
+          <div style="padding:8px 10px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:9px;color:rgba(26,18,8,.3);background:rgba(255,255,255,.6);font-style:italic;font-family:'Cormorant Garamond',serif">Your thoughts…</div>
+          <button style="padding:10px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:var(--ink);font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif">Submit →</button>
+        </div>
+      </div>
+      <div class="cc-body">
+        <div class="cc-num">Option D</div>
+        <div class="cc-name">Side Drawer</div>
+        <div class="cc-desc">A "Share your thoughts" button in the product CTA area opens a panel that slides in from the right (desktop) or up from the bottom (mobile). The product page stays visible underneath. Modern, non-disruptive, no page jump.</div>
+        <div class="cc-tags">
+          <span class="cc-tag">Non-disruptive</span><span class="cc-tag">Modern</span><span class="cc-tag g">Drawer / sheet</span>
+        </div>
+        <button class="view-btn">Interactive demo →</button>
+      </div>
+    </div>
+
+  </div><!-- /cgrid -->
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 4 — IMPLEMENTATION
+════════════════════════════════════════════════════════════════ -->
+<div id="guide" class="sec">
+  <div class="sh">
+    <div class="sh-eyebrow">Implementation Guide</div>
+    <div class="sh-title">Step-by-step</div>
+    <div class="sh-sub">No SDK required — plain fetch, one POST call, one JSON body. Works in any framework.</div>
+  </div>
+
+  <div class="chk" style="margin-bottom:36px">
+    <div class="chk-item">
+      <div class="chk-num">1</div>
+      <div class="chk-txt"><strong>Get the product ID from your page context</strong>Your storefront routes likely have the product slug or UUID in the URL or page data. Extract the UUID to use as the path param. If your system uses slugs, look up the UUID from your product data source before submitting.</div>
+    </div>
+    <div class="chk-item">
+      <div class="chk-num">2</div>
+      <div class="chk-txt"><strong>Decide which design pattern to use (see Design Options tab)</strong>Option A (accordion) requires the least new component work — it can be an additional row appended to the existing accordion list. Option B (sticky bar) requires a scroll listener and an overlay.</div>
+    </div>
+    <div class="chk-item">
+      <div class="chk-num">3</div>
+      <div class="chk-txt"><strong>Build the form with these fields</strong>Rating (1–5, optional), body/message (textarea, optional), name (optional), phone (optional), email (optional). Require at least one of rating or body — show a small inline validation message if both are empty.</div>
+    </div>
+    <div class="chk-item">
+      <div class="chk-num">4</div>
+      <div class="chk-txt"><strong>Submit with fetch</strong>See the code example below. Disable the submit button while the request is in flight. On 201 → show success state. On any other status → show a small inline error ("Something went wrong — please try again").</div>
+    </div>
+    <div class="chk-item">
+      <div class="chk-num">5</div>
+      <div class="chk-txt"><strong>Success state</strong>Replace the form with a short thank-you message. Suggested copy: <em>"Thank you — your words reach our artisans personally."</em> A small gold checkmark icon looks great here. Do not redirect the user.</div>
+    </div>
+  </div>
+
+  <!-- Complete fetch example -->
+  <div style="font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:12px">Complete example (vanilla JS)</div>
+  <div class="code"><span class="cm">/**
+ * Submit product feedback from the storefront.
+ * Call this from your form's submit handler.
+ */</span>
+<span class="kw">async function</span> <span class="fn">submitFeedback</span>({ productId, rating, body, name, phone, email }) {
+  <span class="cm">// Validate — at least one of rating or body required</span>
+  <span class="kw">if</span> (!rating && !body?.trim()) {
+    <span class="kw">throw new</span> Error(<span class="str">'Please add a rating or a message before submitting.'</span>);
+  }
+
+  <span class="kw">const</span> endpoint = productId
+    ? <span class="str">`/api/products/<span style="color:#fbbf24">${productId}</span>/reviews`</span>
+    : <span class="str">'/api/reviews'</span>;
+
+  <span class="kw">const</span> res = <span class="kw">await</span> fetch(endpoint, {
+    method:  <span class="str">'POST'</span>,
+    headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> },
+    body:    JSON.stringify({
+      rating:      rating   || <span class="nb">null</span>,
+      body:        body?.trim() || <span class="nb">null</span>,
+      authorName:  name?.trim()  || <span class="nb">null</span>,
+      authorPhone: phone?.trim() || <span class="nb">null</span>,
+      authorEmail: email?.trim() || <span class="nb">null</span>,
+      source:      <span class="str">'storefront'</span>,
+    }),
+  });
+
+  <span class="kw">if</span> (!res.ok) {
+    <span class="kw">const</span> err = <span class="kw">await</span> res.json().catch(() => ({}));
+    <span class="kw">throw new</span> Error(err.message || <span class="str">'Submission failed'</span>);
+  }
+
+  <span class="kw">return await</span> res.json(); <span class="cm">// { success: true, data: { id, createdAt } }</span>
+}
+
+<span class="cm">// Usage in a form submit handler</span>
+formEl.addEventListener(<span class="str">'submit'</span>, <span class="kw">async</span> (e) => {
+  e.preventDefault();
+  submitBtn.disabled = <span class="nb">true</span>;
+  submitBtn.textContent = <span class="str">'Sending…'</span>;
+
+  <span class="kw">try</span> {
+    <span class="kw">await</span> <span class="fn">submitFeedback</span>({
+      productId: <span class="str">'&lt;from page context&gt;'</span>,
+      rating:    selectedRating,   <span class="cm">// integer 1–5 or null</span>
+      body:      bodyInput.value,
+      name:      nameInput.value,
+      phone:     phoneInput.value,
+      email:     emailInput.value,
+    });
+    showThanksState();
+  } <span class="kw">catch</span> (err) {
+    errorEl.textContent = err.message;
+    submitBtn.disabled = <span class="nb">false</span>;
+    submitBtn.textContent = <span class="str">'Submit →'</span>;
+  }
+});</div>
+
+  <div class="divider"></div>
+
+  <!-- Edge cases -->
+  <div style="font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:16px">Edge cases to handle</div>
+  <div class="g2">
+    <div class="card-sm">
+      <div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:8px">Network offline</div>
+      <div style="font-size:11px;color:var(--dim);line-height:1.6">Wrap the fetch in try/catch (shown above). Show inline error — never let a network failure break the whole product page. The form should still be usable once they reconnect.</div>
+    </div>
+    <div class="card-sm">
+      <div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:8px">Double-submit</div>
+      <div style="font-size:11px;color:var(--dim);line-height:1.6">Disable the submit button while the request is in flight (<code style="font-size:10px;color:#7dd3fc">submitBtn.disabled = true</code>). Re-enable on error only — on success, replace the form with the thanks state.</div>
+    </div>
+    <div class="card-sm">
+      <div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:8px">RTL / Arabic pages</div>
+      <div style="font-size:11px;color:var(--dim);line-height:1.6">If the storefront supports Arabic, set <code style="font-size:10px;color:#7dd3fc">dir="rtl"</code> on the form container and mirror any directional arrow icons. The API accepts Arabic text without special handling.</div>
+    </div>
+    <div class="card-sm">
+      <div style="font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:8px">Rating-only submission</div>
+      <div style="font-size:11px;color:var(--dim);line-height:1.6">A tap on a star with no message is valid — pass <code style="font-size:10px;color:#7dd3fc">body: null</code>. The API accepts it. Don't force the user to type anything.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Contact -->
+  <div class="info info-gold">
+    <div class="info-icon">◇</div>
+    <div class="info-body">
+      <strong>Questions?</strong>
+      Contact the Elite Collection admin team. The backend is already running — your only dependency is the API base URL (same origin in production, <code style="font-size:11px;color:#7dd3fc">http://localhost:3000</code> in local dev). No credentials, no API keys, no CORS issues.
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════════════════ -->
+
+<!-- Modal A — Collapsible Accordion -->
+<div class="modal" id="ma" onclick="closeBack(event,'ma')">
+  <div class="mbox">
+    <div class="mhead">
+      <div class="mtitle">Option A — Collapsible Accordion &nbsp;·&nbsp; Interactive demo</div>
+      <button class="mclose" onclick="closeM('ma')">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="mviews">
+        <div>
+          <div class="mlabel">Desktop — accordion on product page</div>
+          <div class="dframe">
+            <div class="sf-nav"><div class="sf-logo">elite</div><div class="sf-nav-r">Collection &nbsp; Our Story &nbsp; ✦ &nbsp; 🛒</div></div>
+            <div class="sf" style="padding:16px 20px">
+              <div class="sf-name">MisStitch Ostrich</div>
+              <div class="sf-price">QAR 1,080</div>
+              <div class="sf-accord">
+                <div class="sf-arow">MATERIAL & CARE <span>+</span></div>
+                <div class="sf-arow">SIZING & FIT <span>+</span></div>
+                <div class="sf-arow">DELIVERY <span>+</span></div>
+                <!-- Feedback accordion row -->
+                <div class="acc-row" id="acc-toggle" onclick="toggleAcc()">
+                  <span style="color:var(--gold)">★ &nbsp;SHARE YOUR THOUGHTS</span>
+                  <span class="acc-icon">+</span>
+                </div>
+                <div class="acc-panel" id="acc-panel">
+                  <div id="acc-form">
+                    <div class="acc-label">Your rating (optional)</div>
+                    <div class="acc-stars" id="acc-stars">
+                      <span class="acc-star" onclick="rateAcc(1)">★</span>
+                      <span class="acc-star" onclick="rateAcc(2)">★</span>
+                      <span class="acc-star" onclick="rateAcc(3)">★</span>
+                      <span class="acc-star" onclick="rateAcc(4)">★</span>
+                      <span class="acc-star" onclick="rateAcc(5)">★</span>
+                    </div>
+                    <div class="acc-label">Your thoughts (optional)</div>
+                    <textarea class="sf-ta" style="height:72px;margin-bottom:10px" placeholder="Craftsmanship, comfort, first impression — anything…"></textarea>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                      <input class="sf-inp" placeholder="Name (optional)"/>
+                      <input class="sf-inp" placeholder="Phone (optional)" type="tel"/>
+                    </div>
+                    <button class="sf-submit" onclick="submitAcc()">Submit →</button>
+                    <div style="text-align:center"><button class="sf-skip" onclick="toggleAcc()">Cancel</button></div>
+                  </div>
+                  <div id="acc-thanks" style="display:none;padding:10px 0">
+                    <div class="acc-thanks">
+                      <div class="acc-thanks-icon">✓</div>
+                      <span>Thank you — your words reach our artisans personally.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button class="sf-cta" style="margin-top:14px">Notify Me</button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mlabel">Mobile</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe" style="background:var(--cream)">
+              <div class="mframe-nav"><div class="mframe-logo">elite</div><div class="mframe-icons">✦ 🛒</div></div>
+              <div style="padding:14px 16px">
+                <div style="font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px">MisStitch Ostrich</div>
+                <div style="font-size:13px;color:var(--gold);font-weight:600;margin-bottom:12px">QAR 1,080</div>
+                <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);padding:9px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between">MATERIAL & CARE<span style="color:var(--gold);font-size:12px;font-weight:300">+</span></div>
+                <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);padding:9px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between">SIZING & FIT<span style="color:var(--gold);font-size:12px;font-weight:300">+</span></div>
+                <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);padding:9px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between">
+                  ★ SHARE YOUR THOUGHTS<span style="font-size:12px;font-weight:300;transform:rotate(45deg);display:inline-block">+</span>
+                </div>
+                <!-- expanded on mobile preview -->
+                <div style="padding:12px 0;border-top:1px solid var(--border)">
+                  <div style="font-size:7px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Rating (optional)</div>
+                  <div style="display:flex;gap:4px;font-size:24px;margin-bottom:12px">
+                    <span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:var(--gold)">★</span><span style="color:rgba(0,0,0,.12)">★</span>
+                  </div>
+                  <textarea style="width:100%;height:64px;padding:9px 11px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:11px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);color:var(--ink);outline:none;resize:none;margin-bottom:8px" placeholder="Your thoughts…"></textarea>
+                  <input style="width:100%;padding:9px 11px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:11px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);color:var(--ink);outline:none;margin-bottom:10px" placeholder="Phone (optional)" type="tel"/>
+                  <button style="width:100%;padding:11px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:var(--ink);font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-family:'Montserrat',sans-serif">Submit →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal B — Sticky Bar -->
+<div class="modal" id="mb" onclick="closeBack(event,'mb')">
+  <div class="mbox">
+    <div class="mhead">
+      <div class="mtitle">Option B — Sticky Floating Bar &nbsp;·&nbsp; Interactive demo</div>
+      <button class="mclose" onclick="closeM('mb')">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="mviews">
+        <div>
+          <div class="mlabel">Desktop — bar + slide-up panel</div>
+          <div class="dframe" style="position:relative;overflow:hidden">
+            <div class="sf-nav"><div class="sf-logo">elite</div><div class="sf-nav-r">Collection &nbsp; 🛒</div></div>
+            <div style="position:relative">
+              <div class="sf" style="padding:14px 20px 56px">
+                <div class="sf-name">MisStitch Ostrich</div>
+                <div class="sf-price">QAR 1,080</div>
+                <div class="sf-accord">
+                  <div class="sf-arow">MATERIAL & CARE<span>+</span></div>
+                  <div class="sf-arow">SIZING & FIT<span>+</span></div>
+                </div>
+                <button class="sf-cta">Notify Me</button>
+              </div>
+              <!-- floating bar -->
+              <div class="fbar">
+                <div><div class="fbar-text">★ &nbsp;Leave a thought</div><div class="fbar-sub">Private · 60 sec · anyone welcome</div></div>
+                <button class="fbar-btn" onclick="openSlide('b-slide')">Share</button>
+              </div>
+              <!-- slide-up panel -->
+              <div class="fslide" id="b-slide">
+                <button class="fslide-close" onclick="closeSlide('b-slide')">✕</button>
+                <div class="fslide-title">What's on<br/>your mind?</div>
+                <div class="fslide-sub">Private — only the Elite team reads this</div>
+                <div>
+                  <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:8px">Rating (optional)</div>
+                  <div class="fslide-stars" id="b-stars">
+                    <span class="fslide-star" onclick="rateFSlide('b-stars',1)">★</span>
+                    <span class="fslide-star" onclick="rateFSlide('b-stars',2)">★</span>
+                    <span class="fslide-star" onclick="rateFSlide('b-stars',3)">★</span>
+                    <span class="fslide-star" onclick="rateFSlide('b-stars',4)">★</span>
+                    <span class="fslide-star" onclick="rateFSlide('b-stars',5)">★</span>
+                  </div>
+                </div>
+                <textarea class="fslide-ta" placeholder="Fit, quality, style, service — anything…"></textarea>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <input class="fslide-inp" placeholder="Name (optional)"/>
+                  <input class="fslide-inp" placeholder="Phone (optional)" type="tel"/>
+                </div>
+                <button class="fslide-submit">Submit →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mlabel">Mobile — full-screen overlay</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe" style="background:var(--cream)">
+              <div class="mframe-nav"><div class="mframe-logo">elite</div><div class="mframe-icons">✦ 🛒</div></div>
+              <div style="background:rgba(2,70,56,.98);padding:22px 18px;display:flex;flex-direction:column;gap:11px">
+                <div style="font-family:'Cormorant Garamond',serif;font-size:21px;font-style:italic;color:#fff;line-height:1.2">What's on<br/>your mind?</div>
+                <div style="font-size:9px;color:rgba(255,255,255,.4);letter-spacing:.04em">Private · anyone welcome</div>
+                <div>
+                  <div style="font-size:7px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:8px">Rating</div>
+                  <div style="display:flex;gap:5px;font-size:28px" id="m-stars">
+                    <span style="color:#d4a853;cursor:pointer" onclick="rateFSlide('m-stars',1)">★</span>
+                    <span style="color:#d4a853;cursor:pointer" onclick="rateFSlide('m-stars',2)">★</span>
+                    <span style="color:#d4a853;cursor:pointer" onclick="rateFSlide('m-stars',3)">★</span>
+                    <span style="color:#d4a853;cursor:pointer" onclick="rateFSlide('m-stars',4)">★</span>
+                    <span style="color:rgba(255,255,255,.18);cursor:pointer" onclick="rateFSlide('m-stars',5)">★</span>
+                  </div>
+                </div>
+                <textarea style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:10px 13px;color:#fff;font-size:11px;font-family:'Montserrat',sans-serif;resize:none;height:80px;width:100%;outline:none" placeholder="Anything at all…"></textarea>
+                <input style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:10px 13px;color:#fff;font-size:11px;font-family:'Montserrat',sans-serif;width:100%;outline:none" placeholder="Phone (optional)" type="tel"/>
+                <button style="padding:12px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:var(--ink);font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif">Submit →</button>
+                <button style="background:none;border:none;font-size:10px;color:rgba(255,255,255,.3);cursor:pointer;font-family:'Montserrat',sans-serif;text-align:center">Keep anonymous</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal C — Editorial Section -->
+<div class="modal" id="mc" onclick="closeBack(event,'mc')">
+  <div class="mbox">
+    <div class="mhead">
+      <div class="mtitle">Option C — Editorial Section &nbsp;·&nbsp; Interactive demo</div>
+      <button class="mclose" onclick="closeM('mc')">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="mviews">
+        <div>
+          <div class="mlabel">Desktop — below product details</div>
+          <div class="dframe">
+            <div class="sf-nav"><div class="sf-logo">elite</div><div class="sf-nav-r">Collection &nbsp; 🛒</div></div>
+            <div class="sf" style="padding:14px 20px">
+              <div class="sf-name">MisStitch Ostrich</div>
+              <div class="sf-price">QAR 1,080</div>
+              <div class="sf-accord">
+                <div class="sf-arow">MATERIAL & CARE<span>+</span></div>
+                <div class="sf-arow">SIZING & FIT<span>+</span></div>
+              </div>
+              <button class="sf-cta">Notify Me</button>
+            </div>
+            <div class="editorial">
+              <div class="ed-qmark">"</div>
+              <div class="ed-title">What's your first impression?</div>
+              <div class="ed-sub">Any visitor welcome &nbsp;·&nbsp; Private &nbsp;·&nbsp; No purchase needed</div>
+              <textarea class="ed-ta" id="ed-ta" placeholder="Write anything — a feeling, a detail, a question…"></textarea>
+              <div class="ed-divider"></div>
+              <div class="ed-inputs">
+                <input class="ed-inp" placeholder="Name (optional)"/>
+                <input class="ed-inp" placeholder="Phone (optional)" type="tel"/>
+              </div>
+              <button class="ed-btn" onclick="submitEd()">Submit</button>
+              <div id="ed-thanks" style="display:none;margin-top:14px;font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;color:rgba(184,146,74,.8)">Shukran — your words matter to us.</div>
+              <div class="ed-privacy">◇ &nbsp; Private — only the Elite team reads your response</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mlabel">Mobile</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe" style="background:var(--cream)">
+              <div class="mframe-nav"><div class="mframe-logo">elite</div><div class="mframe-icons">✦ 🛒</div></div>
+              <div style="background:#1a1208;padding:30px 18px;text-align:center">
+                <div style="font-family:'Cormorant Garamond',serif;font-size:80px;font-style:italic;color:rgba(184,146,74,.1);line-height:.65;margin-bottom:6px">"</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:300;font-style:italic;color:#f0e6ce;margin-bottom:6px;line-height:1.3">What's your<br/>first impression?</div>
+                <div style="font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:rgba(184,146,74,.5);margin-bottom:18px">Any visitor welcome</div>
+                <textarea style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(184,146,74,.25);padding:10px 0;color:#f0e6ce;font-size:13px;font-family:'Cormorant Garamond',serif;font-style:italic;resize:none;height:70px;outline:none;text-align:center" placeholder="Write anything…"></textarea>
+                <div style="width:50px;height:1px;background:rgba(184,146,74,.25);margin:16px auto 12px"></div>
+                <input style="width:100%;background:transparent;border-bottom:1px solid rgba(184,146,74,.15);padding:9px 0;color:#f0e6ce;font-size:11px;font-family:'Montserrat',sans-serif;outline:none;margin-bottom:12px;text-align:center" placeholder="Phone (optional)"/>
+                <button style="padding:10px 28px;background:transparent;border:1px solid rgba(184,146,74,.38);border-radius:2px;color:var(--gold);font-size:8px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;font-family:'Montserrat',sans-serif;cursor:pointer">Submit</button>
+                <div style="font-size:8px;color:rgba(240,230,206,.18);letter-spacing:.06em;margin-top:12px">◇ Private — only our team reads this</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal D — Drawer -->
+<div class="modal" id="md" onclick="closeBack(event,'md')">
+  <div class="mbox">
+    <div class="mhead">
+      <div class="mtitle">Option D — Side Drawer &nbsp;·&nbsp; Interactive demo</div>
+      <button class="mclose" onclick="closeM('md')">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="mviews">
+        <div>
+          <div class="mlabel">Desktop — drawer from right</div>
+          <div class="dframe" style="position:relative;overflow:hidden">
+            <div class="sf-nav"><div class="sf-logo">elite</div><div class="sf-nav-r">Collection &nbsp; 🛒</div></div>
+            <div style="position:relative">
+              <div class="sf" style="padding:14px 20px">
+                <div class="sf-name">MisStitch Ostrich</div>
+                <div class="sf-price">QAR 1,080</div>
+                <div class="sf-accord">
+                  <div class="sf-arow">SIZING & FIT<span>+</span></div>
+                </div>
+                <button class="sf-cta" style="margin-bottom:8px">Notify Me</button>
+                <button class="drawer-trigger" onclick="openDrawer('d-drawer','d-overlay')">★ &nbsp;Share your thoughts</button>
+              </div>
+              <!-- overlay -->
+              <div class="drawer-overlay" id="d-overlay" onclick="closeDrawer('d-drawer','d-overlay')"></div>
+              <!-- drawer -->
+              <div class="drawer" id="d-drawer">
+                <button class="drawer-close" onclick="closeDrawer('d-drawer','d-overlay')">✕</button>
+                <div class="drawer-title">Share your thoughts</div>
+                <div class="drawer-sub">Private — only the Elite team reads this</div>
+                <div>
+                  <div class="drawer-label">Rating (optional)</div>
+                  <div class="drawer-stars" id="d-dstars">
+                    <span class="drawer-star" onclick="rateDrawer('d-dstars',1)">★</span>
+                    <span class="drawer-star" onclick="rateDrawer('d-dstars',2)">★</span>
+                    <span class="drawer-star" onclick="rateDrawer('d-dstars',3)">★</span>
+                    <span class="drawer-star" onclick="rateDrawer('d-dstars',4)">★</span>
+                    <span class="drawer-star" onclick="rateDrawer('d-dstars',5)">★</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="drawer-label">Your thoughts (optional)</div>
+                  <textarea class="sf-ta" style="height:80px" placeholder="Craftsmanship, comfort, service — anything…"></textarea>
+                </div>
+                <div class="drawer-row">
+                  <input class="sf-inp" placeholder="Name (optional)"/>
+                  <input class="sf-inp" placeholder="Phone (optional)" type="tel"/>
+                </div>
+                <button class="sf-submit">Submit →</button>
+                <div style="text-align:center"><button class="sf-skip" onclick="closeDrawer('d-drawer','d-overlay')">Cancel</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mlabel">Mobile — bottom sheet</div>
+          <div style="display:flex;justify-content:center">
+            <div class="mframe" style="background:var(--cream);position:relative;overflow:hidden">
+              <div class="mframe-nav"><div class="mframe-logo">elite</div><div class="mframe-icons">✦ 🛒</div></div>
+              <div style="padding:14px 16px">
+                <div style="font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px">MisStitch Ostrich</div>
+                <div style="font-size:13px;color:var(--gold);font-weight:600;margin-bottom:12px">QAR 1,080</div>
+                <button style="width:100%;padding:12px;background:linear-gradient(135deg,var(--green),#013028);border-radius:3px;color:#fff;font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;border:none;cursor:pointer;font-family:'Montserrat',sans-serif;margin-bottom:8px">Notify Me</button>
+                <button class="drawer-trigger" onclick="openDrawer('m-drawer','m-overlay')">★ &nbsp;Share your thoughts</button>
+              </div>
+              <!-- mobile overlay -->
+              <div class="drawer-overlay" id="m-overlay" onclick="closeDrawer('m-drawer','m-overlay')"></div>
+              <!-- mobile bottom sheet -->
+              <div id="m-drawer" style="position:absolute;left:0;right:0;bottom:0;background:var(--cream);border-radius:16px 16px 0 0;padding:18px 16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -6px 30px rgba(0,0,0,.16);transform:translateY(100%);transition:transform .26s cubic-bezier(.4,0,.2,1)">
+                <div style="width:36px;height:4px;border-radius:2px;background:rgba(0,0,0,.12);margin:0 auto 6px"></div>
+                <div style="font-family:'Cormorant Garamond',serif;font-size:19px;font-style:italic;color:var(--ink)">Share your thoughts</div>
+                <div style="font-size:8px;color:var(--muted);letter-spacing:.04em">Private — only the Elite team reads this</div>
+                <div>
+                  <div style="font-size:7px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Rating</div>
+                  <div style="display:flex;gap:5px;font-size:26px" id="m-dstars">
+                    <span style="color:rgba(0,0,0,.1);cursor:pointer" onclick="rateDrawer('m-dstars',1)">★</span>
+                    <span style="color:rgba(0,0,0,.1);cursor:pointer" onclick="rateDrawer('m-dstars',2)">★</span>
+                    <span style="color:rgba(0,0,0,.1);cursor:pointer" onclick="rateDrawer('m-dstars',3)">★</span>
+                    <span style="color:rgba(0,0,0,.1);cursor:pointer" onclick="rateDrawer('m-dstars',4)">★</span>
+                    <span style="color:rgba(0,0,0,.1);cursor:pointer" onclick="rateDrawer('m-dstars',5)">★</span>
+                  </div>
+                </div>
+                <textarea style="width:100%;height:70px;padding:10px 12px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:11px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);color:var(--ink);outline:none;resize:none" placeholder="Your thoughts…"></textarea>
+                <input style="width:100%;padding:10px 12px;border:1.5px solid rgba(0,0,0,.1);border-radius:5px;font-size:11px;font-family:'Montserrat',sans-serif;background:rgba(255,255,255,.6);color:var(--ink);outline:none" placeholder="Phone (optional)" type="tel"/>
+                <button style="width:100%;padding:12px;background:linear-gradient(135deg,#c9a96e,#9a7535);border:none;border-radius:4px;color:var(--ink);font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif">Submit →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+/* ── Tab nav ────────────────────────────────────────────── */
+function show(id) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  const order = ['overview','api','design','guide'];
+  document.querySelectorAll('.tab')[order.indexOf(id)].classList.add('on');
+}
+
+/* ── Modals ─────────────────────────────────────────────── */
+function openM(id)  { document.getElementById(id).classList.add('on'); }
+function closeM(id) { document.getElementById(id).classList.remove('on'); }
+function closeBack(e, id) { if (e.target === document.getElementById(id)) closeM(id); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal.on').forEach(m => m.classList.remove('on'));
+});
+
+/* ── Option A: Accordion ────────────────────────────────── */
+let accOpen = false;
+function toggleAcc() {
+  accOpen = !accOpen;
+  const toggle = document.getElementById('acc-toggle');
+  const panel  = document.getElementById('acc-panel');
+  toggle.classList.toggle('open', accOpen);
+  panel.classList.toggle('on', accOpen);
+}
+let accRating = 0;
+function rateAcc(n) {
+  accRating = n;
+  document.querySelectorAll('#acc-stars .acc-star').forEach((s, i) => s.classList.toggle('on', i < n));
+}
+function submitAcc() {
+  document.getElementById('acc-form').style.display   = 'none';
+  document.getElementById('acc-thanks').style.display = 'block';
+}
+
+/* ── Option B: Floating bar slide ───────────────────────── */
+function openSlide(id)  { document.getElementById(id).classList.add('on'); }
+function closeSlide(id) { document.getElementById(id).classList.remove('on'); }
+function rateFSlide(containerId, n) {
+  const stars = document.querySelectorAll(`#${containerId} .fslide-star, #${containerId} span`);
+  stars.forEach((s, i) => {
+    if (s.classList.contains('fslide-star')) s.classList.toggle('on', i < n);
+    else s.style.color = i < n ? '#d4a853' : 'rgba(255,255,255,.18)';
+  });
+}
+
+/* ── Option C: Editorial ────────────────────────────────── */
+function submitEd() {
+  const ta = document.getElementById('ed-ta');
+  if (!ta.value.trim()) { ta.style.borderBottomColor = '#f87171'; return; }
+  ta.style.borderBottomColor = '';
+  document.getElementById('ed-thanks').style.display = 'block';
+}
+
+/* ── Option D: Drawer ───────────────────────────────────── */
+function openDrawer(drawerId, overlayId) {
+  document.getElementById(drawerId).classList.add('on');
+  document.getElementById(drawerId).style.transform = 'translateX(0)';
+  document.getElementById(overlayId).classList.add('on');
+}
+function closeDrawer(drawerId, overlayId) {
+  const drawer = document.getElementById(drawerId);
+  drawer.classList.remove('on');
+  drawer.style.transform = '';
+  document.getElementById(overlayId).classList.remove('on');
+}
+/* Mobile bottom sheet uses translateY */
+const mDrawer = document.getElementById('m-drawer');
+if (mDrawer) {
+  document.querySelectorAll('[onclick*="m-drawer"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const opening = btn.getAttribute('onclick').includes('openDrawer');
+      if (opening) {
+        mDrawer.style.transform = 'translateY(0)';
+        document.getElementById('m-overlay').classList.add('on');
+      } else {
+        mDrawer.style.transform = 'translateY(100%)';
+        document.getElementById('m-overlay').classList.remove('on');
+      }
+    });
+  });
+}
+function rateDrawer(containerId, n) {
+  const stars = document.querySelectorAll(`#${containerId} .drawer-star, #${containerId} span`);
+  stars.forEach((s, i) => {
+    if (s.classList.contains('drawer-star')) s.classList.toggle('on', i < n);
+    else s.style.color = i < n ? 'var(--gold)' : 'rgba(0,0,0,.1)';
+  });
+}
+</script>
+</body>
+</html>
