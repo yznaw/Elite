@@ -65,6 +65,7 @@ export interface OrderItem {
   s: number;
   q: number;
   p: number;
+  img?: string | null;
 }
 
 export type OrderFulfillment = 'awaiting' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned';

@@ -164,6 +164,58 @@ See `server/routes/admin-media.route.js`. All endpoints require an active admin 
 | `DELETE` | `/api/admin/media/orphaned` | Delete all unlinked media assets and their files. |
 | `DELETE` | `/api/admin/media/:id` | Delete one media asset and its file. |
 
+### Admin — Orders (`/api/admin/orders`)
+
+See `server/routes/admin-orders.route.js`. All endpoints require an active admin session.
+
+**Idempotency:** `POST /` accepts an optional `idempotencyKey` body field. If a key is supplied and an order with that key already exists for the tenant, the existing order is returned (HTTP 200) without creating a duplicate. The key is stored in `orders.idempotency_key` (unique per tenant, nullable — enforced by `idx_orders_idempotency`).
+
+**Public number format:** `EC-YY-MMDD-{6-digit-ms-suffix}` (e.g. `EC-26-0619-123456`). A unique constraint `orders_tenant_public_number_key` on `(tenant_id, public_number)` prevents collisions at the DB level.
+
+**Server-side pagination and filtering:** `GET /` now supports query parameters. All filters are applied in PostgreSQL before returning results. Response shape is `{ orders[], total, page, limit, pages }`.
+
+**Product thumbnails:** `GET /:id` (and the list endpoint) includes `img` in each item object, sourced from `order_items.media_url`. The frontend renders a real `<img>` when present, falls back to a gradient placeholder otherwise.
+
+**Performance index:** `idx_orders_tenant_placed ON orders (tenant_id, placed_at DESC)` ensures the list query uses an index scan on large datasets.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/orders` | List orders with server-side pagination and filtering. Query params: `page` (0-based, default 0), `limit` (default 50, max 200), `payment` (paid / pending / refunded / failed — maps to DB enum values automatically), `fulfillment` (awaiting / processing / shipped / delivered / returned), `from` (YYYY-MM-DD), `to` (YYYY-MM-DD), `q` (searches customer name, public number, email). Returns `{ orders[], total, page, limit, pages }`. |
+| `GET` | `/api/admin/orders/:id` | Single order by DB UUID or `public_number`; includes items (with `img`), timeline, notes |
+| `POST` | `/api/admin/orders` | Create order. Body: `{ customerName, items[], idempotencyKey?, customerId?, customerEmail?, customerPhone?, shippingAddress?, payment?, fulfillment?, total? }`. Validates `customerId` existence if provided. |
+| `PATCH` | `/api/admin/orders/:id/status` | Update payment/fulfillment status; optionally sets `trackingNumber`. Appends timeline entry. If `payment=paid`, triggers NBOX shipment booking (non-fatal on failure — appended as `note` timeline entry). |
+| `POST` | `/api/admin/orders/:id/notes` | Add an internal note. Body: `{ body }`. Also appends a `note` timeline entry. |
+
+### Admin — Customers (`/api/admin/customers`)
+
+See `server/routes/admin-customers.route.js`. All endpoints require an active admin session.
+
+**Soft-delete pattern:** Customers are never hard-deleted. `DELETE /:id` sets `deleted_at = now()`. All list and detail queries filter `deleted_at IS NULL`. Soft-deleted customers' order history is fully preserved. A `PATCH /:id/restore` endpoint un-deletes a customer.
+
+**Live order stats:** Customer list and detail responses include `orders_count`, `ltv_cents`, and `last_order_at` from the `v_customer_order_stats` PostgreSQL view (created by migration 013). If the view is unavailable, a fallback COUNT/SUM query runs instead — any view error is logged to console but never propagated to the client.
+
+**Order history by email and ID:** `GET /:id/orders` matches orders by both `customer_id` (FK) and `customer_email` so orders placed before a customer record existed are correctly attributed.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/customers` | List all active (non-deleted) customers with live order stats |
+| `GET` | `/api/admin/customers/:id` | Single customer with live order stats |
+| `GET` | `/api/admin/customers/:id/orders` | Customer's full order history (matches by `customer_id` OR `customer_email`) |
+| `POST` | `/api/admin/customers` | Upsert customer by email. If email already exists with `deleted_at`, resets `deleted_at = NULL` (restore). Body: `{ name, email, city?, sizePref?, notes?, phone? }` |
+| `PATCH` | `/api/admin/customers/:id` | Update customer. Body: `{ name?, email?, city?, sizePref?, notes?, phone? }` |
+| `DELETE` | `/api/admin/customers/:id` | Soft-delete — sets `deleted_at = now()`. Order history preserved. |
+| `PATCH` | `/api/admin/customers/:id/restore` | Restore a soft-deleted customer — sets `deleted_at = NULL` |
+
+**Migration 013** (`server/db/migrations/013_orders_customers_production.sql`) must be applied before using these endpoints. It adds:
+- `customers.deleted_at TIMESTAMPTZ NULL` + partial index `idx_customers_active`
+- `customers.phone_number TEXT NULL`
+- Unique constraint `orders_tenant_public_number_key` on `(tenant_id, public_number)`
+- `orders.idempotency_key TEXT NULL` + unique partial index `idx_orders_idempotency`
+- `v_customer_order_stats` view
+
+**Applied post-013 index** (applied directly, not via migration file):
+- `idx_orders_tenant_placed ON orders (tenant_id, placed_at DESC)` — speeds up the default list query ORDER BY
+
 ### Admin — Settings (`/api/admin/settings`)
 
 See `server/routes/admin-settings.route.js`. All endpoints require an active admin session; team/invitation write operations require owner or admin role.

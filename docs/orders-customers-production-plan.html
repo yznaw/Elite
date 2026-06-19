@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Orders & Customers — Production-Readiness Plan</title>
+<style>
+  :root {
+    --gold:#C9A84C; --gold-light:#F5EDD6; --gold-mid:#E8D5A0;
+    --ink:#1A1A2E; --ink-2:#3D3D5C; --muted:#6B7280;
+    --surface:#FFFFFF; --bg:#F8F7F4; --bg-2:#F0EDE6; --border:#E5E0D5;
+    --green:#16A34A; --green-bg:#F0FDF4; --green-border:#BBF7D0;
+    --blue:#2563EB; --blue-bg:#EFF6FF; --blue-border:#BFDBFE;
+    --orange:#D97706; --orange-bg:#FFFBEB; --orange-border:#FDE68A;
+    --red:#DC2626; --red-bg:#FEF2F2; --red-border:#FECACA;
+    --purple:#7C3AED; --purple-bg:#F5F3FF; --purple-border:#DDD6FE;
+    --radius:12px; --shadow:0 2px 12px rgba(0,0,0,.07); --shadow-lg:0 8px 32px rgba(0,0,0,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;}
+
+  .hero{background:linear-gradient(135deg,#1A1A2E 0%,#2D2D4A 60%,#3D3525 100%);color:#fff;padding:56px 48px 48px;position:relative;overflow:hidden;}
+  .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 80% 50%,rgba(201,168,76,.18) 0%,transparent 65%);pointer-events:none;}
+  .hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,.18);border:1px solid rgba(201,168,76,.35);color:#E8D5A0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:20px;}
+  .hero h1{font-size:34px;font-weight:800;line-height:1.15;margin-bottom:12px;}
+  .hero h1 span{color:var(--gold);}
+  .hero p{font-size:15px;opacity:.65;max-width:680px;line-height:1.7;}
+  .hero-meta{display:flex;gap:32px;margin-top:32px;padding-top:28px;border-top:1px solid rgba(255,255,255,.1);flex-wrap:wrap;}
+  .hero-stat .n{font-size:26px;font-weight:800;color:var(--gold);}
+  .hero-stat .l{font-size:12px;opacity:.5;text-transform:uppercase;letter-spacing:.06em;}
+
+  .page{max-width:1100px;margin:0 auto;padding:40px 32px 100px;}
+
+  /* Section headers */
+  .section{display:flex;align-items:center;gap:14px;margin:52px 0 20px;}
+  .sec-num{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;color:#fff;}
+  .sec-title{font-size:19px;font-weight:800;}
+  .sec-sub{font-size:13px;color:var(--muted);margin-top:1px;}
+  .sec-line{flex:1;height:1px;background:var(--border);}
+
+  /* Severity labels */
+  .sev{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:6px;flex-shrink:0;}
+  .sev-critical{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);}
+  .sev-high{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border);}
+  .sev-medium{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border);}
+  .sev-low{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);}
+  .sev-done{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);}
+
+  /* Layer badges */
+  .layer{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:4px;flex-shrink:0;}
+  .layer-be{background:#1E3A5F;color:#93C5FD;}
+  .layer-fe{background:#3B2D6A;color:#C4B5FD;}
+  .layer-db{background:#1A3A2E;color:#6EE7B7;}
+  .layer-ux{background:#4A2000;color:#FCD34D;}
+
+  /* Task cards */
+  .task{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:18px 20px;margin-bottom:10px;box-shadow:var(--shadow);
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .task-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+  .task-title{font-size:15px;font-weight:700;color:var(--ink);flex:1;min-width:200px;}
+  .task-body{font-size:14px;color:var(--ink-2);line-height:1.7;}
+  .task-body p{margin-bottom:8px;}
+  .task-body p:last-child{margin-bottom:0;}
+  .task-body ul{margin-left:18px;margin-bottom:8px;}
+  .task-body li{margin-bottom:4px;}
+  .task-body code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:12.5px;}
+  .task-body pre{background:#1A1A2E;color:#E8D5A0;padding:14px 16px;border-radius:8px;overflow-x:auto;font-size:12.5px;line-height:1.6;margin:8px 0;}
+
+  /* Callout boxes */
+  .callout{border-radius:10px;padding:14px 18px;margin:14px 0;font-size:14px;line-height:1.65;border-left:3px solid;}
+  .callout-red{background:var(--red-bg);border-color:var(--red);}
+  .callout-orange{background:var(--orange-bg);border-color:var(--orange);}
+  .callout-blue{background:var(--blue-bg);border-color:var(--blue);}
+  .callout-green{background:var(--green-bg);border-color:var(--green);}
+  .callout-purple{background:var(--purple-bg);border-color:var(--purple);}
+  .callout strong{font-weight:700;}
+
+  /* Category headers */
+  .cat{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:28px 0 12px;padding-bottom:6px;border-bottom:1px dashed var(--border);}
+
+  /* UX wireframe blocks */
+  .wire-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:14px 0;}
+  .wire-box{background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:13px;line-height:1.6;}
+  .wire-box h4{font-size:13px;font-weight:700;color:var(--green);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+  .wire-box ul{margin-left:16px;}
+  .wire-box li{margin-bottom:3px;}
+
+  /* Flow diagram */
+  .flow{display:flex;flex-wrap:wrap;gap:0;margin:14px 0;align-items:center;}
+  .flow-step{background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;}
+  .flow-step.action{background:var(--blue-bg);border-color:var(--blue-border);color:var(--blue);}
+  .flow-step.guard{background:var(--orange-bg);border-color:var(--orange-border);color:var(--orange);}
+  .flow-step.fail{background:var(--red-bg);border-color:var(--red-border);color:var(--red);}
+  .flow-step.pass{background:var(--green-bg);border-color:var(--green-border);color:var(--green);}
+  .flow-arrow{color:var(--muted);padding:0 8px;font-size:16px;flex-shrink:0;}
+
+  /* Mobile vs Desktop split */
+  .resp-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:14px 0;}
+  .resp-col h4{font-size:13px;font-weight:700;padding:6px 12px;border-radius:6px 6px 0 0;margin-bottom:0;}
+  .resp-col-mobile h4{background:#1E3A5F;color:#93C5FD;}
+  .resp-col-desktop h4{background:#1A3A2E;color:#6EE7B7;}
+  .resp-col-body{background:var(--surface);border:1px solid var(--border);border-radius:0 0 8px 8px;padding:14px;font-size:13px;line-height:1.65;}
+  .resp-col-body ul{margin-left:16px;}
+  .resp-col-body li{margin-bottom:4px;}
+
+  @media(max-width:700px){
+    .hero{padding:32px 20px 28px;}
+    .hero h1{font-size:24px;}
+    .page{padding:24px 16px 60px;}
+    .wire-grid,.resp-grid{grid-template-columns:1fr;}
+  }
+
+  /* Sticky TOC bar */
+  .toc{position:sticky;top:0;z-index:99;background:rgba(26,26,46,.95);backdrop-filter:blur(10px);border-bottom:1px solid rgba(201,168,76,.2);padding:10px 20px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .toc a{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,.45);text-decoration:none;padding:4px 8px;border-radius:5px;transition:all .15s;white-space:nowrap;}
+  .toc a:hover{color:#E8D5A0;background:rgba(201,168,76,.12);}
+  .toc-sep{width:1px;height:14px;background:rgba(255,255,255,.1);flex-shrink:0;}
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-badge">Production Readiness Plan · June 2026</div>
+  <h1>Orders &amp; Customers<br/><span>End-to-End Production Plan</span></h1>
+  <p>Full audit of the backend API, database layer, and Angular frontend for both the Orders and Customers modules — including critical bugs found, every edge case, fallback strategy, and a complete UX redesign spec for the Customer Detail drawer on both mobile and desktop.</p>
+  <div class="hero-meta">
+    <div class="hero-stat"><div class="n">3</div><div class="l">Critical Bugs</div></div>
+    <div class="hero-stat"><div class="n">8</div><div class="l">Edge Cases</div></div>
+    <div class="hero-stat"><div class="n">14</div><div class="l">Backend Tasks</div></div>
+    <div class="hero-stat"><div class="n">12</div><div class="l">Frontend Tasks</div></div>
+    <div class="hero-stat"><div class="n">2</div><div class="l">Pages Covered</div></div>
+  </div>
+</div>
+
+<!-- Sticky TOC -->
+<div class="toc">
+  <a href="#bugs">Critical Bugs</a>
+  <div class="toc-sep"></div>
+  <a href="#backend">Backend</a>
+  <div class="toc-sep"></div>
+  <a href="#edge">Edge Cases</a>
+  <div class="toc-sep"></div>
+  <a href="#frontend">Frontend</a>
+  <div class="toc-sep"></div>
+  <a href="#ux">Customer UX</a>
+  <div class="toc-sep"></div>
+  <a href="#mobile">Mobile</a>
+  <div class="toc-sep"></div>
+  <a href="#orders">Orders UX</a>
+</div>
+
+<div class="page">
+
+  <!-- ── SECTION 1: WHAT EXISTS ── -->
+  <div class="section" id="audit">
+    <div class="sec-num" style="background:#5B21B6;">A</div>
+    <div>
+      <div class="sec-title">Current State Audit</div>
+      <div class="sec-sub">What was found when reading every relevant file</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="callout callout-blue">
+    <strong>Files reviewed:</strong> <code>server/routes/admin-orders.route.js</code>, <code>server/routes/admin-customers.route.js</code>, <code>pages/orders/orders.component.ts</code>, <code>pages/orders/order-drawer.component.ts</code>, <code>pages/customers/customers.component.ts</code>, <code>pages/customers/customer-drawer.component.ts</code>, <code>services/admin-orders.service.ts</code>, <code>services/admin-customers.service.ts</code>, <code>services/api-client.service.ts</code>, <code>models/index.ts</code>, <code>data/mock.ts</code>
+  </div>
+
+  <div class="cat">What works today</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-done">Done</span>
+      <div class="task-title">Orders list with filters, search, pagination, and CSV export</div>
+    </div>
+    <div class="task-body">
+      <p>The orders page has a working 15-second silent auto-refresh, date-range pills (Today / Week / Month / Custom), payment + fulfillment filters, search by order ID or customer name, and CSV export. Desktop shows a sortable table; mobile (≤768px) switches to card tiles with left-border color coding per fulfillment status. Pagination component is present.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-done">Done</span>
+      <div class="task-title">Order drawer: status workflow, tracking, notes, timeline, invoice print</div>
+    </div>
+    <div class="task-body">
+      <p>The order drawer has a visual stepper (awaiting → processing → shipped → delivered), transition buttons that gate correctly, tracking number save, cancel + refund flows with confirmation dialog, an internal notes composer, a timeline viewer, and a print invoice window. All status mutations call <code>PATCH /admin/orders/:id/status</code> and update the in-memory order immediately.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-done">Done</span>
+      <div class="task-title">Customers list: table + card view, search, create/edit/delete drawer</div>
+    </div>
+    <div class="task-body">
+      <p>Customers page has a view toggle (table / cards, persisted to localStorage), mobile-first card grid (900px breakpoint), a floating add-customer FAB on phone, and a full CRUD drawer with name / email / city / size preference / notes. Delete is gated behind a confirmation dialog.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-done">Done</span>
+      <div class="task-title">Backend: transactional order creation + NBOX booking on payment</div>
+    </div>
+    <div class="task-body">
+      <p>Order creation uses <code>BEGIN/COMMIT/ROLLBACK</code> for atomicity across <code>orders</code>, <code>order_items</code>, and <code>order_timeline_entries</code>. When an order is marked paid (<code>PATCH .../status</code>), <code>bookNboxForPaidOrder</code> fires post-commit and failures are logged to the timeline without blocking the payment confirmation response.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: CRITICAL BUGS ── -->
+  <div class="section" id="bugs">
+    <div class="sec-num" style="background:#DC2626;">1</div>
+    <div>
+      <div class="sec-title">Critical Bugs — Fix Before Anything Else</div>
+      <div class="sec-sub">These are live production defects — incorrect data is displayed to admins right now</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="task" style="border-color:var(--red-border);background:var(--red-bg);">
+    <div class="task-head">
+      <span class="sev sev-critical">Critical</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Bug #1 — Customer drawer shows MOCK orders, not real API data</div>
+    </div>
+    <div class="task-body">
+      <div class="callout callout-red">
+        <strong>File:</strong> <code>pages/customers/customer-drawer.component.ts</code> — Line 17 + Lines 392-396<br/>
+        <code>import { ORDERS } from '../../data/mock';</code><br/>
+        <code>readonly customerOrders = computed&lt;Order[]&gt;(() => ORDERS.filter(o => o.customer === name));</code>
+      </div>
+      <p>The customer history section in the drawer — order rows, size-preference bar chart, order count — is powered entirely by hardcoded mock data. Even if an admin scrolls into a real customer's drawer, every order shown is fake. New real orders from the storefront <strong>will never appear</strong>.</p>
+      <p><strong>Root cause:</strong> The <code>GET /admin/customers/:id</code> endpoint exists but doesn't return orders. There is no <code>GET /admin/customers/:id/orders</code> endpoint. The developer temporarily wired mock data and never came back to fix it.</p>
+      <p><strong>Fix required (2 parts):</strong></p>
+      <ul>
+        <li><strong>Backend:</strong> Add <code>GET /admin/customers/:id/orders</code> — returns all orders where <code>customer_id = :id</code> OR <code>customer_email = customer.email</code></li>
+        <li><strong>Frontend:</strong> In <code>CustomerDrawerComponent.ngOnInit()</code>, call the new endpoint and replace the mock computed. Remove the mock import entirely.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="task" style="border-color:var(--red-border);background:var(--red-bg);">
+    <div class="task-head">
+      <span class="sev sev-critical">Critical</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Bug #2 — Customer save shows "Saved" before the API call resolves</div>
+    </div>
+    <div class="task-body">
+      <div class="callout callout-red">
+        <strong>File:</strong> <code>pages/customers/customer-drawer.component.ts</code> — <code>save()</code> method (Lines 342-361)<br/>
+        The method uses a hard-coded <code>setTimeout(..., 700)</code> and immediately mutates <code>this.customer</code> in memory, showing the "Saved" toast — before <code>saved.emit()</code> ever triggers the actual <code>this.customersApi.update()</code> call in the parent.
+      </div>
+      <p>If the API call in the parent fails (network timeout, server error), the drawer has already shown "Saved" and the customer object has already been mutated in memory. The admin believes the data was persisted when it wasn't.</p>
+      <p><strong>Fix:</strong> Move the save logic entirely into the drawer component using <code>AdminCustomersService</code> directly. Remove the <code>setTimeout</code> fake delay. Only set <code>saveState = 'saved'</code> and emit after a successful API response. Keep <code>saveState = 'saving'</code> while the call is in-flight and show a real spinner.</p>
+    </div>
+  </div>
+
+  <div class="task" style="border-color:var(--orange-border);background:var(--orange-bg);">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-be">Backend</span>
+      <div class="task-title">Bug #3 — Hard-deleting customers orphans their orders</div>
+    </div>
+    <div class="task-body">
+      <div class="callout callout-orange">
+        <strong>File:</strong> <code>server/routes/admin-customers.route.js</code> — <code>DELETE /:id</code><br/>
+        <code>DELETE FROM customers WHERE tenant_id = $1 AND id = $2</code>
+      </div>
+      <p>When a customer is deleted, all orders that have <code>customer_id = deleted_id</code> retain the now-orphaned FK. The orders remain visible in the orders list (using the denormalized <code>customer_name</code> column), but any attempt to load "this customer's orders" from the customer table will fail silently — and analytics LTV calculations will be wrong.</p>
+      <p><strong>Fix:</strong> Replace hard delete with a <strong>soft delete</strong>. Add <code>deleted_at TIMESTAMPTZ NULL</code> to the <code>customers</code> table. <code>DELETE</code> API should <code>SET deleted_at = now()</code>. All <code>SELECT</code> queries add <code>WHERE deleted_at IS NULL</code>. If a customer must be fully purged, that's an explicit separate operation that also nullifies <code>customer_id</code> on orders.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: BACKEND ── -->
+  <div class="section" id="backend">
+    <div class="sec-num" style="background:#1E40AF;">2</div>
+    <div>
+      <div class="sec-title">Backend — All Missing Endpoints &amp; Hardening</div>
+      <div class="sec-sub">server/routes/admin-orders.route.js · admin-customers.route.js · DB layer</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="cat">Missing Endpoints</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-critical">Critical</span>
+      <span class="layer layer-be">Backend</span>
+      <div class="task-title">Add GET /admin/customers/:id/orders</div>
+    </div>
+    <div class="task-body">
+      <p>Returns the full order history for a specific customer. Must join by <strong>both</strong> <code>customer_id</code> AND by email match to handle orders placed before the customer record existed (guest checkout, storefront orders that pre-date the admin record).</p>
+      <pre>router.get('/:id/orders', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    // find customer first (email is needed for fallback join)
+    const cust = await client.query(
+      'SELECT id, email FROM customers WHERE tenant_id = $1 AND id = $2',
+      [tenant.id, req.params.id]
+    );
+    if (cust.rowCount === 0) return notFound(res, 'Customer not found.');
+    const { id: custId, email } = cust.rows[0];
+
+    const result = await client.query(`
+      SELECT o.*, COUNT(oi.id)::int AS items_count,
+        COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
+          'n', oi.product_name, 's', COALESCE(oi.size,''),
+          'q', oi.quantity, 'p', round(oi.unit_price_cents/100.0)
+        )) FILTER (WHERE oi.id IS NOT NULL), '[]'::jsonb) AS items
+      FROM orders o
+      LEFT JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.tenant_id = $1
+        AND (o.customer_id = $2 OR o.customer_email = $3)
+      GROUP BY o.id
+      ORDER BY o.placed_at DESC
+    `, [tenant.id, custId, email]);
+
+    ok(res, result.rows.map(mapOrder));
+  } finally { client.release(); }
+}));</pre>
+      <p>Register in <code>index.js</code> under <code>/api/admin/customers</code>.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-be">Backend</span>
+      <div class="task-title">Add GET /admin/customers/:id — include order stats in single fetch</div>
+    </div>
+    <div class="task-body">
+      <p>The existing <code>GET /:id</code> only returns the raw customer row via <code>mapCustomer()</code>, which is missing <code>orders_count</code>, <code>ltv_cents</code>, and <code>last_order_at</code> (those come from <code>v_customer_order_stats</code> in the list query but NOT in the detail query). This means the KPI bar in the drawer shows stale values from the list.</p>
+      <pre>// Replace the existing SELECT with a joined query:
+SELECT c.*,
+  COALESCE(s.orders_count, c.orders_count) AS orders_count,
+  COALESCE(s.ltv_cents, c.ltv_cents) AS ltv_cents,
+  s.last_order_at
+FROM customers c
+LEFT JOIN v_customer_order_stats s ON s.customer_id = c.id
+WHERE c.tenant_id = $1 AND c.id = $2</pre>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-be">Backend</span>
+      <div class="task-title">Order creation idempotency — prevent duplicate orders on retry</div>
+    </div>
+    <div class="task-body">
+      <p>The current <code>POST /admin/orders</code> generates <code>publicNumber</code> as <code>EC-YY-${Date.now().slice(-5)}</code>. A 5-digit millisecond suffix has a collision window when two requests land within 100ms, or when the client retries a failed request (network timeout after the server already inserted the row).</p>
+      <p><strong>Two-layer fix:</strong></p>
+      <ul>
+        <li><strong>DB layer:</strong> Add <code>UNIQUE (tenant_id, public_number)</code> constraint to the <code>orders</code> table. The INSERT will fail with a unique violation rather than creating a silent duplicate.</li>
+        <li><strong>API layer:</strong> Accept an optional <code>idempotencyKey</code> in the request body. Before inserting, check <code>SELECT id FROM orders WHERE tenant_id = $1 AND idempotency_key = $2</code>. If found, return the existing order (HTTP 200, not 201). This lets the frontend safely retry without duplicating.</li>
+      </ul>
+      <pre>// Frontend: generate before sending
+const idempotencyKey = `order-${crypto.randomUUID()}`;
+// store in localStorage against the draft, re-use on retry</pre>
+      <div class="callout callout-orange">
+        <strong>Also fix:</strong> The <code>publicNumber</code> generator should use a longer unique suffix or a sequential counter per tenant. Recommended: <code>EC-YY-MMDD-XXXXX</code> where XXXXX is from a DB sequence (<code>nextval('order_seq')</code>), guaranteed unique without collision.
+      </div>
+    </div>
+  </div>
+
+  <div class="cat">Database Hardening</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-db">DB</span>
+      <div class="task-title">Add soft-delete to customers table</div>
+    </div>
+    <div class="task-body">
+      <pre>-- Migration
+ALTER TABLE customers ADD COLUMN deleted_at TIMESTAMPTZ NULL;
+CREATE INDEX idx_customers_deleted ON customers (tenant_id, deleted_at) WHERE deleted_at IS NULL;
+
+-- All customer SELECTs must add:
+WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+
+-- DELETE endpoint becomes:
+UPDATE customers SET deleted_at = now()
+WHERE tenant_id = $1 AND id = $2 RETURNING id</pre>
+      <p>Orders that reference a soft-deleted customer remain intact. The admin can still view the order history even after deleting the customer record.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-db">DB</span>
+      <div class="task-title">Verify v_customer_order_stats view exists and has correct fallback</div>
+    </div>
+    <div class="task-body">
+      <p>The <code>GET /admin/customers</code> route <strong>depends</strong> on <code>v_customer_order_stats</code> via a <code>LEFT JOIN</code>. If this view doesn't exist or has a bug, every customer list fetch fails with a 500 error and the entire customers page shows empty/error.</p>
+      <p><strong>Required view definition (create if missing):</strong></p>
+      <pre>CREATE OR REPLACE VIEW v_customer_order_stats AS
+SELECT
+  customer_id,
+  COUNT(*)::int AS orders_count,
+  COALESCE(SUM(total_cents), 0)::bigint AS ltv_cents,
+  MAX(placed_at) AS last_order_at
+FROM orders
+WHERE customer_id IS NOT NULL
+  AND payment_status = 'paid'
+GROUP BY customer_id;</pre>
+      <p><strong>Fallback in query:</strong> The LEFT JOIN already handles the "no orders" case via COALESCE. Add an <code>ON CONFLICT DO NOTHING</code> guard in the view creation migration so re-running migrations is idempotent.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-db">DB</span>
+      <div class="task-title">Add phone_number column to customers table</div>
+    </div>
+    <div class="task-body">
+      <p>The <code>orders</code> table has <code>customer_phone</code> but the <code>customers</code> table doesn't. A customer who placed an order via the storefront with a phone number loses that data when the admin tries to look them up by phone, or when a customer record is auto-created from a storefront order.</p>
+      <pre>ALTER TABLE customers ADD COLUMN phone_number TEXT NULL;
+-- Update mapCustomer() to include: phone: row.phone_number || ''
+-- Update PATCH handler to include phone_number in the SET clause</pre>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-be">Backend</span>
+      <div class="task-title">Add server-side pagination to GET /admin/orders</div>
+    </div>
+    <div class="task-body">
+      <p>Currently <code>GET /admin/orders</code> fetches <strong>all orders</strong> for a tenant in a single query. At 500+ orders this query is slow and the JSON payload is large. All filtering (search, date range, payment, fulfillment) happens client-side, which means the full dataset must travel over the network every 15 seconds.</p>
+      <p><strong>Add query params:</strong> <code>?page=0&amp;limit=100&amp;payment=paid&amp;fulfillment=shipped&amp;from=2026-01-01&amp;to=2026-06-30&amp;q=EC-26</code></p>
+      <p><strong>Return envelope:</strong></p>
+      <pre>{ "data": { "rows": [...], "total": 847, "page": 0, "limit": 100 }, "success": true }</pre>
+      <p><strong>Migration path:</strong> The frontend auto-refresh can continue to work. If <code>?limit</code> is omitted, return all (backward compat). Then in a separate frontend task, wire the Angular signals to pass the filter values as query params and receive the paginated envelope.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-be">Backend</span>
+      <div class="task-title">NBOX booking: add admin notification on retry-exhausted failure</div>
+    </div>
+    <div class="task-body">
+      <p>When <code>bookNboxForPaidOrder</code> fails, the code logs a console warning and adds a timeline entry. The admin has <strong>no UI feedback</strong> that the delivery was never booked unless they open that specific order and read the timeline.</p>
+      <p><strong>Short-term:</strong> The timeline entry added on failure should use <code>kind: 'note'</code> with a red-flag detail string that the order drawer renders distinctly (e.g. a warning pill). The customer list page's silent refresh should surface any order where the timeline has an unresolved NBOX failure as a badge.</p>
+      <p><strong>Long-term:</strong> Implement a <code>delivery_bookings</code> table that tracks booking attempts, status, and retry count. A background job retries failed bookings up to 3 times with exponential back-off (1 min, 5 min, 30 min). After 3 failures, set a <code>requires_manual_booking</code> flag and surface it in the orders page as a prominent banner.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-be">Backend</span>
+      <div class="task-title">Validate customer_id when creating orders from admin</div>
+    </div>
+    <div class="task-body">
+      <p><code>POST /admin/orders</code> accepts <code>req.body.customerId</code> but never verifies it exists in the <code>customers</code> table. A typo in the frontend sends a non-existent UUID, the FK is stored, and the customer stats view returns nothing for that order.</p>
+      <pre>if (req.body.customerId) {
+  const c = await client.query(
+    'SELECT id FROM customers WHERE tenant_id = $1 AND id = $2',
+    [tenant.id, req.body.customerId]
+  );
+  if (c.rowCount === 0) {
+    await client.query('ROLLBACK');
+    return validationError(res, ['Customer ID does not exist.']);
+  }
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── SECTION 4: EDGE CASES ── -->
+  <div class="section" id="edge">
+    <div class="sec-num" style="background:#B45309;">3</div>
+    <div>
+      <div class="sec-title">Edge Cases &amp; Fallback Scenarios</div>
+      <div class="sec-sub">Every scenario where things go wrong — and what the system should do</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="cat">Order-Related Edge Cases</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-critical">Critical</span>
+      <div class="task-title">Scenario: Customer places duplicate order (double-tap, retry, back-button)</div>
+    </div>
+    <div class="task-body">
+      <p><strong>Risk:</strong> Customer taps "Place Order" twice on the storefront or the network drops after the server commits but before the success response reaches the client. The client retries. Without idempotency, two identical orders are created.</p>
+
+      <div class="flow">
+        <div class="flow-step action">Client sends POST /orders with idempotency_key</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step guard">Server checks idempotency_key in orders table</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step pass">Key not found → INSERT → return 201</div>
+      </div>
+      <div class="flow" style="margin-top:4px;">
+        <div class="flow-step action">Client retries (network error)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step guard">Server finds existing idempotency_key</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step pass">Return existing order → 200 (not a new insert)</div>
+      </div>
+
+      <p style="margin-top:10px;"><strong>Admin-side detection:</strong> If a duplicate slips through anyway (e.g. two different clients), the admin orders list should group orders by customer and date and highlight any where: same customer + same total + same items within 60 minutes. Show a "Possible Duplicate" badge on the newer one.</p>
+      <p><strong>Implementation:</strong> Add <code>idempotency_key TEXT NULL UNIQUE per tenant</code> column to orders. Storefront generates UUID before checkout starts, persists in localStorage, re-uses on retry. Cleared from localStorage only after confirmed server 201.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <div class="task-title">Scenario: Customer makes a payment but status is stuck on "pending"</div>
+    </div>
+    <div class="task-body">
+      <p><strong>Risk:</strong> Payment gateway webhook fires but fails (timeout, server restart). The Sadad/Stripe/payment webhook route marks the order as paid, but if it crashes mid-update, the order stays pending forever. The admin sees a pending order but the customer's bank shows a deduction.</p>
+      <p><strong>Fallbacks:</strong></p>
+      <ul>
+        <li>The order drawer should show a "Confirm Payment Manually" button prominently for <code>payment === 'pending'</code> orders — this button already exists but should be visually elevated when the order is more than 30 minutes old.</li>
+        <li>Add a <strong>payment reconciliation query</strong>: <code>SELECT * FROM orders WHERE payment_status = 'pending' AND placed_at &lt; now() - interval '30 minutes'</code>. Surface this count as a red badge on the orders nav item.</li>
+        <li>Payment gateway should implement webhook retry with exponential backoff. The <code>sadad-webhook.route.js</code> should be idempotent (check if already paid before updating).</li>
+      </ul>
+      <p><strong>In the order drawer:</strong> When <code>payment = 'pending'</code> AND <code>date &lt; today - 1 day</code>, show a warning banner: "This order has a pending payment older than 24h. Check payment gateway or confirm manually."</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <div class="task-title">Scenario: Status update API call fails mid-transition (optimistic vs real state)</div>
+    </div>
+    <div class="task-body">
+      <p><strong>Risk:</strong> Admin clicks "Mark Shipped". The drawer shows "Shipped" optimistically. The PATCH request fails with 500. The in-memory order now says "shipped" but the database still says "processing". The admin sees the wrong state until they close and re-open the drawer.</p>
+      <p><strong>Current behavior:</strong> The order drawer does NOT optimistically update. It waits for the API response (<code>this._order.set(updated)</code> runs only after the resolved promise). This is correct — but the error catch only surfaces via the global toast interceptor. The drawer needs to also re-fetch on error to ensure state is correct.</p>
+      <p><strong>Fix in order-drawer.component.ts:</strong></p>
+      <pre>async transition(target: OrderFulfillment): Promise<void> {
+  this.busy.set(true);
+  try {
+    const updated = await this.ordersApi.updateStatus(...);
+    this._order.set(updated);
+    this.updated.emit(updated);
+    // ... toast
+  } catch {
+    // Refetch to ensure local state matches server
+    try { const fresh = await this.ordersApi.get(o.id); this._order.set(fresh); } catch {}
+    // Global interceptor shows the error toast
+  } finally { this.busy.set(false); }
+}</pre>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <div class="task-title">Scenario: Customer creates a new order — it must appear in their customer drawer immediately</div>
+    </div>
+    <div class="task-body">
+      <p><strong>Risk:</strong> Admin has the customer drawer open. A new order arrives from the storefront. The customer drawer shows the old order list (fetched once on drawer open, never refreshed). Admin doesn't see the new order without closing and re-opening the drawer.</p>
+      <p><strong>Fix — Customer drawer order refresh:</strong></p>
+      <ul>
+        <li>When the customer drawer opens, load orders from <code>GET /admin/customers/:id/orders</code> into a local signal <code>orders = signal&lt;Order[]&gt;([])</code>.</li>
+        <li>Set up a <strong>30-second poll</strong> (similar to the orders page 15s refresh) inside the drawer. On each tick, silently re-fetch the customer's orders and update the signal.</li>
+        <li>The orders list in the drawer should show a subtle "Updated just now" timestamp so the admin knows the data is live.</li>
+        <li>Cancel the poll in <code>ngOnDestroy</code>.</li>
+      </ul>
+      <p>This is especially important because: when an admin is processing an order, a customer might call in saying "I just placed another order" — the admin needs to see it without navigating away.</p>
+    </div>
+  </div>
+
+  <div class="cat">API & Network Edge Cases</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <div class="task-title">Scenario: API call fails — add retry with exponential backoff</div>
+    </div>
+    <div class="task-body">
+      <p>Currently <code>ApiClient</code> makes a single HTTP request and throws on error. No retry logic exists. A transient 502 or DB connection pool exhaustion will show an error toast and drop the operation. On mobile with intermittent signal this is frequent.</p>
+      <p><strong>Add an RxJS retry operator to ApiClient:</strong></p>
+      <pre>import { retry, timer } from 'rxjs';
+
+// Inside get/post/patch/delete, pipe before map:
+.pipe(
+  retry({
+    count: 2,                        // max 2 retries (3 total attempts)
+    delay: (_, retryIndex) =>
+      timer(Math.pow(2, retryIndex) * 500), // 500ms, 1000ms
+    resetOnSuccess: true,
+  }),
+  map(res => res.data),
+)</pre>
+      <p><strong>Important:</strong> Only retry GET and safe read operations automatically. For <strong>mutating requests</strong> (POST, PATCH, DELETE), do NOT auto-retry without idempotency keys — retrying a PATCH could cause unintended double-updates. For those, surface the error and let the admin retry manually.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <div class="task-title">Scenario: 401 session expiry while admin is mid-workflow</div>
+    </div>
+    <div class="task-body">
+      <p>If the Express session expires (default 24h, or server restart), every API call returns 401. Currently the HTTP interceptor surfaces a toast error. But if the admin is in the middle of a status update or saving a note, the work is silently lost — the toast just says "Unauthorized".</p>
+      <p><strong>Handling in the HTTP interceptor:</strong></p>
+      <ul>
+        <li>On 401: show a modal (not a toast) saying "Your session has expired. Log in again to continue." with a "Go to Login" button.</li>
+        <li>Preserve the current URL so after re-login the admin lands back on the same page.</li>
+        <li>If there's an in-progress order drawer with a pending note draft, save it to <code>localStorage</code> before redirect so it can be restored after re-auth.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <div class="task-title">Scenario: Orders list returns empty due to v_customer_order_stats view failure</div>
+    </div>
+    <div class="task-body">
+      <p>If <code>v_customer_order_stats</code> fails (view dropped, DB migration error), the <code>LEFT JOIN</code> in the customers list query may throw a 500, making the entire customers page show an error state. The orders page is independent and won't be affected, but admins can't access customer data at all.</p>
+      <p><strong>Fix — Graceful fallback query:</strong> Wrap the view join in a <code>try/catch</code> inside the route and fall back to the customers table's own <code>orders_count</code> and <code>ltv_cents</code> columns if the view is unavailable.</p>
+      <pre>try {
+  // full join with view
+} catch (viewErr) {
+  console.warn('v_customer_order_stats unavailable, using denormalized columns', viewErr.message);
+  // fallback: SELECT c.* FROM customers c WHERE c.tenant_id = $1
+  result = await client.query('SELECT * FROM customers WHERE tenant_id = $1 ORDER BY joined_at DESC', [tenant.id]);
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── SECTION 5: FRONTEND HARDENING ── -->
+  <div class="section" id="frontend">
+    <div class="sec-num" style="background:#5B21B6;">4</div>
+    <div>
+      <div class="sec-title">Frontend — Production Hardening</div>
+      <div class="sec-sub">Angular signals, loading states, error handling, and wiring gaps</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="cat">Loading &amp; Error States</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Orders page: distinguish "loading" from "empty" from "error" states</div>
+    </div>
+    <div class="task-body">
+      <p>Currently when the initial fetch fails, the catch block does <code>this._orders.set([])</code> and removes the loading spinner. The page shows the empty state ("No orders found") as if there genuinely are no orders. The admin has no idea the data failed to load.</p>
+      <p><strong>Add an error signal:</strong></p>
+      <pre>readonly loadError = signal&lt;string | null&gt;(null);
+
+private async refreshOrders(silent = false): Promise&lt;void&gt; {
+  if (!silent) { this.loading.set(true); this.loadError.set(null); }
+  try {
+    this._orders.set(await this.ordersApi.list());
+  } catch (err: any) {
+    if (!silent) {
+      this.loadError.set('Failed to load orders. Check your connection.');
+      this._orders.set([]);
+    }
+    // silent refresh failures are swallowed (don't flash errors every 15s)
+  } finally {
+    if (!silent) this.loading.set(false);
+  }
+}</pre>
+      <p>In the template: show a red callout banner with a "Retry" button when <code>loadError()</code> is set, instead of the empty state.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Add skeleton loaders to orders and customers pages</div>
+    </div>
+    <div class="task-body">
+      <p>Both pages show a blank white card during the initial API fetch (the <code>loading</code> signal is set but neither page has a skeleton). On a slow connection this looks like a broken empty state.</p>
+      <p><strong>Skeleton pattern:</strong></p>
+      <pre>&lt;!-- In template, replace the empty card during loading --&gt;
+@if (loading()) {
+  &lt;div class="card"&gt;
+    @for (i of [1,2,3,4,5]; track i) {
+      &lt;div class="skeleton-row"&gt;
+        &lt;div class="sk sk-id"&gt;&lt;/div&gt;
+        &lt;div class="sk sk-text"&gt;&lt;/div&gt;
+        &lt;div class="sk sk-pill"&gt;&lt;/div&gt;
+      &lt;/div&gt;
+    }
+  &lt;/div&gt;
+}</pre>
+      <p>The skeleton shape should match the real table/card dimensions. Use a CSS <code>shimmer</code> animation. CSS: <code>@keyframes shimmer { 0%{background-position:-200%} 100%{background-position:200%} }</code></p>
+    </div>
+  </div>
+
+  <div class="cat">Wiring Gaps</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Wire the Customers page Export button</div>
+    </div>
+    <div class="task-body">
+      <p>The export button in <code>customers.component.ts</code> has no <code>(click)</code> handler. It renders but does nothing.</p>
+      <p><strong>Implement CSV export identical to the orders page pattern:</strong></p>
+      <pre>exportCsv(): void {
+  const rows = this.filtered();
+  const headers = ['Name', 'Email', 'City', 'Orders', 'LTV (QAR)', 'Size Pref', 'Last Order', 'Joined'];
+  const data = rows.map(c =&gt; [
+    c.name, c.email, c.city, c.orders,
+    c.ltv.toFixed(2), `EU ${c.sizePref}`, c.lastOrder, c.joined
+  ]);
+  const csv = [headers, ...data]
+    .map(r =&gt; r.map(v =&gt; `"${String(v).replace(/"/g,'""')}"`).join(','))
+    .join('\r\n');
+  // blob download same as orders page...
+}</pre>
+      <p>Bind: <code>(click)="exportCsv()"</code> on the export button. Add an <code>exporting</code> signal for the spinner state.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Fix sizePref pill — hide or show "EU 0" when preference is unset</div>
+    </div>
+    <div class="task-body">
+      <p>Both the customer card and the table render <code>&lt;ap-pill kind="gold"&gt;EU {{ c.sizePref }}&lt;/ap-pill&gt;</code>. When <code>sizePref</code> is <code>0</code> or <code>null</code> (a customer who has never ordered), the pill shows "EU 0" which is nonsensical.</p>
+      <pre>&lt;!-- Replace with: --&gt;
+@if (c.sizePref) {
+  &lt;ap-pill kind="gold"&gt;EU {{ c.sizePref }}&lt;/ap-pill&gt;
+} @else {
+  &lt;span class="muted small"&gt;—&lt;/span&gt;
+}</pre>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Add AdminCustomersService.getOrders(customerId) method</div>
+    </div>
+    <div class="task-body">
+      <pre>// admin-customers.service.ts
+getOrders(id: string): Promise&lt;Order[]&gt; {
+  return firstValueFrom(this.api.get&lt;Order[]&gt;(`/admin/customers/${id}/orders`));
+}</pre>
+      <p>This will be used by the customer drawer (see Section 5 — Customer UX below).</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Order drawer: add a "stale data" refresh guard after errors</div>
+    </div>
+    <div class="task-body">
+      <p>When any workflow action (transition, tracking save, cancel, refund) fails, the in-memory <code>_order</code> signal may be out of sync with the DB. The fix (from the edge cases section) is to re-fetch the order on error. This needs to be centralized:</p>
+      <pre>private async safeUpdateStatus(payload: OrderStatusPayload): Promise&lt;void&gt; {
+  const o = this._order();
+  try {
+    const updated = await this.ordersApi.updateStatus(o.id, payload);
+    this._order.set(updated);
+    this.updated.emit(updated);
+  } catch {
+    // Re-fetch to sync local state
+    try { this._order.set(await this.ordersApi.get(o.id)); } catch {}
+    throw; // re-throw so the caller's toast fires
+  }
+}</pre>
+      <p>All workflow methods (<code>transition</code>, <code>confirmPayment</code>, <code>cancelOrder</code>, <code>refundOrder</code>, <code>saveTracking</code>) call <code>safeUpdateStatus()</code> instead of <code>ordersApi.updateStatus()</code> directly.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 6: CUSTOMER UX ── -->
+  <div class="section" id="ux">
+    <div class="sec-num" style="background:#B45309;">5</div>
+    <div>
+      <div class="sec-title">Customer Detail UX — Redesign Spec</div>
+      <div class="sec-sub">The drawer must show real data, a clear data hierarchy, and be useful on mobile</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="callout callout-purple">
+    <strong>Goal:</strong> When an admin opens a customer record, they should know in 3 seconds: Who is this person? How much have they spent? When was their last order? Are there any active/pending orders? What sizes do they buy? Then they can edit info or click straight into an order without navigating away.
+  </div>
+
+  <div class="cat">Redesigned Customer Drawer Structure</div>
+
+  <div class="wire-grid">
+    <div class="wire-box">
+      <h4>Section 1 — Identity Header (always visible)</h4>
+      <ul>
+        <li>Avatar initials (large, colored by name hash)</li>
+        <li>Full name (editable, syncs avatar live)</li>
+        <li>Email (truncated with tooltip)</li>
+        <li>Phone number (new field)</li>
+        <li>City</li>
+        <li>Member since date</li>
+        <li>Customer ID (small mono, copy button)</li>
+      </ul>
+    </div>
+    <div class="wire-box">
+      <h4>Section 2 — KPI Bar (3 tiles, read-only)</h4>
+      <ul>
+        <li><strong>Total Orders</strong> — live from API (not cached)</li>
+        <li><strong>Lifetime Value</strong> — QAR, gold color, from paid orders only</li>
+        <li><strong>Last Order</strong> — relative date ("3 days ago")</li>
+        <li>All 3 tiles show skeleton pulse while loading</li>
+      </ul>
+    </div>
+    <div class="wire-box">
+      <h4>Section 3 — Order History (live)</h4>
+      <ul>
+        <li>Loaded from <code>GET /admin/customers/:id/orders</code></li>
+        <li>Each row: Order ID (green mono) + date + items count + fulfillment pill + total</li>
+        <li>Clicking a row navigates to orders page with that order pre-opened</li>
+        <li>Empty state: "No orders yet — customer has never purchased"</li>
+        <li>Loading skeleton: 3 placeholder rows while fetching</li>
+        <li>Auto-refreshes every 30s silently</li>
+        <li>Badge: pending payment orders highlighted in orange</li>
+      </ul>
+    </div>
+    <div class="wire-box">
+      <h4>Section 4 — Size Intelligence</h4>
+      <ul>
+        <li>Bar chart derived from REAL order items (from the live order list)</li>
+        <li>Shows most-purchased size as "Preferred Size" chip</li>
+        <li>If no orders: show only the manually-set size preference field</li>
+        <li>If orders exist: show chart + below it "Manual override" field</li>
+      </ul>
+    </div>
+    <div class="wire-box">
+      <h4>Section 5 — Notes</h4>
+      <ul>
+        <li>Free-text textarea (unchanged)</li>
+        <li>Auto-saves on blur (debounced 1s)</li>
+        <li>Shows last-edited timestamp</li>
+      </ul>
+    </div>
+    <div class="wire-box">
+      <h4>Section 6 — Danger Zone</div>
+      <ul>
+        <li>"Delete Customer" — now triggers soft-delete</li>
+        <li>Confirm dialog explains: "This will hide the customer from the list. Their order history remains accessible from the orders page."</li>
+        <li>Show a "Restore" button in the danger zone if customer is already soft-deleted</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="cat">Data Flow for Customer Drawer</div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-critical">Critical</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Customer drawer: full data flow rewrite</div>
+    </div>
+    <div class="task-body">
+      <p>Replace the current mock-data implementation with a proper async data flow:</p>
+      <pre>// customer-drawer.component.ts
+
+// 1. Add inject
+private readonly customersApi = inject(AdminCustomersService);
+
+// 2. Add signals
+readonly orders = signal&lt;Order[]&gt;([]);
+readonly ordersLoading = signal(false);
+readonly ordersError = signal&lt;string | null&gt;(null);
+private refreshTimer: ReturnType&lt;typeof setInterval&gt; | null = null;
+
+// 3. ngOnInit
+async ngOnInit(): Promise&lt;void&gt; {
+  this.initial.set(this.makeFormFromCustomer(this.customer));
+  this.form.set({ ...this.initial() });
+  if (this.mode === 'edit') {
+    await this.loadOrders();
+    this.refreshTimer = setInterval(() =&gt; void this.loadOrders(true), 30_000);
+  }
+}
+
+// 4. ngOnDestroy
+ngOnDestroy(): void {
+  if (this.refreshTimer) clearInterval(this.refreshTimer);
+}
+
+// 5. Load orders method
+private async loadOrders(silent = false): Promise&lt;void&gt; {
+  if (!silent) this.ordersLoading.set(true);
+  this.ordersError.set(null);
+  try {
+    const list = await this.customersApi.getOrders(this.customer.id);
+    this.orders.set(list);
+  } catch {
+    if (!silent) this.ordersError.set('Could not load order history.');
+  } finally {
+    if (!silent) this.ordersLoading.set(false);
+  }
+}
+
+// 6. Size stats — derived from REAL orders
+readonly sizeStats = computed(() =&gt; {
+  const sizeMap: Record&lt;number, number&gt; = {};
+  this.orders().forEach(o =&gt;
+    o.items.forEach(it =&gt; { sizeMap[it.s] = (sizeMap[it.s] || 0) + it.q; })
+  );
+  const sizes = Object.keys(sizeMap).map(s =&gt; ({ size: +s, count: sizeMap[+s] }));
+  return sizes.length ? sizes.sort((a,b) =&gt; b.count - a.count)
+    : [{ size: this.form().sizePref || 0, count: 1 }];
+});</pre>
+      <p><strong>Remove:</strong> <code>import { ORDERS } from '../../data/mock'</code> entirely. <code>customerOrders</code> computed is replaced by the <code>orders</code> signal above.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-high">High</span>
+      <span class="layer layer-fe">Frontend</span>
+      <div class="task-title">Customer drawer: fix save to be truly async (no fake setTimeout)</div>
+    </div>
+    <div class="task-body">
+      <pre>// Replace the current save() method entirely:
+async save(): Promise&lt;void&gt; {
+  if (!this.dirty() || this.saveState() === 'saving') return;
+  const f = this.form();
+  if (!f.name.trim() || !f.email.trim()) {
+    this.toast.error('Name and email are required.');
+    return;
+  }
+  this.saveState.set('saving');
+  try {
+    const saved = this.mode === 'create'
+      ? await this.customersApi.create({ name: f.name, email: f.email, city: f.city, sizePref: f.sizePref, notes: f.notes })
+      : await this.customersApi.update(this.customer.id, { name: f.name, email: f.email, city: f.city, sizePref: f.sizePref, notes: f.notes });
+
+    // Adopt server response (especially id for new records)
+    Object.assign(this.customer, saved);
+    this.initial.set({ ...f });
+    this.saveState.set('saved');
+    const titleKey = this.mode === 'create'
+      ? 'customerDrawer.toast.created.title'
+      : 'customerDrawer.toast.saved.title';
+    this.toast.success(this.t(titleKey), f.name);
+    this.saved.emit({ ...this.customer, ...saved });
+    setTimeout(() =&gt; this.saveState.set('idle'), 1500);
+  } catch {
+    this.saveState.set('dirty'); // revert to dirty so admin can retry
+    // Global interceptor shows the error toast
+  }
+}</pre>
+      <p>The parent <code>onCustomerSaved</code> should no longer call the API — the drawer handles it directly. The parent only needs to update the list signal when it receives the <code>saved</code> emit.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 7: MOBILE ── -->
+  <div class="section" id="mobile">
+    <div class="sec-num" style="background:#0F766E;">6</div>
+    <div>
+      <div class="sec-title">Mobile View — Responsive Plan</div>
+      <div class="sec-sub">Every layout must work at 375px (iPhone SE) and 390px (iPhone 15)</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="resp-grid">
+    <div class="resp-col resp-col-mobile">
+      <h4>Mobile (&lt;768px) — Orders Page</h4>
+      <div class="resp-col-body">
+        <ul>
+          <li>Card tiles already implemented (good)</li>
+          <li>Date-range pills can wrap — need <code>flex-wrap:wrap</code> guard at 375px so "Custom" doesn't get cut</li>
+          <li>Payment + fulfillment selects: stack to full-width at 480px (<code>flex-direction:column</code>)</li>
+          <li>Export label already hidden at 480px (good)</li>
+          <li>Order drawer: full <code>100vw</code> width already set (good)</li>
+          <li>Stepper at 560px: already 2×2 grid fallback (good)</li>
+          <li>Notes composer: textarea should be <code>rows="3"</code> on mobile, not "2"</li>
+          <li>Action buttons in drawer: wrap naturally at 560px — verify none get cropped</li>
+          <li>Timeline items: meta text can overflow — add <code>word-break:break-word</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="resp-col resp-col-desktop">
+      <h4>Desktop (≥768px) — Orders Page</h4>
+      <div class="resp-col-body">
+        <ul>
+          <li>Sortable table with 8 columns — at 1024px the "actions" column with 2 buttons may be tight — test at 1024px</li>
+          <li>Order drawer: <code>min(640px, 100vw)</code> — drawer width good</li>
+          <li>Date-range pills + custom inputs on one line — verify at 1024px that filters don't push to 2 rows</li>
+          <li>Pagination bar: ensure it doesn't clip at 1024px with pageSize selector</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="resp-grid">
+    <div class="resp-col resp-col-mobile">
+      <h4>Mobile (&lt;900px) — Customers Page</h4>
+      <div class="resp-col-body">
+        <ul>
+          <li>Card view forced on mobile (good — table view toggle hidden)</li>
+          <li>Card grid: 1-col at 720px (good)</li>
+          <li>FAB (+ button) positioned at <code>bottom: 72px + safe-area</code> (good for iOS)</li>
+          <li>Customer drawer: full 100vw at 720px (good)</li>
+          <li><strong>New:</strong> KPI grid (3-col) must collapse to 1-col at 560px — needs <code>grid-template-columns:1fr</code> media override</li>
+          <li><strong>New:</strong> Order history rows in drawer: on mobile, pill + total stack below order ID/date (flex-direction:column inside the order-row)</li>
+          <li><strong>New:</strong> Size stats bar chart: reduce label width from 60px to 40px at 480px</li>
+          <li>Search bar + export + add-customer button on mobile: export and add are hidden on mobile (only FAB for add). Export should also be accessible via a "..." menu or keep it in the toolbar as icon-only.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="resp-col resp-col-desktop">
+      <h4>Desktop (≥900px) — Customers Page</h4>
+      <div class="resp-col-body">
+        <ul>
+          <li>Table + cards toggle visible (good)</li>
+          <li>Cards grid: auto-fill 280px min-width (good)</li>
+          <li>Customer drawer: 640px width (good)</li>
+          <li>KPI 3-col grid in drawer: all tiles side by side (good)</li>
+          <li>Order history rows: horizontal layout with pill + amount on right (good)</li>
+          <li><strong>New:</strong> "Phone" field added to the identity form grid — put it next to "City" in the 2-col grid row (grid-2)</li>
+          <li>Save bar: confirm it doesn't obscure drawer body scroll on 720px-900px viewports</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-ux">UX</span>
+      <div class="task-title">Customer drawer: bottom action bar on mobile instead of inline save bar</div>
+    </div>
+    <div class="task-body">
+      <p>On mobile, the save bar sticks to the bottom of the viewport but the drawer's form fields extend below it. On small screens (375px height), the save bar overlaps the bottom form fields.</p>
+      <p><strong>Fix:</strong> On mobile (<code>≤ 720px</code>), the save bar should be outside the scrollable <code>.drawer-body</code> and pinned to <code>position: sticky; bottom: env(safe-area-inset-bottom, 0)</code> at the very bottom of the drawer panel. The drawer body should have <code>padding-bottom: 80px</code> to avoid content being hidden behind the bar.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 8: ORDERS UX ── -->
+  <div class="section" id="orders">
+    <div class="sec-num" style="background:#1E40AF;">7</div>
+    <div>
+      <div class="sec-title">Orders Page — UX Improvements</div>
+      <div class="sec-sub">Specific UX issues found during the audit, with fixes</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-ux">UX</span>
+      <div class="task-title">Add a "Stale Payment" warning badge to orders with pending payment &gt;30 min</div>
+    </div>
+    <div class="task-body">
+      <p>In the orders list, if <code>o.payment === 'pending'</code> AND <code>o.date &lt; today - 1</code>, add a small warning icon next to the pending pill. In the order drawer, show a yellow callout banner at the top of the workflow section.</p>
+      <p>This gives admins an immediate visual cue without needing to open every pending order to check if it's a stuck payment vs. a new order.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-ux">UX</span>
+      <div class="task-title">Order drawer: show product thumbnail placeholder linked to real product</div>
+    </div>
+    <div class="task-body">
+      <p>The line items section in the order drawer shows a grey placeholder box (<code>background: linear-gradient(135deg, #e8eaf2, #dde1ee)</code>) where a product image should be. The <code>OrderItem</code> model has no image URL — the image needs to come from a join with <code>media_links</code> via <code>product_id</code>.</p>
+      <p><strong>Backend:</strong> In <code>loadAdminOrder()</code>, the items <code>jsonb_agg</code> should include the product's cover image:</p>
+      <pre>jsonb_build_object(
+  'n', oi.product_name,
+  's', COALESCE(oi.size, ''),
+  'q', oi.quantity,
+  'p', round(oi.unit_price_cents / 100.0),
+  'img', (SELECT url FROM media_links WHERE product_id = oi.product_id AND role = 'cover' LIMIT 1)
+)</pre>
+      <p><strong>Frontend model:</strong> Add <code>img?: string</code> to <code>OrderItem</code>. In the drawer template, render <code>&lt;img [src]="api.mediaUrl(it.img)"&gt;</code> instead of the grey div.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-medium">Medium</span>
+      <span class="layer layer-ux">UX</span>
+      <div class="task-title">Order drawer: add "Open Customer Profile" button</div>
+    </div>
+    <div class="task-body">
+      <p>Currently in the Customer section of the order drawer, the admin can see the customer name + email + phone but has no way to navigate to the customer's profile without closing the drawer and going to the customers page.</p>
+      <p><strong>Add:</strong> A small "View Customer" ghost button next to the customer name that navigates to <code>/customers?highlight={customerId}</code>. On the customers page, the highlight param scrolls to and opens the customer's drawer automatically.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <span class="sev sev-low">Low</span>
+      <span class="layer layer-ux">UX</span>
+      <div class="task-title">Order search: add debounce on search input (300ms)</div>
+    </div>
+    <div class="task-body">
+      <p>The current search uses <code>(ngModelChange)="search.set($event)"</code> which fires a recompute on every keystroke. At 500+ orders this can cause visible lag on mobile. Add a 300ms debounce:</p>
+      <pre>// Convert to rxjs Subject approach or use a debounce signal wrapper
+private readonly searchInput$ = new Subject&lt;string&gt;();
+
+ngOnInit() {
+  this.searchInput$.pipe(debounceTime(300), takeUntilDestroyed())
+    .subscribe(v =&gt; { this.search.set(v); this.page.set(0); });
+}</pre>
+    </div>
+  </div>
+
+  <!-- ── SECTION 9: IMPLEMENTATION ORDER ── -->
+  <div class="section" id="order">
+    <div class="sec-num" style="background:#065F46;">8</div>
+    <div>
+      <div class="sec-title">Implementation Order — Priority Queue</div>
+      <div class="sec-sub">Do these in sequence. Each phase is independently shippable.</div>
+    </div>
+    <div class="sec-line"></div>
+  </div>
+
+  <div class="task" style="border-color:var(--red-border);">
+    <div class="task-head">
+      <span class="sev sev-critical">Phase 1 — Fix Critical Bugs (1–2 days)</span>
+    </div>
+    <div class="task-body">
+      <ul>
+        <li><strong>BE:</strong> Add <code>GET /admin/customers/:id/orders</code> endpoint</li>
+        <li><strong>FE:</strong> Add <code>customersApi.getOrders(id)</code> service method</li>
+        <li><strong>FE:</strong> Rewrite customer drawer — remove mock import, load orders from API, fix save() async flow</li>
+        <li><strong>FE:</strong> Fix save() to be truly async (no setTimeout, wait for API response before showing Saved)</li>
+        <li><strong>DB:</strong> Add soft-delete to customers (migration + update all routes)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="task" style="border-color:var(--orange-border);">
+    <div class="task-head">
+      <span class="sev sev-high">Phase 2 — Edge Cases &amp; Hardening (2–3 days)</span>
+    </div>
+    <div class="task-body">
+      <ul>
+        <li><strong>DB:</strong> Add <code>UNIQUE (tenant_id, public_number)</code> to orders</li>
+        <li><strong>DB:</strong> Add <code>idempotency_key</code> column + unique constraint</li>
+        <li><strong>BE:</strong> Idempotency check in <code>POST /admin/orders</code></li>
+        <li><strong>BE:</strong> Validate <code>customer_id</code> FK in order creation</li>
+        <li><strong>DB:</strong> Create/verify <code>v_customer_order_stats</code> view</li>
+        <li><strong>BE:</strong> Graceful fallback in customers list if view fails</li>
+        <li><strong>FE:</strong> Add GET retry (read-only, 2 retries) to ApiClient</li>
+        <li><strong>FE:</strong> Add 401 session-expiry modal (not toast)</li>
+        <li><strong>FE:</strong> Orders page: distinguish loading / empty / error states</li>
+        <li><strong>FE:</strong> Customers page: distinguish loading / empty / error states</li>
+        <li><strong>FE:</strong> Order drawer: <code>safeUpdateStatus()</code> with re-fetch on error</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="task" style="border-color:var(--blue-border);">
+    <div class="task-head">
+      <span class="sev sev-medium">Phase 3 — UX Polish &amp; Missing Features (2–3 days)</span>
+    </div>
+    <div class="task-body">
+      <ul>
+        <li><strong>FE:</strong> Skeleton loaders on orders and customers pages</li>
+        <li><strong>FE:</strong> Wire customers export CSV button</li>
+        <li><strong>FE:</strong> Fix "EU 0" pill when sizePref is unset</li>
+        <li><strong>FE:</strong> Customer drawer — 30s order refresh timer</li>
+        <li><strong>FE:</strong> Customer drawer — phone field</li>
+        <li><strong>FE:</strong> Customer drawer — real size stats from live orders</li>
+        <li><strong>FE:</strong> Customer drawer — mobile safe-area save bar</li>
+        <li><strong>FE:</strong> "Stale Payment" warning badge in orders list</li>
+        <li><strong>FE:</strong> "Open Customer Profile" button in order drawer</li>
+        <li><strong>FE:</strong> Orders search debounce (300ms)</li>
+        <li><strong>BE:</strong> Add <code>customer_id</code> enrichment in <code>GET /admin/customers/:id</code> (join with stats view)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="task" style="border-color:var(--green-border);">
+    <div class="task-head">
+      <span class="sev sev-low">Phase 4 — Performance &amp; Scale (1–2 days)</span>
+    </div>
+    <div class="task-body">
+      <ul>
+        <li><strong>BE:</strong> Server-side pagination on <code>GET /admin/orders</code> (<code>?page&amp;limit&amp;payment&amp;fulfillment&amp;from&amp;to&amp;q</code>)</li>
+        <li><strong>DB:</strong> Add <code>phone_number</code> column to customers</li>
+        <li><strong>BE:</strong> Include cover image URL in order items (<code>loadAdminOrder</code> query)</li>
+        <li><strong>FE:</strong> Product thumbnail in order drawer line items</li>
+        <li><strong>BE:</strong> NBOX booking retry mechanism (delivery_bookings table)</li>
+        <li><strong>FE:</strong> NBOX failure badge on orders with unresolved delivery failure</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div style="background:var(--ink);color:rgba(255,255,255,.4);text-align:center;padding:24px;font-size:12px;">
+  Elite Collection Admin Portal · Orders &amp; Customers Production Plan · June 2026
+</div>
+
+</body>
+</html>

@@ -240,7 +240,7 @@ export class DashboardComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const [orders, products, customers] = await Promise.all([
-      this.ordersApi.list().catch(() => []),
+      this.ordersApi.list().then(r => r.orders).catch(() => []),
       this.productsApi.list().catch(() => []),
       this.customersApi.list().catch(() => []),
     ]);

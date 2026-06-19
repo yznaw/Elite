@@ -50,8 +50,8 @@ All pages are lazy-loaded:
 | `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, real multipart upload (drag/drop or browse, per-file progress), auto-link by SKU, detail drawer. **Google Drive import:** "Google Drive" button opens a modal — paste a file or folder URL (folder requires `GOOGLE_DRIVE_API_KEY` env var). Images are downloaded, saved to storage, and **auto-linked by SKU** via 4-tier matching: (1) folder name = SKU, (2) filename stem = SKU, (3) filename contains SKU, (4) two-segment prefix matches SKU start. Success toast reports how many were auto-linked. **Set as Default Fallback** button in the detail drawer saves the image URL to tenant config (`PATCH /api/admin/settings/store { config: { defaultImage } }`). Delete removes the DB row and the file from storage. |
 | `/storefront` | `StorefrontComponent` | **3-tab unified content editor** with sticky Publish/Preview bar. **Tab: Home Page** — sub-tabs: Section Order (drag/drop visibility), Landing Hero (heroSlider items + feature callouts, EN/AR CTA), Collections (3 tiles + featured collections picker), Promotion Section (image/title/body/CTA), Craft Promise (3 cards EN/AR), Stats Reel (4 values EN/AR). **Tab: Our Story** — sub-tabs: Hero, Intro, Chapters (4), Quote, Atelier. **Tab: Contact Us** — sub-tabs: Page Header (EN/AR headline), Info Blocks (3 blocks with lines), Phone & Promise. All image slots have Upload + Pick from Media. Save Content writes to `PATCH /api/admin/storefront-content`; Publish Layout writes to `POST /api/admin/storefront/publish`. |
 | `/home-content` | — | **Redirects to `/storefront`** (deprecated — all editing moved into the Storefront tabs). |
-| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, **Date Range filter** (All Time / Today / This Week / This Month / Custom — custom shows `date from/to` inputs). Active date range displayed as a dismissible chip. `clearFilters()` resets date range along with other filters. **CSV export** of the current filtered set (UTF-8 BOM), full-height drawer with status workflow stepper, tracking number, internal notes & timeline, **Print Invoice** button that opens a new browser tab with a fully formatted printable invoice (brand header, shipping address, line-items table, totals, `@media print` styles). |
-| `/customers` | `CustomersComponent` | Customer table/cards, tier filter, **Add Customer** create flow, fully editable detail drawer with real linked-orders history (rows navigate to /orders?id=…) |
+| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, **Date Range filter** (All Time / Today / This Week / This Month / Custom — custom shows `date from/to` inputs). Active date range displayed as a dismissible chip. `clearFilters()` resets date range along with other filters. **CSV export** of the current filtered set (UTF-8 BOM). **Production hardening (2026-06):** skeleton table/card loaders while `loading()` is true; `loadError` signal shows a red error banner with Retry button on initial load failure (silent background refresh swallows errors); 300ms RxJS search debounce via `Subject` + `takeUntil` teardown; 15s background polling syncs the list while the drawer is open; `OrderDrawerComponent` now routes all `PATCH /status` calls through `safeUpdateStatus()` which re-fetches the order from the server on API error to resync local state. Full-height drawer with status workflow stepper, tracking number, internal notes & timeline, **Print Invoice** button that opens a new browser tab with a fully formatted printable invoice. |
+| `/customers` | `CustomersComponent` | Customer table/cards view (toggle persisted), **Add Customer** create flow (synthesises a draft, discards on close without save), fully editable detail drawer with real linked-orders history (rows navigate to `/orders?id=…`). **Production hardening (2026-06):** skeleton loaders while `loading()` is true; `loadError` banner with Retry; 300ms debounced search; **Export CSV** wired (was previously a no-op button); EU size pill hidden when `sizePref` is `0` or `null`. Customer drawer fetches orders from `GET /admin/customers/:id/orders` (matches by `customer_id` OR `customer_email`), 30s polling with silent refresh + "Updated HH:MM" timestamp, `phone` field, async save that only shows "Saved" after API response and reverts to dirty on error, soft-delete that preserves order history. |
 | `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel |
 | `/settings` | `SettingsComponent` | **General tab:** Store info (name, currency, timezone, language — `PATCH /api/admin/settings/store`) + **Low Stock Threshold** number input — sets `StoreConfigService.lowStockThreshold()`, persisted tenant-scoped via `StorageService`, consumed by catalog and dashboard. **Team tab:** team members (list, role change, status toggle — `GET/PATCH /api/admin/settings/team/:id`). **Team Invitations** — invite by email + role (`POST /api/admin/settings/invitations`), shows generated invite link in a copy-able input, lists pending invitations with revoke button. **Integrations tab.** Owner/admin only. |
 | `/accept-invite` | `AcceptInviteComponent` | Public — reads `?token=` query param, validates via `GET /api/invitations/validate`, shows name/password/confirm form. On submit calls `POST /api/invitations/accept`. Redirects to login on success. Invitation token is single-use and expires after 48 h. |
@@ -112,6 +112,7 @@ Located in `app/shared/`:
   - Resolves base URL automatically — `localhost:3000/api` in dev, `/api` in production
   - Sends `withCredentials: true` on every request so the session cookie travels with admin calls
   - Unwraps the `{ success, data }` envelope — callers receive `data` directly
+  - **GET retry:** `get<T>()` automatically retries twice (500ms, then 1000ms backoff) for transient network errors (`status 0`, `502`, `503`, `504`). Deterministic failures (401, 403, 404, 422) are NOT retried. Mutating requests (POST/PATCH/PUT/DELETE) are never auto-retried — idempotency keys handle those at the server.
 - **Methods:** `get<T>(path)`, `post<T>(path, body)`, `put<T>(path, body)`, `patch<T>(path, body)`, `delete<T>(path)`
 - **`mediaUrl(path)`** — converts `/uploads/abc.jpg` → `/api/uploads/abc.jpg` so every media URL routes through the Nginx `/api` proxy in production. Returns absolute `https://` or `data:` URLs unchanged. Used by `AdminMediaService`, `AdminProductsService`, `MediaUploadService`, and `HomeContentComponent`.
 
@@ -147,11 +148,17 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **File:** `services/admin-orders.service.ts`
 - **Purpose:** Order list, status transitions, adding notes, and timeline entries — wraps `/api/admin/orders/*`
+- **Methods:** `list(params?: OrderListParams)`, `get(id)`, `updateStatus(id, payload: OrderStatusPayload)`, `addNote(id, body)`
+- **`list()`** now accepts `OrderListParams` (`{ page, limit, q, payment, fulfillment, from, to }`) and returns `OrderListResponse` (`{ orders[], total, page, limit, pages }`). All filtering and pagination is server-side.
+- **`OrderListParams`** and **`OrderListResponse`** are exported interfaces.
+- **`OrderStatusPayload`** is exported and used by `OrderDrawerComponent.safeUpdateStatus()` which re-fetches on error
 
 ### `AdminCustomersService`
 
 - **File:** `services/admin-customers.service.ts`
-- **Purpose:** Customer list, detail, create, update — includes linked order history — wraps `/api/admin/customers/*`
+- **Purpose:** Customer list, detail, create, update, soft-delete, restore, and linked order history — wraps `/api/admin/customers/*`
+- **Methods:** `list()`, `get(id)`, `getOrders(id)` → `Order[]`, `create(payload)`, `update(id, payload)`, `remove(id)` (soft-delete), `restore(id)`
+- `getOrders()` fetches from `GET /admin/customers/:id/orders` — matches orders by both `customer_id` FK and `customer_email` for full history attribution
 
 ### `AdminMediaService` / `MediaUploadService`
 
@@ -251,6 +258,7 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 - **File:** `interceptors/http-error.interceptor.ts`
 - **Purpose:** Global HTTP error interceptor
 - **Features:** Catches all failed HTTP requests globally and displays contextual toasts via `ToastService` based on status code (401, 403, 404, 422, etc.).
+- **401 handling:** Uses `toast.error` (not warning) and redirects to `/login?returnUrl=<current-path>` so the admin lands back on the same page after re-authenticating. Skipped when the request is the `/auth/me` auth probe or when already on `/login`.
 
 ---
 
@@ -303,6 +311,7 @@ Unlike standard auto-translation, the Arabic localization for the Elite platform
 ## Mock Data Layer
 
 > Most sections are now connected to the real PostgreSQL API. The mock layer (`app/data/mock.ts`) is only used for data that has not yet been wired to a live endpoint (analytics charts, storefront blocks).
+> **`ORDERS` and `CUSTOMERS` exports in `mock.ts` are legacy** — the Orders page, Customers page, and Customer drawer all fetch live data from the API. `ORDERS` is no longer imported anywhere. `CUSTOMERS` seed data is used only during `db/seed.js` (not in the Angular app).
 
 All mock data lives in `app/data/mock.ts`:
 
@@ -348,7 +357,7 @@ All models are defined in `app/models/index.ts`:
 | `Order` | id, date, customer, total, payment, fulfillment, items[], trackingNumber?, timeline[]?, notes[]? | Orders |
 | `OrderTimelineEntry` | id, ts, kind, detail?, actor? | Order drawer timeline |
 | `OrderNote` | id, ts, author, initials, body | Order drawer internal notes |
-| `Customer` | id, name, email, orders, ltv, sizePref, notes | Customers |
+| `Customer` | id, name, email, city, orders, ltv, sizePref, notes, phone?, joined?, lastOrder? | Customers |
 | `StorefrontBlock` | id, type, title, visible, config, ctaText, productIds | Storefront Editor |
 | `TeamMember` | id, name, email, role, initials | Settings |
 | `Invitation` | id, email, role, expires_at, created_at, invited_by_name? | Settings — pending invitations |

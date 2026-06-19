@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Orders & Customers — Production Tracker</title>
+<style>
+  :root{
+    --green:#024638; --green-2:#036350; --green-3:#012b23;
+    --gold:#c5a572; --gold-2:#d6bc91;
+    --bg:#f5f6fa; --surface:#fff;
+    --ink:#1a1f36; --ink-2:#3d4159; --muted:#6b7088;
+    --success:#10b981; --warning:#f59e0b; --danger:#ef4444; --info:#3b82f6;
+    --border:#e2e5f0; --radius:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+
+  /* ── Header ── */
+  .hdr{background:var(--green);padding:32px 40px;display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;}
+  .hdr-left .brand{color:var(--gold);font-size:11px;letter-spacing:.32em;text-transform:uppercase;margin-bottom:6px;}
+  .hdr-left h1{color:#fff;font-size:28px;font-weight:600;}
+  .hdr-left p{color:rgba(255,255,255,.55);font-size:13px;margin-top:4px;}
+  .ring{flex-shrink:0;width:90px;height:90px;border-radius:50%;border:3px solid rgba(197,165,114,.25);display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(197,165,114,.08);}
+  .ring-pct{font-size:26px;font-weight:700;color:var(--gold);line-height:1;}
+  .ring-lbl{font-size:9px;letter-spacing:.15em;color:rgba(255,255,255,.5);text-transform:uppercase;margin-top:2px;}
+
+  /* ── Progress strip ── */
+  .strip{background:var(--green-3);padding:0 40px;display:flex;align-items:center;gap:16px;height:40px;}
+  .bar{flex:1;height:6px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden;}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-2));border-radius:99px;transition:width .6s ease;}
+  .strip-lbl{font-size:11px;color:rgba(255,255,255,.5);white-space:nowrap;}
+
+  /* ── Legend ── */
+  .legend{display:flex;gap:20px;padding:14px 40px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center;}
+  .leg{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .dot-done{background:var(--success);}
+  .dot-in{background:var(--warning);}
+  .dot-todo{background:var(--border);border:1px solid #ccc;}
+  .dot-bug{background:var(--danger);}
+  .reset-btn{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted);background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;transition:all .15s;}
+  .reset-btn:hover{color:var(--ink);border-color:#aaa;}
+
+  /* ── Content ── */
+  .content{padding:28px 40px;display:flex;flex-direction:column;gap:20px;max-width:1200px;}
+
+  /* ── Phase block ── */
+  .phase{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);}
+  .phase-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);background:#fafbfc;cursor:pointer;user-select:none;}
+  .phase-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;flex-shrink:0;}
+  .phase-info{flex:1;min-width:0;}
+  .phase-title{font-size:15px;font-weight:700;}
+  .phase-sub{font-size:12px;color:var(--muted);margin-top:1px;}
+  .phase-meta{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .phase-count{font-size:12px;color:var(--muted);white-space:nowrap;}
+  .phase-pbar{width:120px;height:6px;background:var(--border);border-radius:99px;overflow:hidden;}
+  .phase-pbar-fill{height:100%;border-radius:99px;transition:width .4s ease;}
+  .phase-toggle{color:var(--muted);font-size:14px;transition:transform .2s;}
+  .phase.collapsed .phase-toggle{transform:rotate(-90deg);}
+  .phase-body{padding:12px 16px;display:flex;flex-direction:column;gap:6px;}
+  .phase.collapsed .phase-body{display:none;}
+
+  /* ── Task row ── */
+  .task{
+    display:flex;align-items:flex-start;gap:12px;
+    padding:12px 14px;border-radius:8px;border:1px solid transparent;
+    transition:background .15s,border-color .15s;
+    cursor:pointer;
+  }
+  .task:hover{background:var(--bg);}
+  .task.done{background:#f0fdf4;border-color:#d1fae5;}
+  .task.in-progress{background:#fffbeb;border-color:#fde68a;}
+  .task.blocked{background:#fef2f2;border-color:#fecaca;}
+  .task-cb{width:20px;height:20px;border-radius:5px;border:2px solid var(--border);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all .15s;background:#fff;}
+  .task.done .task-cb{background:var(--success);border-color:var(--success);color:#fff;}
+  .task.in-progress .task-cb{background:var(--warning);border-color:var(--warning);}
+  .task-cb svg{display:none;}
+  .task.done .task-cb svg{display:block;}
+  .task-right{flex:1;min-width:0;}
+  .task-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .task-title{font-size:14px;font-weight:600;color:var(--ink);}
+  .task.done .task-title{color:var(--muted);text-decoration:line-through;}
+  .task-title-text{flex:1;min-width:0;}
+  .task-body{font-size:13px;color:var(--ink-2);margin-top:4px;line-height:1.6;}
+  .task-body code{background:rgba(0,0,0,.05);padding:1px 4px;border-radius:3px;font-family:ui-monospace,monospace;font-size:12px;}
+
+  /* ── Badges ── */
+  .badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;white-space:nowrap;}
+  .badge-critical{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
+  .badge-high{background:#fffbeb;color:#d97706;border:1px solid #fde68a;}
+  .badge-medium{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;}
+  .badge-low{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
+  .badge-be{background:#1e3a5f;color:#93c5fd;}
+  .badge-fe{background:#3b2d6a;color:#c4b5fd;}
+  .badge-db{background:#1a3a2e;color:#6ee7b7;}
+  .badge-ux{background:#4a2000;color:#fcd34d;}
+
+  /* ── Status toggle ── */
+  .status-sel{
+    font-size:10px;font-weight:700;letter-spacing:.04em;
+    padding:2px 7px;border-radius:5px;border:none;cursor:pointer;
+    background:var(--border);color:var(--muted);
+    appearance:none;outline:none;
+    transition:all .15s;
+  }
+  .status-todo .status-sel{background:#e5e7eb;color:#6b7280;}
+  .status-in .status-sel{background:#fde68a;color:#92400e;}
+  .status-done .status-sel{background:#d1fae5;color:#065f46;}
+  .status-blocked .status-sel{background:#fecaca;color:#991b1b;}
+
+  /* ── Phase summary cards ── */
+  .phase-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin:0 40px 24px;}
+  .phase-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.03);}
+  .pc-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
+  .pc-count{font-size:22px;font-weight:800;}
+  .pc-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .pc-bar{height:4px;background:var(--border);border-radius:99px;margin-top:8px;overflow:hidden;}
+  .pc-bar-fill{height:100%;border-radius:99px;transition:width .5s ease;}
+
+  @media(max-width:700px){
+    .hdr{padding:20px;}.strip{padding:0 20px;}.legend{padding:12px 20px;}
+    .content{padding:16px 12px;}.phase-cards{margin:0 12px 16px;grid-template-columns:1fr 1fr;}
+    .ring{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="brand">Elite Collection · Admin Portal</div>
+    <h1>Orders &amp; Customers</h1>
+    <p>Production Readiness Tracker · 4 Phases · Updated June 2026</p>
+  </div>
+  <div class="ring">
+    <div class="ring-pct" id="overall-pct">0%</div>
+    <div class="ring-lbl">Done</div>
+  </div>
+</div>
+
+<!-- Strip -->
+<div class="strip">
+  <div class="bar"><div class="bar-fill" id="main-bar" style="width:0%"></div></div>
+  <span class="strip-lbl" id="main-count">0 / 0 tasks complete</span>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="leg"><div class="dot dot-bug"></div> Critical Bug</div>
+  <div class="leg"><div class="dot dot-in"></div> In Progress</div>
+  <div class="leg"><div class="dot dot-done"></div> Done</div>
+  <div class="leg"><div class="dot dot-todo"></div> To Do</div>
+  <button class="reset-btn" onclick="resetAll()">Reset All</button>
+</div>
+
+<!-- Phase summary cards -->
+<div class="phase-cards" id="phase-cards"></div>
+
+<!-- Main content -->
+<div class="content" id="main-content"></div>
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+const PHASES = [
+  {
+    id: 'p1',
+    num: '1',
+    color: '#dc2626',
+    title: 'Phase 1 — Critical Bug Fixes',
+    sub: 'Fix live production defects first. Estimated: 1–2 days',
+    tasks: [
+      {
+        id: 'p1-t1', sev: 'critical', layer: 'be',
+        title: 'Add GET /admin/customers/:id/orders endpoint',
+        body: 'Returns all orders for a customer joined by customer_id AND email fallback. Without this, customer order history cannot be shown from real data.',
+      },
+      {
+        id: 'p1-t2', sev: 'critical', layer: 'fe',
+        title: 'Add AdminCustomersService.getOrders(id) method',
+        body: 'Service layer method to call the new customer orders endpoint. Required before the drawer rewrite.',
+      },
+      {
+        id: 'p1-t3', sev: 'critical', layer: 'fe',
+        title: 'Remove mock import from customer-drawer.component.ts',
+        body: 'Line 17: remove `import { ORDERS } from \'../../data/mock\'`. Replace the mock-powered customerOrders computed with a real API signal loaded in ngOnInit.',
+      },
+      {
+        id: 'p1-t4', sev: 'critical', layer: 'fe',
+        title: 'Rewrite customer drawer save() — make it truly async',
+        body: 'Remove the hardcoded setTimeout(700ms) fake delay. The drawer should call AdminCustomersService directly and only show "Saved" after a successful API response. Show a real spinner while in-flight.',
+      },
+      {
+        id: 'p1-t5', sev: 'critical', layer: 'fe',
+        title: 'Wire real order history in customer drawer (replace mock computed)',
+        body: 'Fetch orders via customersApi.getOrders(customer.id) on drawer open. Store in a local orders signal. Derive sizeStats from real order items, not mock data.',
+      },
+      {
+        id: 'p1-t6', sev: 'high', layer: 'db',
+        title: 'Add soft-delete to customers table (migration)',
+        body: 'ALTER TABLE customers ADD COLUMN deleted_at TIMESTAMPTZ NULL. Update all SELECT queries to add WHERE deleted_at IS NULL. Change DELETE endpoint to SET deleted_at = now().',
+      },
+      {
+        id: 'p1-t7', sev: 'high', layer: 'be',
+        title: 'Update all customer routes to filter by deleted_at IS NULL',
+        body: 'GET /, GET /:id, and the v_customer_order_stats view join must all exclude soft-deleted customers. DELETE /:id must use UPDATE...SET deleted_at instead of hard delete.',
+      },
+    ]
+  },
+  {
+    id: 'p2',
+    num: '2',
+    color: '#d97706',
+    title: 'Phase 2 — Edge Cases & API Hardening',
+    sub: 'Prevent data loss, duplicates, and silent failures. Estimated: 2–3 days',
+    tasks: [
+      {
+        id: 'p2-t1', sev: 'critical', layer: 'db',
+        title: 'Add UNIQUE (tenant_id, public_number) constraint to orders table',
+        body: 'Prevents duplicate order numbers if the timestamp-based generator collides. DB-level safety net independent of application logic.',
+      },
+      {
+        id: 'p2-t2', sev: 'high', layer: 'db',
+        title: 'Add idempotency_key column to orders (unique per tenant)',
+        body: 'ALTER TABLE orders ADD COLUMN idempotency_key TEXT NULL; CREATE UNIQUE INDEX ON orders (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL.',
+      },
+      {
+        id: 'p2-t3', sev: 'high', layer: 'be',
+        title: 'Implement idempotency check in POST /admin/orders',
+        body: 'Before inserting: check if idempotency_key already exists for this tenant. If found, return the existing order (200, not 201). Frontend generates UUID per checkout session and re-uses on retry.',
+      },
+      {
+        id: 'p2-t4', sev: 'high', layer: 'be',
+        title: 'Validate customer_id FK in POST /admin/orders',
+        body: 'If customerId is provided, verify it exists in customers table before inserting the order. Return 400 with helpful message if not found.',
+      },
+      {
+        id: 'p2-t5', sev: 'high', layer: 'db',
+        title: 'Create/verify v_customer_order_stats view',
+        body: 'CREATE OR REPLACE VIEW v_customer_order_stats AS SELECT customer_id, COUNT(*) AS orders_count, SUM(total_cents) AS ltv_cents, MAX(placed_at) AS last_order_at FROM orders WHERE customer_id IS NOT NULL AND payment_status = \'paid\' GROUP BY customer_id.',
+      },
+      {
+        id: 'p2-t6', sev: 'high', layer: 'be',
+        title: 'Add fallback in GET /admin/customers if view fails',
+        body: 'Wrap the LEFT JOIN on v_customer_order_stats in a try/catch. If the view throws, fall back to SELECT * FROM customers (using denormalized columns) so the page still loads.',
+      },
+      {
+        id: 'p2-t7', sev: 'high', layer: 'fe',
+        title: 'Add GET-only retry with exponential backoff to ApiClient',
+        body: 'Use RxJS retry({ count: 2, delay: (_, i) => timer(Math.pow(2,i)*500) }) on GET requests only. Do NOT auto-retry POST/PATCH/DELETE without idempotency keys.',
+      },
+      {
+        id: 'p2-t8', sev: 'high', layer: 'fe',
+        title: 'Add 401 session-expiry modal (replace toast)',
+        body: 'When HTTP interceptor catches 401, show a modal: "Session expired — please log in again." with a "Go to Login" button. Preserve current URL for post-login redirect. Save any in-progress note drafts to localStorage before redirect.',
+      },
+      {
+        id: 'p2-t9', sev: 'high', layer: 'fe',
+        title: 'Orders page: separate loading / empty / error states',
+        body: 'Add loadError signal. On initial fetch failure: show error callout with Retry button, not the empty state. Silent refresh failures are swallowed (no error flash every 15s).',
+      },
+      {
+        id: 'p2-t10', sev: 'high', layer: 'fe',
+        title: 'Customers page: separate loading / empty / error states',
+        body: 'Same pattern as orders. Add loadError signal. Show a red error callout with Retry on initial fetch failure, not the empty state.',
+      },
+      {
+        id: 'p2-t11', sev: 'high', layer: 'fe',
+        title: 'Order drawer: safeUpdateStatus() — re-fetch on any mutation error',
+        body: 'Centralize all PATCH calls through a safeUpdateStatus() method. On catch, silently re-fetch the order to resync local state with DB. Re-throw so the global toast interceptor fires.',
+      },
+      {
+        id: 'p2-t12', sev: 'high', layer: 'fe',
+        title: 'Customer drawer: add 30s order refresh polling',
+        body: 'After initial order list load, poll GET /admin/customers/:id/orders every 30s silently. Cancel in ngOnDestroy. Show "Updated just now" timestamp below the orders section header.',
+      },
+    ]
+  },
+  {
+    id: 'p3',
+    num: '3',
+    color: '#2563eb',
+    title: 'Phase 3 — UX Polish & Missing Features',
+    sub: 'Skeleton loaders, wiring gaps, mobile improvements. Estimated: 2–3 days',
+    tasks: [
+      {
+        id: 'p3-t1', sev: 'high', layer: 'fe',
+        title: 'Add skeleton loaders to orders page (table and mobile cards)',
+        body: 'While loading signal is true, render shimmer placeholder rows matching the table/card dimensions. CSS @keyframes shimmer with background-position animation.',
+      },
+      {
+        id: 'p3-t2', sev: 'high', layer: 'fe',
+        title: 'Add skeleton loaders to customers page',
+        body: 'Skeleton for both table view (5 rows) and cards view (6 card outlines). Show while loading signal is true.',
+      },
+      {
+        id: 'p3-t3', sev: 'high', layer: 'fe',
+        title: 'Wire customers export CSV button',
+        body: 'Add (click)="exportCsv()" and implement exportCsv() in CustomersComponent. Export: Name, Email, City, Orders, LTV (QAR), Size Pref, Last Order, Joined. Same BOM-prefixed CSV pattern as the orders page.',
+      },
+      {
+        id: 'p3-t4', sev: 'high', layer: 'fe',
+        title: 'Fix "EU 0" pill — hide when sizePref is 0 or null',
+        body: 'In customer cards and table, wrap the pill in @if (c.sizePref). Show a dash (—) when unset. Also fix in the customer drawer form (show placeholder EU not EU 0).',
+      },
+      {
+        id: 'p3-t5', sev: 'high', layer: 'fe',
+        title: 'Customer drawer: load real size stats from live order items',
+        body: 'The sizeStats computed should read from the live orders() signal, not mock data. If no orders, show only the manual size preference input.',
+      },
+      {
+        id: 'p3-t6', sev: 'high', layer: 'be',
+        title: 'Update GET /admin/customers/:id to join v_customer_order_stats',
+        body: 'The single-customer endpoint currently only returns the raw customers row. Join v_customer_order_stats so the KPI bar in the drawer (total orders, LTV, last order) uses live computed values, not stale denormalized columns.',
+      },
+      {
+        id: 'p3-t7', sev: 'medium', layer: 'fe',
+        title: 'Customer drawer: add phone number field to identity section',
+        body: 'Add phone_number to the form and to the 2-col identity grid. Requires the BE phone_number column (Phase 4). Wire to the PATCH endpoint.',
+      },
+      {
+        id: 'p3-t8', sev: 'medium', layer: 'fe',
+        title: 'Customer drawer: mobile safe-area save bar fix',
+        body: 'On ≤720px: move save bar to position:sticky;bottom:env(safe-area-inset-bottom,0) outside the scrollable drawer-body. Add padding-bottom:80px to drawer-body to prevent content hiding behind bar.',
+      },
+      {
+        id: 'p3-t9', sev: 'medium', layer: 'fe',
+        title: 'Customer drawer: pending payment warning in order history rows',
+        body: 'In the order history list inside the customer drawer, highlight rows where payment==="pending" with an orange left border or warning icon. Tooltip: "Payment pending — verify with gateway."',
+      },
+      {
+        id: 'p3-t10', sev: 'medium', layer: 'ux',
+        title: 'Orders page: stale-payment warning badge on pending orders >30min old',
+        body: 'In the orders list, if payment==="pending" AND placed_at < now-30min, add a warning icon (⚠) next to the Pending pill. In the order drawer, add a yellow callout banner at the top of the workflow section.',
+      },
+      {
+        id: 'p3-t11', sev: 'medium', layer: 'fe',
+        title: 'Order drawer: "View Customer Profile" button in customer section',
+        body: 'Add a ghost "View Customer" button next to the customer name. Navigates to /customers?highlight=customerId. On customers page, the highlight param scrolls to and opens that customer\'s drawer.',
+      },
+      {
+        id: 'p3-t12', sev: 'low', layer: 'fe',
+        title: 'Orders search: add 300ms debounce on search input',
+        body: 'Use RxJS Subject + debounceTime(300) + takeUntilDestroyed() instead of direct ngModelChange. Prevents recomputing the filtered signal on every keystroke at scale.',
+      },
+    ]
+  },
+  {
+    id: 'p4',
+    num: '4',
+    color: '#065f46',
+    title: 'Phase 4 — Performance & Scale',
+    sub: 'Server-side pagination, product images, delivery reliability. Estimated: 1–2 days',
+    tasks: [
+      {
+        id: 'p4-t1', sev: 'medium', layer: 'be',
+        title: 'Server-side pagination on GET /admin/orders',
+        body: 'Add query params: ?page=0&limit=100&payment=&fulfillment=&from=&to=&q=. Return { rows, total, page, limit } envelope. Backward compat: if limit omitted, return all. Frontend wires signals as query params.',
+      },
+      {
+        id: 'p4-t2', sev: 'medium', layer: 'db',
+        title: 'Add phone_number column to customers table',
+        body: 'ALTER TABLE customers ADD COLUMN phone_number TEXT NULL. Update mapCustomer() to include phone. Update POST and PATCH handlers to accept and persist phone_number.',
+      },
+      {
+        id: 'p4-t3', sev: 'medium', layer: 'be',
+        title: 'Include cover image URL in order items (loadAdminOrder query)',
+        body: 'Extend the jsonb_agg in loadAdminOrder to include: "img", (SELECT url FROM media_links WHERE product_id = oi.product_id AND role = \'cover\' LIMIT 1). Add img?: string to OrderItem model.',
+      },
+      {
+        id: 'p4-t4', sev: 'medium', layer: 'fe',
+        title: 'Render product thumbnail in order drawer line items',
+        body: 'Replace the grey placeholder div with <img [src]="api.mediaUrl(it.img)" [alt]="it.n"> with a grey fallback when img is null. Use 48x48 rounded square, same as current placeholder size.',
+      },
+      {
+        id: 'p4-t5', sev: 'medium', layer: 'be',
+        title: 'NBOX delivery booking retry mechanism',
+        body: 'Create delivery_bookings table (order_id, attempts, last_attempted_at, status, error). Background job retries failed bookings: 1min, 5min, 30min. After 3 failures, set requires_manual_booking = true.',
+      },
+      {
+        id: 'p4-t6', sev: 'medium', layer: 'fe',
+        title: 'Surface NBOX failure badge on orders requiring manual booking',
+        body: 'In the orders list, add a red "Delivery Failed" badge for orders where timeline has an unresolved NBOX failure. In the order drawer, add a red callout with a "Retry Booking" button.',
+      },
+      {
+        id: 'p4-t7', sev: 'low', layer: 'db',
+        title: 'Add DB index on orders (tenant_id, placed_at DESC) for list query performance',
+        body: 'CREATE INDEX idx_orders_tenant_placed ON orders (tenant_id, placed_at DESC). Speeds up the ORDER BY placed_at DESC in GET /admin/orders as the table grows.',
+      },
+    ]
+  },
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const KEY = 'ec-orders-customers-tracker-v1';
+let state = {};
+
+// Baseline completed as of 2026-06-19 implementation session (Phase 4 complete)
+const COMPLETED_BASELINE = {
+  'p1-t1': 'done', 'p1-t2': 'done', 'p1-t3': 'done', 'p1-t4': 'done',
+  'p1-t5': 'done', 'p1-t6': 'done', 'p1-t7': 'done',
+  'p2-t1': 'done', 'p2-t2': 'done', 'p2-t3': 'done', 'p2-t4': 'done',
+  'p2-t5': 'done', 'p2-t6': 'done', 'p2-t7': 'done', 'p2-t8': 'done',
+  'p2-t9': 'done', 'p2-t10': 'done', 'p2-t11': 'done', 'p2-t12': 'done',
+  'p3-t1': 'done', 'p3-t2': 'done', 'p3-t3': 'done', 'p3-t4': 'done',
+  'p3-t5': 'done', 'p3-t6': 'done', 'p3-t7': 'done', 'p3-t10': 'done',
+  'p3-t11': 'done', 'p3-t12': 'done',
+  'p4-t1': 'done', 'p4-t2': 'done', 'p4-t3': 'done', 'p4-t4': 'done',
+  'p4-t7': 'done',
+};
+
+function loadState() {
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { state = {}; }
+  // Merge baseline into state (does not overwrite user edits)
+  for (const [k, v] of Object.entries(COMPLETED_BASELINE)) {
+    if (!state[k]) state[k] = v;
+  }
+}
+function saveState() {
+  localStorage.setItem(KEY, JSON.stringify(state));
+}
+function getTask(id) { return state[id] || 'todo'; }
+function setTask(id, val) { state[id] = val; saveState(); }
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function sevBadge(s) {
+  const map = { critical:'badge-critical', high:'badge-high', medium:'badge-medium', low:'badge-low' };
+  return `<span class="badge ${map[s] || 'badge-low'}">${s}</span>`;
+}
+function layerBadge(l) {
+  const map = { be:'badge-be', fe:'badge-fe', db:'badge-db', ux:'badge-ux' };
+  const label = { be:'Backend', fe:'Frontend', db:'DB', ux:'UX' };
+  return `<span class="badge ${map[l] || ''}">${label[l] || l}</span>`;
+}
+
+function statusClass(s) {
+  if (s === 'done') return 'done';
+  if (s === 'in-progress') return 'in-progress';
+  if (s === 'blocked') return 'blocked';
+  return '';
+}
+
+function renderTask(t) {
+  const s = getTask(t.id);
+  const isDone = s === 'done';
+  const sc = statusClass(s);
+  return `
+    <div class="task ${sc}" id="task-${t.id}" onclick="cycleTask('${t.id}')">
+      <div class="task-cb">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="task-right">
+        <div class="task-head">
+          ${sevBadge(t.sev)}
+          ${layerBadge(t.layer)}
+          <div class="task-title-text task-title">${t.title}</div>
+        </div>
+        ${t.body ? `<div class="task-body">${t.body}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderPhase(ph) {
+  const tasks = ph.tasks;
+  const done = tasks.filter(t => getTask(t.id) === 'done').length;
+  const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+  const isCollapsed = state[`${ph.id}__collapsed`] ? 'collapsed' : '';
+
+  const phaseCard = `
+    <div class="phase ${isCollapsed}" id="phase-${ph.id}">
+      <div class="phase-head" onclick="togglePhase('${ph.id}')">
+        <div class="phase-num" style="background:${ph.color}">${ph.num}</div>
+        <div class="phase-info">
+          <div class="phase-title">${ph.title}</div>
+          <div class="phase-sub">${ph.sub}</div>
+        </div>
+        <div class="phase-meta">
+          <span class="phase-count">${done}/${tasks.length} done</span>
+          <div class="phase-pbar">
+            <div class="phase-pbar-fill" style="background:${ph.color};width:${pct}%"></div>
+          </div>
+          <span class="phase-toggle">▾</span>
+        </div>
+      </div>
+      <div class="phase-body">
+        ${tasks.map(renderTask).join('')}
+      </div>
+    </div>`;
+
+  return phaseCard;
+}
+
+function renderSummaryCards() {
+  const el = document.getElementById('phase-cards');
+  el.innerHTML = PHASES.map(ph => {
+    const done = ph.tasks.filter(t => getTask(t.id) === 'done').length;
+    const total = ph.tasks.length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return `
+      <div class="phase-card">
+        <div class="pc-title" style="color:${ph.color}">${ph.title.split(' — ')[1] || ph.title}</div>
+        <div class="pc-count" style="color:${ph.color}">${done}<span style="color:var(--muted);font-size:14px;font-weight:400"> / ${total}</span></div>
+        <div class="pc-sub">${pct}% complete</div>
+        <div class="pc-bar"><div class="pc-bar-fill" style="background:${ph.color};width:${pct}%"></div></div>
+      </div>`;
+  }).join('');
+}
+
+function updateProgress() {
+  const allTasks = PHASES.flatMap(p => p.tasks);
+  const done = allTasks.filter(t => getTask(t.id) === 'done').length;
+  const total = allTasks.length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById('main-bar').style.width = pct + '%';
+  document.getElementById('main-count').textContent = `${done} / ${total} tasks complete`;
+  document.getElementById('overall-pct').textContent = pct + '%';
+  renderSummaryCards();
+}
+
+function render() {
+  document.getElementById('main-content').innerHTML = PHASES.map(renderPhase).join('');
+  updateProgress();
+}
+
+// ── INTERACTIONS ──────────────────────────────────────────────────────────────
+function cycleTask(id) {
+  const cur = getTask(id);
+  const next = { todo: 'in-progress', 'in-progress': 'done', done: 'todo' };
+  setTask(id, next[cur] || 'todo');
+  // Re-render just this task's classes without full re-render
+  const el = document.getElementById(`task-${id}`);
+  if (!el) return render();
+  const s = getTask(id);
+  el.className = 'task ' + statusClass(s);
+  const cb = el.querySelector('.task-cb');
+  const title = el.querySelector('.task-title');
+  if (cb) { cb.querySelector('svg').style.display = s === 'done' ? 'block' : 'none'; }
+  if (title) { title.style.textDecoration = s === 'done' ? 'line-through' : ''; title.style.color = s === 'done' ? 'var(--muted)' : ''; }
+  // Update phase progress bar
+  const phase = PHASES.find(p => p.tasks.some(t => t.id === id));
+  if (phase) {
+    const done = phase.tasks.filter(t => getTask(t.id) === 'done').length;
+    const pct = Math.round((done / phase.tasks.length) * 100);
+    const phEl = document.getElementById(`phase-${phase.id}`);
+    if (phEl) {
+      phEl.querySelector('.phase-count').textContent = `${done}/${phase.tasks.length} done`;
+      phEl.querySelector('.phase-pbar-fill').style.width = pct + '%';
+    }
+  }
+  updateProgress();
+}
+
+function togglePhase(id) {
+  const el = document.getElementById(`phase-${id}`);
+  const isNowCollapsed = !el.classList.contains('collapsed');
+  el.classList.toggle('collapsed', isNowCollapsed);
+  state[`${id}__collapsed`] = isNowCollapsed ? '1' : '';
+  saveState();
+}
+
+function resetAll() {
+  if (!confirm('Reset all task progress?')) return;
+  state = {};
+  saveState();
+  render();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+loadState();
+render();
+</script>
+</body>
+</html>

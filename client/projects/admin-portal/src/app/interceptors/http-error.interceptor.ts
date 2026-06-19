@@ -40,11 +40,12 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           { label: t('common.retry'), run: () => {} },
         );
       } else if (err.status === 401) {
-        if (!isAuthProbe) {
-          toast.warning(t('error.401.title'), t('error.401.sub'));
-        }
         const onLogin = router.url.startsWith('/login');
-        if (!onLogin && !isAuthProbe) {
+        if (!isAuthProbe && !onLogin) {
+          // Use error (not warning) so the banner is clearly visible.
+          // The redirect to login carries the returnUrl so the admin
+          // lands back on the same page after re-authenticating.
+          toast.error(t('error.401.title'), t('error.401.sub'));
           router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
         }
       } else if (err.status === 403) {

@@ -1,7 +1,8 @@
-import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { Subject, debounceTime, takeUntil } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
@@ -26,7 +27,7 @@ const MOBILE_BP = 900;
       <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
         <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
           <ap-icon name="search" [size]="14"/>
-          <input class="inp with-icon" [placeholder]="t('customers.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
+          <input class="inp with-icon" [placeholder]="t('customers.search.placeholder')" [ngModel]="search()" (ngModelChange)="onSearchChange($event)"/>
         </div>
 
         <!-- View toggle (desktop only — mobile is always cards) -->
@@ -66,7 +67,10 @@ const MOBILE_BP = 900;
           </div>
         }
 
-        <button class="btn btn-outline" title="Export"><ap-icon name="download" [size]="14"/> <span class="btn-lbl">{{ t('common.export') }}</span></button>
+        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
+          @if (exporting()) { <ap-icon name="spinner" [size]="14"/> } @else { <ap-icon name="download" [size]="14"/> }
+          <span class="btn-lbl">{{ exporting() ? t('common.exporting') : t('common.exportCsv') }}</span>
+        </button>
         @if (!isMobile()) {
           <button class="btn btn-gold" (click)="createCustomer()" title="Add Customer"><ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('customers.add') }}</span></button>
         }
@@ -79,7 +83,44 @@ const MOBILE_BP = 900;
         </button>
       }
 
-      @if (filtered().length === 0) {
+      <!-- Error banner -->
+      @if (loadError()) {
+        <div class="load-error-banner">
+          <ap-icon name="warning" [size]="16"/>
+          <span>{{ loadError() }}</span>
+          <button class="btn btn-outline btn-sm" (click)="loadCustomers()">Retry</button>
+        </div>
+      }
+
+      <!-- Skeleton while loading -->
+      @if (loading()) {
+        @if (effectiveView() === 'table') {
+          <div class="card">
+            <div class="skeleton-table">
+              @for (_ of skeletonRows; track $index) {
+                <div class="sk-row">
+                  <div class="sk-cell sk-w-md"></div>
+                  <div class="sk-cell sk-w-md"></div>
+                  <div class="sk-cell sk-w-xs"></div>
+                  <div class="sk-cell sk-w-sm"></div>
+                  <div class="sk-cell sk-w-xs"></div>
+                  <div class="sk-cell sk-w-sm"></div>
+                </div>
+              }
+            </div>
+          </div>
+        } @else {
+          <div class="customer-cards">
+            @for (_ of skeletonRows; track $index) {
+              <div class="customer-card sk-card">
+                <div class="sk-line sk-w-sm mb-8" style="height:16px;border-radius:8px;"></div>
+                <div class="sk-line sk-w-md mb-6"></div>
+                <div class="sk-line sk-w-xs"></div>
+              </div>
+            }
+          </div>
+        }
+      } @else if (filtered().length === 0) {
         <div class="card">
           <ap-empty-state icon="users" [title]="t('customers.empty.title')" [sub]="t('customers.empty.sub')">
             <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
@@ -99,7 +140,7 @@ const MOBILE_BP = 900;
             </ng-template>
             <ng-template apCellTpl="orders" let-r><span class="strong">{{ r.orders }}</span></ng-template>
             <ng-template apCellTpl="ltv" let-r><span class="strong mono">{{ QAR(r.ltv) }}</span></ng-template>
-            <ng-template apCellTpl="sizePref" let-r><ap-pill kind="gold">EU {{ r.sizePref }}</ap-pill></ng-template>
+            <ng-template apCellTpl="sizePref" let-r>@if (r.sizePref) {<ap-pill kind="gold">EU {{ r.sizePref }}</ap-pill>} @else {<span class="muted small">-</span>}</ng-template>
             <ng-template apCellTpl="actions" let-r>
               <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openCustomer(r)">{{ t('common.view') }}</button>
             </ng-template>
@@ -117,7 +158,7 @@ const MOBILE_BP = 900;
                   <div class="muted small" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.email }}</div>
                   <div class="muted small">{{ c.city }}</div>
                 </div>
-                <ap-pill kind="gold">EU {{ c.sizePref }}</ap-pill>
+                @if (c.sizePref) { <ap-pill kind="gold">EU {{ c.sizePref }}</ap-pill> }
               </div>
 
               <div class="customer-card-stats">
@@ -273,6 +314,25 @@ const MOBILE_BP = 900;
     html[dir='rtl'] .customer-card-foot { transform: scaleX(1); }
     html[dir='rtl'] .customer-card-foot .muted::after { content: ''; }
 
+    /* ── Error banner ── */
+    .load-error-banner {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(220,38,38,.07); border: 1px solid rgba(220,38,38,.2);
+      border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
+      color: var(--danger, #dc2626); font-size: 13px; font-weight: 500;
+    }
+    .load-error-banner span { flex: 1; }
+
+    /* ── Skeleton loaders ── */
+    @keyframes shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
+    .sk-row { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .sk-row:last-child { border-bottom: none; }
+    .sk-cell { height: 14px; border-radius: 6px; flex: 1; background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3,#e5e7eb) 50%, var(--bg-2) 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite; }
+    .sk-w-xs { max-width: 60px; } .sk-w-sm { max-width: 100px; } .sk-w-md { max-width: 140px; }
+    .sk-card { pointer-events: none; min-height: 90px; }
+    .sk-line { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3,#e5e7eb) 50%, var(--bg-2) 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite; }
+    .mb-6 { margin-bottom: 6px; } .mb-8 { margin-bottom: 8px; }
+
     /* ── Add Customer FAB (phone only) ── */
     .customers-fab {
       position: fixed;
@@ -295,7 +355,7 @@ const MOBILE_BP = 900;
     .customers-fab:active { transform: scale(.94); box-shadow: 0 2px 10px rgba(0,69,56,.25); }
   `],
 })
-export class CustomersComponent implements OnInit {
+export class CustomersComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
   private readonly customersApi = inject(AdminCustomersService);
@@ -303,25 +363,46 @@ export class CustomersComponent implements OnInit {
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
+  readonly skeletonRows = Array(8).fill(null);
   /** Live, mutable customers list — hydrated from the API on init. */
   private readonly _customers = signal<Customer[]>([]);
   readonly customers = computed(() => this._customers());
   readonly loading = signal(true);
+  readonly loadError = signal<string | null>(null);
   readonly active = signal<Customer | null>(null);
   /** ID of a customer that's currently being created (drawer in 'create' mode). */
   readonly creatingId = signal<string | null>(null);
   readonly search = signal('');
+  readonly exporting = signal(false);
+
+  private readonly destroy$ = new Subject<void>();
+  private readonly searchInput$ = new Subject<string>();
 
   async ngOnInit(): Promise<void> {
+    this.searchInput$.pipe(debounceTime(300), takeUntil(this.destroy$))
+      .subscribe((v) => { this.search.set(v); this.page.set(0); });
+    await this.loadCustomers();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  async loadCustomers(): Promise<void> {
+    this.loading.set(true);
+    this.loadError.set(null);
     try {
       const list = await this.customersApi.list();
       this._customers.set(list);
     } catch {
-      this._customers.set([]);
+      this.loadError.set('Could not load customers. Check your connection and try again.');
     } finally {
       this.loading.set(false);
     }
   }
+
+  onSearchChange(value: string): void { this.searchInput$.next(value); }
 
   readonly view = signal<View>(this.loadView());
   readonly isMobile = signal(this.computeIsMobile());
@@ -443,6 +524,33 @@ export class CustomersComponent implements OnInit {
     this.active.set(null);
     this.creatingId.set(null);
     this.router.navigate(['/orders'], { queryParams: { id: o.id } });
+  }
+
+  exportCsv(): void {
+    if (this.exporting()) return;
+    this.exporting.set(true);
+    try {
+      const list = this.filtered();
+      const headers = ['Name', 'Email', 'City', 'Orders', 'LTV (QAR)', 'Size (EU)', 'Last Order', 'Joined'];
+      const rows = list.map((c) => [
+        c.name, c.email, c.city, c.orders,
+        c.ltv.toFixed(2), c.sizePref || '', c.lastOrder, c.joined,
+      ]);
+      const csv = [headers, ...rows]
+        .map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+        .join('\r\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   setView(v: View): void {

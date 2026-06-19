@@ -2,6 +2,7 @@ import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { Subject, debounceTime, takeUntil } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
@@ -12,7 +13,7 @@ import { OrderDrawerComponent } from './order-drawer.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminOrdersService } from '../../services/admin-orders.service';
+import { AdminOrdersService, OrderListParams } from '../../services/admin-orders.service';
 import { Order, QAR } from '../../models';
 
 @Component({
@@ -25,7 +26,7 @@ import { Order, QAR } from '../../models';
       <div class="row gap-sm mb-10">
         <div class="inp-search" style="flex:1;position:relative;">
           <ap-icon name="search" [size]="14"/>
-          <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="search.set($event); page.set(0)"/>
+          <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="onSearchChange($event)"/>
         </div>
         <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
           @if (exporting()) {
@@ -37,14 +38,14 @@ import { Order, QAR } from '../../models';
       </div>
       <!-- Row 2: filters -->
       <div class="row gap-sm mb-16" style="flex-wrap:wrap;">
-        <select class="inp orders-filter-sel" [ngModel]="paymentFilter()" (ngModelChange)="paymentFilter.set($event); page.set(0)">
+        <select class="inp orders-filter-sel" [ngModel]="paymentFilter()" (ngModelChange)="onPaymentFilterChange($event)">
           <option value="all">{{ t('orders.allPayment') }}</option>
           <option value="paid">{{ t('pill.paid') }}</option>
           <option value="pending">{{ t('pill.pending') }}</option>
           <option value="refunded">{{ t('pill.refunded') }}</option>
           <option value="failed">{{ t('pill.failed') }}</option>
         </select>
-        <select class="inp orders-filter-sel" [ngModel]="fulfillmentFilter()" (ngModelChange)="fulfillmentFilter.set($event); page.set(0)">
+        <select class="inp orders-filter-sel" [ngModel]="fulfillmentFilter()" (ngModelChange)="onFulfillmentFilterChange($event)">
           <option value="all">{{ t('orders.allFulfillment') }}</option>
           <option value="awaiting">{{ t('pill.awaiting') }}</option>
           <option value="processing">{{ t('pill.processing') }}</option>
@@ -64,9 +65,9 @@ import { Order, QAR } from '../../models';
           <button class="dr-pill" [class.active]="dateRange() === 'custom'" (click)="setDateRange('custom')">Custom</button>
         </div>
         @if (dateRange() === 'custom') {
-          <input class="inp" type="date" style="width:auto;" [ngModel]="dateFrom()" (ngModelChange)="dateFrom.set($event); page.set(0)"/>
-          <span class="muted">–</span>
-          <input class="inp" type="date" style="width:auto;" [ngModel]="dateTo()" (ngModelChange)="dateTo.set($event); page.set(0)"/>
+          <input class="inp" type="date" style="width:auto;" [ngModel]="dateFrom()" (ngModelChange)="onDateFromChange($event)"/>
+          <span class="muted">-</span>
+          <input class="inp" type="date" style="width:auto;" [ngModel]="dateTo()" (ngModelChange)="onDateToChange($event)"/>
         }
         @if (dateRange() !== 'all') {
           <span class="filter-chip">
@@ -76,15 +77,38 @@ import { Order, QAR } from '../../models';
         }
       </div>
 
+      <!-- Error banner -->
+      @if (loadError()) {
+        <div class="load-error-banner">
+          <ap-icon name="warning" [size]="16"/>
+          <span>{{ loadError() }}</span>
+          <button class="btn btn-outline btn-sm" (click)="refreshOrders()">Retry</button>
+        </div>
+      }
+
       <!-- Desktop table -->
       @if (!isMobile()) {
         <div class="card">
-          @if (filtered().length === 0) {
+          @if (loading()) {
+            <div class="skeleton-table">
+              @for (_ of skeletonRows; track $index) {
+                <div class="sk-row">
+                  <div class="sk-cell sk-w-sm"></div>
+                  <div class="sk-cell sk-w-xs"></div>
+                  <div class="sk-cell sk-w-md"></div>
+                  <div class="sk-cell sk-w-xs"></div>
+                  <div class="sk-cell sk-w-xs"></div>
+                  <div class="sk-cell sk-w-xs"></div>
+                  <div class="sk-cell sk-w-xs"></div>
+                </div>
+              }
+            </div>
+          } @else if (_orders().length === 0) {
             <ap-empty-state icon="orders" [title]="t('orders.empty.title')" [sub]="t('orders.empty.sub')">
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
             </ap-empty-state>
           } @else {
-            <ap-sortable-table [columns]="columns" [rows]="paged()" [rowClick]="openOrder">
+            <ap-sortable-table [columns]="columns" [rows]="_orders()" [rowClick]="openOrder">
               <ng-template apCellTpl="id" let-r>
                 <span class="strong mono" style="color:var(--green);">{{ r.id }}</span>
               </ng-template>
@@ -95,7 +119,14 @@ import { Order, QAR } from '../../models';
                 <span class="strong mono">{{ QAR(r.total) }}</span>
               </ng-template>
               <ng-template apCellTpl="payment" let-r>
-                <ap-pill [kind]="paymentPill(r.payment).kind">{{ t(paymentPill(r.payment).labelKey) }}</ap-pill>
+                <div class="row gap-sm" style="align-items:center;">
+                  <ap-pill [kind]="paymentPill(r.payment).kind">{{ t(paymentPill(r.payment).labelKey) }}</ap-pill>
+                  @if (isStalePayment(r)) {
+                    <span class="stale-warn" title="Payment pending for over 30 minutes">
+                      <ap-icon name="warning" [size]="12"/>
+                    </span>
+                  }
+                </div>
               </ng-template>
               <ng-template apCellTpl="fulfillment" let-r>
                 <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
@@ -122,7 +153,17 @@ import { Order, QAR } from '../../models';
 
       <!-- Mobile card list -->
       @if (isMobile()) {
-        @if (filtered().length === 0) {
+        @if (loading()) {
+          <div class="order-cards">
+            @for (_ of skeletonRows; track $index) {
+              <div class="order-card sk-card">
+                <div class="sk-line sk-w-sm mb-6"></div>
+                <div class="sk-line sk-w-md mb-8"></div>
+                <div class="sk-line sk-w-xs"></div>
+              </div>
+            }
+          </div>
+        } @else if (_orders().length === 0) {
           <div class="card">
             <ap-empty-state icon="orders" [title]="t('orders.empty.title')" [sub]="t('orders.empty.sub')">
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
@@ -130,7 +171,7 @@ import { Order, QAR } from '../../models';
           </div>
         } @else {
           <div class="order-cards">
-            @for (o of paged(); track o.id) {
+            @for (o of _orders(); track o.id) {
               <div class="order-card" [class]="'order-card--' + o.fulfillment" (click)="openOrder(o)">
                 <div class="oc-row1">
                   <span class="oc-id">{{ o.id }}</span>
@@ -142,6 +183,9 @@ import { Order, QAR } from '../../models';
                   <span class="oc-total">{{ QAR(o.total) }}</span>
                   <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
                   <ap-pill [kind]="paymentPill(o.payment).kind">{{ t(paymentPill(o.payment).labelKey) }}</ap-pill>
+                  @if (isStalePayment(o)) {
+                    <span class="stale-warn" title="Payment pending for over 30 minutes"><ap-icon name="warning" [size]="12"/></span>
+                  }
                 </div>
                 <div class="oc-cta">View →</div>
               </div>
@@ -153,9 +197,9 @@ import { Order, QAR } from '../../models';
       <ap-pagination
         [page]="page()"
         [pageSize]="pageSize()"
-        [total]="filtered().length"
+        [total]="serverTotal()"
         [totalPages]="totalPages()"
-        (pageChange)="page.set($event)"
+        (pageChange)="onPageChange($event)"
         (pageSizeChange)="onPageSizeChange($event)"
       />
     </div>
@@ -174,6 +218,33 @@ import { Order, QAR } from '../../models';
     .filter-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(2,70,56,.09); color: var(--green); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
     .filter-chip button { background: none; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; opacity: .6; }
     .filter-chip button:hover { opacity: 1; }
+
+    /* ── Error banner ── */
+    .load-error-banner {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(220,38,38,.07); border: 1px solid rgba(220,38,38,.2);
+      border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
+      color: var(--danger, #dc2626); font-size: 13px; font-weight: 500;
+    }
+    .load-error-banner span { flex: 1; }
+
+    /* ── Skeleton loaders ── */
+    @keyframes shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
+    .sk-row { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .sk-row:last-child { border-bottom: none; }
+    .sk-cell { height: 14px; border-radius: 6px; background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3,#e5e7eb) 50%, var(--bg-2) 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite; }
+    .sk-w-xs { width: 60px; } .sk-w-sm { width: 100px; } .sk-w-md { width: 140px; }
+    .sk-cell:nth-child(1) { flex: 1.2; } .sk-cell:nth-child(2) { flex: 0.8; } .sk-cell:nth-child(3) { flex: 2; }
+    .sk-cell:nth-child(4),
+    .sk-cell:nth-child(5),
+    .sk-cell:nth-child(6),
+    .sk-cell:nth-child(7) { flex: 1; }
+    .sk-card { pointer-events: none; min-height: 80px; }
+    .sk-line { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3,#e5e7eb) 50%, var(--bg-2) 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite; }
+    .mb-6 { margin-bottom: 6px; } .mb-8 { margin-bottom: 8px; }
+
+    /* ── Stale payment warning ── */
+    .stale-warn { display: inline-flex; align-items: center; color: #d97706; }
 
     /* ── Mobile order cards ── */
     .order-cards { display: flex; flex-direction: column; gap: 10px; }
@@ -216,8 +287,14 @@ export class OrdersComponent implements OnInit, OnDestroy {
   onResize(): void { this.isMobile.set(window.innerWidth <= 768); }
 
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly destroy$ = new Subject<void>();
+  private readonly searchInput$ = new Subject<string>();
 
   async ngOnInit(): Promise<void> {
+    // 300ms debounce on search: reset page and re-fetch from server
+    this.searchInput$.pipe(debounceTime(300), takeUntil(this.destroy$))
+      .subscribe((v) => { this.search.set(v); this.page.set(0); void this.refreshOrders(); });
+
     await this.refreshOrders();
     this.refreshTimer = setInterval(() => void this.refreshOrders(true), 15000);
 
@@ -231,16 +308,32 @@ export class OrdersComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.refreshTimer) clearInterval(this.refreshTimer);
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
-  private async refreshOrders(silent = false): Promise<void> {
-    if (!silent) this.loading.set(true);
+  onSearchChange(value: string): void { this.searchInput$.next(value); }
+
+  readonly skeletonRows = Array(8).fill(null);
+
+  async refreshOrders(silent = false): Promise<void> {
+    if (!silent) { this.loading.set(true); this.loadError.set(null); }
     try {
-      const list = await this.ordersApi.list();
-      this._orders.set(list);
+      const { from, to } = this.effectiveDateRange();
+      const resp = await this.ordersApi.list({
+        page:        this.page(),
+        limit:       this.pageSize(),
+        q:           this.search() || undefined,
+        payment:     this.paymentFilter() !== 'all' ? this.paymentFilter() : undefined,
+        fulfillment: this.fulfillmentFilter() !== 'all' ? this.fulfillmentFilter() : undefined,
+        from:        from || undefined,
+        to:          to || undefined,
+      });
+      this._ordersSignal.set(resp.orders);
+      this._serverTotal.set(resp.total);
       const active = this.active();
       if (active) {
-        const updated = list.find((o) => o.id === active.id);
+        const updated = resp.orders.find((o) => o.id === active.id);
         if (updated) {
           this.active.set({
             ...active,
@@ -252,15 +345,26 @@ export class OrdersComponent implements OnInit, OnDestroy {
         }
       }
     } catch {
-      if (!silent) this._orders.set([]);
+      if (!silent) this.loadError.set('Could not load orders. Check your connection and try again.');
     } finally {
       if (!silent) this.loading.set(false);
     }
   }
 
+  private effectiveDateRange(): { from: string; to: string } {
+    const dr = this.dateRange();
+    const today = new Date().toISOString().slice(0, 10);
+    if (dr === 'today')  return { from: today, to: today };
+    if (dr === 'week')   { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return { from: d.toISOString().slice(0, 10), to: today }; }
+    if (dr === 'month')  return { from: today.slice(0, 8) + '01', to: today };
+    if (dr === 'custom') return { from: this.dateFrom(), to: this.dateTo() || today };
+    return { from: '', to: '' };
+  }
+
   readonly QAR = QAR;
   readonly active = signal<Order | null>(null);
   readonly search = signal('');
+  readonly loadError = signal<string | null>(null);
   readonly paymentFilter = signal('all');
   readonly fulfillmentFilter = signal('all');
   readonly dateRange = signal<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
@@ -272,50 +376,21 @@ export class OrdersComponent implements OnInit, OnDestroy {
   readonly page = signal(0);
   readonly pageSize = signal(50);
 
-  private readonly _orders = signal<Order[]>([]);
+  private readonly _ordersSignal = signal<Order[]>([]);
+  readonly _orders = this._ordersSignal.asReadonly();
+  readonly serverTotal = signal(0);
+  private readonly _serverTotal = this.serverTotal;
 
-  readonly filtered = computed(() => {
-    const q = this.search().toLowerCase();
-    const p = this.paymentFilter();
-    const f = this.fulfillmentFilter();
-    const dr = this.dateRange();
-    const today = new Date().toISOString().slice(0, 10);
-
-    let fromDate = '';
-    let toDate = today;
-    if (dr === 'today') {
-      fromDate = toDate = today;
-    } else if (dr === 'week') {
-      const d = new Date(); d.setDate(d.getDate() - d.getDay());
-      fromDate = d.toISOString().slice(0, 10);
-    } else if (dr === 'month') {
-      fromDate = today.slice(0, 8) + '01';
-    } else if (dr === 'custom') {
-      fromDate = this.dateFrom();
-      toDate = this.dateTo() || today;
-    }
-
-    return this._orders().filter((o) => {
-      if (p !== 'all' && o.payment !== p) return false;
-      if (f !== 'all' && o.fulfillment !== f) return false;
-      if (q && !(o.id.toLowerCase().includes(q) || o.customer.toLowerCase().includes(q))) return false;
-      if (fromDate && o.date < fromDate) return false;
-      if (dr !== 'all' && dr !== 'custom' && o.date > toDate) return false;
-      if (dr === 'custom' && toDate && o.date > toDate) return false;
-      return true;
-    });
-  });
-
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
-
-  readonly paged = computed(() => {
-    const all = this.filtered();
-    const start = this.page() * this.pageSize();
-    return all.slice(start, start + this.pageSize());
-  });
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.serverTotal() / this.pageSize())));
 
   readonly paymentPill = paymentPillKind;
   readonly fulfillmentPill = fulfillmentPillKind;
+
+  isStalePayment(o: Order): boolean {
+    if (o.payment !== 'pending') return false;
+    const placed = new Date(o.date).getTime();
+    return Date.now() - placed > 30 * 60 * 1000;
+  }
 
   readonly columns: TableColumn<Order>[] = [
     { key: 'id',          label: 'Order ID',    labelKey: 'orders.col.id' },
@@ -332,20 +407,27 @@ export class OrdersComponent implements OnInit, OnDestroy {
     this.active.set(o);
     void this.ordersApi.get(o.id)
       .then((full) => {
-        this._orders.update((all) => all.map((x) => (x.id === full.id ? { ...x, ...full } : x)));
+        this._ordersSignal.update((all) => all.map((x) => (x.id === full.id ? { ...x, ...full } : x)));
         this.active.set(full);
       })
       .catch(() => {});
   };
 
   onOrderUpdated(updated: Order): void {
-    this._orders.update((all) => all.map((x) => (x.id === updated.id ? updated : x)));
+    this._ordersSignal.update((all) => all.map((x) => (x.id === updated.id ? updated : x)));
     this.active.set(updated);
   }
+
+  onPaymentFilterChange(val: string): void { this.paymentFilter.set(val); this.page.set(0); void this.refreshOrders(); }
+  onFulfillmentFilterChange(val: string): void { this.fulfillmentFilter.set(val); this.page.set(0); void this.refreshOrders(); }
+  onDateFromChange(val: string): void { this.dateFrom.set(val); this.page.set(0); void this.refreshOrders(); }
+  onDateToChange(val: string): void { this.dateTo.set(val); this.page.set(0); void this.refreshOrders(); }
+  onPageChange(p: number): void { this.page.set(p); void this.refreshOrders(); }
 
   setDateRange(range: 'all' | 'today' | 'week' | 'month' | 'custom'): void {
     this.dateRange.set(range);
     this.page.set(0);
+    void this.refreshOrders();
   }
 
   dateRangeLabel(): string {
@@ -355,7 +437,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
       case 'month': return 'This Month';
       case 'custom': {
         const f = this.dateFrom(); const t = this.dateTo();
-        if (f && t) return `${f} – ${t}`;
+        if (f && t) return `${f} - ${t}`;
         if (f) return `From ${f}`;
         return 'Custom range';
       }
@@ -371,11 +453,13 @@ export class OrdersComponent implements OnInit, OnDestroy {
     this.dateFrom.set('');
     this.dateTo.set('');
     this.page.set(0);
+    void this.refreshOrders();
   }
 
   onPageSizeChange(size: number): void {
     this.pageSize.set(size);
     this.page.set(0);
+    void this.refreshOrders();
   }
 
   async markFulfilled(o: Order): Promise<void> {
@@ -387,7 +471,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
         timelineKind: 'shipped',
         detail: 'Marked shipped from list view',
       });
-      this._orders.update((all) => all.map((x) => (x.id === o.id ? { ...x, ...updated } : x)));
+      this._ordersSignal.update((all) => all.map((x) => (x.id === o.id ? { ...x, ...updated } : x)));
       this.toast.success('Order marked as shipped', `${o.id} · ${o.customer}`, {
         label: 'View',
         run: () => this.openOrder({ ...o, ...updated }),
@@ -403,7 +487,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
     if (this.exporting()) return;
     this.exporting.set(true);
     try {
-      const orders = this.filtered();
+      const orders = this._orders();
       const headers = ['Order ID', 'Date', 'Customer', 'Items', 'Total (QAR)', 'Payment', 'Fulfillment'];
       const rows = orders.map((o) => [
         o.id, o.date, o.customer, o.itemsCount,

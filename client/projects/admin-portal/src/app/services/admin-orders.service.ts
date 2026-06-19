@@ -12,12 +12,39 @@ export interface OrderStatusPayload {
   detail?: string;
 }
 
+export interface OrderListParams {
+  page?: number;
+  limit?: number;
+  payment?: string;
+  fulfillment?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+}
+
+export interface OrderListResponse {
+  orders: Order[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminOrdersService {
   private readonly api = inject(ApiClient);
 
-  list(): Promise<Order[]> {
-    return firstValueFrom(this.api.get<Order[]>('/admin/orders'));
+  list(params: OrderListParams = {}): Promise<OrderListResponse> {
+    const qs = new URLSearchParams();
+    if (params.page   != null)  qs.set('page',        String(params.page));
+    if (params.limit  != null)  qs.set('limit',       String(params.limit));
+    if (params.payment)         qs.set('payment',     params.payment);
+    if (params.fulfillment)     qs.set('fulfillment', params.fulfillment);
+    if (params.from)            qs.set('from',        params.from);
+    if (params.to)              qs.set('to',          params.to);
+    if (params.q)               qs.set('q',           params.q);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return firstValueFrom(this.api.get<OrderListResponse>(`/admin/orders${suffix}`));
   }
 
   get(id: string): Promise<Order> {

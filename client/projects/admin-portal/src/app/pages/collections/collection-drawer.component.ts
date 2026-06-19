@@ -36,13 +36,20 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
   template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
+
+      <!-- ── Header ── -->
       <div class="drawer-head product-head">
         <div style="min-width:0;flex:1;">
           <div class="row gap-sm" style="flex-wrap:wrap;align-items:center;">
-            <div class="card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">{{ form().title || t('collections.new') }}</div>
+            <div class="card-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">
+              {{ form().title || t('collections.new') }}
+            </div>
             <ap-pill [kind]="form().hidden ? 'red' : 'green'">
               {{ form().hidden ? t('collections.hidden') : t('collections.visible') }}
             </ap-pill>
+            @if (form().parentId) {
+              <ap-pill kind="grey">Sub-collection</ap-pill>
+            }
             <span class="save-badge" [class]="'save-badge ' + saveState()">
               @if (saveState() === 'saving') { <ap-spinner [size]="10"/> }
               @if (saveState() === 'saved')  { <ap-icon name="check" [size]="10"/> }
@@ -59,20 +66,16 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
         <div class="head-actions">
           <button class="head-icon-btn" (click)="navigate(-1)" [disabled]="!canPrev()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <button class="head-icon-btn" (click)="navigate(1)" [disabled]="!canNext()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <span class="head-divider" aria-hidden="true"></span>
           <button class="head-icon-btn" (click)="handleClose()"><ap-icon name="x" [size]="14"/></button>
         </div>
       </div>
-      
+
       <ap-save-bar
         [dirty]="dirty()"
         [saving]="saveState() === 'saving'"
@@ -83,16 +86,22 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         (discarded)="discard()"/>
 
       <div class="drawer-body">
+
+        <!-- ── 1. Visibility ── -->
         <div class="vis-block mb-24" [class.hidden-state]="form().hidden">
           <div>
-            <div class="strong" style="font-size:13px;margin-bottom:2px;" [style.color]="form().hidden ? 'var(--danger)' : 'var(--ink)'">
+            <div class="strong" style="font-size:13px;margin-bottom:2px;"
+                 [style.color]="form().hidden ? 'var(--danger)' : 'var(--ink)'">
               {{ isSystemCollection() ? 'Always visible' : (form().hidden ? t('collections.hidden') : t('collections.visible')) }}
             </div>
-            <div class="muted small">{{ isSystemCollection() ? 'Managed by the storefront and kept active.' : t('collections.visibility') }}</div>
+            <div class="muted small">
+              {{ isSystemCollection() ? 'Managed by the storefront and kept active.' : t('collections.visibility') }}
+            </div>
           </div>
           <button class="toggle" [class.on]="!form().hidden" (click)="toggle('hidden')" [disabled]="isSystemCollection()"></button>
         </div>
 
+        <!-- ── 2. Collection Details ── -->
         <div class="section-title">
           <ap-icon name="edit" [size]="14"/>
           <span>{{ t('collections.drawer.title') }}</span>
@@ -100,144 +109,243 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
         <div class="mb-24">
           <label class="lbl">{{ t('collections.drawer.name') }}</label>
-          <input class="inp mb-16" [ngModel]="form().title" (ngModelChange)="set('title', $event)"/>
+          <input class="inp mb-16" [ngModel]="form().title" (ngModelChange)="set('title', $event)"
+                 [placeholder]="t('collections.new')" autocomplete="off"/>
 
-          <label class="lbl">URL Handle <span class="muted" style="font-weight:500;">(collection path)</span></label>
-          <div class="handle-row mb-16">
-            <span class="handle-prefix">/collection/</span>
-            <input class="inp handle-inp"
-                   [ngModel]="form().handle"
-                   (ngModelChange)="setHandle($event)"
-                   [disabled]="isSystemCollection()"
-                   placeholder="auto-generated-from-title"/>
-            @if (handleManual() && !isSystemCollection()) {
-              <button class="btn btn-ghost btn-sm" type="button" (click)="resetHandleToTitle()" title="Reset to auto-generated">
-                <ap-icon name="sync" [size]="12"/>
-              </button>
-            }
-          </div>
-          <div class="handle-preview mb-16">
-            <span class="muted small">Preview: </span>
-            <span class="handle-link mono small">/collection/{{ form().handle || 'your-collection-name' }}</span>
-          </div>
+          <label class="lbl">{{ t('collections.drawer.desc') }}
+            <span class="lbl-hint">Shown on storefront collection pages</span>
+          </label>
+          <textarea class="inp" rows="4"
+                    [placeholder]="t('collections.drawer.descHolder')"
+                    [ngModel]="form().description"
+                    (ngModelChange)="set('description', $event)"></textarea>
+        </div>
 
-          <label class="lbl">{{ t('collections.drawer.desc') }}</label>
-          <textarea class="inp mb-16" rows="3" [placeholder]="t('collections.drawer.descHolder')" [ngModel]="form().description" (ngModelChange)="set('description', $event)"></textarea>
+        <!-- ── 3. Cover Image ── -->
+        <div class="section-title">
+          <ap-icon name="media" [size]="14"/>
+          <span>{{ t('collections.cover.title') }}</span>
+        </div>
 
-          <label class="lbl">{{ t('collections.drawer.parent') }}</label>
-          <div class="parent-row mb-16">
-            <ap-icon name="hierarchy" [size]="14" style="color:var(--muted);flex-shrink:0;"/>
-            <select class="inp" style="flex:1;" [ngModel]="form().parentId" (ngModelChange)="set('parentId', $event || null)">
-              <option [value]="null">{{ t('collections.drawer.parent.none') }}</option>
-              @for (c of parentOptions(); track c.id) {
-                <option [value]="c.id">{{ c.title }}</option>
-              }
-            </select>
-          </div>
-          @if (form().parentId) {
-            <div class="parent-breadcrumb mb-16">
-              <ap-icon name="hierarchy" [size]="11"/>
-              <span class="muted small">Sub-collection of <strong>{{ parentTitle() }}</strong> · /collection/{{ parentHandle() }}/{{ form().handle || 'this-collection' }}</span>
-            </div>
-          }
-
-          <label class="lbl">{{ t('collections.cover.title') }}</label>
+        <div class="mb-24">
           <div class="cover-drop"
                [class.has-image]="!!form().imageUrl"
                (dragover)="onCoverDragOver($event)"
                (drop)="onCoverDrop($event)">
             @if (form().imageUrl) {
               <img class="cover-preview" [src]="form().imageUrl" [alt]="form().title"/>
+              <button class="cover-remove-btn" type="button" (click)="set('imageUrl', null)" title="Remove image">
+                <ap-icon name="x" [size]="12"/>
+              </button>
             } @else {
               <div class="cover-empty">
-                <div class="muted"><ap-icon name="media" [size]="24"/></div>
+                <div class="muted"><ap-icon name="media" [size]="28"/></div>
                 <div class="strong mt-8">{{ t('collections.cover.empty.title') }}</div>
-                <div class="muted small mt-8">{{ t('collections.cover.empty.sub') }}</div>
+                <div class="muted small mt-4">Drag and drop or upload from device</div>
               </div>
             }
           </div>
-          <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+          <div class="row gap-sm mt-12" style="flex-wrap:wrap;">
             <label class="btn btn-gold btn-sm" style="cursor:pointer;">
-              <ap-icon name="upload" [size]="12"/> {{ form().imageUrl ? t('collections.cover.replace') : t('collections.cover.upload') }}
+              <ap-icon name="upload" [size]="12"/>
+              {{ form().imageUrl ? t('collections.cover.replace') : t('collections.cover.upload') }}
               <input type="file" accept="image/*" hidden (change)="onCoverPick($event)"/>
             </label>
             <button class="btn btn-outline btn-sm" type="button" (click)="addCoverUrl()">
-              <ap-icon name="link" [size]="12"/> {{ t('collections.cover.addUrl') }}
+              <ap-icon name="link" [size]="12"/> URL
             </button>
-            @if (form().imageUrl) {
-              <button class="btn btn-danger btn-sm" type="button" (click)="set('imageUrl', null)">
-                <ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}
-              </button>
-            }
           </div>
         </div>
 
+        <!-- ── 4. Organization (URL + Hierarchy) ── -->
         <div class="section-title">
-          <ap-icon name="link" [size]="14"/>
+          <ap-icon name="hierarchy" [size]="14"/>
+          <span>Organization</span>
+        </div>
+
+        <div class="mb-24">
+
+          <!-- Parent collection -->
+          <label class="lbl">Parent Collection
+            <span class="lbl-hint">Makes this a sub-collection nested inside another</span>
+          </label>
+          <select class="inp mb-8" [ngModel]="form().parentId" (ngModelChange)="set('parentId', $event || null)" [disabled]="isSystemCollection()">
+            <option [value]="null">None — top-level collection</option>
+            @for (c of parentOptions(); track c.id) {
+              <option [value]="c.id">{{ c.title }}</option>
+            }
+          </select>
+
+          @if (form().parentId) {
+            <div class="breadcrumb-row mb-16">
+              <ap-icon name="hierarchy" [size]="11"/>
+              <span>
+                Nested under <strong>{{ parentTitle() }}</strong>
+              </span>
+            </div>
+          }
+
+          <!-- URL Handle -->
+          <label class="lbl">URL Handle
+            <span class="lbl-hint">Storefront path for this collection</span>
+          </label>
+          <div class="handle-row mb-6">
+            <span class="handle-prefix">
+              @if (form().parentId) {
+                /collection/{{ parentHandle() }}/
+              } @else {
+                /collection/
+              }
+            </span>
+            <input class="inp handle-inp"
+                   [ngModel]="form().handle"
+                   (ngModelChange)="setHandle($event)"
+                   [disabled]="isSystemCollection()"
+                   placeholder="auto-generated"/>
+            @if (handleManual() && !isSystemCollection()) {
+              <button class="btn btn-ghost btn-sm" type="button" (click)="resetHandleToTitle()" title="Reset to auto">
+                <ap-icon name="sync" [size]="12"/>
+              </button>
+            }
+          </div>
+          <div class="url-preview mb-0">
+            <ap-icon name="link" [size]="10"/>
+            <span class="mono">
+              @if (form().parentId) {
+                /collection/{{ parentHandle() }}/{{ form().handle || 'this-collection' }}
+              } @else {
+                /collection/{{ form().handle || 'collection-name' }}
+              }
+            </span>
+          </div>
+        </div>
+
+        <!-- ── 5. Sub-collections ── -->
+        @if (!isSystemCollection() && !form().parentId) {
+          <div class="section-title">
+            <ap-icon name="collections" [size]="14"/>
+            <span>Sub-collections
+              @if (subCollections().length > 0) {
+                <span class="sec-count">{{ subCollections().length }}</span>
+              }
+            </span>
+          </div>
+
+          <div class="mb-24">
+            @if (subCollections().length > 0) {
+              <div class="sub-grid mb-12">
+                @for (child of subCollections(); track child.id) {
+                  <button class="sub-item" (click)="navigateTo(child.id)" [class.sub-hidden]="child.hidden">
+                    <div class="sub-thumb">
+                      @if (child.imageUrl) {
+                        <img [src]="child.imageUrl" [alt]="child.title"/>
+                      } @else {
+                        <ap-icon name="collections" [size]="14"/>
+                      }
+                    </div>
+                    <div class="sub-info">
+                      <div class="sub-name">{{ child.title }}</div>
+                      <div class="sub-meta">{{ child.productIds.length }} products
+                        @if (child.hidden) { · <span style="color:var(--danger)">Hidden</span> }
+                      </div>
+                    </div>
+                    <ap-icon name="arrow" [size]="12" style="color:var(--muted);flex-shrink:0;"/>
+                  </button>
+                }
+              </div>
+            } @else {
+              <div class="empty-sub-hint mb-12">
+                <ap-icon name="hierarchy" [size]="20"/>
+                <div>
+                  <div class="strong" style="font-size:13px;">No sub-collections yet</div>
+                  <div class="muted small">Group products into sub-categories inside this collection</div>
+                </div>
+              </div>
+            }
+            <button class="btn btn-outline btn-sm w-full" (click)="addSubCollection()">
+              <ap-icon name="plus" [size]="13"/> Add sub-collection
+            </button>
+          </div>
+        }
+
+        <!-- ── 6. Products ── -->
+        <div class="section-title">
+          <ap-icon name="grid" [size]="14"/>
           <span>{{ t('collections.drawer.manageProducts') }}</span>
         </div>
 
         <div class="mb-24">
           @if (isSystemCollection()) {
-            <div style="padding:24px;border:1px solid var(--border);border-radius:10px;background:var(--bg);">
-              <div class="strong" style="margin-bottom:4px;">All Products is system-managed</div>
-              <div class="muted small">It always reflects the full active catalog, so the product list is read-only here.</div>
+            <div class="info-box">
+              <ap-icon name="info" [size]="16"/>
+              <div>
+                <div class="strong" style="font-size:13px;">System-managed collection</div>
+                <div class="muted small">Always reflects the full active catalog — product list is read-only.</div>
+              </div>
             </div>
           } @else {
             <div class="row gap-sm mb-16" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
-              <div class="strong">{{ form().productIds.length }} {{ t('collections.products') }}</div>
-            <div class="row gap-sm">
-              @if (form().productIds.length > 1) {
-                <div class="view-toggle">
-                  <button class="view-toggle-btn" [class.active]="reorderView() === 'grid'" (click)="reorderView.set('grid')" title="Grid view">
-                    <ap-icon name="grid" [size]="13"/>
-                  </button>
-                  <button class="view-toggle-btn" [class.active]="reorderView() === 'list'" (click)="reorderView.set('list')" title="List view — drag handles">
-                    <ap-icon name="rows" [size]="13"/>
-                  </button>
-                </div>
-              }
-                <button class="btn btn-outline btn-sm" (click)="pickingProducts.set(true)">{{ t('collections.drawer.linkProducts') }}</button>
-            </div>
-            </div>
-  
-            @if (form().productIds.length === 0) {
-              <div style="padding:24px;border:1px solid var(--border);border-radius:10px;text-align:center;background:var(--bg);">
-                <div class="muted mb-8"><ap-icon name="collections" [size]="24"/></div>
-                <div class="strong">{{ t('collections.drawer.noProducts') }}</div>
-                <div class="muted small">{{ t('collections.drawer.noProducts.sub') }}</div>
+              <div class="strong">
+                {{ form().productIds.length }} {{ t('collections.products') }}
+                @if (form().productIds.length > 0) {
+                  <span class="muted" style="font-weight:400;"> · sorted for storefront display</span>
+                }
               </div>
-          } @else if (reorderView() === 'list') {
-            <!-- List view: explicit drag handle + up/down buttons for precise reordering -->
-            <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
-            <div class="reorder-list">
-              @for (p of linkedProducts(); track p.id; let i = $index; let first = $first; let last = $last) {
-                <div class="reorder-row"
-                     draggable="true"
-                     (dragstart)="onProductDragStart(i, $event)"
-                     (dragover)="onReorderRowDragOver($event, i)"
-                     (dragleave)="dragOverIndex.set(-1)"
-                     (drop)="onProductDrop(i, $event)"
-                     [class.drag-over]="dragOverIndex() === i">
-                  <span class="reorder-handle" title="Drag to reorder"><ap-icon name="drag" [size]="14"/></span>
-                  <span class="reorder-pos">{{ i + 1 }}</span>
-                  <img [src]="p.image" [alt]="p.name" class="reorder-thumb"/>
-                  <div class="reorder-info">
-                    <div class="strong small" style="font-size:13px;">{{ p.name }}</div>
-                    <div class="muted mono" style="font-size:11px;">{{ p.sku }}</div>
+              <div class="row gap-sm">
+                @if (form().productIds.length > 1) {
+                  <div class="view-toggle">
+                    <button class="view-toggle-btn" [class.active]="reorderView() === 'grid'" (click)="reorderView.set('grid')" title="Grid view">
+                      <ap-icon name="grid" [size]="13"/>
+                    </button>
+                    <button class="view-toggle-btn" [class.active]="reorderView() === 'list'" (click)="reorderView.set('list')" title="List view">
+                      <ap-icon name="rows" [size]="13"/>
+                    </button>
                   </div>
-                  <div class="reorder-actions">
-                    <button class="icon-btn" [disabled]="first" (click)="moveProduct(i, -1)" title="Move up"><ap-icon name="arrowUp" [size]="12"/></button>
-                    <button class="icon-btn" [disabled]="last" (click)="moveProduct(i, 1)" title="Move down"><ap-icon name="arrowDn" [size]="12"/></button>
-                    <button class="icon-btn" style="color:var(--danger);" (click)="removeProduct(p.id)" title="Remove"><ap-icon name="x" [size]="12"/></button>
-                  </div>
-                </div>
-              }
+                }
+                <button class="btn btn-outline btn-sm" (click)="pickingProducts.set(true)">
+                  <ap-icon name="plus" [size]="12"/> {{ t('collections.drawer.linkProducts') }}
+                </button>
+              </div>
             </div>
-            } @else {
-            <!-- Grid view: drag the card -->
+
+            @if (form().productIds.length === 0) {
+              <div class="empty-products">
+                <div class="muted mb-8"><ap-icon name="collections" [size]="28"/></div>
+                <div class="strong mb-4">{{ t('collections.drawer.noProducts') }}</div>
+                <div class="muted small">{{ t('collections.drawer.noProducts.sub') }}</div>
+                <button class="btn btn-outline btn-sm mt-16" (click)="pickingProducts.set(true)">
+                  <ap-icon name="plus" [size]="12"/> Add products
+                </button>
+              </div>
+            } @else if (reorderView() === 'list') {
               <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
-              <div class="grid-cards collection-products-grid" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
+              <div class="reorder-list">
+                @for (p of linkedProducts(); track p.id; let i = $index; let first = $first; let last = $last) {
+                  <div class="reorder-row"
+                       draggable="true"
+                       (dragstart)="onProductDragStart(i, $event)"
+                       (dragover)="onReorderRowDragOver($event, i)"
+                       (dragleave)="dragOverIndex.set(-1)"
+                       (drop)="onProductDrop(i, $event)"
+                       [class.drag-over]="dragOverIndex() === i">
+                    <span class="reorder-handle"><ap-icon name="drag" [size]="14"/></span>
+                    <span class="reorder-pos">{{ i + 1 }}</span>
+                    <img [src]="p.image" [alt]="p.name" class="reorder-thumb"/>
+                    <div class="reorder-info">
+                      <div class="strong small" style="font-size:13px;">{{ p.name }}</div>
+                      <div class="muted mono" style="font-size:11px;">{{ p.sku }}</div>
+                    </div>
+                    <div class="reorder-actions">
+                      <button class="icon-btn" [disabled]="first" (click)="moveProduct(i, -1)" title="Move up"><ap-icon name="arrowUp" [size]="12"/></button>
+                      <button class="icon-btn" [disabled]="last" (click)="moveProduct(i, 1)" title="Move down"><ap-icon name="arrowDn" [size]="12"/></button>
+                      <button class="icon-btn danger-btn" (click)="removeProduct(p.id)" title="Remove"><ap-icon name="x" [size]="12"/></button>
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else {
+              <div class="muted small mb-8">{{ t('collections.products.dragHint') }}</div>
+              <div class="grid-cards collection-products-grid" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
                 @for (p of linkedProducts(); track p.id; let i = $index) {
                   <div class="prod-card collection-prod"
                        draggable="true"
@@ -247,7 +355,9 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                     <div class="prod-img">
                       <img [src]="p.image" [alt]="p.name"/>
                       <span class="prod-3d-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
-                      <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)"><ap-icon name="x" [size]="12"/></button>
+                      <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)">
+                        <ap-icon name="x" [size]="12"/>
+                      </button>
                     </div>
                     <div class="prod-body">
                       <div class="prod-name">{{ p.name }}</div>
@@ -260,6 +370,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           }
         </div>
 
+        <!-- ── 7. Danger Zone ── -->
         <div class="section-title danger-section">
           <ap-icon name="trash" [size]="14"/>
           <span>{{ t('product.section.danger') }}</span>
@@ -268,21 +379,33 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         @if (!isSystemCollection()) {
           <div class="danger-zone mb-24">
             <div style="flex:1;min-width:0;">
-              <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">{{ t('collections.section.danger.title') }}</div>
+              <div class="strong" style="font-size:13px;color:var(--danger);margin-bottom:2px;">
+                {{ t('collections.section.danger.title') }}
+              </div>
+              <div class="muted small">
+                @if (subCollections().length > 0) {
+                  Sub-collections will be unlinked (not deleted).
+                } @else {
+                  This action cannot be undone.
+                }
+              </div>
             </div>
             <button class="btn btn-danger" [disabled]="deleting()" (click)="onDelete()">
-              @if (deleting()) {
-                <ap-spinner/> {{ t('common.working') }}
-              } @else {
-                <ap-icon name="trash" [size]="12"/> {{ t('product.delete.button') }}
-              }
+              @if (deleting()) { <ap-spinner/> {{ t('common.working') }} }
+              @else { <ap-icon name="trash" [size]="12"/> {{ t('product.delete.button') }} }
             </button>
           </div>
+        } @else {
+          <div class="info-box mb-24">
+            <ap-icon name="info" [size]="14"/>
+            <span class="muted small">System collections cannot be deleted.</span>
+          </div>
         }
-      </div>
+
+      </div><!-- /drawer-body -->
     </div>
 
-    <!-- Product Picker Modal -->
+    <!-- ── Product Picker Modal ── -->
     @if (pickingProducts()) {
       <div class="overlay" style="z-index:220;" (click)="pickingProducts.set(false)"></div>
       <div class="modal" style="z-index:230;width:min(600px,96vw);max-height:85vh;display:flex;flex-direction:column;">
@@ -293,23 +416,26 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         <div class="modal-body" style="flex:1;overflow-y:auto;padding-top:0;">
           <div class="inp-search mb-16" style="position:sticky;top:0;background:var(--surface);padding-top:16px;z-index:10;">
             <ap-icon name="search" [size]="14"/>
-            <input class="inp with-icon" [placeholder]="t('collections.drawer.addProducts.search')" [ngModel]="pickerSearch()" (ngModelChange)="pickerSearch.set($event)"/>
+            <input class="inp with-icon"
+                   [placeholder]="t('collections.drawer.addProducts.search')"
+                   [ngModel]="pickerSearch()"
+                   (ngModelChange)="pickerSearch.set($event)"/>
           </div>
           <div class="col gap-sm">
             @for (p of pickerProducts(); track p.id) {
-              <div class="row gap-sm" style="padding:8px;border:1px solid var(--border);border-radius:8px;align-items:center;cursor:pointer;" (click)="toggleProduct(p.id)">
-                <input type="checkbox" [checked]="form().productIds.includes(p.id)" style="pointer-events:none;"/>
-                <img [src]="p.image" style="width:32px;height:32px;border-radius:4px;object-fit:cover;"/>
-                <div style="flex:1;">
-                  <div class="strong">{{ p.name }}</div>
-                  <div class="muted small">{{ p.sku }}</div>
+              <div class="picker-row" [class.selected]="form().productIds.includes(p.id)" (click)="toggleProduct(p.id)">
+                <input type="checkbox" [checked]="form().productIds.includes(p.id)" style="pointer-events:none;flex-shrink:0;"/>
+                <img [src]="p.image" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;"/>
+                <div style="flex:1;min-width:0;">
+                  <div class="strong" style="font-size:13px;">{{ p.name }}</div>
+                  <div class="muted small mono">{{ p.sku }}</div>
                 </div>
               </div>
             }
           </div>
         </div>
         <div class="drawer-foot">
-          <div class="muted">{{ form().productIds.length }} {{ t('collections.drawer.addProducts.selected') }}</div>
+          <div class="muted small">{{ form().productIds.length }} selected</div>
           <button class="btn btn-primary" (click)="pickingProducts.set(false)">Done</button>
         </div>
       </div>
@@ -319,6 +445,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     .drawer-wide { width: min(720px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
 
+    /* ── Header ── */
     .product-head { gap: 12px; align-items: flex-start; }
     .head-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
     .head-icon-btn {
@@ -333,86 +460,133 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     html[dir='rtl'] .head-icon-btn svg { transform: scaleX(-1); }
     html[dir='rtl'] .head-icon-btn ap-icon[name='x'] svg { transform: none; }
 
+    .product-drawer.is-dirty .product-head { box-shadow: inset 4px 0 0 var(--gold); }
+    html[dir='rtl'] .product-drawer.is-dirty .product-head { box-shadow: inset -4px 0 0 var(--gold); }
+
+    /* ── Section titles ── */
     .section-title {
-      display: flex; align-items: center; gap: 8px; padding: 16px 0 12px; margin-top: 4px;
-      border-top: 1px solid var(--border-2); color: var(--green); font-family: var(--ff-disp); font-size: 16px; font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+      padding: 18px 0 12px; margin-top: 4px;
+      border-top: 1px solid var(--border-2);
+      color: var(--green); font-family: var(--ff-disp); font-size: 15px; font-weight: 600;
     }
     .section-title:first-of-type { border-top: none; padding-top: 0; }
     .section-title.danger-section { color: var(--danger); }
     .section-title ap-icon { color: var(--gold); flex-shrink: 0; }
     .section-title.danger-section ap-icon { color: var(--danger); }
+    .sec-count {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 20px; height: 20px; padding: 0 6px;
+      background: rgba(2,70,56,0.1); color: var(--green);
+      border-radius: 10px; font-size: 11px; font-weight: 700;
+      margin-inline-start: 4px;
+    }
 
+    /* ── Labels ── */
+    .lbl-hint {
+      display: block; font-size: 11px; font-weight: 400;
+      color: var(--muted); margin-top: 1px; margin-bottom: 4px;
+    }
 
-    .product-drawer.is-dirty .product-head { box-shadow: inset 4px 0 0 var(--gold); }
-    html[dir='rtl'] .product-drawer.is-dirty .product-head { box-shadow: inset -4px 0 0 var(--gold); }
-
-    /* Cover image upload */
+    /* ── Cover image ── */
     .cover-drop {
-      position: relative;
-      min-height: 160px;
-      border: 1px dashed var(--border);
-      border-radius: 12px;
-      background: var(--bg);
+      position: relative; min-height: 180px;
+      border: 1px dashed var(--border); border-radius: 12px;
+      background: var(--bg); display: flex; align-items: center; justify-content: center;
+      overflow: hidden; transition: border-color 0.15s, background 0.15s;
+    }
+    .cover-drop:hover { border-color: var(--gold); background: rgba(197,165,114,0.03); }
+    .cover-drop.has-image { padding: 0; min-height: 200px; border-style: solid; }
+    .cover-empty { padding: 24px; text-align: center; }
+    .cover-preview { width: 100%; max-height: 260px; object-fit: cover; display: block; }
+    .cover-remove-btn {
+      position: absolute; top: 10px; inset-inline-end: 10px;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: rgba(0,0,0,0.55); color: #fff; border: none;
       display: flex; align-items: center; justify-content: center;
-      overflow: hidden;
-      transition: border-color 0.15s, background 0.15s;
+      cursor: pointer; transition: background 0.13s;
     }
-    .cover-drop:hover { border-color: var(--gold); }
-    .cover-drop.has-image { padding: 0; min-height: 200px; }
-    .cover-empty { padding: 20px; text-align: center; }
-    .cover-preview {
-      width: 100%;
-      max-height: 240px;
-      object-fit: cover;
-      display: block;
-    }
+    .cover-remove-btn:hover { background: rgba(239,68,68,0.85); }
 
-    /* URL handle field */
+    /* ── URL handle ── */
     .handle-row {
-      display: flex;
-      align-items: center;
-      gap: 0;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-      background: var(--surface);
+      display: flex; align-items: center; gap: 0;
+      border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; background: var(--surface);
     }
     .handle-row:focus-within { border-color: var(--green); }
     .handle-prefix {
-      padding: 0 10px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-      background: var(--bg);
-      border-right: 1px solid var(--border);
-      height: 38px;
-      display: flex;
-      align-items: center;
+      padding: 0 10px; color: var(--muted); font-size: 12px; font-weight: 600;
+      white-space: nowrap; background: var(--bg);
+      border-right: 1px solid var(--border); height: 38px;
+      display: flex; align-items: center; flex-shrink: 0;
     }
     .handle-inp {
-      flex: 1;
-      border: none !important;
-      border-radius: 0 !important;
-      background: transparent;
-      font-family: var(--ff-mono, monospace);
-      font-size: 13px;
+      flex: 1; border: none !important; border-radius: 0 !important;
+      background: transparent; font-family: var(--ff-mono, monospace); font-size: 13px;
     }
     .handle-row button { margin: 0 6px; flex-shrink: 0; }
-    .handle-preview { padding: 4px 0; }
-    .handle-link { color: var(--green); word-break: break-all; }
-
-    /* Collection products: drag-to-reorder */
-    .collection-prod {
-      cursor: grab;
-      transition: transform 0.12s, box-shadow 0.12s;
+    .url-preview {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 2px; font-size: 11px;
+      color: var(--green); word-break: break-all;
     }
+
+    /* ── Breadcrumb ── */
+    .breadcrumb-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 12px; border-radius: 8px;
+      background: rgba(2,70,56,0.05); border: 1px solid rgba(2,70,56,0.12);
+      font-size: 12px; color: var(--ink-2);
+    }
+    .breadcrumb-row ap-icon { color: var(--green); flex-shrink: 0; }
+
+    /* ── Sub-collections panel ── */
+    .sub-grid { display: flex; flex-direction: column; gap: 6px; }
+    .sub-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--surface); cursor: pointer; transition: all 0.13s;
+      text-align: start; width: 100%;
+    }
+    .sub-item:hover { border-color: var(--green); background: rgba(2,70,56,0.03); }
+    .sub-item.sub-hidden { opacity: 0.6; }
+    .sub-thumb {
+      width: 36px; height: 36px; border-radius: 7px; flex-shrink: 0;
+      background: var(--bg); border: 1px solid var(--border-2);
+      display: flex; align-items: center; justify-content: center; color: var(--muted);
+      overflow: hidden;
+    }
+    .sub-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .sub-info { flex: 1; min-width: 0; }
+    .sub-name { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .empty-sub-hint {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 16px; border-radius: 10px;
+      background: var(--bg); border: 1px solid var(--border-2);
+      color: var(--muted);
+    }
+    .w-full { width: 100%; justify-content: center; }
+
+    /* ── Info box ── */
+    .info-box {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg); color: var(--ink-2);
+    }
+    .info-box ap-icon { color: var(--muted); flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Empty products state ── */
+    .empty-products {
+      padding: 32px 24px; border: 1px dashed var(--border); border-radius: 10px;
+      text-align: center; background: var(--bg);
+    }
+
+    /* ── Products grid / list ── */
+    .collection-prod { cursor: grab; transition: transform 0.12s, box-shadow 0.12s; }
     .collection-prod:active { cursor: grabbing; transform: scale(0.98); }
-
-    /* View toggle (grid / list) */
-    .view-toggle {
-      display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden;
-    }
+    .view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
     .view-toggle-btn {
       padding: 0 9px; height: 30px; display: inline-flex; align-items: center;
       background: transparent; border: none; color: var(--muted); cursor: pointer; transition: all 0.12s;
@@ -420,7 +594,6 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     .view-toggle-btn:hover { color: var(--ink); }
     .view-toggle-btn.active { background: var(--green); color: #fff; }
 
-    /* List-mode reorder */
     .reorder-list { display: flex; flex-direction: column; gap: 4px; }
     .reorder-row {
       display: flex; align-items: center; gap: 10px;
@@ -431,13 +604,8 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     .reorder-row:active { cursor: grabbing; }
     .reorder-row.drag-over { border-color: var(--gold); background: var(--gold-3); }
     .reorder-handle { color: var(--muted); flex-shrink: 0; cursor: grab; }
-    .reorder-pos {
-      font-size: 11px; font-weight: 700; color: var(--muted);
-      min-width: 18px; text-align: center; flex-shrink: 0;
-    }
-    .reorder-thumb {
-      width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0;
-    }
+    .reorder-pos { font-size: 11px; font-weight: 700; color: var(--muted); min-width: 18px; text-align: center; flex-shrink: 0; }
+    .reorder-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
     .reorder-info { flex: 1; min-width: 0; }
     .reorder-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
     .reorder-actions .icon-btn {
@@ -447,18 +615,16 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     }
     .reorder-actions .icon-btn:hover:not(:disabled) { background: var(--bg); border-color: var(--border); }
     .reorder-actions .icon-btn:disabled { color: var(--muted-2); cursor: not-allowed; opacity: 0.4; }
+    .reorder-actions .icon-btn.danger-btn:hover { color: var(--danger); border-color: rgba(239,68,68,0.3); }
 
-    /* Parent collection picker */
-    .parent-row {
-      display: flex; align-items: center; gap: 8px;
+    /* ── Product picker modal ── */
+    .picker-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+      cursor: pointer; transition: all 0.13s;
     }
-    .parent-breadcrumb {
-      display: flex; align-items: center; gap: 6px;
-      padding: 8px 12px; border-radius: 8px;
-      background: var(--bg); border: 1px solid var(--border);
-      color: var(--ink-2);
-    }
-    .parent-breadcrumb ap-icon { color: var(--green); flex-shrink: 0; }
+    .picker-row:hover { border-color: var(--green); background: rgba(2,70,56,0.03); }
+    .picker-row.selected { background: rgba(2,70,56,0.05); border-color: rgba(2,70,56,0.25); }
   `],
 })
 export class CollectionDrawerComponent implements OnInit, OnDestroy {
@@ -476,6 +642,8 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
   @Output() currentIdChange = new EventEmitter<string>();
   @Output() deleted = new EventEmitter<Collection>();
+  @Output() saved = new EventEmitter<{ collection: Collection; oldId: string }>();
+  @Output() createSubCollection = new EventEmitter<Collection>();
 
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -506,7 +674,12 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
 
   readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
-  /** Collections eligible to be the parent of the current one — excludes self and all descendants. */
+  /** Child collections (sub-collections) of the current one. */
+  readonly subCollections = computed(() =>
+    this._collections().filter(c => c.parentId === this._currentId() && !c.id.startsWith('COL-NEW-')),
+  );
+
+  /** Collections eligible to be the parent — excludes self and all descendants. */
   readonly parentOptions = computed(() => {
     const selfId = this._currentId();
     const all = this._collections();
@@ -538,8 +711,6 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
 
   readonly linkedProducts = computed(() => {
     if (this.isSystemCollection()) return [];
-    // Render in the order saved on `productIds` so drag-to-reorder is
-    // meaningful for storefront display order.
     const ids = this.form().productIds;
     const byId = new Map(this.products().map(p => [p.id, p]));
     return ids.map(id => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
@@ -642,40 +813,42 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     else this.set('productIds', [...ids, id]);
   }
 
-  // ────────────────────────────────────────────────────────────────────
-  // Cover image upload (file picker, drag & drop, paste-URL)
-  // ────────────────────────────────────────────────────────────────────
+  /** Navigate the drawer to a different collection (e.g. a sub-collection). */
+  navigateTo(id: string): void {
+    if (this.dirty()) { this.triggerShake(); return; }
+    this.currentIdChange.emit(id);
+  }
 
+  /** Tell the parent page to create a new sub-collection under this one. */
+  addSubCollection(): void {
+    if (this.dirty()) { this.triggerShake(); return; }
+    this.createSubCollection.emit(this.collection);
+  }
+
+  // Cover image
   onCoverPick(ev: Event): void {
     const input = ev.target as HTMLInputElement;
     const file = input.files?.[0];
     if (file) this.readCover(file);
     input.value = '';
   }
-
   onCoverDragOver(ev: DragEvent): void { ev.preventDefault(); }
-
   onCoverDrop(ev: DragEvent): void {
     ev.preventDefault();
     const file = Array.from(ev.dataTransfer?.files ?? []).find(f => f.type.startsWith('image/'));
     if (file) this.readCover(file);
   }
-
   addCoverUrl(): void {
     const url = window.prompt(this.t('collections.cover.urlPrompt'), 'https://');
     if (url && url.trim()) this.set('imageUrl', url.trim());
   }
-
   private readCover(file: File): void {
     const reader = new FileReader();
     reader.onload = () => this.set('imageUrl', reader.result as string);
     reader.readAsDataURL(file);
   }
 
-  // ────────────────────────────────────────────────────────────────────
-  // Drag-to-reorder products (controls storefront display order)
-  // ────────────────────────────────────────────────────────────────────
-
+  // Drag-to-reorder products
   private dragFromIndex: number | null = null;
 
   onProductDragStart(index: number, ev: DragEvent): void {
@@ -683,12 +856,10 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     ev.dataTransfer?.setData('text/plain', String(index));
     if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
   }
-
   onProductDragOver(ev: DragEvent): void {
     ev.preventDefault();
     if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
   }
-
   onProductDrop(targetIndex: number, ev: DragEvent): void {
     ev.preventDefault();
     this.dragOverIndex.set(-1);
@@ -700,13 +871,11 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     ids.splice(targetIndex, 0, moved);
     this.set('productIds', ids);
   }
-
   onReorderRowDragOver(ev: DragEvent, index: number): void {
     ev.preventDefault();
     if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
     this.dragOverIndex.set(index);
   }
-
   moveProduct(index: number, dir: -1 | 1): void {
     const ids = [...this.form().productIds];
     const targetIndex = index + dir;
@@ -743,23 +912,26 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
       hidden: f.hidden,
       parentId: f.parentId,
     };
-    const id = this.collection.id;
-    const isDraft = !id || id.startsWith('COL-NEW-');
+    const oldId = this.collection.id;
+    const isDraft = !oldId || oldId.startsWith('COL-NEW-');
 
     try {
-      const saved = isDraft
+      const result = isDraft
         ? await this.collectionsApi.create(payload)
-        : await this.collectionsApi.update(id, payload);
-
-      // Update the underlying collection in the parent's list — keep ids in
-      // sync if the server replaced our temporary draft id with a real UUID.
-      Object.assign(this.collection, saved);
+        : await this.collectionsApi.update(oldId, payload);
 
       try { localStorage.removeItem(this.draftKey); } catch {}
       this.initial.set({ ...this.form() });
       this.saveState.set('saved');
-      this.toast.success(this.t('collections.toast.saved.title'), `${saved.title}`);
+      this.toast.success(this.t('collections.toast.saved.title'), `${result.title}`);
       window.setTimeout(() => this.saveState.set('idle'), 1800);
+
+      this.saved.emit({ collection: result, oldId });
+
+      if (isDraft && result.id !== oldId) {
+        this._currentId.set(result.id);
+        this.currentIdChange.emit(result.id);
+      }
     } catch {
       this.saveState.set('error');
       this.triggerShake();
@@ -796,11 +968,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     const idx = this.currentIndex();
     const newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= list.length) return;
-
-    if (this.dirty()) {
-      this.triggerShake();
-      return;
-    }
+    if (this.dirty()) { this.triggerShake(); return; }
     this.currentIdChange.emit(list[newIdx].id);
   }
 
@@ -810,10 +978,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   }
 
   handleClose(): void {
-    if (this.dirty()) { 
-      this.triggerShake(); 
-      return; 
-    }
+    if (this.dirty()) { this.triggerShake(); return; }
     this.closed.emit();
   }
 }

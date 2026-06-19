@@ -698,55 +698,6 @@ function readPreview(file: File): Promise<string> {
           }
         </div>
 
-        <!-- Section: Sync -->
-        <div class="section-title" [class.sec-collapsed]="isMobile() && !openSections().has('sync')" (click)="toggleSection('sync')">
-          <ap-icon name="sync" [size]="14"/>
-          <span>{{ t('product.section.sync') }}</span>
-          <ap-icon name="arrowDn" [size]="11" class="sec-chev" [class.open]="openSections().has('sync')" [style.display]="isMobile() ? 'block' : 'none'"/>
-        </div>
-
-        <div class="mb-24" [style.display]="isMobile() && !openSections().has('sync') ? 'none' : ''"  >
-          <div class="ms-block">
-            <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-              <div>
-                <div class="strong" style="font-size:13px;color:var(--green);margin-bottom:2px;">{{ t('product.sync.title') }}</div>
-                <div class="muted small">{{ t('product.sync.sub') }} <span class="mono">{{ product.sku }}</span></div>
-              </div>
-              <ap-pill kind="green">{{ t('product.sync.inSync') }}</ap-pill>
-            </div>
-            <div class="ms-row">
-              <span class="muted small">{{ t('product.sync.lastAuto') }}</span>
-              <span class="row gap-sm">
-                <span class="mono" style="font-size:11px;color:var(--ink-2);">2026-04-29 06:00</span>
-              </span>
-            </div>
-            <div class="ms-row">
-              <span class="muted small">{{ t('product.sync.lastManual') }}</span>
-              <span class="row gap-sm">
-                <span class="mono" style="font-size:11px;color:var(--ink-2);">{{ lastManual().when }}</span>
-                <span class="trigger" style="padding:2px 10px 2px 3px;font-size:10px;">
-                  <span class="avatar" style="width:18px;height:18px;font-size:8px;">{{ lastManual().initials }}</span>
-                  {{ firstName(lastManual().by) }}
-                </span>
-              </span>
-            </div>
-            <div class="ms-row">
-              <span class="muted small">{{ t('product.sync.posStock') }}</span>
-              <span class="strong">{{ product.stock }}</span>
-            </div>
-            <div class="row gap-sm" style="margin-top:14px;flex-wrap:wrap;">
-              <button class="btn btn-gold" style="flex:1;min-width:200px;" [disabled]="syncing()" (click)="runProductSync()">
-                @if (syncing()) {
-                  <ap-spinner/> {{ t('product.sync.syncing') }}
-                } @else {
-                  <ap-icon name="sync" [size]="14"/> {{ t('product.sync.syncNow') }}
-                }
-              </button>
-              <button class="btn btn-outline" [disabled]="syncing()">{{ t('product.sync.history') }}</button>
-            </div>
-          </div>
-        </div>
-
         <!-- Section: Danger zone -->
         <div class="section-title danger-section" [class.sec-collapsed]="isMobile() && !openSections().has('danger')" (click)="toggleSection('danger')">
           <ap-icon name="trash" [size]="14"/>
@@ -1738,9 +1689,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     );
   });
   readonly lastSavedAt = signal<string | null>(null);
-  readonly syncing = signal(false);
   readonly deleting = signal(false);
-  readonly lastManual = signal({ when: '2026-04-29 09:42', by: 'Mona Al-Sayed', initials: 'MS' });
 
   readonly currentIndex = computed(() => this._products().findIndex((p) => p.id === this._currentId()));
   readonly canPrev = computed(() => this.currentIndex() > 0);
@@ -1776,7 +1725,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   private feedbackTimer: number | undefined;
   private autoSaveTimer: number | undefined;
-  private syncTimer: number | undefined;
 
   get linkedMediaCount(): number {
     return this.form().images.length;
@@ -1801,7 +1749,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
-    if (this.syncTimer) clearTimeout(this.syncTimer);
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -2550,22 +2497,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       return; 
     }
     this.closed.emit();
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-  // Manual sync action
-  // ────────────────────────────────────────────────────────────────────
-
-  runProductSync(): void {
-    this.syncing.set(true);
-    this.toast.info(this.t('product.toast.syncStart.title'), `${this.product.name} · ${ME.name}`);
-    if (this.syncTimer) clearTimeout(this.syncTimer);
-    this.syncTimer = window.setTimeout(() => {
-      const stamp = '2026-04-29 ' + new Date().toTimeString().slice(0, 5);
-      this.lastManual.set({ when: stamp, by: ME.name, initials: ME.initials });
-      this.syncing.set(false);
-      this.toast.success(this.t('product.toast.syncDone.title'), `${this.product.sku}`);
-    }, 1800);
   }
 
   async duplicateProduct(): Promise<void> {
