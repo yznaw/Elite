@@ -93,21 +93,16 @@
                         ><span></span
                       ></span>
                       <div class="callout-pill">
-                        <picture>
-                          <source
-                            [srcset]="toWebp(callout.thumbnail)"
-                            type="image/webp"
-                          />
+                        <span class="callout-pill__icon" aria-hidden="true">
                           <img
-                            [src]="callout.thumbnail"
-                            [alt]="callout.alt"
+                            [src]="mobileFeatureIcon(callout.id)"
+                            alt=""
                             loading="lazy"
                             decoding="async"
                           />
-                        </picture>
+                        </span>
                         <div>
                           <strong>{{ calloutTitle(callout) }}</strong>
-                          <span>{{ calloutSubtitle(callout) }}</span>
                         </div>
                       </div>
                     </article>

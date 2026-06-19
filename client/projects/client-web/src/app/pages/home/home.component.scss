@@ -289,12 +289,12 @@
 
 .callout-pill {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
-  width: 226px;
-  min-height: 62px;
-  padding: 6px 12px 6px 6px;
+  width: 208px;
+  min-height: 58px;
+  padding: 7px 12px 7px 7px;
   border: 1px solid rgba(184, 150, 90, 0.72);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.94);
@@ -304,21 +304,18 @@
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
 
-.callout-pill picture {
+.callout-pill__icon {
   display: block;
-  width: 50px;
-  height: 50px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
 }
 
-.callout-pill img {
-  width: 50px;
-  height: 50px;
+.callout-pill__icon img {
+  width: 34px;
+  height: 34px;
   display: block;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--claude-bg-soft);
-  border: 1px solid var(--claude-border-subtle);
+  object-fit: contain;
 }
 
 .callout-pill strong,
@@ -332,15 +329,6 @@
   font-size: 12px;
   font-weight: 800;
   line-height: 1.25;
-}
-
-.callout-pill span {
-  margin-top: 3px;
-  color: var(--claude-text-secondary);
-  font-size: 8.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .callout-line {

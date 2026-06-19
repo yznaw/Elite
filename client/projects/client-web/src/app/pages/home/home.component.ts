@@ -90,12 +90,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       : (callout.titleEn || callout.subtitleEn || callout.titleAr || '');
   }
 
-  calloutSubtitle(callout: { subtitleEn?: string; subtitleAr?: string }): string {
-    return this.isArabic()
-      ? (callout.subtitleAr || '')
-      : (callout.subtitleEn || '');
-  }
-
   mobileFeatureIcon(calloutId: string): string {
     return this.mobileFeatureIcons[calloutId] || this.mobileFeatureIcons['strap'];
   }
