@@ -57,6 +57,13 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
             </span>
           </div>
           <div class="card-sub">
+            @if (form().parentId) {
+              <button class="back-to-parent-btn" type="button" (click)="goToParent()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px;"><polyline points="15 18 9 12 15 6"/></svg>
+                {{ parentTitle() }}
+              </button>
+              <span class="muted"> / </span>
+            }
             <span class="mono">{{ collection.id }}</span>
             @if (collectionList().length > 1) {
               <span class="muted"> · {{ currentIndex() + 1 }} {{ t('product.of') }} {{ collectionList().length }}</span>
@@ -179,9 +186,15 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           @if (form().parentId) {
             <div class="breadcrumb-row mb-16">
               <ap-icon name="hierarchy" [size]="11"/>
-              <span>
+              <span style="flex:1;">
                 Nested under <strong>{{ parentTitle() }}</strong>
               </span>
+              <button class="btn btn-ghost btn-sm" type="button" (click)="goToParent()" title="Open parent collection">
+                <ap-icon name="arrow" [size]="11"/> Open
+              </button>
+              <button class="btn btn-ghost btn-sm" type="button" (click)="set('parentId', null)" title="Promote to top-level collection">
+                Promote to top-level
+              </button>
             </div>
           }
 
@@ -541,6 +554,15 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     }
     .breadcrumb-row ap-icon { color: var(--green); flex-shrink: 0; }
 
+    /* ── Back-to-parent breadcrumb in header ── */
+    .back-to-parent-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: none; border: none; padding: 0; cursor: pointer;
+      font-size: 11px; font-weight: 600; color: var(--green);
+      text-decoration: underline; text-underline-offset: 2px;
+    }
+    .back-to-parent-btn:hover { color: var(--gold); }
+
     /* ── Sub-collections panel ── */
     .sub-grid { display: flex; flex-direction: column; gap: 6px; }
     .sub-item {
@@ -817,6 +839,14 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   navigateTo(id: string): void {
     if (this.dirty()) { this.triggerShake(); return; }
     this.currentIdChange.emit(id);
+  }
+
+  /** Navigate up to the parent collection. */
+  goToParent(): void {
+    const pid = this.form().parentId;
+    if (!pid) return;
+    if (this.dirty()) { this.triggerShake(); return; }
+    this.currentIdChange.emit(pid);
   }
 
   /** Tell the parent page to create a new sub-collection under this one. */
