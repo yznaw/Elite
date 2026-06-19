@@ -123,6 +123,40 @@ async function ensureAllMigrations(client) {
       AND  pv.color_ref_id IS NULL
   `);
 
+  // ── Migration 009: product_reviews table ─────────────────────────────────────
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS product_reviews (
+      id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id    uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      product_id   uuid        REFERENCES products(id) ON DELETE CASCADE,
+      rating       smallint    CHECK (rating BETWEEN 1 AND 5),
+      title        text,
+      body         text,
+      author_name  text,
+      author_email text,
+      author_phone text,
+      source       text        DEFAULT 'storefront',
+      created_at   timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS product_reviews_product
+      ON product_reviews (tenant_id, product_id, created_at DESC)
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS product_reviews_tenant
+      ON product_reviews (tenant_id, created_at DESC)
+  `);
+
+  // ── Migration 010: source column (already included above for fresh installs) ─
+  await client.query(`
+    ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS source text DEFAULT 'storefront'
+  `);
+
+  // ── Migration 011: allow general (non-product) feedback ───────────────────
+  await client.query(`ALTER TABLE product_reviews ALTER COLUMN product_id DROP NOT NULL`);
+  await client.query(`ALTER TABLE product_reviews ALTER COLUMN body DROP NOT NULL`);
+
   // ── Migration 012: shipping_cost_cents + total_cost_cents on product_variants ─
   await client.query(`
     ALTER TABLE product_variants
