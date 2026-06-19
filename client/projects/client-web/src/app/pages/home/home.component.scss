@@ -50,6 +50,9 @@
   --claude-crystal-green: #0b6f62;
   --claude-crystal-green-hover: #09584e;
   --claude-shadow-soft: 0 28px 80px rgba(87, 58, 31, 0.13);
+  --callout-icon-size: clamp(34px, calc(2vw + 0.8svh), 42px);
+  --callout-icon-offset-y: 0px;
+  --callout-icon-offset-x: 0px;
 
   position: relative;
   box-sizing: border-box;
@@ -283,18 +286,23 @@
   position: absolute;
   z-index: 5;
   opacity: 0;
+  --callout-line-width: 240px;
+  --callout-line-top: 50%;
+  --callout-line-rotate: 0deg;
+  --callout-line-origin: left center;
   animation: calloutIn 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--delay);
 }
 
 .callout-pill {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: var(--callout-icon-size) minmax(0, 1fr);
+  gap: 5px;
   align-items: center;
-  width: 208px;
+  justify-items: start;
+  width: auto;
   min-height: 58px;
-  padding: 7px 12px 7px 7px;
+  padding: 7px 20px 7px 7px;
   border: 1px solid rgba(184, 150, 90, 0.72);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.94);
@@ -306,14 +314,15 @@
 
 .callout-pill__icon {
   display: block;
-  width: 34px;
-  height: 34px;
+  width: var(--callout-icon-size);
+  height: var(--callout-icon-size);
   flex-shrink: 0;
+  transform: translate(var(--callout-icon-offset-x), var(--callout-icon-offset-y));
 }
 
 .callout-pill__icon img {
-  width: 34px;
-  height: 34px;
+  width: var(--callout-icon-size);
+  height: var(--callout-icon-size);
   display: block;
   object-fit: contain;
 }
@@ -321,7 +330,7 @@
 .callout-pill strong,
 .callout-pill span {
   display: block;
-  text-align: center;
+  text-align: left;
 }
 
 .callout-pill strong {
@@ -374,6 +383,9 @@
 .hero-callout--strap {
   left: clamp(0px, 1vw, 20px);
   top: 12%;
+  --callout-line-width: clamp(250px, 21vw, 392px);
+  --callout-line-top: 57%;
+  --callout-line-rotate: 23deg;
 }
 
 .hero-callout--strap .callout-pill img {
@@ -382,9 +394,10 @@
 
 .hero-callout--strap .callout-line {
   left: calc(100% - 9px);
-  top: 54%;
-  width: clamp(300px, 23vw, 430px);
-  transform: rotate(21deg);
+  top: var(--callout-line-top);
+  width: var(--callout-line-width);
+  transform: rotate(var(--callout-line-rotate));
+  transform-origin: var(--callout-line-origin);
 }
 
 .hero-callout--strap .callout-line span {
@@ -394,6 +407,10 @@
 .hero-callout--buckle {
   right: clamp(0px, 1.4vw, 24px);
   top: 16%;
+  --callout-line-width: clamp(200px, 16vw, 280px);
+  --callout-line-top: 57%;
+  --callout-line-rotate: -40deg;
+  --callout-line-origin: right center;
 }
 
 .hero-callout--buckle .callout-pill img {
@@ -402,10 +419,10 @@
 
 .hero-callout--buckle .callout-line {
   right: calc(100% - 9px);
-  top: 56%;
-  width: clamp(235px, 19vw, 300px);
-  transform: rotate(-35deg);
-  transform-origin: right center;
+  top: var(--callout-line-top);
+  width: var(--callout-line-width);
+  transform: rotate(var(--callout-line-rotate));
+  transform-origin: var(--callout-line-origin);
 }
 
 .hero-callout--buckle .callout-line span {
@@ -415,6 +432,9 @@
 .hero-callout--stitching {
   left: clamp(8px, 5.5vw, 86px);
   bottom: 12%;
+  --callout-line-width: clamp(210px, 17vw, 340px);
+  --callout-line-top: 49%;
+  --callout-line-rotate: 11deg;
 }
 
 .hero-callout--stitching .callout-pill img {
@@ -423,9 +443,10 @@
 
 .hero-callout--stitching .callout-line {
   left: calc(100% - 9px);
-  top: 45%;
-  width: clamp(228px, 7vw, 390px);
-  transform: rotate(8deg);
+  top: var(--callout-line-top);
+  width: var(--callout-line-width);
+  transform: rotate(var(--callout-line-rotate));
+  transform-origin: var(--callout-line-origin);
 }
 
 .hero-callout--stitching .callout-line span {
@@ -435,6 +456,10 @@
 .hero-callout--sole {
   right: clamp(8px, 6vw, 96px);
   bottom: 11%;
+  --callout-line-width: clamp(84px, 7vw, 124px);
+  --callout-line-top: 40%;
+  --callout-line-rotate: 18deg;
+  --callout-line-origin: right center;
 }
 
 .hero-callout--sole .callout-pill img {
@@ -443,10 +468,10 @@
 
 .hero-callout--sole .callout-line {
   right: calc(100% - 9px);
-  top: 36%;
-  width: clamp(96px, 8vw, 136px);
-  transform: rotate(14deg);
-  transform-origin: right center;
+  top: var(--callout-line-top);
+  width: var(--callout-line-width);
+  transform: rotate(var(--callout-line-rotate));
+  transform-origin: var(--callout-line-origin);
 }
 
 .hero-callout--sole .callout-line span {
@@ -926,17 +951,17 @@
 
   .callout-pill {
     width: 232px;
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: var(--callout-icon-size) minmax(0, 1fr);
   }
 
   .callout-pill picture {
-    width: 52px;
-    height: 52px;
+    width: var(--callout-icon-size);
+    height: var(--callout-icon-size);
   }
 
   .callout-pill img {
-    width: 52px;
-    height: 52px;
+    width: var(--callout-icon-size);
+    height: var(--callout-icon-size);
   }
 
   .callout-pill strong {
@@ -947,6 +972,68 @@
     font-size: 9px;
   }
 
+}
+
+@media (max-width: 980px) and (max-height: 820px) {
+  .hero {
+    --callout-icon-size: clamp(32px, calc(2vw + 0.5svh), 38px);
+    --callout-icon-offset-y: -1px;
+  }
+
+  .hero-callout--strap {
+    --callout-line-width: clamp(228px, 19vw, 340px);
+    --callout-line-top: 58%;
+    --callout-line-rotate: 24deg;
+  }
+
+  .hero-callout--buckle {
+    --callout-line-width: clamp(180px, 15vw, 252px);
+    --callout-line-top: 58%;
+    --callout-line-rotate: -41deg;
+  }
+
+  .hero-callout--stitching {
+    --callout-line-width: clamp(192px, 15vw, 304px);
+    --callout-line-top: 50%;
+    --callout-line-rotate: 12deg;
+  }
+
+  .hero-callout--sole {
+    --callout-line-width: clamp(78px, 6.5vw, 112px);
+    --callout-line-top: 41%;
+    --callout-line-rotate: 17deg;
+  }
+}
+
+@media (max-width: 980px) and (max-height: 720px) {
+  .hero {
+    --callout-icon-size: clamp(30px, calc(1.8vw + 0.35svh), 36px);
+    --callout-icon-offset-y: -2px;
+  }
+
+  .hero-callout--strap {
+    --callout-line-width: clamp(210px, 17vw, 320px);
+    --callout-line-top: 59%;
+    --callout-line-rotate: 25deg;
+  }
+
+  .hero-callout--buckle {
+    --callout-line-width: clamp(168px, 13vw, 232px);
+    --callout-line-top: 59%;
+    --callout-line-rotate: -42deg;
+  }
+
+  .hero-callout--stitching {
+    --callout-line-width: clamp(180px, 14vw, 272px);
+    --callout-line-top: 51%;
+    --callout-line-rotate: 13deg;
+  }
+
+  .hero-callout--sole {
+    --callout-line-width: clamp(72px, 6vw, 102px);
+    --callout-line-top: 42%;
+    --callout-line-rotate: 18deg;
+  }
 }
 
 @media (max-width: 760px) {

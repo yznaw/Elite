@@ -1,8 +1,20 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  QueryList,
+  ViewChild,
+  ViewChildren,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
@@ -32,7 +44,7 @@ const FEATURED_COLLECTION_HANDLES = ['men', 'sunglasses', 'kids'];
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss',
 })
-export class HomeComponent implements OnInit, OnDestroy {
+export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly router       = inject(Router);
   private readonly http         = inject(HttpClient);
   private readonly i18n         = inject(I18nService);
@@ -42,6 +54,13 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private metaTimer: number | undefined;
   private heroSwipeStart: { x: number; y: number; pointerId: number } | null = null;
+  private heroGeometryObserver: ResizeObserver | undefined;
+  private heroGeometryFrame: number | undefined;
+  private heroCalloutChanges: Subscription | undefined;
+
+  @ViewChild('heroStage') private heroStageElement?: ElementRef<HTMLElement>;
+  @ViewChild('heroProduct') private heroProductElement?: ElementRef<HTMLElement>;
+  @ViewChildren('heroCallout') private heroCalloutElements!: QueryList<ElementRef<HTMLElement>>;
 
   readonly metaVisible         = signal(false);
   readonly activeHeroItemIndex = signal(0);
@@ -79,6 +98,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     sole: 'assets/home-feature-icons/sole.svg',
     stitching: 'assets/home-feature-icons/stitching.svg',
   };
+  private readonly heroCalloutTargets: Record<string, { x: number; y: number; side: 'left' | 'right' }> = {
+    strap: { x: 0.28, y: 0.50, side: 'left' },
+    buckle: { x: 0.49, y: 0.63, side: 'right' },
+    stitching: { x: 0.27, y: 0.82, side: 'left' },
+    sole: { x: 0.84, y: 0.66, side: 'right' },
+  };
 
   calloutDelay(id: string): string {
     return this._calloutDelays[id] ?? '0.5s';
@@ -108,8 +133,16 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
   }
 
+  ngAfterViewInit(): void {
+    this.heroCalloutChanges = this.heroCalloutElements.changes.subscribe(() => this.observeHeroGeometry());
+    this.observeHeroGeometry();
+  }
+
   ngOnDestroy(): void {
     if (this.metaTimer) clearTimeout(this.metaTimer);
+    if (this.heroGeometryFrame) cancelAnimationFrame(this.heroGeometryFrame);
+    this.heroGeometryObserver?.disconnect();
+    this.heroCalloutChanges?.unsubscribe();
   }
 
   goTo(path: string): void {
@@ -209,6 +242,53 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private isHeroControl(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && target.closest('button') !== null;
+  }
+
+  private observeHeroGeometry(): void {
+    this.heroGeometryObserver?.disconnect();
+    this.heroGeometryObserver = new ResizeObserver(() => this.scheduleHeroLineUpdate());
+
+    const stage = this.heroStageElement?.nativeElement;
+    const product = this.heroProductElement?.nativeElement;
+    if (stage) this.heroGeometryObserver.observe(stage);
+    if (product) this.heroGeometryObserver.observe(product);
+    this.heroCalloutElements?.forEach(({ nativeElement }) => this.heroGeometryObserver?.observe(nativeElement));
+    this.scheduleHeroLineUpdate();
+  }
+
+  private scheduleHeroLineUpdate(): void {
+    if (this.heroGeometryFrame) cancelAnimationFrame(this.heroGeometryFrame);
+    this.heroGeometryFrame = requestAnimationFrame(() => {
+      this.heroGeometryFrame = undefined;
+      this.updateHeroLines();
+    });
+  }
+
+  private updateHeroLines(): void {
+    const product = this.heroProductElement?.nativeElement;
+    if (!product || window.matchMedia('(max-width: 760px)').matches) return;
+
+    this.heroCalloutElements.forEach(({ nativeElement: callout }) => {
+      const id = callout.dataset['calloutId'] || '';
+      const target = this.heroCalloutTargets[id];
+      const pill = callout.querySelector<HTMLElement>('.callout-pill');
+      if (!target || !pill) return;
+
+      const startX = callout.offsetLeft + pill.offsetLeft
+        + (target.side === 'left' ? pill.offsetWidth - 9 : 9);
+      const startY = callout.offsetTop + pill.offsetTop + (pill.offsetHeight / 2);
+      const targetX = product.offsetLeft + (product.offsetWidth * target.x);
+      const targetY = product.offsetTop + (product.offsetHeight * target.y);
+      const deltaX = targetX - startX;
+      const deltaY = targetY - startY;
+      const angle = target.side === 'left'
+        ? Math.atan2(deltaY, deltaX)
+        : Math.atan2(-deltaY, -deltaX);
+
+      callout.style.setProperty('--callout-line-width', `${Math.hypot(deltaX, deltaY)}px`);
+      callout.style.setProperty('--callout-line-top', '50%');
+      callout.style.setProperty('--callout-line-rotate', `${angle * 180 / Math.PI}deg`);
+    });
   }
 
   toWebp(url: string): string {
