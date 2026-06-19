@@ -49,7 +49,7 @@ async function loadAdminOrder(client, tenantId, id) {
   const result = await client.query(
     `
       SELECT o.*, COUNT(oi.id)::integer AS items_count, s.tracking_number,
-        COALESCE(jsonb_agg(DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0))) FILTER (WHERE oi.id IS NOT NULL), '[]'::jsonb) AS items,
+        COALESCE(jsonb_agg(DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0), 'img', oi.media_url)) FILTER (WHERE oi.id IS NOT NULL), '[]'::jsonb) AS items,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail) ORDER BY t.occurred_at) FROM order_timeline_entries t WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', to_char(n.created_at, 'YYYY-MM-DD HH24:MI'), 'author', 'Admin', 'initials', 'AD', 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n WHERE n.order_id = o.id), '[]'::jsonb) AS notes
       FROM orders o
@@ -63,10 +63,52 @@ async function loadAdminOrder(client, tenantId, id) {
   return result.rowCount === 0 ? null : mapOrder(result.rows[0]);
 }
 
-router.get('/', asyncHandler(async (_req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+
+    const page    = Math.max(0, parseInt(req.query.page  ?? '0', 10)  || 0);
+    const limit   = Math.min(200, Math.max(1, parseInt(req.query.limit ?? '50', 10) || 50));
+    const offset  = page * limit;
+
+    const params = [tenant.id];
+    const where  = ['o.tenant_id = $1'];
+
+    if (req.query.payment) {
+      // Map frontend aliases to the DB enum values used by mapPayment()
+      const paymentMap = { pending: ['pending', 'authorized'], refunded: ['refunded', 'partially_refunded'] };
+      const dbStatuses = paymentMap[req.query.payment] || [req.query.payment];
+      params.push(dbStatuses);
+      where.push(`o.payment_status = ANY($${params.length}::order_payment_status[])`);
+    }
+    if (req.query.fulfillment) {
+      params.push(req.query.fulfillment);
+      where.push(`o.fulfillment_status = $${params.length}`);
+    }
+    if (req.query.from) {
+      params.push(req.query.from);
+      where.push(`o.placed_at >= $${params.length}::date`);
+    }
+    if (req.query.to) {
+      params.push(req.query.to);
+      where.push(`o.placed_at < ($${params.length}::date + INTERVAL '1 day')`);
+    }
+    if (req.query.q) {
+      params.push(`%${req.query.q}%`);
+      where.push(`(o.customer_name ILIKE $${params.length} OR o.public_number ILIKE $${params.length} OR o.customer_email ILIKE $${params.length})`);
+    }
+
+    const whereClause = where.join(' AND ');
+
+    // Total count for pagination metadata
+    const countResult = await client.query(
+      `SELECT COUNT(DISTINCT o.id)::integer AS total FROM orders o WHERE ${whereClause}`,
+      params,
+    );
+    const total = countResult.rows[0].total;
+
+    params.push(limit, offset);
     const result = await client.query(
       `
         SELECT
@@ -75,20 +117,28 @@ router.get('/', asyncHandler(async (_req, res) => {
           s.tracking_number,
           COALESCE(
             jsonb_agg(
-              DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0))
+              DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0), 'img', oi.media_url)
             ) FILTER (WHERE oi.id IS NOT NULL),
             '[]'::jsonb
           ) AS items
         FROM orders o
         LEFT JOIN order_items oi ON oi.order_id = o.id
         LEFT JOIN shipments s ON s.order_id = o.id
-        WHERE o.tenant_id = $1
+        WHERE ${whereClause}
         GROUP BY o.id, s.tracking_number
         ORDER BY o.placed_at DESC
+        LIMIT $${params.length - 1} OFFSET $${params.length}
       `,
-      [tenant.id],
+      params,
     );
-    ok(res, result.rows.map(mapOrder));
+
+    ok(res, {
+      orders: result.rows.map(mapOrder),
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    });
   } finally {
     client.release();
   }
@@ -111,26 +161,60 @@ router.post('/', asyncHandler(async (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!customerName || items.length === 0) return validationError(res, ['Customer name and at least one order item are required.']);
 
+  const idempotencyKey = String(req.body.idempotencyKey || '').trim() || null;
+
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
+
+    // ── Idempotency check: return the existing order if key already used ──
+    if (idempotencyKey) {
+      const existing = await client.query(
+        'SELECT * FROM orders WHERE tenant_id = $1 AND idempotency_key = $2',
+        [tenant.id, idempotencyKey],
+      );
+      if (existing.rowCount > 0) {
+        await client.query('ROLLBACK');
+        return ok(res, await loadAdminOrder(client, tenant.id, existing.rows[0].id.toString()), 'Order already exists.');
+      }
+    }
+
+    // ── Validate customer_id if provided ──
+    if (req.body.customerId) {
+      const cust = await client.query(
+        'SELECT id FROM customers WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL',
+        [tenant.id, req.body.customerId],
+      );
+      if (cust.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return validationError(res, ['Customer ID does not exist.']);
+      }
+    }
+
     const subtotal = items.reduce((sum, item) => sum + toCents(item.price || item.p || 0) * (Number(item.quantity || item.q) || 1), 0);
-    const publicNumber = req.body.publicNumber || `EC-${new Date().getFullYear().toString().slice(2)}-${Date.now().toString().slice(-5)}`;
+    // Use a date-seeded public number: EC-YY-MMDD-{ms-suffix} reduces collision window
+    const now = new Date();
+    const yy = now.getFullYear().toString().slice(2);
+    const mmdd = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const suffix = Date.now().toString().slice(-6);
+    const publicNumber = req.body.publicNumber || `EC-${yy}-${mmdd}-${suffix}`;
 
     const order = await client.query(
       `
         INSERT INTO orders (
-          tenant_id, public_number, customer_id, customer_email, customer_name, customer_phone,
+          tenant_id, public_number, idempotency_key,
+          customer_id, customer_email, customer_name, customer_phone,
           payment_status, fulfillment_status, subtotal_cents, shipping_cents, tax_cents, discount_cents,
           total_cents, shipping_address, billing_address
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb)
         RETURNING *
       `,
       [
         tenant.id,
         publicNumber,
+        idempotencyKey,
         req.body.customerId || null,
         req.body.customerEmail || null,
         customerName,

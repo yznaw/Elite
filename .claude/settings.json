@@ -1,7 +1,37 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(kill 99303)",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -f \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/server/db/migrations/013_orders_customers_production.sql\")",
+      "Bash(psql postgresql://elite:elite_password@localhost:5432/elite -c ' *)",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"\\\\d customers\")",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"\\\\d orders\")",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"\\\\d v_customer_order_stats\")",
+      "Bash(node_modules/.bin/tsc --noEmit --project projects/admin-portal/tsconfig.app.json)",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"\\\\d order_items\")",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"CREATE INDEX IF NOT EXISTS idx_orders_tenant_placed ON orders \\(tenant_id, placed_at DESC\\);\")",
+      "Bash(git stash *)",
+      "Bash(node_modules/.bin/ng build *)",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"SELECT enum_range\\(NULL::order_payment_status\\);\")",
+      "Bash(curl -sc /tmp/elite-cookie -s -X POST http://localhost:3000/api/admin/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@elite.qa\",\"password\":\"admin123\"}')",
+      "Bash(curl -s \"http://localhost:3000/api/admin/orders?page=0&limit=5\" -H \"Cookie: $\\(curl -sc /tmp/elite-cookie -s -X POST http://localhost:3000/api/admin/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@elite.qa\",\"password\":\"admin123\"}' && cat /tmp/elite-cookie)",
+      "Bash(curl -s -c /tmp/elite-cookie -X POST http://localhost:3000/api/admin/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@elite.qa\",\"password\":\"admin123\"}')",
+      "Bash(curl -s -b /tmp/elite-cookie \"http://localhost:3000/api/admin/orders?page=0&limit=3\")",
+      "Bash(curl -s -c /tmp/elite-cookie -X POST http://localhost:3000/api/admin/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@elite.local\",\"password\":\"Admin!e1a56b\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Login OK' if d.get\\('success'\\) else 'FAIL: '+d.get\\('message',''\\)\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -sv -c /tmp/elite-cookie2 -X POST http://localhost:3000/api/admin/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@elite.local\",\"password\":\"Admin!e1a56b\"}')",
+      "Bash(curl -sv -b /tmp/elite-cookie2 \"http://localhost:3000/api/admin/orders?page=0&limit=3\")",
+      "Bash(curl -s -c /tmp/elite-cookie3 -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@elite.local\",\"password\":\"Admin!e1a56b\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('OK' if d.get\\('success'\\) else 'FAIL: '+d.get\\('message',''\\)\\)\")",
+      "Bash(curl -s -b /tmp/elite-cookie3 \"http://localhost:3000/api/admin/orders?page=0&limit=3\")",
+      "Bash(curl -s -c /tmp/elite-cookie4 -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@elite.local\",\"password\":\"Admin!e1a56b\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Login:',d.get\\('success'\\)\\)\")",
+      "Bash(curl -s -b /tmp/elite-cookie4 \"http://localhost:3000/api/admin/orders?page=0&limit=3\")",
+      "Bash(curl -s -b /tmp/elite-cookie4 \"http://localhost:3000/api/admin/orders?page=0&limit=3&payment=pending\")",
+      "Bash(sed -i '' 's/kind=\"neutral\">Sub-collection/kind=\"grey\">Sub-collection/' projects/admin-portal/src/app/pages/collections/collection-drawer.component.ts)",
+      "Bash(sed -i '' 's/name=\"arrowRight\"/name=\"arrow\"/' projects/admin-portal/src/app/pages/collections/collection-drawer.component.ts)"
     ]
   }
 }

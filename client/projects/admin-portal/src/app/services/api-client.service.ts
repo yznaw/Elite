@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, map, retry, timer } from 'rxjs';
 
 /** Standard envelope returned by the Express API. */
 export interface ApiEnvelope<T> {
@@ -15,9 +15,11 @@ export interface ApiEnvelope<T> {
  *   - sends `withCredentials: true` on every request so the session cookie
  *     issued by Express is sent with admin API calls
  *   - unwraps the `{ success, data }` envelope to the inner `data`
+ *   - GET requests: automatic retry ×2 with exponential back-off (500ms, 1000ms)
+ *     for transient network errors (status 0, 502, 503, 504)
  *
- * All admin services should compose this rather than calling HttpClient
- * directly, so behaviour stays consistent across the app.
+ * Mutating requests (POST/PATCH/PUT/DELETE) are NOT auto-retried — use
+ * idempotency keys on the server side for those.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiClient {
@@ -37,14 +39,27 @@ export class ApiClient {
   mediaUrl(path: string): string {
     const v = (path || '').trim();
     if (!v || /^(https?:|data:|blob:)/i.test(v)) return v;
-    if (v.startsWith('/uploads/')) return this.url(v); // e.g. /api/uploads/abc.jpg
+    if (v.startsWith('/uploads/')) return this.url(v);
     return v;
   }
 
   get<T>(path: string): Observable<T> {
     return this.http
       .get<ApiEnvelope<T>>(this.url(path), { withCredentials: true })
-      .pipe(map((res) => res.data));
+      .pipe(
+        // Retry transient errors (network drop, gateway timeout) with back-off.
+        // 401/403/404/422 are not retried — they are deterministic failures.
+        retry({
+          count: 2,
+          delay: (err, index) => {
+            const retryable = err?.status === 0 || err?.status === 502 || err?.status === 503 || err?.status === 504;
+            if (!retryable) throw err;
+            return timer(Math.pow(2, index) * 500); // 500ms, 1000ms
+          },
+          resetOnSuccess: true,
+        }),
+        map((res) => res.data),
+      );
   }
 
   post<T>(path: string, body: unknown): Observable<T> {

@@ -13,6 +13,7 @@ function mapCollection(row) {
     description: row.description || '',
     imageUrl: row.image_url || null,
     productIds: row.product_ids || [],
+    parentId: row.parent_id || null,
   };
 }
 
@@ -61,6 +62,7 @@ router.get(
             c.title,
             c.description,
             c.seo->>'imageUrl' AS image_url,
+            c.parent_id,
             COALESCE(
               array_agg(cp.product_id::text ORDER BY cp.sort_order) FILTER (WHERE cp.product_id IS NOT NULL),
               ARRAY[]::text[]

@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
@@ -8,7 +9,7 @@ import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-p
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
-import { AdminOrdersService } from '../../services/admin-orders.service';
+import { AdminOrdersService, OrderStatusPayload } from '../../services/admin-orders.service';
 import { Order, OrderFulfillment, OrderTimelineEntry, QAR } from '../../models';
 
 const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
@@ -66,6 +67,16 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
             </div>
           }
         </div>
+
+        @if (isStalePayment()) {
+          <div class="stale-payment-callout mb-16">
+            <ap-icon name="warning" [size]="14"/>
+            <div>
+              <strong>Payment pending for over 30 minutes.</strong>
+              Verify with the payment gateway before fulfilling.
+            </div>
+          </div>
+        }
 
         <div class="row gap-sm mb-16" style="flex-wrap:wrap;">
           @if (canTransitionTo('processing')) {
@@ -125,8 +136,12 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
             <div [style.padding]="'14px 18px'"
                  [style.border-bottom]="last ? 'none' : '1px solid var(--border-2)'"
                  style="display:flex;gap:12px;align-items:center;">
-              <div class="prod-img" style="width:48px;height:48px;border-radius:8px;flex-shrink:0;">
-                <div style="width:100%;height:100%;background:linear-gradient(135deg,#e8eaf2,#dde1ee);"></div>
+              <div class="prod-img" style="width:48px;height:48px;border-radius:8px;flex-shrink:0;overflow:hidden;">
+                @if (it.img) {
+                  <img [src]="it.img" [alt]="it.n" style="width:100%;height:100%;object-fit:cover;" loading="lazy"/>
+                } @else {
+                  <div style="width:100%;height:100%;background:linear-gradient(135deg,#e8eaf2,#dde1ee);"></div>
+                }
               </div>
               <div class="grow">
                 <div class="strong">{{ it.n }}</div>
@@ -145,6 +160,11 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
         <div class="section-title">
           <ap-icon name="users" [size]="14"/>
           <span>{{ t('orderModal.customer') }}</span>
+          @if (order().customerEmail || order().customer) {
+            <button class="view-customer-btn" (click)="viewCustomerProfile()">
+              <ap-icon name="users" [size]="11"/> View profile
+            </button>
+          }
         </div>
         <div class="grid-2 mb-24">
           <div>
@@ -314,6 +334,24 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
     .step.done .step-label { color: var(--ink); }
     .step.current .step-label { color: var(--gold); font-weight: 600; }
 
+    /* Stale-payment callout */
+    .stale-payment-callout {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px; border-radius: 10px;
+      background: #fffbeb; border: 1px solid #fde68a;
+      color: #92400e; font-size: 13px; line-height: 1.5;
+    }
+    .stale-payment-callout ap-icon { flex-shrink: 0; margin-top: 1px; color: #d97706; }
+
+    /* View customer profile button */
+    .view-customer-btn {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--muted); font: inherit; font-size: 11px;
+      font-weight: 600; cursor: pointer; transition: all 0.12s;
+    }
+    .view-customer-btn:hover { color: var(--green); border-color: var(--green-4); background: var(--surface); }
+
     .tracking-block {
       padding: 14px 16px;
       border: 1px solid var(--border-2);
@@ -366,6 +404,7 @@ export class OrderDrawerComponent {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly ordersApi = inject(AdminOrdersService);
+  private readonly router = inject(Router);
 
   readonly t = (k: string): string => this.i18n.t(k);
   readonly QAR = QAR;
@@ -382,6 +421,21 @@ export class OrderDrawerComponent {
   @Output() updated = new EventEmitter<Order>();
 
   readonly busy = signal(false);
+
+  /** True when payment is still pending and the order was placed >30 minutes ago. */
+  readonly isStalePayment = computed(() => {
+    const o = this._order();
+    if (o.payment !== 'pending') return false;
+    const placed = new Date(o.date).getTime();
+    return Date.now() - placed > 30 * 60 * 1000;
+  });
+
+  viewCustomerProfile(): void {
+    this.closed.emit();
+    void this.router.navigate(['/customers'], {
+      queryParams: { highlight: this._order().customerEmail || this._order().customer },
+    });
+  }
   readonly noteDraft = signal('');
   readonly trackingDraft = signal('');
 
@@ -443,6 +497,30 @@ export class OrderDrawerComponent {
   }
 
   // ────────────────────────────────────────────────────────────────────
+  // Safe status update — re-fetches on error to resync local state
+  // ────────────────────────────────────────────────────────────────────
+
+  private async safeUpdateStatus(payload: OrderStatusPayload): Promise<Order | null> {
+    const o = this._order();
+    try {
+      const updated = await this.ordersApi.updateStatus(o.id, payload);
+      this._order.set(updated);
+      this.updated.emit(updated);
+      return updated;
+    } catch (err) {
+      // Re-fetch so the drawer shows the real server state, not stale optimistic state.
+      try {
+        const current = await this.ordersApi.get(o.id);
+        this._order.set(current);
+        this.updated.emit(current);
+      } catch {
+        // If re-fetch also fails, leave local state as-is; interceptor already toasted.
+      }
+      return null;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────
   // Workflow
   // ────────────────────────────────────────────────────────────────────
 
@@ -485,18 +563,16 @@ export class OrderDrawerComponent {
     this.busy.set(true);
     try {
       const o = this._order();
-      const updated = await this.ordersApi.updateStatus(o.id, {
+      const updated = await this.safeUpdateStatus({
         fulfillment: target,
         trackingNumber: target === 'shipped' ? this.trackingDraft().trim() : undefined,
         timelineKind: target as OrderTimelineEntry['kind'],
         detail: target === 'shipped' ? this.trackingDraft().trim() : `Marked ${target}`,
       });
-      this._order.set(updated);
-      this.updated.emit(updated);
-      const toastKey = `orderDrawer.toast.${target}.title`;
-      this.toast.success(this.t(toastKey), `${o.id} · ${o.customer}`);
-    } catch {
-      // Global interceptor surfaces the error.
+      if (updated) {
+        const toastKey = `orderDrawer.toast.${target}.title`;
+        this.toast.success(this.t(toastKey), `${o.id} · ${o.customer}`);
+      }
     } finally {
       this.busy.set(false);
     }
@@ -507,16 +583,12 @@ export class OrderDrawerComponent {
     this.busy.set(true);
     try {
       const o = this._order();
-      const updated = await this.ordersApi.updateStatus(o.id, {
+      const updated = await this.safeUpdateStatus({
         payment: 'paid',
         timelineKind: 'paid',
         detail: 'Payment confirmed',
       });
-      this._order.set(updated);
-      this.updated.emit(updated);
-      this.toast.success(this.t('orderDrawer.toast.paid.title'), o.id);
-    } catch {
-      // Global interceptor surfaces the error.
+      if (updated) this.toast.success(this.t('orderDrawer.toast.paid.title'), o.id);
     } finally {
       this.busy.set(false);
     }
@@ -535,17 +607,13 @@ export class OrderDrawerComponent {
     this.busy.set(true);
     try {
       const o = this._order();
-      const updated = await this.ordersApi.updateStatus(o.id, {
+      const updated = await this.safeUpdateStatus({
         status: 'cancelled',
         fulfillment: 'cancelled',
         timelineKind: 'cancelled',
         detail: 'Order cancelled',
       });
-      this._order.set(updated);
-      this.updated.emit(updated);
-      this.toast.info(this.t('orderDrawer.toast.cancelled.title'), o.id);
-    } catch {
-      // Global interceptor surfaces the error.
+      if (updated) this.toast.info(this.t('orderDrawer.toast.cancelled.title'), o.id);
     } finally {
       this.busy.set(false);
     }
@@ -564,17 +632,13 @@ export class OrderDrawerComponent {
     this.busy.set(true);
     try {
       const o = this._order();
-      const updated = await this.ordersApi.updateStatus(o.id, {
+      const updated = await this.safeUpdateStatus({
         payment: 'refunded',
         status: 'refunded',
         timelineKind: 'refunded',
         detail: QAR(o.total),
       });
-      this._order.set(updated);
-      this.updated.emit(updated);
-      this.toast.success(this.t('orderDrawer.toast.refunded.title'), `${o.id} · ${QAR(o.total)}`);
-    } catch {
-      // Global interceptor surfaces the error.
+      if (updated) this.toast.success(this.t('orderDrawer.toast.refunded.title'), `${o.id} · ${QAR(o.total)}`);
     } finally {
       this.busy.set(false);
     }
@@ -591,16 +655,12 @@ export class OrderDrawerComponent {
     if (tn === (o.trackingNumber ?? '')) return;
     this.busy.set(true);
     try {
-      const updated = await this.ordersApi.updateStatus(o.id, {
+      const updated = await this.safeUpdateStatus({
         trackingNumber: tn,
         timelineKind: 'note',
         detail: `${this.t('orderModal.tl.tracking')}: ${tn}`,
       });
-      this._order.set(updated);
-      this.updated.emit(updated);
-      this.toast.success(this.t('orderDrawer.toast.tracking.title'), tn);
-    } catch {
-      // Global interceptor surfaces the error.
+      if (updated) this.toast.success(this.t('orderDrawer.toast.tracking.title'), tn);
     } finally {
       this.busy.set(false);
     }

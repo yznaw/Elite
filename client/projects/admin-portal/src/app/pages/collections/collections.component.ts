@@ -36,14 +36,23 @@ interface HierarchyGroup {
         </div>
       </div>
 
-      <div class="row mb-16" style="justify-content:space-between;align-items:center;">
-        <div class="muted small">{{ filtered().length }} {{ t('collections.products') === 'Products' ? 'collections' : '' }}</div>
+      <div class="row mb-20" style="justify-content:space-between;align-items:center;">
+        <div class="muted small">{{ totalCount() }} {{ totalCount() === 1 ? 'collection' : 'collections' }}</div>
+        @if (hierarchyGroups().length > 0 && standaloneCollections().length > 0 && !isSearching()) {
+          <div class="muted small"><ap-icon name="hierarchy" [size]="11"/> {{ hierarchyGroups().length }} with sub-collections</div>
+        }
       </div>
 
-      @if (filtered().length === 0) {
+      @if (isSearching() && filtered().length === 0) {
         <div class="card">
           <ap-empty-state icon="collections" [title]="t('collections.empty.title')" [sub]="t('collections.empty.sub')">
             <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
+          </ap-empty-state>
+        </div>
+      } @else if (isEmptyCatalog()) {
+        <div class="card">
+          <ap-empty-state icon="collections" [title]="t('collections.empty.title')" [sub]="t('collections.empty.sub')">
+            <button class="btn btn-gold btn-sm" (click)="openNew()">{{ t('collections.new') }}</button>
           </ap-empty-state>
         </div>
       } @else if (isSearching()) {
@@ -55,13 +64,49 @@ interface HierarchyGroup {
         </div>
       } @else {
         <!-- Hierarchical view -->
-        @for (group of hierarchyGroups(); track group.parent.id) {
-          <div class="hierarchy-group mb-24">
-            <ng-container *ngTemplateOutlet="collectionCard; context: { $implicit: group.parent }"/>
+        @if (hierarchyGroups().length > 0) {
+          @if (standaloneCollections().length > 0) {
+            <div class="section-label mb-12">
+              <ap-icon name="hierarchy" [size]="12"/>
+              <span>With sub-collections</span>
+            </div>
+          }
+          @for (group of hierarchyGroups(); track group.parent.id) {
+            <div class="hierarchy-group mb-16">
+              <!-- Compact parent row -->
+              <div class="parent-row" (click)="openCollection(group.parent)" [style.opacity]="group.parent.hidden ? 0.6 : 1">
+                <div class="parent-thumb">
+                  @if (group.parent.imageUrl) {
+                    <img [src]="group.parent.imageUrl" [alt]="group.parent.title" (error)="onImgError($event)"/>
+                  } @else {
+                    <ap-icon name="collections" [size]="18"/>
+                  }
+                </div>
+                <div class="parent-info">
+                  <div class="parent-title">
+                    {{ group.parent.title }}
+                    @if (group.parent.hidden) {
+                      <span class="inline-badge badge-hidden-sm">Hidden</span>
+                    }
+                    @if (group.parent.system) {
+                      <span class="inline-badge badge-system-sm">System</span>
+                    }
+                  </div>
+                  <div class="parent-meta">
+                    {{ group.parent.productIds.length }} {{ t('collections.products') }}
+                    <span class="meta-dot">·</span>
+                    <ap-icon name="hierarchy" [size]="9"/>
+                    {{ group.children.length }} sub-collection{{ group.children.length !== 1 ? 's' : '' }}
+                  </div>
+                </div>
+                <div class="parent-chevron">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </div>
 
-            @if (group.children.length > 0) {
-              <div class="sub-col-list">
-                <ap-icon name="hierarchy" [size]="12" style="color:var(--muted);flex-shrink:0;margin-top:2px;"/>
+              <!-- Sub-collection strip -->
+              <div class="sub-col-strip">
+                <div class="sub-col-tree-line"></div>
                 <div class="sub-col-chips">
                   @for (child of group.children; track child.id) {
                     <button class="sub-col-chip" [class.hidden-chip]="child.hidden" (click)="openCollection(child)" [title]="child.title">
@@ -71,29 +116,27 @@ interface HierarchyGroup {
                         <span class="sub-chip-img sub-chip-placeholder"><ap-icon name="collections" [size]="10"/></span>
                       }
                       <span class="sub-chip-name">{{ child.title }}</span>
-                      <span class="sub-chip-count muted">{{ child.productIds.length }}</span>
+                      <span class="sub-chip-count">{{ child.productIds.length }}</span>
                     </button>
                   }
-                  <button class="sub-col-chip sub-col-add" (click)="openNewSubCollection(group.parent)" title="Add sub-collection">
+                  <button class="sub-col-chip sub-col-add" (click)="openNewSubCollection(group.parent)">
                     <ap-icon name="plus" [size]="11"/>
-                    <span class="sub-chip-name">Add</span>
+                    <span class="sub-chip-name">Add sub-collection</span>
                   </button>
                 </div>
               </div>
-            } @else {
-              <div class="sub-col-list">
-                <ap-icon name="hierarchy" [size]="12" style="color:var(--muted);flex-shrink:0;margin-top:2px;"/>
-                <button class="sub-col-chip sub-col-add" (click)="openNewSubCollection(group.parent)" title="Add sub-collection">
-                  <ap-icon name="plus" [size]="11"/>
-                  <span class="sub-chip-name">Add sub-collection</span>
-                </button>
-              </div>
-            }
-          </div>
+            </div>
+          }
         }
 
-        <!-- Standalone (no parent, no children) -->
+        <!-- Standalone collections -->
         @if (standaloneCollections().length > 0) {
+          @if (hierarchyGroups().length > 0) {
+            <div class="section-label mb-12 mt-4">
+              <ap-icon name="collections" [size]="12"/>
+              <span>Standalone collections</span>
+            </div>
+          }
           <div class="grid-cards">
             @for (c of standaloneCollections(); track c.id) {
               <ng-container *ngTemplateOutlet="collectionCard; context: { $implicit: c }"/>
@@ -103,28 +146,28 @@ interface HierarchyGroup {
       }
     </div>
 
-    <!-- Reusable card template -->
+    <!-- Reusable card template (used for flat/search view and standalone) -->
     <ng-template #collectionCard let-c>
       <div class="prod-card" (click)="openCollection(c)" [style.opacity]="c.hidden ? 0.65 : 1">
         <div class="prod-img">
           @if (c.imageUrl) {
             <img [src]="c.imageUrl" [alt]="c.title" (error)="onImgError($event)" [style.filter]="c.hidden ? 'grayscale(0.6)' : null"/>
           } @else {
-            <div style="width:100%;height:100%;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--muted);">
+            <div class="card-img-placeholder">
               <ap-icon name="collections" [size]="24"/>
             </div>
           }
           @if (c.hidden) {
-            <span class="prod-3d-badge" style="top:10px;inset-inline-end:10px;inset-inline-start:auto;background:rgba(239,68,68,0.92);">○ {{ t('collections.hidden') }}</span>
+            <span class="prod-3d-badge badge-hidden">○ {{ t('collections.hidden') }}</span>
           }
           @if (c.parentId) {
-            <span class="prod-3d-badge" style="top:10px;inset-inline-start:10px;inset-inline-end:auto;background:rgba(2,70,56,0.85);">
+            <span class="prod-3d-badge badge-sub" style="inset-inline-start:10px;inset-inline-end:auto;">
               <ap-icon name="hierarchy" [size]="9"/> {{ t('collections.sub') }}
             </span>
           }
-              @if (c.system) {
-                <span class="prod-3d-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">○ All Products</span>
-              }
+          @if (c.system) {
+            <span class="prod-3d-badge badge-system">○ All Products</span>
+          }
         </div>
         <div class="prod-body">
           <div class="prod-name">{{ c.title }}</div>
@@ -142,28 +185,102 @@ interface HierarchyGroup {
         (closed)="activeId.set(null)"
         (currentIdChange)="activeId.set($event)"
         (deleted)="onDeleted($event)"
+        (saved)="onSaved($event)"
+        (createSubCollection)="openNewSubCollection($event)"
       />
     }
   `,
   styles: [`
-    .hierarchy-group { display: flex; flex-direction: column; gap: 0; }
-    .hierarchy-group .prod-card { margin-bottom: 0; }
+    /* Section labels */
+    .section-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--muted); padding: 0 2px;
+    }
+    .section-label ap-icon { color: var(--muted); flex-shrink: 0; }
 
-    .sub-col-list {
-      display: flex; align-items: flex-start; gap: 8px;
-      padding: 10px 14px 14px;
+    /* Hierarchy group */
+    .hierarchy-group { display: flex; flex-direction: column; }
+
+    /* ── Compact parent row ───────────────────────────────────────── */
+    .parent-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px 12px 0 0; border-bottom: none;
+      cursor: pointer; transition: background 0.13s;
+    }
+    .parent-row:hover { background: rgba(2,70,56,0.03); }
+
+    .parent-thumb {
+      width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0;
+      background: var(--bg); border: 1px solid var(--border-2);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); overflow: hidden;
+    }
+    .parent-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .parent-info { flex: 1; min-width: 0; }
+    .parent-title {
+      font-size: 14px; font-weight: 600; color: var(--ink);
+      display: flex; align-items: center; gap: 6px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .parent-meta {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; color: var(--muted); margin-top: 2px;
+    }
+    .meta-dot { color: var(--border); }
+
+    .parent-chevron {
+      width: 18px; height: 18px; flex-shrink: 0; color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .parent-chevron svg { width: 14px; height: 14px; }
+
+    /* Inline status badges */
+    .inline-badge {
+      display: inline-flex; align-items: center;
+      font-size: 10px; font-weight: 600; padding: 1px 6px;
+      border-radius: 8px; flex-shrink: 0;
+    }
+    .badge-hidden-sm { background: rgba(239,68,68,0.1); color: #dc2626; }
+    .badge-system-sm { background: rgba(2,70,56,0.1); color: var(--green); }
+
+    /* Card image placeholder (standalone cards) */
+    .card-img-placeholder {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted);
+    }
+
+    /* Pill badges on card images */
+    .badge-hidden { top: 10px; inset-inline-end: 10px; inset-inline-start: auto; background: rgba(239,68,68,0.92); }
+    .badge-sub { top: 10px; background: rgba(2,70,56,0.85); }
+    .badge-system { top: 10px; inset-inline-start: 10px; background: rgba(2,70,56,0.92); }
+
+    /* Sub-collection strip */
+    .sub-col-strip {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 16px 14px;
       background: var(--bg); border: 1px solid var(--border);
       border-top: none; border-radius: 0 0 12px 12px;
-      margin-bottom: 0;
+    }
+    .sub-col-tree-line {
+      width: 14px; height: 14px; flex-shrink: 0; margin-top: 5px;
+      border-left: 2px solid var(--border); border-bottom: 2px solid var(--border);
+      border-radius: 0 0 0 6px;
     }
     .sub-col-chips {
       display: flex; flex-wrap: wrap; gap: 6px; flex: 1;
     }
     @media (max-width: 640px) {
-      /* Chips scroll horizontally — prevents a wall of wrapped rows on phone */
       .sub-col-chips { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
       .sub-col-chips::-webkit-scrollbar { display: none; }
     }
+
+    /* Sub-collection chip */
     .sub-col-chip {
       display: inline-flex; align-items: center; gap: 5px;
       padding: 4px 10px 4px 5px;
@@ -184,15 +301,9 @@ interface HierarchyGroup {
     }
     .sub-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
     .sub-chip-count {
-      font-size: 10px; font-weight: 600;
-      background: var(--bg); padding: 0 5px; border-radius: 10px;
-      margin-inline-start: 2px;
-    }
-
-    /* Card border-radius override when sub-list follows */
-    .hierarchy-group .prod-card {
-      border-radius: 12px 12px 0 0;
-      border-bottom: none;
+      font-size: 10px; font-weight: 600; color: var(--muted);
+      background: var(--bg); padding: 1px 6px; border-radius: 10px;
+      margin-inline-start: 2px; border: 1px solid var(--border-2);
     }
   `],
 })
@@ -226,12 +337,17 @@ export class CollectionsComponent implements OnInit {
     const s = this.search().toLowerCase();
     const v = this.visibility();
     return this._collections().filter((c) => {
+      if (c.id.startsWith('COL-NEW-')) return false;
       if (v === 'Visible' && c.hidden) return false;
       if (v === 'Hidden' && !c.hidden) return false;
       if (s && !c.title.toLowerCase().includes(s)) return false;
       return true;
     });
   });
+
+  readonly persistedCount = computed(() => this._collections().filter(c => !c.id.startsWith('COL-NEW-')).length);
+  readonly totalCount = computed(() => this.filtered().length || this.persistedCount());
+  readonly isEmptyCatalog = computed(() => !this.isSearching() && this.persistedCount() === 0);
 
   /** Top-level collections (no parent) that have at least one sub-collection. */
   readonly hierarchyGroups = computed((): HierarchyGroup[] => {
@@ -289,6 +405,19 @@ export class CollectionsComponent implements OnInit {
   clearFilters(): void {
     this.search.set('');
     this.visibility.set('All');
+  }
+
+  /** Called when the drawer successfully saves a collection (create or update).
+   *  Replaces the entry in the signal list so the hierarchy view re-renders. */
+  onSaved(event: { collection: Collection; oldId: string }): void {
+    const { collection, oldId } = event;
+    this._collections.update(cols =>
+      cols.map(c => (c.id === oldId || c.id === collection.id) ? collection : c),
+    );
+    // If a draft was turned into a real record, update the active cursor.
+    if (oldId.startsWith('COL-NEW-') && collection.id !== oldId) {
+      this.activeId.set(collection.id);
+    }
   }
 
   onDeleted(deleted: Collection): void {
