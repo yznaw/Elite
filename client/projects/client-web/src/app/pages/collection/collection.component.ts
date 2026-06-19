@@ -47,6 +47,14 @@ interface ApiResponse<T> {
   message?: string;
 }
 
+interface StorefrontChildCollection {
+  id: string;
+  handle: string;
+  title: string;
+  imageUrl: string | null;
+  productIds: string[];
+}
+
 interface StorefrontCollection {
   id: string;
   handle: string;
@@ -54,6 +62,8 @@ interface StorefrontCollection {
   description: string;
   imageUrl: string | null;
   productIds: string[];
+  parentId: string | null;
+  children: StorefrontChildCollection[];
 }
 
 @Component({
@@ -87,6 +97,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly productsLoaded = this.products.loaded;
   readonly productsError = this.products.error;
   readonly activeCollectionKey = signal<string | null>(null);
+  readonly activeSubCollectionKey = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
   readonly colorSwatchImageByName = this.referenceData.colorSwatchImageByName;
   readonly filtersOpen = signal(false);
@@ -109,6 +120,25 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly activeCollection = computed(() => (
     this.findCollection(this.activeCollectionKey()) ?? null
   ));
+
+  readonly activeSubCollection = computed((): StorefrontChildCollection | null => {
+    const key = this.activeSubCollectionKey();
+    if (!key) return null;
+    const children = this.activeCollection()?.children ?? [];
+    return children.find((c) => c.handle === key || c.id === key) ?? null;
+  });
+
+  /** Total unique product count across the parent + all its sub-collections. */
+  readonly activeCollectionTotalCount = computed((): number => {
+    const col = this.activeCollection();
+    if (!col) return 0;
+    const ids = new Set<string>([
+      ...col.productIds,
+      ...(col.children ?? []).flatMap((c) => c.productIds),
+    ]);
+    return ids.size;
+  });
+
   readonly isCollectionLanding = computed(() => !this.activeCollectionKey());
 
   readonly filterGroups = computed<FilterGroup[]>(() => {
@@ -208,9 +238,13 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   goToProduct(p: Product): void {
     const active = this.activeCollection();
+    const sub = this.activeSubCollection();
     const selectedColor = this.selectedProductColor(p);
     const queryParams: Record<string, string> = {};
-    if (active) {
+    if (sub) {
+      queryParams['col'] = sub.handle || sub.id;
+      queryParams['colName'] = sub.title;
+    } else if (active) {
       queryParams['col'] = active.handle || active.id;
       queryParams['colName'] = active.title;
     }
@@ -271,6 +305,19 @@ export class CollectionComponent implements OnInit, OnDestroy {
       ? ['/collection', collection.handle || collection.id]
       : ['/collection'];
     void this.router.navigate(route);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  selectSubCollection(sub: StorefrontChildCollection | null): void {
+    const parent = this.activeCollection();
+    if (!parent) return;
+    this.selectedFilters.set(this.emptySelectedFilters());
+    this.mobilePage.set(0);
+    if (!sub) {
+      void this.router.navigate(['/collection', parent.handle || parent.id]);
+    } else {
+      void this.router.navigate(['/collection', parent.handle || parent.id, sub.handle || sub.id]);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -445,9 +492,13 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   private syncRouteState(params: ParamMap, query: ParamMap): void {
-    const collectionKey = params.get('collection');
+    // `/collection/:parent/:child` → parent is the collection, child is the sub-collection.
+    // `/collection/:collection` → single-level, no sub-collection active.
+    const parentKey = params.get('parent') ?? params.get('collection');
+    const childKey = params.get('child') ?? null;
     const hasQueryFilter = query.has('sort') || query.has('tag');
-    this.activeCollectionKey.set(collectionKey || (hasQueryFilter ? 'all-products' : null));
+    this.activeCollectionKey.set(parentKey || (hasQueryFilter ? 'all-products' : null));
+    this.activeSubCollectionKey.set(childKey);
     this.selectedFilters.set(this.emptySelectedFilters());
     this.filtersOpen.set(false);
     this.mobilePage.set(0);
@@ -510,8 +561,20 @@ export class CollectionComponent implements OnInit, OnDestroy {
     const collection = this.activeCollection();
     if (!collection) return this.allProducts();
     if (collection.handle === 'all-products') return this.allProducts();
-    const ids = new Set(collection.productIds);
-    return this.allProducts().filter((product) => ids.has(product.id));
+
+    const sub = this.activeSubCollection();
+    if (sub) {
+      // Viewing a specific sub-collection: show only its products.
+      const ids = new Set(sub.productIds);
+      return this.allProducts().filter((p) => ids.has(p.id));
+    }
+
+    // Viewing a parent collection: merge parent's own products + all children's products.
+    const allIds = new Set<string>([
+      ...collection.productIds,
+      ...(collection.children ?? []).flatMap((c) => c.productIds),
+    ]);
+    return this.allProducts().filter((p) => allIds.has(p.id));
   }
 
   private findCollection(key: string | null): StorefrontCollection | undefined {
@@ -712,6 +775,14 @@ export class CollectionComponent implements OnInit, OnDestroy {
           ...collection,
           imageUrl: this.resolveMediaUrl(collection.imageUrl),
           productIds: Array.isArray(collection.productIds) ? collection.productIds : [],
+          parentId: collection.parentId ?? null,
+          children: Array.isArray(collection.children)
+            ? collection.children.map((c: StorefrontChildCollection) => ({
+                ...c,
+                imageUrl: this.resolveMediaUrl(c.imageUrl),
+                productIds: Array.isArray(c.productIds) ? c.productIds : [],
+              }))
+            : [],
         }))
         : [];
       this.collections.set(collections);

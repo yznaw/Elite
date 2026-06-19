@@ -200,7 +200,7 @@ async function replaceProducts(client, tenantId, collectionId, productIds) {
 }
 
 /** Validate parentId — must belong to this tenant, not be the collection itself,
- *  and not create a cycle (i.e. the proposed parent is not a descendant of selfId). */
+ *  not create a cycle, and must itself be a top-level collection (max 2 levels). */
 async function resolveParentId(client, tenantId, parentId, selfId) {
   if (!parentId) return null;
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -212,7 +212,7 @@ async function resolveParentId(client, tenantId, parentId, selfId) {
     let cursor = parentId;
     const visited = new Set();
     while (cursor) {
-      if (cursor === selfId) return null; // cycle detected
+      if (cursor === selfId) return null;
       if (visited.has(cursor)) break;
       visited.add(cursor);
       const row = await client.query(
@@ -224,10 +224,15 @@ async function resolveParentId(client, tenantId, parentId, selfId) {
   }
 
   const check = await client.query(
-    "SELECT id FROM collections WHERE tenant_id = $1 AND id = $2 AND status <> 'archived'",
+    "SELECT id, parent_id FROM collections WHERE tenant_id = $1 AND id = $2 AND status <> 'archived'",
     [tenantId, parentId],
   );
-  return check.rowCount > 0 ? parentId : null;
+  if (check.rowCount === 0) return null;
+
+  // Enforce max 2 levels: the proposed parent must itself be top-level (no parent).
+  if (check.rows[0].parent_id) return null;
+
+  return parentId;
 }
 
 async function filterExistingProductIds(client, tenantId, productIds) {

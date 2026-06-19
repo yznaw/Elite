@@ -5,7 +5,7 @@ const { asyncHandler, ok } = require('./lib');
 
 const router = Router();
 
-function mapCollection(row) {
+function mapCollection(row, children = []) {
   return {
     id: row.id,
     handle: row.handle,
@@ -14,6 +14,7 @@ function mapCollection(row) {
     imageUrl: row.image_url || null,
     productIds: row.product_ids || [],
     parentId: row.parent_id || null,
+    children,
   };
 }
 
@@ -26,15 +27,14 @@ router.get(
 
     try {
       const tenant = await ensureDefaultTenant(client);
+
+      // ── System "all-products" collection ──────────────────────────────────
       const systemResult = await client.query(
         `
-          SELECT
-            c.id,
-            c.handle,
-            c.title,
-            c.description,
-            c.seo->>'imageUrl' AS image_url,
-            ARRAY[]::text[] AS product_ids
+          SELECT c.id, c.handle, c.title, c.description,
+                 c.seo->>'imageUrl' AS image_url,
+                 NULL::uuid AS parent_id,
+                 ARRAY[]::text[] AS product_ids
           FROM collections c
           WHERE c.tenant_id = $1 AND c.status = 'active' AND c.handle = 'all-products'
           LIMIT 1
@@ -44,32 +44,29 @@ router.get(
 
       const systemProductIds = systemResult.rowCount > 0
         ? (await client.query(
-            `
-              SELECT id::text
-              FROM products
-              WHERE tenant_id = $1 AND status <> 'archived'
-              ORDER BY created_at DESC
-            `,
+            `SELECT id::text FROM products WHERE tenant_id = $1 AND status <> 'archived' ORDER BY created_at DESC`,
             [tenant.id],
-          )).rows.map((row) => row.id)
+          )).rows.map((r) => r.id)
         : [];
 
-      const result = await client.query(
+      // ── Top-level collections only (parent_id IS NULL) ────────────────────
+      const topResult = await client.query(
         `
           SELECT
-            c.id,
-            c.handle,
-            c.title,
-            c.description,
+            c.id, c.handle, c.title, c.description,
             c.seo->>'imageUrl' AS image_url,
             c.parent_id,
             COALESCE(
-              array_agg(cp.product_id::text ORDER BY cp.sort_order) FILTER (WHERE cp.product_id IS NOT NULL),
+              array_agg(cp.product_id::text ORDER BY cp.sort_order)
+              FILTER (WHERE cp.product_id IS NOT NULL),
               ARRAY[]::text[]
             ) AS product_ids
           FROM collections c
           LEFT JOIN collection_products cp ON cp.collection_id = c.id
-          WHERE c.tenant_id = $1 AND c.status = 'active' AND c.handle <> 'all-products'
+          WHERE c.tenant_id = $1
+            AND c.status = 'active'
+            AND c.handle <> 'all-products'
+            AND c.parent_id IS NULL
           GROUP BY c.id
           ORDER BY c.sort_order, c.created_at DESC
           LIMIT $2
@@ -77,9 +74,49 @@ router.get(
         [tenant.id, Math.max(limit - (systemResult.rowCount > 0 ? 1 : 0), 0)],
       );
 
-      const rows = result.rows.map(mapCollection);
+      // ── Sub-collections for the parents we just fetched ───────────────────
+      const parentIds = topResult.rows.map((r) => r.id);
+      let childRows = [];
+
+      if (parentIds.length > 0) {
+        const childResult = await client.query(
+          `
+            SELECT
+              c.id, c.handle, c.title, c.description,
+              c.seo->>'imageUrl' AS image_url,
+              c.parent_id,
+              COALESCE(
+                array_agg(cp.product_id::text ORDER BY cp.sort_order)
+                FILTER (WHERE cp.product_id IS NOT NULL),
+                ARRAY[]::text[]
+              ) AS product_ids
+            FROM collections c
+            LEFT JOIN collection_products cp ON cp.collection_id = c.id
+            WHERE c.tenant_id = $1
+              AND c.status = 'active'
+              AND c.parent_id = ANY($2::uuid[])
+            GROUP BY c.id
+            ORDER BY c.sort_order, c.created_at DESC
+          `,
+          [tenant.id, parentIds],
+        );
+        childRows = childResult.rows;
+      }
+
+      // ── Attach children to parents ────────────────────────────────────────
+      const childrenByParent = {};
+      for (const row of childRows) {
+        const pid = row.parent_id;
+        if (!childrenByParent[pid]) childrenByParent[pid] = [];
+        childrenByParent[pid].push(mapCollection(row));
+      }
+
+      const rows = topResult.rows.map((row) =>
+        mapCollection(row, childrenByParent[row.id] || []),
+      );
+
       if (systemResult.rowCount > 0) {
-        rows.push({ ...mapCollection(systemResult.rows[0]), productIds: systemProductIds });
+        rows.push({ ...mapCollection(systemResult.rows[0]), productIds: systemProductIds, children: [] });
       }
 
       ok(res, rows);

@@ -1192,3 +1192,72 @@ html[dir='rtl'] .product-tile {
     gap: 24px;
   }
 }
+
+/* ── Sub-collection tabs ─────────────────────────────────────────────── */
+.sub-collection-tabs {
+  width: min(100%, 1160px);
+  margin: 0 auto 20px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 1px solid #d6cfc4;
+  border-radius: 99px;
+  background: #fff;
+  color: #625b50;
+  font-family: var(--ff-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.14s, background 0.14s, color 0.14s;
+  white-space: nowrap;
+}
+
+.sub-tab:hover {
+  border-color: #24211c;
+  color: #24211c;
+}
+
+.sub-tab.is-active {
+  border-color: #24211c;
+  background: #24211c;
+  color: #fff;
+}
+
+.sub-tab-img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.sub-tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.55;
+  line-height: 1;
+}
+
+.sub-tab.is-active .sub-tab-count {
+  opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+  .sub-collection-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .sub-collection-tabs::-webkit-scrollbar { display: none; }
+}
