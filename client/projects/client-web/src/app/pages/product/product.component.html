@@ -2,6 +2,12 @@
   <main class="product-page">
     <div class="product-shell">
       <nav class="breadcrumb" aria-label="Breadcrumb">
+        @if (fromParentCollectionHandle()) {
+          <button type="button" (click)="goParentCollection()">
+            {{ fromParentCollectionName() || t("product.breadcrumb.collection") }}
+          </button>
+          <span>/</span>
+        }
         <button type="button" (click)="goCollection()">
           {{ fromCollectionName() || t("product.breadcrumb.collection") }}
         </button>
@@ -282,6 +288,16 @@
             }
           </div>
 
+          <button
+            type="button"
+            class="review-launch"
+            data-testid="open-review"
+            (click)="openReview()"
+          >
+            <span class="review-launch__star" aria-hidden="true">★</span>
+            <span>{{ t("product.review.button") }}</span>
+          </button>
+
           @if (!selectedSizeInStock()) {
             <div
               class="restock-panel"
@@ -403,6 +419,162 @@
                   </article>
                 }
               </div>
+            }
+          </section>
+        </div>
+      }
+
+      @if (reviewOpen()) {
+        <div
+          class="review-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="review-title"
+          data-testid="review-modal"
+        >
+          <button
+            type="button"
+            class="review-modal__backdrop"
+            (click)="closeReview()"
+            [attr.aria-label]="t('common.close')"
+          ></button>
+
+          <section class="review-panel">
+            <button
+              type="button"
+              class="review-panel__close"
+              (click)="closeReview()"
+              [attr.aria-label]="t('common.close')"
+            >
+              ×
+            </button>
+
+            @if (reviewSubmitted()) {
+              <div class="review-success" aria-live="polite">
+                <span class="review-success__mark" aria-hidden="true">✓</span>
+                <p>{{ t("product.review.successKicker") }}</p>
+                <h2 id="review-title">{{ t("product.review.successTitle") }}</h2>
+                <span>{{ t("product.review.successBody") }}</span>
+                <div class="review-success__actions">
+                  <button type="button" class="review-submit" (click)="closeReview()">
+                    {{ t("common.close") }}
+                  </button>
+                  <button type="button" class="review-secondary" (click)="startAnotherReview()">
+                    {{ t("product.review.another") }}
+                  </button>
+                </div>
+              </div>
+            } @else {
+              <header class="review-head">
+                <p>{{ t("product.review.kicker") }}</p>
+                <h2 id="review-title">{{ t("product.review.title") }}</h2>
+                <span>{{ t("product.review.subtitle") }}</span>
+              </header>
+
+              <form class="review-form" (submit)="submitReview($event)" novalidate>
+                <fieldset class="review-rating">
+                  <legend>
+                    {{ t("product.review.rating") }}
+                    <span>{{ t("product.review.optional") }}</span>
+                  </legend>
+                  <div class="review-stars">
+                    @for (star of [1, 2, 3, 4, 5]; track star) {
+                      <button
+                        type="button"
+                        [class.is-selected]="star <= (reviewRating() || 0)"
+                        [attr.aria-pressed]="reviewRating() === star"
+                        [attr.aria-label]="t('product.review.starLabel', { rating: star })"
+                        (click)="selectReviewRating(star)"
+                      >
+                        ★
+                      </button>
+                    }
+                  </div>
+                </fieldset>
+
+                <label class="review-field review-field--message" for="review-description">
+                  <span>
+                    {{ t("product.review.description") }}
+                    <small>{{ t("product.review.optional") }}</small>
+                  </span>
+                  <textarea
+                    id="review-description"
+                    data-testid="review-description"
+                    rows="4"
+                    maxlength="1200"
+                    [value]="reviewDescription()"
+                    (input)="onReviewDescriptionInput($event)"
+                    [placeholder]="t('product.review.descriptionPlaceholder')"
+                  ></textarea>
+                </label>
+
+                <div class="review-contact-grid">
+                  <label class="review-field" for="review-name">
+                    <span>
+                      {{ t("product.review.name") }}
+                      <small>{{ t("product.review.optional") }}</small>
+                    </span>
+                    <input
+                      id="review-name"
+                      type="text"
+                      autocomplete="name"
+                      maxlength="100"
+                      [value]="reviewName()"
+                      (input)="onReviewNameInput($event)"
+                      [placeholder]="t('product.review.namePlaceholder')"
+                    />
+                  </label>
+
+                  <label class="review-field" for="review-mobile">
+                    <span>
+                      {{ t("product.review.mobile") }}
+                      <small>{{ t("product.review.optional") }}</small>
+                    </span>
+                    <input
+                      id="review-mobile"
+                      type="tel"
+                      inputmode="tel"
+                      autocomplete="tel"
+                      maxlength="40"
+                      [value]="reviewPhone()"
+                      (input)="onReviewPhoneInput($event)"
+                      [placeholder]="t('product.review.mobilePlaceholder')"
+                    />
+                  </label>
+
+                  <label class="review-field review-field--email" for="review-email">
+                    <span>
+                      {{ t("product.review.email") }}
+                      <small>{{ t("product.review.optional") }}</small>
+                    </span>
+                    <input
+                      id="review-email"
+                      type="email"
+                      inputmode="email"
+                      autocomplete="email"
+                      maxlength="254"
+                      [value]="reviewEmail()"
+                      (input)="onReviewEmailInput($event)"
+                      [placeholder]="t('product.review.emailPlaceholder')"
+                    />
+                  </label>
+                </div>
+
+                <p class="review-privacy">{{ t("product.review.privacy") }}</p>
+
+                @if (reviewError()) {
+                  <p class="review-error" role="alert">{{ reviewError() }}</p>
+                }
+
+                <button
+                  type="submit"
+                  class="review-submit"
+                  data-testid="submit-review"
+                  [disabled]="reviewSubmitting()"
+                >
+                  {{ reviewSubmitting() ? t("product.review.submitting") : t("product.review.submit") }}
+                </button>
+              </form>
             }
           </section>
         </div>

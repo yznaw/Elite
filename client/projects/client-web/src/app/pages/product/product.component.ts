@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -28,6 +28,13 @@ interface AvailableSize {
   inStock: boolean;
 }
 
+interface StorefrontCollectionLink {
+  id: string;
+  handle: string;
+  title: string;
+  children?: StorefrontCollectionLink[];
+}
+
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 
 @Component({
@@ -52,6 +59,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   private routeSub?: Subscription;
   private querySub?: Subscription;
   private loadToken = 0;
+  private previousBodyOverflow = '';
+  private bodyScrollLocked = false;
 
   readonly accordions: Accordion[] = [
     {
@@ -93,8 +102,19 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly restockSubmitting = signal(false);
   readonly restockSubmitted = signal(false);
   readonly restockError = signal('');
+  readonly reviewOpen = signal(false);
+  readonly reviewRating = signal<number | null>(null);
+  readonly reviewDescription = signal('');
+  readonly reviewName = signal('');
+  readonly reviewPhone = signal('');
+  readonly reviewEmail = signal('');
+  readonly reviewSubmitting = signal(false);
+  readonly reviewSubmitted = signal(false);
+  readonly reviewError = signal('');
   readonly fromCollectionHandle = signal<string | null>(null);
   readonly fromCollectionName = signal<string | null>(null);
+  readonly fromParentCollectionHandle = signal<string | null>(null);
+  readonly fromParentCollectionName = signal<string | null>(null);
 
   readonly gallery = computed(() => {
     const p = this.product();
@@ -178,8 +198,14 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.querySub = this.route.queryParamMap.subscribe((queryParams) => {
-      this.fromCollectionHandle.set(queryParams.get('col'));
+      const collectionHandle = queryParams.get('col');
+      this.fromCollectionHandle.set(collectionHandle);
       this.fromCollectionName.set(queryParams.get('colName'));
+      this.fromParentCollectionHandle.set(queryParams.get('parentCol'));
+      this.fromParentCollectionName.set(queryParams.get('parentColName'));
+      if (collectionHandle && !queryParams.get('parentCol')) {
+        void this.resolveLegacyCollectionParent(collectionHandle);
+      }
       this.applyColorParam(queryParams.get('color'));
     });
 
@@ -192,11 +218,32 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.routeSub?.unsubscribe();
     this.querySub?.unsubscribe();
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
+    this.unlockBodyScroll();
   }
 
-  goCollection(): void {
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.reviewOpen()) this.closeReview();
+  }
+
+  async goCollection(): Promise<void> {
     const handle = this.fromCollectionHandle();
-    void this.router.navigate(handle ? ['/collection', handle] : ['/collection']);
+    if (handle && !this.fromParentCollectionHandle()) {
+      await this.resolveLegacyCollectionParent(handle);
+    }
+
+    const parentHandle = this.fromParentCollectionHandle();
+    const route = parentHandle && handle
+      ? ['/collection', parentHandle, handle]
+      : handle
+        ? ['/collection', handle]
+        : ['/collection'];
+    void this.router.navigate(route);
+  }
+
+  goParentCollection(): void {
+    const parentHandle = this.fromParentCollectionHandle();
+    void this.router.navigate(parentHandle ? ['/collection', parentHandle] : ['/collection']);
   }
 
   retryProduct(): void {
@@ -431,6 +478,88 @@ export class ProductComponent implements OnInit, OnDestroy {
     }
   }
 
+  openReview(): void {
+    this.resetReviewForm();
+    this.reviewOpen.set(true);
+    if (!this.bodyScrollLocked) {
+      this.previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      this.bodyScrollLocked = true;
+    }
+  }
+
+  closeReview(): void {
+    this.reviewOpen.set(false);
+    this.unlockBodyScroll();
+  }
+
+  selectReviewRating(rating: number): void {
+    this.reviewRating.set(this.reviewRating() === rating ? null : rating);
+    this.reviewError.set('');
+  }
+
+  onReviewDescriptionInput(event: Event): void {
+    this.reviewDescription.set((event.target as HTMLTextAreaElement).value);
+    this.reviewError.set('');
+  }
+
+  onReviewNameInput(event: Event): void {
+    this.reviewName.set((event.target as HTMLInputElement).value);
+  }
+
+  onReviewPhoneInput(event: Event): void {
+    this.reviewPhone.set((event.target as HTMLInputElement).value);
+  }
+
+  onReviewEmailInput(event: Event): void {
+    this.reviewEmail.set((event.target as HTMLInputElement).value);
+  }
+
+  async submitReview(event?: Event): Promise<void> {
+    event?.preventDefault();
+    const product = this.product();
+    const body = this.reviewDescription().trim();
+    const rating = this.reviewRating();
+    const email = this.reviewEmail().trim();
+    if (!product || this.reviewSubmitting()) return;
+
+    if (!rating && !body) {
+      this.reviewError.set(this.t('product.review.validation'));
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.reviewError.set(this.t('product.review.emailError'));
+      return;
+    }
+
+    this.reviewSubmitting.set(true);
+    this.reviewError.set('');
+    try {
+      await firstValueFrom(
+        this.http.post<ApiResponse<{ id: string; createdAt: string }>>(
+          `${this.apiBase}/products/${encodeURIComponent(product.id)}/reviews`,
+          {
+            rating,
+            body: body || null,
+            authorName: this.reviewName().trim() || null,
+            authorPhone: this.reviewPhone().trim() || null,
+            authorEmail: email || null,
+            source: 'storefront',
+          },
+        ),
+      );
+      this.reviewSubmitted.set(true);
+    } catch {
+      this.reviewError.set(this.t('product.review.error'));
+    } finally {
+      this.reviewSubmitting.set(false);
+    }
+  }
+
+  startAnotherReview(): void {
+    this.resetReviewForm();
+  }
+
   private cartItem(p: Product) {
     const variant = this.selectedVariant(p);
     return {
@@ -553,6 +682,44 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.restockFormOpen.set(false);
     this.restockSubmitted.set(false);
     this.restockError.set('');
+  }
+
+  private resetReviewForm(): void {
+    this.reviewRating.set(null);
+    this.reviewDescription.set('');
+    this.reviewName.set('');
+    this.reviewPhone.set('');
+    this.reviewEmail.set('');
+    this.reviewSubmitting.set(false);
+    this.reviewSubmitted.set(false);
+    this.reviewError.set('');
+  }
+
+  private unlockBodyScroll(): void {
+    if (!this.bodyScrollLocked) return;
+    document.body.style.overflow = this.previousBodyOverflow;
+    this.bodyScrollLocked = false;
+  }
+
+  private async resolveLegacyCollectionParent(childKey: string): Promise<void> {
+    if (!childKey || childKey === 'all' || this.fromParentCollectionHandle()) return;
+
+    try {
+      const response = await firstValueFrom(
+        this.http.get<ApiResponse<StorefrontCollectionLink[]>>(`${this.apiBase}/collections?limit=100`),
+      );
+      if (this.fromCollectionHandle() !== childKey || this.fromParentCollectionHandle()) return;
+
+      const parent = (Array.isArray(response.data) ? response.data : []).find((collection) =>
+        (collection.children ?? []).some((child) => child.id === childKey || child.handle === childKey),
+      );
+      if (!parent) return;
+
+      this.fromParentCollectionHandle.set(parent.handle || parent.id);
+      this.fromParentCollectionName.set(parent.title);
+    } catch {
+      // Keep the original top-level collection fallback if hierarchy lookup fails.
+    }
   }
 
   private resolveApiBase(): string {

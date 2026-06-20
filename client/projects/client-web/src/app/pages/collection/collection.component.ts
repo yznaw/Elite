@@ -259,6 +259,13 @@ export class CollectionComponent implements OnInit, OnDestroy {
     if (sub) {
       queryParams['col'] = sub.handle || sub.id;
       queryParams['colName'] = sub.title;
+      queryParams['parentCol'] = active?.handle || active?.id || '';
+      queryParams['parentColName'] = active?.title || '';
+    } else if (active && this.activeSubCollectionKey() === 'all') {
+      queryParams['col'] = 'all';
+      queryParams['colName'] = 'All';
+      queryParams['parentCol'] = active.handle || active.id;
+      queryParams['parentColName'] = active.title;
     } else if (active) {
       queryParams['col'] = active.handle || active.id;
       queryParams['colName'] = active.title;
