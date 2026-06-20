@@ -89,7 +89,7 @@ const MOBILE_BP = 900;
         <div class="load-error-banner">
           <ap-icon name="warning" [size]="16"/>
           <span>{{ loadError() }}</span>
-          <button class="btn btn-outline btn-sm" (click)="loadCustomers()">Retry</button>
+          <button class="btn btn-outline btn-sm" (click)="loadCustomers()">{{ t('common.retry') }}</button>
         </div>
       }
 
@@ -209,7 +209,7 @@ const MOBILE_BP = 900;
     @if (activeOrder(); as o) {
       <ap-order-drawer
         [value]="o"
-        [backLabel]="orderContext()?.name ? 'Back to ' + orderContext()!.name : 'Back'"
+        [backLabel]="orderContext()?.name ? t('common.backTo') + ' ' + orderContext()!.name : t('common.back')"
         (back)="closeOrderDrawer()"
         (closed)="closeOrderDrawer()"
         (updated)="onOrderUpdated($event)"
@@ -412,7 +412,7 @@ export class CustomersComponent implements OnInit, OnDestroy {
       const list = await this.customersApi.list();
       this._customers.set(list);
     } catch {
-      this.loadError.set('Could not load customers. Check your connection and try again.');
+      this.loadError.set(this.t('customers.loadError'));
     } finally {
       this.loading.set(false);
     }

@@ -68,13 +68,13 @@ interface StorefrontContent {
 
       <!-- Left: title + status chip -->
       <div class="pub-bar__left">
-        <span class="pub-bar__title">Storefront Editor</span>
+        <span class="pub-bar__title">{{ t('storefront.editor.title') }}</span>
         @if (contentDirty()) {
-          <span class="pub-bar__chip pub-bar__chip--unsaved">Unsaved edits</span>
+          <span class="pub-bar__chip pub-bar__chip--unsaved">{{ t('storefront.editor.chip.unsaved') }}</span>
         } @else if (draftUnpublished()) {
-          <span class="pub-bar__chip pub-bar__chip--draft">Draft — not live</span>
+          <span class="pub-bar__chip pub-bar__chip--draft">{{ t('storefront.editor.chip.draft') }}</span>
         } @else if (storefront.hasUnpublishedChanges()) {
-          <span class="pub-bar__chip pub-bar__chip--layout">Layout unpublished</span>
+          <span class="pub-bar__chip pub-bar__chip--layout">{{ t('storefront.editor.chip.layout') }}</span>
         }
       </div>
 
@@ -86,7 +86,7 @@ interface StorefrontContent {
                 [disabled]="generatingToken()" (click)="openPreview()"
                 title="Open a fresh preview tab showing the current saved draft">
           @if (generatingToken()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="eye" [size]="14"/> }
-          <span class="pub-bar__btn-label">Preview</span>
+          <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.preview') }}</span>
         </button>
 
         <!-- Dirty state: Discard edits + Save Draft -->
@@ -96,12 +96,12 @@ interface StorefrontContent {
                   [disabled]="savingDraft()" (click)="discardContent()"
                   title="Discard unsaved edits and reload last saved state">
             <ap-icon name="x" [size]="13"/>
-            <span class="pub-bar__btn-label">Discard edits</span>
+            <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.discard') }}</span>
           </button>
           <button class="pub-bar__btn pub-bar__btn--save" type="button"
                   [disabled]="savingDraft()" (click)="saveDraftContent()">
             @if (savingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="edit" [size]="13"/> }
-            <span class="pub-bar__btn-label">@if (savingDraft()) { Saving… } @else { Save Draft }</span>
+            <span class="pub-bar__btn-label">@if (savingDraft()) { {{ t('storefront.editor.btn.saving') }} } @else { {{ t('storefront.editor.btn.saveDraft') }} }</span>
           </button>
         }
 
@@ -112,12 +112,12 @@ interface StorefrontContent {
                   [disabled]="revertingDraft()" (click)="revertToLive()"
                   title="Discard this draft and go back to the published live content">
             @if (revertingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="x" [size]="13"/> }
-            <span class="pub-bar__btn-label">Revert to live</span>
+            <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.revertToLive') }}</span>
           </button>
           <button class="pub-bar__btn pub-bar__btn--publish-content" type="button"
                   [disabled]="publishingContent()" (click)="publishContent()">
             @if (publishingContent()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="check" [size]="13"/> }
-            <span class="pub-bar__btn-label">@if (publishingContent()) { Publishing… } @else { Publish Content }</span>
+            <span class="pub-bar__btn-label">@if (publishingContent()) { {{ t('storefront.editor.btn.publishingContent') }} } @else { {{ t('storefront.editor.btn.publishContent') }} }</span>
           </button>
         }
 
@@ -128,7 +128,7 @@ interface StorefrontContent {
                 [disabled]="publishing()" (click)="publish()"
                 title="Publish section order and visibility to the live storefront">
           @if (publishing()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="sync" [size]="13"/> }
-          <span class="pub-bar__btn-label">@if (publishing()) { Publishing… } @else { Publish Layout }</span>
+          <span class="pub-bar__btn-label">@if (publishing()) { {{ t('storefront.editor.btn.publishingLayout') }} } @else { {{ t('storefront.editor.btn.publishLayout') }} }</span>
         </button>
 
       </div>
@@ -138,7 +138,7 @@ interface StorefrontContent {
     @if (showPreviewHint()) {
       <div class="preview-hint-bar">
         <ap-icon name="eye" [size]="12"/>
-        Draft saved — click <strong>Preview</strong> to open a fresh tab with your latest changes.
+        {{ t('storefront.editor.hint.draftSaved') }}
         <button class="preview-hint-dismiss" type="button" (click)="showPreviewHint.set(false)">✕</button>
       </div>
     }
@@ -146,13 +146,13 @@ interface StorefrontContent {
     <!-- ── Page tabs ───────────────────────────────────────── -->
     <div class="page-tabs">
       <button class="ptab" [class.active]="pageTab() === 'home'"    (click)="pageTab.set('home')">
-        <ap-icon name="dash" [size]="14"/> Home Page
+        <ap-icon name="dash" [size]="14"/> {{ t('storefront.editor.tab.home') }}
       </button>
       <button class="ptab" [class.active]="pageTab() === 'story'"   (click)="pageTab.set('story')">
-        <ap-icon name="edit" [size]="14"/> Our Story
+        <ap-icon name="edit" [size]="14"/> {{ t('storefront.editor.tab.story') }}
       </button>
       <button class="ptab" [class.active]="pageTab() === 'contact'" (click)="pageTab.set('contact')">
-        <ap-icon name="mail" [size]="14"/> Contact Us
+        <ap-icon name="mail" [size]="14"/> {{ t('storefront.editor.tab.contact') }}
       </button>
     </div>
 
@@ -162,7 +162,7 @@ interface StorefrontContent {
     @if (pageTab() === 'home') {
       <div class="sub-tabs">
         @for (st of homeSubTabs; track st.id) {
-          <button class="stab" [class.active]="homeSubTab() === st.id" (click)="homeSubTab.set(st.id)">{{ st.label }}</button>
+          <button class="stab" [class.active]="homeSubTab() === st.id" (click)="homeSubTab.set(st.id)">{{ t(st.labelKey) }}</button>
         }
       </div>
 
@@ -172,11 +172,11 @@ interface StorefrontContent {
           <div class="card">
             <div class="card-header">
               <div>
-                <div class="card-title">Section Order</div>
-                <div class="card-sub">Drag to reorder · toggle to show / hide sections on the home page.</div>
+                <div class="card-title">{{ t('storefront.editor.order.title') }}</div>
+                <div class="card-sub">{{ t('storefront.editor.order.sub') }}</div>
               </div>
               <button class="btn btn-outline btn-sm" type="button" (click)="resetLayout()">
-                <ap-icon name="sync" [size]="13"/> Reset
+                <ap-icon name="sync" [size]="13"/> {{ t('storefront.editor.order.reset') }}
               </button>
             </div>
             <div class="card-pad">
@@ -199,7 +199,7 @@ interface StorefrontContent {
                 <div class="layout-drop-end" [class.drop-target]="dropTargetId() === '__end__'"
                   (dragover)="onDragOver($event,'__end__')" (drop)="onDrop($event,'__end__')">
                   <ap-icon name="drag" [size]="14"/>
-                  <span>Drop here to place at end</span>
+                  <span>{{ t('storefront.editor.order.dropEnd') }}</span>
                 </div>
               </div>
             </div>
@@ -211,11 +211,11 @@ interface StorefrontContent {
       @if (homeSubTab() === 'hero-slider') {
         <div class="tab-content">
           <div class="card mb-24">
-            <div class="card-header"><div><div class="card-title">Hero Slider</div><div class="card-sub">CTA button labels shown on every slide.</div></div></div>
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.slider.title') }}</div><div class="card-sub">{{ t('storefront.editor.slider.sub') }}</div></div></div>
             <div class="card-pad field-stack">
               <div class="two-col">
-                <label><span class="lbl">CTA (English)</span><input class="inp" [ngModel]="content().heroSlider.ctaEn" (ngModelChange)="patchHeroSlider('ctaEn', $event)"/></label>
-                <label><span class="lbl">CTA (Arabic)</span><input class="inp" dir="rtl" [ngModel]="content().heroSlider.ctaAr" (ngModelChange)="patchHeroSlider('ctaAr', $event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.slider.ctaEn') }}</span><input class="inp" [ngModel]="content().heroSlider.ctaEn" (ngModelChange)="patchHeroSlider('ctaEn', $event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.slider.ctaAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().heroSlider.ctaAr" (ngModelChange)="patchHeroSlider('ctaAr', $event)"/></label>
               </div>
             </div>
           </div>
@@ -224,36 +224,36 @@ interface StorefrontContent {
             <div class="card mb-16">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Slide {{ i + 1 }}</div>
+                  <div class="card-title">{{ t('storefront.editor.slider.slide') }} {{ i + 1 }}</div>
                   <div class="card-sub mono small">{{ item.id }}</div>
                 </div>
                 @if (content().heroSlider.items.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeSliderItem(i)">
-                    <ap-icon name="trash" [size]="12"/> Remove
+                    <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.slider.remove') }}
                   </button>
                 }
               </div>
               <div class="card-pad field-stack">
                 <div class="two-col">
-                  <label><span class="lbl">Product Name</span><input class="inp" [ngModel]="item.name" (ngModelChange)="patchSliderItem(i,'name',$event)"/></label>
-                  <label><span class="lbl">Subtitle (bilingual)</span><input class="inp" [ngModel]="item.subtitle" (ngModelChange)="patchSliderItem(i,'subtitle',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.slider.productName') }}</span><input class="inp" [ngModel]="item.name" (ngModelChange)="patchSliderItem(i,'name',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.slider.subtitle') }}</span><input class="inp" [ngModel]="item.subtitle" (ngModelChange)="patchSliderItem(i,'subtitle',$event)"/></label>
                 </div>
                 <label>
-                  <span class="lbl">Slide Image</span>
+                  <span class="lbl">{{ t('storefront.editor.slider.image') }}</span>
                   <div class="image-picker-row">
                     @if (item.imageUrl) { <img class="img-thumb" [src]="item.imageUrl" [alt]="item.name"/> }
                     <div class="ip-info">
                       <span class="small mono">{{ imageName(item.imageUrl) }}</span>
                       <div class="row gap-sm">
                         <input #slFile type="file" accept="image/*" (change)="uploadSliderImage(i, $event)" hidden/>
-                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="slFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
-                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('slider-item-'+i)"><ap-icon name="media" [size]="12"/> Media</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="slFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
+                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('slider-item-'+i)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
                       <input class="inp mt-8" placeholder="or paste URL…" [ngModel]="item.imageUrl" (ngModelChange)="patchSliderItem(i,'imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">Alt text (accessibility)</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.slider.altText') }}</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
 
                 <!-- Per-slide collapsible callouts — clear accordion UI -->
                 <div class="callouts-section" [class.callouts-open]="expandedSlide() === i">
@@ -262,9 +262,9 @@ interface StorefrontContent {
                     <span class="callouts-toggle__icon">
                       <ap-icon name="list" [size]="12"/>
                     </span>
-                    <span class="callouts-toggle__label">Feature Callouts</span>
+                    <span class="callouts-toggle__label">{{ t('storefront.editor.slider.callouts') }}</span>
                     <span class="callouts-toggle__count">{{ item.callouts.length }}</span>
-                    <span class="callouts-toggle__hint">{{ expandedSlide() === i ? 'Collapse' : 'Expand' }}</span>
+                    <span class="callouts-toggle__hint">{{ expandedSlide() === i ? t('storefront.editor.slider.collapse') : t('storefront.editor.slider.expand') }}</span>
                     <span class="callouts-toggle__arrow" [class.open]="expandedSlide() === i">
                       <ap-icon name="arrowDn" [size]="13"/>
                     </span>
@@ -283,12 +283,12 @@ interface StorefrontContent {
                             </button>
                           </div>
                           <div class="callout-row__fields">
-                            <label><span class="lbl">English label</span><input class="inp inp-sm" [ngModel]="callout.titleEn" (ngModelChange)="patchCallout(i,ci,'titleEn',$event)"/></label>
-                            <label><span class="lbl">Arabic label</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.titleAr" (ngModelChange)="patchCallout(i,ci,'titleAr',$event)"/></label>
-                            <label><span class="lbl">English subtitle</span><input class="inp inp-sm" [ngModel]="callout.subtitleEn" (ngModelChange)="patchCallout(i,ci,'subtitleEn',$event)"/></label>
-                            <label><span class="lbl">Arabic subtitle</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.subtitleAr" (ngModelChange)="patchCallout(i,ci,'subtitleAr',$event)"/></label>
+                            <label><span class="lbl">{{ t('storefront.editor.slider.labelEn') }}</span><input class="inp inp-sm" [ngModel]="callout.titleEn" (ngModelChange)="patchCallout(i,ci,'titleEn',$event)"/></label>
+                            <label><span class="lbl">{{ t('storefront.editor.slider.labelAr') }}</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.titleAr" (ngModelChange)="patchCallout(i,ci,'titleAr',$event)"/></label>
+                            <label><span class="lbl">{{ t('storefront.editor.slider.subtitleEn') }}</span><input class="inp inp-sm" [ngModel]="callout.subtitleEn" (ngModelChange)="patchCallout(i,ci,'subtitleEn',$event)"/></label>
+                            <label><span class="lbl">{{ t('storefront.editor.slider.subtitleAr') }}</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.subtitleAr" (ngModelChange)="patchCallout(i,ci,'subtitleAr',$event)"/></label>
                             <label>
-                              <span class="lbl">Thumbnail</span>
+                              <span class="lbl">{{ t('storefront.editor.slider.thumbnail') }}</span>
                               <div class="callout-thumb-row">
                                 @if (callout.thumbnail) {
                                   <img class="callout-thumb" [src]="callout.thumbnail" [alt]="callout.alt"/>
@@ -299,18 +299,18 @@ interface StorefrontContent {
                                 }
                                 <div style="flex:1;min-width:0;">
                                   <input #ctFile type="file" accept="image/*" (change)="uploadCalloutImage(i,ci,$event)" hidden/>
-                                  <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="ctFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
+                                  <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="ctFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                                   <input class="inp mt-6" style="font-size:11px;" placeholder="or paste URL…" [ngModel]="callout.thumbnail" (ngModelChange)="patchCallout(i,ci,'thumbnail',$event)"/>
                                 </div>
                               </div>
                             </label>
-                            <label><span class="lbl">Alt text</span><input class="inp inp-sm" [ngModel]="callout.alt" (ngModelChange)="patchCallout(i,ci,'alt',$event)"/></label>
+                            <label><span class="lbl">{{ t('storefront.editor.field.altText') }}</span><input class="inp inp-sm" [ngModel]="callout.alt" (ngModelChange)="patchCallout(i,ci,'alt',$event)"/></label>
                           </div>
                         </div>
                         @if (ci < item.callouts.length - 1) { <hr class="callout-sep"/> }
                       }
                       <button class="btn btn-outline btn-sm mt-12" style="width:100%;" type="button" (click)="addCallout(i)">
-                        <ap-icon name="plus" [size]="12"/> Add callout
+                        <ap-icon name="plus" [size]="12"/> {{ t('storefront.editor.slider.addCallout') }}
                       </button>
                     </div>
                   }
@@ -321,7 +321,7 @@ interface StorefrontContent {
 
           <!-- Add slide button -->
           <button class="btn btn-outline add-slide-btn" type="button" (click)="addSliderItem()">
-            <ap-icon name="plus" [size]="14"/> Add new slide
+            <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.slider.addSlide') }}
           </button>
         </div>
       }
@@ -332,9 +332,9 @@ interface StorefrontContent {
           <!-- Featured collection IDs picker -->
           <div class="card mb-24">
             <div class="card-header">
-              <div><div class="card-title">Featured Collections</div><div class="card-sub">Collections shown in the home layout block.</div></div>
+              <div><div class="card-title">{{ t('storefront.editor.collections.title') }}</div><div class="card-sub">{{ t('storefront.editor.collections.sub') }}</div></div>
               <button class="btn btn-outline btn-sm" type="button" (click)="showCollectionPicker.set(!showCollectionPicker())">
-                <ap-icon name="plus" [size]="13"/> Add from list
+                <ap-icon name="plus" [size]="13"/> {{ t('storefront.editor.collections.addFromList') }}
               </button>
             </div>
             <div class="card-pad">
@@ -348,7 +348,7 @@ interface StorefrontContent {
                           <span class="feat-chip-path mono">/collection/{{ col.handle }}</span>
                         } @else {
                           <span class="feat-chip-title">{{ ref }}</span>
-                          <span class="feat-chip-path muted small">manual handle</span>
+                          <span class="feat-chip-path muted small">{{ t('storefront.editor.collections.manualHandle') }}</span>
                         }
                       </div>
                       <button class="feat-chip-remove" type="button" (click)="removeFeatured(ref)"><ap-icon name="x" [size]="10"/></button>
@@ -356,7 +356,7 @@ interface StorefrontContent {
                   }
                 </div>
               } @else {
-                <div class="feat-empty mb-16"><ap-icon name="collections" [size]="20"/><span>No collections featured yet.</span></div>
+                <div class="feat-empty mb-16"><ap-icon name="collections" [size]="20"/><span>{{ t('storefront.editor.collections.empty') }}</span></div>
               }
               @if (showCollectionPicker()) {
                 <div class="col-picker mb-16">
@@ -365,7 +365,7 @@ interface StorefrontContent {
                     <input class="inp with-icon" placeholder="Search…" [ngModel]="pickerSearch()" (ngModelChange)="pickerSearch.set($event)"/>
                   </div>
                   <div class="col-picker-list">
-                    @if (collectionsLoading()) { <div class="col-picker-row muted"><ap-spinner [size]="12"/> Loading…</div> }
+                    @if (collectionsLoading()) { <div class="col-picker-row muted"><ap-spinner [size]="12"/> {{ t('common.loading') }}</div> }
                     @else {
                       @for (col of filteredPickerCollections(); track col.id) {
                         <div class="col-picker-row" [class.selected]="featuredRefs().includes(col.id)" (click)="toggleFeatured(col.id)">
@@ -375,7 +375,7 @@ interface StorefrontContent {
                           <div class="col-picker-check" [class.on]="featuredRefs().includes(col.id)"></div>
                         </div>
                       }
-                      @if (filteredPickerCollections().length === 0) { <div class="col-picker-row muted">No collections found.</div> }
+                      @if (filteredPickerCollections().length === 0) { <div class="col-picker-row muted">{{ t('storefront.editor.collections.noFound') }}</div> }
                     }
                   </div>
                 </div>
@@ -383,57 +383,57 @@ interface StorefrontContent {
               <div class="manual-entry">
                 <span class="manual-prefix">/collection/</span>
                 <input class="inp manual-inp" [(ngModel)]="manualHandle" placeholder="type-a-handle" (keydown.enter)="addManualHandle()"/>
-                <button class="btn btn-outline btn-sm" type="button" (click)="addManualHandle()" [disabled]="!manualHandle.trim()">Add</button>
+                <button class="btn btn-outline btn-sm" type="button" (click)="addManualHandle()" [disabled]="!manualHandle.trim()">{{ t('storefront.editor.collections.add') }}</button>
               </div>
             </div>
           </div>
           <!-- Collection tiles (3 tiles) -->
           <div class="card">
-            <div class="card-header"><div><div class="card-title">Collection Tiles</div><div class="card-sub">3 tiles displayed in the home collections grid.</div></div></div>
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.tiles.title') }}</div><div class="card-sub">{{ t('storefront.editor.tiles.sub') }}</div></div></div>
             <div class="card-pad">
               <div class="tile-editor-grid">
                 @for (tile of content().collections; track tile.id; let ti = $index) {
                   <article class="tile-editor">
                     <div class="tile-thumb"><img [src]="tile.imageUrl" [alt]="tile.title"/><span>{{ tile.title }}</span><span class="tile-num">{{ ti + 1 }}</span></div>
                     <div class="field-stack compact">
-                      <label><span class="lbl">Linked Collection</span>
+                      <label><span class="lbl">{{ t('storefront.editor.tiles.linkedCollection') }}</span>
                         <select class="inp inp-sm" [ngModel]="tile.collectionId || ''" (ngModelChange)="selectTileCollection(ti, $event)">
-                          <option value="">— None (custom) —</option>
+                          <option value="">{{ t('storefront.editor.tiles.noneCustom') }}</option>
                           @for (col of allCollections(); track col.id) { <option [value]="col.id">{{ col.title }}</option> }
                         </select>
                       </label>
 
                       @if (tile.collectionId) {
                         <div class="live-badge-row">
-                          <span class="live-badge">⟳ Live from catalog</span>
-                          <span class="live-hint">Title, image &amp; link auto-sync when collection is updated.</span>
+                          <span class="live-badge">⟳ {{ t('storefront.editor.tiles.liveBadge') }}</span>
+                          <span class="live-hint">{{ t('storefront.editor.tiles.liveHint') }}</span>
                         </div>
-                        <label><span class="lbl">Title <em>(read-only — from catalog)</em></span><input class="inp" [ngModel]="tile.title" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
-                        <label><span class="lbl">Image <em>(read-only — from catalog)</em></span>
+                        <label><span class="lbl">{{ t('storefront.editor.tiles.titleReadonly') }}</span><input class="inp" [ngModel]="tile.title" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
+                        <label><span class="lbl">{{ t('storefront.editor.tiles.imageReadonly') }}</span>
                           <div class="row gap-sm">
                             @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
                             <input class="inp" [ngModel]="tile.imageUrl" readonly style="opacity:0.5;cursor:not-allowed;flex:1;"/>
                           </div>
                         </label>
-                        <label><span class="lbl">Collection link <em>(read-only)</em></span><input class="inp" [ngModel]="tile.link" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
+                        <label><span class="lbl">{{ t('storefront.editor.tiles.linkReadonly') }}</span><input class="inp" [ngModel]="tile.link" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
                       } @else {
-                        <label><span class="lbl">Title</span><input class="inp" [ngModel]="tile.title" (ngModelChange)="patchTile(ti,'title',$event)"/></label>
-                        <label><span class="lbl">Image URL</span>
+                        <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="tile.title" (ngModelChange)="patchTile(ti,'title',$event)"/></label>
+                        <label><span class="lbl">{{ t('storefront.editor.tiles.imageUrl') }}</span>
                           <div class="row gap-sm">
                             @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
                             <div style="flex:1">
                               <div class="row gap-sm mb-4">
                                 <input #tileFile type="file" accept="image/*" (change)="uploadTileImage(ti, $event)" hidden/>
-                                <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="tileFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
-                                <button class="btn btn-outline btn-sm" (click)="openMediaPicker('tile-'+ti)"><ap-icon name="media" [size]="12"/> Media</button>
+                                <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="tileFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
+                                <button class="btn btn-outline btn-sm" (click)="openMediaPicker('tile-'+ti)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                               </div>
                               <input class="inp" [ngModel]="tile.imageUrl" (ngModelChange)="patchTile(ti,'imageUrl',$event)" placeholder="https://…"/>
                             </div>
                           </div>
                         </label>
-                        <label><span class="lbl">Collection link</span><input class="inp" [ngModel]="tile.link" (ngModelChange)="patchTile(ti,'link',$event)"/></label>
+                        <label><span class="lbl">{{ t('storefront.editor.tiles.link') }}</span><input class="inp" [ngModel]="tile.link" (ngModelChange)="patchTile(ti,'link',$event)"/></label>
                       }
-                      <label><span class="lbl">CTA button text (optional)</span><input class="inp" [ngModel]="tile.ctaText || ''" (ngModelChange)="patchTile(ti,'ctaText',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.tiles.cta') }}</span><input class="inp" [ngModel]="tile.ctaText || ''" (ngModelChange)="patchTile(ti,'ctaText',$event)"/></label>
                     </div>
                   </article>
                 }
@@ -448,32 +448,32 @@ interface StorefrontContent {
         <div class="tab-content">
           <div class="editor-grid">
             <div class="card">
-              <div class="card-header"><div><div class="card-title">Promotion Section</div><div class="card-sub">The split showcase section on the home page.</div></div></div>
+              <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.promotion.title') }}</div><div class="card-sub">{{ t('storefront.editor.promotion.sub') }}</div></div></div>
               <div class="card-pad field-stack">
-                <label><span class="lbl">Showcase image</span>
+                <label><span class="lbl">{{ t('storefront.editor.promotion.image') }}</span>
                   <div class="image-picker-row">
                     @if (content().hero.imageUrl) { <img class="img-thumb" [src]="content().hero.imageUrl" [alt]="content().hero.title"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #heroFile type="file" accept="image/*" (change)="uploadHeroImage($event)" hidden/>
-                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="heroFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
-                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('hero')"><ap-icon name="media" [size]="12"/> Media</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="heroFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
+                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('hero')"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
                       <input class="inp" placeholder="https://…" [ngModel]="content().hero.imageUrl" (ngModelChange)="patchHero('imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">Header text</span><input class="inp" [ngModel]="content().hero.title" (ngModelChange)="patchHero('title',$event)"/></label>
-                <label><span class="lbl">Body text</span><textarea class="inp" rows="3" [ngModel]="content().hero.body" (ngModelChange)="patchHero('body',$event)"></textarea></label>
+                <label><span class="lbl">{{ t('storefront.editor.promotion.header') }}</span><input class="inp" [ngModel]="content().hero.title" (ngModelChange)="patchHero('title',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.promotion.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().hero.body" (ngModelChange)="patchHero('body',$event)"></textarea></label>
                 <div class="two-col">
-                  <label><span class="lbl">Discount badge text</span><input class="inp" [ngModel]="content().hero.discountText" (ngModelChange)="patchHero('discountText',$event)"/></label>
-                  <label><span class="lbl">Button label</span><input class="inp" [ngModel]="content().hero.ctaText" (ngModelChange)="patchHero('ctaText',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.promotion.discount') }}</span><input class="inp" [ngModel]="content().hero.discountText" (ngModelChange)="patchHero('discountText',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.promotion.btnLabel') }}</span><input class="inp" [ngModel]="content().hero.ctaText" (ngModelChange)="patchHero('ctaText',$event)"/></label>
                 </div>
-                <label><span class="lbl">Button destination link</span><input class="inp" [ngModel]="content().hero.ctaLink" (ngModelChange)="patchHero('ctaLink',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.promotion.btnLink') }}</span><input class="inp" [ngModel]="content().hero.ctaLink" (ngModelChange)="patchHero('ctaLink',$event)"/></label>
               </div>
             </div>
             <div class="card preview-card">
-              <div class="card-header"><div><div class="card-title">Preview</div></div></div>
+              <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.promotion.preview') }}</div></div></div>
               <div class="card-pad preview-hero">
                 <img [src]="content().hero.imageUrl" [alt]="content().hero.title"/>
                 <div>
@@ -493,7 +493,7 @@ interface StorefrontContent {
       @if (homeSubTab() === 'promise') {
         <div class="tab-content">
           <div class="card">
-            <div class="card-header"><div><div class="card-title">Craft Promise</div><div class="card-sub">3 cards in the craft promise section.</div></div></div>
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.promise.title') }}</div><div class="card-sub">{{ t('storefront.editor.promise.sub') }}</div></div></div>
             <div class="card-pad">
               @for (card of content().promise.cards; track card.id; let i = $index) {
                 <div class="promise-card-editor">
@@ -502,12 +502,12 @@ interface StorefrontContent {
                   </div>
                   <div class="promise-fields">
                     <div class="two-col">
-                      <label><span class="lbl">Label (English)</span><input class="inp" [ngModel]="card.labelEn" (ngModelChange)="patchPromiseCard(i,'labelEn',$event)"/></label>
-                      <label><span class="lbl">Label (Arabic)</span><input class="inp" dir="rtl" [ngModel]="card.labelAr" (ngModelChange)="patchPromiseCard(i,'labelAr',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.promise.labelEn') }}</span><input class="inp" [ngModel]="card.labelEn" (ngModelChange)="patchPromiseCard(i,'labelEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.promise.labelAr') }}</span><input class="inp" dir="rtl" [ngModel]="card.labelAr" (ngModelChange)="patchPromiseCard(i,'labelAr',$event)"/></label>
                     </div>
                     <div class="two-col">
-                      <label><span class="lbl">Sub-text (English)</span><input class="inp" [ngModel]="card.subEn" (ngModelChange)="patchPromiseCard(i,'subEn',$event)"/></label>
-                      <label><span class="lbl">Sub-text (Arabic)</span><input class="inp" dir="rtl" [ngModel]="card.subAr" (ngModelChange)="patchPromiseCard(i,'subAr',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.promise.subEn') }}</span><input class="inp" [ngModel]="card.subEn" (ngModelChange)="patchPromiseCard(i,'subEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.promise.subAr') }}</span><input class="inp" dir="rtl" [ngModel]="card.subAr" (ngModelChange)="patchPromiseCard(i,'subAr',$event)"/></label>
                     </div>
                   </div>
                 </div>
@@ -522,13 +522,13 @@ interface StorefrontContent {
       @if (homeSubTab() === 'stats') {
         <div class="tab-content">
           <div class="card">
-            <div class="card-header"><div><div class="card-title">Stats Reel</div><div class="card-sub">4 numbers displayed in the stats band.</div></div></div>
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.stats.title') }}</div><div class="card-sub">{{ t('storefront.editor.stats.sub') }}</div></div></div>
             <div class="card-pad stats-grid-editor">
               @for (stat of content().stats; track stat.id; let i = $index) {
                 <div class="stat-editor card">
-                  <label><span class="lbl">Value</span><input class="inp" style="font-size:20px;font-weight:700;text-align:center;" [ngModel]="stat.value" (ngModelChange)="patchStat(i,'value',$event)"/></label>
-                  <label><span class="lbl">Label (EN)</span><input class="inp" [ngModel]="stat.labelEn" (ngModelChange)="patchStat(i,'labelEn',$event)"/></label>
-                  <label><span class="lbl">Label (AR)</span><input class="inp" dir="rtl" [ngModel]="stat.labelAr" (ngModelChange)="patchStat(i,'labelAr',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.stats.value') }}</span><input class="inp" style="font-size:20px;font-weight:700;text-align:center;" [ngModel]="stat.value" (ngModelChange)="patchStat(i,'value',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.stats.labelEn') }}</span><input class="inp" [ngModel]="stat.labelEn" (ngModelChange)="patchStat(i,'labelEn',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.stats.labelAr') }}</span><input class="inp" dir="rtl" [ngModel]="stat.labelAr" (ngModelChange)="patchStat(i,'labelAr',$event)"/></label>
                 </div>
               }
             </div>
@@ -543,7 +543,7 @@ interface StorefrontContent {
     @if (pageTab() === 'story') {
       <div class="sub-tabs">
         @for (st of storySubTabs; track st.id) {
-          <button class="stab" [class.active]="storySubTab() === st.id" (click)="storySubTab.set(st.id)">{{ st.label }}</button>
+          <button class="stab" [class.active]="storySubTab() === st.id" (click)="storySubTab.set(st.id)">{{ t(st.labelKey) }}</button>
         }
       </div>
 
@@ -552,30 +552,30 @@ interface StorefrontContent {
         <div class="tab-content">
           <div class="editor-grid">
             <div class="card">
-              <div class="card-header"><div class="card-title">Story Hero</div></div>
+              <div class="card-header"><div class="card-title">{{ t('storefront.editor.storyHero.title') }}</div></div>
               <div class="card-pad field-stack">
-                <label><span class="lbl">Kicker (small text above title)</span><input class="inp" [ngModel]="content().story.hero.kicker" (ngModelChange)="patchStoryHero('kicker',$event)"/></label>
-                <label><span class="lbl">Title</span><input class="inp" [ngModel]="content().story.hero.title" (ngModelChange)="patchStoryHero('title',$event)"/></label>
-                <label><span class="lbl">Accent (italic line)</span><input class="inp" [ngModel]="content().story.hero.accent" (ngModelChange)="patchStoryHero('accent',$event)"/></label>
-                <label><span class="lbl">Body paragraph</span><textarea class="inp" rows="3" [ngModel]="content().story.hero.body" (ngModelChange)="patchStoryHero('body',$event)"></textarea></label>
-                <label><span class="lbl">Hero image</span>
+                <label><span class="lbl">{{ t('storefront.editor.storyHero.kicker') }}</span><input class="inp" [ngModel]="content().story.hero.kicker" (ngModelChange)="patchStoryHero('kicker',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="content().story.hero.title" (ngModelChange)="patchStoryHero('title',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.storyHero.accent') }}</span><input class="inp" [ngModel]="content().story.hero.accent" (ngModelChange)="patchStoryHero('accent',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.storyHero.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().story.hero.body" (ngModelChange)="patchStoryHero('body',$event)"></textarea></label>
+                <label><span class="lbl">{{ t('storefront.editor.storyHero.image') }}</span>
                   <div class="image-picker-row">
                     @if (content().story.hero.imageUrl) { <img class="img-thumb" [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #shFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden/>
-                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="shFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
-                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('story-hero')"><ap-icon name="media" [size]="12"/> Media</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="shFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
+                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('story-hero')"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
                       <input class="inp" placeholder="https://…" [ngModel]="content().story.hero.imageUrl" (ngModelChange)="patchStoryHero('imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">Image alt text</span><input class="inp" [ngModel]="content().story.hero.imageAlt" (ngModelChange)="patchStoryHero('imageAlt',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.storyHero.imageAlt') }}</span><input class="inp" [ngModel]="content().story.hero.imageAlt" (ngModelChange)="patchStoryHero('imageAlt',$event)"/></label>
               </div>
             </div>
             <div class="card preview-card">
-              <div class="card-header"><div class="card-title">Preview</div></div>
+              <div class="card-header"><div class="card-title">{{ t('storefront.editor.promotion.preview') }}</div></div>
               <div class="card-pad story-preview-hero">
                 <img [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/>
                 <div><small>{{ content().story.hero.kicker }}</small><h3>{{ content().story.hero.title }}</h3><em>{{ content().story.hero.accent }}</em></div>
@@ -590,7 +590,7 @@ interface StorefrontContent {
         <div class="tab-content">
           <div class="card">
             <div class="card-header">
-              <div><div class="card-title">Hero Facts Strip</div><div class="card-sub">Short highlight tags shown at the bottom of the story hero image.</div></div>
+              <div><div class="card-title">{{ t('storefront.editor.heroFacts.title') }}</div><div class="card-sub">{{ t('storefront.editor.heroFacts.sub') }}</div></div>
             </div>
             <div class="card-pad field-stack">
               @for (fact of content().story.heroFacts; track fact.id; let fi = $index) {
@@ -604,7 +604,7 @@ interface StorefrontContent {
                 </div>
               }
               <button class="btn btn-outline btn-sm" style="align-self:flex-start;" type="button" (click)="addHeroFact()">
-                <ap-icon name="plus" [size]="12"/> Add fact
+                <ap-icon name="plus" [size]="12"/> {{ t('storefront.editor.heroFacts.add') }}
               </button>
             </div>
           </div>
@@ -615,11 +615,11 @@ interface StorefrontContent {
       @if (storySubTab() === 'intro') {
         <div class="tab-content">
           <div class="card">
-            <div class="card-header"><div><div class="card-title">Philosophy Intro</div><div class="card-sub">The "Our philosophy" block between the hero and the chapter timeline.</div></div></div>
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.intro.title') }}</div><div class="card-sub">{{ t('storefront.editor.intro.sub') }}</div></div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">Kicker</span><input class="inp" [ngModel]="content().story.intro.kicker" (ngModelChange)="patchStoryIntro('kicker',$event)"/></label>
-              <label><span class="lbl">Headline</span><input class="inp" [ngModel]="content().story.intro.headline" (ngModelChange)="patchStoryIntro('headline',$event)"/></label>
-              <label><span class="lbl">Body paragraph</span><textarea class="inp" rows="3" [ngModel]="content().story.intro.body" (ngModelChange)="patchStoryIntro('body',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.intro.kicker') }}</span><input class="inp" [ngModel]="content().story.intro.kicker" (ngModelChange)="patchStoryIntro('kicker',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.intro.headline') }}</span><input class="inp" [ngModel]="content().story.intro.headline" (ngModelChange)="patchStoryIntro('headline',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.field.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().story.intro.body" (ngModelChange)="patchStoryIntro('body',$event)"></textarea></label>
             </div>
           </div>
         </div>
@@ -634,33 +634,33 @@ interface StorefrontContent {
                 <div><div class="card-title">Chapter {{ i + 1 }}</div><div class="card-sub mono">{{ chapter.id }}</div></div>
                 @if (content().story.chapters.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeChapter(i)">
-                    <ap-icon name="trash" [size]="12"/> Remove
+                    <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.chapters.remove') }}
                   </button>
                 }
               </div>
               <div class="card-pad field-stack">
-                <label><span class="lbl">Eyebrow (year · label)</span><input class="inp" [ngModel]="chapter.eyebrow" (ngModelChange)="patchChapter(i,'eyebrow',$event)"/></label>
-                <label><span class="lbl">Title</span><input class="inp" [ngModel]="chapter.title" (ngModelChange)="patchChapter(i,'title',$event)"/></label>
-                <label><span class="lbl">Body paragraph</span><textarea class="inp" rows="3" [ngModel]="chapter.body" (ngModelChange)="patchChapter(i,'body',$event)"></textarea></label>
-                <label><span class="lbl">Chapter image</span>
+                <label><span class="lbl">{{ t('storefront.editor.chapters.eyebrow') }}</span><input class="inp" [ngModel]="chapter.eyebrow" (ngModelChange)="patchChapter(i,'eyebrow',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="chapter.title" (ngModelChange)="patchChapter(i,'title',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.chapters.body') }}</span><textarea class="inp" rows="3" [ngModel]="chapter.body" (ngModelChange)="patchChapter(i,'body',$event)"></textarea></label>
+                <label><span class="lbl">{{ t('storefront.editor.chapters.image') }}</span>
                   <div class="image-picker-row">
                     @if (chapter.imageUrl) { <img class="img-thumb" [src]="chapter.imageUrl" [alt]="chapter.imageAlt"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #chFile type="file" accept="image/*" (change)="uploadChapterImage(i,$event)" hidden/>
-                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="chFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} Upload</button>
-                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('chapter-'+i)"><ap-icon name="media" [size]="12"/> Media</button>
+                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="chFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
+                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('chapter-'+i)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
                       <input class="inp" placeholder="https://…" [ngModel]="chapter.imageUrl" (ngModelChange)="patchChapter(i,'imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">Image alt text</span><input class="inp" [ngModel]="chapter.imageAlt" (ngModelChange)="patchChapter(i,'imageAlt',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.chapters.imageAlt') }}</span><input class="inp" [ngModel]="chapter.imageAlt" (ngModelChange)="patchChapter(i,'imageAlt',$event)"/></label>
               </div>
             </div>
           }
           <button class="btn btn-outline add-slide-btn" type="button" (click)="addChapter()">
-            <ap-icon name="plus" [size]="14"/> Add chapter
+            <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.chapters.add') }}
           </button>
         </div>
       }
@@ -669,11 +669,11 @@ interface StorefrontContent {
       @if (storySubTab() === 'quote') {
         <div class="tab-content">
           <div class="card">
-            <div class="card-header"><div class="card-title">Quote Band</div></div>
+            <div class="card-header"><div class="card-title">{{ t('storefront.editor.quote.title') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">Quote text</span><input class="inp" [ngModel]="content().story.quote.text" (ngModelChange)="patchQuote('text',$event)"/></label>
-              <label><span class="lbl">Accent (continuation)</span><input class="inp" [ngModel]="content().story.quote.accent" (ngModelChange)="patchQuote('accent',$event)"/></label>
-              <label><span class="lbl">Attribution</span><input class="inp" [ngModel]="content().story.quote.author" (ngModelChange)="patchQuote('author',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.quote.text') }}</span><input class="inp" [ngModel]="content().story.quote.text" (ngModelChange)="patchQuote('text',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.quote.accent') }}</span><input class="inp" [ngModel]="content().story.quote.accent" (ngModelChange)="patchQuote('accent',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.quote.author') }}</span><input class="inp" [ngModel]="content().story.quote.author" (ngModelChange)="patchQuote('author',$event)"/></label>
               <div class="quote-preview">
                 <p>"{{ content().story.quote.text }}</p>
                 <p>{{ content().story.quote.accent }}"</p>
@@ -688,15 +688,15 @@ interface StorefrontContent {
       @if (storySubTab() === 'atelier') {
         <div class="tab-content">
           <div class="card mb-16">
-            <div class="card-header"><div class="card-title">Atelier Section Header</div></div>
+            <div class="card-header"><div class="card-title">{{ t('storefront.editor.atelier.header') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">Kicker</span><input class="inp" [ngModel]="content().story.atelier.kicker" (ngModelChange)="patchAtelier('kicker',$event)"/></label>
-              <label><span class="lbl">Title</span><input class="inp" [ngModel]="content().story.atelier.title" (ngModelChange)="patchAtelier('title',$event)"/></label>
-              <label><span class="lbl">Body</span><textarea class="inp" rows="2" [ngModel]="content().story.atelier.body" (ngModelChange)="patchAtelier('body',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.field.kicker') }}</span><input class="inp" [ngModel]="content().story.atelier.kicker" (ngModelChange)="patchAtelier('kicker',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="content().story.atelier.title" (ngModelChange)="patchAtelier('title',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.field.body') }}</span><textarea class="inp" rows="2" [ngModel]="content().story.atelier.body" (ngModelChange)="patchAtelier('body',$event)"></textarea></label>
             </div>
           </div>
           <div class="card">
-            <div class="card-header"><div><div class="card-title">Artisan Cards</div><div class="card-sub">Role cards displayed in the atelier grid.</div></div></div>
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.atelier.cards') }}</div><div class="card-sub">{{ t('storefront.editor.atelier.cardsSub') }}</div></div></div>
             <div class="card-pad atelier-grid-editor">
               @for (item of content().story.atelier.items; track item.id; let i = $index) {
                 <div class="card atelier-card-editor">
@@ -708,14 +708,14 @@ interface StorefrontContent {
                       </button>
                     }
                   </div>
-                  <label><span class="lbl">Title</span><input class="inp" [ngModel]="item.title" (ngModelChange)="patchAtelierItem(i,'title',$event)"/></label>
-                  <label><span class="lbl">Meta</span><input class="inp" [ngModel]="item.meta" (ngModelChange)="patchAtelierItem(i,'meta',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="item.title" (ngModelChange)="patchAtelierItem(i,'title',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.field.meta') }}</span><input class="inp" [ngModel]="item.meta" (ngModelChange)="patchAtelierItem(i,'meta',$event)"/></label>
                 </div>
               }
             </div>
             <div class="card-pad" style="padding-top:0;">
               <button class="btn btn-outline btn-sm" type="button" (click)="addAtelierItem()">
-                <ap-icon name="plus" [size]="12"/> Add artisan card
+                <ap-icon name="plus" [size]="12"/> {{ t('storefront.editor.atelier.addCard') }}
               </button>
             </div>
           </div>
@@ -729,7 +729,7 @@ interface StorefrontContent {
     @if (pageTab() === 'contact') {
       <div class="sub-tabs">
         @for (st of contactSubTabs; track st.id) {
-          <button class="stab" [class.active]="contactSubTab() === st.id" (click)="contactSubTab.set(st.id)">{{ st.label }}</button>
+          <button class="stab" [class.active]="contactSubTab() === st.id" (click)="contactSubTab.set(st.id)">{{ t(st.labelKey) }}</button>
         }
       </div>
 
@@ -737,18 +737,18 @@ interface StorefrontContent {
       @if (contactSubTab() === 'header') {
         <div class="tab-content">
           <div class="card">
-            <div class="card-header"><div class="card-title">Page Header</div></div>
+            <div class="card-header"><div class="card-title">{{ t('storefront.editor.contactHeader.title') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">Kicker (small label above headline)</span><input class="inp" [ngModel]="content().contact.kicker" (ngModelChange)="patchContact('kicker',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.contactHeader.kicker') }}</span><input class="inp" [ngModel]="content().contact.kicker" (ngModelChange)="patchContact('kicker',$event)"/></label>
               <div class="two-col">
-                <label><span class="lbl">Headline (English)</span><input class="inp" [ngModel]="content().contact.headlineEn" (ngModelChange)="patchContact('headlineEn',$event)"/></label>
-                <label><span class="lbl">Headline Accent (EN)</span><input class="inp" [ngModel]="content().contact.headlineAccentEn" (ngModelChange)="patchContact('headlineAccentEn',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.contactHeader.headlineEn') }}</span><input class="inp" [ngModel]="content().contact.headlineEn" (ngModelChange)="patchContact('headlineEn',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.contactHeader.headlineAccentEn') }}</span><input class="inp" [ngModel]="content().contact.headlineAccentEn" (ngModelChange)="patchContact('headlineAccentEn',$event)"/></label>
               </div>
               <div class="two-col">
-                <label><span class="lbl">Headline (Arabic)</span><input class="inp" dir="rtl" [ngModel]="content().contact.headlineAr" (ngModelChange)="patchContact('headlineAr',$event)"/></label>
-                <label><span class="lbl">Headline Accent (AR)</span><input class="inp" dir="rtl" [ngModel]="content().contact.headlineAccentAr" (ngModelChange)="patchContact('headlineAccentAr',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.contactHeader.headlineAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().contact.headlineAr" (ngModelChange)="patchContact('headlineAr',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.contactHeader.headlineAccentAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().contact.headlineAccentAr" (ngModelChange)="patchContact('headlineAccentAr',$event)"/></label>
               </div>
-              <label><span class="lbl">Sub-heading paragraph</span><textarea class="inp" rows="2" [ngModel]="content().contact.subhead" (ngModelChange)="patchContact('subhead',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.contactHeader.subhead') }}</span><textarea class="inp" rows="2" [ngModel]="content().contact.subhead" (ngModelChange)="patchContact('subhead',$event)"></textarea></label>
             </div>
           </div>
         </div>
@@ -763,16 +763,16 @@ interface StorefrontContent {
                 <div><div class="card-title">{{ block.titleEn || 'Info Block ' + (i+1) }}</div><div class="card-sub mono">{{ block.id }}</div></div>
                 @if (content().contact.infoBlocks.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeInfoBlock(i)">
-                    <ap-icon name="trash" [size]="12"/> Remove
+                    <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.infoBlocks.remove') }}
                   </button>
                 }
               </div>
               <div class="card-pad field-stack">
                 <div class="row gap-sm align-center">
-                  <label style="width:64px"><span class="lbl">Icon</span><input class="inp" style="text-align:center;font-size:18px;" [ngModel]="block.icon" (ngModelChange)="patchInfoBlock(i,'icon',$event)"/></label>
+                  <label style="width:64px"><span class="lbl">{{ t('storefront.editor.infoBlocks.icon') }}</span><input class="inp" style="text-align:center;font-size:18px;" [ngModel]="block.icon" (ngModelChange)="patchInfoBlock(i,'icon',$event)"/></label>
                   <div class="two-col" style="flex:1">
-                    <label><span class="lbl">Title (EN)</span><input class="inp" [ngModel]="block.titleEn" (ngModelChange)="patchInfoBlock(i,'titleEn',$event)"/></label>
-                    <label><span class="lbl">Title (AR)</span><input class="inp" dir="rtl" [ngModel]="block.titleAr" (ngModelChange)="patchInfoBlock(i,'titleAr',$event)"/></label>
+                    <label><span class="lbl">{{ t('storefront.editor.infoBlocks.titleEn') }}</span><input class="inp" [ngModel]="block.titleEn" (ngModelChange)="patchInfoBlock(i,'titleEn',$event)"/></label>
+                    <label><span class="lbl">{{ t('storefront.editor.infoBlocks.titleAr') }}</span><input class="inp" dir="rtl" [ngModel]="block.titleAr" (ngModelChange)="patchInfoBlock(i,'titleAr',$event)"/></label>
                   </div>
                 </div>
                 @for (line of block.lines; track line; let li = $index) {
@@ -786,13 +786,13 @@ interface StorefrontContent {
                   </div>
                 }
                 <button class="btn btn-outline btn-sm" style="align-self:flex-start;" type="button" (click)="addInfoBlockLine(i)">
-                  <ap-icon name="plus" [size]="11"/> Add line
+                  <ap-icon name="plus" [size]="11"/> {{ t('storefront.editor.infoBlocks.addLine') }}
                 </button>
               </div>
             </div>
           }
           <button class="btn btn-outline add-slide-btn" type="button" (click)="addInfoBlock()">
-            <ap-icon name="plus" [size]="14"/> Add info block
+            <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.infoBlocks.addBlock') }}
           </button>
         </div>
       }
@@ -801,25 +801,25 @@ interface StorefrontContent {
       @if (contactSubTab() === 'phone') {
         <div class="tab-content">
           <div class="card mb-20">
-            <div class="card-header"><div class="card-title">Contact Details</div></div>
+            <div class="card-header"><div class="card-title">{{ t('storefront.editor.phone.title') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">Email address</span><input class="inp" type="email" [ngModel]="content().contact.email" (ngModelChange)="patchContact('email',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.phone.email') }}</span><input class="inp" type="email" [ngModel]="content().contact.email" (ngModelChange)="patchContact('email',$event)"/></label>
               <div class="two-col">
-                <label><span class="lbl">Phone number</span><input class="inp" [ngModel]="content().contact.phone" (ngModelChange)="patchContact('phone',$event)"/></label>
-                <label><span class="lbl">WhatsApp number</span><input class="inp mono" placeholder="+974 XXXX XXXX" [ngModel]="content().contact.whatsapp" (ngModelChange)="patchContact('whatsapp',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.phone.phone') }}</span><input class="inp" [ngModel]="content().contact.phone" (ngModelChange)="patchContact('phone',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.phone.whatsapp') }}</span><input class="inp mono" placeholder="+974 XXXX XXXX" [ngModel]="content().contact.whatsapp" (ngModelChange)="patchContact('whatsapp',$event)"/></label>
               </div>
-              <div class="hint-box">Enter in any format — <span class="mono">+974 XXXX XXXX</span> or <span class="mono">974XXXXXXXX</span>. The +, spaces, and dashes are stripped automatically when building the wa.me link.</div>
-              <label><span class="lbl">Promise line (italic quote card)</span><textarea class="inp" rows="2" [ngModel]="content().contact.promiseLine" (ngModelChange)="patchContact('promiseLine',$event)"></textarea></label>
-              <label><span class="lbl">Signature</span><input class="inp" [ngModel]="content().contact.promiseSignature" (ngModelChange)="patchContact('promiseSignature',$event)"/></label>
+              <div class="hint-box">{{ t('storefront.editor.phone.whatsappHint') }}</div>
+              <label><span class="lbl">{{ t('storefront.editor.phone.promise') }}</span><textarea class="inp" rows="2" [ngModel]="content().contact.promiseLine" (ngModelChange)="patchContact('promiseLine',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.phone.signature') }}</span><input class="inp" [ngModel]="content().contact.promiseSignature" (ngModelChange)="patchContact('promiseSignature',$event)"/></label>
             </div>
           </div>
 
           <!-- Social links editor -->
           <div class="card">
             <div class="card-header">
-              <div><div class="card-title">Social Media Links</div><div class="card-sub">Toggle, edit handle. WhatsApp uses your WhatsApp number above.</div></div>
+              <div><div class="card-title">{{ t('storefront.editor.social.title') }}</div><div class="card-sub">{{ t('storefront.editor.social.sub') }}</div></div>
               <button class="btn btn-outline btn-sm" type="button" (click)="addSocialLink()">
-                <ap-icon name="plus" [size]="13"/> Add platform
+                <ap-icon name="plus" [size]="13"/> {{ t('storefront.editor.social.add') }}
               </button>
             </div>
             <div class="card-pad">
@@ -863,10 +863,10 @@ interface StorefrontContent {
       <!-- Header -->
       <div class="mpp-head">
         <div style="min-width:0;">
-          <p class="mpp-eyebrow">Media Library</p>
-          <div class="card-title" style="margin:0;">Pick an Image</div>
+          <p class="mpp-eyebrow">{{ t('storefront.editor.mediaPicker.eyebrow') }}</p>
+          <div class="card-title" style="margin:0;">{{ t('storefront.editor.mediaPicker.title') }}</div>
           @if (!mediaPickerLoading()) {
-            <div class="muted small mt-4">{{ filteredMediaFiles().length }} image{{ filteredMediaFiles().length === 1 ? '' : 's' }}</div>
+            <div class="muted small mt-4">{{ filteredMediaFiles().length }} {{ filteredMediaFiles().length === 1 ? t('storefront.editor.mediaPicker.imageCount.one') : t('storefront.editor.mediaPicker.imageCount.many') }}</div>
           }
         </div>
         <button class="x-btn" style="flex-shrink:0;" (click)="mediaPickerTarget.set(null)">
@@ -882,8 +882,8 @@ interface StorefrontContent {
                  [ngModel]="mediaPickerSearch()" (ngModelChange)="mediaPickerSearch.set($event)"/>
         </div>
         <label class="btn btn-gold btn-sm mpp-upload-btn" style="cursor:pointer;flex-shrink:0;">
-          @if (uploading()) { <ap-spinner [size]="10"/> Uploading… }
-          @else { <ap-icon name="upload" [size]="12"/> Upload }
+          @if (uploading()) { <ap-spinner [size]="10"/> {{ t('storefront.editor.mediaPicker.uploading') }} }
+          @else { <ap-icon name="upload" [size]="12"/> {{ t('storefront.editor.mediaPicker.upload') }} }
           <input type="file" accept="image/*" hidden [disabled]="uploading()" (change)="uploadAndPick($event)"/>
         </label>
       </div>
@@ -892,13 +892,13 @@ interface StorefrontContent {
       <div class="mpp-body">
         @if (mediaPickerLoading()) {
           <div class="mpp-state">
-            <ap-spinner/> <span>Loading library…</span>
+            <ap-spinner/> <span>{{ t('storefront.editor.mediaPicker.loading') }}</span>
           </div>
         } @else if (filteredMediaFiles().length === 0) {
           <div class="mpp-state mpp-empty">
             <ap-icon name="media" [size]="36"/>
-            <p class="strong">No images found</p>
-            <p class="muted small">{{ mediaPickerSearch() ? 'Try a different search term' : 'Upload an image to get started' }}</p>
+            <p class="strong">{{ t('storefront.editor.mediaPicker.noImages') }}</p>
+            <p class="muted small">{{ mediaPickerSearch() ? t('storefront.editor.mediaPicker.trySearch') : t('storefront.editor.mediaPicker.uploadToStart') }}</p>
           </div>
         } @else {
           <div class="media-picker-grid">
@@ -930,7 +930,7 @@ interface StorefrontContent {
       <div class="pv-toolbar">
         <button class="pv-back" type="button" (click)="closePreview()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-          <span>Back to editing</span>
+          <span>{{ t('storefront.editor.preview.backToEdit') }}</span>
         </button>
 
         <div class="pv-device-group">
@@ -939,14 +939,14 @@ interface StorefrontContent {
             <svg width="16" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
             </svg>
-            Desktop
+            {{ t('storefront.editor.preview.desktop') }}
           </button>
           <button class="pv-device-btn" [class.active]="previewDevice() === 'mobile'"
                   (click)="previewDevice.set('mobile')" title="Mobile (393 px — iPhone 14)">
             <svg width="11" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/>
             </svg>
-            Mobile
+            {{ t('storefront.editor.preview.mobile') }}
           </button>
         </div>
 
@@ -955,7 +955,7 @@ interface StorefrontContent {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
-            New tab
+            {{ t('storefront.editor.preview.newTab') }}
           </button>
           @if (previewDevice() === 'mobile') {
             <span class="pv-size-badge">393 × 852</span>
@@ -1850,25 +1850,25 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   readonly contactSubTab = signal<ContactSubTab>('header');
 
   readonly homeSubTabs    = [
-    { id: 'order' as HomeSubTab,       label: 'Section Order' },
-    { id: 'hero-slider' as HomeSubTab, label: 'Landing Hero' },
-    { id: 'collections' as HomeSubTab, label: 'Collections' },
-    { id: 'discount' as HomeSubTab,    label: 'Promotion Section' },
-    { id: 'promise' as HomeSubTab,     label: 'Craft Promise' },
-    { id: 'stats' as HomeSubTab,       label: 'Stats Reel' },
+    { id: 'order' as HomeSubTab,       labelKey: 'storefront.editor.home.order' },
+    { id: 'hero-slider' as HomeSubTab, labelKey: 'storefront.editor.home.heroSlider' },
+    { id: 'collections' as HomeSubTab, labelKey: 'storefront.editor.home.collections' },
+    { id: 'discount' as HomeSubTab,    labelKey: 'storefront.editor.home.discount' },
+    { id: 'promise' as HomeSubTab,     labelKey: 'storefront.editor.home.promise' },
+    { id: 'stats' as HomeSubTab,       labelKey: 'storefront.editor.home.stats' },
   ];
   readonly storySubTabs   = [
-    { id: 'hero' as StorySubTab,      label: 'Hero' },
-    { id: 'hero-facts' as StorySubTab, label: 'Facts Strip' },
-    { id: 'intro' as StorySubTab,     label: 'Intro' },
-    { id: 'chapters' as StorySubTab,  label: 'Chapters' },
-    { id: 'quote' as StorySubTab,     label: 'Quote' },
-    { id: 'atelier' as StorySubTab,   label: 'Atelier' },
+    { id: 'hero' as StorySubTab,       labelKey: 'storefront.editor.story.hero' },
+    { id: 'hero-facts' as StorySubTab, labelKey: 'storefront.editor.story.heroFacts' },
+    { id: 'intro' as StorySubTab,      labelKey: 'storefront.editor.story.intro' },
+    { id: 'chapters' as StorySubTab,   labelKey: 'storefront.editor.story.chapters' },
+    { id: 'quote' as StorySubTab,      labelKey: 'storefront.editor.story.quote' },
+    { id: 'atelier' as StorySubTab,    labelKey: 'storefront.editor.story.atelier' },
   ];
   readonly contactSubTabs = [
-    { id: 'header' as ContactSubTab, label: 'Page Header' },
-    { id: 'info' as ContactSubTab,   label: 'Info Blocks' },
-    { id: 'phone' as ContactSubTab,  label: 'Phone & Promise' },
+    { id: 'header' as ContactSubTab, labelKey: 'storefront.editor.contact.header' },
+    { id: 'info' as ContactSubTab,   labelKey: 'storefront.editor.contact.info' },
+    { id: 'phone' as ContactSubTab,  labelKey: 'storefront.editor.contact.phone' },
   ];
 
   // ── Layout blocks (drag/drop + visibility) ────────────────────────────
@@ -1954,7 +1954,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       }
       this.contentLoaded = true;
     } catch {
-      this.toast.warning('Could not load content', 'Using defaults.');
+      this.toast.warning(this.t('storefront.editor.toast.loadWarning'), this.t('storefront.editor.toast.loadWarning.sub'));
     }
   }
 
@@ -1972,7 +1972,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.draftUnpublished.set(true);
       this.showPreviewHint.set(true);
     } catch {
-      this.toast.error('Save failed', 'Could not save draft.');
+      this.toast.error(this.t('storefront.editor.toast.saveFailed'), this.t('storefront.editor.toast.saveFailed.sub'));
     } finally {
       this.savingDraft.set(false);
     }
@@ -1982,10 +1982,10 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   async revertToLive(): Promise<void> {
     if (this.revertingDraft()) return;
     const ok = await this.confirm.ask({
-      title: 'Revert to live content?',
-      message: 'Your saved draft will be discarded and the editor will reload the current live content.',
-      confirmLabel: 'Revert',
-      cancelLabel: 'Cancel',
+      title: this.t('storefront.editor.confirm.revert.title'),
+      message: this.t('storefront.editor.confirm.revert.message'),
+      confirmLabel: this.t('storefront.editor.confirm.revert.confirm'),
+      cancelLabel: this.t('common.cancel'),
       variant: 'info',
     });
     if (!ok) return;
@@ -1997,9 +1997,9 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.draftUnpublished.set(false);
       this.contentDirty.set(false);
       this.showPreviewHint.set(false);
-      this.toast.success('Draft discarded', 'Editor reloaded with live content.');
+      this.toast.success(this.t('storefront.editor.toast.draftDiscarded'), this.t('storefront.editor.toast.draftDiscarded.sub'));
     } catch {
-      this.toast.error('Revert failed', 'Could not discard draft.');
+      this.toast.error(this.t('storefront.editor.toast.revertFailed'), this.t('storefront.editor.toast.revertFailed.sub'));
     } finally {
       this.revertingDraft.set(false);
     }
@@ -2009,10 +2009,10 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   async publishContent(): Promise<void> {
     if (this.publishingContent()) return;
     const ok = await this.confirm.ask({
-      title: 'Publish content?',
-      message: 'This will replace the live storefront content with your saved draft.',
-      confirmLabel: 'Publish now',
-      cancelLabel: 'Cancel',
+      title: this.t('storefront.editor.confirm.publish.title'),
+      message: this.t('storefront.editor.confirm.publish.message'),
+      confirmLabel: this.t('storefront.editor.confirm.publish.confirm'),
+      cancelLabel: this.t('common.cancel'),
       variant: 'info',
     });
     if (!ok) return;
@@ -2020,9 +2020,9 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     try {
       await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/publish', {}));
       this.draftUnpublished.set(false);
-      this.toast.success('Content published', 'Your draft is now live on the storefront.');
+      this.toast.success(this.t('storefront.editor.toast.contentPublished'), this.t('storefront.editor.toast.contentPublished.sub'));
     } catch {
-      this.toast.error('Publish failed', 'Could not publish content.');
+      this.toast.error(this.t('storefront.editor.toast.publishFailed'), this.t('storefront.editor.toast.publishFailed.sub'));
     } finally {
       this.publishingContent.set(false);
     }
@@ -2043,7 +2043,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.previewOpen.set(true);
       this.previewDevice.set('desktop');
     } catch {
-      this.toast.error('Preview failed', 'Could not generate a preview link.');
+      this.toast.error(this.t('storefront.editor.toast.previewFailed'), this.t('storefront.editor.toast.previewFailed.sub'));
     } finally {
       this.generatingToken.set(false);
     }
@@ -2071,7 +2071,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       }
       this.contentDirty.set(false);
     } catch {
-      this.toast.error('Discard failed', 'Could not reload content.');
+      this.toast.error(this.t('storefront.editor.toast.discardFailed'), this.t('storefront.editor.toast.discardFailed.sub'));
     }
   }
 
@@ -2423,7 +2423,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.blocks.set(blocks);
       this.toast.success(this.t('storefront.publish.toast.title'), this.t('storefront.publish.toast.sub'));
     } catch {
-      this.toast.error('Publish failed', 'Could not publish layout.');
+      this.toast.error(this.t('storefront.editor.toast.layoutPublishFailed'), this.t('storefront.editor.toast.layoutPublishFailed.sub'));
     } finally {
       this.publishing.set(false);
     }
@@ -2553,7 +2553,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return null;
     const err = this.uploadApi.validate(file);
-    if (err) { this.toast.error('Invalid file', err); return null; }
+    if (err) { this.toast.error(this.t('storefront.editor.toast.uploadFailed'), err); return null; }
     this.uploading.set(true);
     return new Promise<string | null>((resolve) => {
       this.uploadApi.uploadMedia([file]).subscribe({
@@ -2567,13 +2567,13 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           if (rawUrl) {
             resolve(this.api.mediaUrl(rawUrl));
           } else {
-            this.toast.error('Upload error', 'Server returned no image URL.');
+            this.toast.error(this.t('storefront.editor.toast.uploadError'), this.t('storefront.editor.toast.uploadError.sub'));
             resolve(null);
           }
         },
         error: () => {
           this.uploading.set(false);
-          this.toast.error('Upload failed', 'Could not upload image.');
+          this.toast.error(this.t('storefront.editor.toast.uploadFailed'), this.t('storefront.editor.toast.uploadFailed.sub'));
           resolve(null);
         },
       });

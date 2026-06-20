@@ -84,11 +84,11 @@ const PRESET_TYPES: PolicyType[] = [
               <input class="inp with-icon" [placeholder]="t('policies.search')" [(ngModel)]="searchQuery"/>
             </div>
             <select class="inp" style="width:auto;" [(ngModel)]="statusFilter">
-              <option value="all">{{ t('catalog.allStatus') || 'All statuses' }}</option>
+              <option value="all">{{ t('policies.status.all') }}</option>
               <option value="active">{{ t('policies.status.active') }}</option>
               <option value="draft">{{ t('policies.status.draft') }}</option>
             </select>
-            <div class="muted small" style="white-space:nowrap;">{{ filtered().length }} page{{ filtered().length === 1 ? '' : 's' }}</div>
+            <div class="muted small" style="white-space:nowrap;">{{ filtered().length }} {{ filtered().length === 1 ? t('policies.pageCount.one') : t('policies.pageCount.many') }}</div>
           </div>
         </div>
 
@@ -97,7 +97,7 @@ const PRESET_TYPES: PolicyType[] = [
           <div class="card">
             <ap-empty-state icon="docs" [title]="t('policies.empty.title')" [sub]="t('policies.empty.sub')">
               <button class="btn btn-outline btn-sm" type="button" (click)="clearFilters()">
-                {{ t('common.clearFilters') || 'Clear filters' }}
+                {{ t('common.clearFilters') }}
               </button>
             </ap-empty-state>
           </div>
@@ -130,7 +130,7 @@ const PRESET_TYPES: PolicyType[] = [
         <!-- Quick-add presets (when some policies exist but not all standard ones) -->
         @if (missingPresets().length > 0) {
           <div class="quick-add-bar">
-            <span class="muted small">Quick add:</span>
+            <span class="muted small">{{ t('policies.quickAdd') }}</span>
             @for (tp of missingPresets(); track tp) {
               <button class="btn btn-outline btn-xs" type="button" (click)="openPreset(tp)">
                 <ap-icon name="plus" [size]="10"/>
@@ -313,7 +313,7 @@ export class PoliciesComponent implements OnInit {
       const list = await this.svc.list();
       this.policies.set(list.sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title)));
     } catch {
-      this.toast.error('Failed to load policies');
+      this.toast.error(this.t('policies.loadError'));
     } finally {
       this.loading.set(false);
     }

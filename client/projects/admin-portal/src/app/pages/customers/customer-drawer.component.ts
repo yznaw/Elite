@@ -106,7 +106,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
                      [ngModel]="form().email" (ngModelChange)="set('email', $event)"/>
             </div>
             <div>
-              <label class="lbl">Phone</label>
+              <label class="lbl">{{ t('customerDrawer.field.phone') }}</label>
               <input class="inp" type="tel"
                      placeholder="+966 5x xxx xxxx"
                      [ngModel]="form().phone" (ngModelChange)="set('phone', $event)"/>
@@ -134,7 +134,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
             <ap-icon name="orders" [size]="14"/>
             <span>{{ t('customerDrawer.section.history') }}</span>
             @if (ordersRefreshedAt()) {
-              <span class="refresh-ts muted small">Updated {{ ordersRefreshedAt() }}</span>
+              <span class="refresh-ts muted small">{{ t('common.updated') }} {{ ordersRefreshedAt() }}</span>
             }
           </div>
 
@@ -153,7 +153,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
               <div class="error-callout">
                 <ap-icon name="x" [size]="13"/>
                 <span>{{ ordersError() }}</span>
-                <button class="btn btn-ghost btn-sm" (click)="loadOrders()">Retry</button>
+                <button class="btn btn-ghost btn-sm" (click)="loadOrders()">{{ t('common.retry') }}</button>
               </div>
             } @else if (orders().length === 0) {
               <div class="muted small notes-empty">{{ t('customerDrawer.noOrders') }}</div>
@@ -168,7 +168,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
                       <div class="row gap-sm" style="align-items:center;">
                         <div class="strong mono" style="color:var(--green);">{{ o.id }}</div>
                         @if (o.payment === 'pending') {
-                          <span class="pending-badge">Pending Payment</span>
+                          <span class="pending-badge">{{ t('customerDrawer.pendingPayment') }}</span>
                         }
                       </div>
                       <div class="muted small">{{ o.date }} · {{ itemsCountLabel(o.itemsCount) }}</div>
@@ -413,7 +413,7 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
       const now = new Date();
       this.ordersRefreshedAt.set(`${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`);
     } catch {
-      if (!silent) this.ordersError.set('Could not load order history.');
+      if (!silent) this.ordersError.set(this.t('customerDrawer.ordersError'));
     } finally {
       if (!silent) this.ordersLoading.set(false);
     }
@@ -449,7 +449,7 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
     if (!this.dirty() || this.saveState() === 'saving') return;
     const f = this.form();
     if (!f.name.trim() || !f.email.trim()) {
-      this.toast.error(this.t('customerDrawer.field.name') + ' and email are required.');
+      this.toast.error(this.t('customerDrawer.nameEmailRequired'));
       this.triggerShake();
       return;
     }

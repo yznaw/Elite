@@ -58,11 +58,11 @@ import { Order, QAR } from '../../models';
       <!-- Date range filter -->
       <div class="row gap-sm mb-16" style="flex-wrap:wrap;align-items:center;">
         <div class="date-range-pills">
-          <button class="dr-pill" [class.active]="dateRange() === 'all'"   (click)="setDateRange('all')">All time</button>
-          <button class="dr-pill" [class.active]="dateRange() === 'today'" (click)="setDateRange('today')">Today</button>
-          <button class="dr-pill" [class.active]="dateRange() === 'week'"  (click)="setDateRange('week')">This Week</button>
-          <button class="dr-pill" [class.active]="dateRange() === 'month'" (click)="setDateRange('month')">This Month</button>
-          <button class="dr-pill" [class.active]="dateRange() === 'custom'" (click)="setDateRange('custom')">Custom</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'all'"   (click)="setDateRange('all')">{{ t('orders.range.all') }}</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'today'" (click)="setDateRange('today')">{{ t('orders.range.today') }}</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'week'"  (click)="setDateRange('week')">{{ t('orders.range.week') }}</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'month'" (click)="setDateRange('month')">{{ t('orders.range.month') }}</button>
+          <button class="dr-pill" [class.active]="dateRange() === 'custom'" (click)="setDateRange('custom')">{{ t('orders.range.custom') }}</button>
         </div>
         @if (dateRange() === 'custom') {
           <input class="inp" type="date" style="width:auto;" [ngModel]="dateFrom()" (ngModelChange)="onDateFromChange($event)"/>
@@ -82,7 +82,7 @@ import { Order, QAR } from '../../models';
         <div class="load-error-banner">
           <ap-icon name="warning" [size]="16"/>
           <span>{{ loadError() }}</span>
-          <button class="btn btn-outline btn-sm" (click)="refreshOrders()">Retry</button>
+          <button class="btn btn-outline btn-sm" (click)="refreshOrders()">{{ t('common.retry') }}</button>
         </div>
       }
 
@@ -179,7 +179,7 @@ import { Order, QAR } from '../../models';
                 </div>
                 <div class="oc-customer">{{ o.customer }}</div>
                 <div class="oc-row3">
-                  <span class="oc-items muted">{{ o.itemsCount }} item{{ o.itemsCount !== 1 ? 's' : '' }}</span>
+                  <span class="oc-items muted">{{ o.itemsCount }} {{ o.itemsCount !== 1 ? t('orders.items') : t('orders.item') }}</span>
                   <span class="oc-total">{{ QAR(o.total) }}</span>
                   <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
                   <ap-pill [kind]="paymentPill(o.payment).kind">{{ t(paymentPill(o.payment).labelKey) }}</ap-pill>
@@ -187,7 +187,7 @@ import { Order, QAR } from '../../models';
                     <span class="stale-warn" title="Payment pending for over 30 minutes"><ap-icon name="warning" [size]="12"/></span>
                   }
                 </div>
-                <div class="oc-cta">View →</div>
+                <div class="oc-cta">{{ t('orders.cta.view') }} →</div>
               </div>
             }
           </div>
@@ -432,14 +432,14 @@ export class OrdersComponent implements OnInit, OnDestroy {
 
   dateRangeLabel(): string {
     switch (this.dateRange()) {
-      case 'today': return 'Today';
-      case 'week': return 'This Week';
-      case 'month': return 'This Month';
+      case 'today': return this.t('orders.range.today');
+      case 'week': return this.t('orders.range.week');
+      case 'month': return this.t('orders.range.month');
       case 'custom': {
-        const f = this.dateFrom(); const t = this.dateTo();
-        if (f && t) return `${f} - ${t}`;
-        if (f) return `From ${f}`;
-        return 'Custom range';
+        const f = this.dateFrom(); const to = this.dateTo();
+        if (f && to) return `${f} - ${to}`;
+        if (f) return `${this.t('orders.range.from')} ${f}`;
+        return this.t('orders.range.customRange');
       }
       default: return '';
     }
@@ -472,8 +472,8 @@ export class OrdersComponent implements OnInit, OnDestroy {
         detail: 'Marked shipped from list view',
       });
       this._ordersSignal.update((all) => all.map((x) => (x.id === o.id ? { ...x, ...updated } : x)));
-      this.toast.success('Order marked as shipped', `${o.id} · ${o.customer}`, {
-        label: 'View',
+      this.toast.success(this.t('orders.toast.shipped'), `${o.id} · ${o.customer}`, {
+        label: this.t('orders.toast.viewOrder'),
         run: () => this.openOrder({ ...o, ...updated }),
       });
     } catch {
@@ -505,7 +505,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      this.toast.success('Export downloaded', `${orders.length} order${orders.length !== 1 ? 's' : ''} · CSV`);
+      this.toast.success(this.t('orders.toast.exportDone'), `${orders.length} ${orders.length !== 1 ? this.t('orders.items') : this.t('orders.item')} · CSV`);
     } finally {
       this.exporting.set(false);
     }

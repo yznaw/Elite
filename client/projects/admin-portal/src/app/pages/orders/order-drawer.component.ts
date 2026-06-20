@@ -47,7 +47,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           <div class="card-sub">{{ order().date }} · {{ order().customer }}</div>
         </div>
         <div class="head-actions">
-          <button class="head-icon-btn" (click)="printInvoice()" title="Print invoice / packing slip">
+          <button class="head-icon-btn" (click)="printInvoice()" [title]="t('orderDrawer.printInvoice')">
             <ap-icon name="print" [size]="14"/>
           </button>
           <span class="head-divider" aria-hidden="true"></span>
@@ -78,8 +78,8 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           <div class="stale-payment-callout mb-16">
             <ap-icon name="warning" [size]="14"/>
             <div>
-              <strong>Payment pending for over 30 minutes.</strong>
-              Verify with the payment gateway before fulfilling.
+              <strong>{{ t('orderDrawer.stalePayment.title') }}</strong>
+              {{ t('orderDrawer.stalePayment.sub') }}
             </div>
           </div>
         }
@@ -168,7 +168,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           <span>{{ t('orderModal.customer') }}</span>
           @if ((order().customerEmail || order().customer) && !backLabel) {
             <button class="view-customer-btn" (click)="viewCustomerProfile()">
-              <ap-icon name="users" [size]="11"/> View profile
+              <ap-icon name="users" [size]="11"/> {{ t('orderDrawer.viewProfile') }}
             </button>
           }
         </div>
@@ -725,7 +725,7 @@ export class OrderDrawerComponent {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Invoice ${o.id}</title>
+  <title>${this.t('orders.invoice.label')} ${o.id}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto;}
@@ -746,7 +746,7 @@ export class OrderDrawerComponent {
   <div class="hd">
     <div>
       <div class="brand">ELITE COLLECTION</div>
-      <div class="inv-meta">Invoice ${o.id}</div>
+      <div class="inv-meta">${this.t('orders.invoice.label')} ${o.id}</div>
     </div>
     <div style="text-align:right;font-size:13px;color:#666;">
       <div>${o.date}</div>
@@ -756,27 +756,27 @@ export class OrderDrawerComponent {
     </div>
   </div>
   <div class="section">
-    <div class="label">Shipping Address</div>
-    <div style="font-size:13px;line-height:1.8;">${(o.address || '—').replace(/\n/g, '<br>')}</div>
+    <div class="label">${this.t('orders.invoice.shippingAddress')}</div>
+    <div style="font-size:13px;line-height:1.8;">${(o.address || '-').replace(/\n/g, '<br>')}</div>
   </div>
   <div class="section">
     <table>
       <thead><tr>
-        <th>Product</th>
-        <th style="text-align:center">Size</th>
-        <th style="text-align:center">Qty</th>
-        <th style="text-align:right">Amount</th>
+        <th>${this.t('orders.invoice.colProduct')}</th>
+        <th style="text-align:center">${this.t('orders.invoice.colSize')}</th>
+        <th style="text-align:center">${this.t('orders.invoice.colQty')}</th>
+        <th style="text-align:right">${this.t('orders.invoice.colAmount')}</th>
       </tr></thead>
       <tbody>${itemRows}</tbody>
       <tfoot>
         <tr class="total-row">
-          <td colspan="3">Total</td>
+          <td colspan="3">${this.t('orders.invoice.total')}</td>
           <td style="text-align:right">${QAR(o.total)}</td>
         </tr>
       </tfoot>
     </table>
   </div>
-  <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  <button class="print-btn" onclick="window.print()">${this.t('orders.invoice.print')}</button>
 </body>
 </html>`;
 

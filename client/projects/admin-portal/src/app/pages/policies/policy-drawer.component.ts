@@ -184,7 +184,7 @@ const ALL_TYPES: PolicyType[] = [
 
           <!-- 3. APPEARS IN -->
           <section class="drawer-section">
-            <div class="ds-label">Appears in</div>
+            <div class="ds-label">{{ t('policies.drawer.appearsIn') }}</div>
             <div class="appears-list">
               <div class="appears-item" [class.appears-inactive]="form().status !== 'active'">
                 <div class="appears-icon">
@@ -193,14 +193,14 @@ const ALL_TYPES: PolicyType[] = [
                   </svg>
                 </div>
                 <div class="appears-body">
-                  <div class="appears-title">Storefront Footer</div>
-                  <div class="appears-desc">Legal column — visible on every page of the store</div>
+                  <div class="appears-title">{{ t('policies.drawer.footer.title') }}</div>
+                  <div class="appears-desc">{{ t('policies.drawer.footer.desc') }}</div>
                 </div>
                 <div class="appears-status">
                   @if (form().status === 'active') {
-                    <span class="status-dot active"></span><span class="status-txt">Showing</span>
+                    <span class="status-dot active"></span><span class="status-txt">{{ t('policies.drawer.footer.showing') }}</span>
                   } @else {
-                    <span class="status-dot draft"></span><span class="status-txt">Hidden</span>
+                    <span class="status-dot draft"></span><span class="status-txt">{{ t('policies.drawer.footer.hidden') }}</span>
                   }
                 </div>
               </div>
@@ -212,20 +212,20 @@ const ALL_TYPES: PolicyType[] = [
                   </svg>
                 </div>
                 <div class="appears-body">
-                  <div class="appears-title">Policy Page</div>
+                  <div class="appears-title">{{ t('policies.drawer.page.title') }}</div>
                   <div class="appears-desc">
                     @if (form().handle) {
-                      Direct link at <span class="appears-url">/policy/{{ form().handle }}</span>
+                      {{ t('policies.drawer.page.directLink') }} <span class="appears-url">/policy/{{ form().handle }}</span>
                     } @else {
-                      Set a URL handle to generate the page link
+                      {{ t('policies.drawer.page.setHandle') }}
                     }
                   </div>
                 </div>
                 <div class="appears-status">
                   @if (form().status === 'active' && form().handle) {
-                    <span class="status-dot active"></span><span class="status-txt">Live</span>
+                    <span class="status-dot active"></span><span class="status-txt">{{ t('policies.drawer.page.live') }}</span>
                   } @else {
-                    <span class="status-dot draft"></span><span class="status-txt">Draft</span>
+                    <span class="status-dot draft"></span><span class="status-txt">{{ t('policies.drawer.page.draft') }}</span>
                   }
                 </div>
               </div>
@@ -717,7 +717,7 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
       this.deleted.emit(this.policy!.id);
       this.closeDrawer.emit();
     } catch {
-      this.toast.error('Delete failed');
+      this.toast.error(this.t('policies.deleteError'));
     }
   }
 }

@@ -43,22 +43,22 @@ type Tab = 'general' | 'team' | 'integrations';
 
           @if (loadingStore()) {
             <div class="row gap-sm" style="padding:24px 0;justify-content:center;">
-              <ap-spinner/> <span class="muted small">Loading…</span>
+              <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
             </div>
           } @else {
             <div class="grid-2">
               <div>
                 <label class="lbl">{{ t('settings.storeName') }}</label>
                 <input class="inp" [ngModel]="storeName()" (ngModelChange)="storeName.set($event)"
-                       placeholder="Store name" [class.inp-error]="storeNameError()"/>
+                       [placeholder]="t('settings.storeName.placeholder')" [class.inp-error]="storeNameError()"/>
                 @if (storeNameError()) {
-                  <div class="inp-msg-error">Store name is required</div>
+                  <div class="inp-msg-error">{{ t('settings.storeNameRequired') }}</div>
                 }
               </div>
               <div>
                 <label class="lbl">{{ t('settings.currency') }}</label>
                 <select class="inp" [ngModel]="currency()" (ngModelChange)="currency.set($event)">
-                  <option value="QAR">QAR — Qatari Riyal</option>
+                  <option value="QAR">{{ t('settings.currency.qar') }}</option>
                 </select>
               </div>
               <div>
@@ -111,18 +111,18 @@ type Tab = 'general' | 'team' | 'integrations';
                 <input class="inp" type="email" placeholder="name@elitecollection.qa" [ngModel]="invite().email" (ngModelChange)="setInvite('email', $event)"/>
               </div>
               <div>
-                <label class="lbl">Role</label>
+                <label class="lbl">{{ t('settings.role') }}</label>
                 <select class="inp" [ngModel]="invite().role" (ngModelChange)="setInvite('role', $event)">
-                  <option>Admin</option>
-                  <option>Manager</option>
-                  <option>Viewer</option>
+                  <option value="Admin">{{ t('settings.role.admin') }}</option>
+                  <option value="Manager">{{ t('settings.role.manager') }}</option>
+                  <option value="Viewer">{{ t('settings.role.viewer') }}</option>
                 </select>
               </div>
             </div>
             <div class="row gap-sm" style="flex-wrap:wrap;">
               <button class="btn btn-gold" [disabled]="inviting() || !invite().email.includes('@')" (click)="sendInvite()">
-                @if (inviting()) { <ap-spinner [size]="12"/> Sending… }
-                @else { <ap-icon name="mail" [size]="14"/> Send Invitation }
+                @if (inviting()) { <ap-spinner [size]="12"/> {{ t('settings.team.sending') }} }
+                @else { <ap-icon name="mail" [size]="14"/> {{ t('settings.team.sendInvitation') }} }
               </button>
             </div>
             @if (inviteLink()) {
@@ -131,9 +131,9 @@ type Tab = 'general' | 'team' | 'integrations';
                 <span class="inv-email">{{ inviteLink()!.email }}</span>
                 <span class="muted small">·</span>
                 <input class="inv-link-input" [value]="inviteLink()!.link" readonly (click)="copyInviteLink()"/>
-                <button class="btn btn-outline btn-sm" (click)="copyInviteLink()">Copy link</button>
+                <button class="btn btn-outline btn-sm" (click)="copyInviteLink()">{{ t('settings.team.copyLink') }}</button>
               </div>
-              <div class="muted small" style="margin-top:4px;">Link expires in 48h. Share this with {{ inviteLink()!.email }} to set their password.</div>
+              <div class="muted small" style="margin-top:4px;">{{ t('settings.team.linkExpiry') }}</div>
             }
           </div>
 
@@ -141,8 +141,8 @@ type Tab = 'general' | 'team' | 'integrations';
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Pending Invitations</div>
-                  <div class="card-sub">{{ pendingInvitations().length }} awaiting acceptance</div>
+                  <div class="card-title">{{ t('settings.team.pendingTitle') }}</div>
+                  <div class="card-sub">{{ pendingInvitations().length }} {{ t('settings.team.awaitingAcceptance') }}</div>
                 </div>
               </div>
               <div style="padding:0 0 8px;">
@@ -153,7 +153,7 @@ type Tab = 'general' | 'team' | 'integrations';
                       <div class="strong">{{ inv.email }}</div>
                       <div class="muted small">{{ inv.role | titlecase }} · invited {{ inv.created_at | date:'MMM d' }}</div>
                     </div>
-                    <button class="btn btn-ghost btn-sm" style="color:var(--danger);" (click)="revokeInvite(inv.id)">Revoke</button>
+                    <button class="btn btn-ghost btn-sm" style="color:var(--danger);" (click)="revokeInvite(inv.id)">{{ t('settings.team.revoke') }}</button>
                   </div>
                 }
               </div>
@@ -163,14 +163,14 @@ type Tab = 'general' | 'team' | 'integrations';
           <div class="card">
             <div class="card-header">
               <div>
-                <div class="card-title">Team Members</div>
-                <div class="card-sub">{{ team().length }} member{{ team().length !== 1 ? 's' : '' }}</div>
+                <div class="card-title">{{ t('settings.team.membersTitle') }}</div>
+                <div class="card-sub">{{ team().length }} {{ team().length === 1 ? t('settings.team.memberCount.one') : t('settings.team.memberCount.many') }}</div>
               </div>
             </div>
 
             @if (loadingTeam()) {
               <div class="row gap-sm" style="padding:24px;justify-content:center;">
-                <ap-spinner/> <span class="muted small">Loading team…</span>
+                <ap-spinner/> <span class="muted small">{{ t('settings.team.loading') }}</span>
               </div>
             } @else {
               <ap-sortable-table [columns]="teamColumns" [rows]="team()">
@@ -179,15 +179,15 @@ type Tab = 'general' | 'team' | 'integrations';
                     <ap-avatar [initials]="r.initials"/>
                     <div>
                       <div class="strong">{{ r.name }}</div>
-                      <div class="muted small">Since {{ r.joined | slice:0:10 }}</div>
+                      <div class="muted small">{{ t('settings.team.since') }} {{ r.joined | slice:0:10 }}</div>
                     </div>
                   </div>
                 </ng-template>
                 <ng-template apCellTpl="role" let-r>
                   <select class="inp" style="width:120px;padding:6px 10px;font-size:12px;" [ngModel]="r.role" (ngModelChange)="updateRole(r.id, $event)">
-                    <option>Admin</option>
-                    <option>Manager</option>
-                    <option>Viewer</option>
+                    <option value="Admin">{{ t('settings.role.admin') }}</option>
+                    <option value="Manager">{{ t('settings.role.manager') }}</option>
+                    <option value="Viewer">{{ t('settings.role.viewer') }}</option>
                   </select>
                 </ng-template>
                 <ng-template apCellTpl="actions" let-r>
@@ -296,10 +296,10 @@ export class SettingsComponent implements OnInit {
   });
 
   readonly teamColumns: TableColumn<TeamMember>[] = [
-    { key: 'name',    label: 'Name' },
-    { key: 'email',   label: 'Email' },
-    { key: 'role',    label: 'Role',    noSort: true },
-    { key: 'actions', label: '',        noSort: true, align: 'right' },
+    { key: 'name',    label: 'Name',    labelKey: 'settings.col.name' },
+    { key: 'email',   label: 'Email',   labelKey: 'settings.col.email' },
+    { key: 'role',    label: 'Role',    labelKey: 'settings.col.role',  noSort: true },
+    { key: 'actions', label: '',                                         noSort: true, align: 'right' },
   ];
 
   async ngOnInit(): Promise<void> {
@@ -381,7 +381,7 @@ export class SettingsComponent implements OnInit {
         language: this.language(),
         lowStockThreshold: this.lowStockThreshold(),
       };
-      this.toast.success('Store settings saved', 'Changes are live across the storefront');
+      this.toast.success(this.t('settings.toast.saved'), this.t('settings.toast.saved.sub'));
     } catch {
       // Global interceptor surfaces the error.
     } finally {
@@ -410,7 +410,7 @@ export class SettingsComponent implements OnInit {
       this.inviteLink.set({ email: result.email, link: result.inviteLink });
       const invites = await this.settingsApi.getInvitations().catch(() => this.pendingInvitations());
       this.pendingInvitations.set(invites);
-      this.toast.success('Invitation created', `Link expires in 48h · ${result.email}`);
+      this.toast.success(this.t('settings.toast.invitationCreated'), this.t('settings.toast.invitationCreated.sub'));
     } catch {
       // Global interceptor surfaces the error.
     } finally {
@@ -422,7 +422,7 @@ export class SettingsComponent implements OnInit {
     const link = this.inviteLink()?.link;
     if (!link) return;
     navigator.clipboard.writeText(link).then(() => {
-      this.toast.success('Link copied', 'Share this with the invitee to set their password.');
+      this.toast.success(this.t('settings.toast.linkCopied'), this.t('settings.toast.linkCopied.sub'));
     }).catch(() => {});
   }
 
@@ -430,7 +430,7 @@ export class SettingsComponent implements OnInit {
     try {
       await this.settingsApi.revokeInvitation(id);
       this.pendingInvitations.update(list => list.filter(i => i.id !== id));
-      this.toast.success('Invitation revoked');
+      this.toast.success(this.t('settings.toast.invitationRevoked'));
     } catch { /* Global interceptor */ }
   }
 
@@ -441,8 +441,8 @@ export class SettingsComponent implements OnInit {
     this.team.update((t) => t.map((m) => (m.id === id ? { ...m, role } : m)));
     try {
       await this.settingsApi.patchTeam(id, { role: role.toLowerCase() });
-      this.toast.success('Role updated', `${member.name} is now ${role}`, {
-        label: 'Undo',
+      this.toast.success(this.t('settings.toast.roleUpdated'), `${member.name} ${this.t('settings.toast.roleUpdated.sub')} ${role}`, {
+        label: this.t('settings.toast.undo'),
         run: () => {
           this.team.update((t) => t.map((m) => (m.id === id ? { ...m, role: previous } : m)));
           void this.settingsApi.patchTeam(id, { role: previous.toLowerCase() });
@@ -461,18 +461,18 @@ export class SettingsComponent implements OnInit {
     const member = this.team().find((m) => m.id === id);
     if (!member) return;
     const ok = await this.confirm.ask({
-      title: `Remove ${member.name}?`,
-      message: `${member.email} will lose access to the admin portal immediately. They will need a new invitation to return.`,
-      confirmLabel: 'Remove access',
-      cancelLabel: 'Keep',
+      title: this.t('settings.confirm.removeMember.title').replace('{name}', member.name),
+      message: `${member.email} ${this.t('settings.confirm.removeMember.message')}`,
+      confirmLabel: this.t('settings.confirm.removeMember.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.removeMember.cancelLabel'),
       variant: 'danger',
     });
     if (!ok) return;
     this.team.update((t) => t.filter((m) => m.id !== id));
     try {
       await this.settingsApi.patchTeam(id, { status: 'removed' });
-      this.toast.success('Team member removed', `${member.name} can no longer sign in`, {
-        label: 'Undo',
+      this.toast.success(this.t('settings.toast.memberRemoved'), `${member.name} ${this.t('settings.toast.memberRemoved.sub')}`, {
+        label: this.t('settings.toast.undo'),
         run: () => {
           this.team.update((t) => [...t, member]);
           void this.settingsApi.patchTeam(id, { status: 'active' });
@@ -489,9 +489,9 @@ export class SettingsComponent implements OnInit {
     const itg = this.integrations.find((i) => i.id === id);
     if (!itg) return;
     if (itg.connected) {
-      this.toast.info(`${itg.name}`, 'Manage screen would open here.');
+      this.toast.info(`${itg.name}`, this.t('settings.integrations.manageInfo'));
     } else {
-      this.toast.info(`Connecting to ${itg.name}…`, 'You will be redirected to authorize.');
+      this.toast.info(`${this.t('settings.integrations.connecting')} ${itg.name}…`, this.t('settings.integrations.connectInfo'));
     }
   }
 }

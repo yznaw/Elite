@@ -140,7 +140,7 @@ interface FormShape extends StorefrontBlock {
               </div>
               <div class="inp-search" style="position:relative;margin-bottom:8px;">
                 <input class="inp" [ngModel]="productSearch()" (ngModelChange)="productSearch.set($event)"
-                       placeholder="Search by name or SKU…" style="padding-left:10px;"/>
+                       [placeholder]="t('catalog.search.placeholder')" style="padding-left:10px;"/>
               </div>
               <div class="product-picker">
                 @for (p of filteredProducts(); track p.id) {
