@@ -34,7 +34,17 @@
       "Bash(sed -i '' 's/name=\"arrowRight\"/name=\"arrow\"/' projects/admin-portal/src/app/pages/collections/collection-drawer.component.ts)",
       "Bash(git branch *)",
       "Bash(npx nx *)",
-      "Bash(kill 7682)"
+      "Bash(kill 7682)",
+      "Bash(git -C \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite\" diff --stat HEAD -- \"client/projects/admin-portal/src/app/pages/feedback/\" \"client/projects/admin-portal/src/app/pages/reference/\")",
+      "Bash(git -C \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite\" diff HEAD -- \"client/projects/admin-portal/src/app/pages/feedback/feedback.component.ts\")",
+      "Bash(git -C \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite\" diff HEAD -- \"client/projects/admin-portal/src/app/pages/feedback/feedback-detail.component.ts\")",
+      "Bash(grep -n \"'>.\\\\{4,\\\\}<\\\\|\\\\\"'>.\\\\{4,\\\\}\\\\|>\\\\s\\\\+[A-Z][a-z].\\\\{3,\\\\}\\\\s\\\\+<\\\\|placeholder=\\\\\"[^{]\" \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/home-content/home-content.component.ts\")",
+      "Bash(grep -nE '>[A-Z][a-z].{3,}<|placeholder=\"[^{t]' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/catalog/product-drawer.component.ts')",
+      "Bash(grep -nE '>[A-Z][a-z].{3,}<|placeholder=\"[^{t]' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/customers/customer-drawer.component.ts')",
+      "Bash(grep -nE '>[A-Z][a-z].{3,}<|placeholder=\"[^{t]' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/orders/order-drawer.component.ts')",
+      "Bash(grep -nE '>[A-Z][a-z].{3,}<|placeholder=\"[^{t]' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/settings/settings.component.ts')",
+      "Bash(grep -nE '>[A-Z][a-z].{3,}<|placeholder=\"[^{t]' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/storefront/section-drawer.component.ts')",
+      "Bash(awk '$1 > 2 {print $1, $2}')"
     ]
   }
 }
