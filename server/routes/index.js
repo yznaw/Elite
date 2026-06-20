@@ -14,6 +14,8 @@ const adminBulkImportRouter = require('./admin-bulk-import.route');
 const adminRefRouter = require('./admin-ref.route');
 const productsRouter = require('./products.route');
 const collectionsRouter = require('./collections.route');
+const policiesRouter = require('./policies.route');
+const adminPoliciesRouter = require('./admin-policies.route');
 const storefrontRouter = require('./storefront.route');
 const refRouter = require('./ref.route');
 const contactRouter = require('./contact.route');
@@ -37,6 +39,7 @@ router.use('/products', productsRouter);
 router.use('/products', reviewsPublicRouter);
 router.use('/reviews', reviewsGeneralRouter);
 router.use('/collections', collectionsRouter);
+router.use('/policies', policiesRouter);
 router.use('/storefront', storefrontRouter.router);
 router.use('/ref', refRouter);
 router.use('/contact', contactRouter);
@@ -62,6 +65,7 @@ admin.use('/ref', adminRefRouter);
 // Settings includes role-sensitive endpoints (team management). Owners and
 // admins can manage everything; viewers/managers can read store settings.
 admin.use('/settings', adminSettingsRouter);
+admin.use('/policies', adminPoliciesRouter);
 admin.use('/', reviewsAdminRouter);
 
 router.use('/admin', admin);

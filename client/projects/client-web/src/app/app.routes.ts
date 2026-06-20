@@ -87,5 +87,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/kiosk/kiosk.component').then((m) => m.KioskComponent),
   },
+  {
+    path: 'policy/:handle',
+    loadComponent: () =>
+      import('./pages/policy/policy.component').then((m) => m.PolicyComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

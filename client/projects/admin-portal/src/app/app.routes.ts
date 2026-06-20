@@ -70,6 +70,11 @@ export const routes: Routes = [
           import('./pages/feedback/feedback.component').then((m) => m.FeedbackComponent),
       },
       {
+        path: 'policies',
+        loadComponent: () =>
+          import('./pages/policies/policies.component').then((m) => m.PoliciesComponent),
+      },
+      {
         path: 'feedback/:productId',
         loadComponent: () =>
           import('./pages/feedback/feedback-detail.component').then((m) => m.FeedbackDetailComponent),

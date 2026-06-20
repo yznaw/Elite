@@ -33,6 +33,12 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
     <div class="drawer drawer-wide order-drawer">
       <div class="drawer-head">
         <div style="min-width:0;flex:1;">
+          @if (backLabel) {
+            <button class="back-btn" (click)="back.emit()">
+              <ap-icon name="arrow" [size]="12" style="transform:scaleX(-1);display:inline-flex;"/>
+              {{ backLabel }}
+            </button>
+          }
           <div class="row gap-sm" style="flex-wrap:wrap;align-items:center;">
             <div class="card-title mono" style="color:var(--green);">{{ order().id }}</div>
             <ap-pill [kind]="paymentKind().kind">{{ t(paymentKind().labelKey) }}</ap-pill>
@@ -160,7 +166,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
         <div class="section-title">
           <ap-icon name="users" [size]="14"/>
           <span>{{ t('orderModal.customer') }}</span>
-          @if (order().customerEmail || order().customer) {
+          @if ((order().customerEmail || order().customer) && !backLabel) {
             <button class="view-customer-btn" (click)="viewCustomerProfile()">
               <ap-icon name="users" [size]="11"/> View profile
             </button>
@@ -250,6 +256,15 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
   styles: [`
     .drawer-wide { width: min(640px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
+
+    /* Back breadcrumb button */
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: none; border: none; padding: 0 0 8px; cursor: pointer;
+      font: inherit; font-size: 12px; font-weight: 600;
+      color: var(--muted); transition: color 0.12s;
+    }
+    .back-btn:hover { color: var(--green); }
 
     .head-actions {
       display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
@@ -417,8 +432,13 @@ export class OrderDrawerComponent {
     this._order.set(this.hydrate(o));
   }
 
+  /** When set, shows a back-breadcrumb button in the header. */
+  @Input() backLabel?: string;
+
   @Output() closed = new EventEmitter<void>();
   @Output() updated = new EventEmitter<Order>();
+  /** Emitted when the user clicks the back breadcrumb. */
+  @Output() back = new EventEmitter<void>();
 
   readonly busy = signal(false);
 

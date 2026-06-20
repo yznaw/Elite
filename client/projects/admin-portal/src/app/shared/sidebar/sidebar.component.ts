@@ -405,6 +405,7 @@ export class SidebarComponent {
     { path: '/orders',      labelKey: 'nav.orders',      subKey: 'nav.orders.sub',      icon: 'orders' },
     { path: '/customers',   labelKey: 'nav.customers',   subKey: 'nav.customers.sub',   icon: 'users' },
     { path: '/feedback',    labelKey: 'nav.feedback',    subKey: 'nav.feedback.sub',    icon: 'star'  },
+    { path: '/policies',    labelKey: 'nav.policies',    subKey: 'nav.policies.sub',    icon: 'docs'  },
     { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart' },
     { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
     { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
