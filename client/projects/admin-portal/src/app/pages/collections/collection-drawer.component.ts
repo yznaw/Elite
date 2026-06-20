@@ -48,7 +48,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
               {{ form().hidden ? t('collections.hidden') : t('collections.visible') }}
             </ap-pill>
             @if (form().parentId) {
-              <ap-pill kind="grey">Sub-collection</ap-pill>
+              <ap-pill kind="grey">{{ t('collections.drawer.subCollectionPill') }}</ap-pill>
             }
             <span class="save-badge" [class]="'save-badge ' + saveState()">
               @if (saveState() === 'saving') { <ap-spinner [size]="10"/> }
@@ -99,10 +99,10 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           <div>
             <div class="strong" style="font-size:13px;margin-bottom:2px;"
                  [style.color]="form().hidden ? 'var(--danger)' : 'var(--ink)'">
-              {{ isSystemCollection() ? 'Always visible' : (form().hidden ? t('collections.hidden') : t('collections.visible')) }}
+              {{ isSystemCollection() ? t('collections.alwaysVisible') : (form().hidden ? t('collections.hidden') : t('collections.visible')) }}
             </div>
             <div class="muted small">
-              {{ isSystemCollection() ? 'Managed by the storefront and kept active.' : t('collections.visibility') }}
+              {{ isSystemCollection() ? t('collections.systemActiveHint') : t('collections.visibility') }}
             </div>
           </div>
           <button class="toggle" [class.on]="!form().hidden" (click)="toggle('hidden')" [disabled]="isSystemCollection()"></button>
@@ -120,7 +120,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                  [placeholder]="t('collections.new')" autocomplete="off"/>
 
           <label class="lbl">{{ t('collections.drawer.desc') }}
-            <span class="lbl-hint">Shown on storefront collection pages</span>
+            <span class="lbl-hint">{{ t('collections.visibilityHint') }}</span>
           </label>
           <textarea class="inp" rows="4"
                     [placeholder]="t('collections.drawer.descHolder')"
@@ -148,7 +148,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
               <div class="cover-empty">
                 <div class="muted"><ap-icon name="media" [size]="28"/></div>
                 <div class="strong mt-8">{{ t('collections.cover.empty.title') }}</div>
-                <div class="muted small mt-4">Drag and drop or upload from device</div>
+                <div class="muted small mt-4">{{ t('collections.cover.uploadHint') }}</div>
               </div>
             }
           </div>
@@ -167,17 +167,17 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         <!-- ── 4. Organization (URL + Hierarchy) ── -->
         <div class="section-title">
           <ap-icon name="hierarchy" [size]="14"/>
-          <span>Organization</span>
+          <span>{{ t('collections.drawer.organization') }}</span>
         </div>
 
         <div class="mb-24">
 
           <!-- Parent collection -->
-          <label class="lbl">Parent Collection
-            <span class="lbl-hint">Makes this a sub-collection nested inside another</span>
+          <label class="lbl">{{ t('collections.drawer.parentLabel') }}
+            <span class="lbl-hint">{{ t('collections.drawer.parentHint') }}</span>
           </label>
           <select class="inp mb-8" [ngModel]="form().parentId" (ngModelChange)="set('parentId', $event || null)" [disabled]="isSystemCollection()">
-            <option [value]="null">None — top-level collection</option>
+            <option [value]="null">{{ t('collections.drawer.noParent') }}</option>
             @for (c of parentOptions(); track c.id) {
               <option [value]="c.id">{{ c.title }}</option>
             }
@@ -187,20 +187,20 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
             <div class="breadcrumb-row mb-16">
               <ap-icon name="hierarchy" [size]="11"/>
               <span style="flex:1;">
-                Nested under <strong>{{ parentTitle() }}</strong>
+                {{ t('collections.drawer.nestedUnder') }} <strong>{{ parentTitle() }}</strong>
               </span>
-              <button class="btn btn-ghost btn-sm" type="button" (click)="goToParent()" title="Open parent collection">
-                <ap-icon name="arrow" [size]="11"/> Open
+              <button class="btn btn-ghost btn-sm" type="button" (click)="goToParent()" [title]="t('collections.drawer.urlHandle')">
+                <ap-icon name="arrow" [size]="11"/> {{ t('common.open') }}
               </button>
-              <button class="btn btn-ghost btn-sm" type="button" (click)="set('parentId', null)" title="Promote to top-level collection">
-                Promote to top-level
+              <button class="btn btn-ghost btn-sm" type="button" (click)="set('parentId', null)">
+                {{ t('collections.drawer.promoteToTopLevel') }}
               </button>
             </div>
           }
 
           <!-- URL Handle -->
-          <label class="lbl">URL Handle
-            <span class="lbl-hint">Storefront path for this collection</span>
+          <label class="lbl">{{ t('collections.drawer.urlHandle') }}
+            <span class="lbl-hint">{{ t('collections.drawer.urlHint') }}</span>
           </label>
           <div class="handle-row mb-6">
             <span class="handle-prefix">
@@ -214,7 +214,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                    [ngModel]="form().handle"
                    (ngModelChange)="setHandle($event)"
                    [disabled]="isSystemCollection()"
-                   placeholder="auto-generated"/>
+                   [placeholder]="t('common.autoGenerated')"/>
             @if (handleManual() && !isSystemCollection()) {
               <button class="btn btn-ghost btn-sm" type="button" (click)="resetHandleToTitle()" title="Reset to auto">
                 <ap-icon name="sync" [size]="12"/>
@@ -237,7 +237,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         @if (!isSystemCollection() && !form().parentId) {
           <div class="section-title">
             <ap-icon name="collections" [size]="14"/>
-            <span>Sub-collections
+            <span>{{ t('collections.drawer.subCollections') }}
               @if (subCollections().length > 0) {
                 <span class="sec-count">{{ subCollections().length }}</span>
               }
@@ -258,8 +258,8 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                     </div>
                     <div class="sub-info">
                       <div class="sub-name">{{ child.title }}</div>
-                      <div class="sub-meta">{{ child.productIds.length }} products
-                        @if (child.hidden) { · <span style="color:var(--danger)">Hidden</span> }
+                      <div class="sub-meta">{{ child.productIds.length }} {{ t('collections.products') }}
+                        @if (child.hidden) { · <span style="color:var(--danger)">{{ t('collections.hidden') }}</span> }
                       </div>
                     </div>
                     <ap-icon name="arrow" [size]="12" style="color:var(--muted);flex-shrink:0;"/>
@@ -270,13 +270,13 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
               <div class="empty-sub-hint mb-12">
                 <ap-icon name="hierarchy" [size]="20"/>
                 <div>
-                  <div class="strong" style="font-size:13px;">No sub-collections yet</div>
-                  <div class="muted small">Group products into sub-categories inside this collection</div>
+                  <div class="strong" style="font-size:13px;">{{ t('collections.drawer.noSubCollections') }}</div>
+                  <div class="muted small">{{ t('collections.drawer.subCollectionsHint') }}</div>
                 </div>
               </div>
             }
             <button class="btn btn-outline btn-sm w-full" (click)="addSubCollection()">
-              <ap-icon name="plus" [size]="13"/> Add sub-collection
+              <ap-icon name="plus" [size]="13"/> {{ t('collections.addSubCollection') }}
             </button>
           </div>
         }
@@ -292,8 +292,8 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
             <div class="info-box">
               <ap-icon name="info" [size]="16"/>
               <div>
-                <div class="strong" style="font-size:13px;">System-managed collection</div>
-                <div class="muted small">Always reflects the full active catalog — product list is read-only.</div>
+                <div class="strong" style="font-size:13px;">{{ t('collections.systemManagedTitle') }}</div>
+                <div class="muted small">{{ t('collections.systemHint') }}</div>
               </div>
             </div>
           } @else {
@@ -301,7 +301,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
               <div class="strong">
                 {{ form().productIds.length }} {{ t('collections.products') }}
                 @if (form().productIds.length > 0) {
-                  <span class="muted" style="font-weight:400;"> · sorted for storefront display</span>
+                  <span class="muted" style="font-weight:400;"> · {{ t('collections.sortedHint') }}</span>
                 }
               </div>
               <div class="row gap-sm">
@@ -327,7 +327,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                 <div class="strong mb-4">{{ t('collections.drawer.noProducts') }}</div>
                 <div class="muted small">{{ t('collections.drawer.noProducts.sub') }}</div>
                 <button class="btn btn-outline btn-sm mt-16" (click)="pickingProducts.set(true)">
-                  <ap-icon name="plus" [size]="12"/> Add products
+                  <ap-icon name="plus" [size]="12"/> {{ t('collections.drawer.addProducts') }}
                 </button>
               </div>
             } @else if (reorderView() === 'list') {
@@ -397,9 +397,9 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
               </div>
               <div class="muted small">
                 @if (subCollections().length > 0) {
-                  Sub-collections will be unlinked (not deleted).
+                  {{ t('collections.deleteWarning') }}
                 } @else {
-                  This action cannot be undone.
+                  {{ t('common.cannotUndo') }}
                 }
               </div>
             </div>
@@ -411,7 +411,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         } @else {
           <div class="info-box mb-24">
             <ap-icon name="info" [size]="14"/>
-            <span class="muted small">System collections cannot be deleted.</span>
+            <span class="muted small">{{ t('collections.systemCannotDelete') }}</span>
           </div>
         }
 
@@ -448,8 +448,8 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
           </div>
         </div>
         <div class="drawer-foot">
-          <div class="muted small">{{ form().productIds.length }} selected</div>
-          <button class="btn btn-primary" (click)="pickingProducts.set(false)">Done</button>
+          <div class="muted small">{{ form().productIds.length }} {{ t('collections.drawer.selectedCount') }}</div>
+          <button class="btn btn-primary" (click)="pickingProducts.set(false)">{{ t('common.done') }}</button>
         </div>
       </div>
     }
@@ -761,7 +761,7 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
       this.products.set(products.filter((product) => !product.hidden));
     } catch {
       this.products.set([]);
-      this.toast.warning('Products unavailable', 'Could not load products for this collection.');
+      this.toast.warning(this.t('collections.toast.productsUnavailableTitle'), this.t('collections.toast.productsUnavailable'));
     }
   }
 

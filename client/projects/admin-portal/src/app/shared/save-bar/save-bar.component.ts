@@ -1,7 +1,8 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SpinnerComponent } from '../spinner/spinner.component';
 import { IconComponent } from '../icons/icon.component';
+import { I18nService } from '../../services/i18n.service';
 
 /**
  * Unified "Unsaved changes" save bar — rendered across drawers and full pages.
@@ -23,19 +24,19 @@ import { IconComponent } from '../icons/icon.component';
   },
   template: `
     <div class="row gap-sm" style="min-width:0;flex:1;">
-      <span class="sb-label">{{ label || 'Unsaved changes' }}</span>
+      <span class="sb-label">{{ label || t('common.unsavedChanges') }}</span>
     </div>
     <div class="row gap-sm" style="flex-shrink:0;">
       <button class="btn btn-ghost btn-sm" type="button" (click)="discarded.emit()" [disabled]="saving">
-        {{ discardLabel || 'Discard' }}
+        {{ discardLabel || t('common.discard') }}
       </button>
       <button class="btn btn-primary btn-sm" type="button" (click)="saved.emit()" [disabled]="saving">
         @if (saving) {
-          <ap-spinner [size]="12"/> Saving…
+          <ap-spinner [size]="12"/> {{ t('common.saving') }}
         } @else if (justSaved) {
-          <ap-icon name="check" [size]="12"/> Saved
+          <ap-icon name="check" [size]="12"/> {{ t('common.saved') }}
         } @else {
-          {{ saveLabel || 'Save changes' }}
+          {{ saveLabel || t('common.saveChanges') }}
         }
       </button>
     </div>
@@ -46,6 +47,9 @@ import { IconComponent } from '../icons/icon.component';
   `],
 })
 export class SaveBarComponent {
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string) => this.i18n.t(k);
+
   @Input() dirty = false;
   @Input() saving = false;
   @Input() justSaved = false;

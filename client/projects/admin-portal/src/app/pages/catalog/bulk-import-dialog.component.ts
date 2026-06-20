@@ -5,6 +5,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { ApiClient } from '../../services/api-client.service';
 import { StorageService } from '../../services/storage.service';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { I18nService } from '../../services/i18n.service';
 
 type Step = 'upload' | 'importing' | 'results' | 'stock-results' | 'history';
 
@@ -41,8 +42,8 @@ interface Summary { total: number; created: number; updated: number; failed: num
         <!-- Header -->
         <div class="modal-hd">
           <div>
-            <div class="modal-title">{{ stockMode() ? 'Bulk Stock Update' : 'Bulk Import Products' }}</div>
-            <div class="sub">{{ stockMode() ? 'Upload a 2-column CSV (SKU, Stock) to update quantities' : 'Upload your product_list CSV — rows with the same name are grouped as color variants' }}</div>
+            <div class="modal-title">{{ stockMode() ? t('bulkImport.title.stock') : t('bulkImport.title.products') }}</div>
+            <div class="sub">{{ stockMode() ? t('bulkImport.sub.stock') : t('bulkImport.sub.products') }}</div>
           </div>
           <button class="x-btn" (click)="close()" [disabled]="step() === 'importing'">
             <ap-icon name="x" [size]="18"/>
@@ -54,13 +55,13 @@ interface Summary { total: number; created: number; updated: number; failed: num
           <!-- Mode tabs -->
           <div class="mode-tabs">
             <button class="mode-tab" [class.active]="step() === 'upload' && !stockMode()" (click)="switchMode(false)">
-              <ap-icon name="upload" [size]="13"/> Product Import
+              <ap-icon name="upload" [size]="13"/> {{ t('bulkImport.tab.products') }}
             </button>
             <button class="mode-tab" [class.active]="step() === 'upload' && stockMode()" (click)="switchMode(true)">
-              <ap-icon name="csv" [size]="13"/> Stock Update
+              <ap-icon name="csv" [size]="13"/> {{ t('bulkImport.tab.stock') }}
             </button>
             <button class="mode-tab" [class.active]="step() === 'history'" (click)="step.set('history')" style="margin-left:auto;">
-              <ap-icon name="clock" [size]="13"/> History @if (importHistory().length) { <span class="hist-badge">{{ importHistory().length }}</span> }
+              <ap-icon name="clock" [size]="13"/> {{ t('bulkImport.tab.history') }} @if (importHistory().length) { <span class="hist-badge">{{ importHistory().length }}</span> }
             </button>
           </div>
         }
@@ -70,12 +71,12 @@ interface Summary { total: number; created: number; updated: number; failed: num
           <div class="modal-body">
             @if (!stockMode()) {
             <div class="info-box">
-              <div class="info-title">How it works</div>
+              <div class="info-title">{{ t('bulkImport.howTitle') }}</div>
               <div class="how-grid">
-                <div class="how-step"><span class="how-n">1</span> Rows with the same <code>English Name</code> → grouped into one product</div>
-                <div class="how-step"><span class="how-n">2</span> Each row → a <strong>variant</strong> (SKU + color + size)</div>
-                <div class="how-step"><span class="how-n">3</span> <code>Cost-QAR</code> + <code>Shipping cost</code> → stored separately; <strong>Total Cost</strong> auto-calculated</div>
-                <div class="how-step"><span class="how-n">4</span> Images downloaded from Drive folders automatically</div>
+                <div class="how-step"><span class="how-n">1</span> {{ t('bulkImport.step.p1') }}</div>
+                <div class="how-step"><span class="how-n">2</span> {{ t('bulkImport.step.p2') }}</div>
+                <div class="how-step"><span class="how-n">3</span> {{ t('bulkImport.step.p3') }}</div>
+                <div class="how-step"><span class="how-n">4</span> {{ t('bulkImport.step.p4') }}</div>
               </div>
               <div class="col-grid" style="margin-top:10px;">
                 @for (c of columns; track c.n) {
@@ -102,8 +103,8 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 </div>
               } @else {
                 <ap-icon name="upload" [size]="30"/>
-                <div class="drop-label">Drop CSV here or click to browse</div>
-                <div class="sub">Max 10 MB · .csv only</div>
+                <div class="drop-label">{{ t('bulkImport.drop.label') }}</div>
+                <div class="sub">{{ t('bulkImport.drop.sub.stock') }}</div>
               }
             </div>
 
@@ -113,11 +114,11 @@ interface Summary { total: number; created: number; updated: number; failed: num
             } @else {
             <!-- Stock import mode -->
             <div class="info-box">
-              <div class="info-title">How it works</div>
+              <div class="info-title">{{ t('bulkImport.howTitle') }}</div>
               <div class="how-grid">
-                <div class="how-step"><span class="how-n">1</span> CSV must have <code>SKU</code> and <code>Stock</code> columns (header row)</div>
-                <div class="how-step"><span class="how-n">2</span> Each row updates the <strong>stock quantity</strong> for that SKU</div>
-                <div class="how-step"><span class="how-n">3</span> Unmatched SKUs are listed in the result report</div>
+                <div class="how-step"><span class="how-n">1</span> {{ t('bulkImport.step.s1') }}</div>
+                <div class="how-step"><span class="how-n">2</span> {{ t('bulkImport.step.s2') }}</div>
+                <div class="how-step"><span class="how-n">3</span> {{ t('bulkImport.step.s3') }}</div>
               </div>
             </div>
 
@@ -136,8 +137,8 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 </div>
               } @else {
                 <ap-icon name="upload" [size]="30"/>
-                <div class="drop-label">Drop CSV here or click to browse</div>
-                <div class="sub">SKU, Stock · .csv only</div>
+                <div class="drop-label">{{ t('bulkImport.drop.label') }}</div>
+                <div class="sub">{{ t('bulkImport.drop.sub.stock') }}</div>
               }
             </div>
 
@@ -151,20 +152,20 @@ interface Summary { total: number; created: number; updated: number; failed: num
             @if (!stockMode()) {
               <label class="dry-run-toggle" title="Preview changes without writing to the database">
                 <input type="checkbox" [checked]="dryRun()" (change)="dryRun.set(!dryRun())"/>
-                <span>Dry run</span>
+                <span>{{ t('bulkImport.dryRun') }}</span>
               </label>
               <a class="btn btn-outline btn-sm" [href]="templateUrl" download>
-                <ap-icon name="download" [size]="13"/> Template
+                <ap-icon name="download" [size]="13"/> {{ t('bulkImport.template') }}
               </a>
               <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startImport()">
-                <ap-icon name="upload" [size]="14"/> {{ dryRun() ? 'Preview Import' : 'Import Products' }}
+                <ap-icon name="upload" [size]="14"/> {{ dryRun() ? t('bulkImport.btn.previewImport') : t('bulkImport.btn.importProducts') }}
               </button>
             } @else {
               <button class="btn btn-outline btn-sm" (click)="downloadStockTemplate()">
-                <ap-icon name="download" [size]="13"/> Template
+                <ap-icon name="download" [size]="13"/> {{ t('bulkImport.template') }}
               </button>
               <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startStockImport()">
-                <ap-icon name="upload" [size]="14"/> Update Stock
+                <ap-icon name="upload" [size]="14"/> {{ t('bulkImport.btn.updateStock') }}
               </button>
             }
           </div>
@@ -179,7 +180,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 <span class="prog-current">{{ current() }}</span>
                 <span class="prog-sep">/</span>
                 <span class="prog-total">{{ total() }}</span>
-                <span class="prog-label">products processed</span>
+                <span class="prog-label">{{ t('bulkImport.processing.label') }}</span>
               </div>
               <div class="prog-pct">{{ pct() }}%</div>
             </div>
@@ -194,14 +195,14 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 <div class="cur-details">
                   <span class="cur-name">{{ currentName() }}</span>
                   @if (currentVariantCount()) {
-                    <span class="cur-variants">{{ currentVariantCount() }} color variants</span>
+                    <span class="cur-variants">{{ currentVariantCount() }} {{ t('bulkImport.processing.colorVariants') }}</span>
                   }
                 </div>
               </div>
             }
 
             <div class="log-wrap" #logWrap>
-              <div class="log-header">Live log</div>
+              <div class="log-header">{{ t('bulkImport.processing.liveLog') }}</div>
               @for (e of log(); track e.name) {
                 <div class="log-row" [class]="'log-' + e.status">
                   <span class="log-icon">{{ statusIcon(e.status) }}</span>
@@ -215,7 +216,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
                       </span>
                     }
                     @if (e.imagesUploaded) { <span class="img-ok">{{ e.imagesUploaded }} img</span> }
-                    @if (e.imagesFailed)   { <span class="img-fail">{{ e.imagesFailed }} img failed</span> }
+                    @if (e.imagesFailed)   { <span class="img-fail">{{ e.imagesFailed }} {{ t('bulkImport.processing.imgFailed') }}</span> }
                   </span>
                   @if (e.error) { <span class="log-err" [title]="e.error">{{ e.error | slice:0:55 }}</span> }
                 </div>
@@ -230,21 +231,21 @@ interface Summary { total: number; created: number; updated: number; failed: num
           @if (wasLastDryRun()) {
             <div class="dry-run-banner">
               <ap-icon name="warning" [size]="13"/>
-              <strong>Dry-Run Preview</strong> — No changes were saved. Review results below and click "Commit Import" to apply.
+              <strong>{{ t('bulkImport.dryRunBanner') }}</strong>
             </div>
           }
           @if (summary(); as s) {
             <div class="sum-bar">
-              <div class="chip green">{{ s.created }} {{ wasLastDryRun() ? 'to create' : 'created' }}</div>
-              <div class="chip blue">{{ s.updated }} {{ wasLastDryRun() ? 'to update' : 'updated' }}</div>
-              @if (s.failed) { <div class="chip red">{{ s.failed }} failed</div> }
-              <div class="sub ml-auto">{{ s.total }} products</div>
+              <div class="chip green">{{ s.created }} {{ wasLastDryRun() ? t('bulkImport.chip.toCreate') : t('bulkImport.chip.created') }}</div>
+              <div class="chip blue">{{ s.updated }} {{ wasLastDryRun() ? t('bulkImport.chip.toUpdate') : t('bulkImport.chip.updated') }}</div>
+              @if (s.failed) { <div class="chip red">{{ s.failed }} {{ t('bulkImport.chip.failed') }}</div> }
+              <div class="sub ml-auto">{{ s.total }} {{ t('bulkImport.chip.products') }}</div>
             </div>
           }
           <div class="modal-body" style="padding-top:0">
             <div class="res-wrap">
               <table class="res-table">
-                <thead><tr><th>Product Name</th><th>Status</th><th>Variants</th><th>Images</th></tr></thead>
+                <thead><tr><th>{{ t('bulkImport.table.productName') }}</th><th>{{ t('bulkImport.table.status') }}</th><th>{{ t('bulkImport.table.variants') }}</th><th>{{ t('bulkImport.table.images') }}</th></tr></thead>
                 <tbody>
                   @for (e of log(); track e.name) {
                     <tr [class.row-err]="e.status==='error'||e.status==='skipped'">
@@ -270,19 +271,19 @@ interface Summary { total: number; created: number; updated: number; failed: num
           <div class="modal-ft">
             @if ((summary()?.failed ?? 0) > 0) {
               <button class="btn btn-outline btn-sm" (click)="retryFailed()">
-                <ap-icon name="sync" [size]="13"/> Retry Failed ({{ summary()!.failed }})
+                <ap-icon name="sync" [size]="13"/> {{ t('bulkImport.btn.retryFailed') }} ({{ summary()!.failed }})
               </button>
             }
-            <button class="btn btn-outline" (click)="reset()">Import Another</button>
+            <button class="btn btn-outline" (click)="reset()">{{ t('bulkImport.btn.importAnother') }}</button>
             <button class="btn btn-outline" (click)="downloadReport()">
-              <ap-icon name="download" [size]="13"/> Download Report
+              <ap-icon name="download" [size]="13"/> {{ t('bulkImport.btn.downloadReport') }}
             </button>
             @if (wasLastDryRun()) {
               <button class="btn btn-gold" (click)="commitDryRun()">
-                <ap-icon name="check" [size]="14"/> Commit Import
+                <ap-icon name="check" [size]="14"/> {{ t('bulkImport.btn.commitImport') }}
               </button>
             } @else {
-              <button class="btn btn-gold" (click)="done()">Done</button>
+              <button class="btn btn-gold" (click)="done()">{{ t('common.done') }}</button>
             }
           </div>
         }
@@ -291,25 +292,25 @@ interface Summary { total: number; created: number; updated: number; failed: num
         @if (step() === 'stock-results') {
           @if (stockResult(); as r) {
             <div class="sum-bar">
-              <div class="chip green">{{ r.updated }} updated</div>
-              @if (r.notFound.length) { <div class="chip red">{{ r.notFound.length }} not found</div> }
-              <div class="sub ml-auto">{{ r.updated + r.notFound.length }} rows processed</div>
+              <div class="chip green">{{ r.updated }} {{ t('bulkImport.chip.updated') }}</div>
+              @if (r.notFound.length) { <div class="chip red">{{ r.notFound.length }} {{ t('bulkImport.chip.notFound') }}</div> }
+              <div class="sub ml-auto">{{ r.updated + r.notFound.length }} {{ t('bulkImport.chip.rowsProcessed') }}</div>
             </div>
           }
           <div class="modal-body" style="padding-top:0">
             @if (stockResult()?.notFound?.length) {
               <div class="err-banner">
-                <strong>Unmatched SKUs:</strong> {{ stockResult()!.notFound.join(', ') }}
+                <strong>{{ t('bulkImport.stock.unmatchedSKUs') }}</strong> {{ stockResult()!.notFound.join(', ') }}
               </div>
             } @else if (stockResult()?.updated === 0) {
-              <div class="muted small" style="text-align:center;padding:24px;">No matching SKUs found in the catalog.</div>
+              <div class="muted small" style="text-align:center;padding:24px;">{{ t('bulkImport.stock.noMatch') }}</div>
             } @else {
-              <div class="muted small" style="text-align:center;padding:24px;">All rows processed successfully.</div>
+              <div class="muted small" style="text-align:center;padding:24px;">{{ t('bulkImport.stock.allProcessed') }}</div>
             }
           </div>
           <div class="modal-ft">
-            <button class="btn btn-outline" (click)="reset()">Import Another</button>
-            <button class="btn btn-gold" (click)="done()">Done</button>
+            <button class="btn btn-outline" (click)="reset()">{{ t('bulkImport.btn.importAnother') }}</button>
+            <button class="btn btn-gold" (click)="done()">{{ t('common.done') }}</button>
           </div>
         }
 
@@ -317,19 +318,19 @@ interface Summary { total: number; created: number; updated: number; failed: num
         @if (step() === 'history') {
           <div class="modal-body" style="padding-top:12px;">
             @if (importHistory().length === 0) {
-              <div class="muted small" style="text-align:center;padding:40px;">No import history yet.</div>
+              <div class="muted small" style="text-align:center;padding:40px;">{{ t('bulkImport.history.empty') }}</div>
             } @else {
               @for (h of importHistory(); track h.id) {
                 <div class="hist-row">
                   <div class="hist-hd" (click)="toggleHistory(h.id)">
                     <div class="hist-info">
                       <div class="hist-file">{{ h.filename }}</div>
-                      <div class="sub">{{ h.ts | date:'MMM d, yyyy · HH:mm' }} · {{ h.summary.total }} products</div>
+                      <div class="sub">{{ h.ts | date:'MMM d, yyyy · HH:mm' }} · {{ h.summary.total }} {{ t('bulkImport.chip.products') }}</div>
                     </div>
                     <div class="hist-chips">
-                      <span class="chip green sm">{{ h.summary.created }} created</span>
-                      <span class="chip blue sm">{{ h.summary.updated }} updated</span>
-                      @if (h.summary.failed) { <span class="chip red sm">{{ h.summary.failed }} failed</span> }
+                      <span class="chip green sm">{{ h.summary.created }} {{ t('bulkImport.chip.created') }}</span>
+                      <span class="chip blue sm">{{ h.summary.updated }} {{ t('bulkImport.chip.updated') }}</span>
+                      @if (h.summary.failed) { <span class="chip red sm">{{ h.summary.failed }} {{ t('bulkImport.chip.failed') }}</span> }
                     </div>
                     <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); downloadHistoryReport(h)">
                       <ap-icon name="arrowDn" [size]="12"/>
@@ -353,9 +354,9 @@ interface Summary { total: number; created: number; updated: number; failed: num
           </div>
           <div class="modal-ft">
             @if (importHistory().length > 0) {
-              <button class="btn btn-outline btn-sm" style="color:var(--danger);" (click)="clearHistory()">Clear History</button>
+              <button class="btn btn-outline btn-sm" style="color:var(--danger);" (click)="clearHistory()">{{ t('bulkImport.history.clearHistory') }}</button>
             }
-            <button class="btn btn-gold" (click)="step.set('upload')">Back to Import</button>
+            <button class="btn btn-gold" (click)="step.set('upload')">{{ t('bulkImport.history.backToImport') }}</button>
           </div>
         }
 
@@ -483,6 +484,8 @@ export class BulkImportDialogComponent {
   private readonly api  = inject(ApiClient);
   private readonly zone = inject(NgZone);
   private readonly storage = inject(StorageService);
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly step               = signal<Step>('upload');
   readonly csvFile            = signal<File | null>(null);
@@ -606,7 +609,7 @@ export class BulkImportDialogComponent {
         }
       }
     } catch (err: any) {
-      this.zone.run(() => { this.uploadError.set(err.message || 'Network error.'); this.step.set('upload'); });
+      this.zone.run(() => { this.uploadError.set(err.message || this.t('bulkImport.error.networkError')); this.step.set('upload'); });
     }
   }
 
@@ -664,10 +667,10 @@ export class BulkImportDialogComponent {
 
   statusLabel(s: string): string {
     switch (s) {
-      case 'created': return '+ Created';
-      case 'updated': return '↺ Updated';
-      case 'skipped': return '— Skipped';
-      case 'error':   return '✕ Error';
+      case 'created': return this.t('bulkImport.status.created');
+      case 'updated': return this.t('bulkImport.status.updated');
+      case 'skipped': return this.t('bulkImport.status.skipped');
+      case 'error':   return this.t('bulkImport.status.error');
       default: return s;
     }
   }
@@ -698,14 +701,14 @@ export class BulkImportDialogComponent {
       const text = await file.text();
       const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (lines.length < 2) {
-        this.zone.run(() => { this.uploadError.set('CSV appears empty.'); this.step.set('upload'); });
+        this.zone.run(() => { this.uploadError.set(this.t('bulkImport.error.csvEmpty')); this.step.set('upload'); });
         return;
       }
       const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
       const skuIdx = header.indexOf('sku');
       const stockIdx = header.indexOf('stock');
       if (skuIdx < 0 || stockIdx < 0) {
-        this.zone.run(() => { this.uploadError.set('CSV must have SKU and Stock columns.'); this.step.set('upload'); });
+        this.zone.run(() => { this.uploadError.set(this.t('bulkImport.error.missingColumns')); this.step.set('upload'); });
         return;
       }
       const updates = lines.slice(1).map(line => {
@@ -727,7 +730,7 @@ export class BulkImportDialogComponent {
 
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        this.zone.run(() => { this.uploadError.set(json.message || 'Stock update failed.'); this.step.set('upload'); });
+        this.zone.run(() => { this.uploadError.set(json.message || this.t('bulkImport.error.stockFailed')); this.step.set('upload'); });
         return;
       }
 
@@ -737,7 +740,7 @@ export class BulkImportDialogComponent {
         this.step.set('stock-results');
       });
     } catch (err: any) {
-      this.zone.run(() => { this.uploadError.set(err.message || 'Network error.'); this.step.set('upload'); });
+      this.zone.run(() => { this.uploadError.set(err.message || this.t('bulkImport.error.networkError')); this.step.set('upload'); });
     }
   }
 

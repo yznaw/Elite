@@ -46,15 +46,15 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
         <!-- Row 2: status quick-filter pills -->
         <div class="tb-row2">
           <div class="status-pills">
-            <button class="status-pill" [class.active]="statusFilter() === 'all'"    (click)="statusFilter.set('all'); page.set(0)">All</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'active'" (click)="statusFilter.set('active'); page.set(0)">Active</button>
-            <button class="status-pill" [class.active]="statusFilter() === 'hidden'" (click)="statusFilter.set('hidden'); page.set(0)">Hidden</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'all'"    (click)="statusFilter.set('all'); page.set(0)">{{ t('catalog.status.all') }}</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'active'" (click)="statusFilter.set('active'); page.set(0)">{{ t('catalog.status.active') }}</button>
+            <button class="status-pill" [class.active]="statusFilter() === 'hidden'" (click)="statusFilter.set('hidden'); page.set(0)">{{ t('catalog.status.hidden') }}</button>
             <button class="status-pill danger" [class.active]="statusFilter() === 'out-of-stock'" (click)="statusFilter.set('out-of-stock'); page.set(0)">
-              Out of Stock
+              {{ t('catalog.status.outOfStock') }}
               @if (outOfStockCount() > 0) { <span class="ls-badge danger-badge">{{ outOfStockCount() }}</span> }
             </button>
             <button class="status-pill warn" [class.active]="statusFilter() === 'low-stock'" (click)="statusFilter.set('low-stock'); page.set(0)">
-              Low Stock
+              {{ t('catalog.status.lowStock') }}
               @if (lowStockCount() > 0) { <span class="ls-badge">{{ lowStockCount() }}</span> }
             </button>
           </div>
@@ -63,38 +63,38 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
         <!-- Row 3: CTAs -->
         <div class="tb-row3">
           <select class="inp ctrl-inp" [ngModel]="sortKey()" (ngModelChange)="sortKey.set($event)">
-            <option value="newest">Newest</option>
-            <option value="name-az">Name A–Z</option>
-            <option value="name-za">Name Z–A</option>
-            <option value="price-asc">Price ↑</option>
-            <option value="price-desc">Price ↓</option>
-            <option value="stock-asc">Stock ↑</option>
-            <option value="stock-desc">Stock ↓</option>
+            <option value="newest">{{ t('catalog.sort.newest') }}</option>
+            <option value="name-az">{{ t('catalog.sort.nameAsc') }}</option>
+            <option value="name-za">{{ t('catalog.sort.nameDesc') }}</option>
+            <option value="price-asc">{{ t('catalog.sort.priceAsc') }}</option>
+            <option value="price-desc">{{ t('catalog.sort.priceDesc') }}</option>
+            <option value="stock-asc">{{ t('catalog.sort.stockAsc') }}</option>
+            <option value="stock-desc">{{ t('catalog.sort.stockDesc') }}</option>
           </select>
           <div class="view-toggle">
-            <button class="vt-btn" [class.active]="viewMode() === 'grid'" (click)="setView('grid')" title="Grid view">
+            <button class="vt-btn" [class.active]="viewMode() === 'grid'" (click)="setView('grid')" [title]="t('catalog.btn.gridView')">
               <ap-icon name="grid" [size]="14"/>
             </button>
-            <button class="vt-btn" [class.active]="viewMode() === 'list'" (click)="setView('list')" title="List view">
+            <button class="vt-btn" [class.active]="viewMode() === 'list'" (click)="setView('list')" [title]="t('catalog.btn.listView')">
               <ap-icon name="rows" [size]="14"/>
             </button>
           </div>
           <button class="btn btn-outline btn-sm" [class.btn-filter-active]="hasAdvancedFilters()"
-                  (click)="toggleFilters()" title="Filters">
+                  (click)="toggleFilters()" [title]="t('catalog.btn.filters')">
             <ap-icon name="filter" [size]="13"/>
-            <span class="btn-lbl">Filters</span>
+            <span class="btn-lbl">{{ t('catalog.btn.filters') }}</span>
             @if (hasAdvancedFilters()) { <span class="filter-badge">{{ activeFilterCount() }}</span> }
           </button>
           <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
-                  (click)="toggleSelectionMode()" title="Select">
-            <ap-icon name="check" [size]="13"/> <span class="btn-lbl">{{ selectionMode() ? 'Cancel' : 'Select' }}</span>
+                  (click)="toggleSelectionMode()" [title]="t('catalog.btn.select')">
+            <ap-icon name="check" [size]="13"/> <span class="btn-lbl">{{ selectionMode() ? t('common.cancel') : t('catalog.btn.select') }}</span>
           </button>
           <div class="tb-row3-end">
-            <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0" title="Export CSV">
-              <ap-icon name="download" [size]="14"/> <span class="btn-lbl">Export</span>
+            <button class="btn btn-outline btn-sm" (click)="exportCsv()" [disabled]="filtered().length === 0" [title]="t('common.exportCsv')">
+              <ap-icon name="download" [size]="14"/> <span class="btn-lbl">{{ t('common.export') }}</span>
             </button>
-            <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)" title="Import">
-              <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">Import</span>
+            <button class="btn btn-outline btn-sm" (click)="showBulkImport.set(true)" [title]="t('catalog.btn.import')">
+              <ap-icon name="upload" [size]="14"/> <span class="btn-lbl">{{ t('catalog.btn.import') }}</span>
             </button>
             <button class="btn btn-gold btn-sm" (click)="createProduct()" [disabled]="selectionMode()" title="New Product">
               <ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('catalog.newProduct') }}</span>
@@ -112,9 +112,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
           <div class="filter-panel-grid">
 
             <div class="fp-group">
-              <label class="fp-label">Collection</label>
+              <label class="fp-label">{{ t('catalog.filter.collection') }}</label>
               <select class="inp inp-sm" [ngModel]="collectionId()" (ngModelChange)="collectionId.set($event); page.set(0)">
-                <option value="All">All collections</option>
+                <option value="All">{{ t('catalog.filter.allCollections') }}</option>
                 @for (c of collections(); track c.id) {
                   <option [value]="c.id">{{ c.title }}</option>
                 }
@@ -122,9 +122,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             </div>
 
             <div class="fp-group">
-              <label class="fp-label">Brand</label>
+              <label class="fp-label">{{ t('catalog.filter.brand') }}</label>
               <select class="inp inp-sm" [ngModel]="brandFilter()" (ngModelChange)="brandFilter.set($event); page.set(0)">
-                <option value="all">All brands</option>
+                <option value="all">{{ t('catalog.filter.allBrands') }}</option>
                 @for (b of brands(); track b) {
                   <option [value]="b">{{ b }}</option>
                 }
@@ -132,7 +132,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             </div>
 
             <div class="fp-group cf-wrap" (click)="$event.stopPropagation()">
-              <label class="fp-label">Color</label>
+              <label class="fp-label">{{ t('catalog.filter.color') }}</label>
               <!-- Trigger button -->
               <button type="button" class="inp inp-sm cf-trigger"
                       [class.cf-active]="colorFilter() !== 'all'"
@@ -145,7 +145,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   }
                   <span class="cf-trigger-name">{{ colorFilter() }}</span>
                 } @else {
-                  <span class="cf-trigger-name muted">All colors</span>
+                  <span class="cf-trigger-name muted">{{ t('catalog.filter.allColors') }}</span>
                 }
                 <ap-icon name="arrowDn" [size]="10" class="cf-chev"
                          [class.open]="colorFilterOpen()"/>
@@ -157,7 +157,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                           [class.cf-option--sel]="colorFilter() === 'all'"
                           (click)="colorFilter.set('all'); colorFilterOpen.set(false); page.set(0)">
                     <span class="cf-swatch cf-swatch--all">✕</span>
-                    All colors
+                    {{ t('catalog.filter.allColors') }}
                   </button>
                   @for (c of refColors(); track c.id) {
                     <button type="button" class="cf-option"
@@ -176,23 +176,23 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             </div>
 
             <div class="fp-group fp-price">
-              <label class="fp-label">Price range (QAR)</label>
+              <label class="fp-label">{{ t('catalog.filter.priceRange') }}</label>
               <div class="price-range">
-                <input class="inp inp-sm mono" type="number" min="0" placeholder="Min"
+                <input class="inp inp-sm mono" type="number" min="0" [placeholder]="t('catalog.filter.min')"
                        [ngModel]="priceMin()" (ngModelChange)="priceMin.set(+$event || 0); page.set(0)"/>
                 <span class="price-sep">–</span>
-                <input class="inp inp-sm mono" type="number" min="0" placeholder="Max"
+                <input class="inp inp-sm mono" type="number" min="0" [placeholder]="t('catalog.filter.max')"
                        [ngModel]="priceMax()" (ngModelChange)="priceMax.set(+$event || 0); page.set(0)"/>
               </div>
             </div>
 
             <div class="fp-group fp-page">
-              <label class="fp-label">Per page</label>
+              <label class="fp-label">{{ t('common.perPage') }}</label>
               <select class="inp inp-sm" [ngModel]="pageSize()" (ngModelChange)="pageSize.set(+$event)">
                 <option [value]="25">25</option>
                 <option [value]="50">50</option>
                 <option [value]="100">100</option>
-                <option [value]="0">All</option>
+                <option [value]="0">{{ t('catalog.filter.all') }}</option>
               </select>
             </div>
 
@@ -201,10 +201,10 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
           @if (hasAdvancedFilters()) {
             <div class="filter-chips">
               @if (collectionId() !== 'All') {
-                <span class="fchip">Collection: {{ collectionLabel() }} <button (click)="collectionId.set('All')">×</button></span>
+                <span class="fchip">{{ t('catalog.filter.collectionLabel') }} {{ collectionLabel() }} <button (click)="collectionId.set('All')">×</button></span>
               }
               @if (brandFilter() !== 'all') {
-                <span class="fchip">Brand: {{ brandFilter() }} <button (click)="brandFilter.set('all')">×</button></span>
+                <span class="fchip">{{ t('catalog.filter.brandLabel') }} {{ brandFilter() }} <button (click)="brandFilter.set('all')">×</button></span>
               }
               @if (colorFilter() !== 'all') {
                 <span class="fchip fchip--color">
@@ -218,9 +218,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                 </span>
               }
               @if (priceMin() > 0 || priceMax() > 0) {
-                <span class="fchip">Price: {{ priceMin() }}–{{ priceMax() || '∞' }} QAR <button (click)="priceMin.set(0);priceMax.set(0)">×</button></span>
+                <span class="fchip">{{ t('catalog.filter.priceLabel') }} {{ priceMin() }}–{{ priceMax() || '∞' }} QAR <button (click)="priceMin.set(0);priceMax.set(0)">×</button></span>
               }
-              <button class="btn btn-sm btn-outline" style="font-size:11px;padding:2px 10px;" (click)="clearFilters()">Clear all</button>
+              <button class="btn btn-sm btn-outline" style="font-size:11px;padding:2px 10px;" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
             </div>
           }
         </div>
@@ -231,34 +231,34 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
         <div class="sel-bar mb-16">
           <div class="sel-count">
             @if (selectedIds().size === 0) {
-              <span class="muted">Tap to select items</span>
+              <span class="muted">{{ t('catalog.selection.tap') }}</span>
             } @else {
-              <strong>{{ selectedIds().size }}</strong> of {{ paged().length }} selected
+              <strong>{{ selectedIds().size }}</strong> {{ t('catalog.selection.of') }} {{ paged().length }} {{ t('catalog.selection.selected') }}
             }
           </div>
           <div class="sel-actions">
-            <button class="btn btn-sm btn-outline" (click)="selectAll()">Select all ({{ paged().length }})</button>
+            <button class="btn btn-sm btn-outline" (click)="selectAll()">{{ t('catalog.selection.selectAll') }} ({{ paged().length }})</button>
             @if (selectedIds().size > 0) {
-              <button class="btn btn-sm btn-outline" (click)="clearSelection()">Clear</button>
+              <button class="btn btn-sm btn-outline" (click)="clearSelection()">{{ t('catalog.selection.clear') }}</button>
 
               <!-- Bulk status dropdown -->
               <div class="bulk-status-wrap">
                 <select class="inp inp-sm" (change)="onBulkStatusChange($event)">
-                  <option value="">Set status…</option>
-                  <option value="status-active">Make Active</option>
-                  <option value="status-hidden">Make Hidden</option>
+                  <option value="">{{ t('catalog.bulk.setStatus') }}</option>
+                  <option value="status-active">{{ t('catalog.bulk.makeActive') }}</option>
+                  <option value="status-hidden">{{ t('catalog.bulk.makeHidden') }}</option>
                 </select>
               </div>
 
               @if (confirmingDelete()) {
                 <div class="del-confirm">
-                  <span class="del-warn">Delete {{ selectedIds().size }} product(s)?</span>
-                  <button class="btn btn-sm btn-danger" (click)="confirmDelete()">Yes, Delete</button>
-                  <button class="btn btn-sm btn-outline" (click)="confirmingDelete.set(false)">Cancel</button>
+                  <span class="del-warn">{{ t('common.delete') }} {{ selectedIds().size }} {{ selectedIds().size === 1 ? t('catalog.product') : t('catalog.products') }}?</span>
+                  <button class="btn btn-sm btn-danger" (click)="confirmDelete()">{{ t('catalog.bulk.confirmDelete') }}</button>
+                  <button class="btn btn-sm btn-outline" (click)="confirmingDelete.set(false)">{{ t('common.cancel') }}</button>
                 </div>
               } @else {
                 <button class="btn btn-sm btn-danger" (click)="confirmingDelete.set(true)">
-                  <ap-icon name="trash" [size]="13"/> Delete ({{ selectedIds().size }})
+                  <ap-icon name="trash" [size]="13"/> {{ t('common.delete') }} ({{ selectedIds().size }})
                 </button>
               }
             }
@@ -314,7 +314,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                       <span class="prod-hidden-badge">○ {{ t('catalog.hidden') }}</span>
                     }
                     @if (!p.hidden && p.stock === 0) {
-                      <span class="prod-oos-badge">Out of Stock</span>
+                      <span class="prod-oos-badge">{{ t('catalog.status.outOfStock') }}</span>
                     }
                   }
                 </div>
@@ -329,7 +329,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                       </span>
                     }
                     @if (selectionMode() && p.variants?.length) {
-                      <span class="var-count">{{ p.variants!.length }} colors</span>
+                      <span class="var-count">{{ p.variants!.length }} {{ t('catalog.colors') }}</span>
                     }
                   </div>
                 </div>
@@ -351,12 +351,12 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
           <div class="list-view card">
             <div class="lv-head">
               <div class="lv-c-img"></div>
-              <div class="lv-c-name">Product</div>
-              <div class="lv-c-sku hide-mobile">SKU</div>
-              <div class="lv-c-price">Price</div>
-              <div class="lv-c-stock hide-mobile">Stock</div>
-              <div class="lv-c-variants hide-mobile">Variants</div>
-              <div class="lv-c-status hide-small">Status</div>
+              <div class="lv-c-name">{{ t('catalog.header.product') }}</div>
+              <div class="lv-c-sku hide-mobile">{{ t('catalog.header.sku') }}</div>
+              <div class="lv-c-price">{{ t('catalog.header.price') }}</div>
+              <div class="lv-c-stock hide-mobile">{{ t('catalog.header.stock') }}</div>
+              <div class="lv-c-variants hide-mobile">{{ t('catalog.header.variants') }}</div>
+              <div class="lv-c-status hide-small">{{ t('catalog.header.status') }}</div>
             </div>
             @for (p of paged(); track p.id) {
               <div class="lv-row" [class.selected]="selectedIds().has(p.id)"
@@ -384,13 +384,13 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                 <div class="lv-c-price mono">{{ QAR(p.price) }}</div>
                 <div class="lv-c-stock hide-mobile">
                   <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < lowStockThreshold()" [class.out]="p.stock === 0">
-                    {{ p.stock === 0 ? 'Out of stock' : p.stock }}
+                    {{ p.stock === 0 ? t('catalog.outOfStock') : p.stock }}
                   </span>
                 </div>
                 <div class="lv-c-variants hide-mobile small muted">{{ p.variants?.length ?? 0 }}</div>
                 <div class="lv-c-status hide-small">
                   <ap-pill [kind]="p.hidden ? 'red' : 'green'">
-                    {{ p.hidden ? t('catalog.hidden') : 'Active' }}
+                    {{ p.hidden ? t('catalog.status.hidden') : t('catalog.status.active') }}
                   </ap-pill>
                 </div>
               </div>
@@ -402,9 +402,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       <!-- ── Pagination ── -->
       @if (pageSize() > 0 && filtered().length > pageSize()) {
         <div class="pagination mt-16">
-          <button class="btn btn-sm btn-outline" [disabled]="page() === 0" (click)="prevPage()">← Prev</button>
-          <span class="muted small">Page {{ page() + 1 }} of {{ totalPages() }}</span>
-          <button class="btn btn-sm btn-outline" [disabled]="page() >= totalPages() - 1" (click)="nextPage()">Next →</button>
+          <button class="btn btn-sm btn-outline" [disabled]="page() === 0" (click)="prevPage()">← {{ t('common.prev') }}</button>
+          <span class="muted small">{{ t('catalog.pagination.page') }} {{ page() + 1 }} {{ t('catalog.pagination.of') }} {{ totalPages() }}</span>
+          <button class="btn btn-sm btn-outline" [disabled]="page() >= totalPages() - 1" (click)="nextPage()">{{ t('common.next') }} →</button>
         </div>
       }
     </div>
@@ -900,10 +900,10 @@ export class CatalogComponent implements OnInit {
   readonly pagedLabel = computed(() => {
     const total = this.filtered().length;
     const ps = this.pageSize();
-    if (ps === 0 || total <= ps) return `${total} product${total !== 1 ? 's' : ''}`;
+    if (ps === 0 || total <= ps) return `${total} ${total !== 1 ? this.t('catalog.products') : this.t('catalog.product')}`;
     const start = this.page() * ps + 1;
     const end = Math.min((this.page() + 1) * ps, total);
-    return `${start}–${end} of ${total}`;
+    return `${start}–${end} ${this.t('catalog.pagination.of')} ${total}`;
   });
 
   collectionLabel(): string {
@@ -952,11 +952,11 @@ export class CatalogComponent implements OnInit {
       await Promise.all(ids.map(id =>
         this.productsApi.update(id, { hidden }),
       ));
-      this.toast.success(`${ids.length} product(s) set to ${hidden ? 'hidden' : 'active'}`);
+      this.toast.success(`${ids.length} ${ids.length === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${hidden ? this.t('catalog.status.hidden') : this.t('catalog.status.active')}`);
     } catch {
       const list = await this.productsApi.list().catch(() => this._products());
       this._products.set(list);
-      this.toast.error('Status update failed — list refreshed');
+      this.toast.error(this.t('catalog.toast.statusError'));
     }
   }
 
@@ -969,11 +969,11 @@ export class CatalogComponent implements OnInit {
     this.selectionMode.set(false);
     try {
       const { deleted } = await this.productsApi.bulkDelete(ids);
-      this.toast.success(`${deleted} product(s) deleted`);
+      this.toast.success(`${deleted} ${deleted === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${this.t('common.delete').toLowerCase()}`);
     } catch {
       const list = await this.productsApi.list().catch(() => this._products());
       this._products.set(list);
-      this.toast.error('Delete failed — list refreshed');
+      this.toast.error(this.t('catalog.toast.deleteError'));
     }
   }
 
@@ -1067,7 +1067,7 @@ export class CatalogComponent implements OnInit {
     try {
       const list = await this.productsApi.list();
       this._products.set(list);
-      this.toast.success('Bulk import complete', 'Product catalog refreshed.');
+      this.toast.success(this.t('catalog.toast.importComplete'), this.t('catalog.toast.importSub'));
     } catch { /* silent */ }
   }
 
@@ -1093,7 +1093,7 @@ export class CatalogComponent implements OnInit {
     a.download = `catalog-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    this.toast.success('Catalog exported', `${products.length} products`);
+    this.toast.success(this.t('catalog.toast.exported'), `${products.length} ${products.length === 1 ? this.t('catalog.product') : this.t('catalog.products')}`);
   }
 
   onDuplicated(copy: Product): void {

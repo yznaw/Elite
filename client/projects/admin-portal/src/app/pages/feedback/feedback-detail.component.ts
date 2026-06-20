@@ -5,6 +5,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { ToastService } from '../../services/toast.service';
 import { ApiClient } from '../../services/api-client.service';
+import { I18nService } from '../../services/i18n.service';
 
 interface ReviewProduct {
   id:          string;
@@ -37,7 +38,7 @@ interface Review {
       <!-- Back -->
       <button class="fbd-back" type="button" (click)="goBack()">
         <ap-icon name="arrow" [size]="14" style="transform:rotate(180deg)"/>
-        Back to Feedback
+        {{ t('feedback.backToFeedback') }}
       </button>
 
       <!-- Product summary -->
@@ -58,7 +59,7 @@ interface Review {
                 <span class="fbd-avg">{{ product()!.avgRating | number:'1.1-1' }}</span>
               }
               <span class="fbd-sep">·</span>
-              <span>{{ product()!.reviewCount }} {{ product()!.reviewCount === 1 ? 'review' : 'reviews' }}</span>
+              <span>{{ product()!.reviewCount }} {{ product()!.reviewCount === 1 ? t('feedback.review') : t('feedback.reviews') }}</span>
             </div>
           </div>
           <!-- Kiosk actions (product only) -->
@@ -67,14 +68,14 @@ interface Review {
               <a [href]="kioskUrl(product()!.id)" target="_blank" rel="noopener noreferrer"
                  class="fbd-action-btn fbd-kiosk-open" title="Open kiosk for this product">
                 <ap-icon name="phone" [size]="12"/>
-                iPad Kiosk
+                {{ t('feedback.detail.kioskOpen') }}
               </a>
               <button class="fbd-action-btn" type="button"
                       [class.copied]="kioskLinkCopied()"
                       (click)="copyKioskLink(product()!.id)"
                       title="Copy kiosk URL for iPad setup">
                 <ap-icon [name]="kioskLinkCopied() ? 'check' : 'copy'" [size]="12"/>
-                {{ kioskLinkCopied() ? 'Copied!' : 'Copy Link' }}
+                {{ kioskLinkCopied() ? t('feedback.copied') : t('feedback.copyLink') }}
               </button>
             </div>
           }
@@ -97,7 +98,7 @@ interface Review {
       <!-- Empty -->
       @if (!loading() && reviews().length === 0) {
         <div class="card">
-          <ap-empty-state icon="star" title="No reviews yet" sub="Feedback submitted for this product will appear here."/>
+          <ap-empty-state icon="star" [title]="t('feedback.detail.empty.title')" [sub]="t('feedback.detail.empty.sub')"/>
         </div>
       }
 
@@ -112,7 +113,7 @@ interface Review {
                 <span class="fbd-stars">{{ starsLabel(r.rating) }}</span>
                 <div class="fbd-rev-meta">
                   <span class="fbd-source-badge" [class.kiosk]="r.source === 'kiosk'">
-                    {{ r.source === 'kiosk' ? '📱 Kiosk' : '🖥 Storefront' }}
+                    {{ r.source === 'kiosk' ? t('feedback.source.kiosk') : t('feedback.source.storefront') }}
                   </span>
                   <span class="muted small">{{ r.createdAt | date:'d MMM y' }}</span>
                 </div>
@@ -148,7 +149,7 @@ interface Review {
                            class="fbd-action-btn fbd-wa"
                            title="Open in WhatsApp">
                           <ap-icon name="whatsapp" [size]="13"/>
-                          WhatsApp
+                          {{ t('feedback.whatsapp') }}
                         </a>
                         <button class="fbd-action-btn"
                                 [class.copied]="r._copied === 'phone'"
@@ -156,7 +157,7 @@ interface Review {
                                 (click)="copyPhone(r)"
                                 title="Copy phone number">
                           <ap-icon [name]="r._copied === 'phone' ? 'check' : 'copy'" [size]="12"/>
-                          {{ r._copied === 'phone' ? 'Copied' : 'Copy' }}
+                          {{ r._copied === 'phone' ? t('feedback.copied') : t('feedback.copy') }}
                         </button>
                       </div>
                     </div>
@@ -171,7 +172,7 @@ interface Review {
                            class="fbd-action-btn"
                            title="Send email">
                           <ap-icon name="mail" [size]="12"/>
-                          Email
+                          {{ t('feedback.email') }}
                         </a>
                         <button class="fbd-action-btn"
                                 [class.copied]="r._copied === 'email'"
@@ -179,7 +180,7 @@ interface Review {
                                 (click)="copyEmail(r)"
                                 title="Copy email address">
                           <ap-icon [name]="r._copied === 'email' ? 'check' : 'copy'" [size]="12"/>
-                          {{ r._copied === 'email' ? 'Copied' : 'Copy' }}
+                          {{ r._copied === 'email' ? t('feedback.copied') : t('feedback.copy') }}
                         </button>
                       </div>
                     </div>
@@ -189,14 +190,14 @@ interface Review {
 
               <!-- No contact info -->
               @if (!r.authorName && !r.authorEmail && !r.authorPhone) {
-                <div class="fbd-anon">Anonymous</div>
+                <div class="fbd-anon">{{ t('feedback.anonymous') }}</div>
               }
 
               <!-- Delete -->
               <div class="fbd-rev-foot">
                 <button class="fbd-delete" type="button" (click)="deleteReview(r)">
                   <ap-icon name="trash" [size]="13"/>
-                  Delete review
+                  {{ t('feedback.deleteReview') }}
                 </button>
               </div>
             </div>
@@ -328,6 +329,9 @@ export class FeedbackDetailComponent implements OnInit {
   private readonly route  = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly toast  = inject(ToastService);
+  private readonly i18n   = inject(I18nService);
+
+  readonly t = (k: string) => this.i18n.t(k);
 
   readonly loading         = signal(true);
   readonly product         = signal<ReviewProduct | null>(null);
@@ -358,7 +362,7 @@ export class FeedbackDetailComponent implements OnInit {
         this.reviews.set(data.reviews);
       }
     } catch {
-      this.toast.error('Failed to load', 'Could not load reviews.');
+      this.toast.error(this.t('feedback.toast.loadError.title'), this.t('feedback.toast.reviewsError'));
     } finally {
       this.loading.set(false);
     }
@@ -414,16 +418,16 @@ export class FeedbackDetailComponent implements OnInit {
   }
 
   async deleteReview(r: Review): Promise<void> {
-    if (!confirm('Delete this review? This cannot be undone.')) return;
+    if (!confirm(this.t('feedback.deleteConfirm'))) return;
     try {
       await this.api.delete<void>(`/admin/reviews/${r.id}`).toPromise();
       this.reviews.update((rs) => rs.filter((x) => x.id !== r.id));
       this.product.update((p) =>
         p ? { ...p, reviewCount: p.reviewCount - 1 } : p,
       );
-      this.toast.success('Deleted', 'Review removed.');
+      this.toast.success(this.t('feedback.toast.deleted'), this.t('feedback.toast.deletedSub'));
     } catch {
-      this.toast.error('Error', 'Could not delete review.');
+      this.toast.error(this.t('error.unknown.title'), this.t('feedback.toast.deleteError'));
     }
   }
 }

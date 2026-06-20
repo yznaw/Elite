@@ -47,7 +47,7 @@ const META: Record<string, PageMeta> = {
         </button>
         <!-- Phone only: back chevron for secondary pages (hidden on primary tab pages) -->
         @if (showBack()) {
-          <button class="topbar-back" (click)="goBack()" aria-label="Go back">
+          <button class="topbar-back" (click)="goBack()" [attr.aria-label]="t('common.goBack')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                  width="18" height="18">
@@ -121,7 +121,7 @@ const META: Record<string, PageMeta> = {
           class="icon-btn search-close-btn"
           type="button"
           (click)="toggleSearch()"
-          aria-label="Close search"
+          [attr.aria-label]="t('common.closeSearch')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"

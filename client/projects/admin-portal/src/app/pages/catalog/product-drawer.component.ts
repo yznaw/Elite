@@ -245,7 +245,7 @@ function readPreview(file: File): Promise<string> {
               <input type="file" multiple accept="image/*" hidden (change)="onUploadImages($event)"/>
             </label>
             <button class="btn btn-outline btn-sm" type="button" (click)="openMediaPicker()">
-              <ap-icon name="media" [size]="12"/> Pick from Media
+              <ap-icon name="media" [size]="12"/> {{ t('product.gallery.pickFromMedia') }}
             </button>
             <button class="btn btn-outline btn-sm" type="button" (click)="addImageUrl()">
               <ap-icon name="link" [size]="12"/> {{ t('product.gallery.addUrl') }}
@@ -362,7 +362,7 @@ function readPreview(file: File): Promise<string> {
                         <select class="inp inp-sm vcg-color-sel"
                                 [ngModel]="group.colorName"
                                 (ngModelChange)="renameGroupColor(group.colorKey, $event)">
-                          <option value="">— no color —</option>
+                          <option value="">{{ t('product.variants.noColor') }}</option>
                           @for (c of refColors(); track c.id) {
                             <option [value]="c.name_en">{{ c.name_en }}</option>
                           }
@@ -378,7 +378,7 @@ function readPreview(file: File): Promise<string> {
                     <!-- Stock total badge -->
                     <span class="vcg-stock-badge"
                           [class.vcg-stock--out]="groupStock(group.items) === 0">
-                      {{ groupStock(group.items) }} in stock
+                      {{ groupStock(group.items) }} {{ t('product.variants.inStock') }}
                     </span>
 
                     <!-- Image picker trigger + popover, wrapped so picker anchors to button -->
@@ -386,7 +386,7 @@ function readPreview(file: File): Promise<string> {
                       <button class="vcg-img-btn" type="button"
                               (click)="toggleVariantPicker('group-' + group.colorKey)"
                               [class.has-img]="!!imageForColor(group.colorName)"
-                              [attr.title]="group.colorName ? 'Link photo for ' + group.colorName : 'Link photo'">
+                              [attr.title]="group.colorName ? t('product.variants.linkPhotoFor') + ' ' + group.colorName : t('product.variants.linkPhoto')">
                         @if (imageForColor(group.colorName); as img) {
                           <img [src]="img" [alt]="group.colorName" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>
                           <span class="vc-img-edit-icon"><ap-icon name="edit" [size]="9"/></span>
@@ -398,17 +398,17 @@ function readPreview(file: File): Promise<string> {
                       @if (variantPickerOpenId() === 'group-' + group.colorKey) {
                         <div class="vc-img-picker vc-img-picker--group" (click)="$event.stopPropagation()">
                           <div class="vc-img-picker-head">
-                            Link photo for <strong>{{ group.colorName }}</strong>
+                            {{ t('product.variants.linkPhotoFor') }} <strong>{{ group.colorName }}</strong>
                             <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
                           </div>
                           @if (form().images.length === 0) {
-                            <p class="vc-img-picker-empty">Upload gallery images first</p>
+                            <p class="vc-img-picker-empty">{{ t('product.variants.uploadFirst') }}</p>
                           } @else {
                             <div class="vc-img-picker-grid">
                               <button class="vc-img-opt vc-img-opt--none" type="button"
                                       [class.is-sel]="!imageForColor(group.colorName)"
                                       (click)="setColorImage(group.colorName, ''); closeVariantPicker()">
-                                <span class="vc-img-none-label">None</span>
+                                <span class="vc-img-none-label">{{ t('product.variants.noneOption') }}</span>
                               </button>
                               @for (img of form().images; track img) {
                                 <button class="vc-img-opt" type="button"
@@ -430,7 +430,7 @@ function readPreview(file: File): Promise<string> {
                     @if (refSizeSets().length > 0 && expandedGroups().has(group.colorKey)) {
                       <div class="gen-sizes-wrap" (click)="$event.stopPropagation()">
                         <select class="inp inp-sm" #grpSizeSetSel style="font-size:11px;">
-                          <option value="">Generate sizes…</option>
+                          <option value="">{{ t('product.variants.generateSizes') }}</option>
                           @for (ss of refSizeSets(); track ss.id) {
                             <option [value]="ss.id">{{ ss.name }}</option>
                           }
@@ -446,7 +446,7 @@ function readPreview(file: File): Promise<string> {
                     @if (expandedGroups().has(group.colorKey)) {
                       <button class="btn btn-outline btn-sm" type="button"
                               (click)="$event.stopPropagation(); addVariantForColor(group.colorName)">
-                        <ap-icon name="plus" [size]="11"/> Size
+                        <ap-icon name="plus" [size]="11"/> {{ t('product.variants.addSize') }}
                       </button>
                     }
                   </div>
@@ -506,7 +506,7 @@ function readPreview(file: File): Promise<string> {
                             <button class="vt-expand" type="button"
                                     [class.is-open]="expandedVariants().has(item.v.id)"
                                     (click)="toggleVariantExpand(item.v.id)"
-                                    title="Material · Cost · Margin">
+                                    [title]="t('product.variants.costMarginTitle')">
                               <ap-icon name="arrowDn" [size]="12"/>
                             </button>
                             <button class="vt-remove" type="button"
@@ -544,13 +544,13 @@ function readPreview(file: File): Promise<string> {
                                      (ngModelChange)="updateVariant(item.globalIndex, { costPrice: $event !== null && $event !== '' ? +$event : undefined })"/>
                             </div>
                             <div class="vc-field">
-                              <label class="vc-lbl">Shipping (QAR)</label>
+                              <label class="vc-lbl">{{ t('product.variants.shipping') }}</label>
                               <input class="inp inp-sm mono" type="number" min="0" step="0.01" placeholder="—"
                                      [ngModel]="item.v.shippingCost ?? null"
                                      (ngModelChange)="updateVariant(item.globalIndex, { shippingCost: $event !== null && $event !== '' ? +$event : undefined })"/>
                             </div>
                             <div class="vc-field vc-field--total-cost">
-                              <label class="vc-lbl">Total Cost</label>
+                              <label class="vc-lbl">{{ t('product.variants.totalCost') }}</label>
                               @if (variantTotalCost(item.v); as tc) {
                                 <span class="total-cost-val mono">{{ tc | number:'1.2-2' }}</span>
                               } @else {
@@ -565,7 +565,7 @@ function readPreview(file: File): Promise<string> {
                                       [class.margin-amber]="m >= 20 && m < 40"
                                       [class.margin-red]="m < 20">{{ m }}%</span>
                               } @else {
-                                <span class="margin-dash muted small">— set cost to calculate</span>
+                                <span class="margin-dash muted small">{{ t('product.variants.setCostToCalc') }}</span>
                               }
                             </div>
                           </div>
@@ -694,7 +694,7 @@ function readPreview(file: File): Promise<string> {
           <label class="lbl">{{ t('product.field.slug') }}</label>
           <input class="inp mono" [ngModel]="form().slug" (ngModelChange)="set('slug', $event)" [class.inp-invalid]="slugError()"/>
           @if (slugError()) {
-            <div class="field-error mt-6">Lowercase letters, numbers, and hyphens only (e.g. my-product-name)</div>
+            <div class="field-error mt-6">{{ t('product.field.slugError') }}</div>
           }
         </div>
 
@@ -727,21 +727,21 @@ function readPreview(file: File): Promise<string> {
       <div class="media-pick-panel" style="z-index:270;">
         <div class="mpp-head">
           <div>
-            <p class="mpp-eyebrow">Media Library</p>
-            <div class="card-title">Select images to add</div>
+            <p class="mpp-eyebrow">{{ t('product.gallery.library') }}</p>
+            <div class="card-title">{{ t('product.gallery.selectImages') }}</div>
           </div>
           <button class="x-btn" type="button" (click)="mediaPicker.set(false)"><ap-icon name="x" [size]="14"/></button>
         </div>
         <div class="mpp-search">
           <ap-icon name="search" [size]="13"/>
-          <input class="inp" placeholder="Search by filename…"
+          <input class="inp" [placeholder]="t('product.gallery.searchFilename')"
                  [ngModel]="mediaSearch()" (ngModelChange)="mediaSearch.set($event)"/>
         </div>
         <div class="mpp-body">
           @if (mediaLoading()) {
-            <div class="mpp-state"><ap-spinner [size]="20"/> Loading media…</div>
+            <div class="mpp-state"><ap-spinner [size]="20"/> {{ t('product.gallery.loadingMedia') }}</div>
           } @else if (filteredMediaFiles().length === 0) {
-            <div class="mpp-state">No images found in your media library.</div>
+            <div class="mpp-state">{{ t('product.gallery.noImages') }}</div>
           } @else {
             <div class="mpp-grid">
               @for (f of filteredMediaFiles(); track f.id) {
@@ -759,11 +759,11 @@ function readPreview(file: File): Promise<string> {
           }
         </div>
         <div class="drawer-foot">
-          <span class="muted small">{{ mediaSelected().size }} selected</span>
+          <span class="muted small">{{ mediaSelected().size }} {{ t('product.gallery.selected') }}</span>
           <div class="row gap-sm">
-            <button class="btn btn-outline" type="button" (click)="mediaPicker.set(false)">Cancel</button>
+            <button class="btn btn-outline" type="button" (click)="mediaPicker.set(false)">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" type="button" [disabled]="mediaSelected().size === 0" (click)="applyMediaSelection()">
-              Add {{ mediaSelected().size > 0 ? mediaSelected().size : '' }} Image{{ mediaSelected().size !== 1 ? 's' : '' }}
+              {{ mediaSelected().size !== 1 ? t('product.gallery.addImages') : t('product.gallery.addImage') }}
             </button>
           </div>
         </div>
@@ -1837,7 +1837,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       const files = await this.mediaApi.list();
       this.mediaFiles.set(files);
     } catch {
-      this.toast.error('Could not load media library');
+      this.toast.error(this.t('product.gallery.loadError'));
     } finally {
       this.mediaLoading.set(false);
     }
@@ -2141,7 +2141,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       f.variants.filter(v => v.color === colorName).map(v => v.size)
     );
     const toAdd = ss.sizes.filter(sz => !existingSizes.has(sz));
-    if (toAdd.length === 0) { this.toast.info('All sizes already added', ss.name); return; }
+    if (toAdd.length === 0) { this.toast.info(this.t('product.variants.allSizesAdded'), ss.name); return; }
     const newVariants: ProductVariant[] = toAdd.map(sz => ({
       id:       'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
       sku:      f.sku ? `${f.sku}-${colorName.toUpperCase().slice(0,3)}-${sz}` : '',
@@ -2152,7 +2152,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       stock:    0,
     }));
     this.set('variants', [...f.variants, ...newVariants]);
-    this.toast.success(`${newVariants.length} sizes added`, `${colorName} · ${ss.name}`);
+    this.toast.success(`${newVariants.length} ${this.t('product.variants.sizesAdded')}`, `${colorName} · ${ss.name}`);
   }
 
   setBulkPriceForColor(colorName: string, price: number): void {
@@ -2191,11 +2191,11 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       stock: 0,
     }));
     if (newVariants.length === 0) {
-      this.toast.info('All sizes already added', ss.name);
+      this.toast.info(this.t('product.variants.allSizesAdded'), ss.name);
       return;
     }
     this.set('variants', [...f.variants, ...newVariants]);
-    this.toast.success(`${newVariants.length} sizes added`, ss.name);
+    this.toast.success(`${newVariants.length} ${this.t('product.variants.sizesAdded')}`, ss.name);
   }
 
   readonly hasVariants = computed(() => this.form().variants.length > 0);
@@ -2504,7 +2504,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.duplicating.set(true);
     try {
       const copy = await this.productsApi.duplicate(this.product.id);
-      this.toast.success('Product duplicated', copy.sku);
+      this.toast.success(this.t('product.toast.duplicated'), copy.sku);
       this.duplicated.emit(copy);
     } catch {
       // Global interceptor surfaces the error.

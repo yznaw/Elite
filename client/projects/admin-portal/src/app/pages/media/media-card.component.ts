@@ -1,6 +1,7 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { I18nService } from '../../services/i18n.service';
 import { fmtBytes, MediaFile, Product } from '../../models';
 
 interface Suggestion {
@@ -21,16 +22,16 @@ interface Suggestion {
         } @else {
           <div class="glb-thumb">
             <ap-icon name="cube" [size]="42"/>
-            <div class="glb-thumb-label">3D Model</div>
+            <div class="glb-thumb-label">{{ t('media.thumb.gridLabel') }}</div>
           </div>
         }
         <span class="type-badge">{{ media.kind === 'glb' ? '.GLB' : extension(media.name) }}</span>
         @if (linkedProduct) {
-          <span class="link-pill linked"><ap-icon name="check" [size]="9"/> Linked</span>
+          <span class="link-pill linked"><ap-icon name="check" [size]="9"/> {{ t('media.thumb.linked') }}</span>
         } @else if (suggestion) {
-          <span class="link-pill suggest" [attr.title]="suggestion.why">~ Match</span>
+          <span class="link-pill suggest" [attr.title]="suggestion.why">{{ t('media.thumb.match') }}</span>
         } @else {
-          <span class="link-pill unlinked">⚠ Unlinked</span>
+          <span class="link-pill unlinked">⚠ {{ t('media.thumb.unlinked') }}</span>
         }
       </div>
       <div class="media-info">
@@ -50,6 +51,9 @@ interface Suggestion {
   `,
 })
 export class MediaCardComponent {
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
+
   @Input({ required: true }) media!: MediaFile;
   @Input() products: Product[] = [];
   @Input() selected = false;

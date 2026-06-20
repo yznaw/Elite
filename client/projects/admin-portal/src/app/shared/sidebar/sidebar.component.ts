@@ -6,7 +6,6 @@ import { IconComponent, IconName } from '../icons/icon.component';
 import { AvatarComponent } from '../avatar/avatar.component';
 import { I18nService } from '../../services/i18n.service';
 import { AuthService } from '../../services/auth.service';
-import { ToastService } from '../../services/toast.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
 
 interface NavLink {
@@ -35,17 +34,14 @@ interface NavLink {
     >
       <!-- Brand + collapse button -->
       <div class="sidebar-brand">
-        <div class="brand-text">
-          <div class="brand-mark">{{ t('brand.name') }}</div>
-          <div class="brand-sub">{{ t('brand.tagline') }}</div>
-        </div>
+        <img src="assets/brand/elite-logo-cream.png" alt="Elite Collection" class="brand-logo"/>
         <!-- Desktop collapse toggle -->
         <button
           class="collapse-btn"
           type="button"
           (click)="toggle.toggleCollapse()"
-          [attr.title]="toggle.collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
-          [attr.aria-label]="toggle.collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+          [attr.title]="toggle.collapsed() ? t('sidebar.expand') : t('sidebar.collapse')"
+          [attr.aria-label]="toggle.collapsed() ? t('sidebar.expand') : t('sidebar.collapse')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
@@ -92,20 +88,6 @@ interface NavLink {
                 <span class="sidebar-user-email" [attr.title]="u.email">{{ u.email }}</span>
               </div>
             </div>
-            <button
-              class="sidebar-logout"
-              type="button"
-              (click)="logout()"
-              [attr.aria-label]="t('topbar.logout')"
-              [attr.title]="t('topbar.logout')"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                   stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-            </button>
           </div>
         }
       </div>
@@ -147,21 +129,13 @@ interface NavLink {
       position: relative; z-index: 1;
       flex-shrink: 0;
     }
-    .brand-text { min-width: 0; flex: 1; }
-    .brand-mark {
-      font-family: var(--ff-disp);
-      font-size: 24px; font-weight: 500;
-      color: var(--gold); letter-spacing: 0.18em;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    .brand-logo {
+      height: 28px;
+      width: auto;
+      object-fit: contain;
+      flex: 1;
+      min-width: 0;
     }
-    html[dir='rtl'] .brand-mark { letter-spacing: 0.05em; }
-    .brand-sub {
-      font-size: 9px; letter-spacing: 0.32em;
-      color: rgba(255,255,255,0.55);
-      text-transform: uppercase; margin-top: 2px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    html[dir='rtl'] .brand-sub { letter-spacing: 0; }
 
     /* ── Collapse button (desktop only) ── */
     .collapse-btn {
@@ -287,38 +261,19 @@ interface NavLink {
     .sidebar-user-email {
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
     }
-    .sidebar-logout {
-      width: 30px; height: 30px;
-      display: inline-flex; align-items: center; justify-content: center;
-      background: transparent;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px;
-      color: rgba(255,255,255,0.6);
-      cursor: pointer; flex-shrink: 0;
-      transition: all 0.15s;
-    }
-    .sidebar-logout:hover {
-      color: var(--danger);
-      border-color: rgba(239,68,68,0.5);
-      background: rgba(239,68,68,0.08);
-    }
-
     /* ── Collapsed state (desktop) ─────── */
     @media (min-width: 1025px) {
       .sidebar.collapsed {
         width: 68px;
         padding-inline: 8px;
       }
-      .sidebar.collapsed .brand-text,
-      .sidebar.collapsed .brand-sub,
       .sidebar.collapsed .nav-section-label,
       .sidebar.collapsed .nav-label,
-      .sidebar.collapsed .sidebar-user-meta,
-      .sidebar.collapsed .sidebar-logout {
+      .sidebar.collapsed .sidebar-user-meta {
         display: none;
       }
       .sidebar.collapsed .sidebar-brand { padding-inline: 4px; justify-content: center; }
-      .sidebar.collapsed .brand-mark { display: none; }
+      .sidebar.collapsed .brand-logo { height: 20px; }
       .sidebar.collapsed .nav-item { justify-content: center; padding-inline: 0; }
       .sidebar.collapsed .sidebar-user { justify-content: center; }
       .sidebar.collapsed .sidebar-footer { padding-inline: 4px; }
@@ -365,7 +320,6 @@ interface NavLink {
 export class SidebarComponent {
   private readonly i18n  = inject(I18nService);
   private readonly auth  = inject(AuthService);
-  private readonly toast = inject(ToastService);
   readonly toggle = inject(SidebarToggleService);
   private readonly router = inject(Router);
 
@@ -387,15 +341,6 @@ export class SidebarComponent {
     }
   }
 
-  async logout(): Promise<void> {
-    try {
-      await this.auth.logout();
-      this.toast.info(this.t('login.signedOut'));
-    } finally {
-      void this.router.navigate(['/login']);
-    }
-  }
-
   readonly links: NavLink[] = [
     { path: '/dashboard',   labelKey: 'nav.dashboard',   subKey: 'nav.dashboard.sub',   icon: 'dash' },
     { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
@@ -405,6 +350,7 @@ export class SidebarComponent {
     { path: '/orders',      labelKey: 'nav.orders',      subKey: 'nav.orders.sub',      icon: 'orders' },
     { path: '/customers',   labelKey: 'nav.customers',   subKey: 'nav.customers.sub',   icon: 'users' },
     { path: '/feedback',    labelKey: 'nav.feedback',    subKey: 'nav.feedback.sub',    icon: 'star'  },
+    { path: '/policies',    labelKey: 'nav.policies',    subKey: 'nav.policies.sub',    icon: 'docs'  },
     { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart' },
     { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
     { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },

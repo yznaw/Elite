@@ -50,11 +50,11 @@ import { IconComponent } from '../../shared/icons/icon.component';
     <div class="page-fade">
       <div class="range-bar mb-16">
         <div class="range-pills">
-          <button class="range-pill" [class.active]="dateRange() === 'today'"  (click)="dateRange.set('today')">Today</button>
-          <button class="range-pill" [class.active]="dateRange() === '7d'"     (click)="dateRange.set('7d')">7D</button>
-          <button class="range-pill" [class.active]="dateRange() === '30d'"    (click)="dateRange.set('30d')">30D</button>
-          <button class="range-pill" [class.active]="dateRange() === '90d'"    (click)="dateRange.set('90d')">90D</button>
-          <button class="range-pill" [class.active]="dateRange() === 'custom'" (click)="dateRange.set('custom')">Custom</button>
+          <button class="range-pill" [class.active]="dateRange() === 'today'"  (click)="dateRange.set('today')">{{ t('dash.range.today') }}</button>
+          <button class="range-pill" [class.active]="dateRange() === '7d'"     (click)="dateRange.set('7d')">{{ t('dash.range.7d') }}</button>
+          <button class="range-pill" [class.active]="dateRange() === '30d'"    (click)="dateRange.set('30d')">{{ t('dash.range.30d') }}</button>
+          <button class="range-pill" [class.active]="dateRange() === '90d'"    (click)="dateRange.set('90d')">{{ t('dash.range.90d') }}</button>
+          <button class="range-pill" [class.active]="dateRange() === 'custom'" (click)="dateRange.set('custom')">{{ t('dash.range.custom') }}</button>
         </div>
         @if (dateRange() === 'custom') {
           <div class="range-dates">
@@ -96,7 +96,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
           <div class="row" style="justify-content:space-between;">
             <div class="kpi-delta" [class.down]="lowStockCount() > 0" [class.up]="lowStockCount() === 0">
               <ap-icon [name]="lowStockCount() > 0 ? 'warning' : 'check'" [size]="11"/>
-              {{ lowStockCount() > 0 ? t('dash.lowStock.delta') : 'All stocked' }}
+              {{ lowStockCount() > 0 ? t('dash.lowStock.delta') : t('dash.allStocked') }}
             </div>
           </div>
         </div>
@@ -226,14 +226,15 @@ export class DashboardComponent implements OnInit {
   });
 
   revRangeLabel(): string {
+    const rev = this.t('dash.kpi.revenue');
     switch (this.dateRange()) {
       case 'today':  return this.t('dash.todayRevenue');
-      case '7d':     return 'Revenue · 7D';
-      case '30d':    return 'Revenue · 30D';
-      case '90d':    return 'Revenue · 90D';
+      case '7d':     return `${rev} · ${this.t('dash.range.7d')}`;
+      case '30d':    return `${rev} · ${this.t('dash.range.30d')}`;
+      case '90d':    return `${rev} · ${this.t('dash.range.90d')}`;
       case 'custom': {
-        const f = this.customFrom(); const t = this.customTo();
-        return f ? `Revenue · ${f}${t ? ' – ' + t : ''}` : 'Revenue · Custom';
+        const f = this.customFrom(); const to = this.customTo();
+        return f ? `${rev} · ${f}${to ? ' - ' + to : ''}` : `${rev} · ${this.t('dash.range.custom')}`;
       }
     }
   }

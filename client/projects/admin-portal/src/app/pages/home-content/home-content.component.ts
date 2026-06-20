@@ -7,6 +7,7 @@ import { ApiClient } from '../../services/api-client.service';
 import { MediaUploadService } from '../../services/media-upload.service';
 import { AdminMediaService } from '../../services/admin-media.service';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
+import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
@@ -190,13 +191,13 @@ function cloneContent(content: HomeContentData): HomeContentData {
         (discarded)="resetToDefaults()"/>
       <header class="card home-admin__header">
         <div>
-          <p>Storefront Home</p>
-          <h1>Hero & Featured Collections</h1>
-          <span>Update the Promotion Section and collection grid used on the customer home page.</span>
+          <p>{{ t('home.editor.header.title') }}</p>
+          <h1>{{ t('home.editor.header.h1') }}</h1>
+          <span>{{ t('home.editor.header.sub') }}</span>
         </div>
 
         <div class="home-admin__actions">
-          <button type="button" class="btn btn-outline btn-sm" (click)="resetToDefaults()" [disabled]="saving()">Reset to defaults</button>
+          <button type="button" class="btn btn-outline btn-sm" (click)="resetToDefaults()" [disabled]="saving()">{{ t('home.editor.header.reset') }}</button>
         </div>
       </header>
 
@@ -204,14 +205,14 @@ function cloneContent(content: HomeContentData): HomeContentData {
         <article class="card editor-card">
           <div class="editor-card__head">
             <div>
-              <p>Hero / Discount</p>
-              <h2>Split showcase section</h2>
+              <p>{{ t('home.editor.hero.section') }}</p>
+              <h2>{{ t('home.editor.hero.sub') }}</h2>
             </div>
           </div>
 
           <div class="field-stack">
             <label>
-              <span class="lbl">Showcase image</span>
+              <span class="lbl">{{ t('home.editor.hero.image') }}</span>
               <div class="image-picker">
                 <img [src]="content().hero.imageUrl" [alt]="content().hero.title" />
                 <div>
@@ -221,37 +222,37 @@ function cloneContent(content: HomeContentData): HomeContentData {
                     <input #heroFile type="file" accept="image/*" (change)="uploadHeroImage($event)" hidden />
                     <button type="button" class="btn btn-outline btn-sm" (click)="heroFile.click()" [disabled]="isUploading('hero')">
                       @if (isUploading('hero')) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
-                      {{ isUploading('hero') ? 'Uploading…' : 'Upload' }}
+                      {{ isUploading('hero') ? t('home.editor.hero.uploading') : t('storefront.editor.btn.upload') }}
                     </button>
                     <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker('hero')">
-                      <ap-icon name="media" [size]="12"/> Media
+                      <ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}
                     </button>
                   </div>
                 </div>
               </div>
             </label>
             <label>
-              <span class="lbl">Header text</span>
+              <span class="lbl">{{ t('home.editor.hero.header') }}</span>
               <input class="inp" [ngModel]="content().hero.title" (ngModelChange)="updateHero('title', $event)" />
             </label>
             <label>
-              <span class="lbl">Body text</span>
+              <span class="lbl">{{ t('home.editor.hero.body') }}</span>
               <textarea class="inp" rows="4" [ngModel]="content().hero.body" (ngModelChange)="updateHero('body', $event)"></textarea>
             </label>
 
             <div class="two-col">
               <label>
-                <span class="lbl">Discount text</span>
+                <span class="lbl">{{ t('home.editor.hero.discount') }}</span>
                 <input class="inp" [ngModel]="content().hero.discountText" (ngModelChange)="updateHero('discountText', $event)" />
               </label>
               <label>
-                <span class="lbl">Button label</span>
+                <span class="lbl">{{ t('home.editor.hero.btnLabel') }}</span>
                 <input class="inp" [ngModel]="content().hero.ctaText" (ngModelChange)="updateHero('ctaText', $event)" />
               </label>
             </div>
 
             <label>
-              <span class="lbl">Button destination link</span>
+              <span class="lbl">{{ t('home.editor.hero.btnLink') }}</span>
               <input class="inp" [ngModel]="content().hero.ctaLink" (ngModelChange)="updateHero('ctaLink', $event)" />
             </label>
           </div>
@@ -260,8 +261,8 @@ function cloneContent(content: HomeContentData): HomeContentData {
         <article class="card preview-card">
           <div class="editor-card__head">
             <div>
-              <p>Live Preview</p>
-              <h2>Customer hero pattern</h2>
+              <p>{{ t('home.editor.preview.title') }}</p>
+              <h2>{{ t('home.editor.preview.sub') }}</h2>
             </div>
           </div>
           <div class="preview-hero">
@@ -281,10 +282,10 @@ function cloneContent(content: HomeContentData): HomeContentData {
       <section class="card editor-card collections-editor">
         <div class="editor-card__head">
           <div>
-            <p>Featured Collections Grid</p>
-            <h2>Manage the three home tiles</h2>
+            <p>{{ t('home.editor.collections.section') }}</p>
+            <h2>{{ t('home.editor.collections.sub') }}</h2>
           </div>
-          <span class="hint">Images, titles, and collection links update the storefront grid.</span>
+          <span class="hint">{{ t('home.editor.collections.hint') }}</span>
         </div>
 
         <div class="tile-editor-grid">
@@ -300,9 +301,9 @@ function cloneContent(content: HomeContentData): HomeContentData {
               <div class="field-stack compact">
                 <!-- Collection link -->
                 <label>
-                  <span class="lbl">Linked Collection</span>
+                  <span class="lbl">{{ t('storefront.editor.tiles.linkedCollection') }}</span>
                   <select class="inp inp-sm" [ngModel]="tile.collectionId || ''" (ngModelChange)="selectCollection(tile.id, $event)">
-                    <option value="">— None (custom) —</option>
+                    <option value="">{{ t('storefront.editor.tiles.noneCustom') }}</option>
                     @for (col of collections(); track col.id) {
                       <option [value]="col.id">{{ col.title }}</option>
                     }
@@ -313,12 +314,12 @@ function cloneContent(content: HomeContentData): HomeContentData {
                 </label>
 
                 <label>
-                  <span class="lbl">Title</span>
+                  <span class="lbl">{{ t('storefront.editor.field.title') }}</span>
                   <input class="inp" [ngModel]="tile.title" (ngModelChange)="updateCollection(tile.id, 'title', $event)" />
                 </label>
 
                 <label>
-                  <span class="lbl">Tile image</span>
+                  <span class="lbl">{{ t('home.editor.collections.tileImage') }}</span>
                   <div class="mini-picker">
                     @if (tile.imageUrl) {
                       <img class="mini-thumb" [src]="tile.imageUrl" [alt]="tile.title" />
@@ -331,21 +332,21 @@ function cloneContent(content: HomeContentData): HomeContentData {
                       <input #tileFile type="file" accept="image/*" (change)="uploadCollectionImage(tile.id, $event)" hidden />
                       <button type="button" class="btn btn-outline btn-sm" (click)="tileFile.click()" [disabled]="isUploading(tile.id)">
                         @if (isUploading(tile.id)) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
-                        {{ isUploading(tile.id) ? 'Uploading…' : 'Upload' }}
+                        {{ isUploading(tile.id) ? t('home.editor.hero.uploading') : t('storefront.editor.btn.upload') }}
                       </button>
                       <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker(tile.id)">
-                        <ap-icon name="media" [size]="12"/> Media
+                        <ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}
                       </button>
                     </div>
                   </div>
                 </label>
 
                 <label>
-                  <span class="lbl">Collection link</span>
+                  <span class="lbl">{{ t('home.editor.collections.colLink') }}</span>
                   <input class="inp" [ngModel]="tile.link" (ngModelChange)="updateCollection(tile.id, 'link', $event)" />
                 </label>
                 <label>
-                  <span class="lbl">Optional button text</span>
+                  <span class="lbl">{{ t('home.editor.collections.ctaText') }}</span>
                   <input class="inp" [ngModel]="tile.ctaText || ''" (ngModelChange)="updateCollection(tile.id, 'ctaText', $event)" />
                 </label>
               </div>
@@ -354,8 +355,8 @@ function cloneContent(content: HomeContentData): HomeContentData {
         </div>
 
         <div class="grid-preview-head">
-          <p>Live Grid Preview</p>
-          <span>Same three-tile composition used on the customer home page.</span>
+          <p>{{ t('home.editor.collections.previewTitle') }}</p>
+          <span>{{ t('home.editor.collections.previewSub') }}</span>
         </div>
 
         <div class="preview-collection-grid">
@@ -375,10 +376,10 @@ function cloneContent(content: HomeContentData): HomeContentData {
       <section class="card editor-card story-editor">
         <div class="editor-card__head story-editor__head">
           <div>
-            <p>Story Page</p>
-            <h2>Editorial story builder</h2>
+            <p>{{ t('home.editor.story.section') }}</p>
+            <h2>{{ t('home.editor.story.sub') }}</h2>
           </div>
-          <span class="hint">Edit the /story page hero, images, quote, atelier cards, and chapter order.</span>
+          <span class="hint">{{ t('home.editor.story.hint') }}</span>
         </div>
 
         <div class="story-admin-grid">
@@ -394,7 +395,7 @@ function cloneContent(content: HomeContentData): HomeContentData {
 
             <div class="field-stack">
               <label>
-                <span class="lbl">Hero photo</span>
+                <span class="lbl">{{ t('home.editor.story.heroPhoto') }}</span>
                 <div class="mini-picker">
                   <strong>{{ imageName(content().story.hero.imageUrl) }}</strong>
                   <small>{{ uploadProgress('story-hero') }}</small>
@@ -402,10 +403,10 @@ function cloneContent(content: HomeContentData): HomeContentData {
                     <input #storyHeroFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden />
                     <button type="button" class="btn btn-outline btn-sm" (click)="storyHeroFile.click()" [disabled]="isUploading('story-hero')">
                       @if (isUploading('story-hero')) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
-                      {{ isUploading('story-hero') ? 'Uploading…' : 'Upload' }}
+                      {{ isUploading('story-hero') ? t('home.editor.hero.uploading') : t('storefront.editor.btn.upload') }}
                     </button>
                     <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker('story-hero')">
-                      <ap-icon name="media" [size]="12"/> Media
+                      <ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}
                     </button>
                   </div>
                 </div>
@@ -413,25 +414,25 @@ function cloneContent(content: HomeContentData): HomeContentData {
 
               <div class="two-col">
                 <label>
-                  <span class="lbl">Kicker</span>
+                  <span class="lbl">{{ t('home.editor.story.kicker') }}</span>
                   <input class="inp" [ngModel]="content().story.hero.kicker" (ngModelChange)="updateStoryHero('kicker', $event)" />
                 </label>
                 <label>
-                  <span class="lbl">Image alt text</span>
+                  <span class="lbl">{{ t('home.editor.story.imageAlt') }}</span>
                   <input class="inp" [ngModel]="content().story.hero.imageAlt" (ngModelChange)="updateStoryHero('imageAlt', $event)" />
                 </label>
               </div>
 
               <label>
-                <span class="lbl">Main title</span>
+                <span class="lbl">{{ t('home.editor.story.mainTitle') }}</span>
                 <input class="inp" [ngModel]="content().story.hero.title" (ngModelChange)="updateStoryHero('title', $event)" />
               </label>
               <label>
-                <span class="lbl">Accent line</span>
+                <span class="lbl">{{ t('home.editor.story.accent') }}</span>
                 <input class="inp" [ngModel]="content().story.hero.accent" (ngModelChange)="updateStoryHero('accent', $event)" />
               </label>
               <label>
-                <span class="lbl">Intro body</span>
+                <span class="lbl">{{ t('home.editor.story.intro') }}</span>
                 <textarea class="inp" rows="4" [ngModel]="content().story.hero.body" (ngModelChange)="updateStoryHero('body', $event)"></textarea>
               </label>
             </div>
@@ -440,36 +441,36 @@ function cloneContent(content: HomeContentData): HomeContentData {
           <article class="story-admin-panel">
             <div class="field-stack">
               <div class="grid-preview-head story-admin-subhead">
-                <p>Quote Band</p>
-                <span>Large editorial quote between chapters and atelier.</span>
+                <p>{{ t('home.editor.story.quoteBand') }}</p>
+                <span>{{ t('home.editor.story.quoteBandSub') }}</span>
               </div>
               <label>
-                <span class="lbl">Quote text</span>
+                <span class="lbl">{{ t('home.editor.story.quoteText') }}</span>
                 <input class="inp" [ngModel]="content().story.quote.text" (ngModelChange)="updateStoryQuote('text', $event)" />
               </label>
               <label>
-                <span class="lbl">Accent sentence</span>
+                <span class="lbl">{{ t('home.editor.story.quoteSentence') }}</span>
                 <textarea class="inp" rows="3" [ngModel]="content().story.quote.accent" (ngModelChange)="updateStoryQuote('accent', $event)"></textarea>
               </label>
               <label>
-                <span class="lbl">Author</span>
+                <span class="lbl">{{ t('home.editor.story.quoteAuthor') }}</span>
                 <input class="inp" [ngModel]="content().story.quote.author" (ngModelChange)="updateStoryQuote('author', $event)" />
               </label>
 
               <div class="grid-preview-head story-admin-subhead">
-                <p>Atelier Intro</p>
-                <span>Copy shown above the craft role cards.</span>
+                <p>{{ t('home.editor.story.atelierIntro') }}</p>
+                <span>{{ t('home.editor.story.atelierIntroSub') }}</span>
               </div>
               <label>
-                <span class="lbl">Kicker</span>
+                <span class="lbl">{{ t('home.editor.story.kicker') }}</span>
                 <input class="inp" [ngModel]="content().story.atelier.kicker" (ngModelChange)="updateStoryAtelier('kicker', $event)" />
               </label>
               <label>
-                <span class="lbl">Title</span>
+                <span class="lbl">{{ t('home.editor.story.title') }}</span>
                 <input class="inp" [ngModel]="content().story.atelier.title" (ngModelChange)="updateStoryAtelier('title', $event)" />
               </label>
               <label>
-                <span class="lbl">Body</span>
+                <span class="lbl">{{ t('home.editor.story.body') }}</span>
                 <textarea class="inp" rows="3" [ngModel]="content().story.atelier.body" (ngModelChange)="updateStoryAtelier('body', $event)"></textarea>
               </label>
             </div>
@@ -477,8 +478,8 @@ function cloneContent(content: HomeContentData): HomeContentData {
         </div>
 
         <div class="grid-preview-head story-admin-subhead">
-          <p>Sortable Chapters</p>
-          <span>Drag cards, or use the arrow buttons, to change the story order.</span>
+          <p>{{ t('home.editor.story.chapters') }}</p>
+          <span>{{ t('home.editor.story.chaptersSub') }}</span>
         </div>
 
         <div class="story-chapter-editor">
@@ -500,13 +501,13 @@ function cloneContent(content: HomeContentData): HomeContentData {
 
               <div class="story-chapter-card__body">
                 <div class="story-card-tools">
-                  <button type="button" class="btn btn-outline btn-sm" (click)="moveStoryChapter(chapter.id, -1)" [disabled]="i === 0">Up</button>
-                  <button type="button" class="btn btn-outline btn-sm" (click)="moveStoryChapter(chapter.id, 1)" [disabled]="i === content().story.chapters.length - 1">Down</button>
+                  <button type="button" class="btn btn-outline btn-sm" (click)="moveStoryChapter(chapter.id, -1)" [disabled]="i === 0">{{ t('home.editor.story.moveUp') }}</button>
+                  <button type="button" class="btn btn-outline btn-sm" (click)="moveStoryChapter(chapter.id, 1)" [disabled]="i === content().story.chapters.length - 1">{{ t('home.editor.story.moveDown') }}</button>
                 </div>
 
                 <div class="field-stack compact">
                   <label>
-                    <span class="lbl">Chapter photo</span>
+                    <span class="lbl">{{ t('home.editor.story.chapterPhoto') }}</span>
                     <div class="mini-picker">
                       <strong>{{ imageName(chapter.imageUrl) }}</strong>
                       <small>{{ uploadProgress('story-' + chapter.id) }}</small>
@@ -514,28 +515,28 @@ function cloneContent(content: HomeContentData): HomeContentData {
                         <input #storyChapterFile type="file" accept="image/*" (change)="uploadStoryChapterImage(chapter.id, $event)" hidden />
                         <button type="button" class="btn btn-outline btn-sm" (click)="storyChapterFile.click()" [disabled]="isUploading('story-' + chapter.id)">
                           @if (isUploading('story-' + chapter.id)) { <ap-spinner [size]="11"/> } @else { <ap-icon name="upload" [size]="12"/> }
-                          {{ isUploading('story-' + chapter.id) ? 'Uploading…' : 'Upload' }}
+                          {{ isUploading('story-' + chapter.id) ? t('home.editor.hero.uploading') : t('storefront.editor.btn.upload') }}
                         </button>
                         <button type="button" class="btn btn-outline btn-sm" (click)="openMediaPicker('story-' + chapter.id)">
-                          <ap-icon name="media" [size]="12"/> Media
+                          <ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}
                         </button>
                       </div>
                     </div>
                   </label>
                   <label>
-                    <span class="lbl">Eyebrow</span>
+                    <span class="lbl">{{ t('home.editor.story.eyebrow') }}</span>
                     <input class="inp" [ngModel]="chapter.eyebrow" (ngModelChange)="updateStoryChapter(chapter.id, 'eyebrow', $event)" />
                   </label>
                   <label>
-                    <span class="lbl">Title</span>
+                    <span class="lbl">{{ t('home.editor.story.title') }}</span>
                     <input class="inp" [ngModel]="chapter.title" (ngModelChange)="updateStoryChapter(chapter.id, 'title', $event)" />
                   </label>
                   <label>
-                    <span class="lbl">Body</span>
+                    <span class="lbl">{{ t('home.editor.story.body') }}</span>
                     <textarea class="inp" rows="4" [ngModel]="chapter.body" (ngModelChange)="updateStoryChapter(chapter.id, 'body', $event)"></textarea>
                   </label>
                   <label>
-                    <span class="lbl">Image alt text</span>
+                    <span class="lbl">{{ t('home.editor.story.imageAlt') }}</span>
                     <input class="inp" [ngModel]="chapter.imageAlt" (ngModelChange)="updateStoryChapter(chapter.id, 'imageAlt', $event)" />
                   </label>
                 </div>
@@ -545,19 +546,19 @@ function cloneContent(content: HomeContentData): HomeContentData {
         </div>
 
         <div class="grid-preview-head story-admin-subhead">
-          <p>Atelier Cards</p>
-          <span>Short role cards shown at the bottom of the story page.</span>
+          <p>{{ t('home.editor.story.atelierCards') }}</p>
+          <span>{{ t('home.editor.story.atelierCardsSub') }}</span>
         </div>
 
         <div class="atelier-editor-grid">
           @for (item of content().story.atelier.items; track item.id) {
             <article class="atelier-editor-card">
               <label>
-                <span class="lbl">Role title</span>
+                <span class="lbl">{{ t('home.editor.story.roleTitle') }}</span>
                 <input class="inp" [ngModel]="item.title" (ngModelChange)="updateStoryAtelierItem(item.id, 'title', $event)" />
               </label>
               <label>
-                <span class="lbl">Meta line</span>
+                <span class="lbl">{{ t('home.editor.story.metaLine') }}</span>
                 <input class="inp" [ngModel]="item.meta" (ngModelChange)="updateStoryAtelierItem(item.id, 'meta', $event)" />
               </label>
             </article>
@@ -572,20 +573,20 @@ function cloneContent(content: HomeContentData): HomeContentData {
       <div class="media-picker-modal" style="z-index:810;">
         <div class="mpm-head">
           <div>
-            <p class="mpm-eyebrow">Media Center</p>
-            <div class="mpm-title">Select an image</div>
+            <p class="mpm-eyebrow">{{ t('home.editor.mediaPicker.eyebrow') }}</p>
+            <div class="mpm-title">{{ t('home.editor.mediaPicker.title') }}</div>
           </div>
           <button class="x-btn" type="button" (click)="activeMediaPicker.set(null)"><ap-icon name="x" [size]="14"/></button>
         </div>
         <div class="mpm-search">
           <ap-icon name="search" [size]="13"/>
-          <input class="inp with-icon" placeholder="Search by filename…" [ngModel]="mediaSearch()" (ngModelChange)="mediaSearch.set($event)"/>
+          <input class="inp with-icon" [placeholder]="t('home.editor.mediaPicker.search')" [ngModel]="mediaSearch()" (ngModelChange)="mediaSearch.set($event)"/>
         </div>
         <div class="mpm-body">
           @if (mediaLoading()) {
-            <div class="mpm-loading"><ap-spinner [size]="20"/> Loading media…</div>
+            <div class="mpm-loading"><ap-spinner [size]="20"/> {{ t('home.editor.mediaPicker.loading') }}</div>
           } @else if (filteredMediaFiles().length === 0) {
-            <div class="mpm-empty">No images found in your media library.</div>
+            <div class="mpm-empty">{{ t('home.editor.mediaPicker.empty') }}</div>
           } @else {
             <div class="mpm-grid">
               @for (file of filteredMediaFiles(); track file.id) {
@@ -1303,10 +1304,13 @@ function cloneContent(content: HomeContentData): HomeContentData {
 })
 export class HomeContentComponent implements OnInit {
   readonly api = inject(ApiClient);
+  private readonly i18n = inject(I18nService);
   private readonly uploads = inject(MediaUploadService);
   private readonly toast = inject(ToastService);
   private readonly mediaApi = inject(AdminMediaService);
   private readonly collectionsApi = inject(AdminCollectionsService);
+
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly content = signal<HomeContentData>(cloneContent(DEFAULT_HOME_CONTENT));
   readonly savedSnapshot = signal(JSON.stringify(DEFAULT_HOME_CONTENT));

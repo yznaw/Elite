@@ -37,9 +37,9 @@ interface HierarchyGroup {
       </div>
 
       <div class="row mb-20" style="justify-content:space-between;align-items:center;">
-        <div class="muted small">{{ totalCount() }} {{ totalCount() === 1 ? 'collection' : 'collections' }}</div>
+        <div class="muted small">{{ totalCount() }} {{ totalCount() === 1 ? t('collections.collection') : t('collections.collections') }}</div>
         @if (hierarchyGroups().length > 0 && standaloneCollections().length > 0 && !isSearching()) {
-          <div class="muted small"><ap-icon name="hierarchy" [size]="11"/> {{ hierarchyGroups().length }} with sub-collections</div>
+          <div class="muted small"><ap-icon name="hierarchy" [size]="11"/> {{ hierarchyGroups().length }} {{ t('collections.withSubCollections') }}</div>
         }
       </div>
 
@@ -68,7 +68,7 @@ interface HierarchyGroup {
           @if (standaloneCollections().length > 0) {
             <div class="section-label mb-12">
               <ap-icon name="hierarchy" [size]="12"/>
-              <span>With sub-collections</span>
+              <span>{{ t('collections.withSubCollections') }}</span>
             </div>
           }
           @for (group of hierarchyGroups(); track group.parent.id) {
@@ -86,17 +86,17 @@ interface HierarchyGroup {
                   <div class="parent-title">
                     {{ group.parent.title }}
                     @if (group.parent.hidden) {
-                      <span class="inline-badge badge-hidden-sm">Hidden</span>
+                      <span class="inline-badge badge-hidden-sm">{{ t('collections.hidden') }}</span>
                     }
                     @if (group.parent.system) {
-                      <span class="inline-badge badge-system-sm">System</span>
+                      <span class="inline-badge badge-system-sm">{{ t('collections.system') }}</span>
                     }
                   </div>
                   <div class="parent-meta">
                     {{ group.parent.productIds.length }} {{ t('collections.products') }}
                     <span class="meta-dot">·</span>
                     <ap-icon name="hierarchy" [size]="9"/>
-                    {{ group.children.length }} sub-collection{{ group.children.length !== 1 ? 's' : '' }}
+                    {{ group.children.length }} {{ group.children.length !== 1 ? t('collections.subCollections') : t('collections.subCollection') }}
                   </div>
                 </div>
                 <div class="parent-chevron">
@@ -121,7 +121,7 @@ interface HierarchyGroup {
                   }
                   <button class="sub-col-chip sub-col-add" (click)="openNewSubCollection(group.parent)">
                     <ap-icon name="plus" [size]="11"/>
-                    <span class="sub-chip-name">Add sub-collection</span>
+                    <span class="sub-chip-name">{{ t('collections.addSubCollection') }}</span>
                   </button>
                 </div>
               </div>
@@ -134,7 +134,7 @@ interface HierarchyGroup {
           @if (hierarchyGroups().length > 0) {
             <div class="section-label mb-12 mt-4">
               <ap-icon name="collections" [size]="12"/>
-              <span>Standalone collections</span>
+              <span>{{ t('collections.standalone') }}</span>
             </div>
           }
           <div class="grid-cards">
@@ -166,7 +166,7 @@ interface HierarchyGroup {
             </span>
           }
           @if (c.system) {
-            <span class="prod-3d-badge badge-system">○ All Products</span>
+            <span class="prod-3d-badge badge-system">○ {{ t('collections.allProducts') }}</span>
           }
         </div>
         <div class="prod-body">
