@@ -32,7 +32,9 @@
       "Bash(curl -s -b /tmp/elite-cookie4 \"http://localhost:3000/api/admin/orders?page=0&limit=3&payment=pending\")",
       "Bash(sed -i '' 's/kind=\"neutral\">Sub-collection/kind=\"grey\">Sub-collection/' projects/admin-portal/src/app/pages/collections/collection-drawer.component.ts)",
       "Bash(sed -i '' 's/name=\"arrowRight\"/name=\"arrow\"/' projects/admin-portal/src/app/pages/collections/collection-drawer.component.ts)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(npx nx *)",
+      "Bash(kill 7682)"
     ]
   }
 }
