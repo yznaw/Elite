@@ -6,7 +6,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
-import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
+import { AdminRefService, RefColor, RefMaterial, RefSizeSet, SizeChartRow } from '../../services/admin-ref.service';
 import { I18nService } from '../../services/i18n.service';
 
 type Tab = 'colors' | 'materials' | 'sizes';
@@ -201,24 +201,62 @@ type Tab = 'colors' | 'materials' | 'sizes';
                 <div class="size-card" [class.editing]="editingId() === s.id">
                   @if (editingId() === s.id) {
                     <div class="size-edit">
-                      <div class="ef-row" style="margin-bottom:10px;">
+
+                      <!-- Name + order row -->
+                      <div class="ef-row" style="margin-bottom:12px;">
                         <input class="inp inp-sm" [placeholder]="t('reference.field.sizeName')" [(ngModel)]="editSizeSet.name" style="flex:1;"/>
                         <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editSizeSet.sort_order"/>
                       </div>
-                      <label class="lbl">{{ t('reference.field.sizes') }}</label>
-                      <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
-                      <!-- Chip preview with up/down reorder -->
-                      <div class="size-preview">
-                        @for (sz of editSizeSet.sizes; track sz; let si = $index) {
-                          <span class="size-chip size-chip--reorder">
-                            {{ sz }}
-                            <button class="chip-btn" (click)="moveSizeChip(si, -1)" [disabled]="si === 0" title="Move left">‹</button>
-                            <button class="chip-btn" (click)="moveSizeChip(si, 1)" [disabled]="si === editSizeSet.sizes.length - 1" title="Move right">›</button>
-                            <button class="chip-btn chip-btn--rm" (click)="removeSizeChip(si)" title="Remove">×</button>
-                          </span>
+
+                      <!-- Size Conversion Chart -->
+                      <label class="lbl">{{ t('reference.field.sizeChart') }}</label>
+                      <div class="chart-editor">
+                        <div class="chart-head">
+                          <span class="chart-col-label">{{ t('reference.field.sizeChart.uk') }}</span>
+                          <span class="chart-col-label">{{ t('reference.field.sizeChart.eu') }}</span>
+                          <span class="chart-col-label">{{ t('reference.field.sizeChart.us') }}</span>
+                          <span class="chart-col-label chart-col-del"></span>
+                        </div>
+                        @for (row of editSizeSet.size_chart; track row; let ri = $index) {
+                          <div class="chart-row">
+                            <input class="inp inp-xs mono" [(ngModel)]="row.uk" placeholder="UK"/>
+                            <input class="inp inp-xs mono" [(ngModel)]="row.eu" placeholder="EU"/>
+                            <input class="inp inp-xs mono" [(ngModel)]="row.us" placeholder="US"/>
+                            <button class="chart-del-btn" (click)="removeChartRow(ri)" title="Remove row">
+                              <ap-icon name="trash" [size]="12"/>
+                            </button>
+                          </div>
                         }
+                        <button class="btn btn-sm btn-outline chart-add-btn" (click)="addChartRow()">
+                          <ap-icon name="plus" [size]="12"/> {{ t('reference.field.sizeChart.addRow') }}
+                        </button>
                       </div>
-                      <div class="edit-actions" style="margin-top:10px;">
+
+                      <!-- Tip -->
+                      <div style="margin-top:10px;">
+                        <label class="lbl">{{ t('reference.field.sizeChart.tip') }}</label>
+                        <input class="inp inp-sm" [placeholder]="t('reference.field.sizeChart.tipPlaceholder')" [(ngModel)]="editSizeSet.tip" style="width:100%;"/>
+                      </div>
+
+                      <!-- Fallback sizes (hidden if chart is populated) -->
+                      @if (editSizeSet.size_chart.length === 0) {
+                        <div style="margin-top:10px;">
+                          <label class="lbl">{{ t('reference.field.sizes') }}</label>
+                          <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
+                          <div class="size-preview">
+                            @for (sz of editSizeSet.sizes; track sz; let si = $index) {
+                              <span class="size-chip size-chip--reorder">
+                                {{ sz }}
+                                <button class="chip-btn" (click)="moveSizeChip(si, -1)" [disabled]="si === 0">‹</button>
+                                <button class="chip-btn" (click)="moveSizeChip(si, 1)" [disabled]="si === editSizeSet.sizes.length - 1">›</button>
+                                <button class="chip-btn chip-btn--rm" (click)="removeSizeChip(si)">×</button>
+                              </span>
+                            }
+                          </div>
+                        </div>
+                      }
+
+                      <div class="edit-actions" style="margin-top:14px;">
                         <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveSizeSet(s.id)">
                           @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
                         </button>
@@ -227,23 +265,54 @@ type Tab = 'colors' | 'materials' | 'sizes';
                     </div>
                   } @else {
                     <div class="size-head">
-                      <span class="size-name">📐 {{ s.name }}</span>
-                      @if ((s.usage_hint ?? 0) > 0) {
-                        <span class="usage-badge" style="margin-inline-start:8px;">{{ s.usage_hint }} {{ (s.usage_hint ?? 0) !== 1 ? t('reference.product.countMany') : t('reference.product.count') }}</span>
-                      } @else {
-                        <span class="usage-badge usage-badge--zero" style="margin-inline-start:8px;">{{ t('common.unused') }}</span>
-                      }
-                      <div class="mat-acts" style="margin-inline-start:auto;">
+                      <div class="size-name-wrap">
+                        <span class="size-name">{{ s.name }}</span>
+                        @if ((s.usage_hint ?? 0) > 0) {
+                          <span class="usage-badge">{{ s.usage_hint }} {{ (s.usage_hint ?? 0) !== 1 ? t('reference.product.countMany') : t('reference.product.count') }}</span>
+                        } @else {
+                          <span class="usage-badge usage-badge--zero">{{ t('common.unused') }}</span>
+                        }
+                      </div>
+                      <div class="mat-acts">
                         <button class="act-btn" (click)="duplicateSizeSet(s.id)" title="Duplicate"><ap-icon name="copy" [size]="13"/></button>
                         <button class="act-btn" (click)="startEditSizeSet(s)" title="Edit"><ap-icon name="edit" [size]="13"/></button>
                         <button class="act-btn danger" (click)="deleteSizeSet(s.id)" title="Delete"><ap-icon name="trash" [size]="13"/></button>
                       </div>
                     </div>
-                    <div class="size-chips">
-                      @for (sz of s.sizes; track sz) {
-                        <span class="size-chip">{{ sz }}</span>
-                      }
-                    </div>
+
+                    <!-- Conversion chart view -->
+                    @if (s.size_chart && s.size_chart.length > 0) {
+                      <div class="chart-view">
+                        <table class="chart-table">
+                          <thead>
+                            <tr>
+                              <th>UK</th>
+                              <th>EU</th>
+                              <th>US</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (row of s.size_chart; track row) {
+                              <tr>
+                                <td>{{ row.uk }}</td>
+                                <td class="td-highlight">{{ row.eu }}</td>
+                                <td>{{ row.us }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                        @if (s.tip) {
+                          <p class="chart-tip">{{ s.tip }}</p>
+                        }
+                      </div>
+                    } @else {
+                      <!-- Fallback: flat size chips -->
+                      <div class="size-chips">
+                        @for (sz of s.sizes; track sz) {
+                          <span class="size-chip">{{ sz }}</span>
+                        }
+                      </div>
+                    }
                   }
                 </div>
               }
@@ -454,8 +523,12 @@ type Tab = 'colors' | 'materials' | 'sizes';
       border-radius: 10px; padding: 14px 16px;
     }
     .size-card.editing { border-color: var(--gold); }
-    .size-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
-    .size-name { font-size: 14px; font-weight: 600; }
+    .size-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; gap: 8px;
+    }
+    .size-name-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .size-name { font-size: 14px; font-weight: 700; color: var(--ink); }
     .size-edit { display: flex; flex-direction: column; gap: 8px; }
     .size-chips, .size-preview {
       display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
@@ -477,6 +550,80 @@ type Tab = 'colors' | 'materials' | 'sizes';
     .chip-btn:hover:not(:disabled) { color: var(--ink); }
     .chip-btn:disabled { opacity: 0.25; cursor: default; }
     .chip-btn--rm:hover:not(:disabled) { color: var(--danger); }
+
+    /* ── Size Conversion Chart (view mode) ── */
+    .chart-view { overflow-x: auto; }
+    .chart-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 13px; font-family: var(--ff-mono);
+    }
+    .chart-table thead tr {
+      background: var(--bg-2); border-bottom: 2px solid var(--border);
+    }
+    .chart-table th {
+      padding: 7px 16px; text-align: center; font-size: 11px;
+      font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); white-space: nowrap;
+    }
+    .chart-table td {
+      padding: 6px 16px; text-align: center; font-weight: 500;
+      border-bottom: 1px solid var(--border); color: var(--ink-2);
+    }
+    .chart-table .td-highlight {
+      font-weight: 700; color: var(--ink);
+      background: color-mix(in srgb, var(--gold) 6%, transparent);
+    }
+    .chart-table tbody tr:last-child td { border-bottom: none; }
+    .chart-table tbody tr:hover td { background: var(--bg-2); }
+    .chart-table tbody tr:hover td.td-highlight {
+      background: color-mix(in srgb, var(--gold) 12%, transparent);
+    }
+    .chart-tip {
+      font-size: 12px; color: var(--muted); margin-top: 10px;
+      padding: 8px 12px; background: var(--bg-2); border-radius: 6px;
+      border-inline-start: 3px solid var(--gold);
+    }
+
+    /* ── Size Chart Editor ── */
+    .chart-editor {
+      border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; margin-top: 4px;
+    }
+    .chart-head {
+      display: grid; grid-template-columns: 1fr 1fr 1fr 32px;
+      background: var(--bg-2); border-bottom: 1px solid var(--border);
+      padding: 6px 8px; gap: 6px;
+    }
+    .chart-col-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); text-align: center;
+    }
+    .chart-col-del { width: 32px; }
+    .chart-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr 32px;
+      gap: 6px; padding: 5px 8px; align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .chart-row:last-of-type { border-bottom: none; }
+    .chart-row:hover { background: var(--bg); }
+    .inp-xs {
+      padding: 4px 6px; font-size: 12px; text-align: center;
+      width: 100%; box-sizing: border-box;
+    }
+    .chart-del-btn {
+      width: 26px; height: 26px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid transparent;
+      border-radius: 6px; cursor: pointer; color: var(--muted);
+      transition: all .12s;
+    }
+    .chart-del-btn:hover { color: var(--danger); border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.06); }
+    .chart-add-btn {
+      width: 100%; border-radius: 0; border: none; border-top: 1px dashed var(--border);
+      padding: 8px; font-size: 12px;
+    }
+
+    .lbl { font-size: 11px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .06em; }
 
     /* ── Mobile ── */
     @media (max-width: 600px) {
@@ -518,7 +665,7 @@ export class ReferenceComponent implements OnInit {
   // Edit buffers (plain objects — they change on every keystroke)
   editColor: Omit<RefColor, 'id' | 'variant_count'> = { name_en: '', name_ar: '', hex: '#000000', swatch_image_url: null, sort_order: 0 };
   editMaterial: Omit<RefMaterial, 'id' | 'variant_count'> = { name_en: '', name_ar: '', sort_order: 0 };
-  editSizeSet: Omit<RefSizeSet, 'id'> = { name: '', sizes: [], sort_order: 0 };
+  editSizeSet: Omit<RefSizeSet, 'id'> = { name: '', sizes: [], size_chart: [], tip: null, sort_order: 0 };
 
   async ngOnInit(): Promise<void> { await this.reload(); }
 
@@ -745,12 +892,18 @@ export class ReferenceComponent implements OnInit {
   // ── Size Sets ─────────────────────────────────────────────────────────────
 
   addSizeSet(): void {
-    this.editSizeSet = { name: '', sizes: [], sort_order: this.sizeSets().length };
+    this.editSizeSet = { name: '', sizes: [], size_chart: [], tip: null, sort_order: this.sizeSets().length };
     this.editingId.set('__new_sizeset__');
   }
 
   startEditSizeSet(s: RefSizeSet): void {
-    this.editSizeSet = { name: s.name, sizes: [...s.sizes], sort_order: s.sort_order };
+    this.editSizeSet = {
+      name: s.name,
+      sizes: [...s.sizes],
+      size_chart: (s.size_chart ?? []).map(r => ({ ...r })),
+      tip: s.tip ?? null,
+      sort_order: s.sort_order,
+    };
     this.editingId.set(s.id);
   }
 
@@ -776,6 +929,20 @@ export class ReferenceComponent implements OnInit {
     this.editSizeSet = { ...this.editSizeSet, sizes };
   }
 
+  addChartRow(): void {
+    this.editSizeSet = {
+      ...this.editSizeSet,
+      size_chart: [...this.editSizeSet.size_chart, { uk: '', eu: '', us: '' }],
+    };
+  }
+
+  removeChartRow(index: number): void {
+    this.editSizeSet = {
+      ...this.editSizeSet,
+      size_chart: this.editSizeSet.size_chart.filter((_, i) => i !== index),
+    };
+  }
+
   async duplicateSizeSet(id: string): Promise<void> {
     try {
       const created = await this.refApi.duplicateSizeSet(id);
@@ -788,11 +955,19 @@ export class ReferenceComponent implements OnInit {
     if (!this.editSizeSet.name.trim()) { this.toast.error(this.t('reference.toast.sizeSetNameRequired')); return; }
     this.saving.set(true);
     try {
+      // Auto-derive sizes from EU column when a conversion chart is defined
+      const chart = this.editSizeSet.size_chart ?? [];
+      const sizes = chart.length > 0
+        ? chart.map(r => r.eu).filter(Boolean)
+        : this.editSizeSet.sizes;
+
+      const payload = { ...this.editSizeSet, sizes };
+
       if (existingId && existingId !== '__new_sizeset__') {
-        const updated = await this.refApi.updateSizeSet(existingId, this.editSizeSet);
+        const updated = await this.refApi.updateSizeSet(existingId, payload);
         this.sizeSets.update(list => list.map(s => s.id === existingId ? { ...updated } : s));
       } else {
-        const created = await this.refApi.createSizeSet(this.editSizeSet);
+        const created = await this.refApi.createSizeSet(payload);
         this.sizeSets.update(list => [...list, created]);
       }
       this.editingId.set(null);
