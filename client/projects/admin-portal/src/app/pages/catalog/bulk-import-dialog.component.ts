@@ -5,6 +5,8 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { ApiClient } from '../../services/api-client.service';
 import { StorageService } from '../../services/storage.service';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { I18nService } from '../../services/i18n.service';
+import { ToastService } from '../../services/toast.service';
 
 type Step = 'upload' | 'importing' | 'results' | 'stock-results' | 'history';
 
@@ -40,42 +42,40 @@ interface Summary { total: number; created: number; updated: number; failed: num
 
         <!-- Header -->
         <div class="modal-hd">
-          <div>
-            <div class="modal-title">{{ stockMode() ? 'Bulk Stock Update' : 'Bulk Import Products' }}</div>
-            <div class="sub">{{ stockMode() ? 'Upload a 2-column CSV (SKU, Stock) to update quantities' : 'Upload your product_list CSV — rows with the same name are grouped as color variants' }}</div>
+          <div class="modal-hd-left">
+            <div class="modal-title">{{ t('bulkImport.title.products') }}</div>
           </div>
           <button class="x-btn" (click)="close()" [disabled]="step() === 'importing'">
-            <ap-icon name="x" [size]="18"/>
+            <ap-icon name="x" [size]="16"/>
           </button>
         </div>
 
-        <!-- ── UPLOAD ── -->
-        @if (step() === 'upload' || step() === 'history') {
-          <!-- Mode tabs -->
+        <!-- Tabs — always visible except during import -->
+        @if (step() !== 'importing') {
           <div class="mode-tabs">
             <button class="mode-tab" [class.active]="step() === 'upload' && !stockMode()" (click)="switchMode(false)">
-              <ap-icon name="upload" [size]="13"/> Product Import
+              <ap-icon name="upload" [size]="13"/> {{ t('bulkImport.tab.products') }}
             </button>
             <button class="mode-tab" [class.active]="step() === 'upload' && stockMode()" (click)="switchMode(true)">
-              <ap-icon name="csv" [size]="13"/> Stock Update
+              <ap-icon name="csv" [size]="13"/> {{ t('bulkImport.tab.stock') }}
             </button>
-            <button class="mode-tab" [class.active]="step() === 'history'" (click)="step.set('history')" style="margin-left:auto;">
-              <ap-icon name="clock" [size]="13"/> History @if (importHistory().length) { <span class="hist-badge">{{ importHistory().length }}</span> }
+            <button class="mode-tab" [class.active]="step() === 'history'" (click)="step.set('history')" style="margin-inline-start:auto;">
+              <ap-icon name="clock" [size]="13"/> {{ t('bulkImport.tab.history') }}
+              @if (importHistory().length) { <span class="hist-badge">{{ importHistory().length }}</span> }
             </button>
           </div>
         }
 
-        @if (step() === 'upload') {
-
+        <!-- ── UPLOAD: Products ── -->
+        @if (step() === 'upload' && !stockMode()) {
           <div class="modal-body">
-            @if (!stockMode()) {
             <div class="info-box">
-              <div class="info-title">How it works</div>
+              <div class="info-title">{{ t('bulkImport.howTitle') }}</div>
               <div class="how-grid">
-                <div class="how-step"><span class="how-n">1</span> Rows with the same <code>English Name</code> → grouped into one product</div>
-                <div class="how-step"><span class="how-n">2</span> Each row → a <strong>variant</strong> (SKU + color + size)</div>
-                <div class="how-step"><span class="how-n">3</span> <code>Cost-QAR</code> + <code>Shipping cost</code> → stored separately; <strong>Total Cost</strong> auto-calculated</div>
-                <div class="how-step"><span class="how-n">4</span> Images downloaded from Drive folders automatically</div>
+                <div class="how-step"><span class="how-n">1</span> {{ t('bulkImport.step.p1') }}</div>
+                <div class="how-step"><span class="how-n">2</span> {{ t('bulkImport.step.p2') }}</div>
+                <div class="how-step"><span class="how-n">3</span> {{ t('bulkImport.step.p3') }}</div>
+                <div class="how-step"><span class="how-n">4</span> {{ t('bulkImport.step.p4') }}</div>
               </div>
               <div class="col-grid" style="margin-top:10px;">
                 @for (c of columns; track c.n) {
@@ -102,22 +102,44 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 </div>
               } @else {
                 <ap-icon name="upload" [size]="30"/>
-                <div class="drop-label">Drop CSV here or click to browse</div>
-                <div class="sub">Max 10 MB · .csv only</div>
+                <div class="drop-label">{{ t('bulkImport.drop.label') }}</div>
+                <div class="sub">{{ t('bulkImport.drop.sub.stock') }}</div>
               }
             </div>
+            @if (uploadError()) { <div class="err-banner">{{ uploadError() }}</div> }
+          </div>
 
-            @if (uploadError()) {
-              <div class="err-banner">{{ uploadError() }}</div>
-            }
-            } @else {
-            <!-- Stock import mode -->
+          <div class="modal-ft">
+            <label class="dry-run-toggle" title="Preview changes without writing to the database" style="margin-inline-end:auto;">
+              <input type="checkbox" [checked]="dryRun()" (change)="dryRun.set(!dryRun())"/>
+              <span>{{ t('bulkImport.dryRun') }}</span>
+            </label>
+            <button class="btn btn-outline btn-sm" [disabled]="repairingColors()" (click)="repairColors()"
+                    title="Fix variants with missing color by inferring from their SKU">
+              @if (repairingColors()) {
+                <ap-icon name="spinner" [size]="13" class="spin"/> {{ t('bulkImport.btn.repairingColors') }}
+              } @else {
+                <ap-icon name="wand" [size]="13"/> {{ t('bulkImport.btn.repairColors') }}
+              }
+            </button>
+            <a class="btn btn-outline btn-sm" [href]="templateUrl" download>
+              <ap-icon name="download" [size]="13"/> {{ t('bulkImport.template') }}
+            </a>
+            <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startImport()">
+              <ap-icon name="upload" [size]="14"/> {{ dryRun() ? t('bulkImport.btn.previewImport') : t('bulkImport.btn.importProducts') }}
+            </button>
+          </div>
+        }
+
+        <!-- ── UPLOAD: Stock ── -->
+        @if (step() === 'upload' && stockMode()) {
+          <div class="modal-body">
             <div class="info-box">
-              <div class="info-title">How it works</div>
+              <div class="info-title">{{ t('bulkImport.howTitle') }}</div>
               <div class="how-grid">
-                <div class="how-step"><span class="how-n">1</span> CSV must have <code>SKU</code> and <code>Stock</code> columns (header row)</div>
-                <div class="how-step"><span class="how-n">2</span> Each row updates the <strong>stock quantity</strong> for that SKU</div>
-                <div class="how-step"><span class="how-n">3</span> Unmatched SKUs are listed in the result report</div>
+                <div class="how-step"><span class="how-n">1</span> {{ t('bulkImport.step.s1') }}</div>
+                <div class="how-step"><span class="how-n">2</span> {{ t('bulkImport.step.s2') }}</div>
+                <div class="how-step"><span class="how-n">3</span> {{ t('bulkImport.step.s3') }}</div>
               </div>
             </div>
 
@@ -136,72 +158,51 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 </div>
               } @else {
                 <ap-icon name="upload" [size]="30"/>
-                <div class="drop-label">Drop CSV here or click to browse</div>
-                <div class="sub">SKU, Stock · .csv only</div>
+                <div class="drop-label">{{ t('bulkImport.drop.label') }}</div>
+                <div class="sub">{{ t('bulkImport.drop.sub.stock') }}</div>
               }
             </div>
-
-            @if (uploadError()) {
-              <div class="err-banner">{{ uploadError() }}</div>
-            }
-            }
+            @if (uploadError()) { <div class="err-banner">{{ uploadError() }}</div> }
           </div>
 
           <div class="modal-ft">
-            @if (!stockMode()) {
-              <label class="dry-run-toggle" title="Preview changes without writing to the database">
-                <input type="checkbox" [checked]="dryRun()" (change)="dryRun.set(!dryRun())"/>
-                <span>Dry run</span>
-              </label>
-              <a class="btn btn-outline btn-sm" [href]="templateUrl" download>
-                <ap-icon name="download" [size]="13"/> Template
-              </a>
-              <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startImport()">
-                <ap-icon name="upload" [size]="14"/> {{ dryRun() ? 'Preview Import' : 'Import Products' }}
-              </button>
-            } @else {
-              <button class="btn btn-outline btn-sm" (click)="downloadStockTemplate()">
-                <ap-icon name="download" [size]="13"/> Template
-              </button>
-              <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startStockImport()">
-                <ap-icon name="upload" [size]="14"/> Update Stock
-              </button>
-            }
+            <button class="btn btn-outline btn-sm" (click)="downloadStockTemplate()">
+              <ap-icon name="download" [size]="13"/> {{ t('bulkImport.template') }}
+            </button>
+            <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startStockImport()">
+              <ap-icon name="upload" [size]="14"/> {{ t('bulkImport.btn.updateStock') }}
+            </button>
           </div>
         }
 
         <!-- ── IMPORTING ── -->
         @if (step() === 'importing') {
           <div class="modal-body imp-body">
-
             <div class="prog-header">
               <div class="prog-counts">
                 <span class="prog-current">{{ current() }}</span>
                 <span class="prog-sep">/</span>
                 <span class="prog-total">{{ total() }}</span>
-                <span class="prog-label">products processed</span>
+                <span class="prog-label">{{ t('bulkImport.processing.label') }}</span>
               </div>
               <div class="prog-pct">{{ pct() }}%</div>
             </div>
-
             <div class="prog-track">
               <div class="prog-fill" [style.width.%]="pct()"></div>
             </div>
-
             @if (currentName()) {
               <div class="cur-item">
                 <ap-icon name="spinner" [size]="13" class="spin"/>
                 <div class="cur-details">
                   <span class="cur-name">{{ currentName() }}</span>
                   @if (currentVariantCount()) {
-                    <span class="cur-variants">{{ currentVariantCount() }} color variants</span>
+                    <span class="cur-variants">{{ currentVariantCount() }} {{ t('bulkImport.processing.colorVariants') }}</span>
                   }
                 </div>
               </div>
             }
-
             <div class="log-wrap" #logWrap>
-              <div class="log-header">Live log</div>
+              <div class="log-header">{{ t('bulkImport.processing.liveLog') }}</div>
               @for (e of log(); track e.name) {
                 <div class="log-row" [class]="'log-' + e.status">
                   <span class="log-icon">{{ statusIcon(e.status) }}</span>
@@ -211,17 +212,16 @@ interface Summary { total: number; created: number; updated: number; failed: num
                       <span class="meta-variants">
                         @if (e.variantsCreated) { <span class="var-new">+{{ e.variantsCreated }}</span> }
                         @if (e.variantsUpdated) { <span class="var-upd">↺{{ e.variantsUpdated }}</span> }
-                        colors
+                        variants
                       </span>
                     }
                     @if (e.imagesUploaded) { <span class="img-ok">{{ e.imagesUploaded }} img</span> }
-                    @if (e.imagesFailed)   { <span class="img-fail">{{ e.imagesFailed }} img failed</span> }
+                    @if (e.imagesFailed)   { <span class="img-fail">{{ e.imagesFailed }} {{ t('bulkImport.processing.imgFailed') }}</span> }
                   </span>
                   @if (e.error) { <span class="log-err" [title]="e.error">{{ e.error | slice:0:55 }}</span> }
                 </div>
               }
             </div>
-
           </div>
         }
 
@@ -230,21 +230,21 @@ interface Summary { total: number; created: number; updated: number; failed: num
           @if (wasLastDryRun()) {
             <div class="dry-run-banner">
               <ap-icon name="warning" [size]="13"/>
-              <strong>Dry-Run Preview</strong> — No changes were saved. Review results below and click "Commit Import" to apply.
+              <strong>{{ t('bulkImport.dryRunBanner') }}</strong>
             </div>
           }
           @if (summary(); as s) {
             <div class="sum-bar">
-              <div class="chip green">{{ s.created }} {{ wasLastDryRun() ? 'to create' : 'created' }}</div>
-              <div class="chip blue">{{ s.updated }} {{ wasLastDryRun() ? 'to update' : 'updated' }}</div>
-              @if (s.failed) { <div class="chip red">{{ s.failed }} failed</div> }
-              <div class="sub ml-auto">{{ s.total }} products</div>
+              <div class="chip green">{{ s.created }} {{ wasLastDryRun() ? t('bulkImport.chip.toCreate') : t('bulkImport.chip.created') }}</div>
+              <div class="chip blue">{{ s.updated }} {{ wasLastDryRun() ? t('bulkImport.chip.toUpdate') : t('bulkImport.chip.updated') }}</div>
+              @if (s.failed) { <div class="chip red">{{ s.failed }} {{ t('bulkImport.chip.failed') }}</div> }
+              <div class="sub" style="margin-inline-start:auto;">{{ s.total }} {{ t('bulkImport.chip.products') }}</div>
             </div>
           }
           <div class="modal-body" style="padding-top:0">
             <div class="res-wrap">
               <table class="res-table">
-                <thead><tr><th>Product Name</th><th>Status</th><th>Variants</th><th>Images</th></tr></thead>
+                <thead><tr><th>{{ t('bulkImport.table.productName') }}</th><th>{{ t('bulkImport.table.status') }}</th><th>{{ t('bulkImport.table.variants') }}</th><th>{{ t('bulkImport.table.images') }}</th></tr></thead>
                 <tbody>
                   @for (e of log(); track e.name) {
                     <tr [class.row-err]="e.status==='error'||e.status==='skipped'">
@@ -270,19 +270,19 @@ interface Summary { total: number; created: number; updated: number; failed: num
           <div class="modal-ft">
             @if ((summary()?.failed ?? 0) > 0) {
               <button class="btn btn-outline btn-sm" (click)="retryFailed()">
-                <ap-icon name="sync" [size]="13"/> Retry Failed ({{ summary()!.failed }})
+                <ap-icon name="sync" [size]="13"/> {{ t('bulkImport.btn.retryFailed') }} ({{ summary()!.failed }})
               </button>
             }
-            <button class="btn btn-outline" (click)="reset()">Import Another</button>
-            <button class="btn btn-outline" (click)="downloadReport()">
-              <ap-icon name="download" [size]="13"/> Download Report
+            <button class="btn btn-outline btn-sm" (click)="downloadReport()">
+              <ap-icon name="download" [size]="13"/> {{ t('bulkImport.btn.downloadReport') }}
             </button>
+            <button class="btn btn-outline" (click)="reset()">{{ t('bulkImport.btn.importAnother') }}</button>
             @if (wasLastDryRun()) {
               <button class="btn btn-gold" (click)="commitDryRun()">
-                <ap-icon name="check" [size]="14"/> Commit Import
+                <ap-icon name="check" [size]="14"/> {{ t('bulkImport.btn.commitImport') }}
               </button>
             } @else {
-              <button class="btn btn-gold" (click)="done()">Done</button>
+              <button class="btn btn-gold" (click)="done()">{{ t('common.done') }}</button>
             }
           </div>
         }
@@ -291,50 +291,50 @@ interface Summary { total: number; created: number; updated: number; failed: num
         @if (step() === 'stock-results') {
           @if (stockResult(); as r) {
             <div class="sum-bar">
-              <div class="chip green">{{ r.updated }} updated</div>
-              @if (r.notFound.length) { <div class="chip red">{{ r.notFound.length }} not found</div> }
-              <div class="sub ml-auto">{{ r.updated + r.notFound.length }} rows processed</div>
+              <div class="chip green">{{ r.updated }} {{ t('bulkImport.chip.updated') }}</div>
+              @if (r.notFound.length) { <div class="chip red">{{ r.notFound.length }} {{ t('bulkImport.chip.notFound') }}</div> }
+              <div class="sub" style="margin-inline-start:auto;">{{ r.updated + r.notFound.length }} {{ t('bulkImport.chip.rowsProcessed') }}</div>
             </div>
           }
           <div class="modal-body" style="padding-top:0">
             @if (stockResult()?.notFound?.length) {
               <div class="err-banner">
-                <strong>Unmatched SKUs:</strong> {{ stockResult()!.notFound.join(', ') }}
+                <strong>{{ t('bulkImport.stock.unmatchedSKUs') }}</strong> {{ stockResult()!.notFound.join(', ') }}
               </div>
             } @else if (stockResult()?.updated === 0) {
-              <div class="muted small" style="text-align:center;padding:24px;">No matching SKUs found in the catalog.</div>
+              <div class="empty-state">{{ t('bulkImport.stock.noMatch') }}</div>
             } @else {
-              <div class="muted small" style="text-align:center;padding:24px;">All rows processed successfully.</div>
+              <div class="empty-state" style="color:var(--green,#16a34a);">{{ t('bulkImport.stock.allProcessed') }}</div>
             }
           </div>
           <div class="modal-ft">
-            <button class="btn btn-outline" (click)="reset()">Import Another</button>
-            <button class="btn btn-gold" (click)="done()">Done</button>
+            <button class="btn btn-outline" (click)="reset()">{{ t('bulkImport.btn.importAnother') }}</button>
+            <button class="btn btn-gold" (click)="done()">{{ t('common.done') }}</button>
           </div>
         }
 
         <!-- ── HISTORY ── -->
         @if (step() === 'history') {
-          <div class="modal-body" style="padding-top:12px;">
+          <div class="modal-body" style="padding-top:8px;">
             @if (importHistory().length === 0) {
-              <div class="muted small" style="text-align:center;padding:40px;">No import history yet.</div>
+              <div class="empty-state">{{ t('bulkImport.history.empty') }}</div>
             } @else {
               @for (h of importHistory(); track h.id) {
                 <div class="hist-row">
                   <div class="hist-hd" (click)="toggleHistory(h.id)">
                     <div class="hist-info">
                       <div class="hist-file">{{ h.filename }}</div>
-                      <div class="sub">{{ h.ts | date:'MMM d, yyyy · HH:mm' }} · {{ h.summary.total }} products</div>
+                      <div class="sub">{{ h.ts | date:'MMM d, yyyy · HH:mm' }} · {{ h.summary.total }} {{ t('bulkImport.chip.products') }}</div>
                     </div>
                     <div class="hist-chips">
-                      <span class="chip green sm">{{ h.summary.created }} created</span>
-                      <span class="chip blue sm">{{ h.summary.updated }} updated</span>
-                      @if (h.summary.failed) { <span class="chip red sm">{{ h.summary.failed }} failed</span> }
+                      <span class="chip green sm">{{ h.summary.created }} {{ t('bulkImport.chip.created') }}</span>
+                      <span class="chip blue sm">{{ h.summary.updated }} {{ t('bulkImport.chip.updated') }}</span>
+                      @if (h.summary.failed) { <span class="chip red sm">{{ h.summary.failed }} {{ t('bulkImport.chip.failed') }}</span> }
                     </div>
-                    <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); downloadHistoryReport(h)">
-                      <ap-icon name="arrowDn" [size]="12"/>
+                    <button class="icon-btn" type="button" title="Download report" (click)="$event.stopPropagation(); downloadHistoryReport(h)">
+                      <ap-icon name="download" [size]="13"/>
                     </button>
-                    <ap-icon [name]="h.expanded ? 'arrowUp' : 'arrowDn'" [size]="12" style="opacity:.4"/>
+                    <ap-icon [name]="h.expanded ? 'arrowUp' : 'arrowDn'" [size]="12" style="opacity:.35;flex-shrink:0;"/>
                   </div>
                   @if (h.expanded) {
                     <div class="hist-detail">
@@ -353,9 +353,10 @@ interface Summary { total: number; created: number; updated: number; failed: num
           </div>
           <div class="modal-ft">
             @if (importHistory().length > 0) {
-              <button class="btn btn-outline btn-sm" style="color:var(--danger);" (click)="clearHistory()">Clear History</button>
+              <button class="btn btn-outline btn-sm" style="color:var(--danger);margin-inline-end:auto;" (click)="clearHistory()">
+                <ap-icon name="trash" [size]="13"/> {{ t('bulkImport.history.clearHistory') }}
+              </button>
             }
-            <button class="btn btn-gold" (click)="step.set('upload')">Back to Import</button>
           </div>
         }
 
@@ -363,108 +364,123 @@ interface Summary { total: number; created: number; updated: number; failed: num
     </div>
   `,
   styles: [`
-    .mode-tabs{display:flex;gap:0;border-bottom:1px solid var(--border,#e4e4e7);padding:0 24px;flex-shrink:0;}
-    .mode-tab{border:none;background:none;cursor:pointer;padding:10px 16px;font-size:13px;font-weight:600;color:#71717a;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px;transition:color .15s,border-color .15s;}
-    .mode-tab:hover{color:#1a1a1a;}
-    .mode-tab.active{color:#1a1a1a;border-bottom-color:#c9a84c;}
-    .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:24px;}
-    .modal-panel{background:var(--surface,#fff);border:1px solid var(--border,#e4e4e7);border-radius:14px;width:100%;max-width:700px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.18);}
-    .modal-hd{display:flex;align-items:flex-start;justify-content:space-between;padding:20px 24px 16px;border-bottom:1px solid var(--border,#e4e4e7);gap:12px;flex-shrink:0;}
-    .modal-title{font-size:16px;font-weight:700;margin-bottom:2px;}
-    .sub{font-size:12px;opacity:.55;}
-    .modal-body{padding:20px 24px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px;}
-    .modal-ft{padding:14px 24px;border-top:1px solid var(--border,#e4e4e7);display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-shrink:0;}
+    /* Layout */
+    .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px;}
+    .modal-panel{background:var(--surface,#fff);border:1px solid var(--border,#e4e4e7);border-radius:16px;width:100%;max-width:660px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.15);}
 
-    .x-btn{background:none;border:none;cursor:pointer;padding:4px;opacity:.45;display:flex;align-items:center;color:inherit;border-radius:6px;}
+    /* Header */
+    .modal-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid var(--border,#e4e4e7);gap:12px;flex-shrink:0;}
+    .modal-hd-left{min-width:0;}
+    .modal-title{font-size:15px;font-weight:700;color:var(--ink,#111);}
+    .x-btn{background:none;border:none;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--ink-2,#666);border-radius:6px;opacity:.5;transition:opacity .12s,background .12s;flex-shrink:0;}
     .x-btn:hover{opacity:1;background:rgba(0,0,0,.06);}
     .x-btn:disabled{cursor:not-allowed;opacity:.2;}
-    .x-btn.sm{padding:2px;}
+    .x-btn.sm{width:22px;height:22px;}
+
+    /* Tabs */
+    .mode-tabs{display:flex;border-bottom:1px solid var(--border,#e4e4e7);padding:0 20px;flex-shrink:0;gap:0;}
+    .mode-tab{border:none;background:none;cursor:pointer;padding:10px 14px;font-size:12px;font-weight:600;color:var(--ink-2,#71717a);border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:5px;transition:color .13s,border-color .13s;white-space:nowrap;}
+    .mode-tab:hover{color:var(--ink,#111);}
+    .mode-tab.active{color:var(--ink,#111);border-bottom-color:#c9a84c;}
+    .hist-badge{background:#c9a84c;color:#fff;font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;margin-inline-start:3px;}
+
+    /* Body + footer */
+    .sub{font-size:11px;color:var(--muted,#888);}
+    .modal-body{padding:16px 20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;}
+    .modal-ft{padding:12px 20px;border-top:1px solid var(--border,#e4e4e7);display:flex;align-items:center;gap:8px;justify-content:flex-end;flex-shrink:0;}
+    .empty-state{text-align:center;padding:40px 20px;color:var(--muted,#888);font-size:13px;}
 
     /* Info box */
-    .info-box{border:1px solid var(--border,#e4e4e7);border-radius:8px;padding:14px 16px;background:var(--surface-2,#fafafa);}
-    .info-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;opacity:.45;}
-    .how-grid{display:flex;flex-direction:column;gap:6px;}
-    .how-step{display:flex;align-items:center;gap:8px;font-size:12px;}
+    .info-box{border:1px solid var(--border,#e4e4e7);border-radius:8px;padding:12px 14px;background:var(--bg,#fafafa);}
+    .info-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;color:var(--muted,#888);}
+    .how-grid{display:flex;flex-direction:column;gap:5px;}
+    .how-step{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink,#111);}
     .how-n{width:18px;height:18px;border-radius:50%;background:#c9a84c;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-    .col-grid{display:flex;flex-wrap:wrap;gap:6px;}
-    .col-pill{display:flex;align-items:center;gap:4px;background:rgba(0,0,0,.05);border-radius:5px;padding:3px 8px;font-size:12px;}
-    .col-pill.req{background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.3);}
-    .col-pill code{font-size:11px;}
-    .req-dot{width:5px;height:5px;border-radius:50%;background:#c9a84c;flex-shrink:0;}
+    .col-grid{display:flex;flex-wrap:wrap;gap:5px;}
+    .col-pill{display:flex;align-items:center;gap:4px;background:rgba(0,0,0,.05);border-radius:5px;padding:3px 7px;font-size:11px;}
+    .col-pill.req{background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);}
+    .col-pill code{font-size:10px;font-family:monospace;}
+    .req-dot{width:4px;height:4px;border-radius:50%;background:#c9a84c;flex-shrink:0;}
 
     /* Drop zone */
-    .drop-zone{border:2px dashed var(--border,#d4d4d8);border-radius:10px;padding:32px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:border-color .15s,background .15s;text-align:center;}
+    .drop-zone{border:2px dashed var(--border,#d4d4d8);border-radius:10px;padding:28px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer;transition:border-color .14s,background .14s;text-align:center;color:var(--ink-2,#666);}
     .drop-zone:hover,.drop-zone.drag-over{border-color:#c9a84c;background:rgba(201,168,76,.04);}
-    .drop-zone.has-file{border-style:solid;border-color:#c9a84c;}
-    .drop-label{font-size:14px;font-weight:600;}
-    .file-row{display:flex;align-items:center;gap:12px;width:100%;justify-content:center;}
-    .fname{font-size:14px;font-weight:600;}
-    .err-banner{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:7px;padding:10px 14px;color:#dc2626;font-size:13px;}
+    .drop-zone.has-file{border-style:solid;border-color:#c9a84c;background:rgba(201,168,76,.03);}
+    .drop-label{font-size:13px;font-weight:600;color:var(--ink,#111);}
+    .file-row{display:flex;align-items:center;gap:10px;justify-content:center;}
+    .fname{font-size:13px;font-weight:600;color:var(--ink,#111);}
+    .err-banner{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.18);border-radius:7px;padding:9px 13px;color:#dc2626;font-size:12px;}
+
+    /* Dry-run */
+    .dry-run-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted,#888);}
+    .dry-run-toggle input{accent-color:#c9a84c;cursor:pointer;}
+    .dry-run-banner{display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.08);border-top:2px solid rgba(245,158,11,.35);padding:9px 20px;font-size:12px;color:#92400e;flex-shrink:0;}
 
     /* Progress */
     .imp-body{gap:12px;}
     .prog-header{display:flex;align-items:baseline;justify-content:space-between;}
-    .prog-current{font-size:28px;font-weight:800;line-height:1;}
-    .prog-sep{font-size:20px;opacity:.3;margin:0 3px;}
-    .prog-total{font-size:20px;opacity:.4;}
-    .prog-label{font-size:12px;opacity:.5;margin-left:8px;}
-    .prog-pct{font-size:14px;font-weight:700;opacity:.6;}
-    .prog-track{height:6px;background:rgba(0,0,0,.08);border-radius:99px;overflow:hidden;flex-shrink:0;}
+    .prog-current{font-size:26px;font-weight:800;line-height:1;color:var(--ink,#111);}
+    .prog-sep{font-size:18px;opacity:.3;margin:0 3px;}
+    .prog-total{font-size:18px;opacity:.4;}
+    .prog-label{font-size:11px;opacity:.5;margin-left:8px;}
+    .prog-pct{font-size:13px;font-weight:700;opacity:.55;}
+    .prog-track{height:5px;background:rgba(0,0,0,.07);border-radius:99px;overflow:hidden;flex-shrink:0;}
     .prog-fill{height:100%;background:#c9a84c;border-radius:99px;transition:width .3s ease;}
-
-    /* Current item */
-    .cur-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(201,168,76,.07);border-radius:7px;border-left:3px solid #c9a84c;}
+    .cur-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(201,168,76,.07);border-radius:7px;border-inline-start:3px solid #c9a84c;}
     .spin{animation:spin .8s linear infinite;opacity:.6;flex-shrink:0;}
     @keyframes spin{to{transform:rotate(360deg);}}
     .cur-details{display:flex;flex-direction:column;gap:2px;overflow:hidden;}
-    .cur-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .cur-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .cur-variants{font-size:11px;opacity:.5;}
 
     /* Log */
-    .log-wrap{flex:1;overflow-y:auto;border:1px solid var(--border,#e4e4e7);border-radius:8px;min-height:180px;max-height:280px;}
-    .log-header{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.35;padding:8px 12px;border-bottom:1px solid var(--border,#e4e4e7);position:sticky;top:0;background:var(--surface,#fff);}
-    .log-row{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;border-bottom:1px solid rgba(0,0,0,.04);}
+    .log-wrap{flex:1;overflow-y:auto;border:1px solid var(--border,#e4e4e7);border-radius:8px;min-height:160px;max-height:260px;}
+    .log-header{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.35;padding:7px 12px;border-bottom:1px solid var(--border,#e4e4e7);position:sticky;top:0;background:var(--surface,#fff);}
+    .log-row{display:flex;align-items:center;gap:8px;padding:5px 12px;font-size:12px;border-bottom:1px solid rgba(0,0,0,.04);}
     .log-row:last-child{border-bottom:none;}
     .log-created{background:rgba(34,197,94,.04);}
     .log-updated{background:rgba(59,130,246,.04);}
     .log-error,.log-skipped{background:rgba(239,68,68,.04);}
-    .log-icon{font-size:13px;flex-shrink:0;width:16px;text-align:center;}
+    .log-icon{font-size:12px;flex-shrink:0;width:14px;text-align:center;}
     .log-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
-    .log-meta{display:flex;align-items:center;gap:6px;flex-shrink:0;font-size:11px;}
-    .meta-variants{display:flex;align-items:center;gap:3px;opacity:.7;}
+    .log-meta{display:flex;align-items:center;gap:5px;flex-shrink:0;font-size:11px;}
+    .meta-variants{display:flex;align-items:center;gap:3px;opacity:.65;}
     .var-new{color:#16a34a;font-weight:700;}
     .var-upd{color:#2563eb;font-weight:700;}
     .img-ok{color:#16a34a;}.img-fail{color:#dc2626;}
-    .log-err{font-size:11px;color:#dc2626;opacity:.8;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .log-err{font-size:11px;color:#dc2626;opacity:.8;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
     /* Summary bar */
-    .sum-bar{display:flex;align-items:center;gap:8px;padding:12px 24px;border-bottom:1px solid var(--border,#e4e4e7);flex-shrink:0;}
-    .chip{font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;}
+    .sum-bar{display:flex;align-items:center;gap:8px;padding:10px 20px;border-bottom:1px solid var(--border,#e4e4e7);flex-shrink:0;flex-wrap:wrap;}
+    .chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;}
     .chip.green{background:rgba(34,197,94,.12);color:#16a34a;}
     .chip.blue{background:rgba(59,130,246,.12);color:#2563eb;}
     .chip.red{background:rgba(239,68,68,.12);color:#dc2626;}
-    .ml-auto{margin-left:auto;}
+    .chip.sm{font-size:10px;padding:2px 7px;}
 
     /* Results table */
     .res-wrap{overflow-x:auto;}
-    .res-table{width:100%;border-collapse:collapse;font-size:13px;}
-    .res-table th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border,#e4e4e7);font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.4;}
-    .res-table td{padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.05);vertical-align:top;}
+    .res-table{width:100%;border-collapse:collapse;font-size:12px;}
+    .res-table th{text-align:start;padding:7px 10px;border-bottom:1px solid var(--border,#e4e4e7);font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.4;}
+    .res-table td{padding:6px 10px;border-bottom:1px solid rgba(0,0,0,.05);vertical-align:top;}
     .res-table tr.row-err td{background:rgba(239,68,68,.03);}
-    .s-pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;display:inline-block;}
+    .s-pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;display:inline-block;}
     .pill-created{background:rgba(34,197,94,.12);color:#16a34a;}
     .pill-updated{background:rgba(59,130,246,.12);color:#2563eb;}
     .pill-skipped{background:rgba(0,0,0,.07);color:#71717a;}
     .pill-error{background:rgba(239,68,68,.12);color:#dc2626;}
     .row-err-txt{color:#dc2626;font-size:11px;margin-top:2px;}
 
-    /* Dry-run */
-    .dry-run-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);margin-right:auto;}
-    .dry-run-toggle input{accent-color:#c9a84c;cursor:pointer;}
-    .dry-run-banner{display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.1);border-top:2px solid rgba(245,158,11,.4);padding:10px 24px;font-size:12px;color:#92400e;flex-shrink:0;}
-
     /* History */
-    .hist-badge{background:#c9a84c;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:0 5px;line-height:16px;margin-left:4px;}
+    .hist-row{border:1px solid var(--border,#e4e4e7);border-radius:8px;overflow:hidden;flex-shrink:0;}
+    .hist-hd{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg,#fafafa);transition:background .12s;}
+    .hist-hd:hover{background:var(--bg-2,#f0f0f0);}
+    .hist-info{flex:1;min-width:0;}
+    .hist-file{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink,#111);}
+    .hist-chips{display:flex;gap:4px;flex-shrink:0;}
+    .hist-detail{border-top:1px solid var(--border,#e4e4e7);max-height:160px;overflow-y:auto;}
+    .icon-btn{background:none;border:1px solid var(--border,#e4e4e7);cursor:pointer;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--ink-2,#666);border-radius:6px;flex-shrink:0;transition:background .12s,border-color .12s;}
+    .icon-btn:hover{background:var(--bg,#f5f5f5);border-color:var(--gold,#c9a84c);color:var(--gold,#c9a84c);}
     .hist-row{border:1px solid var(--border,#e4e4e7);border-radius:8px;overflow:hidden;flex-shrink:0;}
     .hist-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:var(--surface-2,#fafafa);}
     .hist-hd:hover{background:var(--bg-2,#f0f0f0);}
@@ -483,6 +499,9 @@ export class BulkImportDialogComponent {
   private readonly api  = inject(ApiClient);
   private readonly zone = inject(NgZone);
   private readonly storage = inject(StorageService);
+  private readonly i18n = inject(I18nService);
+  private readonly toast = inject(ToastService);
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly step               = signal<Step>('upload');
   readonly csvFile            = signal<File | null>(null);
@@ -500,6 +519,7 @@ export class BulkImportDialogComponent {
   readonly wasLastDryRun      = signal(false);
   readonly lastFile           = signal<File | null>(null);
   readonly importHistory      = signal<HistoryRecord[]>(this.loadHistory());
+  readonly repairingColors    = signal(false);
 
   readonly pct = () => this.total() ? Math.round((this.current() / this.total()) * 100) : 0;
 
@@ -537,6 +557,7 @@ export class BulkImportDialogComponent {
 
   switchMode(toStock: boolean): void {
     this.stockMode.set(toStock);
+    this.step.set('upload');
     this.csvFile.set(null);
     this.uploadError.set('');
   }
@@ -606,7 +627,7 @@ export class BulkImportDialogComponent {
         }
       }
     } catch (err: any) {
-      this.zone.run(() => { this.uploadError.set(err.message || 'Network error.'); this.step.set('upload'); });
+      this.zone.run(() => { this.uploadError.set(err.message || this.t('bulkImport.error.networkError')); this.step.set('upload'); });
     }
   }
 
@@ -664,10 +685,10 @@ export class BulkImportDialogComponent {
 
   statusLabel(s: string): string {
     switch (s) {
-      case 'created': return '+ Created';
-      case 'updated': return '↺ Updated';
-      case 'skipped': return '— Skipped';
-      case 'error':   return '✕ Error';
+      case 'created': return this.t('bulkImport.status.created');
+      case 'updated': return this.t('bulkImport.status.updated');
+      case 'skipped': return this.t('bulkImport.status.skipped');
+      case 'error':   return this.t('bulkImport.status.error');
       default: return s;
     }
   }
@@ -688,6 +709,38 @@ export class BulkImportDialogComponent {
     URL.revokeObjectURL(url);
   }
 
+  async repairColors(): Promise<void> {
+    if (this.repairingColors()) return;
+    this.repairingColors.set(true);
+    try {
+      const resp = await fetch(this.api.url('/admin/bulk-import/repair-colors'), {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        this.zone.run(() => this.toast.error('Color repair failed', json.message || 'Server error'));
+        return;
+      }
+      const { repaired, skipped } = json.data ?? json;
+      this.zone.run(() => {
+        this.uploadError.set('');
+        if (repaired > 0) {
+          this.toast.success(
+            `${repaired} variants color-repaired`,
+            skipped > 0 ? `${skipped} SKUs had no recognisable color pattern` : undefined,
+          );
+        } else {
+          this.toast.info('No variants to repair', 'All variants already have a color set.');
+        }
+      });
+    } catch (err: any) {
+      this.zone.run(() => this.toast.error('Color repair failed', err.message || 'Network error'));
+    } finally {
+      this.repairingColors.set(false);
+    }
+  }
+
   async startStockImport(): Promise<void> {
     const file = this.csvFile();
     if (!file) return;
@@ -698,14 +751,14 @@ export class BulkImportDialogComponent {
       const text = await file.text();
       const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (lines.length < 2) {
-        this.zone.run(() => { this.uploadError.set('CSV appears empty.'); this.step.set('upload'); });
+        this.zone.run(() => { this.uploadError.set(this.t('bulkImport.error.csvEmpty')); this.step.set('upload'); });
         return;
       }
       const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
       const skuIdx = header.indexOf('sku');
       const stockIdx = header.indexOf('stock');
       if (skuIdx < 0 || stockIdx < 0) {
-        this.zone.run(() => { this.uploadError.set('CSV must have SKU and Stock columns.'); this.step.set('upload'); });
+        this.zone.run(() => { this.uploadError.set(this.t('bulkImport.error.missingColumns')); this.step.set('upload'); });
         return;
       }
       const updates = lines.slice(1).map(line => {
@@ -727,7 +780,7 @@ export class BulkImportDialogComponent {
 
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        this.zone.run(() => { this.uploadError.set(json.message || 'Stock update failed.'); this.step.set('upload'); });
+        this.zone.run(() => { this.uploadError.set(json.message || this.t('bulkImport.error.stockFailed')); this.step.set('upload'); });
         return;
       }
 
@@ -737,7 +790,7 @@ export class BulkImportDialogComponent {
         this.step.set('stock-results');
       });
     } catch (err: any) {
-      this.zone.run(() => { this.uploadError.set(err.message || 'Network error.'); this.step.set('upload'); });
+      this.zone.run(() => { this.uploadError.set(err.message || this.t('bulkImport.error.networkError')); this.step.set('upload'); });
     }
   }
 

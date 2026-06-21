@@ -1,6 +1,7 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, computed, signal } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { I18nService } from '../../services/i18n.service';
 import { MediaFile, Product } from '../../models';
 
 interface Suggestion {
@@ -25,9 +26,9 @@ export interface LinkPair { mediaId: string; productId: string; }
             <ap-icon name="wand" [size]="14"/>
           </div>
           <div>
-            <div class="card-title">Auto-Link by SKU</div>
+            <div class="card-title">{{ t('media.autoLink.title') }}</div>
             <div class="card-sub">
-              {{ scanning() ? 'Scanning unlinked files…' : (candidates().length + ' matches found across ' + unlinkedCount + ' unlinked files') }}
+              {{ scanning() ? t('media.autoLink.scanning') : (candidates().length + ' ' + t('media.autoLink.matchesFound') + ' ' + unlinkedCount + ' ' + t('media.autoLink.unlinkedFiles')) }}
             </div>
           </div>
         </div>
@@ -39,22 +40,22 @@ export interface LinkPair { mediaId: string; productId: string; }
             <div class="spin-i" style="display:inline-block;color:var(--gold);width:32px;height:32px;margin-bottom:12px;">
               <ap-icon name="spinner" [size]="32"/>
             </div>
-            <div class="strong" style="font-family:var(--ff-disp);font-size:18px;color:var(--green);">Scanning filenames for SKU patterns…</div>
-            <div class="muted small mt-8">Looking for product SKU prefixes in {{ unlinkedCount }} files</div>
+            <div class="strong" style="font-family:var(--ff-disp);font-size:18px;color:var(--green);">{{ t('media.autoLink.scanningHeadline') }}</div>
+            <div class="muted small mt-8">{{ t('media.autoLink.scanningSub').replace('{n}', unlinkedCount.toString()) }}</div>
           </div>
         } @else if (candidates().length === 0) {
           <div class="center" style="padding:60px 20px;">
-            <div class="strong" style="font-family:var(--ff-disp);font-size:20px;color:var(--muted);">No matches found</div>
-            <div class="muted small mt-8">None of the unlinked files match a product SKU. Link them manually instead.</div>
+            <div class="strong" style="font-family:var(--ff-disp);font-size:20px;color:var(--muted);">{{ t('media.autoLink.noMatches') }}</div>
+            <div class="muted small mt-8">{{ t('media.autoLink.noMatchesSub') }}</div>
           </div>
         } @else {
           <div class="row gap-sm" style="padding:14px 26px;border-bottom:1px solid var(--border-2);background:var(--bg);">
-            <span class="muted small">Confidence:</span>
-            <span class="alink-conf high">{{ confCounts().high }} high</span>
-            <span class="alink-conf med">{{ confCounts().medium }} medium</span>
-            <span class="alink-conf low">{{ confCounts().low }} low</span>
+            <span class="muted small">{{ t('media.autoLink.confidence') }}</span>
+            <span class="alink-conf high">{{ confCounts().high }} {{ t('media.autoLink.high') }}</span>
+            <span class="alink-conf med">{{ confCounts().medium }} {{ t('media.autoLink.medium') }}</span>
+            <span class="alink-conf low">{{ confCounts().low }} {{ t('media.autoLink.low') }}</span>
             <span class="grow"></span>
-            <span class="muted small">{{ toApply().length }} of {{ candidates().length }} selected</span>
+            <span class="muted small">{{ toApply().length }} {{ t('common.of') }} {{ candidates().length }} {{ t('media.autoLink.selectedSuffix') }}</span>
           </div>
           <div style="max-height:50vh;overflow-y:auto;">
             @for (c of candidates(); track c.media.id) {
@@ -78,7 +79,7 @@ export interface LinkPair { mediaId: string; productId: string; }
                 <div class="row gap-sm">
                   <span class="alink-conf" [class.high]="c.suggestion.conf === 'high'" [class.med]="c.suggestion.conf === 'medium'" [class.low]="c.suggestion.conf === 'low'">{{ c.suggestion.conf }}</span>
                   <button class="btn btn-ghost btn-sm" (click)="toggleSkip(c.media.id)">
-                    {{ skipped().has(c.media.id) ? 'Include' : 'Skip' }}
+                    {{ skipped().has(c.media.id) ? t('media.autoLink.include') : t('media.autoLink.skip') }}
                   </button>
                 </div>
               </div>
@@ -87,16 +88,19 @@ export interface LinkPair { mediaId: string; productId: string; }
         }
       </div>
       <div class="drawer-foot">
-        <button class="btn btn-ghost" (click)="closed.emit()">Cancel</button>
+        <button class="btn btn-ghost" (click)="closed.emit()">{{ t('common.cancel') }}</button>
         <button class="btn btn-gold" [disabled]="scanning() || toApply().length === 0" (click)="applyAll()">
           <ap-icon name="link" [size]="12"/>
-          Link {{ toApply().length }} {{ toApply().length === 1 ? 'File' : 'Files' }}
+          {{ t('media.autoLink.linkN') }} {{ toApply().length }} {{ toApply().length === 1 ? t('media.autoLink.fileSingular') : t('media.autoLink.filePlural') }}
         </button>
       </div>
     </div>
   `,
 })
 export class AutoLinkModalComponent implements OnInit, OnDestroy {
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
+
   @Input({ required: true }) media: MediaFile[] = [];
   @Input() products: Product[] = [];
   @Output() closed = new EventEmitter<void>();
@@ -152,13 +156,13 @@ export class AutoLinkModalComponent implements OnInit, OnDestroy {
   private suggestProduct(media: MediaFile): Suggestion | null {
     const name = media.name.toUpperCase();
     const exact = this.products.find((product) => product.sku && name.includes(product.sku.toUpperCase()));
-    if (exact) return { product: exact, conf: 'high', why: `Filename contains SKU ${exact.sku}` };
+    if (exact) return { product: exact, conf: 'high', why: `${this.t('media.autoLink.skuReason')} ${exact.sku}` };
 
     const prefix = this.products.find((product) => {
       const skuPrefix = product.sku?.split('-').slice(0, 2).join('-').toUpperCase();
       return skuPrefix && name.includes(skuPrefix);
     });
-    if (prefix) return { product: prefix, conf: 'medium', why: 'Filename contains SKU prefix' };
+    if (prefix) return { product: prefix, conf: 'medium', why: this.t('media.autoLink.skuPrefixReason') };
 
     return null;
   }

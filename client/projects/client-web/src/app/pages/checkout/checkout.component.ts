@@ -1,6 +1,9 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { CartService } from '../../services/cart.service';
 import { CheckoutService } from '../../services/checkout.service';
 import { DeliveryQuote } from '../../services/checkout.service';
@@ -26,16 +29,40 @@ interface CheckoutForm {
 @Component({
   selector: 'cw-checkout',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   templateUrl: './checkout.component.html',
   styleUrl: './checkout.component.scss',
 })
-export class CheckoutComponent {
+export class CheckoutComponent implements OnInit {
   readonly cart = inject(CartService);
   private readonly checkoutApi = inject(CheckoutService);
   private readonly paymentService = inject(PaymentService);
   private readonly router = inject(Router);
+  private readonly http = inject(HttpClient);
   private readonly i18n = inject(I18nService);
+
+  readonly termsHandle   = signal<string | null>(null);
+  readonly privacyHandle = signal<string | null>(null);
+
+  private get apiBase(): string {
+    const { hostname, protocol } = window.location;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
+    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
+  }
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const res = await firstValueFrom(
+        this.http.get<{ success: boolean; data: { handle: string; policyType: string }[] }>(`${this.apiBase}/policies`),
+      );
+      for (const p of (res.data ?? [])) {
+        if (p.policyType === 'terms_of_service') this.termsHandle.set(p.handle);
+        if (p.policyType === 'privacy_policy')   this.privacyHandle.set(p.handle);
+      }
+    } catch {
+      // keep signals null — fallback to plain text
+    }
+  }
 
   readonly steps = STEPS;
   readonly countries = ['Qatar'];

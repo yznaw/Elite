@@ -173,6 +173,74 @@ async function ensureAllMigrations(client) {
         ) STORED
   `);
 
+  // ── Migration 013: orders & customers production hardening ───────────────
+  await client.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL`);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_customers_active
+      ON customers (tenant_id, deleted_at)
+      WHERE deleted_at IS NULL
+  `);
+  await client.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS phone_number TEXT NULL`);
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'orders_tenant_public_number_key'
+      ) THEN
+        ALTER TABLE orders ADD CONSTRAINT orders_tenant_public_number_key
+          UNIQUE (tenant_id, public_number);
+      END IF;
+    END $$
+  `);
+  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT NULL`);
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency
+      ON orders (tenant_id, idempotency_key)
+      WHERE idempotency_key IS NOT NULL
+  `);
+  await client.query(`
+    CREATE OR REPLACE VIEW v_customer_order_stats AS
+    SELECT
+      customer_id,
+      COUNT(*)::int                                            AS orders_count,
+      COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_cents ELSE 0 END), 0)::bigint
+                                                               AS ltv_cents,
+      MAX(placed_at)                                           AS last_order_at
+    FROM orders
+    WHERE customer_id IS NOT NULL
+    GROUP BY customer_id
+  `);
+
+  // ── Migration 014: policies (legal pages) ────────────────────────────────
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS policies (
+      id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id   UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      handle      TEXT        NOT NULL,
+      title       TEXT        NOT NULL,
+      content     TEXT        NOT NULL DEFAULT '',
+      policy_type TEXT        NOT NULL DEFAULT 'custom',
+      status      TEXT        NOT NULL DEFAULT 'draft',
+      sort_order  INTEGER     NOT NULL DEFAULT 0,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT policies_tenant_handle_uq UNIQUE (tenant_id, handle),
+      CONSTRAINT policies_status_chk CHECK (status IN ('active', 'draft')),
+      CONSTRAINT policies_type_chk   CHECK (policy_type IN (
+        'privacy_policy','terms_of_service','refund_policy',
+        'shipping_policy','cookie_policy','contact_info','custom'
+      ))
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS policies_tenant_status_idx
+      ON policies (tenant_id, status)
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS policies_tenant_sort_idx
+      ON policies (tenant_id, sort_order, created_at)
+  `);
+
   _done = true;
 }
 

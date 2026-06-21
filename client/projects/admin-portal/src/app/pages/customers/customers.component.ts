@@ -1,7 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { Subject, debounceTime, takeUntil } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
@@ -10,8 +9,10 @@ import { EmptyStateComponent } from '../../shared/empty-state/empty-state.compon
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { CustomerDrawerComponent } from './customer-drawer.component';
+import { OrderDrawerComponent } from '../orders/order-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { AdminCustomersService } from '../../services/admin-customers.service';
+import { AdminOrdersService } from '../../services/admin-orders.service';
 import { StorageService } from '../../services/storage.service';
 import { Customer, Order, QAR } from '../../models';
 
@@ -21,7 +22,7 @@ const MOBILE_BP = 900;
 @Component({
   selector: 'ap-customers',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, AvatarComponent, EmptyStateComponent, SortableTableComponent, CellTplDirective, PaginationComponent, CustomerDrawerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, PillComponent, AvatarComponent, EmptyStateComponent, SortableTableComponent, CellTplDirective, PaginationComponent, CustomerDrawerComponent, OrderDrawerComponent],
   template: `
     <div class="page-fade">
       <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
@@ -88,7 +89,7 @@ const MOBILE_BP = 900;
         <div class="load-error-banner">
           <ap-icon name="warning" [size]="16"/>
           <span>{{ loadError() }}</span>
-          <button class="btn btn-outline btn-sm" (click)="loadCustomers()">Retry</button>
+          <button class="btn btn-outline btn-sm" (click)="loadCustomers()">{{ t('common.retry') }}</button>
         </div>
       }
 
@@ -202,6 +203,16 @@ const MOBILE_BP = 900;
         (saved)="onCustomerSaved($event)"
         (deleted)="onCustomerDeleted($event)"
         (openOrder)="onOpenOrder($event)"
+      />
+    }
+
+    @if (activeOrder(); as o) {
+      <ap-order-drawer
+        [value]="o"
+        [backLabel]="orderContext()?.name ? t('common.backTo') + ' ' + orderContext()!.name : t('common.back')"
+        (back)="closeOrderDrawer()"
+        (closed)="closeOrderDrawer()"
+        (updated)="onOrderUpdated($event)"
       />
     }
   `,
@@ -357,8 +368,8 @@ const MOBILE_BP = 900;
 })
 export class CustomersComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);
-  private readonly router = inject(Router);
   private readonly customersApi = inject(AdminCustomersService);
+  private readonly ordersApi = inject(AdminOrdersService);
   private readonly storage = inject(StorageService);
   readonly t = (k: string): string => this.i18n.t(k);
 
@@ -374,6 +385,11 @@ export class CustomersComponent implements OnInit, OnDestroy {
   readonly creatingId = signal<string | null>(null);
   readonly search = signal('');
   readonly exporting = signal(false);
+
+  /** Order drawer shown inline (instead of navigating to /orders). */
+  readonly activeOrder = signal<Order | null>(null);
+  /** The customer we came from when opening an order inline. */
+  readonly orderContext = signal<Customer | null>(null);
 
   private readonly destroy$ = new Subject<void>();
   private readonly searchInput$ = new Subject<string>();
@@ -396,7 +412,7 @@ export class CustomersComponent implements OnInit, OnDestroy {
       const list = await this.customersApi.list();
       this._customers.set(list);
     } catch {
-      this.loadError.set('Could not load customers. Check your connection and try again.');
+      this.loadError.set(this.t('customers.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -521,9 +537,25 @@ export class CustomersComponent implements OnInit, OnDestroy {
   }
 
   onOpenOrder(o: Order): void {
+    this.orderContext.set(this.active());
     this.active.set(null);
     this.creatingId.set(null);
-    this.router.navigate(['/orders'], { queryParams: { id: o.id } });
+    this.activeOrder.set(o);
+    // Load the full order (timeline, notes, items) in the background
+    void this.ordersApi.get(o.id)
+      .then((full) => this.activeOrder.set(full))
+      .catch(() => {});
+  }
+
+  closeOrderDrawer(): void {
+    const ctx = this.orderContext();
+    this.activeOrder.set(null);
+    this.orderContext.set(null);
+    if (ctx) this.active.set(ctx);
+  }
+
+  onOrderUpdated(updated: Order): void {
+    this.activeOrder.set(updated);
   }
 
   exportCsv(): void {

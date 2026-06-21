@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { ConfirmService } from '../../services/confirm.service';
+import { I18nService } from '../../services/i18n.service';
 import { fmtBytes, MediaFile, Product } from '../../models';
 
 interface Suggestion {
@@ -22,7 +23,7 @@ interface Suggestion {
       <div class="drawer-head">
         <div>
           <div class="card-title mono" style="font-size:15px;">{{ media.name }}</div>
-          <div class="card-sub">{{ media.kind === 'glb' ? '3D Model' : 'Image' }} · {{ size }}{{ media.w ? ' · ' + media.w + '×' + media.h : '' }}</div>
+          <div class="card-sub">{{ media.kind === 'glb' ? t('media.detail.headerType3d') : t('media.detail.headerTypeImage') }} · {{ size }}{{ media.w ? ' · ' + media.w + '×' + media.h : '' }}</div>
         </div>
         <button class="x-btn" (click)="closed.emit()"><ap-icon name="x" [size]="14"/></button>
       </div>
@@ -40,7 +41,7 @@ interface Suggestion {
         </div>
 
         <div class="mb-24">
-          <label class="lbl">Linked Product</label>
+          <label class="lbl">{{ t('media.detail.linkedProduct') }}</label>
           @if (linkedProduct) {
             <div class="ms-block" style="margin-bottom:10px;">
               <div class="row gap-sm">
@@ -51,7 +52,7 @@ interface Suggestion {
                   <div class="strong" style="font-size:13px;color:var(--green);">{{ linkedProduct.name }}</div>
                   <div class="muted small mono">{{ linkedProduct.sku }}</div>
                 </div>
-                <ap-pill kind="green"><ap-icon name="check" [size]="10"/> Linked</ap-pill>
+                <ap-pill kind="green"><ap-icon name="check" [size]="10"/> {{ t('media.thumb.linked') }}</ap-pill>
               </div>
             </div>
           } @else if (suggestion) {
@@ -61,58 +62,58 @@ interface Suggestion {
                   <img [src]="suggestion.product.image" alt="" style="width:100%;height:100%;object-fit:cover;"/>
                 </div>
                 <div class="grow" style="min-width:0;">
-                  <div class="strong" style="font-size:13px;">Suggested match: {{ suggestion.product.name }}</div>
+                  <div class="strong" style="font-size:13px;">{{ t('media.detail.suggestedMatch') }} {{ suggestion.product.name }}</div>
                   <div class="muted small">{{ suggestion.why }}</div>
                 </div>
                 <span class="alink-conf" [class.high]="suggestion.conf === 'high'" [class.med]="suggestion.conf === 'medium'" [class.low]="suggestion.conf === 'low'">{{ suggestion.conf }}</span>
               </div>
               <button class="btn btn-gold btn-sm" (click)="acceptSuggestion()">
-                <ap-icon name="link" [size]="12"/> Accept Match
+                <ap-icon name="link" [size]="12"/> {{ t('media.detail.acceptMatch') }}
               </button>
             </div>
           } @else {
             <div class="muted small mb-16" style="padding:10px 12px;background:var(--bg);border-radius:8px;">
-              No automatic match found. Choose a product below.
+              {{ t('media.detail.noMatch') }}
             </div>
           }
 
           <select class="inp" [ngModel]="linkSel()" (ngModelChange)="linkSel.set($event)">
-            <option value="">— Not linked —</option>
+            <option value="">{{ t('media.detail.notLinked') }}</option>
             @for (p of products; track p.id) {
               <option [value]="p.id">{{ p.name }} · {{ p.sku }}</option>
             }
           </select>
           <div class="row gap-sm mt-8">
             <button class="btn btn-primary btn-sm" [disabled]="!dirty()" (click)="applyLink()">
-              @if (linkSel()) { <ap-icon name="link" [size]="12"/> Link to product }
-              @else { <ap-icon name="unlink" [size]="12"/> Unlink }
+              @if (linkSel()) { <ap-icon name="link" [size]="12"/> {{ t('media.detail.linkToProduct') }} }
+              @else { <ap-icon name="unlink" [size]="12"/> {{ t('media.detail.unlink') }} }
             </button>
           </div>
         </div>
 
         <div class="mb-24">
-          <label class="lbl">Metadata</label>
+          <label class="lbl">{{ t('media.detail.metadata') }}</label>
           <div class="panel">
             <div class="ms-row" style="padding:10px 14px;">
-              <span class="muted small">File ID</span>
+              <span class="muted small">{{ t('media.detail.fileId') }}</span>
               <span class="strong mono">{{ media.id }}</span>
             </div>
             <div class="ms-row" style="padding:10px 14px;">
-              <span class="muted small">Type</span>
-              <span class="strong">{{ media.kind === 'glb' ? '3D Model (.glb)' : 'Image' }}</span>
+              <span class="muted small">{{ t('media.detail.type') }}</span>
+              <span class="strong">{{ media.kind === 'glb' ? t('media.detail.type3d') : t('media.detail.typeImage') }}</span>
             </div>
             <div class="ms-row" style="padding:10px 14px;">
-              <span class="muted small">Size</span>
+              <span class="muted small">{{ t('media.detail.size') }}</span>
               <span class="strong">{{ size }}</span>
             </div>
             @if (media.w) {
               <div class="ms-row" style="padding:10px 14px;">
-                <span class="muted small">Dimensions</span>
+                <span class="muted small">{{ t('media.detail.dimensions') }}</span>
                 <span class="strong">{{ media.w }} × {{ media.h }} px</span>
               </div>
             }
             <div class="ms-row" style="padding:10px 14px;">
-              <span class="muted small">Uploaded</span>
+              <span class="muted small">{{ t('media.detail.uploaded') }}</span>
               <span class="row gap-sm">
                 <span class="strong mono" style="font-size:11px;">{{ media.uploaded }}</span>
                 <span class="trigger" style="padding:2px 10px 2px 3px;font-size:10px;">
@@ -122,9 +123,9 @@ interface Suggestion {
               </span>
             </div>
             <div class="ms-row" style="padding:10px 14px;">
-              <span class="muted small">SKU detected</span>
+              <span class="muted small">{{ t('media.detail.skuDetected') }}</span>
               <span class="strong mono" [style.color]="detectedSku ? 'var(--gold)' : 'var(--muted)'">
-                {{ detectedSku || 'none' }}
+                {{ detectedSku || t('media.detail.skuNone') }}
               </span>
             </div>
           </div>
@@ -135,20 +136,20 @@ interface Suggestion {
         <div class="default-image-section">
           @if (isDefault()) {
             <div class="default-badge">
-              <ap-icon name="check" [size]="12"/> Current default fallback image
+              <ap-icon name="check" [size]="12"/> {{ t('media.detail.defaultBadge') }}
             </div>
           } @else {
             <button class="btn btn-outline btn-sm" (click)="setDefault.emit(media)" [disabled]="settingDefault">
-              <ap-icon name="media" [size]="12"/> Set as Default Fallback
+              <ap-icon name="media" [size]="12"/> {{ t('media.detail.setDefault') }}
             </button>
-            <div class="muted small" style="margin-top:6px;">Used when a product has no image.</div>
+            <div class="muted small" style="margin-top:6px;">{{ t('media.detail.defaultHint') }}</div>
           }
         </div>
       }
 
       <div class="drawer-foot">
-        <button class="btn btn-danger" (click)="onDelete()"><ap-icon name="trash" [size]="12"/> Delete</button>
-        <button class="btn btn-outline" (click)="closed.emit()">Close</button>
+        <button class="btn btn-danger" (click)="onDelete()"><ap-icon name="trash" [size]="12"/> {{ t('common.delete') }}</button>
+        <button class="btn btn-outline" (click)="closed.emit()">{{ t('common.close') }}</button>
       </div>
     </div>
   `,
@@ -191,6 +192,8 @@ export class MediaDetailDrawerComponent {
   }
 
   private readonly confirm = inject(ConfirmService);
+  private readonly i18n = inject(I18nService);
+  readonly t = (k: string): string => this.i18n.t(k);
 
   readonly linkSel = signal<string>('');
 
@@ -213,10 +216,10 @@ export class MediaDetailDrawerComponent {
 
   async onDelete(): Promise<void> {
     const ok = await this.confirm.ask({
-      title: 'Delete this file?',
-      message: `"${this._media.name}" will be removed from the library. This cannot be undone — any product currently using this file will lose its link.`,
-      confirmLabel: 'Delete file',
-      cancelLabel: 'Keep',
+      title: this.t('media.detail.delete.title'),
+      message: `"${this._media.name}" ${this.t('media.detail.delete.message')}`,
+      confirmLabel: this.t('media.detail.delete.confirm'),
+      cancelLabel: this.t('media.detail.delete.cancel'),
       variant: 'danger',
     });
     if (!ok) return;

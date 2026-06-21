@@ -110,6 +110,8 @@ export interface Order {
     status?: string;
   };
   trackingNumber?: string;
+  nboxBookingFailed?: boolean;
+  nboxBookingError?: string;
   timeline?: OrderTimelineEntry[];
   notes?: OrderNote[];
 }
@@ -197,6 +199,22 @@ export interface StorefrontBlock {
 export interface PaletteEntry {
   type: string;
   desc: string;
+}
+
+export type PolicyType =
+  | 'privacy_policy' | 'terms_of_service' | 'refund_policy'
+  | 'shipping_policy' | 'cookie_policy'   | 'contact_info' | 'custom';
+
+export interface Policy {
+  id: string;
+  handle: string;
+  title: string;
+  content: string;
+  policyType: PolicyType;
+  status: 'active' | 'draft';
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const QAR = (n: number): string => 'QAR ' + n.toLocaleString();

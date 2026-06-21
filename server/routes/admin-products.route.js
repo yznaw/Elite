@@ -69,13 +69,31 @@ function validateProduct(body) {
 }
 
 async function replaceVariants(client, tenantId, productId, variants) {
-  // cart_items.variant_id is ON DELETE RESTRICT — null it out before deleting variants
-  // so existing cart items aren't lost (they keep the product, just lose the variant ref)
-  await client.query(
-    'UPDATE cart_items SET variant_id = NULL WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)',
-    [productId],
-  );
-  await client.query('DELETE FROM product_variants WHERE product_id = $1', [productId]);
+  // Collect incoming SKUs so we can remove variants that were deleted in the UI
+  const incomingSkus = variants.map(v => String(v.sku || '').trim()).filter(Boolean);
+
+  // Null-out cart references for variants being removed (ON DELETE RESTRICT)
+  if (incomingSkus.length > 0) {
+    await client.query(
+      `UPDATE cart_items SET variant_id = NULL
+       WHERE variant_id IN (
+         SELECT id FROM product_variants
+         WHERE product_id = $1 AND sku <> ALL($2::text[])
+       )`,
+      [productId, incomingSkus],
+    );
+    await client.query(
+      'DELETE FROM product_variants WHERE product_id = $1 AND sku <> ALL($2::text[])',
+      [productId, incomingSkus],
+    );
+  } else {
+    // No variants coming in — wipe all (product-level stock only)
+    await client.query(
+      'UPDATE cart_items SET variant_id = NULL WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)',
+      [productId],
+    );
+    await client.query('DELETE FROM product_variants WHERE product_id = $1', [productId]);
+  }
 
   for (const [index, variant] of variants.entries()) {
     const sku = String(variant.sku || '').trim();
@@ -90,6 +108,7 @@ async function replaceVariants(client, tenantId, productId, variants) {
       : null;
 
     const colorText = String(variant.color || '').trim() || null;
+    const incomingStock = Math.max(0, Number.parseInt(variant.stock, 10) || 0);
 
     await client.query(
       `
@@ -102,6 +121,24 @@ async function replaceVariants(client, tenantId, productId, variants) {
           (SELECT id FROM ref_colors
            WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($5))
            LIMIT 1))
+        ON CONFLICT (tenant_id, sku) DO UPDATE SET
+          product_id         = EXCLUDED.product_id,
+          size               = EXCLUDED.size,
+          color              = EXCLUDED.color,
+          material           = EXCLUDED.material,
+          price_cents        = EXCLUDED.price_cents,
+          cost_price_cents   = EXCLUDED.cost_price_cents,
+          shipping_cost_cents = EXCLUDED.shipping_cost_cents,
+          sort_order         = EXCLUDED.sort_order,
+          is_active          = true,
+          color_ref_id       = EXCLUDED.color_ref_id,
+          -- Preserve existing stock when the editor sends 0 but DB already has a real value
+          -- (protects against a product save overwriting a bulk-stock-update)
+          stock_quantity     = CASE
+            WHEN EXCLUDED.stock_quantity > 0 THEN EXCLUDED.stock_quantity
+            ELSE GREATEST(product_variants.stock_quantity, EXCLUDED.stock_quantity)
+          END,
+          updated_at = NOW()
       `,
       [
         tenantId,
@@ -113,7 +150,7 @@ async function replaceVariants(client, tenantId, productId, variants) {
         toCents(variant.price),
         costCents,
         shippingCents,
-        Math.max(0, Number.parseInt(variant.stock, 10) || 0),
+        incomingStock,
         index,
       ],
     );
@@ -632,19 +669,36 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
       const stock = Math.max(0, Number.parseInt(item.stock, 10) || 0);
       if (!sku) continue;
 
-      const result = await client.query(
-        "UPDATE products SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 AND status <> 'archived' RETURNING id",
+      // Update the variant row first (preferred — variant SKUs are unique)
+      const varResult = await client.query(
+        'UPDATE product_variants SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 RETURNING product_id',
         [stock, tenant.id, sku],
       );
-      if (result.rowCount === 0) {
-        notFound.push(sku);
+
+      if (varResult.rowCount > 0) {
+        // Re-sum all variant stock onto the parent product so the catalog stock total stays accurate
+        const productId = varResult.rows[0].product_id;
+        await client.query(
+          'UPDATE products SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1), updated_at = now() WHERE id = $1',
+          [productId],
+        );
+        updated += varResult.rowCount;
       } else {
-        updated += result.rowCount;
+        // Fall back to product-level SKU (no-variant products)
+        const prodResult = await client.query(
+          "UPDATE products SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 AND status <> 'archived' RETURNING id",
+          [stock, tenant.id, sku],
+        );
+        if (prodResult.rowCount === 0) {
+          notFound.push(sku);
+        } else {
+          updated += prodResult.rowCount;
+        }
       }
     }
 
     await client.query('COMMIT');
-    ok(res, { updated, notFound }, `${updated} product(s) updated.`);
+    ok(res, { updated, notFound }, `${updated} variant(s) updated.`);
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
     throw err;

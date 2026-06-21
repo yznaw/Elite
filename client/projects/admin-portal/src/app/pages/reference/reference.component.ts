@@ -7,6 +7,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
+import { I18nService } from '../../services/i18n.service';
 
 type Tab = 'colors' | 'materials' | 'sizes';
 
@@ -20,23 +21,23 @@ type Tab = 'colors' | 'materials' | 'sizes';
       <!-- ── Page header ── -->
       <div class="ref-header">
         <div>
-          <h1 class="ref-title">Reference Lists</h1>
-          <p class="ref-sub">Manage the brand's approved colors, materials and size charts. These appear as dropdowns throughout the catalog.</p>
+          <h1 class="ref-title">{{ t('reference.title') }}</h1>
+          <p class="ref-sub">{{ t('reference.sub') }}</p>
         </div>
       </div>
 
       <!-- ── Tabs ── -->
       <div class="ref-tabs">
         <button class="ref-tab" [class.active]="tab() === 'colors'"    (click)="tab.set('colors')">
-          <span class="tab-dot" style="background:#c9a84c;"></span> Colors
+          <span class="tab-dot" style="background:#c9a84c;"></span> {{ t('reference.tab.colors') }}
           <span class="tab-count">{{ colors().length }}</span>
         </button>
         <button class="ref-tab" [class.active]="tab() === 'materials'" (click)="tab.set('materials')">
-          <span class="tab-dot" style="background:#7c3aed;"></span> Materials
+          <span class="tab-dot" style="background:#7c3aed;"></span> {{ t('reference.tab.materials') }}
           <span class="tab-count">{{ materials().length }}</span>
         </button>
         <button class="ref-tab" [class.active]="tab() === 'sizes'"     (click)="tab.set('sizes')">
-          <span class="tab-dot" style="background:#2563eb;"></span> Size Charts
+          <span class="tab-dot" style="background:#2563eb;"></span> {{ t('reference.tab.sizeCharts') }}
           <span class="tab-count">{{ sizeSets().length }}</span>
         </button>
       </div>
@@ -45,13 +46,13 @@ type Tab = 'colors' | 'materials' | 'sizes';
       @if (tab() === 'colors') {
         <div class="ref-section">
           <div class="ref-toolbar">
-            <span class="ref-count">{{ colors().length }} color{{ colors().length !== 1 ? 's' : '' }}</span>
+            <span class="ref-count">{{ colors().length }} {{ colors().length !== 1 ? t('reference.color.countMany') : t('reference.color.count') }}</span>
             <div class="toolbar-right">
               @if (savingSort()) {
-                <span class="sort-saving"><ap-spinner [size]="12"/> Saving order…</span>
+                <span class="sort-saving"><ap-spinner [size]="12"/> {{ t('reference.savingOrder') }}</span>
               }
               <button class="btn btn-gold btn-sm" (click)="addColor()">
-                <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Color</span>
+                <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">{{ t('reference.addColor') }}</span>
               </button>
             </div>
           </div>
@@ -59,7 +60,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
           @if (loading()) {
             <div class="ref-loading"><ap-spinner/></div>
           } @else if (colors().length === 0) {
-            <div class="ref-empty">No colors yet. Add your first brand color.</div>
+            <div class="ref-empty">{{ t('reference.colors.empty') }}</div>
           } @else {
             <div class="color-grid">
 
@@ -100,10 +101,10 @@ type Tab = 'colors' | 'materials' | 'sizes';
                     <!-- Usage badge -->
                     @if ((c.variant_count ?? 0) > 0) {
                       <button class="usage-badge" (click)="goToCatalogFilter(c.name_en)" title="View products using this color">
-                        {{ c.variant_count }} variant{{ (c.variant_count ?? 0) !== 1 ? 's' : '' }}
+                        {{ c.variant_count }} {{ (c.variant_count ?? 0) !== 1 ? t('common.variants') : t('common.variant') }}
                       </button>
                     } @else {
-                      <span class="usage-badge usage-badge--zero">unused</span>
+                      <span class="usage-badge usage-badge--zero">{{ t('common.unused') }}</span>
                     }
                     <!-- Actions -->
                     <div class="color-acts">
@@ -122,13 +123,13 @@ type Tab = 'colors' | 'materials' | 'sizes';
       @if (tab() === 'materials') {
         <div class="ref-section">
           <div class="ref-toolbar">
-            <span class="ref-count">{{ materials().length }} material{{ materials().length !== 1 ? 's' : '' }}</span>
+            <span class="ref-count">{{ materials().length }} {{ materials().length !== 1 ? t('reference.material.countMany') : t('reference.material.count') }}</span>
             <div class="toolbar-right">
               @if (savingSort()) {
-                <span class="sort-saving"><ap-spinner [size]="12"/> Saving order…</span>
+                <span class="sort-saving"><ap-spinner [size]="12"/> {{ t('reference.savingOrder') }}</span>
               }
               <button class="btn btn-gold btn-sm" (click)="addMaterial()">
-                <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Material</span>
+                <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">{{ t('reference.addMaterial') }}</span>
               </button>
             </div>
           </div>
@@ -136,7 +137,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
           @if (loading()) {
             <div class="ref-loading"><ap-spinner/></div>
           } @else if (materials().length === 0) {
-            <div class="ref-empty">No materials yet.</div>
+            <div class="ref-empty">{{ t('reference.materials.empty') }}</div>
           } @else {
             <div class="mat-list">
 
@@ -164,9 +165,9 @@ type Tab = 'colors' | 'materials' | 'sizes';
                     <span class="mat-name-en">{{ m.name_en }}</span>
                     <span class="mat-name-ar muted">{{ m.name_ar }}</span>
                     @if ((m.variant_count ?? 0) > 0) {
-                      <span class="usage-badge">{{ m.variant_count }} variant{{ (m.variant_count ?? 0) !== 1 ? 's' : '' }}</span>
+                      <span class="usage-badge">{{ m.variant_count }} {{ (m.variant_count ?? 0) !== 1 ? t('common.variants') : t('common.variant') }}</span>
                     } @else {
-                      <span class="usage-badge usage-badge--zero">unused</span>
+                      <span class="usage-badge usage-badge--zero">{{ t('common.unused') }}</span>
                     }
                     <div class="mat-acts">
                       <button class="act-btn" (click)="startEditMaterial(m)" title="Edit"><ap-icon name="edit" [size]="13"/></button>
@@ -184,16 +185,16 @@ type Tab = 'colors' | 'materials' | 'sizes';
       @if (tab() === 'sizes') {
         <div class="ref-section">
           <div class="ref-toolbar">
-            <span class="ref-count">{{ sizeSets().length }} size set{{ sizeSets().length !== 1 ? 's' : '' }}</span>
+            <span class="ref-count">{{ sizeSets().length }} {{ sizeSets().length !== 1 ? t('reference.sizeSet.countMany') : t('reference.sizeSet.count') }}</span>
             <button class="btn btn-gold btn-sm" (click)="addSizeSet()">
-              <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">Add Size Set</span>
+              <ap-icon name="plus" [size]="13"/> <span class="btn-lbl">{{ t('reference.addSizeSet') }}</span>
             </button>
           </div>
 
           @if (loading()) {
             <div class="ref-loading"><ap-spinner/></div>
           } @else if (sizeSets().length === 0) {
-            <div class="ref-empty">No size sets yet.</div>
+            <div class="ref-empty">{{ t('reference.sizeSets.empty') }}</div>
           } @else {
             <div class="size-list">
               @for (s of sizeSets(); track s.id) {
@@ -201,10 +202,10 @@ type Tab = 'colors' | 'materials' | 'sizes';
                   @if (editingId() === s.id) {
                     <div class="size-edit">
                       <div class="ef-row" style="margin-bottom:10px;">
-                        <input class="inp inp-sm" placeholder="Set name (e.g. Men's Footwear)" [(ngModel)]="editSizeSet.name" style="flex:1;"/>
-                        <input class="inp inp-sm mono" type="number" placeholder="Order" style="width:72px;" [(ngModel)]="editSizeSet.sort_order"/>
+                        <input class="inp inp-sm" [placeholder]="t('reference.field.sizeName')" [(ngModel)]="editSizeSet.name" style="flex:1;"/>
+                        <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editSizeSet.sort_order"/>
                       </div>
-                      <label class="lbl">Sizes (comma-separated)</label>
+                      <label class="lbl">{{ t('reference.field.sizes') }}</label>
                       <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
                       <!-- Chip preview with up/down reorder -->
                       <div class="size-preview">
@@ -219,18 +220,18 @@ type Tab = 'colors' | 'materials' | 'sizes';
                       </div>
                       <div class="edit-actions" style="margin-top:10px;">
                         <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveSizeSet(s.id)">
-                          @if (saving()) { <ap-spinner [size]="10"/> } Save
+                          @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
                         </button>
-                        <button class="btn btn-sm btn-outline" (click)="cancelEdit()">Cancel</button>
+                        <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
                       </div>
                     </div>
                   } @else {
                     <div class="size-head">
                       <span class="size-name">📐 {{ s.name }}</span>
                       @if ((s.usage_hint ?? 0) > 0) {
-                        <span class="usage-badge" style="margin-inline-start:8px;">{{ s.usage_hint }} product{{ (s.usage_hint ?? 0) !== 1 ? 's' : '' }}</span>
+                        <span class="usage-badge" style="margin-inline-start:8px;">{{ s.usage_hint }} {{ (s.usage_hint ?? 0) !== 1 ? t('reference.product.countMany') : t('reference.product.count') }}</span>
                       } @else {
-                        <span class="usage-badge usage-badge--zero" style="margin-inline-start:8px;">unused</span>
+                        <span class="usage-badge usage-badge--zero" style="margin-inline-start:8px;">{{ t('common.unused') }}</span>
                       }
                       <div class="mat-acts" style="margin-inline-start:auto;">
                         <button class="act-btn" (click)="duplicateSizeSet(s.id)" title="Duplicate"><ap-icon name="copy" [size]="13"/></button>
@@ -263,26 +264,26 @@ type Tab = 'colors' | 'materials' | 'sizes';
           </div>
           <div class="edit-fields">
             <div class="ef-row">
-              <input class="inp inp-sm" placeholder="Name (EN)" [(ngModel)]="editColor.name_en"/>
-              <input class="inp inp-sm" placeholder="اسم عربي" dir="rtl" [(ngModel)]="editColor.name_ar"/>
+              <input class="inp inp-sm" [placeholder]="t('reference.field.nameEn')" [(ngModel)]="editColor.name_en"/>
+              <input class="inp inp-sm" [placeholder]="t('reference.field.nameAr')" dir="rtl" [(ngModel)]="editColor.name_ar"/>
             </div>
             <div class="ef-row">
               <label class="ef-hex-wrap">
                 <input type="color" class="ef-color-picker" [(ngModel)]="editColor.hex"/>
                 <span class="inp inp-sm mono ef-hex-text">{{ editColor.hex }}</span>
               </label>
-              <input class="inp inp-sm mono" type="number" placeholder="Order" style="width:72px;" [(ngModel)]="editColor.sort_order"/>
+              <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editColor.sort_order"/>
             </div>
             <div class="ef-row">
-              <input class="inp inp-sm" placeholder="Swatch image URL (optional — for textured leathers)" [(ngModel)]="editColor.swatch_image_url" style="flex:1;"/>
+              <input class="inp inp-sm" [placeholder]="t('reference.field.swatchUrl')" [(ngModel)]="editColor.swatch_image_url" style="flex:1;"/>
             </div>
-            <p class="ef-hint">Leave blank to use the hex color circle. Set a texture thumbnail URL for suede, croc, or exotic leather.</p>
+            <p class="ef-hint">{{ t('reference.field.swatchHint') }}</p>
           </div>
           <div class="edit-actions">
             <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveColor(c?.id)">
-              @if (saving()) { <ap-spinner [size]="10"/> } Save
+              @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
             </button>
-            <button class="btn btn-sm btn-outline" (click)="cancelEdit()">Cancel</button>
+            <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
           </div>
         </div>
       </ng-template>
@@ -290,13 +291,13 @@ type Tab = 'colors' | 'materials' | 'sizes';
       <!-- ════ Material edit form template ════ -->
       <ng-template #matEditForm let-m>
         <div class="mat-edit">
-          <input class="inp inp-sm" placeholder="Name (EN)" [(ngModel)]="editMaterial.name_en" style="flex:1;min-width:140px;"/>
-          <input class="inp inp-sm" placeholder="اسم عربي" dir="rtl" [(ngModel)]="editMaterial.name_ar" style="flex:1;min-width:120px;"/>
-          <input class="inp inp-sm mono" type="number" placeholder="Order" style="width:72px;" [(ngModel)]="editMaterial.sort_order"/>
+          <input class="inp inp-sm" [placeholder]="t('reference.field.nameEn')" [(ngModel)]="editMaterial.name_en" style="flex:1;min-width:140px;"/>
+          <input class="inp inp-sm" [placeholder]="t('reference.field.nameAr')" dir="rtl" [(ngModel)]="editMaterial.name_ar" style="flex:1;min-width:120px;"/>
+          <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editMaterial.sort_order"/>
           <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveMaterial(m?.id)">
-            @if (saving()) { <ap-spinner [size]="10"/> } Save
+            @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
           </button>
-          <button class="btn btn-sm btn-outline" (click)="cancelEdit()">Cancel</button>
+          <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
         </div>
       </ng-template>
 
@@ -492,6 +493,9 @@ export class ReferenceComponent implements OnInit {
   private readonly toast   = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly router  = inject(Router);
+  private readonly i18n    = inject(I18nService);
+
+  readonly t = (k: string) => this.i18n.t(k);
 
   readonly tab       = signal<Tab>('colors');
   readonly loading   = signal(true);
@@ -530,7 +534,7 @@ export class ReferenceComponent implements OnInit {
       this.materials.set(m);
       this.sizeSets.set(s);
     } catch {
-      this.toast.error('Could not load reference lists');
+      this.toast.error(this.t('reference.toast.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -566,7 +570,7 @@ export class ReferenceComponent implements OnInit {
   }
 
   async saveColor(existingId?: string): Promise<void> {
-    if (!this.editColor.name_en.trim()) { this.toast.error('Color name (EN) is required'); return; }
+    if (!this.editColor.name_en.trim()) { this.toast.error(this.t('reference.toast.colorNameRequired')); return; }
     this.saving.set(true);
     try {
       const payload = {
@@ -584,31 +588,27 @@ export class ReferenceComponent implements OnInit {
         this.colors.update(list => [...list, { ...created, variant_count: 0 }]);
       }
       this.editingId.set(null);
-      this.toast.success('Color saved');
-    } catch { this.toast.error('Could not save color'); }
+      this.toast.success(this.t('reference.toast.colorSaved'));
+    } catch { this.toast.error(this.t('reference.toast.colorSaveError')); }
     finally { this.saving.set(false); }
   }
 
   async deleteColor(c: RefColor): Promise<void> {
     const count = c.variant_count ?? 0;
-    const message = count > 0
-      ? `"${c.name_en}" is used by ${count} variant${count !== 1 ? 's' : ''}. Deleting will unlink those variants from this color but will NOT delete them.\n\nYou can re-open those products to re-assign a color.`
-      : `Delete "${c.name_en}"? This cannot be undone.`;
-
     const confirmed = await this.confirm.ask({
-      title:        count > 0 ? `Delete color in use` : `Delete "${c.name_en}"`,
-      message,
+      title:        count > 0 ? this.t('reference.confirm.deleteColor.inUseTitle') : `${this.t('reference.confirm.deleteColor.title')} "${c.name_en}"`,
+      message:      this.t('reference.confirm.deleteColor.message'),
       variant:      'danger',
-      confirmLabel: count > 0 ? 'Force Delete' : 'Delete',
-      cancelLabel:  'Cancel',
+      confirmLabel: count > 0 ? this.t('reference.confirm.deleteColor.forceLabel') : this.t('reference.confirm.deleteColor.confirmLabel'),
+      cancelLabel:  this.t('common.cancel'),
     });
     if (!confirmed) return;
 
     try {
       await this.refApi.deleteColor(c.id, count > 0);
       this.colors.update(list => list.filter(x => x.id !== c.id));
-      this.toast.success('Color deleted');
-    } catch { this.toast.error('Could not delete color'); }
+      this.toast.success(this.t('reference.toast.colorDeleted'));
+    } catch { this.toast.error(this.t('reference.toast.colorDeleteError')); }
   }
 
   // ── Color drag-to-reorder ─────────────────────────────────────────────────
@@ -649,7 +649,7 @@ export class ReferenceComponent implements OnInit {
     try {
       const items = this.colors().map((c, i) => ({ id: c.id, sort_order: i }));
       await this.refApi.saveColorSortOrders(items);
-    } catch { this.toast.error('Could not save color order'); }
+    } catch { this.toast.error(this.t('reference.toast.colorOrderError')); }
     finally { this.savingSort.set(false); }
   }
 
@@ -666,7 +666,7 @@ export class ReferenceComponent implements OnInit {
   }
 
   async saveMaterial(existingId?: string): Promise<void> {
-    if (!this.editMaterial.name_en.trim()) { this.toast.error('Material name (EN) is required'); return; }
+    if (!this.editMaterial.name_en.trim()) { this.toast.error(this.t('reference.toast.materialNameRequired')); return; }
     this.saving.set(true);
     try {
       if (existingId && existingId !== '__new_material__') {
@@ -677,31 +677,27 @@ export class ReferenceComponent implements OnInit {
         this.materials.update(list => [...list, { ...created, variant_count: 0 }]);
       }
       this.editingId.set(null);
-      this.toast.success('Material saved');
-    } catch { this.toast.error('Could not save material'); }
+      this.toast.success(this.t('reference.toast.materialSaved'));
+    } catch { this.toast.error(this.t('reference.toast.materialSaveError')); }
     finally { this.saving.set(false); }
   }
 
   async deleteMaterial(m: RefMaterial): Promise<void> {
     const count = m.variant_count ?? 0;
-    const message = count > 0
-      ? `"${m.name_en}" is used by ${count} variant${count !== 1 ? 's' : ''}. Deleting will clear the material field on those variants but will NOT delete them.`
-      : `Delete "${m.name_en}"? This cannot be undone.`;
-
     const confirmed = await this.confirm.ask({
-      title:        count > 0 ? `Delete material in use` : `Delete "${m.name_en}"`,
-      message,
+      title:        count > 0 ? this.t('reference.confirm.deleteMaterial.inUseTitle') : `${this.t('reference.confirm.deleteMaterial.title')} "${m.name_en}"`,
+      message:      this.t('reference.confirm.deleteColor.message'),
       variant:      'danger',
-      confirmLabel: count > 0 ? 'Force Delete' : 'Delete',
-      cancelLabel:  'Cancel',
+      confirmLabel: count > 0 ? this.t('reference.confirm.deleteColor.forceLabel') : this.t('reference.confirm.deleteColor.confirmLabel'),
+      cancelLabel:  this.t('common.cancel'),
     });
     if (!confirmed) return;
 
     try {
       await this.refApi.deleteMaterial(m.id, count > 0);
       this.materials.update(list => list.filter(x => x.id !== m.id));
-      this.toast.success('Material deleted');
-    } catch { this.toast.error('Could not delete material'); }
+      this.toast.success(this.t('reference.toast.materialDeleted'));
+    } catch { this.toast.error(this.t('reference.toast.materialDeleteError')); }
   }
 
   // ── Material drag-to-reorder ──────────────────────────────────────────────
@@ -742,7 +738,7 @@ export class ReferenceComponent implements OnInit {
     try {
       const items = this.materials().map((m, i) => ({ id: m.id, sort_order: i }));
       await this.refApi.saveMaterialSortOrders(items);
-    } catch { this.toast.error('Could not save material order'); }
+    } catch { this.toast.error(this.t('reference.toast.materialOrderError')); }
     finally { this.savingSort.set(false); }
   }
 
@@ -784,12 +780,12 @@ export class ReferenceComponent implements OnInit {
     try {
       const created = await this.refApi.duplicateSizeSet(id);
       this.sizeSets.update(list => [...list, created]);
-      this.toast.success('Size set duplicated');
-    } catch { this.toast.error('Could not duplicate size set'); }
+      this.toast.success(this.t('reference.toast.sizeSetDuplicated'));
+    } catch { this.toast.error(this.t('reference.toast.sizeSetDuplicateError')); }
   }
 
   async saveSizeSet(existingId?: string): Promise<void> {
-    if (!this.editSizeSet.name.trim()) { this.toast.error('Size set name is required'); return; }
+    if (!this.editSizeSet.name.trim()) { this.toast.error(this.t('reference.toast.sizeSetNameRequired')); return; }
     this.saving.set(true);
     try {
       if (existingId && existingId !== '__new_sizeset__') {
@@ -800,23 +796,24 @@ export class ReferenceComponent implements OnInit {
         this.sizeSets.update(list => [...list, created]);
       }
       this.editingId.set(null);
-      this.toast.success('Size set saved');
-    } catch { this.toast.error('Could not save size set'); }
+      this.toast.success(this.t('reference.toast.sizeSetSaved'));
+    } catch { this.toast.error(this.t('reference.toast.sizeSetSaveError')); }
     finally { this.saving.set(false); }
   }
 
   async deleteSizeSet(id: string): Promise<void> {
     const confirmed = await this.confirm.ask({
-      title: 'Delete size set',
-      message: 'Delete this size set? This cannot be undone.',
-      variant: 'danger',
-      confirmLabel: 'Delete',
+      title:        this.t('reference.confirm.deleteSizeSet.title'),
+      message:      this.t('reference.confirm.deleteSizeSet.message'),
+      variant:      'danger',
+      confirmLabel: this.t('reference.confirm.deleteColor.confirmLabel'),
+      cancelLabel:  this.t('common.cancel'),
     });
     if (!confirmed) return;
     try {
       await this.refApi.deleteSizeSet(id);
       this.sizeSets.update(list => list.filter(s => s.id !== id));
-      this.toast.success('Size set deleted');
-    } catch { this.toast.error('Could not delete size set'); }
+      this.toast.success(this.t('reference.toast.sizeSetDeleted'));
+    } catch { this.toast.error(this.t('reference.toast.sizeSetDeleteError')); }
   }
 }

@@ -525,10 +525,24 @@
             color: var(--muted);
             text-align: center;
             margin-top: 16px;
-            letterspacing: 0.06em;
+            letter-spacing: 0.06em;
+            line-height: 1.6;
           "
         >
-          {{ t("checkout.terms") }}
+          @if (termsHandle() || privacyHandle()) {
+            {{ t("checkout.terms.prefix") || "By placing your order you agree to our" }}
+            @if (termsHandle()) {
+              <a [routerLink]="'/policy/' + termsHandle()" target="_blank" style="color:var(--green);text-decoration:underline;">{{ t("checkout.terms.tos") || "Terms of Service" }}</a>
+            }
+            @if (termsHandle() && privacyHandle()) {
+              {{ t("checkout.terms.and") || " and " }}
+            }
+            @if (privacyHandle()) {
+              <a [routerLink]="'/policy/' + privacyHandle()" target="_blank" style="color:var(--green);text-decoration:underline;">{{ t("checkout.terms.privacy") || "Privacy Policy" }}</a>
+            }.
+          } @else {
+            {{ t("checkout.terms") }}
+          }
         </p>
       </div>
 

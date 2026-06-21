@@ -40,11 +40,11 @@ interface FeedbackSummary {
       <div class="fb-header">
         <div>
           <h1 class="fb-title">{{ t('nav.feedback') }}</h1>
-          <p class="fb-sub">Private — collected from storefront visitors and in-store kiosk. Never shown publicly.</p>
+          <p class="fb-sub">{{ t('feedback.sub') }}</p>
         </div>
         <a [href]="kioskBaseUrl" target="_blank" rel="noopener noreferrer" class="fb-kiosk-btn">
           <ap-icon name="phone" [size]="13"/>
-          Open Kiosk
+          {{ t('feedback.openKiosk') }}
         </a>
       </div>
 
@@ -53,7 +53,7 @@ interface FeedbackSummary {
         <div class="fb-stats">
           <div class="card card-pad fb-stat">
             <div class="fb-stat-val">{{ summary().totalReviews }}</div>
-            <div class="fb-stat-lbl">Total Reviews</div>
+            <div class="fb-stat-lbl">{{ t('feedback.stats.totalReviews') }}</div>
           </div>
           <div class="card card-pad fb-stat">
             <div class="fb-stat-val fb-avg">
@@ -63,11 +63,11 @@ interface FeedbackSummary {
                 —
               }
             </div>
-            <div class="fb-stat-lbl">Average Rating</div>
+            <div class="fb-stat-lbl">{{ t('feedback.stats.avgRating') }}</div>
           </div>
           <div class="card card-pad fb-stat">
             <div class="fb-stat-val">{{ summary().productCount }}</div>
-            <div class="fb-stat-lbl">Products with Feedback</div>
+            <div class="fb-stat-lbl">{{ t('feedback.stats.productsWithFeedback') }}</div>
           </div>
         </div>
       }
@@ -90,7 +90,7 @@ interface FeedbackSummary {
       <!-- Empty -->
       @if (!loading() && products().length === 0 && !general()) {
         <div class="card">
-          <ap-empty-state icon="star" title="No feedback yet" sub="Feedback submitted through the storefront or in-store kiosk will appear here."/>
+          <ap-empty-state icon="star" [title]="t('feedback.empty.title')" [sub]="t('feedback.empty.sub')"/>
         </div>
       }
 
@@ -102,19 +102,19 @@ interface FeedbackSummary {
               <ap-icon name="users" [size]="18"/>
             </div>
             <div class="fb-row-info">
-              <div class="fb-row-name">General Feedback</div>
+              <div class="fb-row-name">{{ t('feedback.general.name') }}</div>
               <div class="fb-row-meta">
                 <span class="fb-stars">{{ starsLabel(general()!.avgRating) }}</span>
                 @if (general()!.avgRating) {
                   <span class="fb-avg-num">{{ general()!.avgRating | number:'1.1-1' }}</span>
                 }
                 <span class="fb-sep">·</span>
-                <span>{{ general()!.reviewCount }} {{ general()!.reviewCount === 1 ? 'review' : 'reviews' }}</span>
+                <span>{{ general()!.reviewCount }} {{ general()!.reviewCount === 1 ? t('feedback.review') : t('feedback.reviews') }}</span>
                 <span class="fb-sep">·</span>
                 <span class="muted">{{ general()!.latestAt | date:'d MMM y' }}</span>
               </div>
             </div>
-            <span class="fb-general-badge">Not product-specific</span>
+            <span class="fb-general-badge">{{ t('feedback.general.badge') }}</span>
             <ap-icon name="arrow" [size]="16" class="fb-row-arrow"/>
           </button>
         </div>
@@ -124,8 +124,8 @@ interface FeedbackSummary {
       @if (!loading() && products().length > 0) {
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Products with Feedback</div>
-            <div class="muted small">Click a product to see its reviews</div>
+            <div class="card-title">{{ t('feedback.products.title') }}</div>
+            <div class="muted small">{{ t('feedback.products.sub') }}</div>
           </div>
           @for (p of products(); track p.productId) {
             <button class="fb-row" type="button" (click)="openDetail(p.productId)">
@@ -147,7 +147,7 @@ interface FeedbackSummary {
                     <span class="fb-avg-num">{{ p.avgRating | number:'1.1-1' }}</span>
                   }
                   <span class="fb-sep">·</span>
-                  <span>{{ p.reviewCount }} {{ p.reviewCount === 1 ? 'review' : 'reviews' }}</span>
+                  <span>{{ p.reviewCount }} {{ p.reviewCount === 1 ? t('feedback.review') : t('feedback.reviews') }}</span>
                   <span class="fb-sep">·</span>
                   <span class="muted">{{ p.latestAt | date:'d MMM y' }}</span>
                 </div>
@@ -279,10 +279,10 @@ export class FeedbackComponent implements OnInit {
   readonly kioskBaseUrl = (() => {
     if (typeof window === 'undefined') return '/kiosk';
     const h = window.location.hostname;
-    const base = (h === 'localhost' || h === '127.0.0.1')
-      ? `${window.location.protocol}//${h}:4200`
-      : window.location.origin;
-    return `${base}/kiosk`;
+    if (h === 'localhost' || h === '127.0.0.1') {
+      return `${window.location.protocol}//${h}:4200/kiosk`;
+    }
+    return 'https://elitecollections.qa/kiosk';
   })();
 
   async ngOnInit(): Promise<void> {
@@ -296,7 +296,7 @@ export class FeedbackComponent implements OnInit {
         this.products.set(data.products);
       }
     } catch {
-      this.toast.error('Failed to load', 'Could not load feedback data.');
+      this.toast.error(this.t('feedback.toast.loadError.title'), this.t('feedback.toast.loadError.sub'));
     } finally {
       this.loading.set(false);
     }

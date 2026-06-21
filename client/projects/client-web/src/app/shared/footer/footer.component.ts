@@ -1,6 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 
 interface FooterLink {
@@ -14,13 +16,18 @@ interface FooterColumn {
   links: FooterLink[];
 }
 
+interface PolicyMeta {
+  handle: string;
+  title: string;
+}
+
 @Component({
   selector: 'cw-footer',
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
     <footer id="site-footer" class="site-footer">
-      <div class="footer-grid">
+      <div class="footer-grid" [class.has-legal]="policyLinks().length > 0">
         <div class="footer-brand">
           <a routerLink="/" class="footer-logo-link" [attr.aria-label]="t('brand.name')">
             <img class="footer-logo" src="assets/brand/elite-logo-green.png" [alt]="t('brand.name')" loading="lazy" />
@@ -38,6 +45,15 @@ interface FooterColumn {
               <a [routerLink]="l.path" [queryParams]="l.queryParams || null" class="footer-link">
                 {{ t(l.labelKey) }}
               </a>
+            }
+          </div>
+        }
+
+        @if (policyLinks().length > 0) {
+          <div class="footer-column">
+            <div class="footer-column-title">{{ t('footer.col.legal') || 'Legal' }}</div>
+            @for (p of policyLinks(); track p.handle) {
+              <a [routerLink]="'/policy/' + p.handle" class="footer-link">{{ p.title }}</a>
             }
           </div>
         }
@@ -74,6 +90,9 @@ interface FooterColumn {
       grid-template-columns: minmax(260px, 1.15fr) repeat(3, minmax(150px, 0.75fr));
       gap: 42px;
       align-items: start;
+    }
+    .footer-grid.has-legal {
+      grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(120px, 0.7fr));
     }
 
     .footer-brand {
@@ -217,10 +236,29 @@ interface FooterColumn {
     }
   `],
 })
-export class FooterComponent {
+export class FooterComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+  private readonly http = inject(HttpClient);
   readonly t = this.i18n.t;
   readonly currentYear = new Date().getFullYear();
+  readonly policyLinks = signal<PolicyMeta[]>([]);
+
+  private get apiBase(): string {
+    const { hostname, protocol } = window.location;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
+    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
+  }
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const res = await firstValueFrom(
+        this.http.get<{ success: boolean; data: PolicyMeta[] }>(`${this.apiBase}/policies`),
+      );
+      this.policyLinks.set(res.data ?? []);
+    } catch {
+      // Footer keeps rendering without legal column if API fails
+    }
+  }
 
   readonly columns: FooterColumn[] = [
     {

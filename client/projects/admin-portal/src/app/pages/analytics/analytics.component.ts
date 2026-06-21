@@ -9,6 +9,7 @@ import { EmptyStateComponent } from '../../shared/empty-state/empty-state.compon
 import { AdminAnalyticsService } from '../../services/admin-analytics.service';
 import { QAR } from '../../models';
 import { ApiClient } from '../../services/api-client.service';
+import { I18nService } from '../../services/i18n.service';
 
 interface CostCatalog {
   variantsWithCost: number;
@@ -98,60 +99,60 @@ interface CostSummary {
     <div class="page-fade">
       <div class="range-row mb-24">
         <div class="row gap-sm" style="flex-wrap:nowrap;">
-          @for (r of ranges; track r.key) {
+          @for (r of ranges(); track r.key) {
             <button class="btn" [class.btn-primary]="range() === r.key" [class.btn-outline]="range() !== r.key" (click)="select(r.key)">{{ r.label }}</button>
           }
         </div>
         @if (svc.loading()) {
-          <span class="muted small" style="flex-shrink:0;">Loading…</span>
+          <span class="muted small" style="flex-shrink:0;">{{ t('common.loading') }}</span>
         }
       </div>
 
-      <div class="section-label">Financial</div>
+      <div class="section-label">{{ t('analytics.section.financial') }}</div>
       <div class="kpi-grid mb-24">
-        <ap-kpi label="Revenue" [value]="money(d().financial.revenue)" [delta]="d().financial.totalOrders + ' orders total'" [deltaUp]="true" icon="store"/>
-        <ap-kpi label="Paid Orders" [value]="fmtNum(d().financial.orders)" delta="paid" [deltaUp]="true" icon="orders"/>
-        <ap-kpi label="Avg Order Value" [value]="money(d().financial.aov)" delta="per order" [deltaUp]="true" icon="cube"/>
-        <ap-kpi label="Conversion Rate" [value]="d().financial.conversionRate + '%'" delta="orders / sessions" [deltaUp]="true" icon="chart"/>
+        <ap-kpi [label]="t('analytics.kpi.revenue')" [value]="money(d().financial.revenue)" [delta]="d().financial.totalOrders + ' ' + t('analytics.kpi.ordersTotal')" [deltaUp]="true" icon="store"/>
+        <ap-kpi [label]="t('analytics.kpi.paidOrders')" [value]="fmtNum(d().financial.orders)" [delta]="t('analytics.kpi.paid')" [deltaUp]="true" icon="orders"/>
+        <ap-kpi [label]="t('analytics.kpi.avgOrderValue')" [value]="money(d().financial.aov)" [delta]="t('analytics.kpi.perOrder')" [deltaUp]="true" icon="cube"/>
+        <ap-kpi [label]="t('analytics.kpi.conversionRate')" [value]="d().financial.conversionRate + '%'" [delta]="t('analytics.kpi.ordersSessions')" [deltaUp]="true" icon="chart"/>
       </div>
 
       <div class="card mb-24">
         <div class="card-header">
-          <div><div class="card-title">Revenue</div><div class="card-sub">Daily · {{ activeLabel() }}</div></div>
+          <div><div class="card-title">{{ t('analytics.card.revenue') }}</div><div class="card-sub">{{ t('analytics.card.daily') }} · {{ activeLabel() }}</div></div>
         </div>
         <div class="card-pad">
           @if (revenueSeries().length > 0) {
             <ap-line-chart [data]="revenueSeries()" valueKey="revenue" [formatY]="money" [xLabel]="xLabel"/>
           } @else {
-            <ap-empty-state icon="store" title="No revenue yet" sub="Paid orders in this range will chart here."/>
+            <ap-empty-state icon="store" [title]="t('analytics.card.revenueEmpty')" [sub]="t('analytics.card.revenueEmptySub')"/>
           }
         </div>
       </div>
 
-      <div class="section-label">Behavior</div>
+      <div class="section-label">{{ t('analytics.section.behavior') }}</div>
       <div class="kpi-grid mb-24">
-        <ap-kpi label="Visitors" [value]="fmtNum(d().kpis.visitors)" delta="unique" [deltaUp]="true" icon="users"/>
-        <ap-kpi label="Sessions" [value]="fmtNum(d().kpis.sessions)" [delta]="d().kpis.pagesPerSession + ' pages/session'" [deltaUp]="true" icon="team"/>
-        <ap-kpi label="Page Views" [value]="fmtNum(d().kpis.pageviews)" delta="total" [deltaUp]="true" icon="eye"/>
-        <ap-kpi label="Clicks" [value]="fmtNum(d().kpis.clicks)" delta="tracked" [deltaUp]="true" icon="cube"/>
+        <ap-kpi [label]="t('analytics.kpi.visitors')" [value]="fmtNum(d().kpis.visitors)" [delta]="t('analytics.kpi.unique')" [deltaUp]="true" icon="users"/>
+        <ap-kpi [label]="t('analytics.kpi.sessions')" [value]="fmtNum(d().kpis.sessions)" [delta]="d().kpis.pagesPerSession + ' ' + t('analytics.kpi.pagesPerSession')" [deltaUp]="true" icon="team"/>
+        <ap-kpi [label]="t('analytics.kpi.pageViews')" [value]="fmtNum(d().kpis.pageviews)" [delta]="t('analytics.kpi.total')" [deltaUp]="true" icon="eye"/>
+        <ap-kpi [label]="t('analytics.kpi.clicks')" [value]="fmtNum(d().kpis.clicks)" [delta]="t('analytics.kpi.tracked')" [deltaUp]="true" icon="cube"/>
       </div>
 
       <div class="card mb-24">
         <div class="card-header">
           <div>
-            <div class="card-title">Sessions &amp; Clicks</div>
-            <div class="card-sub">Daily · {{ activeLabel() }}</div>
+            <div class="card-title">{{ t('analytics.card.sessionsClicks') }}</div>
+            <div class="card-sub">{{ t('analytics.card.daily') }} · {{ activeLabel() }}</div>
           </div>
           <div class="row gap-sm small">
-            <span class="row gap-sm"><span style="width:10px;height:2px;background:var(--green);"></span>Sessions</span>
-            <span class="row gap-sm"><span style="width:10px;height:2px;background:var(--gold);border-top:1px dashed var(--gold);"></span>Clicks</span>
+            <span class="row gap-sm"><span style="width:10px;height:2px;background:var(--green);"></span>{{ t('analytics.legend.sessions') }}</span>
+            <span class="row gap-sm"><span style="width:10px;height:2px;background:var(--gold);border-top:1px dashed var(--gold);"></span>{{ t('analytics.legend.clicks') }}</span>
           </div>
         </div>
         <div class="card-pad">
           @if (series().length > 0) {
             <ap-line-chart [data]="series()" valueKey="sessions" secondKey="clicks" [formatY]="fmtNum" [xLabel]="xLabel"/>
           } @else {
-            <ap-empty-state icon="chart" title="No activity yet" sub="Sessions and clicks appear here once visitors browse the store."/>
+            <ap-empty-state icon="chart" [title]="t('analytics.card.activityEmpty')" [sub]="t('analytics.card.activityEmptySub')"/>
           }
         </div>
       </div>
@@ -160,25 +161,25 @@ interface CostSummary {
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Traffic Sources</div>
-              <div class="card-sub">By entry referrer · {{ activeLabel() }}</div>
+              <div class="card-title">{{ t('analytics.card.trafficSources') }}</div>
+              <div class="card-sub">{{ t('analytics.card.byReferrer') }} · {{ activeLabel() }}</div>
             </div>
           </div>
           <div class="card-pad split-inner">
             @if (traffic().length > 0) {
               <ap-pie-chart [data]="traffic()"/>
               <div>
-                @for (t of traffic(); track t.source) {
+                @for (tr of traffic(); track tr.source) {
                   <div class="rank-row">
-                    <span [style.background]="t.color" style="width:10px;height:10px;border-radius:2px;flex-shrink:0;"></span>
-                    <span class="grow strong">{{ t.source }}</span>
-                    <span class="muted">{{ t.pct }}%</span>
-                    <span class="strong" style="width:60px;text-align:right;">{{ t.count.toLocaleString() }}</span>
+                    <span [style.background]="tr.color" style="width:10px;height:10px;border-radius:2px;flex-shrink:0;"></span>
+                    <span class="grow strong">{{ tr.source }}</span>
+                    <span class="muted">{{ tr.pct }}%</span>
+                    <span class="strong" style="width:60px;text-align:right;">{{ tr.count.toLocaleString() }}</span>
                   </div>
                 }
               </div>
             } @else {
-              <ap-empty-state icon="users" title="No traffic data yet" sub="Source breakdown appears once visits are tracked."/>
+              <ap-empty-state icon="users" [title]="t('analytics.card.trafficEmpty')" [sub]="t('analytics.card.trafficEmptySub')"/>
             }
           </div>
         </div>
@@ -186,25 +187,25 @@ interface CostSummary {
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Event Breakdown</div>
-              <div class="card-sub">By type · {{ activeLabel() }}</div>
+              <div class="card-title">{{ t('analytics.card.eventBreakdown') }}</div>
+              <div class="card-sub">{{ t('analytics.card.byType') }} · {{ activeLabel() }}</div>
             </div>
           </div>
           <div class="card-pad split-inner">
             @if (eventTypes().length > 0) {
               <ap-pie-chart [data]="eventTypes()"/>
               <div>
-                @for (t of eventTypes(); track t.source) {
+                @for (ev of eventTypes(); track ev.source) {
                   <div class="rank-row">
-                    <span [style.background]="t.color" style="width:10px;height:10px;border-radius:2px;flex-shrink:0;"></span>
-                    <span class="grow strong">{{ t.source }}</span>
-                    <span class="muted">{{ t.pct }}%</span>
-                    <span class="strong" style="width:60px;text-align:right;">{{ t.count.toLocaleString() }}</span>
+                    <span [style.background]="ev.color" style="width:10px;height:10px;border-radius:2px;flex-shrink:0;"></span>
+                    <span class="grow strong">{{ ev.source }}</span>
+                    <span class="muted">{{ ev.pct }}%</span>
+                    <span class="strong" style="width:60px;text-align:right;">{{ ev.count.toLocaleString() }}</span>
                   </div>
                 }
               </div>
             } @else {
-              <ap-empty-state icon="chart" title="No events yet" sub="The breakdown appears once activity is recorded."/>
+              <ap-empty-state icon="chart" [title]="t('analytics.card.eventsEmpty')" [sub]="t('analytics.card.eventsEmptySub')"/>
             }
           </div>
         </div>
@@ -213,20 +214,20 @@ interface CostSummary {
       <div class="grid-2 mb-24">
         <div class="card">
           <div class="card-header">
-            <div><div class="card-title">Top Pages</div><div class="card-sub">By page views</div></div>
+            <div><div class="card-title">{{ t('analytics.card.topPages') }}</div><div class="card-sub">{{ t('analytics.card.byPageViews') }}</div></div>
           </div>
           <div class="card-pad">
             @if (d().topPages.length > 0) {
               <ap-bar-chart [data]="d().topPages"/>
             } @else {
-              <ap-empty-state icon="chart" title="No page views yet"/>
+              <ap-empty-state icon="chart" [title]="t('analytics.card.topPagesEmpty')"/>
             }
           </div>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <div><div class="card-title">Most Clicked</div><div class="card-sub">Tracked elements</div></div>
+            <div><div class="card-title">{{ t('analytics.card.mostClicked') }}</div><div class="card-sub">{{ t('analytics.card.trackedElements') }}</div></div>
           </div>
           <div class="card-pad">
             @if (d().topClicks.length > 0) {
@@ -237,7 +238,7 @@ interface CostSummary {
                 </div>
               }
             } @else {
-              <ap-empty-state icon="cube" title="No clicks yet" sub="Add data-track to elements to capture clicks."/>
+              <ap-empty-state icon="cube" [title]="t('analytics.card.clicksEmpty')" [sub]="t('analytics.card.clicksEmptySub')"/>
             }
           </div>
         </div>
@@ -245,13 +246,13 @@ interface CostSummary {
 
       <div class="card mb-24">
         <div class="card-header">
-          <div><div class="card-title">Most Engaged Products</div><div class="card-sub">By tracked interactions</div></div>
+          <div><div class="card-title">{{ t('analytics.card.topProducts') }}</div><div class="card-sub">{{ t('analytics.card.byInteractions') }}</div></div>
         </div>
         <div class="card-pad">
           @if (d().topProducts.length > 0) {
             <ap-bar-chart [data]="d().topProducts"/>
           } @else {
-            <ap-empty-state icon="cube" title="No product activity yet" sub="Product clicks and views appear here."/>
+            <ap-empty-state icon="cube" [title]="t('analytics.card.productsEmpty')" [sub]="t('analytics.card.productsEmptySub')"/>
           }
         </div>
       </div>
@@ -260,60 +261,58 @@ interface CostSummary {
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Cost & Margin</div>
-            <div class="card-sub">Based on imported Cost-QAR + Shipping cost per variant</div>
+            <div class="card-title">{{ t('analytics.card.costMargin') }}</div>
+            <div class="card-sub">{{ t('analytics.card.costMarginSub') }}</div>
           </div>
-          <button class="btn btn-outline btn-sm" (click)="loadCostSummary()">Refresh</button>
+          <button class="btn btn-outline btn-sm" (click)="loadCostSummary()">{{ t('analytics.legend.refresh') }}</button>
         </div>
         <div class="card-pad">
           @if (costLoading()) {
-            <div class="cost-loading">Loading cost data…</div>
+            <div class="cost-loading">{{ t('analytics.card.costLoading') }}</div>
           } @else if (!costSummary() || costSummary()!.catalog.variantsWithCost === 0) {
-            <ap-empty-state icon="cube" title="No cost data yet"
-              sub="Import products with Cost-QAR and Shipping cost columns to see margin analytics."/>
+            <ap-empty-state icon="cube" [title]="t('analytics.card.costEmpty')"
+              [sub]="t('analytics.card.costEmptySub')"/>
           } @else {
             <!-- KPI row -->
             <div class="cost-kpi-grid">
               <div class="cost-kpi">
-                <div class="cost-kpi-label">Avg Product Cost</div>
+                <div class="cost-kpi-label">{{ t('analytics.cost.avgProductCost') }}</div>
                 <div class="cost-kpi-val mono">{{ fmtQAR(costSummary()!.catalog.avgCost) }}</div>
-                <div class="cost-kpi-sub">material cost per variant</div>
+                <div class="cost-kpi-sub">{{ t('analytics.cost.materialPerVariant') }}</div>
               </div>
               <div class="cost-kpi">
-                <div class="cost-kpi-label">Avg Shipping Cost</div>
+                <div class="cost-kpi-label">{{ t('analytics.cost.avgShippingCost') }}</div>
                 <div class="cost-kpi-val mono">{{ fmtQAR(costSummary()!.catalog.avgShipping) }}</div>
-                <div class="cost-kpi-sub">shipping per variant</div>
+                <div class="cost-kpi-sub">{{ t('analytics.cost.shippingPerVariant') }}</div>
               </div>
               <div class="cost-kpi">
-                <div class="cost-kpi-label">Avg Total Cost</div>
+                <div class="cost-kpi-label">{{ t('analytics.cost.avgTotalCost') }}</div>
                 <div class="cost-kpi-val mono">{{ fmtQAR(costSummary()!.catalog.avgTotalCost) }}</div>
-                <div class="cost-kpi-sub">cost + shipping combined</div>
+                <div class="cost-kpi-sub">{{ t('analytics.cost.costShippingCombined') }}</div>
               </div>
               <div class="cost-kpi" [style.border-color]="marginBorderColor(costSummary()!.catalog.avgMarginPct)">
-                <div class="cost-kpi-label">Avg Gross Margin</div>
+                <div class="cost-kpi-label">{{ t('analytics.cost.avgGrossMargin') }}</div>
                 <div class="cost-kpi-val" [class]="marginClass(costSummary()!.catalog.avgMarginPct)">
                   {{ costSummary()!.catalog.avgMarginPct | number:'1.1-1' }}%
                 </div>
-                <div class="cost-kpi-sub">{{ costSummary()!.catalog.variantsWithCost.toLocaleString() }} variants with cost data</div>
+                <div class="cost-kpi-sub">{{ costSummary()!.catalog.variantsWithCost.toLocaleString() }} {{ t('analytics.cost.variantsWithCost') }}</div>
               </div>
             </div>
 
             <!-- Per-product margin table -->
-            <div class="section-title">Margin by Product</div>
-            <div class="section-sub">
-              Sorted by margin · lowest first — fix low-margin products first
-            </div>
+            <div class="section-title">{{ t('analytics.marginByProduct') }}</div>
+            <div class="section-sub">{{ t('analytics.marginSub') }}</div>
             <div class="table-wrap">
               <table class="margin-table">
                 <thead>
                   <tr>
-                    <th>Product</th>
-                    <th style="text-align:right;">Variants</th>
-                    <th style="text-align:right;">Avg Price</th>
-                    <th style="text-align:right;">Avg Cost</th>
-                    <th style="text-align:right;">Avg Shipping</th>
-                    <th style="text-align:right;">Avg Total Cost</th>
-                    <th style="min-width:160px;">Margin</th>
+                    <th>{{ t('analytics.col.product') }}</th>
+                    <th style="text-align:right;">{{ t('analytics.col.variants') }}</th>
+                    <th style="text-align:right;">{{ t('analytics.col.avgPrice') }}</th>
+                    <th style="text-align:right;">{{ t('analytics.col.avgCost') }}</th>
+                    <th style="text-align:right;">{{ t('analytics.col.avgShipping') }}</th>
+                    <th style="text-align:right;">{{ t('analytics.col.avgTotalCost') }}</th>
+                    <th style="min-width:160px;">{{ t('analytics.col.margin') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -351,13 +350,16 @@ interface CostSummary {
 export class AnalyticsComponent implements OnInit {
   readonly svc = inject(AdminAnalyticsService);
   private readonly api = inject(ApiClient);
+  private readonly i18n = inject(I18nService);
 
-  readonly ranges = [
-    { key: '7d', label: 'Last 7 days' },
-    { key: '30d', label: 'Last 30 days' },
-    { key: '90d', label: 'Last 90 days' },
-    { key: '1y', label: 'Last year' },
-  ];
+  readonly t = (k: string) => this.i18n.t(k);
+
+  readonly ranges = computed(() => [
+    { key: '7d',  label: this.t('analytics.range.7d') },
+    { key: '30d', label: this.t('analytics.range.30d') },
+    { key: '90d', label: this.t('analytics.range.90d') },
+    { key: '1y',  label: this.t('analytics.range.1y') },
+  ]);
   readonly range = signal('30d');
 
   readonly d = this.svc.data;
@@ -365,7 +367,7 @@ export class AnalyticsComponent implements OnInit {
   readonly revenueSeries = computed(() => this.d().revenueSeries as unknown as Array<Record<string, unknown>>);
   readonly eventTypes = computed(() => this.d().eventTypes);
   readonly traffic = computed(() => this.d().traffic);
-  readonly activeLabel = computed(() => this.ranges.find((r) => r.key === this.range())?.label ?? '');
+  readonly activeLabel = computed(() => this.ranges().find((r) => r.key === this.range())?.label ?? '');
 
   // ngOnInit(): void {
   //   void this.svc.load(this.range());

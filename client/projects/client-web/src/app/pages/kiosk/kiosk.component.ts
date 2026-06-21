@@ -37,43 +37,48 @@ interface ApiEnvelope<T> { success: boolean; data: T; }
 const STRINGS: Record<KioskLang, Record<string, string>> = {
   en: {
     logoSub:         'Arabic Leather Artisans',
-    welcomeTitle:    'How was your experience\nwith us today?',
-    welcomeSub:      'Every word you share helps our artisans perfect\ntheir craft. It takes less than a minute.',
+    welcomeTitle:    'Every Step Matters.',
+    welcomeSub:      'Your discerning eye refines our legacy. Kindly share your impressions.',
     welcomeBtn:      'Share Your Thoughts',
-    privacy:         'Your responses are private and seen only by the Elite team',
+    privacy:         'This requires mere moments. Your privacy remains absolute.',
 
     selectEyebrow:   'Step 1',
-    selectTitle:     'Which piece caught your heart?',
-    selectSkip:      'General feedback',
-    selectContinue:  'Continue',
+    selectTitle:     'Which creation accompanied you today?',
+    selectSkip:      'Reflect on the Boutique Experience',
+    selectContinue:  'Choose a Masterpiece',
 
     ratingEyebrow:   'Your impression',
     ratingTitle:     'How would you rate\nyour experience?',
-    ratingPoor:      'Disappointing',
-    ratingExcellent: 'Exceptional',
-    ratingHint:      'Touch a star to share your impression',
+    ratingPoor:      'Unfulfilling',
+    ratingExcellent: 'A Masterpiece',
+    ratingVal1:      'Unfulfilling',
+    ratingVal2:      'Ordinary',
+    ratingVal3:      'Admirable',
+    ratingVal4:      'Exemplary',
+    ratingVal5:      'A Masterpiece',
+    ratingHint:      'Tap to share your impression',
 
-    messageTitle:    'Tell us your story',
-    messageSub:      'What moved you? What could be more refined?',
-    messagePlaceholder: 'Craftsmanship, comfort, service, presentation — your words matter to us…',
-    messageSkip:     'Skip',
+    messageTitle:    'The Art of Detail.',
+    messageSub:      'What resonated with you? (The touch of the leather, the precision of the stitch, the warmth of our service).',
+    messagePlaceholder: 'Share your impressions here...',
+    messageSkip:     'Proceed Without Sharing',
     messageContinue: 'Continue',
 
-    contactTitle:    'May we reach out?',
-    contactSub:      'Entirely optional. We may offer a personal thank-you\nor exclusive care for your Elite pieces.',
-    contactName:     'Your name',
-    contactPhone:    'Mobile number',
-    contactEmail:    'Email address',
-    contactNote:     'Your details are held in the strictest confidence',
-    contactSkip:     'Keep anonymous',
+    contactTitle:    'For Your Utmost Satisfaction.',
+    contactSub:      'We ask for these details solely to refine our craft and ensure your happiness. Your information is held in strict confidence and will never be used for commercial or marketing purposes.',
+    contactName:     'Name',
+    contactPhone:    'Mobile',
+    contactEmail:    'Email',
+    contactNote:     'Your information is held in strict confidence',
+    contactSkip:     'I prefer to remain anonymous.',
     contactSubmit:   'Submit',
     contactSending:  'Sending…',
 
-    thanksTitle:     'Shukran',
-    thanksSub:       'Your words reach our artisans personally. Every detail you share inspires the next piece we create.',
+    thanksTitle:     'With Deepest Gratitude.',
+    thanksSub:       'Your words are entrusted to our artisans, shaping the future of our craft.',
     thanksRestart:   'New Response',
-    thanksCountdown: 'Returning to start in',
-    thanksSeconds:   's…',
+    thanksCountdown: 'The screen will refresh momentarily',
+    thanksSeconds:   '…',
 
     noProducts:      'No collections available right now',
     noProductsSub:   'You may still leave us your thoughts below',
@@ -82,43 +87,48 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
   },
   ar: {
     logoSub:         'حِرَفيّو الجِلد العربي',
-    welcomeTitle:    'كيف كانت تجربتكم\nمعنا اليوم؟',
-    welcomeSub:      'كل كلمة تشاركونها تُلهم حِرَفيّينا نحو الكمال.\nلن يستغرق الأمر سوى لحظات.',
+    welcomeTitle:    'كل خطوة تهمنا.',
+    welcomeSub:      'ذوقكم الرفيع يرتقي بصنعتنا. تفضلوا بمشاركتنا انطباعكم.',
     welcomeBtn:      'شاركونا رأيكم',
-    privacy:         'ردودكم سرية ولا يطّلع عليها سوى فريق إيليت',
+    privacy:         'لن يستغرق الأمر سوى لحظات. خصوصيتكم تامة ومضمونة.',
 
     selectEyebrow:   'الخطوة الأولى',
-    selectTitle:     'أيّ قطعة أسرت قلبكم؟',
-    selectSkip:      'رأي عام',
-    selectContinue:  'متابعة',
+    selectTitle:     'أي إبداعاتنا رافقتكم اليوم؟',
+    selectSkip:      'تقييم تجربة البوتيك العامة',
+    selectContinue:  'اختيار القطعة',
 
     ratingEyebrow:   'انطباعكم',
     ratingTitle:     'كيف تقيّمون\nتجربتكم معنا؟',
-    ratingPoor:      'مخيّبة',
-    ratingExcellent: 'استثنائية',
-    ratingHint:      'المسّ على نجمة للتعبير عن انطباعكم',
+    ratingPoor:      'دون التطلعات',
+    ratingExcellent: 'تحفة فنية',
+    ratingVal1:      'دون التطلعات',
+    ratingVal2:      'اعتيادية',
+    ratingVal3:      'متقنة',
+    ratingVal4:      'استثنائية',
+    ratingVal5:      'تحفة فنية',
+    ratingHint:      'اختر للتعبير عن انطباعك',
 
-    messageTitle:    'احكوا لنا قصّتكم',
-    messageSub:      'ما الذي أثار إعجابكم؟ وما الذي يستحق مزيداً من الرقيّ؟',
-    messagePlaceholder: 'الحِرَفية، الراحة، الخدمة، الإخراج — كلماتكم بالغة الأهمية لنا…',
-    messageSkip:     'تخطّي',
+    messageTitle:    'لغة التفاصيل.',
+    messageSub:      'ما الذي لفت انتباهكم؟ (ملمس الجلد، دقة الحياكة، أو رقي الخدمة).',
+    messagePlaceholder: 'شاركونا انطباعكم هنا...',
+    messageSkip:     'المتابعة دون كتابة',
     messageContinue: 'متابعة',
 
-    contactTitle:    'هل نتواصل معكم؟',
-    contactSub:      'اختياري تماماً. قد نتواصل معكم شكراً خالصاً\nأو رعاية حصرية لقطعكم من إيليت.',
-    contactName:     'الاسم الكريم',
+    contactTitle:    'لضمان رضاكم التام.',
+    contactSub:      'نطلب هذه البيانات حصرياً للارتقاء بحرفيتنا وضمان سعادتكم. معلوماتكم تبقى في غاية السرية، ولن تُستخدم مطلقاً لأي أغراض تجارية أو تسويقية.',
+    contactName:     'الاسم',
     contactPhone:    'رقم الجوال',
     contactEmail:    'البريد الإلكتروني',
-    contactNote:     'بياناتكم محفوظة بمنتهى الخصوصية والأمانة',
-    contactSkip:     'الإبقاء على السرية',
+    contactNote:     'معلوماتكم محفوظة بالسرية التامة',
+    contactSkip:     'أفضل البقاء كمجهول.',
     contactSubmit:   'إرسال',
     contactSending:  'جارٍ الإرسال…',
 
-    thanksTitle:     'شكراً',
-    thanksSub:       'تصل كلماتكم إلى حِرَفيّينا شخصياً. كل تفصيل تشاركونه يُلهم القطعة القادمة.',
+    thanksTitle:     'بخالص الامتنان.',
+    thanksSub:       'كلماتكم تصل إلى حرفيينا شخصياً، وتلهمنا لتقديم الأفضل.',
     thanksRestart:   'رأي جديد',
-    thanksCountdown: 'العودة للبداية بعد',
-    thanksSeconds:   'ث…',
+    thanksCountdown: 'سيتم تحديث الشاشة لحظات',
+    thanksSeconds:   '…',
 
     noProducts:      'لا توجد مجموعات متاحة حالياً',
     noProductsSub:   'يمكنكم إبداء رأيكم العام أدناه',
@@ -170,8 +180,10 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
             </div>
           </div>
           <div class="k-product-content">
-            <div class="k-rate-eyebrow">{{ s('selectEyebrow') }}</div>
-            <div class="k-rate-title">{{ s('selectTitle') }}</div>
+            <div class="k-product-header">
+              <div class="k-rate-eyebrow">{{ s('selectEyebrow') }}</div>
+              <div class="k-rate-title">{{ s('selectTitle') }}</div>
+            </div>
             @if (loadingProducts()) {
               <div class="k-loading-dots"><span></span><span></span><span></span></div>
             } @else if (products().length === 0) {
@@ -186,20 +198,19 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
                   <button class="k-product-card" type="button"
                           [class.on]="selectedProductId() === p.id"
                           (click)="selectAndAdvance(p.id)">
-                    @if (p.image) {
-                      <img [src]="p.image" [alt]="p.name" class="k-product-img"/>
-                    } @else {
-                      <div class="k-product-placeholder">◈</div>
-                    }
+                    <div class="k-product-img-wrap">
+                      @if (p.image) {
+                        <img [src]="p.image" [alt]="p.name" class="k-product-img"/>
+                      } @else {
+                        <div class="k-product-placeholder">◈</div>
+                      }
+                      @if (selectedProductId() === p.id) {
+                        <div class="k-product-check">✓</div>
+                      }
+                    </div>
                     <div class="k-product-name">{{ p.name }}</div>
                   </button>
                 }
-              </div>
-            }
-            <!-- Only show continue if products loaded but none selected yet -->
-            @if (!loadingProducts() && products().length > 0 && !selectedProductId()) {
-              <div class="k-btns">
-                <button class="k-btn-outline" type="button" (click)="skipProduct()">{{ s('selectSkip') }}</button>
               </div>
             }
           </div>
@@ -226,18 +237,26 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
           <div class="k-rating-content">
             <div class="k-rate-eyebrow">{{ s('ratingEyebrow') }}</div>
             <div class="k-rate-title" [innerHTML]="s('ratingTitle').replace('\\n','<br>')"></div>
-            <div class="k-big-stars">
-              @for (n of [1,2,3,4,5]; track n) {
-                <span class="k-big-star"
-                      [class.on]="n <= (hoverRating() || rating())"
-                      (mouseenter)="hoverRating.set(n)"
-                      (mouseleave)="hoverRating.set(0)"
-                      (click)="setRatingAndAdvance(n)">★</span>
+            <div class="k-rating-pills">
+              @for (pill of ratingPills(); track pill.value) {
+                <button class="k-rating-pill"
+                        type="button"
+                        [class.on]="pill.value === (hoverRating() || rating())"
+                        [attr.data-val]="pill.value"
+                        (mouseenter)="hoverRating.set(pill.value)"
+                        (mouseleave)="hoverRating.set(0)"
+                        (click)="setRatingAndAdvance(pill.value)">
+                  <span class="k-pill-num">{{ pill.value }}</span>
+                  <span class="k-pill-label">{{ pill.label }}</span>
+                </button>
               }
             </div>
-            <div class="k-rate-labels">
-              <span class="k-rate-label">{{ s('ratingPoor') }}</span>
-              <span class="k-rate-label">{{ s('ratingExcellent') }}</span>
+            <div class="k-rating-track">
+              <div class="k-rating-track-bar"></div>
+              <div class="k-rating-track-ends">
+                <span>{{ s('ratingPoor') }}</span>
+                <span>{{ s('ratingExcellent') }}</span>
+              </div>
             </div>
             <div class="k-rate-hint">{{ s('ratingHint') }}</div>
           </div>
@@ -374,19 +393,26 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
     }
 
     /* ── Language pill ────────────────────── */
+    /* Always sits on the dark green header — keep it light/gold throughout */
     .k-lang-pill {
       font-family: 'Montserrat', sans-serif;
-      font-size: clamp(9px,.9vw,11px); font-weight: 700;
-      letter-spacing: .1em; text-transform: uppercase;
-      padding: 6px 14px; border-radius: 99px;
-      border: 1px solid rgba(255,255,255,.25);
-      background: rgba(255,255,255,.08);
-      color: rgba(255,255,255,.6);
+      font-size: clamp(11px,1.1vw,14px); font-weight: 700;
+      letter-spacing: .12em; text-transform: uppercase;
+      padding: clamp(7px,.9vw,11px) clamp(16px,1.8vw,24px);
+      border-radius: 99px;
+      border: 1.5px solid rgba(212,168,83,.55);
+      background: rgba(212,168,83,.14);
+      color: rgba(255,255,255,.92);
       cursor: pointer; transition: all .15s; white-space: nowrap;
+      min-height: 40px; display: flex; align-items: center;
     }
-    .k-lang-pill:hover { background: rgba(255,255,255,.16); color: rgba(255,255,255,.9); }
+    .k-lang-pill:hover {
+      border-color: #d4a853;
+      background: rgba(212,168,83,.26);
+      color: #fff;
+    }
 
-    /* Welcome screen pill (same dark bg) */
+    /* Welcome screen pill position */
     .k-lang-welcome {
       position: absolute; top: clamp(14px,2%,24px); inset-inline-end: clamp(16px,3%,36px);
       z-index: 2;
@@ -394,23 +420,7 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
 
     /* Step screen pill sits inside the header */
     .k-step-header-right {
-      display: flex; align-items: center; gap: 10px;
-    }
-
-    /* Step screens: pill uses darker text on light bg — override */
-    .k-product .k-lang-pill,
-    .k-rating .k-lang-pill,
-    .k-feedback .k-lang-pill,
-    .k-contact .k-lang-pill {
-      border-color: rgba(0,0,0,.12);
-      background: rgba(0,0,0,.04);
-      color: rgba(26,18,8,.45);
-    }
-    .k-product .k-lang-pill:hover,
-    .k-rating .k-lang-pill:hover,
-    .k-feedback .k-lang-pill:hover,
-    .k-contact .k-lang-pill:hover {
-      background: rgba(0,0,0,.09); color: rgba(26,18,8,.8);
+      display: flex; align-items: center; gap: clamp(10px,1.4vw,18px);
     }
 
     /* ── Welcome ──────────────────────────── */
@@ -425,95 +435,138 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
       pointer-events: none;
     }
     .k-logo-img {
-      height: clamp(40px,6vw,72px); width: auto;
-      object-fit: contain; position: relative; z-index: 1; margin-bottom: 4px;
+      height: clamp(48px,6.5vw,88px); width: auto;
+      object-fit: contain; position: relative; z-index: 1; margin-bottom: 6px;
     }
     .k-logo-sub {
-      font-size: clamp(8px,1vw,11px); font-weight: 700;
-      letter-spacing: .22em; text-transform: uppercase;
-      color: rgba(184,146,74,.5); position: relative; z-index: 1; margin-bottom: 12px;
+      font-size: clamp(9px,1.1vw,13px); font-weight: 700;
+      letter-spacing: .24em; text-transform: uppercase;
+      color: rgba(184,146,74,.5); position: relative; z-index: 1; margin-bottom: 16px;
     }
-    .k-diamond-line { position: relative; z-index: 1; margin-bottom: 14px; }
-    .k-diamond { color: rgba(184,146,74,.45); font-size: 18px; }
+    .k-diamond-line { position: relative; z-index: 1; margin-bottom: 18px; }
+    .k-diamond { color: rgba(184,146,74,.45); font-size: 22px; }
     .k-welcome-title {
-      font-size: clamp(18px,3vw,40px); font-weight: 300; color: #fff;
-      line-height: 1.4; margin-bottom: 12px; position: relative; z-index: 1;
+      font-size: clamp(22px,3.5vw,52px); font-weight: 300; color: #fff;
+      line-height: 1.4; margin-bottom: 14px; position: relative; z-index: 1;
     }
     .k-welcome-sub {
-      font-size: clamp(10px,1.3vw,16px); color: rgba(255,255,255,.45);
-      line-height: 1.75; margin-bottom: clamp(20px,4%,44px);
-      position: relative; z-index: 1; max-width: 560px;
+      font-size: clamp(12px,1.5vw,20px); color: rgba(255,255,255,.45);
+      line-height: 1.75; margin-bottom: clamp(28px,4.5%,52px);
+      position: relative; z-index: 1; max-width: 620px;
     }
     .k-start-btn {
-      padding: clamp(12px,1.8%,20px) clamp(32px,5%,72px);
+      padding: clamp(16px,2.2%,26px) clamp(44px,6%,88px);
       background: linear-gradient(135deg,#c9a96e,#9a7535);
-      border: none; border-radius: 4px;
-      color: #0d0b08; font-size: clamp(10px,1.3vw,14px);
+      border: none; border-radius: 5px;
+      color: #0d0b08; font-size: clamp(12px,1.5vw,18px);
       font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
       cursor: pointer; font-family: inherit;
-      box-shadow: 0 8px 28px rgba(184,146,74,.35);
-      position: relative; z-index: 1; margin-bottom: clamp(16px,3%,32px);
+      box-shadow: 0 10px 36px rgba(184,146,74,.4);
+      position: relative; z-index: 1; margin-bottom: clamp(20px,3.5%,40px);
       transition: transform .14s, box-shadow .14s;
     }
-    .k-start-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 36px rgba(184,146,74,.45); }
+    .k-start-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 44px rgba(184,146,74,.5); }
     .k-privacy {
-      font-size: clamp(8px,.9vw,11px); color: rgba(255,255,255,.2);
+      font-size: clamp(10px,1vw,13px); color: rgba(255,255,255,.2);
       position: relative; z-index: 1;
     }
 
     /* ── Step header ──────────────────────── */
     .k-step-header {
       position: absolute; top: 0; left: 0; right: 0;
-      background: #024638; padding: clamp(10px,1.8%,16px) clamp(16px,2.5%,36px);
+      background: #024638; padding: clamp(12px,2%,20px) clamp(20px,3%,44px);
       display: flex; align-items: center; justify-content: space-between;
-      z-index: 10;
+      z-index: 10; min-height: clamp(56px,8vh,72px);
     }
     .k-step-logo-img {
-      height: clamp(22px,3vw,36px); width: auto; object-fit: contain;
+      height: clamp(28px,3.5vw,48px); width: auto; object-fit: contain;
     }
-    .k-step-progress { display: flex; gap: 6px; }
+    .k-step-progress { display: flex; gap: clamp(8px,1.2vw,14px); align-items: center; }
     .k-step-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: rgba(255,255,255,.2); transition: background .2s;
+      width: clamp(9px,1.1vw,13px); height: clamp(9px,1.1vw,13px); border-radius: 50%;
+      background: rgba(255,255,255,.18); transition: background .2s, transform .2s;
     }
-    .k-step-dot.on { background: #d4a853; }
+    .k-step-dot.on { background: #d4a853; transform: scale(1.25); }
     .k-step-skip {
-      font-size: clamp(9px,1vw,12px); font-weight: 600;
-      color: rgba(255,255,255,.35); background: none; border: none;
-      cursor: pointer; font-family: inherit; transition: color .14s; white-space: nowrap;
+      font-size: clamp(11px,1.2vw,14px); font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.5);
+      background: none;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 4px;
+      padding: clamp(7px,.9vw,11px) clamp(14px,1.8vw,22px);
+      cursor: pointer; font-family: inherit;
+      transition: all .15s; white-space: nowrap;
+      min-height: 40px;
     }
-    .k-step-skip:hover { color: rgba(255,255,255,.7); }
+    .k-step-skip:hover {
+      color: rgba(255,255,255,.9);
+      background: rgba(255,255,255,.1);
+      border-color: rgba(255,255,255,.4);
+    }
 
     /* ── Product picker ───────────────────── */
     .k-product { background: #eee9df; }
     .k-product-content {
+      display: flex; flex-direction: column;
+      padding: clamp(68px,9%,100px) clamp(28px,4%,64px) clamp(20px,3%,40px);
+      width: 100%; max-width: 1060px;
+      overflow-y: auto; max-height: 100vh; box-sizing: border-box;
+    }
+    .k-product-header {
       text-align: center;
-      padding: clamp(60px,10%,110px) clamp(20px,5%,80px) clamp(20px,4%,60px);
-      width: 100%; max-width: 900px; overflow-y: auto; max-height: 100vh;
+      padding-bottom: clamp(16px,2.5%,28px);
+      border-bottom: 1px solid rgba(0,0,0,.07);
+      margin-bottom: clamp(16px,2.5%,28px);
+      flex-shrink: 0;
     }
     .k-product-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(clamp(120px,18vw,180px), 1fr));
-      gap: clamp(10px,2%,20px);
-      margin: clamp(16px,3%,32px) 0;
+      grid-template-columns: repeat(4, 1fr);
+      gap: clamp(12px,1.8%,22px);
     }
+    @media (max-width: 900px) { .k-product-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .k-product-grid { grid-template-columns: repeat(2, 1fr); } }
     .k-product-card {
-      border: 2px solid rgba(0,0,0,.1); border-radius: 10px;
-      background: rgba(255,255,255,.6); padding: clamp(10px,1.5%,18px);
-      cursor: pointer; font-family: inherit; transition: all .15s;
+      border: 1.5px solid rgba(0,0,0,.07); border-radius: 8px;
+      background: #fff; padding: clamp(10px,1.2%,16px) clamp(10px,1.2%,16px) clamp(12px,1.5%,18px);
+      cursor: pointer; font-family: inherit; transition: all .18s;
       display: flex; flex-direction: column; align-items: center; gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.04);
     }
-    .k-product-card.on { border-color: #b8924a; background: #fff; box-shadow: 0 0 0 3px rgba(184,146,74,.15); }
-    .k-product-card:hover { border-color: #b8924a; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
-    .k-product-img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
+    .k-product-card:hover {
+      border-color: rgba(184,146,74,.5);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 32px rgba(0,0,0,.1);
+    }
+    .k-product-card.on {
+      border-color: #b8924a;
+      box-shadow: 0 0 0 2px #b8924a, 0 10px 32px rgba(184,146,74,.18);
+    }
+    .k-product-img-wrap {
+      position: relative; width: 100%;
+    }
+    .k-product-img {
+      width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 5px;
+      display: block;
+    }
     .k-product-placeholder {
-      width: 100%; aspect-ratio: 1; display: flex; align-items: center;
-      justify-content: center; font-size: 32px; color: #b8924a;
-      background: rgba(184,146,74,.06); border-radius: 6px;
+      width: 100%; aspect-ratio: 1 / 1; display: flex; align-items: center;
+      justify-content: center; font-size: clamp(28px,4vw,44px); color: #b8924a;
+      background: rgba(184,146,74,.06); border-radius: 5px;
+    }
+    .k-product-check {
+      position: absolute; top: 8px; right: 8px;
+      width: clamp(24px,2.8vw,34px); height: clamp(24px,2.8vw,34px);
+      border-radius: 50%;
+      background: linear-gradient(135deg,#c9a96e,#9a7535);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-size: clamp(12px,1.4vw,17px); font-weight: 700;
+      box-shadow: 0 3px 10px rgba(184,146,74,.45);
     }
     .k-product-name {
-      font-size: clamp(10px,1.2vw,13px); font-weight: 600; color: #1a1208;
-      text-align: center; line-height: 1.3;
+      font-size: clamp(11px,1.3vw,16px); font-weight: 600; color: #1a1208;
+      text-align: center; line-height: 1.35; width: 100%;
     }
 
     /* ── Empty products ───────────────────── */
@@ -529,36 +582,67 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
     .k-rating { background: #eee9df; }
     .k-rating-content {
       text-align: center;
-      padding: clamp(60px,10%,110px) clamp(20px,5%,80px) clamp(20px,4%,60px);
+      padding: clamp(72px,11%,120px) clamp(24px,3%,48px) clamp(24px,4%,60px);
+      width: 100%; max-width: 960px;
     }
     .k-rate-eyebrow {
-      font-size: clamp(8px,1vw,11px); font-weight: 700; letter-spacing: .2em;
-      text-transform: uppercase; color: #b8924a; margin-bottom: 10px;
+      font-size: clamp(10px,1.1vw,14px); font-weight: 700; letter-spacing: .22em;
+      text-transform: uppercase; color: #b8924a; margin-bottom: 12px;
     }
     .k-rate-title {
-      font-size: clamp(20px,3vw,36px); font-weight: 600; color: #1a1208;
-      line-height: 1.4; margin-bottom: clamp(20px,4%,44px);
+      font-size: clamp(24px,3.5vw,48px); font-weight: 600; color: #1a1208;
+      line-height: 1.35; margin-bottom: clamp(28px,5%,56px);
     }
-    .k-big-stars {
-      display: flex; gap: clamp(8px,2vw,24px); justify-content: center;
-      margin-bottom: clamp(10px,2%,20px);
+    .k-rating-pills {
+      display: flex; flex-wrap: nowrap;
+      gap: clamp(8px,1.2vw,14px);
+      width: 100%; max-width: 820px; margin: 0 auto clamp(14px,2%,22px);
     }
-    .k-big-star {
-      font-size: clamp(40px,8vw,80px); color: #ddd0bb;
-      cursor: pointer; user-select: none; transition: color .12s, transform .12s;
+    .k-rating-pill {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column; align-items: center;
+      gap: clamp(5px,.7vw,8px);
+      padding: clamp(14px,2vw,22px) clamp(6px,.8vw,10px);
+      border: 1.5px solid rgba(0,0,0,.1); border-radius: 8px;
+      background: rgba(255,255,255,.6); color: #8a7a62;
+      font-family: inherit; cursor: pointer; transition: all .18s;
+      user-select: none;
     }
-    .k-big-star.on { color: #b8924a; }
-    .k-big-star:hover { transform: scale(1.15); color: #b8924a; }
-    .k-rate-labels {
+    .k-rating-pill:hover {
+      border-color: rgba(184,146,74,.6);
+      background: rgba(255,255,255,.9);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    }
+    .k-rating-pill.on {
+      background: #024638; border-color: #024638; color: #d4a853;
+      box-shadow: 0 8px 28px rgba(2,70,56,.28); transform: translateY(-3px);
+    }
+    .k-pill-num {
+      font-size: clamp(22px,3vw,40px); font-weight: 300;
+      font-family: 'Cormorant Garamond','Georgia',serif;
+      line-height: 1; color: inherit;
+    }
+    .k-pill-label {
+      font-size: clamp(8px,.85vw,11px); font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase; color: inherit;
+      white-space: nowrap; text-align: center;
+    }
+    .k-rating-track {
+      width: 100%; max-width: 820px; margin: 0 auto clamp(18px,3%,32px);
+    }
+    .k-rating-track-bar {
+      height: 3px; border-radius: 99px;
+      background: linear-gradient(to right, rgba(184,146,74,.15) 0%, #b8924a 100%);
+      margin-bottom: 8px;
+    }
+    .k-rating-track-ends {
       display: flex; justify-content: space-between;
-      width: clamp(180px,40vw,360px); margin: 0 auto clamp(10px,2%,20px);
-    }
-    .k-rate-label {
-      font-size: clamp(8px,1vw,11px); font-weight: 700;
-      letter-spacing: .12em; text-transform: uppercase; color: #8a7a62;
+      font-size: clamp(9px,1vw,12px); font-weight: 700;
+      letter-spacing: .14em; text-transform: uppercase; color: #8a7a62;
     }
     .k-rate-hint {
-      font-size: clamp(9px,1.1vw,13px); color: #b8924a;
+      font-size: clamp(11px,1.2vw,15px); color: #b8924a;
       margin-bottom: clamp(16px,3%,36px); font-style: italic;
     }
 
@@ -566,89 +650,97 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
     .k-feedback { background: #eee9df; }
     .k-feedback-content {
       text-align: center;
-      padding: clamp(60px,10%,110px) clamp(20px,5%,80px) clamp(20px,4%,60px);
-      width: 100%; max-width: 720px;
+      padding: clamp(72px,11%,120px) clamp(24px,5%,80px) clamp(24px,4%,60px);
+      width: 100%; max-width: 780px;
     }
     .k-feedback-title {
-      font-size: clamp(20px,2.8vw,34px); font-weight: 700; color: #1a1208; margin-bottom: 6px;
+      font-size: clamp(24px,3.2vw,44px); font-weight: 700; color: #1a1208; margin-bottom: 8px;
     }
     .k-feedback-sub {
-      font-size: clamp(11px,1.3vw,15px); color: #8a7a62;
-      margin-bottom: clamp(20px,3%,36px);
+      font-size: clamp(13px,1.5vw,19px); color: #8a7a62;
+      margin-bottom: clamp(24px,3.5%,44px);
     }
     .k-textarea {
-      width: 100%; height: clamp(100px,15vh,200px);
-      padding: clamp(14px,2%,22px); border: 1.5px solid rgba(0,0,0,.1);
-      border-radius: 6px; font-size: clamp(13px,1.6vw,18px);
+      width: 100%; height: clamp(130px,18vh,240px);
+      padding: clamp(18px,2.2%,26px); border: 1.5px solid rgba(0,0,0,.1);
+      border-radius: 8px; font-size: clamp(15px,1.8vw,22px);
       font-family: inherit; resize: none;
-      background: rgba(255,255,255,.7); color: #1a1208;
-      transition: border-color .2s; margin-bottom: 8px;
+      background: rgba(255,255,255,.75); color: #1a1208;
+      transition: border-color .2s, box-shadow .2s; margin-bottom: 8px;
+      line-height: 1.65;
     }
-    .k-textarea:focus { outline: none; border-color: #b8924a; background: #fff; }
+    .k-textarea:focus {
+      outline: none; border-color: #b8924a; background: #fff;
+      box-shadow: 0 0 0 4px rgba(184,146,74,.1);
+    }
     .k-char-count {
-      text-align: end; font-size: clamp(9px,1vw,12px); color: #8a7a62;
-      margin-bottom: clamp(16px,3%,32px);
+      text-align: end; font-size: clamp(11px,1.1vw,15px); color: #8a7a62;
+      margin-bottom: clamp(20px,3%,36px);
     }
 
     /* ── Contact ──────────────────────────── */
     .k-contact { background: #eee9df; }
     .k-contact-content {
       text-align: center;
-      padding: clamp(60px,10%,110px) clamp(20px,5%,80px) clamp(20px,4%,60px);
-      width: 100%; max-width: 700px;
+      padding: clamp(72px,11%,120px) clamp(24px,5%,80px) clamp(24px,4%,60px);
+      width: 100%; max-width: 760px;
     }
     .k-contact-title {
-      font-size: clamp(20px,2.8vw,34px); font-weight: 700; color: #1a1208; margin-bottom: 6px;
+      font-size: clamp(24px,3.2vw,44px); font-weight: 700; color: #1a1208; margin-bottom: 8px;
     }
     .k-contact-sub {
-      font-size: clamp(10px,1.2vw,14px); color: #8a7a62; line-height: 1.7;
-      margin-bottom: clamp(20px,3%,36px);
+      font-size: clamp(13px,1.4vw,18px); color: #8a7a62; line-height: 1.7;
+      margin-bottom: clamp(24px,3.5%,44px);
     }
     .k-contact-grid {
       display: grid; grid-template-columns: 1fr 1fr;
-      gap: clamp(10px,1.5vw,18px); margin-bottom: clamp(12px,2%,20px);
+      gap: clamp(12px,1.8vw,22px); margin-bottom: clamp(16px,2%,24px);
       text-align: start;
     }
     @media (max-width: 600px) { .k-contact-grid { grid-template-columns: 1fr; } }
     .k-contact-full { grid-column: 1 / -1; }
-    .k-contact-field { display: flex; flex-direction: column; gap: 7px; }
+    .k-contact-field { display: flex; flex-direction: column; gap: 8px; }
     .k-contact-label {
-      font-size: clamp(8px,1vw,11px); font-weight: 700;
-      letter-spacing: .14em; text-transform: uppercase; color: #8a7a62;
+      font-size: clamp(10px,1.1vw,14px); font-weight: 700;
+      letter-spacing: .16em; text-transform: uppercase; color: #8a7a62;
     }
     .k-contact-input {
-      padding: clamp(12px,1.8%,18px) clamp(14px,2%,20px);
-      border: 1.5px solid rgba(0,0,0,.1); border-radius: 5px;
-      font-size: clamp(13px,1.6vw,18px); font-family: inherit;
-      background: rgba(255,255,255,.7); color: #1a1208;
-      transition: border-color .2s;
+      padding: clamp(14px,2%,22px) clamp(16px,2.2%,24px);
+      border: 1.5px solid rgba(0,0,0,.1); border-radius: 6px;
+      font-size: clamp(15px,1.8vw,22px); font-family: inherit;
+      background: rgba(255,255,255,.75); color: #1a1208;
+      transition: border-color .2s, box-shadow .2s;
     }
-    .k-contact-input:focus { outline: none; border-color: #b8924a; background: #fff; box-shadow: 0 0 0 4px rgba(184,146,74,.1); }
+    .k-contact-input:focus {
+      outline: none; border-color: #b8924a; background: #fff;
+      box-shadow: 0 0 0 4px rgba(184,146,74,.1);
+    }
     .k-skip-note {
-      font-size: clamp(9px,1vw,12px); color: rgba(26,18,8,.4);
-      margin-bottom: clamp(16px,3%,32px);
+      font-size: clamp(11px,1.1vw,14px); color: rgba(26,18,8,.38);
+      margin-bottom: clamp(20px,3%,36px);
     }
 
     /* ── Shared buttons ───────────────────── */
-    .k-btns { display: flex; gap: clamp(10px,1.5%,16px); justify-content: center; margin-top: clamp(12px,2%,20px); }
+    .k-btns { display: flex; gap: clamp(12px,1.8%,20px); justify-content: center; margin-top: clamp(16px,2.5%,28px); }
     .k-btn-outline {
-      padding: clamp(11px,1.6%,17px) clamp(24px,4%,56px);
-      background: transparent; border: 1.5px solid rgba(0,0,0,.12);
-      border-radius: 4px; color: #8a7a62;
-      font-size: clamp(9px,1.1vw,13px); font-weight: 700;
+      padding: clamp(14px,2%,22px) clamp(28px,4%,64px);
+      background: transparent; border: 1.5px solid rgba(0,0,0,.14);
+      border-radius: 5px; color: #8a7a62;
+      font-size: clamp(11px,1.3vw,17px); font-weight: 700;
       letter-spacing: .14em; text-transform: uppercase;
       cursor: pointer; font-family: inherit; transition: all .14s;
     }
     .k-btn-outline:hover { border-color: #b8924a; color: #b8924a; }
     .k-btn-gold {
-      padding: clamp(11px,1.6%,17px) clamp(28px,5%,64px);
+      padding: clamp(14px,2%,22px) clamp(32px,5%,72px);
       background: linear-gradient(135deg,#c9a96e,#9a7535);
-      border: none; border-radius: 4px; color: #0d0b08;
-      font-size: clamp(9px,1.1vw,13px); font-weight: 700;
+      border: none; border-radius: 5px; color: #0d0b08;
+      font-size: clamp(11px,1.3vw,17px); font-weight: 700;
       letter-spacing: .15em; text-transform: uppercase;
-      cursor: pointer; font-family: inherit; transition: transform .14s;
+      cursor: pointer; font-family: inherit; transition: transform .14s, box-shadow .14s;
+      box-shadow: 0 4px 16px rgba(184,146,74,.28);
     }
-    .k-btn-gold:hover:not(:disabled) { transform: translateY(-1px); }
+    .k-btn-gold:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(184,146,74,.38); }
     .k-btn-gold:disabled { opacity: .5; cursor: not-allowed; }
 
     /* ── Thank you ────────────────────────── */
@@ -662,39 +754,39 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
       pointer-events: none;
     }
     .k-thanks-icon {
-      width: clamp(56px,8vw,88px); height: clamp(56px,8vw,88px);
+      width: clamp(68px,9vw,104px); height: clamp(68px,9vw,104px);
       border-radius: 50%;
       background: linear-gradient(135deg,#c9a96e,#9a7535);
       display: flex; align-items: center; justify-content: center;
-      font-size: clamp(22px,3.5vw,40px); color: #fff;
-      margin-bottom: clamp(16px,3%,32px);
+      font-size: clamp(28px,4vw,48px); color: #fff;
+      margin-bottom: clamp(20px,3.5%,40px);
       position: relative; z-index: 1;
-      box-shadow: 0 10px 32px rgba(184,146,74,.45);
+      box-shadow: 0 12px 40px rgba(184,146,74,.5);
     }
     .k-thanks-title {
       font-family: 'Cormorant Garamond','Georgia',serif;
-      font-size: clamp(32px,6vw,72px); font-style: italic;
+      font-size: clamp(40px,7vw,88px); font-style: italic;
       font-weight: 400; color: #d4a853;
-      margin-bottom: 14px; position: relative; z-index: 1;
+      margin-bottom: 16px; position: relative; z-index: 1;
     }
     .k-thanks-sub {
-      font-size: clamp(11px,1.4vw,17px); color: rgba(255,255,255,.5);
-      line-height: 1.75; max-width: 520px; margin-bottom: clamp(20px,4%,48px);
+      font-size: clamp(13px,1.6vw,22px); color: rgba(255,255,255,.5);
+      line-height: 1.8; max-width: 580px; margin-bottom: clamp(28px,4.5%,56px);
       position: relative; z-index: 1;
     }
     .k-thanks-restart {
-      padding: clamp(11px,1.6%,16px) clamp(24px,4%,52px);
-      background: rgba(255,255,255,.08); border: 1.5px solid rgba(255,255,255,.2);
-      border-radius: 4px; color: rgba(255,255,255,.7);
-      font-size: clamp(9px,1.1vw,12px); font-weight: 700; letter-spacing: .16em;
+      padding: clamp(14px,2%,20px) clamp(32px,5%,64px);
+      background: rgba(255,255,255,.08); border: 1.5px solid rgba(255,255,255,.22);
+      border-radius: 5px; color: rgba(255,255,255,.75);
+      font-size: clamp(11px,1.2vw,16px); font-weight: 700; letter-spacing: .18em;
       text-transform: uppercase; cursor: pointer; font-family: inherit;
-      position: relative; z-index: 1; margin-bottom: clamp(12px,2%,24px);
+      position: relative; z-index: 1; margin-bottom: clamp(16px,2.5%,28px);
       transition: all .15s;
     }
-    .k-thanks-restart:hover { background: rgba(255,255,255,.16); color: #fff; }
+    .k-thanks-restart:hover { background: rgba(255,255,255,.18); color: #fff; }
     .k-ring-wrap {
-      position: relative; width: clamp(64px,8vw,88px); height: clamp(64px,8vw,88px);
-      margin: clamp(12px,2.5%,28px) auto 6px; z-index: 1;
+      position: relative; width: clamp(76px,9vw,104px); height: clamp(76px,9vw,104px);
+      margin: clamp(16px,2.5%,32px) auto 8px; z-index: 1;
     }
     .k-ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
     .k-ring-track {
@@ -711,12 +803,12 @@ const STRINGS: Record<KioskLang, Record<string, string>> = {
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
       font-family: 'Cormorant Garamond','Georgia',serif;
-      font-size: clamp(18px,3vw,28px); font-style: italic;
+      font-size: clamp(22px,3.2vw,34px); font-style: italic;
       color: #d4a853; font-weight: 400;
     }
     .k-ring-label {
-      font-size: clamp(8px,.9vw,10px); letter-spacing: .16em; text-transform: uppercase;
-      color: rgba(255,255,255,.2); position: relative; z-index: 1;
+      font-size: clamp(10px,1vw,13px); letter-spacing: .18em; text-transform: uppercase;
+      color: rgba(255,255,255,.22); position: relative; z-index: 1;
       margin-bottom: 4px;
     }
 
@@ -782,6 +874,13 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly countdown         = signal(5);
   readonly particles         = signal<Particle[]>([]);
   readonly ringOffset        = computed(() => 163.36 * (1 - this.countdown() / 5));
+  readonly ratingPills       = computed(() => [
+    { value: 1, label: this.s('ratingVal1') },
+    { value: 2, label: this.s('ratingVal2') },
+    { value: 3, label: this.s('ratingVal3') },
+    { value: 4, label: this.s('ratingVal4') },
+    { value: 5, label: this.s('ratingVal5') },
+  ]);
 
   messageText      = '';
   contactNameText  = '';

@@ -183,7 +183,8 @@ See `server/routes/admin-orders.route.js`. All endpoints require an active admin
 | `GET` | `/api/admin/orders` | List orders with server-side pagination and filtering. Query params: `page` (0-based, default 0), `limit` (default 50, max 200), `payment` (paid / pending / refunded / failed — maps to DB enum values automatically), `fulfillment` (awaiting / processing / shipped / delivered / returned), `from` (YYYY-MM-DD), `to` (YYYY-MM-DD), `q` (searches customer name, public number, email). Returns `{ orders[], total, page, limit, pages }`. |
 | `GET` | `/api/admin/orders/:id` | Single order by DB UUID or `public_number`; includes items (with `img`), timeline, notes |
 | `POST` | `/api/admin/orders` | Create order. Body: `{ customerName, items[], idempotencyKey?, customerId?, customerEmail?, customerPhone?, shippingAddress?, payment?, fulfillment?, total? }`. Validates `customerId` existence if provided. |
-| `PATCH` | `/api/admin/orders/:id/status` | Update payment/fulfillment status; optionally sets `trackingNumber`. Appends timeline entry. If `payment=paid`, triggers NBOX shipment booking (non-fatal on failure — appended as `note` timeline entry). |
+| `PATCH` | `/api/admin/orders/:id/status` | Update payment/fulfillment status; optionally sets `trackingNumber`. Appends timeline entry. If `payment=paid`, triggers NBOX shipment booking (non-fatal on failure — stored in `orders.metadata.nbox.bookingFailedAt` / `bookingError`). |
+| `POST` | `/api/admin/orders/:id/rebook-delivery` | Retry NBOX delivery booking for a paid order. Clears previous `bookingFailedAt`/`bookingError` flags, then calls `bookNboxForPaidOrder`. Returns full updated order; 409 if not paid; 502 if NBOX call fails. |
 | `POST` | `/api/admin/orders/:id/notes` | Add an internal note. Body: `{ body }`. Also appends a `note` timeline entry. |
 
 ### Admin — Customers (`/api/admin/customers`)

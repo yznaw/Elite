@@ -74,7 +74,7 @@ interface PendingUpload {
                 <input type="file" multiple accept="image/*,.glb,.gltf" hidden (change)="onPick($event)"/>
               </label>
               <button class="btn btn-outline" (click)="openGDrive()">
-                <ap-icon name="link" [size]="14"/> Google Drive
+                <ap-icon name="link" [size]="14"/> {{ t('media.gdrive.btn') }}
               </button>
               <button class="btn btn-gold" [disabled]="counts().unlinked === 0" (click)="autoLinking.set(true)">
                 <ap-icon name="wand" [size]="14"/>
@@ -132,9 +132,9 @@ interface PendingUpload {
         @if (counts().unlinked > 0) {
           <button class="btn btn-danger-outline btn-sm" [disabled]="cleaningUp()" (click)="cleanupOrphaned()">
             @if (cleaningUp()) {
-              <span class="pg-spinner"></span> Cleaning up…
+              <span class="pg-spinner"></span> {{ t('media.cleanup.btn.loading') }}
             } @else {
-              🗑 Clean up {{ counts().unlinked }} unlinked {{ counts().unlinked === 1 ? 'file' : 'files' }} ({{ orphanedSize() }})
+              🗑 {{ counts().unlinked }} {{ t('media.cleanup.btn.unlinked') }} {{ counts().unlinked === 1 ? t('media.cleanup.btn.file') : t('media.cleanup.btn.files') }} ({{ orphanedSize() }})
             }
           </button>
         }
@@ -188,30 +188,30 @@ interface PendingUpload {
       <div class="modal gdrive-modal">
         <div class="modal-head">
           <div>
-            <p class="gdrive-eyebrow">Import from Google Drive</p>
-            <div class="card-title">Paste a Google Drive link</div>
+            <p class="gdrive-eyebrow">{{ t('media.gdrive.eyebrow') }}</p>
+            <div class="card-title">{{ t('media.gdrive.title') }}</div>
           </div>
           <button class="x-btn" (click)="gdriveOpen.set(false)"><ap-icon name="x" [size]="14"/></button>
         </div>
         <div class="modal-body">
           <div class="gdrive-info">
             <ap-icon name="info" [size]="14"/>
-            <span>Works with publicly shared files and folders. For folders, set <code>GOOGLE_DRIVE_API_KEY</code> in your server <code>.env</code>.</span>
+            <span>{{ t('media.gdrive.info') }}</span>
           </div>
-          <label class="lbl mb-8">Google Drive URL or File ID</label>
-          <input class="inp mb-6" placeholder="https://drive.google.com/drive/folders/…"
+          <label class="lbl mb-8">{{ t('media.gdrive.label') }}</label>
+          <input class="inp mb-6" [placeholder]="t('media.gdrive.placeholder')"
                  [ngModel]="gdriveUrl()" (ngModelChange)="gdriveUrl.set($event)"
                  (keydown.enter)="importGDrive()" [disabled]="gdriveLoading()"/>
-          <div class="muted small mb-16">Paste a folder link, file link, or just the file ID.</div>
+          <div class="muted small mb-16">{{ t('media.gdrive.hint') }}</div>
 
           @if (gdriveError()) {
             <div class="gdrive-error">{{ gdriveError() }}</div>
           }
         </div>
         <div class="drawer-foot">
-          <button class="btn btn-outline" (click)="gdriveOpen.set(false)" [disabled]="gdriveLoading()">Cancel</button>
+          <button class="btn btn-outline" (click)="gdriveOpen.set(false)" [disabled]="gdriveLoading()">{{ t('common.cancel') }}</button>
           <button class="btn btn-gold" (click)="importGDrive()" [disabled]="gdriveLoading() || !gdriveUrl().trim()">
-            @if (gdriveLoading()) { <ap-spinner [size]="13"/> Importing… } @else { Import Images }
+            @if (gdriveLoading()) { <ap-spinner [size]="13"/> {{ t('media.gdrive.importing') }} } @else { {{ t('media.gdrive.import') }} }
           </button>
         </div>
       </div>
@@ -377,9 +377,9 @@ export class MediaComponent implements OnInit {
     try {
       await this.mediaApi.setDefaultImage(m.preview || '');
       this.defaultImageUrl.set(m.preview || '');
-      this.toast.success('Default image set', `"${m.name}" will now be used as the product fallback image.`);
+      this.toast.success(this.t('media.toast.defaultSet'), `"${m.name}" ${this.t('media.toast.defaultSet.sub')}`);
     } catch {
-      this.toast.error('Could not save default image');
+      this.toast.error(this.t('media.toast.defaultError'));
     } finally {
       this.settingDefault.set(false);
     }
@@ -412,14 +412,14 @@ export class MediaComponent implements OnInit {
       this.gdriveOpen.set(false);
       const linked = imported.filter(f => f.linkedTo).length;
       const sub = linked > 0
-        ? `${linked} auto-linked by SKU match.`
-        : 'Saved to your media library.';
+        ? `${linked} ${this.t('media.autoLink.matchesFound')} SKU.`
+        : this.t('media.toast.saved');
       this.toast.success(
         `${imported.length} image${imported.length === 1 ? '' : 's'} imported`,
         sub,
       );
     } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message || 'Import failed. Check the URL and try again.';
+      const msg = (err as { message?: string })?.message || this.t('media.toast.importFailed');
       this.gdriveError.set(msg);
     } finally {
       this.gdriveLoading.set(false);
@@ -491,10 +491,10 @@ export class MediaComponent implements OnInit {
     const count = this.counts().unlinked;
     if (count === 0 || this.cleaningUp()) return;
     const ok = await this.confirm.ask({
-      title: `Delete ${count} unlinked ${count === 1 ? 'file' : 'files'}?`,
-      message: `This will permanently delete ${count} media ${count === 1 ? 'file' : 'files'} (${this.orphanedSize()}) that are not linked to any product. This cannot be undone.`,
-      confirmLabel: 'Delete unlinked files',
-      cancelLabel: 'Cancel',
+      title: `${this.t('common.delete')} ${count} ${this.t('media.cleanup.btn.unlinked')} ${count === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')}?`,
+      message: `${this.t('common.cannotUndo')} ${count} ${count === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')} (${this.orphanedSize()}).`,
+      confirmLabel: this.t('media.cleanup.confirm'),
+      cancelLabel: this.t('common.cancel'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -504,8 +504,8 @@ export class MediaComponent implements OnInit {
       this.media.update((all) => all.filter((m) => m.linkedTo));
       this.page.set(0);
       this.toast.success(
-        `${deleted} ${deleted === 1 ? 'file' : 'files'} deleted`,
-        'Orphaned media cleaned up',
+        `${deleted} ${deleted === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')} ${this.t('media.toast.deleted').toLowerCase()}`,
+        this.t('media.cleanup.toast'),
       );
     } catch {
       // Global interceptor surfaces the error.
@@ -526,7 +526,7 @@ export class MediaComponent implements OnInit {
     this.dragOver.set(false);
     const files = Array.from(e.dataTransfer?.files ?? []);
     if (files.length === 0) {
-      this.toast.warning('No files dropped', 'Try dragging a JPG, PNG, or .glb file.');
+      this.toast.warning(this.t('media.toast.noFiles'), this.t('media.toast.noFiles.sub'));
       return;
     }
     void this.upload(files);
@@ -570,7 +570,7 @@ export class MediaComponent implements OnInit {
             if (ev.stage === 'done') {
               this.toast.success(
                 `${accepted.length} ${accepted.length === 1 ? 'file' : 'files'} uploaded`,
-                'Media library refreshed.',
+                this.t('media.toast.refreshed'),
               );
               resolve();
             }
@@ -602,9 +602,9 @@ export class MediaComponent implements OnInit {
     this.active.set(next);
     void this.mediaApi.link(next.id, next.linkedTo, 'gallery').catch(() => undefined);
     this.toast.success(
-      next.linkedTo ? 'File linked' : 'File unlinked',
+      next.linkedTo ? this.t('media.toast.linked') : this.t('media.toast.unlinked'),
       next.name,
-      prev ? { label: 'Undo', run: () => this.revertMedia(prev) } : undefined,
+      prev ? { label: this.t('media.toast.undo'), run: () => this.revertMedia(prev) } : undefined,
     );
   }
 
@@ -618,8 +618,8 @@ export class MediaComponent implements OnInit {
       if (removed) this.media.update((all) => [removed, ...all]);
       return;
     }
-    this.toast.success('File deleted', '1 file removed from library', removed ? {
-      label: 'Undo',
+    this.toast.success(this.t('media.toast.deleted'), this.t('media.toast.deleted.sub'), removed ? {
+      label: this.t('media.toast.undo'),
       run: () => this.media.update((all) => [...all, removed]),
     } : undefined);
   }
@@ -639,15 +639,15 @@ export class MediaComponent implements OnInit {
     this.autoLinking.set(false);
     this.toast.success(
       `Linked ${pairs.length} ${pairs.length === 1 ? 'file' : 'files'}`,
-      'Matched by SKU prefix',
-      { label: 'Undo all', run: () => this.media.set(before) },
+      this.t('media.toast.skuMatch'),
+      { label: this.t('media.toast.undoAll'), run: () => this.media.set(before) },
     );
   }
 
   private revertMedia(prev: MediaFile): void {
     this.media.update((all) => all.map((m) => (m.id === prev.id ? prev : m)));
     void this.mediaApi.link(prev.id, prev.linkedTo, 'gallery').catch(() => undefined);
-    this.toast.info('Change reverted', prev.name);
+    this.toast.info(this.t('media.toast.reverted'), prev.name);
   }
 }
 
