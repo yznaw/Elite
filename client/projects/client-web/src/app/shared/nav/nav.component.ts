@@ -93,7 +93,6 @@ const FALLBACK_SEARCH_IMAGE =
                           </span>
                           <span class="search-copy">
                             <span class="search-name">{{ productName(item) }}</span>
-                            <span class="search-meta">{{ productStyle(item.style) }} · {{ productLeather(item.leather) }}</span>
                           </span>
                           <span class="search-price">{{ price(item.price) }}</span>
                         </button>
