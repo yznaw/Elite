@@ -632,19 +632,36 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
       const stock = Math.max(0, Number.parseInt(item.stock, 10) || 0);
       if (!sku) continue;
 
-      const result = await client.query(
-        "UPDATE products SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 AND status <> 'archived' RETURNING id",
+      // Update the variant row first (preferred — variant SKUs are unique)
+      const varResult = await client.query(
+        'UPDATE product_variants SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 RETURNING product_id',
         [stock, tenant.id, sku],
       );
-      if (result.rowCount === 0) {
-        notFound.push(sku);
+
+      if (varResult.rowCount > 0) {
+        // Re-sum all variant stock onto the parent product so the catalog stock total stays accurate
+        const productId = varResult.rows[0].product_id;
+        await client.query(
+          'UPDATE products SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1), updated_at = now() WHERE id = $1',
+          [productId],
+        );
+        updated += varResult.rowCount;
       } else {
-        updated += result.rowCount;
+        // Fall back to product-level SKU (no-variant products)
+        const prodResult = await client.query(
+          "UPDATE products SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 AND status <> 'archived' RETURNING id",
+          [stock, tenant.id, sku],
+        );
+        if (prodResult.rowCount === 0) {
+          notFound.push(sku);
+        } else {
+          updated += prodResult.rowCount;
+        }
       }
     }
 
     await client.query('COMMIT');
-    ok(res, { updated, notFound }, `${updated} product(s) updated.`);
+    ok(res, { updated, notFound }, `${updated} variant(s) updated.`);
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
     throw err;

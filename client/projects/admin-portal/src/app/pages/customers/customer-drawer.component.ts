@@ -335,9 +335,9 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
     }
     .danger-zone-title { font-family: var(--ff-disp); font-size: 14px; color: var(--danger, #ef4444); font-weight: 600; }
 
-    /* Mobile: pin save bar outside scroll area */
+    /* Mobile: extra body padding so fixed save bar never covers the last row */
     @media (max-width: 720px) {
-      .drawer-body { padding-bottom: 84px; }
+      .drawer-body { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important; }
     }
   `],
 })

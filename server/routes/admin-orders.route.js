@@ -25,6 +25,10 @@ function mapOrder(row) {
     billingAddress: row.billing_address || {},
     paymentGateway: row.metadata?.paymentGateway || undefined,
     trackingNumber: row.tracking_number || undefined,
+    nboxBookingFailed: Boolean(
+      row.metadata?.nbox?.bookingFailedAt && !row.metadata?.nbox?.bookedAt,
+    ),
+    nboxBookingError: row.metadata?.nbox?.bookingError || undefined,
     timeline: row.timeline || [],
     notes: row.notes || [],
   };
@@ -346,6 +350,43 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/:id/rebook-delivery', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const order = await client.query(
+      'SELECT id, payment_status FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)',
+      [tenant.id, req.params.id],
+    );
+    if (order.rowCount === 0) return notFound(res, 'Order not found.');
+    if (order.rows[0].payment_status !== 'paid') {
+      return res.status(409).json({ success: false, message: 'Delivery can only be booked for paid orders.' });
+    }
+
+    // Clear previous booking-failure flags so the attempt is treated as fresh.
+    await client.query(
+      `UPDATE orders
+          SET metadata = metadata || jsonb_build_object(
+                'nbox',
+                (COALESCE(metadata->'nbox', '{}'::jsonb) - 'bookingFailedAt' - 'bookingError')
+              )
+        WHERE tenant_id = $1 AND id = $2`,
+      [tenant.id, order.rows[0].id],
+    );
+
+    const result = await bookNboxForPaidOrder(client, tenant.id, order.rows[0].id);
+
+    if (result.failed || (result.skipped && result.reason !== 'already_booked')) {
+      return res.status(502).json({ success: false, message: 'NBOX booking failed.', data: result });
+    }
+
+    const message = result.skipped ? 'Delivery already booked.' : 'NBOX delivery booked successfully.';
+    ok(res, await loadAdminOrder(client, tenant.id, req.params.id), message);
   } finally {
     client.release();
   }

@@ -148,7 +148,7 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **File:** `services/admin-orders.service.ts`
 - **Purpose:** Order list, status transitions, adding notes, and timeline entries — wraps `/api/admin/orders/*`
-- **Methods:** `list(params?: OrderListParams)`, `get(id)`, `updateStatus(id, payload: OrderStatusPayload)`, `addNote(id, body)`
+- **Methods:** `list(params?: OrderListParams)`, `get(id)`, `updateStatus(id, payload: OrderStatusPayload)`, `addNote(id, body)`, `rebookDelivery(id)` → retries NBOX booking, returns updated `Order`
 - **`list()`** now accepts `OrderListParams` (`{ page, limit, q, payment, fulfillment, from, to }`) and returns `OrderListResponse` (`{ orders[], total, page, limit, pages }`). All filtering and pagination is server-side.
 - **`OrderListParams`** and **`OrderListResponse`** are exported interfaces.
 - **`OrderStatusPayload`** is exported and used by `OrderDrawerComponent.safeUpdateStatus()` which re-fetches on error
