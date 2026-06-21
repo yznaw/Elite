@@ -82,7 +82,7 @@ function readPreview(file: File): Promise<string> {
         <!-- Right-side actions: prev / next / close -->
         <div class="head-actions">
           <button
-            class="head-icon-btn"
+            class="head-icon-btn nav-prev"
             (click)="navigate(-1)"
             [disabled]="!canPrev()"
             [attr.aria-label]="t('product.prev')"
@@ -93,7 +93,7 @@ function readPreview(file: File): Promise<string> {
             </svg>
           </button>
           <button
-            class="head-icon-btn"
+            class="head-icon-btn nav-next"
             (click)="navigate(1)"
             [disabled]="!canNext()"
             [attr.aria-label]="t('product.next')"
@@ -885,10 +885,9 @@ function readPreview(file: File): Promise<string> {
       background: var(--border);
       margin: 0 4px;
     }
-    /* In RTL, flip the chevrons so "previous" still points to the inline-start direction */
-    html[dir='rtl'] .head-icon-btn svg { transform: scaleX(-1); }
-    /* But the close icon (X) is symmetric — un-flip it */
-    html[dir='rtl'] .head-icon-btn ap-icon[name='x'] svg { transform: none; }
+    /* In RTL swap the nav chevrons so prev/next point the correct inline direction */
+    :host-context([dir='rtl']) .nav-prev svg,
+    :host-context([dir='rtl']) .nav-next svg { transform: scaleX(-1); }
 
     /* Section dividers with icon */
     .section-title {
