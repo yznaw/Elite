@@ -87,7 +87,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productLoading = signal(true);
   readonly productError = signal('');
   readonly galleryIdx = signal(0);
-  readonly thumbStripOverflows = signal(false);
+  readonly thumbStripCanScrollStart = signal(false);
+  readonly thumbStripCanScrollEnd = signal(false);
   readonly selectedSize = signal<number | null>(null);
   readonly selectedColor = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
@@ -208,19 +209,20 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.thumbStrip = element?.nativeElement;
 
     if (!this.thumbStrip) {
-      this.thumbStripOverflows.set(false);
+      this.thumbStripCanScrollStart.set(false);
+      this.thumbStripCanScrollEnd.set(false);
       return;
     }
 
-    queueMicrotask(() => this.updateThumbStripOverflow());
+    queueMicrotask(() => this.updateThumbStripState());
 
     if (typeof ResizeObserver !== 'undefined') {
-      this.thumbStripResizeObserver = new ResizeObserver(() => this.updateThumbStripOverflow());
+      this.thumbStripResizeObserver = new ResizeObserver(() => this.updateThumbStripState());
       this.thumbStripResizeObserver.observe(this.thumbStrip);
     }
 
     if (typeof MutationObserver !== 'undefined') {
-      this.thumbStripMutationObserver = new MutationObserver(() => this.updateThumbStripOverflow());
+      this.thumbStripMutationObserver = new MutationObserver(() => this.updateThumbStripState());
       this.thumbStripMutationObserver.observe(this.thumbStrip, { childList: true });
     }
   }
@@ -331,11 +333,12 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.galleryIdx.set(i);
   }
 
-  scrollThumbnails(): void {
+  scrollThumbnails(toward: 'start' | 'end'): void {
     if (!this.thumbStrip) return;
-    const direction = getComputedStyle(this.thumbStrip).direction === 'rtl' ? -1 : 1;
+    const inlineDirection = getComputedStyle(this.thumbStrip).direction === 'rtl' ? -1 : 1;
+    const scrollDirection = toward === 'end' ? inlineDirection : -inlineDirection;
     this.thumbStrip.scrollBy({
-      left: direction * Math.max(this.thumbStrip.clientWidth * 0.7, 160),
+      left: scrollDirection * Math.max(this.thumbStrip.clientWidth * 0.7, 160),
       behavior: 'smooth',
     });
   }
@@ -346,9 +349,18 @@ export class ProductComponent implements OnInit, OnDestroy {
     );
   }
 
-  private updateThumbStripOverflow(): void {
+  updateThumbStripState(): void {
     const strip = this.thumbStrip;
-    this.thumbStripOverflows.set(!!strip && strip.scrollWidth > strip.clientWidth + 1);
+    if (!strip) {
+      this.thumbStripCanScrollStart.set(false);
+      this.thumbStripCanScrollEnd.set(false);
+      return;
+    }
+
+    const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
+    const scrollPosition = Math.min(maxScroll, Math.abs(strip.scrollLeft));
+    this.thumbStripCanScrollStart.set(scrollPosition > 1);
+    this.thumbStripCanScrollEnd.set(scrollPosition < maxScroll - 1);
   }
 
   selectSize(s: number): void {

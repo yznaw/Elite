@@ -290,15 +290,25 @@
   position: absolute;
   z-index: 2;
   inset-block: 0 5px;
-  inset-inline-end: 0;
   display: grid;
   width: 68px;
-  place-items: center end;
-  padding: 0 8px 0 24px;
   border: 0;
-  background: linear-gradient(to right, transparent, #fff 58%);
   color: var(--pdp-green);
   cursor: pointer;
+}
+
+.thumb-scroll-cue--start {
+  inset-inline-start: 0;
+  place-items: center start;
+  padding: 0 24px 0 8px;
+  background: linear-gradient(to left, transparent, #fff 58%);
+}
+
+.thumb-scroll-cue--end {
+  inset-inline-end: 0;
+  place-items: center end;
+  padding: 0 8px 0 24px;
+  background: linear-gradient(to right, transparent, #fff 58%);
 }
 
 .thumb-scroll-cue span {
@@ -319,10 +329,22 @@
   border-color: var(--pdp-green);
   background: var(--pdp-green);
   color: #f3efe4;
+}
+
+.thumb-scroll-cue--start:hover span {
+  transform: translateX(-2px);
+}
+
+.thumb-scroll-cue--end:hover span {
   transform: translateX(2px);
 }
 
-:host-context(html[dir='rtl']) .thumb-scroll-cue {
+:host-context(html[dir='rtl']) .thumb-scroll-cue--start {
+  padding: 0 8px 0 24px;
+  background: linear-gradient(to right, transparent, #fff 58%);
+}
+
+:host-context(html[dir='rtl']) .thumb-scroll-cue--end {
   padding: 0 24px 0 8px;
   background: linear-gradient(to left, transparent, #fff 58%);
 }
@@ -331,7 +353,11 @@
   transform: rotate(180deg);
 }
 
-:host-context(html[dir='rtl']) .thumb-scroll-cue:hover span {
+:host-context(html[dir='rtl']) .thumb-scroll-cue--start:hover span {
+  transform: rotate(180deg) translateX(-2px);
+}
+
+:host-context(html[dir='rtl']) .thumb-scroll-cue--end:hover span {
   transform: rotate(180deg) translateX(2px);
 }
 

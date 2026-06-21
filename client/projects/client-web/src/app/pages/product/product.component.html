@@ -67,7 +67,12 @@
 
           @if (gallery().length > 1) {
             <div class="thumb-strip-shell">
-              <div #thumbStrip class="thumb-strip" aria-label="Product images">
+              <div
+                #thumbStrip
+                class="thumb-strip"
+                aria-label="Product images"
+                (scroll)="updateThumbStripState()"
+              >
                 @for (src of gallery(); track src; let i = $index) {
                   <button
                     type="button"
@@ -91,11 +96,22 @@
                 }
               </div>
 
-              @if (thumbStripOverflows()) {
+              @if (thumbStripCanScrollStart()) {
                 <button
                   type="button"
-                  class="thumb-scroll-cue"
-                  (click)="scrollThumbnails()"
+                  class="thumb-scroll-cue thumb-scroll-cue--start"
+                  (click)="scrollThumbnails('start')"
+                  [attr.aria-label]="t('product.aria.scrollPreviousImages')"
+                >
+                  <span aria-hidden="true">‹</span>
+                </button>
+              }
+
+              @if (thumbStripCanScrollEnd()) {
+                <button
+                  type="button"
+                  class="thumb-scroll-cue thumb-scroll-cue--end"
+                  (click)="scrollThumbnails('end')"
                   [attr.aria-label]="t('product.aria.scrollImages')"
                 >
                   <span aria-hidden="true">›</span>
@@ -301,16 +317,6 @@
             }
           </div>
 
-          <button
-            type="button"
-            class="review-launch"
-            data-testid="open-review"
-            (click)="openReview()"
-          >
-            <span class="review-launch__star" aria-hidden="true">★</span>
-            <span>{{ t("product.review.button") }}</span>
-          </button>
-
           @if (!selectedSizeInStock()) {
             <div
               class="restock-panel"
@@ -350,6 +356,16 @@
               }
             </div>
           }
+
+          <button
+            type="button"
+            class="review-launch"
+            data-testid="open-review"
+            (click)="openReview()"
+          >
+            <span class="review-launch__star" aria-hidden="true">★</span>
+            <span>{{ t("product.review.button") }}</span>
+          </button>
 
           <!-- <div class="trust-row">
             @for (
