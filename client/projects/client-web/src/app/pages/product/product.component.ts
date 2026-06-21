@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -61,6 +61,9 @@ export class ProductComponent implements OnInit, OnDestroy {
   private loadToken = 0;
   private previousBodyOverflow = '';
   private bodyScrollLocked = false;
+  private thumbStrip?: HTMLElement;
+  private thumbStripResizeObserver?: ResizeObserver;
+  private thumbStripMutationObserver?: MutationObserver;
 
   readonly accordions: Accordion[] = [
     {
@@ -84,6 +87,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productLoading = signal(true);
   readonly productError = signal('');
   readonly galleryIdx = signal(0);
+  readonly thumbStripOverflows = signal(false);
   readonly selectedSize = signal<number | null>(null);
   readonly selectedColor = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
@@ -155,14 +159,15 @@ export class ProductComponent implements OnInit, OnDestroy {
     const p = this.product();
     if (!p?.sizes?.length) return [];
 
+    const sizes = [...p.sizes].sort((a, b) => a - b);
     const variants = p.variants || [];
     const fallbackStock = (p.stock ?? 1) > 0;
     if (variants.length === 0) {
-      return p.sizes.map((size) => ({ size, available: true, inStock: fallbackStock }));
+      return sizes.map((size) => ({ size, available: true, inStock: fallbackStock }));
     }
 
     const selectedColorKey = this.selectedColor() ? this.colorKey(this.selectedColor() || '') : '';
-    return p.sizes.map((size) => {
+    return sizes.map((size) => {
       const sizeVariants = variants.filter((variant) => Number(variant.size) === size);
       if (sizeVariants.length === 0) {
         return { size, available: false, inStock: false };
@@ -196,6 +201,30 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
   readonly productTag = (value: string): string => this.i18n.productTag(value);
 
+  @ViewChild('thumbStrip')
+  set thumbStripElement(element: ElementRef<HTMLElement> | undefined) {
+    this.thumbStripResizeObserver?.disconnect();
+    this.thumbStripMutationObserver?.disconnect();
+    this.thumbStrip = element?.nativeElement;
+
+    if (!this.thumbStrip) {
+      this.thumbStripOverflows.set(false);
+      return;
+    }
+
+    queueMicrotask(() => this.updateThumbStripOverflow());
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this.thumbStripResizeObserver = new ResizeObserver(() => this.updateThumbStripOverflow());
+      this.thumbStripResizeObserver.observe(this.thumbStrip);
+    }
+
+    if (typeof MutationObserver !== 'undefined') {
+      this.thumbStripMutationObserver = new MutationObserver(() => this.updateThumbStripOverflow());
+      this.thumbStripMutationObserver.observe(this.thumbStrip, { childList: true });
+    }
+  }
+
   ngOnInit(): void {
     this.querySub = this.route.queryParamMap.subscribe((queryParams) => {
       const collectionHandle = queryParams.get('col');
@@ -217,6 +246,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
     this.querySub?.unsubscribe();
+    this.thumbStripResizeObserver?.disconnect();
+    this.thumbStripMutationObserver?.disconnect();
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     this.unlockBodyScroll();
   }
@@ -300,10 +331,24 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.galleryIdx.set(i);
   }
 
+  scrollThumbnails(): void {
+    if (!this.thumbStrip) return;
+    const direction = getComputedStyle(this.thumbStrip).direction === 'rtl' ? -1 : 1;
+    this.thumbStrip.scrollBy({
+      left: direction * Math.max(this.thumbStrip.clientWidth * 0.7, 160),
+      behavior: 'smooth',
+    });
+  }
+
   navGallery(dir: number): void {
     this.galleryIdx.update(
       (i) => (i + dir + this.gallery().length) % this.gallery().length,
     );
+  }
+
+  private updateThumbStripOverflow(): void {
+    const strip = this.thumbStrip;
+    this.thumbStripOverflows.set(!!strip && strip.scrollWidth > strip.clientWidth + 1);
   }
 
   selectSize(s: number): void {

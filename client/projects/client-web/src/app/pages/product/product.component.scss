@@ -265,19 +265,74 @@
 }
 
 /* ── Thumbnails ── */
+.thumb-strip-shell {
+  position: relative;
+  margin-top: 10px;
+}
+
 .thumb-strip {
   display: grid;
-  // grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
   grid-auto-flow: column;
   grid-auto-columns: 70px;
   grid-template-columns: none;
   overflow-x: auto;
   gap: 9px;
-  margin-top: 10px;
   padding-bottom: 5px;
+  scroll-behavior: smooth;
   scrollbar-width: none;
+}
+
+.thumb-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.thumb-scroll-cue {
+  position: absolute;
+  z-index: 2;
+  inset-block: 0 5px;
+  inset-inline-end: 0;
+  display: grid;
+  width: 68px;
+  place-items: center end;
+  padding: 0 8px 0 24px;
+  border: 0;
+  background: linear-gradient(to right, transparent, #fff 58%);
+  color: var(--pdp-green);
+  cursor: pointer;
+}
+
+.thumb-scroll-cue span {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(0, 53, 42, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 20px -12px rgba(28, 26, 21, 0.65);
+  font-size: 25px;
+  line-height: 1;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.thumb-scroll-cue:hover span {
+  border-color: var(--pdp-green);
+  background: var(--pdp-green);
+  color: #f3efe4;
+  transform: translateX(2px);
+}
+
+:host-context(html[dir='rtl']) .thumb-scroll-cue {
+  padding: 0 24px 0 8px;
+  background: linear-gradient(to left, transparent, #fff 58%);
+}
+
+:host-context(html[dir='rtl']) .thumb-scroll-cue span {
+  transform: rotate(180deg);
+}
+
+:host-context(html[dir='rtl']) .thumb-scroll-cue:hover span {
+  transform: rotate(180deg) translateX(2px);
 }
 
 .thumb {
@@ -599,15 +654,6 @@
   color: rgba(31, 28, 23, 0.34);
   box-shadow: none;
   transform: none;
-}
-
-.size-btn.out-of-stock:not(.unavailable)::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  margin-inline-start: 7px;
-  border-radius: 50%;
-  background: rgba(31, 28, 23, 0.26);
 }
 
 .size-btn.unavailable .size-value {
@@ -1627,22 +1673,12 @@ button:focus-visible {
   }
 
   .thumb-strip {
-    grid-auto-flow: column;
-    grid-auto-columns: 70px;
-    grid-template-columns: none;
-    overflow-x: auto;
-    gap: 9px;
-    margin-top: 10px;
-    padding-bottom: 5px;
-    scrollbar-width: none;
-  }
-
-  .thumb-strip::-webkit-scrollbar {
-    display: none;
+    scroll-snap-type: inline proximity;
   }
 
   .thumb {
     border-radius: 9px;
+    scroll-snap-align: start;
   }
 
   .details-panel {

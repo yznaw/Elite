@@ -66,26 +66,39 @@
           </div>
 
           @if (gallery().length > 1) {
-            <div class="thumb-strip" aria-label="Product images">
-              @for (src of gallery(); track src; let i = $index) {
+            <div class="thumb-strip-shell">
+              <div #thumbStrip class="thumb-strip" aria-label="Product images">
+                @for (src of gallery(); track src; let i = $index) {
+                  <button
+                    type="button"
+                    class="thumb"
+                    [class.is-active]="galleryIdx() === i"
+                    (click)="setGalleryIdx(i)"
+                    [attr.aria-label]="
+                      t('product.aria.viewImage', { index: i + 1 })
+                    "
+                  >
+                    <img
+                      [src]="src"
+                      [attr.srcset]="imageSrcset(src, p)"
+                      sizes="96px"
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      (error)="onImgError($event)"
+                    />
+                  </button>
+                }
+              </div>
+
+              @if (thumbStripOverflows()) {
                 <button
                   type="button"
-                  class="thumb"
-                  [class.is-active]="galleryIdx() === i"
-                  (click)="setGalleryIdx(i)"
-                  [attr.aria-label]="
-                    t('product.aria.viewImage', { index: i + 1 })
-                  "
+                  class="thumb-scroll-cue"
+                  (click)="scrollThumbnails()"
+                  [attr.aria-label]="t('product.aria.scrollImages')"
                 >
-                  <img
-                    [src]="src"
-                    [attr.srcset]="imageSrcset(src, p)"
-                    sizes="96px"
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    (error)="onImgError($event)"
-                  />
+                  <span aria-hidden="true">›</span>
                 </button>
               }
             </div>
