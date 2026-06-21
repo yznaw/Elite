@@ -745,6 +745,8 @@ export class CatalogComponent implements OnInit {
     if (stockParam === 'low') this.statusFilter.set('low-stock');
     const colorParam = this.route.snapshot.queryParamMap.get('color');
     if (colorParam) { this.colorFilter.set(colorParam); this.showFilters.set(true); }
+    const qParam = this.route.snapshot.queryParamMap.get('q');
+    if (qParam) this.search.set(qParam);
   }
 
   // ── Filter / sort / view state ────────────────────────────────────────────
