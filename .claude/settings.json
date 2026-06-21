@@ -72,7 +72,8 @@
       "Bash(curl -s \"http://localhost:3000/api/ref/size-sets\")",
       "Bash(pkill -f \"node.*server\")",
       "Bash(lsof -ti:3000)",
-      "Bash(xargs kill -9)"
+      "Bash(xargs kill -9)",
+      "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -c \"SELECT name FROM ref_size_sets ORDER BY sort_order;\")"
     ]
   }
 }
