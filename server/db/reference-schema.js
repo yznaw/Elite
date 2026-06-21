@@ -25,12 +25,36 @@ const DEFAULT_MATERIALS = [
   ['Exotic Leather', 'جلد نادر', 7],
 ];
 
+// Footwear size chart from brand size guide (UK base, all sandals)
+const FOOTWEAR_CHART = [
+  { uk: '5',    eu: '39',   us: '6'    },
+  { uk: '5.5',  eu: '39.5', us: '6.5'  },
+  { uk: '6',    eu: '40',   us: '7'    },
+  { uk: '6.5',  eu: '40.5', us: '7.5'  },
+  { uk: '7',    eu: '41',   us: '8'    },
+  { uk: '7.5',  eu: '41.5', us: '8.5'  },
+  { uk: '8',    eu: '42',   us: '9'    },
+  { uk: '8.5',  eu: '42.5', us: '9.5'  },
+  { uk: '9',    eu: '43',   us: '10'   },
+  { uk: '9.5',  eu: '43.5', us: '10.5' },
+  { uk: '10',   eu: '44',   us: '11'   },
+  { uk: '10.5', eu: '44.5', us: '11.5' },
+  { uk: '11',   eu: '45',   us: '12'   },
+  { uk: '11.5', eu: '45.5', us: '12.5' },
+  { uk: '12',   eu: '46',   us: '13'   },
+  { uk: '12.5', eu: '46.5', us: '13.5' },
+  { uk: '13',   eu: '47',   us: '14'   },
+  { uk: '13.5', eu: '47.5', us: '14.5' },
+  { uk: '14',   eu: '48',   us: '15'   },
+  { uk: '14.5', eu: '48.5', us: '15.5' },
+  { uk: '15',   eu: '49',   us: '16'   },
+];
+
+const FOOTWEAR_TIP = 'If between sizes, we recommend selecting the larger size.';
+
 const DEFAULT_SIZE_SETS = [
-  ['Men\'s Footwear', ['39', '40', '41', '42', '43', '44', '45', '46', '47'], 0],
-  ['Women\'s Footwear', ['35', '36', '37', '38', '39', '40', '41'], 1],
-  ['Kids Footwear', ['25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35'], 2],
-  ['Sunglasses', ['One Size', 'Small', 'Medium', 'Large'], 3],
-  ['Belts (cm)', ['85', '90', '95', '100', '105', '110', '115', '120'], 4],
+  ['Footwear', ['39', '39.5', '40', '40.5', '41', '41.5', '42', '42.5', '43', '43.5', '44', '44.5', '45', '45.5', '46', '46.5', '47', '47.5', '48', '48.5', '49'], FOOTWEAR_CHART, FOOTWEAR_TIP, 0],
+  ['Belts (cm)', ['85', '90', '95', '100', '105', '110', '115', '120'], [], null, 1],
 ];
 
 async function ensureReferenceSchema(client, tenantId) {
@@ -71,11 +95,16 @@ async function ensureReferenceSchema(client, tenantId) {
         tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
         name text NOT NULL,
         sizes jsonb NOT NULL DEFAULT '[]',
+        size_chart jsonb NOT NULL DEFAULT '[]',
+        tip text,
         sort_order int NOT NULL DEFAULT 0,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       )
     `);
+    // Add columns if table already exists (idempotent upgrade)
+    await client.query(`ALTER TABLE ref_size_sets ADD COLUMN IF NOT EXISTS size_chart jsonb NOT NULL DEFAULT '[]'`);
+    await client.query(`ALTER TABLE ref_size_sets ADD COLUMN IF NOT EXISTS tip text`);
     await client.query('CREATE INDEX IF NOT EXISTS ref_size_sets_tenant ON ref_size_sets(tenant_id)');
     await ensureUpdatedAtTrigger(client, 'ref_size_sets');
 
@@ -133,16 +162,16 @@ async function seedDefaults(client, tenantId) {
     );
   }
 
-  for (const [name, sizes, sortOrder] of DEFAULT_SIZE_SETS) {
+  for (const [name, sizes, sizeChart, tip, sortOrder] of DEFAULT_SIZE_SETS) {
     await client.query(
       `
-        INSERT INTO ref_size_sets (tenant_id, name, sizes, sort_order)
-        SELECT $1, $2, $3::jsonb, $4
+        INSERT INTO ref_size_sets (tenant_id, name, sizes, size_chart, tip, sort_order)
+        SELECT $1, $2, $3::jsonb, $4::jsonb, $5, $6
         WHERE NOT EXISTS (
           SELECT 1 FROM ref_size_sets WHERE tenant_id = $1 AND lower(name) = lower($2)
         )
       `,
-      [tenantId, name, JSON.stringify(sizes), sortOrder],
+      [tenantId, name, JSON.stringify(sizes), JSON.stringify(sizeChart ?? []), tip ?? null, sortOrder],
     );
   }
 }
