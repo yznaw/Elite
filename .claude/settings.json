@@ -62,7 +62,17 @@
       "Bash(cp /tmp/fav32.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-32x32.png')",
       "Bash(cp /tmp/fav192.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-192x192.png')",
       "Bash(cp /tmp/fav512.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-512x512.png')",
-      "Bash(cp /tmp/apple-touch.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/apple-touch-icon.png')"
+      "Bash(cp /tmp/apple-touch.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/apple-touch-icon.png')",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -f \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/server/db/migrations/015_size_chart.sql\")",
+      "Bash(grep -n 'track $index' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/reference/reference.component.ts')",
+      "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -c \"DELETE FROM ref_size_sets WHERE lower\\(name\\) IN \\('men''s footwear', 'women''s footwear', 'kids footwear', 'sunglasses'\\) RETURNING name;\")",
+      "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -c \"DELETE FROM ref_size_sets WHERE lower\\(name\\) = 'belts \\(cm\\)' RETURNING name;\")",
+      "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -c \"SELECT id, name, jsonb_array_length\\(size_chart\\) as chart_rows, tip FROM ref_size_sets ORDER BY sort_order;\")",
+      "Bash(curl -s \"http://localhost:3000/api/ref/size-sets\")",
+      "Bash(pkill -f \"node.*server\")",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill -9)"
     ]
   }
 }

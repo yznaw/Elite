@@ -391,16 +391,45 @@
             } @else if (sizeGuideError()) {
               <p class="size-guide-state">{{ sizeGuideError() }}</p>
             } @else {
-              <div class="size-guide-list">
+              <div class="size-guide-body">
                 @for (set of sizeSets(); track set.id) {
-                  <article class="size-guide-card">
-                    <h3>{{ set.name }}</h3>
-                    <div class="size-guide-chips">
-                      @for (size of set.sizes; track size) {
-                        <span>EU {{ size }}</span>
+                  <div class="size-guide-set">
+
+                    @if (set.size_chart && set.size_chart.length > 0) {
+                      <!-- Conversion table -->
+                      <div class="sg-table-wrap">
+                        <table class="sg-table">
+                          <thead>
+                            <tr>
+                              <th>UK</th>
+                              <th class="sg-th-highlight">EU</th>
+                              <th>US</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (row of set.size_chart; track row) {
+                              <tr>
+                                <td>{{ row.uk }}</td>
+                                <td class="sg-td-highlight">{{ row.eu }}</td>
+                                <td>{{ row.us }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                      @if (set.tip) {
+                        <p class="sg-tip">{{ set.tip }}</p>
                       }
-                    </div>
-                  </article>
+                    } @else {
+                      <!-- Fallback chips for sets without a chart -->
+                      <div class="size-guide-chips">
+                        @for (size of set.sizes; track size) {
+                          <span>EU {{ size }}</span>
+                        }
+                      </div>
+                    }
+
+                  </div>
                 }
               </div>
             }

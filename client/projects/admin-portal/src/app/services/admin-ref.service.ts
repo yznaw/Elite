@@ -20,10 +20,18 @@ export interface RefMaterial {
   variant_count?: number;
 }
 
+export interface SizeChartRow {
+  uk: string;
+  eu: string;
+  us: string;
+}
+
 export interface RefSizeSet {
   id: string;
   name: string;
   sizes: string[];
+  size_chart: SizeChartRow[];
+  tip?: string | null;
   sort_order: number;
   usage_hint?: number;
 }
