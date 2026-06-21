@@ -279,10 +279,10 @@ export class FeedbackComponent implements OnInit {
   readonly kioskBaseUrl = (() => {
     if (typeof window === 'undefined') return '/kiosk';
     const h = window.location.hostname;
-    const base = (h === 'localhost' || h === '127.0.0.1')
-      ? `${window.location.protocol}//${h}:4200`
-      : window.location.origin;
-    return `${base}/kiosk`;
+    if (h === 'localhost' || h === '127.0.0.1') {
+      return `${window.location.protocol}//${h}:4200/kiosk`;
+    }
+    return 'https://elitecollections.qa/kiosk';
   })();
 
   async ngOnInit(): Promise<void> {
