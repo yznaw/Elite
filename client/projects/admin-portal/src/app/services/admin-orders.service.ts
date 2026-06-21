@@ -60,4 +60,8 @@ export class AdminOrdersService {
       this.api.post<{ id: string; ts: string; body: string }>(`/admin/orders/${id}/notes`, { body }),
     );
   }
+
+  rebookDelivery(id: string): Promise<Order> {
+    return firstValueFrom(this.api.post<Order>(`/admin/orders/${id}/rebook-delivery`, {}));
+  }
 }

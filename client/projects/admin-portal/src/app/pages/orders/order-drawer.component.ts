@@ -84,6 +84,21 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           </div>
         }
 
+        @if (order().nboxBookingFailed) {
+          <div class="nbox-failure-callout mb-16">
+            <ap-icon name="warning" [size]="14" style="flex-shrink:0;margin-top:1px;"/>
+            <div style="flex:1;min-width:0;">
+              <strong>Delivery booking failed</strong>
+              @if (order().nboxBookingError) {
+                <div class="small" style="margin-top:2px;opacity:0.8;">{{ order().nboxBookingError }}</div>
+              }
+            </div>
+            <button class="btn btn-sm btn-outline" [disabled]="busy()" (click)="rebookDelivery()" style="flex-shrink:0;">
+              @if (busy()) { <ap-spinner [size]="12"/> } Retry booking
+            </button>
+          </div>
+        }
+
         <div class="row gap-sm mb-16" style="flex-wrap:wrap;">
           @if (canTransitionTo('processing')) {
             <button class="btn btn-outline btn-sm" [disabled]="busy()" (click)="transition('processing')">
@@ -357,6 +372,15 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
       color: #92400e; font-size: 13px; line-height: 1.5;
     }
     .stale-payment-callout ap-icon { flex-shrink: 0; margin-top: 1px; color: #d97706; }
+
+    /* NBOX delivery booking failure callout */
+    .nbox-failure-callout {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px; border-radius: 10px;
+      background: #fef2f2; border: 1px solid #fecaca;
+      color: #991b1b; font-size: 13px; line-height: 1.5;
+    }
+    .nbox-failure-callout ap-icon { color: #dc2626; }
 
     /* View customer profile button */
     .view-customer-btn {
@@ -699,6 +723,22 @@ export class OrderDrawerComponent {
       this.updated.emit(updated);
       this.noteDraft.set('');
       this.toast.success(this.t('orderDrawer.toast.note.title'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async rebookDelivery(): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set(true);
+    try {
+      const o = this._order();
+      const updated = await this.ordersApi.rebookDelivery(o.id);
+      this._order.set(updated);
+      this.updated.emit(updated);
+      this.toast.success('Delivery booking submitted', o.id);
     } catch {
       // Global interceptor surfaces the error.
     } finally {

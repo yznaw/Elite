@@ -2905,6 +2905,22 @@ ap-sortable-table { display: block; overflow-x: auto; -webkit-overflow-scrolling
   .drawer-head { padding: 14px 16px !important; min-height: 56px; }
   .drawer-body { padding: 16px !important; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important; }
   .drawer-foot { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) !important; }
+  /* P3-T8 — save bar pinned to screen bottom; clear iOS home indicator */
+  .save-bar-top {
+    position: fixed !important;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 220;
+  }
+  .save-bar-top.dirty {
+    height: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Extra breathing room in the drawer body when the save bar is visible */
+  .save-bar-top.dirty + .drawer-body {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+  }
 }
 
 /* Task 4.4 — Inputs 48px min-height on phone (overrides 44px tablet rule). */

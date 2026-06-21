@@ -123,6 +123,77 @@ function parsePrice(raw) {
   return parseFloat((raw || '').replace(/[^\d.]/g, '')) || 0;
 }
 
+// Map of single-letter abbreviations (uppercase) found in SKU segments → color name.
+// The segment is identified as the part right before the size (last numeric-ish segment).
+// Extend this map as new abbreviations appear in the catalog.
+const SKU_COLOR_MAP = {
+  G:  'Grey',
+  GR: 'Grey',
+  B:  'Black',
+  BL: 'Black',
+  BLK:'Black',
+  W:  'White',
+  WH: 'White',
+  WHT:'White',
+  N:  'Navy',
+  NV: 'Navy',
+  R:  'Red',
+  RD: 'Red',
+  BR: 'Brown',
+  BRN:'Brown',
+  BG: 'Beige',
+  BE: 'Beige',
+  GD: 'Gold',
+  GL: 'Gold',
+  S:  'Silver',
+  SL: 'Silver',
+  T:  'Tan',
+  C:  'Camel',
+  CM: 'Camel',
+  KK: 'Khaki',
+  KH: 'Khaki',
+  GN: 'Green',
+  O:  'Olive',
+  OL: 'Olive',
+  P:  'Pink',
+  PK: 'Pink',
+  Y:  'Yellow',
+  YL: 'Yellow',
+  OR: 'Orange',
+  PR: 'Purple',
+  PU: 'Purple',
+  BU: 'Burgundy',
+};
+
+/**
+ * Try to infer a color name from a SKU string.
+ * Looks for a known abbreviation in the segment right before the trailing
+ * size segment (the last dash-delimited token that looks like a number).
+ *
+ * e.g. "8825-GNC-G-5"   → segment before "5"  → "G"  → "Grey"
+ *      "8825-GNC-B-9.5" → segment before "9.5" → "B"  → "Black"
+ *      "8825-GNC-390-5" → segment before "5"   → "390" → no match → null
+ */
+function inferColorFromSku(sku) {
+  if (!sku) return null;
+  const parts = sku.split('-');
+  if (parts.length < 2) return null;
+  // Walk from the end; skip the last segment if it looks like a size (numeric or like "5", "6.5", "XL" etc.)
+  // Then check the segment before it.
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const seg = parts[i].toUpperCase();
+    // If this segment is numeric (a size), look at the one before it
+    if (/^\d+(\.\d+)?$/.test(seg) || /^(XS|S|M|L|XL|XXL|XXXL|OS)$/.test(seg)) {
+      const prev = parts[i - 1].toUpperCase();
+      if (SKU_COLOR_MAP[prev]) return SKU_COLOR_MAP[prev];
+      return null;
+    }
+  }
+  // No size-like segment found — try the last segment directly
+  const last = parts[parts.length - 1].toUpperCase();
+  return SKU_COLOR_MAP[last] || null;
+}
+
 // ── Drive helpers ─────────────────────────────────────────────────────────────
 function extractDriveId(url) {
   if (!url) return null;
@@ -346,6 +417,9 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           const stockQty      = row.qtyRaw !== '' ? Math.max(0, parseInt(row.qtyRaw, 10) || 0) : 0;
           const sizeVal       = row.size || null;
 
+          // Use explicit color from CSV; fall back to SKU-inferred color
+          const colorVal = (row.color || '').trim() || inferColorFromSku(row.sku) || null;
+
           const varResult = await client.query(
             `INSERT INTO product_variants
                (tenant_id, product_id, sku, color, size, price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order)
@@ -355,7 +429,7 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
                cost_price_cents=$7, shipping_cost_cents=$8, stock_quantity=$9,
                sort_order=$10, updated_at=NOW()
              RETURNING id, (xmax=0) AS inserted`,
-            [tenant.id, productId, row.sku, row.color || null, sizeVal,
+            [tenant.id, productId, row.sku, colorVal, sizeVal,
              priceCents, costCents, shippingCents, stockQty, varIdx]
           );
           const variantId = varResult.rows[0].id;
@@ -445,6 +519,43 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
   } finally {
     client.release();
     res.end();
+  }
+});
+
+// ── Repair: infer color from SKU for variants with no color set ───────────────
+// POST /api/admin/bulk-import/repair-colors
+// Scans all product_variants with null/empty color, tries to infer from SKU,
+// and updates them. Returns { repaired, skipped }.
+router.post('/repair-colors', async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const { rows } = await client.query(
+      "SELECT id, sku FROM product_variants WHERE tenant_id = $1 AND (color IS NULL OR color = '')",
+      [tenant.id],
+    );
+
+    let repaired = 0, skipped = 0;
+    await client.query('BEGIN');
+    for (const row of rows) {
+      const color = inferColorFromSku(row.sku);
+      if (color) {
+        await client.query(
+          'UPDATE product_variants SET color = $1, updated_at = NOW() WHERE id = $2',
+          [color, row.id],
+        );
+        repaired++;
+      } else {
+        skipped++;
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, data: { repaired, skipped, total: rows.length } });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    res.status(500).json({ success: false, message: err.message });
+  } finally {
+    client.release();
   }
 });
 

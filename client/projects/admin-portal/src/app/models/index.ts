@@ -110,6 +110,8 @@ export interface Order {
     status?: string;
   };
   trackingNumber?: string;
+  nboxBookingFailed?: boolean;
+  nboxBookingError?: string;
   timeline?: OrderTimelineEntry[];
   notes?: OrderNote[];
 }

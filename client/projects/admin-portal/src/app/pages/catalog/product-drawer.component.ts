@@ -587,6 +587,9 @@ function readPreview(file: File): Promise<string> {
                   }
                 </div>
                 <div class="row gap-sm" style="flex-wrap:wrap;">
+                  <button class="btn btn-outline btn-sm" (click)="openBulkStock()">
+                    <ap-icon name="chart" [size]="12"/> {{ t('product.variants.bulkStock') }}
+                  </button>
                   <button class="btn btn-outline btn-sm" (click)="addVariant()">
                     <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
                   </button>
@@ -764,6 +767,76 @@ function readPreview(file: File): Promise<string> {
             <button class="btn btn-outline" type="button" (click)="mediaPicker.set(false)">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" type="button" [disabled]="mediaSelected().size === 0" (click)="applyMediaSelection()">
               {{ mediaSelected().size !== 1 ? t('product.gallery.addImages') : t('product.gallery.addImage') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- ── Bulk Stock Update Modal ── -->
+    @if (bulkStockOpen()) {
+      <div class="overlay" style="z-index:260;" (click)="closeBulkStock()"></div>
+      <div class="media-pick-panel bulk-stock-panel" style="z-index:270;">
+        <div class="mpp-head">
+          <div>
+            <p class="mpp-eyebrow">{{ t('product.section.variants') }}</p>
+            <div class="card-title">{{ t('product.variants.bulkStock.title') }}</div>
+          </div>
+          <button class="x-btn" type="button" (click)="closeBulkStock()"><ap-icon name="x" [size]="14"/></button>
+        </div>
+
+        <div class="bsu-sub muted small">{{ t('product.variants.bulkStock.sub') }}</div>
+
+        <!-- Set-all shortcut -->
+        <div class="bsu-set-all">
+          <span class="muted small">{{ t('product.variants.bulkStock.setAll') }}</span>
+          <input class="inp inp-sm mono bsu-set-all-inp" type="number" min="0"
+                 [ngModel]="bulkStockSetAll()"
+                 (ngModelChange)="setBulkStockAll($event)"/>
+        </div>
+
+        <!-- Variant rows -->
+        <div class="mpp-body bsu-body">
+          <div class="bsu-header">
+            <span>{{ t('product.variants.col.color') }}</span>
+            <span>{{ t('product.variants.col.size') }}</span>
+            <span>{{ t('product.variants.col.sku') }}</span>
+            <span>{{ t('product.variants.col.stock') }}</span>
+          </div>
+          @for (row of bulkStockRows(); track row.id) {
+            <div class="bsu-row">
+              <span class="bsu-color">
+                @if (colorSwatchImage(row.color)) {
+                  <img class="bsu-swatch bsu-swatch--img" [src]="colorSwatchImage(row.color)" [alt]="row.color"/>
+                } @else {
+                  <span class="bsu-swatch" [style.background]="colorHex(row.color)"></span>
+                }
+                <span class="small">{{ row.color || '—' }}</span>
+              </span>
+              <span class="small mono">{{ row.size || '—' }}</span>
+              <span class="small mono muted">{{ row.sku || '—' }}</span>
+              <input class="inp inp-sm mono bsu-stock-inp"
+                     [class.stock-out]="row.stock === 0"
+                     [class.stock-low]="row.stock > 0 && row.stock < 5"
+                     type="number" min="0"
+                     [ngModel]="row.stock"
+                     (ngModelChange)="updateBulkStockRow(row.id, +$event || 0)"/>
+            </div>
+          }
+        </div>
+
+        <div class="drawer-foot">
+          <span class="muted small">{{ bulkStockRows().length }} {{ t('common.variants') }}</span>
+          <div class="row gap-sm">
+            <button class="btn btn-outline" type="button" (click)="closeBulkStock()">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary" type="button"
+                    [disabled]="bulkStockSaving()"
+                    (click)="applyBulkStock()">
+              @if (bulkStockSaving()) {
+                <ap-spinner [size]="12"/> {{ t('product.variants.bulkStock.applying') }}
+              } @else {
+                <ap-icon name="check" [size]="12"/> {{ t('product.variants.bulkStock.apply') }}
+              }
             </button>
           </div>
         </div>
@@ -949,6 +1022,70 @@ function readPreview(file: File): Promise<string> {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
+    /* Bulk Stock Panel */
+    .bulk-stock-panel { width: min(480px, 100vw); }
+    .bsu-sub { padding: 10px 20px 0; }
+    .bsu-set-all {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border-2);
+      background: var(--bg);
+    }
+    .bsu-set-all-inp { width: 80px; }
+    .bsu-body { padding: 0; }
+    .bsu-header {
+      display: grid;
+      grid-template-columns: 1.6fr 0.8fr 1.4fr 0.8fr;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border-2);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--muted);
+      position: sticky;
+      top: 0;
+    }
+    .bsu-row {
+      display: grid;
+      grid-template-columns: 1.6fr 0.8fr 1.4fr 0.8fr;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 16px;
+      border-bottom: 1px solid var(--border-2);
+      transition: background 0.1s;
+    }
+    .bsu-row:last-child { border-bottom: none; }
+    .bsu-row:hover { background: var(--bg); }
+    .bsu-color {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .bsu-color .small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bsu-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,.12);
+    }
+    .bsu-swatch--img {
+      border-radius: 4px;
+      object-fit: cover;
+    }
+    .bsu-stock-inp { width: 100%; }
 
     /* Image Gallery */
     .gallery-drop {
@@ -1707,6 +1844,12 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly duplicating = signal(false);
   readonly expandedVariants = signal(new Set<string>());
+
+  // ── Bulk Stock Update ─────────────────────────────────────────────────
+  readonly bulkStockOpen = signal(false);
+  readonly bulkStockSaving = signal(false);
+  readonly bulkStockSetAll = signal<number | null>(null);
+  readonly bulkStockRows = signal<{ id: string; color: string; size: string; sku: string; stock: number }[]>([]);
   readonly variantPickerOpenId = signal<string | null>(null);
 
   /** Convenience: the current product object (or first as fallback). */
@@ -2510,6 +2653,91 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       // Global interceptor surfaces the error.
     } finally {
       this.duplicating.set(false);
+    }
+  }
+
+  // ── Bulk Stock Update ────────────────────────────────────────────────
+
+  openBulkStock(): void {
+    const rows = this.form().variants.map(v => ({
+      id: v.id,
+      color: v.color ?? '',
+      size: v.size ?? '',
+      sku: v.sku ?? '',
+      stock: v.stock ?? 0,
+    }));
+    this.bulkStockRows.set(rows);
+    this.bulkStockSetAll.set(null);
+    this.bulkStockOpen.set(true);
+  }
+
+  closeBulkStock(): void {
+    this.bulkStockOpen.set(false);
+  }
+
+  updateBulkStockRow(id: string, stock: number): void {
+    this.bulkStockRows.update(rows =>
+      rows.map(r => r.id === id ? { ...r, stock } : r),
+    );
+  }
+
+  setBulkStockAll(value: number | string): void {
+    const n = typeof value === 'number' ? value : parseInt(String(value), 10);
+    if (isNaN(n) || n < 0) return;
+    this.bulkStockSetAll.set(n);
+    this.bulkStockRows.update(rows => rows.map(r => ({ ...r, stock: n })));
+  }
+
+  async applyBulkStock(): Promise<void> {
+    if (this.bulkStockSaving()) return;
+    const rows = this.bulkStockRows();
+    const updates = rows
+      .filter(r => r.sku)
+      .map(r => ({ sku: r.sku, stock: r.stock }));
+
+    if (updates.length === 0) {
+      this.toast.info(this.t('common.noChanges') || 'No variants with SKUs to update.');
+      return;
+    }
+
+    this.bulkStockSaving.set(true);
+    try {
+      const result = await this.productsApi.bulkStockUpdate(updates);
+
+      // Build a SKU -> new stock map for reliable matching (same key the server uses)
+      const stockBySku = new Map<string, number>(rows.filter(r => r.sku).map(r => [r.sku, r.stock]));
+
+      const patchVariants = <T extends { sku: string; stock: number }>(variants: T[]): T[] =>
+        variants.map(v => {
+          const newStock = stockBySku.get(v.sku);
+          return newStock !== undefined ? { ...v, stock: newStock } : v;
+        });
+
+      // Mirror changes into form signal (drives colorGroups computed + variant rows)
+      this.form.update(f => ({ ...f, variants: patchVariants(f.variants) }));
+
+      // Mirror into initial so dirty() stays false and the save bar doesn't appear
+      this.initial.update(i => ({ ...i, variants: patchVariants(i.variants) }));
+
+      // Mirror into the underlying product object so resetForCurrent() doesn't
+      // revert the stock when the user navigates away and back (or closes/reopens)
+      if (this.product) {
+        this.product.variants = patchVariants((this.product.variants ?? []).map(v => ({ ...v })));
+        this.product.stock = this.product.variants.reduce((s, v) => s + (v.stock ?? 0), 0);
+      }
+
+      const successMsg = this.t('product.variants.bulkStock.success').replace('{n}', String(result.updated));
+      if (result.notFound?.length) {
+        const notFoundMsg = this.t('product.variants.bulkStock.notFound').replace('{n}', String(result.notFound.length));
+        this.toast.info(successMsg, notFoundMsg);
+      } else {
+        this.toast.success(successMsg);
+      }
+      this.bulkStockOpen.set(false);
+    } catch {
+      // Global error interceptor handles the toast
+    } finally {
+      this.bulkStockSaving.set(false);
     }
   }
 

@@ -45,7 +45,12 @@
       "Bash(grep -nE '>[A-Z][a-z].{3,}<|placeholder=\"[^{t]' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/settings/settings.component.ts')",
       "Bash(grep -nE '>[A-Z][a-z].{3,}<|placeholder=\"[^{t]' '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/app/pages/storefront/section-drawer.component.ts')",
       "Bash(awk '$1 > 2 {print $1, $2}')",
-      "mcp__claude_ai_Google_Drive__create_file"
+      "mcp__claude_ai_Google_Drive__create_file",
+      "Bash(grep -v \"^$\")",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"\\\\dt\")",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"SELECT COUNT\\(*\\) FROM products;\")",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"SELECT COUNT\\(*\\) FROM media_assets;\")",
+      "Bash(psql \"postgresql://elite:elite_password@localhost:5432/elite\" -c \"SELECT COUNT\\(*\\) FROM product_variants;\")"
     ]
   }
 }
