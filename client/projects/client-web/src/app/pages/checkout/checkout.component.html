@@ -204,47 +204,91 @@
           >
             <div class="float-wrap">
               <input
+                id="checkout-first-name"
                 class="float-input"
                 type="text"
                 [value]="form().firstName"
                 (input)="set('firstName', inputValue($event))"
+                (blur)="markTouched('firstName')"
+                autocomplete="given-name"
+                [attr.aria-invalid]="showFieldError('firstName')"
+                [attr.aria-describedby]="showFieldError('firstName') ? 'checkout-first-name-error' : null"
                 placeholder=" "
               />
-              <label class="float-label">{{
+              <label class="float-label" for="checkout-first-name">{{
                 t("checkout.field.firstName")
               }}</label>
+              @if (showFieldError("firstName")) {
+                <span id="checkout-first-name-error" class="field-error">
+                  {{ t("checkout.validation.firstName") }}
+                </span>
+              }
             </div>
             <div class="float-wrap">
               <input
+                id="checkout-last-name"
                 class="float-input"
                 type="text"
                 [value]="form().lastName"
                 (input)="set('lastName', inputValue($event))"
+                (blur)="markTouched('lastName')"
+                autocomplete="family-name"
+                [attr.aria-invalid]="showFieldError('lastName')"
+                [attr.aria-describedby]="showFieldError('lastName') ? 'checkout-last-name-error' : null"
                 placeholder=" "
               />
-              <label class="float-label">{{
+              <label class="float-label" for="checkout-last-name">{{
                 t("checkout.field.lastName")
               }}</label>
+              @if (showFieldError("lastName")) {
+                <span id="checkout-last-name-error" class="field-error">
+                  {{ t("checkout.validation.lastName") }}
+                </span>
+              }
             </div>
             <div class="float-wrap" style="grid-column: 1/-1">
               <input
+                id="checkout-email"
                 class="float-input"
                 type="email"
                 [value]="form().email"
                 (input)="set('email', inputValue($event))"
+                (blur)="markTouched('email')"
+                autocomplete="email"
+                inputmode="email"
+                maxlength="254"
+                [attr.aria-invalid]="showFieldError('email')"
+                [attr.aria-describedby]="showFieldError('email') ? 'checkout-email-error' : null"
                 placeholder=" "
               />
-              <label class="float-label">{{ t("checkout.field.email") }}</label>
+              <label class="float-label" for="checkout-email">{{ t("checkout.field.email") }}</label>
+              @if (showFieldError("email")) {
+                <span id="checkout-email-error" class="field-error">
+                  {{ t("checkout.validation.email") }}
+                </span>
+              }
             </div>
             <div class="float-wrap" style="grid-column: 1/-1">
               <input
+                id="checkout-phone"
                 class="float-input"
                 type="tel"
                 [value]="form().phone"
                 (input)="set('phone', inputValue($event))"
+                (blur)="markTouched('phone')"
+                autocomplete="tel"
+                inputmode="tel"
+                maxlength="20"
+                [attr.aria-invalid]="showFieldError('phone')"
+                [attr.aria-describedby]="showFieldError('phone') ? 'checkout-phone-error' : null"
                 placeholder=" "
               />
-              <label class="float-label">{{ t("checkout.field.phone") }}</label>
+              <label class="float-label" for="checkout-phone">{{ t("checkout.field.phone") }}</label>
+              @if (showFieldError("phone")) {
+                <span id="checkout-phone-error" class="field-error">
+                  {{ t("checkout.validation.phone") }}
+                </span>
+              }
             </div>
           </div>
         }
@@ -496,7 +540,7 @@
           }
           <button
             class="btn-gold"
-            [disabled]="placing() || redirecting() || cart.items().length === 0"
+            [disabled]="placing() || redirecting() || !isCurrentStepValid()"
             (click)="next()"
             [attr.data-track]="step() < steps.length - 1 ? 'checkout-continue' : 'checkout-place-order'"
             style="

@@ -26,6 +26,8 @@ interface CheckoutForm {
   country: string;
 }
 
+type CustomerField = 'firstName' | 'lastName' | 'email' | 'phone';
+
 @Component({
   selector: 'cw-checkout',
   standalone: true,
@@ -91,6 +93,13 @@ export class CheckoutComponent implements OnInit {
     country: 'Qatar',
   });
 
+  readonly touched = signal<Record<CustomerField, boolean>>({
+    firstName: false,
+    lastName: false,
+    email: false,
+    phone: false,
+  });
+
   readonly subtotal = computed(() => this.cart.subtotal());
   readonly deliveryFee = computed(() => this.shippingQuote()?.amount || 0);
   readonly total = computed(() => (this.placed() ? this.placedTotal() : this.subtotal() + this.deliveryFee()));
@@ -113,6 +122,14 @@ export class CheckoutComponent implements OnInit {
     }
   }
 
+  markTouched(field: CustomerField): void {
+    this.touched.update((current) => ({ ...current, [field]: true }));
+  }
+
+  showFieldError(field: CustomerField): boolean {
+    return this.touched()[field] && !this.isCustomerFieldValid(field);
+  }
+
   inputValue(event: Event): string {
     return (event.target as HTMLInputElement).value;
   }
@@ -124,6 +141,9 @@ export class CheckoutComponent implements OnInit {
   async next(): Promise<void> {
     this.error.set('');
     if (!this.isCurrentStepValid()) {
+      if (this.step() === 0) {
+        this.touched.set({ firstName: true, lastName: true, email: true, phone: true });
+      }
       this.error.set(this.t(`checkout.error.step${this.step()}`));
       return;
     }
@@ -285,20 +305,45 @@ export class CheckoutComponent implements OnInit {
     }
   }
 
-  private isCurrentStepValid(): boolean {
+  isCurrentStepValid(): boolean {
     if (this.cart.items().length === 0) return false;
     const form = this.form();
     if (this.step() === 0) {
-      return Boolean(
-        form.firstName.trim() &&
-        form.lastName.trim() &&
-        form.email.trim() &&
-        form.phone.trim(),
-      );
+      return this.isCustomerFieldValid('firstName')
+        && this.isCustomerFieldValid('lastName')
+        && this.isCustomerFieldValid('email')
+        && this.isCustomerFieldValid('phone');
     }
     if (this.step() === 1) {
       return Boolean(form.address.trim() && form.city.trim() && form.country);
     }
     return true;
+  }
+
+  private isCustomerFieldValid(field: CustomerField): boolean {
+    const value = this.form()[field];
+    if (field === 'firstName' || field === 'lastName') return this.isValidName(value);
+    if (field === 'email') return this.isValidEmail(value);
+    return this.isValidQatarPhone(value);
+  }
+
+  private isValidName(value: string): boolean {
+    const name = value.trim();
+    const letterCount = name.match(/\p{L}/gu)?.length ?? 0;
+    return letterCount >= 2 && /^[\p{L}\p{M}][\p{L}\p{M}'’ -]*$/u.test(name);
+  }
+
+  private isValidEmail(value: string): boolean {
+    const email = value.trim();
+    if (!email || email.length > 254 || email.includes('..')) return false;
+    return /^[^\s@.]+(?:\.[^\s@.]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(email);
+  }
+
+  private isValidQatarPhone(value: string): boolean {
+    const normalized = value
+      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+      .replace(/[\s().-]/g, '');
+    return /^(?:\+974|00974|974)?[3-7]\d{7}$/.test(normalized);
   }
 }

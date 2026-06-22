@@ -271,6 +271,10 @@ const EN = {
   'checkout.field.card': 'Card Number',
   'checkout.field.expiry': 'Expiry (MM/YY)',
   'checkout.field.cvv': 'CVV',
+  'checkout.validation.firstName': 'Enter a valid first name using at least 2 letters.',
+  'checkout.validation.lastName': 'Enter a valid last name using at least 2 letters.',
+  'checkout.validation.email': 'Enter a valid email address, such as name@example.com.',
+  'checkout.validation.phone': 'Enter a valid Qatar phone number, such as +974 5555 5555.',
 
   'checkout.country.qatar': 'Qatar',
   'checkout.country.uae': 'UAE',
@@ -687,6 +691,10 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.field.card': 'رقم البطاقة',
   'checkout.field.expiry': 'تاريخ الانتهاء (MM/YY)',
   'checkout.field.cvv': 'CVV',
+  'checkout.validation.firstName': 'أدخل اسمًا أول صحيحًا مكوّنًا من حرفين على الأقل.',
+  'checkout.validation.lastName': 'أدخل اسم عائلة صحيحًا مكوّنًا من حرفين على الأقل.',
+  'checkout.validation.email': 'أدخل بريدًا إلكترونيًا صحيحًا، مثل name@example.com.',
+  'checkout.validation.phone': 'أدخل رقم هاتف قطري صحيحًا، مثل ‎+974 5555 5555.',
 
   'checkout.country.qatar': 'قطر',
   'checkout.country.uae': 'الإمارات',
