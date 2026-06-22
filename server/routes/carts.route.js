@@ -15,9 +15,13 @@ async function loadCart(client, cartId) {
 }
 
 function cartSessionId(req) {
-  return req.session?.user?.id
-    ? `admin-user:${req.session.user.id}`
-    : `session:${req.sessionID}`;
+  if (req.session?.user?.id) return `admin-user:${req.session.user.id}`;
+
+  // Guest carts are keyed by the Express session id. Touch the session so
+  // saveUninitialized: false still persists it and sends the cookie needed to
+  // retrieve the same cart after a page refresh.
+  if (req.session) req.session.cartInitialized = true;
+  return `session:${req.sessionID}`;
 }
 
 async function ensureSessionCart(client, req) {
