@@ -13,6 +13,7 @@ const { ensureDefaultTenant } = require('./db/tenant');
 const { ensureReferenceSchema } = require('./db/reference-schema');
 const { ensureProductRecommendationsSchema } = require('./db/product-recommendations-schema');
 const { ensureRestockNotificationsSchema } = require('./db/restock-notifications-schema');
+const { ensurePosSchema } = require('./db/pos-schema');
 const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 
@@ -172,6 +173,7 @@ async function bootstrap() {
       await ensureReferenceSchema(client, tenant.id);
       await ensureProductRecommendationsSchema(client);
       await ensureRestockNotificationsSchema(client);
+      await ensurePosSchema(client);
     } catch (err) {
       console.warn('Tenant bootstrap failed (the server will still start):', err.message);
     } finally {

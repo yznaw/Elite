@@ -1,0 +1,255 @@
+<main class="pos-shell">
+  <header class="pos-header">
+    <div class="brand-lockup">
+      <span class="brand-mark">E</span>
+      <div>
+        <strong>Elite POS</strong>
+        <span>{{ register()?.displayName || 'Terminal setup' }}</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <span class="network" [class.offline]="!online()">
+        <i></i>{{ online() ? 'Online' : 'Offline' }}
+      </span>
+      @if (shiftId()) {
+        <span class="shift-chip">Shift open</span>
+      }
+      <span class="cashier">{{ auth.user()?.name }}</span>
+      <button class="exit-button" type="button" (click)="exitPos()">Admin</button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <div class="error-strip" role="alert">
+      <span>{{ error() }}</span>
+      <button type="button" (click)="error.set('')" aria-label="Dismiss error">Close</button>
+    </div>
+  }
+
+  @if (phase() === 'loading') {
+    <section class="center-stage">
+      <div class="loader"></div>
+      <h1>Preparing your register</h1>
+      <p>Checking terminal identity, shift, and receipt numbers.</p>
+    </section>
+  }
+
+  @if (phase() === 'enrollment') {
+    <section class="setup-stage">
+      <div class="setup-intro">
+        <span class="eyebrow">ONE-TIME SETUP</span>
+        <h1>Connect this counter to Elite.</h1>
+        <p>Each physical register gets its own identity. This keeps receipts, shifts, and audit history attached to the correct terminal.</p>
+        <div class="trust-list">
+          <span><b>01</b> Authenticated cashier session</span>
+          <span><b>02</b> Tenant-wide receipt numbering</span>
+          <span><b>03</b> Server-authoritative stock</span>
+        </div>
+      </div>
+      <div class="setup-card">
+        <h2>Enroll register</h2>
+        <p>Use a token created by an Elite administrator.</p>
+        <label>
+          Enrollment token
+          <input [(ngModel)]="enrollmentToken" placeholder="Paste one-time token" autocomplete="off" />
+        </label>
+        @if (auth.user()?.role === 'owner' || auth.user()?.role === 'admin') {
+          <div class="divider"><span>or create one now</span></div>
+          <label>
+            Register name
+            <input [(ngModel)]="terminalName" placeholder="Main counter" maxlength="80" />
+          </label>
+        }
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="enrollTerminal()">
+          {{ busy() ? 'Connecting...' : 'Connect register' }}
+        </button>
+        <small>The register credential is stored locally and is never shown again.</small>
+      </div>
+    </section>
+  }
+
+  @if (phase() === 'shift') {
+    <section class="shift-stage">
+      <div class="shift-card">
+        <span class="eyebrow">START OF DAY</span>
+        <h1>Open a cashier shift</h1>
+        <p>Count the cash already in the drawer before taking the first payment.</p>
+        <label class="money-field">
+          <span>Opening cash</span>
+          <div><b>QAR</b><input [(ngModel)]="openingFloat" inputmode="decimal" /></div>
+        </label>
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="openShift()">
+          {{ busy() ? 'Opening...' : 'Open shift' }}
+        </button>
+      </div>
+      <aside class="shift-note">
+        <span>REGISTER</span>
+        <strong>{{ register()?.displayName }}</strong>
+        <p>Sales cannot be posted without an open shift. Closing and Z reporting remain manager-controlled.</p>
+      </aside>
+    </section>
+  }
+
+  @if (phase() === 'selling') {
+    <section class="workspace">
+      <div class="catalog-panel">
+        <div class="catalog-tools">
+          <label class="search-box">
+            <span>SEARCH</span>
+            <input
+              [(ngModel)]="searchQuery"
+              (ngModelChange)="queueSearch()"
+              placeholder="Product name, SKU, or barcode"
+              autocomplete="off"
+            />
+          </label>
+          <form class="scanner-box" (submit)="$event.preventDefault(); scanBarcode()">
+            <span>BARCODE</span>
+            <input [(ngModel)]="barcode" name="barcode" placeholder="Scan and press Enter" autocomplete="off" />
+          </form>
+        </div>
+
+        <div class="catalog-heading">
+          <div>
+            <span class="eyebrow">CATALOG</span>
+            <h1>{{ searchQuery ? 'Search results' : 'Available products' }}</h1>
+          </div>
+          <span>{{ products().length }} variants</span>
+        </div>
+
+        <div class="product-grid">
+          @for (product of products(); track product.variantId) {
+            <button
+              class="product-card"
+              type="button"
+              [disabled]="product.stock <= 0"
+              (click)="addToCart(product)"
+            >
+              <div class="product-visual">
+                @if (product.imageUrl) {
+                  <img [src]="productImage(product)" [alt]="product.name" />
+                } @else {
+                  <span>{{ product.name.slice(0, 1) }}</span>
+                }
+                <i [class.low]="product.stock > 0 && product.stock <= 3">
+                  {{ product.stock > 0 ? product.stock + ' in stock' : 'Sold out' }}
+                </i>
+              </div>
+              <div class="product-copy">
+                <strong>{{ product.name }}</strong>
+                <small>{{ product.variant || product.sku }}</small>
+                <b>{{ formatMoney(product.priceCents) }}</b>
+              </div>
+            </button>
+          } @empty {
+            <div class="empty-catalog">
+              <b>No matching products</b>
+              <span>Try another name, SKU, or barcode.</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <aside class="cart-panel">
+        <div class="cart-title">
+          <div>
+            <span class="eyebrow">CURRENT SALE</span>
+            <h2>Cart</h2>
+          </div>
+          <span>{{ cartCount() }} item{{ cartCount() === 1 ? '' : 's' }}</span>
+        </div>
+
+        <div class="cart-lines">
+          @for (line of cart(); track line.item.variantId) {
+            <article class="cart-line">
+              <div class="line-top">
+                <div>
+                  <strong>{{ line.item.name }}</strong>
+                  <small>{{ line.item.variant || line.item.sku }}</small>
+                </div>
+                <button type="button" (click)="removeLine(line.item.variantId)" aria-label="Remove item">Remove</button>
+              </div>
+              <div class="line-bottom">
+                <div class="stepper">
+                  <button type="button" (click)="changeQuantity(line.item.variantId, -1)">-</button>
+                  <span>{{ line.quantity }}</span>
+                  <button type="button" (click)="changeQuantity(line.item.variantId, 1)" [disabled]="line.quantity >= line.item.stock">+</button>
+                </div>
+                <b>{{ formatMoney(line.item.priceCents * line.quantity) }}</b>
+              </div>
+            </article>
+          } @empty {
+            <div class="empty-cart">
+              <span class="empty-symbol">+</span>
+              <b>Your cart is ready</b>
+              <p>Tap a product or scan a barcode to begin.</p>
+            </div>
+          }
+        </div>
+
+        <div class="cart-totals">
+          <div><span>Subtotal</span><b>{{ formatMoney(totalCents()) }}</b></div>
+          <div><span>Tax</span><b>{{ formatMoney(0) }}</b></div>
+          <div class="grand-total"><span>Total</span><b>{{ formatMoney(totalCents()) }}</b></div>
+          <button class="checkout-button" type="button" [disabled]="!cart().length || busy()" (click)="beginPayment()">
+            Take payment
+            <span>{{ formatMoney(totalCents()) }}</span>
+          </button>
+          <small>Receipt {{ receiptBlock() ? '#' + receiptBlock()!.next : 'number unavailable' }}</small>
+        </div>
+      </aside>
+    </section>
+  }
+
+  @if (paymentOpen()) {
+    <div class="modal-backdrop" (click)="paymentOpen.set(false)">
+      <section class="payment-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="paymentOpen.set(false)">Close</button>
+        <span class="eyebrow">PAYMENT</span>
+        <h2>{{ formatMoney(totalCents()) }}</h2>
+        <div class="payment-methods">
+          <button type="button" [class.active]="paymentMethod() === 'cash'" (click)="selectPayment('cash')">
+            <b>Cash</b><span>Record drawer tender</span>
+          </button>
+          <button type="button" [class.active]="paymentMethod() === 'card'" (click)="selectPayment('card')">
+            <b>Card</b><span>Manual terminal confirmation</span>
+          </button>
+        </div>
+        @if (paymentMethod() === 'cash') {
+          <label class="money-field tendered-field">
+            <span>Cash received</span>
+            <div><b>QAR</b><input [(ngModel)]="tendered" inputmode="decimal" /></div>
+          </label>
+          <div class="change-row"><span>Change due</span><strong>{{ formatMoney(changeCents()) }}</strong></div>
+        } @else {
+          <div class="card-confirmation">
+            Confirm the payment on the external card terminal before completing this sale.
+          </div>
+        }
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="completeSale()">
+          {{ busy() ? 'Posting sale...' : 'Complete sale' }}
+        </button>
+      </section>
+    </div>
+  }
+
+  @if (lastSale(); as sale) {
+    <div class="modal-backdrop receipt-backdrop">
+      <section class="receipt-card">
+        <div class="success-mark">OK</div>
+        <span class="eyebrow">SALE COMPLETE</span>
+        <h2>{{ formatMoney(sale.totalCents) }}</h2>
+        <dl>
+          <div><dt>Receipt</dt><dd>#{{ sale.receiptNumber }}</dd></div>
+          <div><dt>Order</dt><dd>{{ sale.orderNumber }}</dd></div>
+          <div><dt>Payment</dt><dd>{{ sale.paymentMethod === 'cash' ? 'Cash' : 'Card' }}</dd></div>
+          @if (sale.changeGivenCents > 0) {
+            <div><dt>Change</dt><dd>{{ formatMoney(sale.changeGivenCents) }}</dd></div>
+          }
+        </dl>
+        <button class="primary-action" type="button" (click)="closeReceipt()">New sale</button>
+        <small>Printing will be connected after the approved QZ Tray hardware spike.</small>
+      </section>
+    </div>
+  }
+</main>

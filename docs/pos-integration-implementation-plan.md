@@ -88,8 +88,11 @@ Required POS data model:
 | `pos_registers` | One row per physical register. Stores server-generated ID, hashed device credential, status, display name, device signing certificate fingerprint/status, and last-seen timestamp. |
 | `pos_register_enrollment_tokens` | Hashed, tenant-scoped, single-use enrollment tokens with creator, expiry, consumed time, and resulting register ID. |
 | `pos_shifts` | One row per shift per register. Stores cashier, register, `opening_float_cents`, open/close times, Z report link, and state (`open` / `closing` / `closed`). |
-| `pos_transactions` | POS operational record linked one-to-one to `orders` through `order_id`. Stores sale/refund/void type, payment breakdown, cashier, shift, register, receipt number, idempotency key, and POS audit metadata. A refund is its own `pos_transactions` row with its own credit/negative `order_id`, plus an `original_transaction_id` (and `original_order_id`) pointer back to the sale it refunds, so the one-to-one transaction↔order rule is never violated. A void is recorded on the original sale row and does not create a new order. |
-| `pos_transaction_items` | Immutable POS item snapshot linked to the matching `order_items` row. Stores product, variant, SKU, barcode, quantity, `unit_price_cents`, `tax_rate`, `tax_amount_cents`, and `line_total_cents`. No discount fields in v1. |
+| `pos_transactions` | POS sale record linked one-to-one to `orders` through `order_id`. Stores payment breakdown, cashier, shift, register, receipt number, idempotency key, void status/reason, and POS audit metadata. Refunds are not stored here. |
+| `pos_transaction_items` | Immutable sold-item snapshot linked to the matching `order_items` row. Stores product, variant, SKU, barcode, positive quantity, `unit_price_cents`, `tax_rate`, `tax_amount_cents`, and `line_total_cents`. |
+| `pos_refunds` | Positive credit record linked to the original `pos_transactions`, `orders`, and `payments` rows. Stores current shift/register, manager approval, refund receipt number, method, positive `amount_cents`, status, reason, and idempotency key. It does not create a negative order. |
+| `pos_refund_items` | Positive refund quantities and amounts linked to original `pos_transaction_items`; stores `quantity`, `refund_amount_cents`, and whether physical stock was restored. |
+| `payment_refunds` | Positive payment-credit record linked to the original `payments` row and `pos_refunds` row. Stores method/provider reference, positive `amount_cents`, status, and processed time. Supports multiple partial refunds without inserting a negative payment. |
 | `pos_z_reports` | Immutable end-of-day report records. All monetary columns use `_cents`, including opening float, expected cash, physical cash, variance, cash/card/refund totals, voided-cash total, and net sales. |
 | `pos_parked_carts` | Stores parked carts by tenant, register, cashier, and cart payload. No discount fields in v1. |
 | `pos_sync_conflicts` | Records accepted offline sales whose captured price or stock no longer matches current server state. Stores conflict type, affected variant, shortage/difference, manager resolution, and audit timestamps. |
@@ -98,7 +101,9 @@ Required POS data model:
 | `audit_events` | Already exists in Elite. Reuse it for manager overrides, voids, refunds, Z reports, shift changes, register enrollment, security failures, and other POS actions. |
 | `pos_receipt_number_blocks` | Server-reserved tenant receipt ranges assigned to one register. Tracks range start/end, next number, allocation time, and exhaustion. Numbers are globally unique per tenant; unused reserved numbers may create acceptable gaps but are never reassigned. |
 
-> **Arch note — Elite integration:** A completed POS sale creates `orders`, `order_items`, `payments`, `pos_transactions`, and `pos_transaction_items` in one database transaction. The order uses `metadata.source = 'pos'`, zero shipping, paid status, and completed/fulfilled store-pickup semantics. Existing CRM order history and customer statistics therefore include POS sales without a separate union query. A **refund** creates its own credit/negative `order` (and negative `payment`) plus a refund `pos_transactions` row that points back to the original sale via `original_transaction_id`/`original_order_id`; this preserves the one-to-one transaction↔order rule. A **void** does not create a new order — it atomically updates the original sale's `order`/`payment` state and the original `pos_transactions` row. All of these run in a single database transaction.
+> **Arch note — Elite integration:** A completed POS sale creates `orders`, `order_items`, `payments`, `pos_transactions`, and `pos_transaction_items` in one database transaction. The order uses `metadata.source = 'pos'`, zero shipping, paid status, and completed/fulfilled store-pickup semantics. A refund creates positive `pos_refunds`, `pos_refund_items`, and `payment_refunds` records linked to the original sale; it updates the original order's payment status to `partially_refunded` or `refunded` and adds an order timeline entry. A void updates the original order/payment and sale record without creating a new order. No negative `orders`, `order_items`, or `payments` rows are created.
+
+> **Arch note — CRM and LTV:** Migrate `v_customer_order_stats` so LTV equals paid original order totals minus completed `payment_refunds`, clamped at zero. Order count continues to count original orders only. Keep the denormalized customer LTV/order counters synchronized in the same sale/refund/void transaction for the existing fallback path.
 
 > **Arch note — Inventory source of truth:** POS sells variants only. `product_variants.stock_quantity` is authoritative. `products.stock_quantity` is treated as a derived aggregate and updated in the same transaction or replaced by a database view. Products without a variant must receive a default variant before they can be sold through POS.
 
@@ -116,6 +121,7 @@ Migration rules:
 - Use database constraints to prevent duplicate idempotency keys per tenant and register action.
 - Add a unique constraint on `(tenant_id, receipt_number)` and exclusion/uniqueness rules preventing overlapping receipt-number blocks.
 - Use `bigint` integer cents for POS totals and payment amounts, matching Elite's existing money convention.
+- Require positive refund quantities and amounts; enforce cumulative refunded quantity/amount no greater than the original sold line/payment.
 
 ## 6. API Contracts
 
@@ -187,7 +193,7 @@ Rules:
 - Reject disabled, revoked, unknown, or mismatched registers.
 - Update `last_seen_at` only after successful authentication.
 - Bind the authenticated register ID to the cashier's server session; all later POS requests reject a different request-body/query register ID.
-- `cashierId` is always derived from the authenticated server session, never trusted from the request body or query. Where a `cashierId` appears in a request payload below, it is informational only; the backend overrides it with the session identity and rejects a mismatch.
+- Cashier identity is always derived from the authenticated server session. POS APIs do not accept `cashierId` in request bodies or query parameters.
 
 ---
 
@@ -225,7 +231,6 @@ Request:
 ```json
 {
   "registerId": "uuid",
-  "cashierId": "uuid",
   "openingFloatCents": 50000
 }
 ```
@@ -314,7 +319,6 @@ Request:
   "receiptNumber": 1000,
   "registerId": "uuid",
   "shiftId": "uuid",
-  "cashierId": "uuid",
   "customerId": "uuid|null",
   "items": [
     {
@@ -457,7 +461,6 @@ Request:
 {
   "idempotencyKey": "uuid",
   "registerId": "uuid",
-  "cashierId": "uuid",
   "managerOverrideId": "uuid",
   "voidReason": "string"
 }
@@ -499,6 +502,7 @@ Request:
 ```json
 {
   "idempotencyKey": "uuid",
+  "receiptNumber": 1002,
   "registerId": "uuid",
   "shiftId": "uuid",
   "managerOverrideId": "uuid",
@@ -515,15 +519,42 @@ Request:
 }
 ```
 
+Response:
+
+```json
+{
+  "refundId": "uuid",
+  "refundReceiptNumber": "001002",
+  "amountCents": 10000,
+  "orderPaymentStatus": "partially_refunded|refunded",
+  "receipt": {
+    "receiptData": {},
+    "qrCodeValue": "string"
+  },
+  "stockUpdates": [
+    {
+      "variantId": "uuid",
+      "stock": 5
+    }
+  ]
+}
+```
+
 Rules:
 
 - Requires manager approval for cashier role.
-- Refund transaction must link to the original sale.
+- Create positive `pos_refunds`, `pos_refund_items`, and `payment_refunds` records linked to the original sale/order/payment; do not create a negative order or payment.
+- All refund quantities and amounts are positive integer values. Reports apply them as deductions based on record type, not negative storage.
 - Stock is restored only when physical items are returned.
 - Partial refund cannot exceed `refundableQty` per line.
-- Refunds appear in X and Z reports as negative amounts.
+- Cumulative completed refunds cannot exceed the original payment amount.
+- The refund amount is calculated from the original captured sale prices, not current catalog prices.
+- Update the original order's `payment_status` to `partially_refunded` or `refunded` and add an order timeline entry in the same database transaction.
+- Refunds appear as deductions in X and Z reports.
 - Duplicate `idempotencyKey` must not create a duplicate refund.
-- Refunded amount reduces customer LTV if the original sale was linked to that customer.
+- Completed `payment_refunds` reduce customer LTV through the updated aggregate view and synchronized fallback counters.
+- Cash refunds reduce expected cash for the current refund shift. Card refunds do not change the cash drawer.
+- `receiptNumber` must belong to the current register's reserved block and is used for the refund receipt.
 
 ---
 
@@ -642,7 +673,7 @@ Offline sale rules:
 - POS creates canonical `receiptData` locally from the immutable cart/payment snapshot and can print through QZ Tray while Elite is unreachable.
 - Checkout is blocked if the register has no unused reserved receipt numbers.
 - Shift/Z-report closure is unavailable while offline or while pending/rejected sales exist.
-- Voids and refunds are online-only in v1. They require manager PIN verification and atomic server-side order/payment records, so they are disabled while offline and become available again on reconnect.
+- Voids and refunds are online-only in v1. They require manager PIN verification and atomic server-side order/payment/credit updates, so they are disabled while offline and become available again on reconnect.
 
 Reconnect rules:
 
@@ -670,10 +701,10 @@ Rules:
 SSE endpoint:
 
 ```
-GET /api/pos/events?registerId=<uuid>
+GET /api/pos/events
 ```
 
-Authentication: native same-origin `EventSource` using Elite's existing secure session cookie. Custom bearer headers are not used. Every event contains an `id:` line; on automatic reconnect the browser supplies `Last-Event-ID`. If the ID predates the replay buffer, the server emits `catalog.refresh-required` and the client performs a REST refresh.
+Authentication: native same-origin `EventSource` using Elite's existing secure session cookie. The server derives the register from the cashier session established by register check-in; no register query parameter is accepted. Every event contains an `id:` line; on automatic reconnect the browser supplies `Last-Event-ID`. If the ID predates the replay buffer, the server emits `catalog.refresh-required` and the client performs a REST refresh.
 
 Heartbeat: the server sends a comment (`: heartbeat`) every 30 seconds. If the client does not receive a heartbeat within 60 seconds, it must reconnect.
 
@@ -776,7 +807,7 @@ Refund rules:
 - Full refund returns all refundable items and restores stock when items are physically returned.
 - Partial refund allows selected items and quantities.
 - Refunded quantity per line cannot exceed `refundableQty` (original quantity minus all prior refunds on that line).
-- Refunds create negative transactions linked to the original sale.
+- Refunds create positive credit records linked to the original sale, items, and payment. Report calculations subtract completed credits by record type.
 - Refunds affect X and Z report totals.
 - Refund receipts follow the same format as sale receipts with a clear `REFUND` header.
 
@@ -862,6 +893,7 @@ Automated tests:
 - Shift state machine transitions.
 - Integer-cent validation; decimal/floating monetary payloads are rejected.
 - Atomic creation of linked `orders`, `payments`, and POS records.
+- Positive refund-credit constraints, cumulative refund limits, original order status updates, and LTV subtraction.
 - Receipt-number block allocation, uniqueness, exhaustion, and replay prevention.
 - Register enrollment token expiry, single use, revocation, and credential mismatch.
 - Z report rejection while pending or unresolved offline sales exist.
@@ -882,6 +914,7 @@ Physical hardware tests:
 - Posiflex terminal in Chrome kiosk mode.
 - QZ Tray installed and confirmed running as a startup service.
 - QZ Tray localhost certificate, message signing, and Chrome Local Network Access permission verified.
+- Online server signing and disconnected device-local signing both print without warning dialogs; register revocation disables the local signing identity.
 - USB barcode scanner.
 - Bixolon receipt printer via QZ Tray.
 - Cash drawer via RJ12 kick port triggered through QZ Tray.
@@ -911,11 +944,12 @@ Each phase builds on the previous one. A phase is considered complete only when 
 
    Everything that follows depends on the data model being correct from the start. Get this right before any UI is built.
 
-   - Add POS tables: `pos_registers`, `pos_register_enrollment_tokens`, `pos_shifts`, `pos_transactions`, `pos_transaction_items`, `pos_z_reports`, `pos_parked_carts`, `pos_receipt_number_blocks`, and `pos_sync_conflicts`.
+   - Add POS tables: `pos_registers`, `pos_register_enrollment_tokens`, `pos_shifts`, `pos_transactions`, `pos_transaction_items`, `pos_refunds`, `pos_refund_items`, `payment_refunds`, `pos_z_reports`, `pos_parked_carts`, `pos_receipt_number_blocks`, and `pos_sync_conflicts`.
    - Add `admin_users.pos_pin_hash`; reuse existing `audit_events` and existing `product_variants.barcode`.
    - Add the unique partial barcode index and tenant receipt-number allocator.
    - Add `tenant_id` on every new POS table.
    - Define and migrate the one-to-one POS transaction to Elite order linkage.
+   - Migrate `v_customer_order_stats` and customer fallback counters to subtract completed positive refund credits.
    - Add all indexes, unique constraints (idempotency keys, barcodes, receipt numbers), and rollback scripts.
    - Add base API routes: register enrollment/check-in, receipt-number reservation, shift open, product search, barcode lookup, and manager PIN verify.
    - No frontend work in this phase.
@@ -977,7 +1011,8 @@ Each phase builds on the previous one. A phase is considered complete only when 
 
    - Connect the browser to QZ Tray via `wss://localhost:8181`.
    - Configure the install-generated localhost certificate, Chrome Local Network Access permission, and authenticated signing callbacks.
-   - Send locally rendered ESC/POS data to QZ Tray; keep the signing private key server-side.
+   - Send locally rendered ESC/POS data to QZ Tray. Use the Elite-held signing key online and the separate per-register OS-protected key through the local device signer offline; neither key is exposed to Angular.
+   - Provision, start, rotate, revoke, and health-check the device signer with the register lifecycle.
    - Trigger cash drawer via kick-port command through QZ Tray on cash sales only.
    - Integrate USB barcode scanner global listener and camera fallback.
    - Label printing (Code 128, product name, variant, SKU, price).
@@ -988,7 +1023,8 @@ Each phase builds on the previous one. A phase is considered complete only when 
    Post-sale correction flows. These depend on Phase 6 (reprint receipts) and Phase 2 (manager PIN) being complete.
 
    - Implement `POST /api/pos/transactions/:id/void` with manager approval, same-shift restriction, stock restoration, and audit event.
-   - Implement full and partial refunds with `refundableQty` enforcement per line.
+   - Implement full and partial refunds as positive `pos_refunds`, `pos_refund_items`, and `payment_refunds` credits with cumulative quantity/amount enforcement.
+   - Update the original order payment status/timeline and subtract completed refund credits from CRM LTV without creating negative orders or payments.
    - Customer phone-number search and attachment to POS sales.
    - Linked POS sales appear in Elite CRM order history, clearly labelled as POS-originated.
    - LTV calculation: net sales only; refunds reduce LTV; voids are excluded.
@@ -1028,6 +1064,7 @@ Each phase builds on the previous one. A phase is considered complete only when 
 | Void scope | **Decided** | Void only in the same open shift. Later corrections use the refund flow. |
 | Register identity management | **Decided** | Server-generated register ID enrolled with a one-time admin token; hashed device credential, revocation, and re-enrollment after reset. |
 | POS/Elite order integration | **Decided** | Every POS sale creates linked Elite `orders`, `order_items`, and `payments` records in the same transaction. |
+| Refund accounting | **Decided** | Store positive `pos_refunds`, `pos_refund_items`, and `payment_refunds`; update the original order status/timeline and subtract completed credits from LTV. Never insert negative orders/payments. |
 | Inventory ownership | **Decided** | `product_variants.stock_quantity` is authoritative; product stock is derived. POS requires a variant ID. |
 
 ## 17. V1 Acceptance Gate
@@ -1075,6 +1112,6 @@ Hardware and security:
 Corrections and reporting:
 
 - Same-shift void restores stock, excludes the value from net sales, updates the linked Elite order/payment, and is audited.
-- Full and partial refunds enforce remaining refundable quantity, restore returned stock, update reports and customer LTV, and are audited.
+- Full and partial refunds use positive credit records, enforce remaining quantity/payment limits, restore returned stock, update the original order status, subtract completed credits from LTV/reports, and never create negative orders or payments.
 - X report is repeatable and non-destructive.
 - Z report totals match known cash/card/refund/void transactions, stores an immutable record, and closes the shift once.

@@ -24,6 +24,12 @@ export const routes: Routes = [
       import('./pages/accept-invite/accept-invite.component').then((m) => m.AcceptInviteComponent),
   },
   {
+    path: 'pos',
+    canMatch: [authGuard, roleGuard(['owner', 'admin', 'manager'])],
+    loadComponent: () =>
+      import('./pages/pos/pos.component').then((m) => m.PosComponent),
+  },
+  {
     path: '',
     canMatch: [authGuard],
     children: [

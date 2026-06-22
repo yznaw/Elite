@@ -25,6 +25,7 @@ const storefrontContentRouter = require('./storefront-content.route');
 const nboxWebhookRouter = require('./nbox-webhook.route');
 const paymentsRouter = require('./payments.route');
 const invitationsRouter = require('./invitations.route');
+const posRouter = require('./pos.route');
 const { router: reviewsPublicRouter, generalRouter: reviewsGeneralRouter, adminRouter: reviewsAdminRouter } = require('./product-reviews.route');
 const { requireAuth } = require('../middleware/require-auth');
 
@@ -48,6 +49,7 @@ router.use('/analytics', analyticsRouter);
 router.use('/payments', paymentsRouter);
 router.use('/storefront-content', storefrontContentRouter.publicRouter);
 router.use('/webhooks/nbox', nboxWebhookRouter);
+router.use('/pos', posRouter);
 
 // ─── Admin routes — require an authenticated session ────────────────────────
 const admin = Router();
