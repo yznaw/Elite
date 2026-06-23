@@ -17,5 +17,6 @@ export class CheckoutResultComponent {
   readonly orderNumber = signal(this.route.snapshot.queryParamMap.get('order') || '');
   readonly reason = signal(this.route.snapshot.queryParamMap.get('reason') || '');
   readonly isPending = signal(this.route.snapshot.routeConfig?.path === 'checkout/pending');
+  readonly isCancelled = signal(this.reason() === 'cancelled');
   readonly t = (key: string): string => this.i18n.t(key);
 }

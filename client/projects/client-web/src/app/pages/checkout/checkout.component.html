@@ -212,7 +212,11 @@
                 (blur)="markTouched('firstName')"
                 autocomplete="given-name"
                 [attr.aria-invalid]="showFieldError('firstName')"
-                [attr.aria-describedby]="showFieldError('firstName') ? 'checkout-first-name-error' : null"
+                [attr.aria-describedby]="
+                  showFieldError('firstName')
+                    ? 'checkout-first-name-error'
+                    : null
+                "
                 placeholder=" "
               />
               <label class="float-label" for="checkout-first-name">{{
@@ -234,7 +238,9 @@
                 (blur)="markTouched('lastName')"
                 autocomplete="family-name"
                 [attr.aria-invalid]="showFieldError('lastName')"
-                [attr.aria-describedby]="showFieldError('lastName') ? 'checkout-last-name-error' : null"
+                [attr.aria-describedby]="
+                  showFieldError('lastName') ? 'checkout-last-name-error' : null
+                "
                 placeholder=" "
               />
               <label class="float-label" for="checkout-last-name">{{
@@ -258,10 +264,14 @@
                 inputmode="email"
                 maxlength="254"
                 [attr.aria-invalid]="showFieldError('email')"
-                [attr.aria-describedby]="showFieldError('email') ? 'checkout-email-error' : null"
+                [attr.aria-describedby]="
+                  showFieldError('email') ? 'checkout-email-error' : null
+                "
                 placeholder=" "
               />
-              <label class="float-label" for="checkout-email">{{ t("checkout.field.email") }}</label>
+              <label class="float-label" for="checkout-email">{{
+                t("checkout.field.email")
+              }}</label>
               @if (showFieldError("email")) {
                 <span id="checkout-email-error" class="field-error">
                   {{ t("checkout.validation.email") }}
@@ -280,10 +290,14 @@
                 inputmode="tel"
                 maxlength="20"
                 [attr.aria-invalid]="showFieldError('phone')"
-                [attr.aria-describedby]="showFieldError('phone') ? 'checkout-phone-error' : null"
+                [attr.aria-describedby]="
+                  showFieldError('phone') ? 'checkout-phone-error' : null
+                "
                 placeholder=" "
               />
-              <label class="float-label" for="checkout-phone">{{ t("checkout.field.phone") }}</label>
+              <label class="float-label" for="checkout-phone">{{
+                t("checkout.field.phone")
+              }}</label>
               @if (showFieldError("phone")) {
                 <span id="checkout-phone-error" class="field-error">
                   {{ t("checkout.validation.phone") }}
@@ -299,7 +313,7 @@
             class="anim-fade-up"
             style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px"
           >
-            <div class="float-wrap" style="grid-column: 1/-1">
+            <!-- <div class="float-wrap" style="grid-column: 1/-1">
               <input
                 class="float-input"
                 type="text"
@@ -310,43 +324,70 @@
               <label class="float-label">{{
                 t("checkout.field.address")
               }}</label>
-            </div>
+            </div> -->
             <div class="checkout-address-grid">
               <div class="float-wrap">
                 <input
+                  id="checkout-zone"
                   class="float-input"
                   type="text"
                   [value]="form().zone"
                   (input)="set('zone', inputValue($event))"
+                  (blur)="markDeliveryTouched('zone')"
+                  [attr.aria-invalid]="showDeliveryFieldError('zone')"
+                  [attr.aria-describedby]="showDeliveryFieldError('zone') ? 'checkout-zone-error' : null"
                   placeholder=" "
                 />
-                <label class="float-label">{{
+                <label class="float-label" for="checkout-zone">{{
                   t("checkout.field.zone")
                 }}</label>
+                @if (showDeliveryFieldError("zone")) {
+                  <span id="checkout-zone-error" class="field-error">
+                    {{ t("checkout.validation.zone") }}
+                  </span>
+                }
               </div>
               <div class="float-wrap">
                 <input
+                  id="checkout-street"
                   class="float-input"
                   type="text"
                   [value]="form().street"
                   (input)="set('street', inputValue($event))"
+                  (blur)="markDeliveryTouched('street')"
+                  [attr.aria-invalid]="showDeliveryFieldError('street')"
+                  [attr.aria-describedby]="showDeliveryFieldError('street') ? 'checkout-street-error' : null"
                   placeholder=" "
                 />
-                <label class="float-label">{{
+                <label class="float-label" for="checkout-street">{{
                   t("checkout.field.street")
                 }}</label>
+                @if (showDeliveryFieldError("street")) {
+                  <span id="checkout-street-error" class="field-error">
+                    {{ t("checkout.validation.street") }}
+                  </span>
+                }
               </div>
               <div class="float-wrap">
                 <input
+                  id="checkout-building"
                   class="float-input"
                   type="text"
                   [value]="form().building"
                   (input)="set('building', inputValue($event))"
+                  (blur)="markDeliveryTouched('building')"
+                  [attr.aria-invalid]="showDeliveryFieldError('building')"
+                  [attr.aria-describedby]="showDeliveryFieldError('building') ? 'checkout-building-error' : null"
                   placeholder=" "
                 />
-                <label class="float-label">{{
+                <label class="float-label" for="checkout-building">{{
                   t("checkout.field.building")
                 }}</label>
+                @if (showDeliveryFieldError("building")) {
+                  <span id="checkout-building-error" class="field-error">
+                    {{ t("checkout.validation.building") }}
+                  </span>
+                }
               </div>
             </div>
             <div class="float-wrap" style="grid-column: 1/-1">
@@ -364,13 +405,22 @@
             </div>
             <div class="float-wrap">
               <input
+                id="checkout-city"
                 class="float-input"
                 type="text"
                 [value]="form().city"
                 (input)="set('city', inputValue($event))"
+                (blur)="markDeliveryTouched('city')"
+                [attr.aria-invalid]="showDeliveryFieldError('city')"
+                [attr.aria-describedby]="showDeliveryFieldError('city') ? 'checkout-city-error' : null"
                 placeholder=" "
               />
-              <label class="float-label">{{ t("checkout.field.city") }}</label>
+              <label class="float-label" for="checkout-city">{{ t("checkout.field.city") }}</label>
+              @if (showDeliveryFieldError("city")) {
+                <span id="checkout-city-error" class="field-error">
+                  {{ t("checkout.validation.city") }}
+                </span>
+              }
             </div>
             <div class="float-wrap">
               <select
@@ -540,9 +590,18 @@
           }
           <button
             class="btn-gold"
-            [disabled]="placing() || redirecting() || !isCurrentStepValid()"
+            [disabled]="
+              placing() ||
+              redirecting() ||
+              quoteLoading() ||
+              cart.items().length === 0
+            "
             (click)="next()"
-            [attr.data-track]="step() < steps.length - 1 ? 'checkout-continue' : 'checkout-place-order'"
+            [attr.data-track]="
+              step() < steps.length - 1
+                ? 'checkout-continue'
+                : 'checkout-place-order'
+            "
             style="
               padding: 16px;
               flex: 2;
@@ -554,6 +613,8 @@
               {{ t("checkout.placing") }}
             } @else if (redirecting()) {
               {{ t("checkout.redirecting") }}
+            } @else if (step() === 1 && quoteLoading()) {
+              {{ t("checkout.delivery.checkingShort") }}
             } @else if (step() < steps.length - 1) {
               {{ t("common.continue") }}
             } @else {
@@ -574,16 +635,30 @@
           "
         >
           @if (termsHandle() || privacyHandle()) {
-            {{ t("checkout.terms.prefix") || "By placing your order you agree to our" }}
+            {{
+              t("checkout.terms.prefix") ||
+                "By placing your order you agree to our"
+            }}
             @if (termsHandle()) {
-              <a [routerLink]="'/policy/' + termsHandle()" target="_blank" style="color:var(--green);text-decoration:underline;">{{ t("checkout.terms.tos") || "Terms of Service" }}</a>
+              <a
+                [routerLink]="'/policy/' + termsHandle()"
+                target="_blank"
+                style="color: var(--green); text-decoration: underline"
+                >{{ t("checkout.terms.tos") || "Terms of Service" }}</a
+              >
             }
             @if (termsHandle() && privacyHandle()) {
               {{ t("checkout.terms.and") || " and " }}
             }
             @if (privacyHandle()) {
-              <a [routerLink]="'/policy/' + privacyHandle()" target="_blank" style="color:var(--green);text-decoration:underline;">{{ t("checkout.terms.privacy") || "Privacy Policy" }}</a>
-            }.
+              <a
+                [routerLink]="'/policy/' + privacyHandle()"
+                target="_blank"
+                style="color: var(--green); text-decoration: underline"
+                >{{ t("checkout.terms.privacy") || "Privacy Policy" }}</a
+              >
+            }
+            .
           } @else {
             {{ t("checkout.terms") }}
           }
@@ -617,7 +692,14 @@
               {{ t("checkout.summary.empty") }}
             </p>
           } @else {
-            @for (item of cart.items(); track item.id + "-" + item.size + "-" + (item.variantId || item.color || "")) {
+            @for (
+              item of cart.items();
+              track item.id +
+                "-" +
+                item.size +
+                "-" +
+                (item.variantId || item.color || "")
+            ) {
               <div
                 style="
                   display: flex;
@@ -726,14 +808,16 @@
                 color: var(--cream-dim);
               "
             >
-              @if (shippingQuote()?.available) {
+              @if (quoteLoading()) {
+                {{ t("checkout.delivery.checkingShort") }}
+              } @else if (shippingQuote()?.available) {
                 {{
                   deliveryFee() > 0
                     ? price(deliveryFee())
                     : t("checkout.delivery.free")
                 }}
               } @else {
-                {{ t("checkout.summary.deliveryValue") }}
+                {{ t("checkout.delivery.pending") }}
               }
             </span>
           </div>

@@ -275,6 +275,10 @@ const EN = {
   'checkout.validation.lastName': 'Enter a valid last name using at least 2 letters.',
   'checkout.validation.email': 'Enter a valid email address, such as name@example.com.',
   'checkout.validation.phone': 'Enter a valid Qatar phone number, such as +974 5555 5555.',
+  'checkout.validation.zone': 'Enter the delivery zone.',
+  'checkout.validation.street': 'Enter the street number.',
+  'checkout.validation.building': 'Enter the building number.',
+  'checkout.validation.city': 'Enter the delivery city.',
 
   'checkout.country.qatar': 'Qatar',
   'checkout.country.uae': 'UAE',
@@ -283,7 +287,7 @@ const EN = {
   'checkout.country.bahrain': 'Bahrain',
   'checkout.country.oman': 'Oman',
 
-  'checkout.delivery.title': 'Complimentary Express Delivery',
+  'checkout.delivery.title': 'Express Delivery',
   'checkout.delivery.sub': '1–2 business days · Signature required',
   'checkout.delivery.free': 'Free',
   'checkout.delivery.nbox': 'NBOX Delivery',
@@ -307,7 +311,7 @@ const EN = {
   'checkout.redirecting': 'Redirecting to Sadad…',
   'checkout.error.empty': 'Your cart is empty.',
   'checkout.error.step0': 'Enter your name, email, and phone to continue.',
-  'checkout.error.step1': 'Enter your delivery address and city to continue.',
+  'checkout.error.step1': 'Enter the zone, street, building, and city to continue.',
   'checkout.error.step2': 'Review the payment step to continue.',
   'checkout.error.submit': 'We could not place the order. Please try again.',
   'checkout.error.payment': 'Could not connect to the payment gateway. Please try again.',
@@ -341,6 +345,9 @@ const EN = {
   'checkoutResult.pendingKicker': 'Payment Pending',
   'checkoutResult.pendingTitle': 'Processing',
   'checkoutResult.pendingBody': 'Your payment is being processed. Please wait a few minutes and check your email for a confirmation. If nothing arrives, contact us with your order reference.',
+  'checkoutResult.cancelledKicker': 'Checkout Cancelled',
+  'checkoutResult.cancelledTitle': 'Payment Cancelled',
+  'checkoutResult.cancelledBody': 'No payment was completed. Your cart is still available if you would like to try again.',
   'checkoutResult.tryAgain': 'Try Again',
 
   // ─────────────────────────────────────────────────────────────────────
@@ -695,6 +702,10 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.validation.lastName': 'أدخل اسم عائلة صحيحًا مكوّنًا من حرفين على الأقل.',
   'checkout.validation.email': 'أدخل بريدًا إلكترونيًا صحيحًا، مثل name@example.com.',
   'checkout.validation.phone': 'أدخل رقم هاتف قطري صحيحًا، مثل ‎+974 5555 5555.',
+  'checkout.validation.zone': 'أدخل منطقة التوصيل.',
+  'checkout.validation.street': 'أدخل رقم الشارع.',
+  'checkout.validation.building': 'أدخل رقم المبنى.',
+  'checkout.validation.city': 'أدخل مدينة التوصيل.',
 
   'checkout.country.qatar': 'قطر',
   'checkout.country.uae': 'الإمارات',
@@ -703,7 +714,7 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.country.bahrain': 'البحرين',
   'checkout.country.oman': 'عُمان',
 
-  'checkout.delivery.title': 'توصيل سريع مجاني',
+  'checkout.delivery.title': 'توصيل سريع',
   'checkout.delivery.sub': '1–2 يوم عمل · يتطلب التوقيع',
   'checkout.delivery.free': 'مجاني',
   'checkout.delivery.nbox': 'توصيل NBOX',
@@ -727,7 +738,7 @@ const AR: Record<keyof typeof EN, string> = {
   'checkout.redirecting': 'جارٍ التحويل إلى سداد…',
   'checkout.error.empty': 'سلتك فارغة.',
   'checkout.error.step0': 'أدخل الاسم والبريد الإلكتروني ورقم الهاتف للمتابعة.',
-  'checkout.error.step1': 'أدخل عنوان التوصيل والمدينة للمتابعة.',
+  'checkout.error.step1': 'أدخل المنطقة والشارع والمبنى والمدينة للمتابعة.',
   'checkout.error.step2': 'راجع خطوة الدفع للمتابعة.',
   'checkout.error.submit': 'تعذّر إنشاء الطلب. حاول مرة أخرى.',
   'checkout.error.payment': 'تعذّر الاتصال ببوابة الدفع. حاول مرة أخرى.',
@@ -761,6 +772,9 @@ const AR: Record<keyof typeof EN, string> = {
   'checkoutResult.pendingKicker': 'الدفع قيد المعالجة',
   'checkoutResult.pendingTitle': 'جارٍ المعالجة',
   'checkoutResult.pendingBody': 'دفعتك قيد المعالجة. يرجى الانتظار بضع دقائق والتحقق من بريدك الإلكتروني. إذا لم تصلك رسالة تأكيد، تواصل معنا مع رقم الطلب.',
+  'checkoutResult.cancelledKicker': 'تم إلغاء الدفع',
+  'checkoutResult.cancelledTitle': 'أُلغيت عملية الدفع',
+  'checkoutResult.cancelledBody': 'لم تكتمل أي عملية دفع. لا تزال سلتك محفوظة ويمكنك المحاولة مرة أخرى.',
   'checkoutResult.tryAgain': 'حاول مجدداً',
 
   // Story

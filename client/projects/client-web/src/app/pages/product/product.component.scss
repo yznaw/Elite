@@ -1909,6 +1909,7 @@ button:focus-visible {
     border-radius: 22px 22px 0 0;
     background: var(--pdp-surface);
     box-shadow: 0 -22px 70px rgba(26, 24, 21, 0.26);
+    max-height: 50%;
   }
 
   .size-sheet-head {
