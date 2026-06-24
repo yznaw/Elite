@@ -190,8 +190,8 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
       `UPDATE payments
           SET provider            = 'sadad',
               provider_payment_id = $1,
-              status              = $2,
-              processed_at        = CASE WHEN $2 = 'paid' THEN NOW() ELSE processed_at END,
+              status              = $2::order_payment_status,
+              processed_at        = CASE WHEN $2::order_payment_status = 'paid' THEN NOW() ELSE processed_at END,
               updated_at          = NOW()
         WHERE order_id = $3`,
       [transactionNumber || null, paymentStatus, orderId],
