@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
@@ -41,7 +41,7 @@ type DeliveryField = 'zone' | 'street' | 'building' | 'city';
   templateUrl: './checkout.component.html',
   styleUrl: './checkout.component.scss',
 })
-export class CheckoutComponent implements OnInit {
+export class CheckoutComponent implements OnInit, OnDestroy {
   readonly cart = inject(CartService);
   private readonly checkoutApi = inject(CheckoutService);
   private readonly paymentService = inject(PaymentService);
@@ -64,11 +64,32 @@ export class CheckoutComponent implements OnInit {
     return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
   }
 
-  async ngOnInit(): Promise<void> {
+  // Bound reference so we can add AND remove the same listener.
+  private readonly onPageShow = (event: PageTransitionEvent): void => {
+    // event.persisted is true when the page is restored from the bfcache —
+    // e.g. the user hit Back from the Sadad payment page. In that case
+    // ngOnInit does NOT run again, so we must re-check the pending flag here.
+    if (event.persisted) {
+      this.checkPendingOrder();
+    }
+  };
+
+  private checkPendingOrder(): void {
     const pendingId = sessionStorage.getItem(PENDING_ORDER_KEY);
     if (pendingId) {
       this.resumeOrderId.set(pendingId);
     }
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('pageshow', this.onPageShow);
+  }
+
+  async ngOnInit(): Promise<void> {
+    // Covers the normal navigation case (fresh load / SPA route).
+    this.checkPendingOrder();
+    // Covers the bfcache case (browser Back from Sadad restores a frozen page).
+    window.addEventListener('pageshow', this.onPageShow);
 
     try {
       const res = await firstValueFrom(
