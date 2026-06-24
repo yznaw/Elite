@@ -37,44 +37,65 @@
   } @else {
     @if (activeCollection(); as collection) {
       <div class="collection-detail-head">
-        <button type="button" class="back-to-collections" (click)="showAllCollections()">
-          ← Collections
-        </button>
-        <h1>{{ collection.title }}</h1>
+        <nav class="back-to-collections" aria-label="Breadcrumb">
+          <button type="button" (click)="showAllCollections()">Collections</button>
+          <span aria-hidden="true">/</span>
+          @if (activeSubCollectionKey() !== null) {
+            <button type="button" (click)="selectCollection(collection)">{{ collection.title }}</button>
+            <span aria-hidden="true">/</span>
+            <strong>{{ activeSubCollection()?.title ?? 'All' }}</strong>
+          } @else {
+            <strong>{{ collection.title }}</strong>
+          }
+        </nav>
+        <h1>
+          @if (collection.children.length > 0 && activeSubCollectionKey() === null) {
+            Shop {{ collection.title }}
+          } @else {
+            {{ activeCollectionDisplayTitle() }}
+          }
+        </h1>
+        @if (activeSubCollection(); as sub) {
+          <p>{{ sub.title }} inside {{ collection.title }}</p>
+        }
         @if (collection.description) {
           <p>{{ collection.description }}</p>
         }
       </div>
 
-      @if (activeCollection()!.children.length > 0) {
-        <nav class="sub-collection-tabs" aria-label="Sub-collections">
+      @if (activeCollection()!.children.length > 0 && activeSubCollectionKey() === null) {
+        <div class="collection-picker collection-picker--sub" aria-label="Sub-collections">
           <button
             type="button"
-            class="sub-tab"
-            [class.is-active]="!activeSubCollection()"
+            class="collection-card collection-card--sub collection-card--all"
+            [class.is-active]="activeSubCollectionKey() === 'all'"
             (click)="selectSubCollection(null)"
           >
-            All
-            <span class="sub-tab-count">{{ activeCollectionTotalCount() }}</span>
+            @if (collection.imageUrl) {
+              <img [src]="collection.imageUrl" [alt]="'All ' + collection.title" (error)="onImgError($event)" />
+            }
+            <span>{{ activeCollectionTotalCount() }} pieces</span>
+            <strong>All {{ collection.title }}</strong>
           </button>
           @for (child of activeCollection()!.children; track child.id) {
             <button
               type="button"
-              class="sub-tab"
+              class="collection-card collection-card--sub"
               [class.is-active]="activeSubCollection()?.id === child.id"
               (click)="selectSubCollection(child)"
             >
               @if (child.imageUrl) {
-                <img class="sub-tab-img" [src]="child.imageUrl" [alt]="child.title" loading="lazy" />
+                <img [src]="child.imageUrl" [alt]="child.title" loading="lazy" (error)="onImgError($event)" />
               }
-              {{ child.title }}
-              <span class="sub-tab-count">{{ child.productIds.length }}</span>
+              <span>{{ child.productIds.length }} pieces</span>
+              <strong>{{ child.title }}</strong>
             </button>
           }
-        </nav>
+        </div>
       }
 
-      <div class="collection-shell">
+      @if (showCollectionCatalog()) {
+        <div class="collection-shell">
         @if (filtersOpen()) {
           <button
             type="button"
@@ -337,7 +358,8 @@
             }
           }
         </div>
-      </div>
+        </div>
+      }
     } @else if (!collectionsLoaded()) {
       <div class="empty-state empty-state--collections">
         <p>Loading collection...</p>

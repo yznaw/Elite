@@ -1,5 +1,18 @@
 :host { display: block; }
 
+.float-input[aria-invalid="true"] {
+  border-color: #d98282;
+}
+
+.field-error {
+  display: block;
+  margin: 6px 2px 0;
+  color: #f3a7a7;
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .checkout-address-grid {
   grid-column: 1 / -1;
   display: grid;

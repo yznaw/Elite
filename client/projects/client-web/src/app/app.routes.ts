@@ -1,9 +1,11 @@
 import { Routes } from '@angular/router';
+import { sadadRootReturnGuard } from './guards/sadad-return.guard';
 
 export const routes: Routes = [
   {
     path: '',
     pathMatch: 'full',
+    canActivate: [sadadRootReturnGuard],
     loadComponent: () =>
       import('./pages/home/home.component').then((m) => m.HomeComponent),
   },

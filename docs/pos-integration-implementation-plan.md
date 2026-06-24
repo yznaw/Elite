@@ -6,14 +6,14 @@ Elite POS will be implemented as a cashier module inside Elite, not as a separat
 
 The POS interface will run at `/pos` and will use the same Elite backend and database. The cashier screen should feel fast and local, but all completed business events must eventually be recorded in Elite.
 
-The existing [POS System Acceptance Criteria](./pos-system-plan.html) remains the sign-off checklist. This document defines the implementation plan and integration rules.
+The existing [POS System Acceptance Criteria](./pos-system-plan.html) describes the full product target, including features deferred beyond v1. It is not the v1 release gate. Section 17 of this document is the authoritative v1 acceptance gate. This document defines the implementation plan and integration rules.
 
 **Scope constraints confirmed for v1:**
 - Payment methods: cash and card only. Split payment is not in scope for v1.
 - Discounts: not in scope for v1.
 - Receipt language: English only.
-- Tax: Qatar, VAT currently 0%. Tax rate and tax amount fields are included in the schema for future compliance but will always be zero in v1.
-- Receipt numbering: global auto-increment per tenant.
+- Tax: no VAT is charged in v1. Tax rate and tax amount fields remain configurable and are set to zero; this is an implementation setting, not a permanent legal assumption.
+- Receipt numbering: tenant-wide numbers are reserved by the server in blocks and cached per register so online and offline receipts remain unique.
 - Printer bridge: QZ Tray installed on the Posiflex terminal.
 
 ## 2. System Roles
@@ -24,13 +24,14 @@ The existing [POS System Acceptance Criteria](./pos-system-plan.html) remains th
 | Elite database | Stores products, variants, barcodes, customers, POS transactions, refunds, parked carts, shifts, Z reports, and manager PIN hashes. |
 | POS browser interface | Touch-first cashier UI at `/pos`; handles search, cart, checkout, offline queue, and hardware actions. |
 | Posiflex terminal | Physical cashier device running Chrome in kiosk mode. |
-| QZ Tray | Java desktop bridge installed on the Posiflex terminal. The browser connects to it via WebSocket on localhost to issue ESC/POS commands to the Bixolon printer and trigger the cash drawer. Must run as a system startup service so it is always available when Chrome launches. |
+| QZ Tray | Desktop bridge installed on the Posiflex terminal. The browser connects to it over secure localhost WebSocket to issue ESC/POS commands to the Bixolon printer and trigger the cash drawer. It must run at system startup. |
+| POS device signer | Small localhost signing helper provisioned per register. Its private key is non-exportable or stored in the OS credential/key store. It signs approved QZ Tray requests while Elite is offline; Angular never receives the key. |
 | Barcode scanner | USB HID scanner that behaves like keyboard input; optional camera scanner for fallback. |
 | Bixolon receipt printer | Prints receipts and Z reports using ESC/POS commands sent through QZ Tray. |
 | Cash drawer | Opens through the Bixolon printer RJ12 kick port, triggered via QZ Tray. |
 | Payment terminal | Handles card payments externally for v1, with cashier confirming payment in POS. |
 
-> **Arch note — QZ Tray validation:** QZ Tray must be validated on the exact Posiflex model before Phase 5 begins. Confirm the Posiflex OS supports Java and that QZ Tray can run as a startup service. The backend `printPayload` format must be designed around QZ Tray's expected input from Phase 2 onward so receipt generation is not rewritten later.
+> **Arch note — Pre-implementation QZ Tray spike:** Before Phase 1, validate QZ Tray and the device signer on the exact Posiflex OS and Bixolon printer. Confirm startup behavior, localhost certificates, Chrome Local Network Access permission, online and offline message signing, ESC/POS printing, and cash-drawer triggering. Receipt rendering contracts must not be finalized until this spike passes.
 
 ## 3. Data Flow Overview
 
@@ -65,17 +66,18 @@ POS offline -> IndexedDB queue -> reconnect -> sync endpoint -> Elite validates 
 | Area | Implementation |
 | --- | --- |
 | Normal reads/writes | REST APIs under `/api/pos/*`. |
-| Live updates | SSE channel for stock, shift, and transaction events. Authentication uses the same session token as REST. The SSE connection must send a `Last-Event-ID` header on reconnect so the server can replay missed events or signal that a full catalog refresh is needed. |
+| Live updates | Native `EventSource` over same-origin SSE. It uses Elite's existing secure session cookie. Each server event includes an `id:` field; the browser automatically sends `Last-Event-ID` when reconnecting so the server can replay missed events or request a full refresh. |
 | Offline storage | IndexedDB queue for pending transactions and parked local state. |
 | Offline app shell / PWA | The POS is built as a Progressive Web App. A service worker caches `/pos`, static assets, and last-known product data. A `manifest.json` makes it installable on the Posiflex as a standalone app (no browser chrome), which is the preferred kiosk deployment mode. If Chrome kiosk mode is already in use, the PWA install is additive and does not conflict. |
-| Printing and drawer | QZ Tray WebSocket bridge on localhost. The browser opens a WebSocket connection to QZ Tray, sends a signed ESC/POS job, and QZ Tray writes to the Bixolon and triggers the cash drawer. The backend generates the complete print job and returns it as `printPayload`; the frontend passes it to QZ Tray without modification. |
+| Printing and drawer | QZ Tray secure WebSocket bridge on localhost. A shared deterministic receipt renderer converts canonical `receiptData` into ESC/POS bytes. Online requests use the Elite signing endpoint; offline requests use the provisioned POS device signer. Neither private key reaches Angular. |
 | Idempotency | Client-generated idempotency keys for every sale, refund, void, sync attempt, and Z report. |
+| Money | Integer minor units only. All API and database monetary fields use a `_cents` suffix; floating-point currency values are prohibited. |
 
 For v1, keep all business rules on the backend. The frontend can calculate totals for speed, but the backend must recalculate and validate before saving.
 
 > **Arch note — SSE vs WebSocket:** Use SSE (server-sent events) for the live update channel. SSE is simpler to implement, works over standard HTTP, and is sufficient for one-directional server-to-client push. The POS already uses REST for client-to-server communication. A full WebSocket upgrade is not needed for v1.
 
-> **Arch note — Scalability:** The architecture is designed so each layer can scale independently. The backend is stateless behind a load balancer. SSE connections can be backed by Redis pub/sub when horizontal scaling is needed — the event schema defined in Section 8 is compatible with this without changes to the POS frontend. The database uses `tenant_id` on every POS table from day one so multi-branch and multi-tenant expansion requires no schema changes. The `printPayload` abstraction means the printer bridge (QZ Tray today) can be swapped for a cloud print service in the future without touching the receipt generation logic.
+> **Arch note — Scalability:** The backend remains stateless behind a load balancer. SSE can later use Redis pub/sub without changing the event schema. Every POS table includes `tenant_id`. V1 uses one inventory location per tenant; multi-branch inventory is explicitly deferred and will require a location-level inventory model. Canonical `receiptData` keeps receipt content independent from QZ Tray so another print bridge can be added later.
 
 ## 5. Database Plan
 
@@ -83,18 +85,24 @@ Required POS data model:
 
 | Table / Field | Purpose |
 | --- | --- |
-| `pos_registers` | One row per physical register. Stores register ID (stable UUID generated on first boot), display name, branch/location, and last-seen timestamp. The `registerId` in all transactions must be a foreign key to this table. |
-| `pos_shifts` | One row per shift open/close cycle per register. Stores cashier, register, opening float, open time, close time, Z report link, and state (`open` / `closing` / `closed`). The `closing` state is set atomically at Z report start to prevent concurrent Z report creation on the same register. |
-| `pos_transactions` | Stores completed sales, refunds, and voids. Includes payment breakdown (cash or card only), cashier, customer, shift, register, receipt number, and idempotency key. |
-| `pos_transaction_items` | Immutable item snapshot: product, variant, SKU, barcode, quantity, unit price, `tax_rate` (0 for Qatar v1), `tax_amount` (0 for Qatar v1), and line total. No discount fields in v1. |
-| `pos_z_reports` | Immutable end-of-day report records. Stores opening float, expected cash (float + cash sales − cash refunds), physical cash entered by manager, variance, cash totals, card totals, refund totals, void count, transaction count, and generated report data. |
+| `pos_registers` | One row per physical register. Stores server-generated ID, hashed device credential, status, display name, device signing certificate fingerprint/status, and last-seen timestamp. |
+| `pos_register_enrollment_tokens` | Hashed, tenant-scoped, single-use enrollment tokens with creator, expiry, consumed time, and resulting register ID. |
+| `pos_shifts` | One row per shift per register. Stores cashier, register, `opening_float_cents`, open/close times, Z report link, and state (`open` / `closing` / `closed`). |
+| `pos_transactions` | POS operational record linked one-to-one to `orders` through `order_id`. Stores sale/refund/void type, payment breakdown, cashier, shift, register, receipt number, idempotency key, and POS audit metadata. A refund is its own `pos_transactions` row with its own credit/negative `order_id`, plus an `original_transaction_id` (and `original_order_id`) pointer back to the sale it refunds, so the one-to-one transaction↔order rule is never violated. A void is recorded on the original sale row and does not create a new order. |
+| `pos_transaction_items` | Immutable POS item snapshot linked to the matching `order_items` row. Stores product, variant, SKU, barcode, quantity, `unit_price_cents`, `tax_rate`, `tax_amount_cents`, and `line_total_cents`. No discount fields in v1. |
+| `pos_z_reports` | Immutable end-of-day report records. All monetary columns use `_cents`, including opening float, expected cash, physical cash, variance, cash/card/refund totals, voided-cash total, and net sales. |
 | `pos_parked_carts` | Stores parked carts by tenant, register, cashier, and cart payload. No discount fields in v1. |
-| `product_variants.barcode` | Variant-level barcode. Must be unique per tenant when present. |
+| `pos_sync_conflicts` | Records accepted offline sales whose captured price or stock no longer matches current server state. Stores conflict type, affected variant, shortage/difference, manager resolution, and audit timestamps. |
+| `product_variants.barcode` | Already exists in Elite. Add a unique partial index per tenant when the barcode is present. Do not recreate the column. |
 | `admin_users.pos_pin_hash` | bcrypt hash for manager PIN. Plain text PIN must never be stored. |
-| `audit_events` | Manager overrides, voids, refunds, Z reports, shift opens/closes, security failures, and all important POS actions. |
-| `receipt_number_seq` | One global auto-increment sequence per tenant. Receipt numbers are globally unique within a tenant and never reset. Displayed as a zero-padded string (e.g., `000142`). |
+| `audit_events` | Already exists in Elite. Reuse it for manager overrides, voids, refunds, Z reports, shift changes, register enrollment, security failures, and other POS actions. |
+| `pos_receipt_number_blocks` | Server-reserved tenant receipt ranges assigned to one register. Tracks range start/end, next number, allocation time, and exhaustion. Numbers are globally unique per tenant; unused reserved numbers may create acceptable gaps but are never reassigned. |
 
-> **Arch note — Tax fields:** `tax_rate` and `tax_amount` are included in `pos_transaction_items` from the start and will always be 0 in v1. Adding them now avoids a schema migration if Qatar introduces VAT. The backend must set these explicitly; the frontend does not calculate tax.
+> **Arch note — Elite integration:** A completed POS sale creates `orders`, `order_items`, `payments`, `pos_transactions`, and `pos_transaction_items` in one database transaction. The order uses `metadata.source = 'pos'`, zero shipping, paid status, and completed/fulfilled store-pickup semantics. Existing CRM order history and customer statistics therefore include POS sales without a separate union query. A **refund** creates its own credit/negative `order` (and negative `payment`) plus a refund `pos_transactions` row that points back to the original sale via `original_transaction_id`/`original_order_id`; this preserves the one-to-one transaction↔order rule. A **void** does not create a new order — it atomically updates the original sale's `order`/`payment` state and the original `pos_transactions` row. All of these run in a single database transaction.
+
+> **Arch note — Inventory source of truth:** POS sells variants only. `product_variants.stock_quantity` is authoritative. `products.stock_quantity` is treated as a derived aggregate and updated in the same transaction or replaced by a database view. Products without a variant must receive a default variant before they can be sold through POS.
+
+> **Arch note — Tax fields:** `tax_rate` and `tax_amount_cents` are included from the start and configured as zero in v1. The backend sets them explicitly. Future tax behavior must be enabled through reviewed configuration and compliance requirements.
 
 > **Arch note — Shift state machine:** The shift lifecycle is `open → closing → closed`. The `closing` state is set in the same database transaction as Z report creation. If the Z report fails, the shift rolls back to `open`. This prevents two concurrent Z report requests from both succeeding on the same register.
 
@@ -106,22 +114,23 @@ Migration rules:
 - Use non-destructive migrations where possible.
 - Add indexes for barcode lookup, transaction lookup by receipt number, customer lookup, shift summaries, idempotency keys, and register ID.
 - Use database constraints to prevent duplicate idempotency keys per tenant and register action.
-- Add a unique constraint on the receipt number sequence per tenant.
+- Add a unique constraint on `(tenant_id, receipt_number)` and exclusion/uniqueness rules preventing overlapping receipt-number blocks.
+- Use `bigint` integer cents for POS totals and payment amounts, matching Elite's existing money convention.
 
 ## 6. API Contracts
 
 The exact payloads can evolve during implementation, but these contracts define the first integration surface.
 
-### `POST /api/pos/registers/check-in`
+### `POST /api/pos/registers/enroll`
 
-Purpose: register a terminal on first boot or after a restart, and confirm the register identity.
+Purpose: enroll a terminal using a one-time token created by an authorized Elite administrator.
 
 Request:
 
 ```json
 {
-  "registerId": "uuid",
-  "displayName": "string"
+  "enrollmentToken": "one-time-secret",
+  "deviceLabel": "Front Counter"
 }
 ```
 
@@ -131,16 +140,79 @@ Response:
 {
   "registerId": "uuid",
   "displayName": "string",
-  "currentShiftId": "uuid|null",
-  "currentShiftState": "open|closed|null"
+  "registerCredential": "opaque-secret"
 }
 ```
 
 Rules:
 
-- If `registerId` does not exist, create it.
-- If it already exists, update `last_seen_at` and return current shift state.
-- `registerId` must be a stable UUID generated on first boot and stored locally on the terminal (localStorage or a config file).
+- The server creates the register ID; the browser cannot choose it.
+- The enrollment token is single-use, short-lived, tenant-scoped, and stored only as a hash.
+- The returned register credential is stored in IndexedDB or protected device configuration, never `localStorage`.
+- Re-enrollment after browser/device reset requires a new admin-generated token.
+- Administrators can disable or revoke a register without disabling the cashier account.
+- All enrollment, revocation, and failed enrollment attempts are audited.
+
+---
+
+### `POST /api/pos/registers/check-in`
+
+Purpose: authenticate an enrolled register after startup and retrieve its current state.
+
+Request:
+
+```json
+{
+  "registerId": "uuid",
+  "registerCredential": "opaque-secret"
+}
+```
+
+Response:
+
+```json
+{
+  "registerId": "uuid",
+  "displayName": "Front Counter",
+  "currentShiftId": "uuid|null",
+  "currentShiftState": "open|closed|null",
+  "receiptNumbersRemaining": 84
+}
+```
+
+Rules:
+
+- The cashier authenticates first via the existing Elite admin auth, which establishes the secure Elite session cookie. Register check-in then binds the authenticated register to that same session.
+- Compare only the stored credential hash.
+- Reject disabled, revoked, unknown, or mismatched registers.
+- Update `last_seen_at` only after successful authentication.
+- Bind the authenticated register ID to the cashier's server session; all later POS requests reject a different request-body/query register ID.
+- `cashierId` is always derived from the authenticated server session, never trusted from the request body or query. Where a `cashierId` appears in a request payload below, it is informational only; the backend overrides it with the session identity and rejects a mismatch.
+
+---
+
+### `POST /api/pos/registers/:id/receipt-number-blocks`
+
+Purpose: reserve the next tenant-wide block of receipt numbers for online and offline sales.
+
+Response:
+
+```json
+{
+  "blockId": "uuid",
+  "start": 1000,
+  "end": 1099,
+  "next": 1000
+}
+```
+
+Rules:
+
+- Allocate blocks atomically from the tenant sequence; default block size is 100.
+- Only the authenticated enrolled register can request its block.
+- Cache the active block in IndexedDB and consume one number for every attempted completed sale.
+- A used or abandoned number is never reassigned; gaps are acceptable and auditable.
+- If the register is offline and has no reserved numbers left, checkout is blocked until connectivity returns.
 
 ---
 
@@ -154,7 +226,7 @@ Request:
 {
   "registerId": "uuid",
   "cashierId": "uuid",
-  "openingFloat": 500
+  "openingFloatCents": 50000
 }
 ```
 
@@ -171,7 +243,7 @@ Rules:
 
 - A register cannot open a new shift if it already has an `open` shift.
 - Manager approval is not required to open a shift, but the event is audited.
-- `openingFloat` is the physical cash counted and confirmed before trading starts.
+- `openingFloatCents` is the physical cash counted and confirmed before trading starts.
 
 ---
 
@@ -200,7 +272,7 @@ Response:
       "name": "string",
       "sku": "string",
       "barcode": "string",
-      "price": 100,
+      "priceCents": 10000,
       "stock": 5,
       "imageUrl": "string",
       "isActive": true
@@ -226,7 +298,7 @@ Rules:
 
 - Return exactly one variant or a clear `404` not found error.
 - Duplicate barcode data must be prevented by database constraint.
-- Include current stock and price.
+- Include current stock and `priceCents`.
 
 ---
 
@@ -239,6 +311,7 @@ Request:
 ```json
 {
   "idempotencyKey": "uuid",
+  "receiptNumber": 1000,
   "registerId": "uuid",
   "shiftId": "uuid",
   "cashierId": "uuid",
@@ -247,15 +320,15 @@ Request:
     {
       "variantId": "uuid",
       "quantity": 1,
-      "unitPrice": 100
+      "unitPriceCents": 10000
     }
   ],
   "payment": {
     "method": "cash|card",
-    "cashAmount": 100,
-    "cardAmount": 0,
-    "amountTendered": 100,
-    "changeGiven": 0
+    "cashAmountCents": 10000,
+    "cardAmountCents": 0,
+    "amountTenderedCents": 10000,
+    "changeGivenCents": 0
   },
   "managerOverrideId": "uuid|null"
 }
@@ -268,9 +341,10 @@ Response:
 ```json
 {
   "transactionId": "uuid",
+  "orderId": "uuid",
   "receiptNumber": "string",
   "receipt": {
-    "printPayload": "string",
+    "receiptData": {},
     "qrCodeValue": "string"
   },
   "stockUpdates": [
@@ -284,14 +358,15 @@ Response:
 
 Rules:
 
-- Backend recalculates line totals and the transaction total from `quantity × unitPrice` and rejects any mismatch.
-- Backend decrements stock inside the same database transaction that creates the POS transaction.
+- Backend loads authoritative variant prices and recalculates line totals from `quantity × unitPriceCents`; it rejects stale/tampered prices.
+- Backend creates the Elite order/payment records, POS records, and inventory changes in one database transaction.
 - If stock is insufficient, reject the sale and return the affected variant IDs.
 - Duplicate `idempotencyKey` must return the original saved transaction, not create a second sale.
-- For cash payments: `cashAmount` must equal `amountTendered`. `changeGiven = amountTendered − total`. Backend validates this.
-- For card payments: `cardAmount` must equal the transaction total. `amountTendered` and `changeGiven` are ignored.
+- For cash payments: `cashAmountCents` equals the sale total. `changeGivenCents = amountTenderedCents - totalCents`. Backend validates all values.
+- For card payments: `cardAmountCents` equals `totalCents`. Tendered/change fields are zero.
 - `shiftId` must reference an open shift for this register.
-- `printPayload` is the QZ Tray-ready ESC/POS print job, generated entirely by the backend.
+- `receiptNumber` must belong to an unused reserved block assigned to this register and is consumed atomically with the sale.
+- `receiptData` is canonical structured content. The shared client renderer creates the ESC/POS job locally.
 
 ---
 
@@ -307,6 +382,7 @@ Request:
   "transactions": [
     {
       "idempotencyKey": "uuid",
+      "receiptNumber": 1001,
       "clientCreatedAt": "2026-06-17T10:00:00Z",
       "payload": {}
     }
@@ -314,17 +390,24 @@ Request:
 }
 ```
 
-> **Arch note — Timestamps:** The backend must record `clientCreatedAt` as provided by the device and stamp a separate `server_received_at` at the moment of sync. Only `server_received_at` is used in Z report totals. `clientCreatedAt` is stored for audit and dispute reference only. A manipulated client clock must not affect financial records.
+> **Arch note — Timestamps:** The backend records `clientCreatedAt` as provided by the device and stamps `server_received_at` at sync. The sale remains assigned to its supplied open `shiftId`; Z report closure is blocked until every sale for that shift is synced and resolved. `server_received_at` is the authoritative posting timestamp, while `clientCreatedAt` is retained for receipt display and audit.
 
 Response:
 
 ```json
 {
   "accepted": ["uuid"],
+  "acceptedWithConflicts": [
+    {
+      "idempotencyKey": "uuid",
+      "conflictId": "uuid",
+      "reason": "INSUFFICIENT_STOCK|PRICE_CHANGED"
+    }
+  ],
   "rejected": [
     {
       "idempotencyKey": "uuid",
-      "reason": "INSUFFICIENT_STOCK|PRICE_CHANGED|INVALID_PAYLOAD",
+      "reason": "INVALID_PAYLOAD|INVALID_RECEIPT_NUMBER|UNAUTHORIZED_REGISTER",
       "message": "string"
     }
   ]
@@ -334,9 +417,13 @@ Response:
 Rules:
 
 - Sync must be idempotent.
-- Accepted sales are removed from the local queue.
-- Rejected sales stay visible to the cashier and manager with a clear reason.
+- Accepted sales are removed from the local queue only after the response is durably recorded locally.
+- A completed offline sale that was tendered and receipted is financially accepted even when stock or price changed. It is returned as `acceptedWithConflicts` and creates a manager reconciliation record.
+- For insufficient stock, variant stock is reduced no lower than zero and the unfulfilled shortage quantity is stored in `pos_sync_conflicts`; the manager must reconcile physical stock later.
+- For changed price, the captured receipt price remains authoritative for that completed sale and the difference is audited.
+- Rejection is reserved for corrupt/invalid payloads, invalid receipt reservations, or unauthorized register identity. Rejected items remain visible and block shift closure until resolved.
 - Backend must never silently modify an offline sale to make it fit.
+- The backend verifies that every uploaded receipt number belongs to the syncing register's reserved block.
 
 ---
 
@@ -407,6 +494,27 @@ Rules:
 
 Purpose: create a full or partial refund.
 
+Request:
+
+```json
+{
+  "idempotencyKey": "uuid",
+  "registerId": "uuid",
+  "shiftId": "uuid",
+  "managerOverrideId": "uuid",
+  "originalTransactionId": "uuid",
+  "lines": [
+    {
+      "transactionItemId": "uuid",
+      "quantity": 1,
+      "restock": true
+    }
+  ],
+  "refundMethod": "cash|card",
+  "reason": "string"
+}
+```
+
 Rules:
 
 - Requires manager approval for cashier role.
@@ -454,7 +562,7 @@ Request:
   "registerId": "uuid",
   "shiftId": "uuid",
   "managerOverrideId": "uuid",
-  "physicalCash": 650
+  "physicalCashCents": 65000
 }
 ```
 
@@ -464,8 +572,10 @@ Rules:
 - Must use an idempotency key.
 - Atomically sets shift state to `closing`, creates the Z report row, then sets state to `closed`. On any failure the transaction rolls back and the shift returns to `open`.
 - Must store a permanent, immutable report row.
-- Must include: opening float, expected cash (float + cash sales − cash refunds), physical cash entered, variance, cash totals, card totals, refund totals, void count, transaction count, and net sales.
+- Must include: opening float, expected cash (float + cash sales − cash refunds − voided cash sales), physical cash entered, variance, cash totals, card totals, refund totals, voided-cash total, void count, transaction count, and net sales. A same-shift void of a cash sale returns physical cash to the customer, so its cash value must be removed from expected cash; the value of voided card sales does not affect the cash drawer.
 - After Z report is closed, included transactions must not be counted in any new open shift report.
+- Z report creation requires an online register, zero pending IndexedDB sales, and zero unresolved rejected sync entries for the shift.
+- If another device reports pending work for the same register/shift, closure is rejected with `SHIFT_SYNC_INCOMPLETE`.
 
 ---
 
@@ -476,10 +586,35 @@ Purpose: verify manager PIN for restricted actions.
 Rules:
 
 - Never log plain PIN.
-- Return an approval token scoped to one specific action type (`refund`, `void`, `z-report`, `drawer-open`).
+- Return an approval token scoped to one specific action type (`refund`, `void`, `z-report`, `drawer-open`, `sync-conflict-override`). The set of action types must stay in sync with the restricted actions listed in Section 13.
 - Approval token must be short-lived (maximum 5 minutes).
 - Failed attempts must be rate-limited and audited.
 - After a configurable number of consecutive failures, temporarily lock PIN verification and log an alert.
+
+---
+
+### `GET /api/pos/print/certificate`
+
+Purpose: provide the public QZ Tray signing certificate to the authenticated POS client.
+
+Rules:
+
+- Return only the public certificate expected by QZ Tray.
+- Require an authenticated cashier session bound to an active enrolled register.
+- Never return private signing key material.
+
+### `POST /api/pos/print/sign`
+
+Purpose: sign the exact QZ Tray request string supplied by the authenticated POS client.
+
+Rules:
+
+- Require an authenticated cashier session bound to an active enrolled register.
+- Sign only allowed QZ operations and configured printer/drawer targets.
+- Apply request size limits and rate limiting.
+- Keep the private key in server-side secret storage.
+- Audit rejected signing attempts and sensitive drawer commands.
+- When Elite is unreachable, the same allowlist and size rules are enforced by the provisioned POS device signer using a unique revocable register certificate.
 
 ## 7. Offline Sync Rules
 
@@ -493,25 +628,32 @@ Cached locally:
 - Last-known stock values.
 - Current cashier, register, and shift context.
 - Pending sales queue.
+- Active reserved receipt-number block.
+- Canonical receipt template and renderer required for offline printing.
 
 Offline sale rules:
 
 - Every offline sale gets a client-generated idempotency key.
+- Every offline sale consumes one number from the register's server-reserved block.
 - POS stores the complete transaction payload in IndexedDB.
 - POS shows the number of pending sales.
 - POS warns if stock data is stale.
 - Cash manual confirmation can be recorded offline. Card confirmation can also be recorded offline, but the cashier must be shown a warning that card payment cannot be verified without connectivity.
+- POS creates canonical `receiptData` locally from the immutable cart/payment snapshot and can print through QZ Tray while Elite is unreachable.
+- Checkout is blocked if the register has no unused reserved receipt numbers.
+- Shift/Z-report closure is unavailable while offline or while pending/rejected sales exist.
+- Voids and refunds are online-only in v1. They require manager PIN verification and atomic server-side order/payment records, so they are disabled while offline and become available again on reconnect.
 
 Reconnect rules:
 
 - POS attempts sync automatically after reconnection.
 - Sync retries use exponential backoff.
-- Accepted sales are removed from IndexedDB.
+- Accepted sales are removed from IndexedDB only after the response is durably recorded.
 - Rejected sales require manager review.
-- If stock changed while offline and a sale would oversell, the backend rejects that sale.
-- The cashier must see which sale failed and why.
+- If stock or price changed, the backend accepts the completed financial sale with an explicit reconciliation conflict.
+- The cashier and manager must see every conflict and its resolution status.
 
-> **Arch note — Timestamps:** Every offline sale includes `clientCreatedAt` (the device clock at time of sale). The backend records this alongside `server_received_at` (the server clock at sync time). Only `server_received_at` is used for financial reports. `clientCreatedAt` is stored for audit and dispute resolution. The backend must never use a client-supplied timestamp as the authoritative financial timestamp.
+> **Arch note — Offline reporting:** A shift cannot close around unsynced work. Accepted offline sales remain assigned to their original open shift and are posted before the Z report is produced. `server_received_at` is the authoritative posting time; `clientCreatedAt` remains visible for audit and on the customer receipt.
 
 ## 8. Multi-Register Sync Rules
 
@@ -531,7 +673,7 @@ SSE endpoint:
 GET /api/pos/events?registerId=<uuid>
 ```
 
-Authentication: same session token as REST requests, passed as a cookie or `Authorization: Bearer` header. The connection must send `Last-Event-ID` on reconnect to allow the server to replay missed events or signal that a full refresh is needed.
+Authentication: native same-origin `EventSource` using Elite's existing secure session cookie. Custom bearer headers are not used. Every event contains an `id:` line; on automatic reconnect the browser supplies `Last-Event-ID`. If the ID predates the replay buffer, the server emits `catalog.refresh-required` and the client performs a REST refresh.
 
 Heartbeat: the server sends a comment (`: heartbeat`) every 30 seconds. If the client does not receive a heartbeat within 60 seconds, it must reconnect.
 
@@ -587,9 +729,13 @@ Barcode scanner:
 Receipt printer (Bixolon 80mm via QZ Tray):
 
 - The browser connects to QZ Tray via WebSocket at `wss://localhost:8181` (QZ Tray default port).
-- QZ Tray must be configured with a self-signed certificate to allow `wss://` from Chrome kiosk mode.
-- The backend generates the complete ESC/POS print job and returns it as `printPayload` in the transaction response.
-- The frontend passes `printPayload` to QZ Tray without modification.
+- Use QZ Tray's install-generated localhost certificate; do not create an unrelated browser self-signed certificate.
+- Provision Chrome Local Network Access permission for the Elite origin during terminal setup and verify it after Chrome upgrades.
+- The shared POS receipt renderer converts canonical `receiptData` to ESC/POS bytes locally, including while offline.
+- While online, QZ Tray certificate/signature callbacks call the authenticated Elite signing endpoint.
+- While offline, callbacks use the localhost POS device signer with a unique per-register certificate/key provisioned during setup. The key stays in the OS key store and can be revoked with the register.
+- No signing private key is bundled into Angular, stored in IndexedDB, or returned by an Elite API.
+- Print and drawer commands are signed. Production must not depend on QZ Tray's unsigned warning-dialog mode.
 - Receipts are in English only.
 - Browser print dialogs must not be used for checkout receipts.
 - If QZ Tray is not reachable, the transaction still saves. The cashier can retry printing from the transaction lookup screen.
@@ -608,13 +754,13 @@ Label printing:
 - Printed labels must scan back to the exact variant.
 - Label printing can use QZ Tray or a separate label printer driver depending on the label printer model.
 
-> **Arch note — QZ Tray setup spike:** Before Phase 5 begins, run a one-day spike: install QZ Tray on the Posiflex, configure `wss://localhost:8181`, generate and trust the self-signed certificate in Chrome, and send one test ESC/POS print job to the Bixolon. This validates the entire hardware path before any receipt generation code is written and avoids discovering hardware incompatibility late.
+> **Arch note — QZ Tray setup spike:** Before Phase 1, run a spike on the exact Posiflex: install QZ Tray and the device signer, verify localhost certificates and Chrome Local Network Access, print and trigger the drawer using server-side signing, disconnect Elite, then repeat using device-local signing. Failure of either path blocks offline receipt scope.
 
 ## 11. Receipts, Refunds, And Reports
 
 Receipt requirements (English only):
 
-- Receipt number (global auto-increment, zero-padded).
+- Receipt number from the register's server-reserved tenant block, zero-padded for display.
 - Date and time.
 - Cashier name and register ID.
 - Line items: product name, variant, SKU, quantity, unit price, line total.
@@ -714,6 +860,11 @@ Automated tests:
 - Void restricted to transactions within the same open shift.
 - X and Z report totals including opening float, variance, and void count.
 - Shift state machine transitions.
+- Integer-cent validation; decimal/floating monetary payloads are rejected.
+- Atomic creation of linked `orders`, `payments`, and POS records.
+- Receipt-number block allocation, uniqueness, exhaustion, and replay prevention.
+- Register enrollment token expiry, single use, revocation, and credential mismatch.
+- Z report rejection while pending or unresolved offline sales exist.
 
 Staging tests:
 
@@ -722,6 +873,7 @@ Staging tests:
 - Test product search performance with expected catalog size.
 - Test customer lookup performance.
 - Test offline sync with accepted and rejected transactions.
+- Test offline receipt rendering (canonical `receiptData` → ESC/POS bytes) with a reserved receipt number; physical print delivery is covered by the QZ Tray hardware tests.
 - Test Z report closure and shift state transition under concurrent requests.
 - Test QZ Tray print job delivery on staging hardware.
 
@@ -729,6 +881,7 @@ Physical hardware tests:
 
 - Posiflex terminal in Chrome kiosk mode.
 - QZ Tray installed and confirmed running as a startup service.
+- QZ Tray localhost certificate, message signing, and Chrome Local Network Access permission verified.
 - USB barcode scanner.
 - Bixolon receipt printer via QZ Tray.
 - Cash drawer via RJ12 kick port triggered through QZ Tray.
@@ -742,6 +895,7 @@ Production rollout checklist:
 - Run migration during approved window.
 - Verify admin product/order/customer flows.
 - Verify one test POS sale (cash and one card).
+- Verify both sales create linked Elite order/payment and POS records.
 - Verify receipt printing via QZ Tray.
 - Verify cash drawer behavior.
 - Verify X and Z reports.
@@ -751,22 +905,26 @@ Production rollout checklist:
 
 Each phase builds on the previous one. A phase is considered complete only when its automated tests pass and the feature can be demonstrated end-to-end. No phase skips are allowed — later phases depend on the correctness of earlier ones.
 
+**Pre-implementation hardware gate:** complete the QZ Tray spike described in Section 10 before Phase 1. Do not finalize receipt or drawer contracts until the exact Posiflex/Bixolon path, signing, and browser permissions pass.
+
 1. **DB and API foundation**
 
    Everything that follows depends on the data model being correct from the start. Get this right before any UI is built.
 
-   - Add all POS tables: `pos_registers`, `pos_shifts`, `pos_transactions`, `pos_transaction_items`, `pos_z_reports`, `pos_parked_carts`.
-   - Add `admin_users.pos_pin_hash`, `product_variants.barcode`, and the global receipt number sequence.
-   - Add `tenant_id` on every POS table for future multi-branch and multi-tenant expansion.
+   - Add POS tables: `pos_registers`, `pos_register_enrollment_tokens`, `pos_shifts`, `pos_transactions`, `pos_transaction_items`, `pos_z_reports`, `pos_parked_carts`, `pos_receipt_number_blocks`, and `pos_sync_conflicts`.
+   - Add `admin_users.pos_pin_hash`; reuse existing `audit_events` and existing `product_variants.barcode`.
+   - Add the unique partial barcode index and tenant receipt-number allocator.
+   - Add `tenant_id` on every new POS table.
+   - Define and migrate the one-to-one POS transaction to Elite order linkage.
    - Add all indexes, unique constraints (idempotency keys, barcodes, receipt numbers), and rollback scripts.
-   - Add base API routes: register check-in, shift open, product search, barcode lookup, and manager PIN verify.
+   - Add base API routes: register enrollment/check-in, receipt-number reservation, shift open, product search, barcode lookup, and manager PIN verify.
    - No frontend work in this phase.
 
 2. **Register identity and shift management**
 
    Sales cannot be recorded without an open shift. This phase establishes the shift lifecycle before any transaction code is written.
 
-   - Implement `POST /api/pos/registers/check-in` and register persistence.
+   - Implement admin-issued register enrollment, register credential verification, revocation, and check-in.
    - Implement `POST /api/pos/shift/open` with opening float recording.
    - Implement shift state machine (`open → closing → closed`) at the database level.
    - Implement `GET /api/pos/shift/summary` (X report, read-only, no-op safe).
@@ -776,16 +934,16 @@ Each phase builds on the previous one. A phase is considered complete only when 
 
 3. **POS core interface and sale creation**
 
-   The first complete user-facing workflow: cashier opens a shift, builds a cart, takes payment, and gets a receipt payload.
+   The first complete user-facing workflow: cashier opens a shift, builds a cart, takes payment, and gets canonical receipt data.
 
    - Build the `/pos` Angular module and routing.
    - Product search UI (text and barcode input), cart, and checkout flow.
    - Cash and card payment only. No discounts, no split.
-   - Backend generates a QZ Tray-compatible `printPayload` in the transaction response from this phase. The receipt format is finalized here so it does not need to change in Phase 6.
+   - Build the shared deterministic receipt renderer from canonical `receiptData`; it must work without a network connection.
    - Receipt language: English only.
-   - Backend recalculates all totals and rejects mismatches.
-   - Atomic sale + stock decrement in a single database transaction.
-   - End-to-end test: open shift → search product → checkout → verify transaction in DB and stock decremented.
+   - Use integer `_cents` fields for all monetary values; backend rejects floating values and recalculates all totals.
+   - Atomically create Elite order/payment records, POS records, and variant stock decrement.
+   - End-to-end test: open shift → search product → checkout → verify linked Elite/POS records and stock decrement.
 
 4. **Inventory integrity and live sync**
 
@@ -806,17 +964,20 @@ Each phase builds on the previous one. A phase is considered complete only when 
    - Add `manifest.json` so the POS is installable as a standalone PWA on the Posiflex (removes browser chrome, behaves like a native app).
    - Implement IndexedDB transaction queue for offline sales.
    - Implement `POST /api/pos/transactions/sync` with idempotency enforcement.
-   - Record `clientCreatedAt` (device clock) and `server_received_at` (server clock) separately on sync. Only `server_received_at` is used in reports.
+   - Cache and consume server-reserved receipt-number blocks; block offline checkout when exhausted.
+   - Render offline receipts locally from canonical `receiptData` to ESC/POS bytes (no network). Physical printing through QZ Tray, online and offline, is wired up in Phase 6 — this phase verifies the renderer output only.
+   - Record `clientCreatedAt` and `server_received_at` separately; retain shift assignment and use the server posting time as authoritative.
    - Show cashier-visible pending sale count and stale-stock warning.
+   - Block Z report while offline or while any pending/rejected shift sale exists.
    - Test: go offline mid-session, complete two sales, reconnect, verify both sync correctly and stock is accurate.
 
 6. **Hardware integration (QZ Tray)**
 
    Hardware integration is isolated in its own phase so a QZ Tray problem does not block core POS functionality.
 
-   - **Run the QZ Tray spike first** (one day): install on Posiflex, configure `wss://localhost:8181` with a self-signed cert trusted by Chrome, send one ESC/POS test job to the Bixolon. If this fails, investigate before writing any printing code.
    - Connect the browser to QZ Tray via `wss://localhost:8181`.
-   - Pass the `printPayload` (already generated by the backend since Phase 3) to QZ Tray for receipt printing.
+   - Configure the install-generated localhost certificate, Chrome Local Network Access permission, and authenticated signing callbacks.
+   - Send locally rendered ESC/POS data to QZ Tray; keep the signing private key server-side.
    - Trigger cash drawer via kick-port command through QZ Tray on cash sales only.
    - Integrate USB barcode scanner global listener and camera fallback.
    - Label printing (Code 128, product name, variant, SKU, price).
@@ -831,7 +992,7 @@ Each phase builds on the previous one. A phase is considered complete only when 
    - Customer phone-number search and attachment to POS sales.
    - Linked POS sales appear in Elite CRM order history, clearly labelled as POS-originated.
    - LTV calculation: net sales only; refunds reduce LTV; voids are excluded.
-   - Refund and void receipts print via QZ Tray using the same `printPayload` pattern.
+   - Refund and void receipts use the same canonical `receiptData` renderer and QZ Tray path.
 
 8. **Security hardening and final QA**
 
@@ -844,9 +1005,9 @@ Each phase builds on the previous one. A phase is considered complete only when 
    - Load test: product search and barcode lookup at expected catalog size.
    - Full hardware test on the real Posiflex terminal with real Bixolon printer.
    - Production rollout checklist execution (see Section 14).
-   - After this phase, the system is ready for production sign-off against the POS System Acceptance Criteria.
+   - After this phase, the system is ready for production sign-off against the v1 gate in Section 17. The separate full-product checklist remains a later roadmap target.
 
-## 16. Open Decisions
+## 16. Scope Decisions
 
 | Decision | Status | Direction |
 | --- | --- | --- |
@@ -854,13 +1015,66 @@ Each phase builds on the previous one. A phase is considered complete only when 
 | Split payment | **Decided** | Not in v1. Revisit alongside gateway integration. |
 | Discounts | **Decided** | Not in v1. |
 | Receipt language | **Decided** | English only. |
-| Tax | **Decided** | Qatar, VAT 0%. Schema includes `tax_rate` and `tax_amount` set to 0. |
-| Receipt number format | **Decided** | Global auto-increment per tenant, zero-padded display. |
-| Printer bridge | **Decided** | QZ Tray on Posiflex via `wss://localhost:8181`. Validate with a spike before Phase 5. |
-| Offline stock | **Decided** | Allow offline sales with stale-stock warning; backend rejects oversells during sync. |
+| Tax | **Decided** | No VAT charged in v1. Configurable `tax_rate` and `tax_amount_cents` are set to zero; future changes require compliance review. |
+| Money representation | **Decided** | Integer cents only across API, database, receipts, and reports. |
+| Receipt number format | **Decided** | Tenant sequence reserved in blocks of 100 per register; globally unique, zero-padded display, gaps allowed but no reuse. |
+| Printer bridge | **Decided** | QZ Tray via secure localhost WebSocket. Use server-side signing online and an OS-protected, per-register local signer offline. Pre-implementation spike required. |
+| SSE authentication | **Decided** | Native same-origin `EventSource` using Elite's existing secure session cookie; browser-managed `Last-Event-ID`. |
+| Offline conflicts | **Decided** | Completed offline sales are financially accepted. Stock/price conflicts create manager reconciliation records; only invalid or unauthorized payloads are rejected. |
 | LTV behavior | **Decided** | Net sales; refunds reduce customer LTV; voids do not increase LTV. |
 | Real Sadad/QPay/NAPS integration | **Deferred** | Later phase after manual POS is stable. |
-| Store/branch model | **Open** | Confirm whether POS is single-store or multi-branch from day one. Affects `pos_registers` schema and SSE event routing. |
-| Shift model | **Open** | Confirm whether shifts are per register, per cashier, or store-wide. Affects `pos_shifts` schema, Z report scope, and opening float ownership. |
-| Void scope | **Open** | Confirm whether void is strictly same-shift-only or allowed across shifts (e.g., next-day correction). Same-shift is the safer default and is what this plan assumes. |
-| Register identity management | **Open** | Confirm whether `registerId` is pre-configured by an admin or auto-generated on first boot and stored locally. |
+| Store/branch model | **Decided** | One store/inventory location per tenant in v1. Multi-branch inventory is deferred and will require a location-level stock model. |
+| Shift model | **Decided** | One shift per register with one responsible cashier. Cashier handoff requires closing and opening a new shift. |
+| Void scope | **Decided** | Void only in the same open shift. Later corrections use the refund flow. |
+| Register identity management | **Decided** | Server-generated register ID enrolled with a one-time admin token; hashed device credential, revocation, and re-enrollment after reset. |
+| POS/Elite order integration | **Decided** | Every POS sale creates linked Elite `orders`, `order_items`, and `payments` records in the same transaction. |
+| Inventory ownership | **Decided** | `product_variants.stock_quantity` is authoritative; product stock is derived. POS requires a variant ID. |
+
+## 17. V1 Acceptance Gate
+
+V1 is releasable only when every criterion below passes. Split payments, discounts, Arabic receipts, and direct Sadad/QPay/NAPS integration belong to the full-product checklist and are not v1 blockers.
+
+Foundation and integration:
+
+- Migrations and rollback run successfully in staging without recreating existing barcode or audit fields.
+- Every monetary API/database value uses integer cents.
+- Every completed POS sale atomically creates linked Elite order, item, payment, POS transaction, and POS item records.
+- Variant inventory changes exactly once; duplicate idempotency requests return the original transaction.
+- POS-linked sales appear in existing Elite CRM customer history and LTV calculations.
+
+Register and shift:
+
+- A terminal can enroll only with a valid one-time admin token; expired/reused tokens fail and are audited.
+- Disabled/revoked register credentials cannot check in.
+- One register can have only one open shift, owned by one cashier.
+- Z report is rejected while offline, while a local sale is pending, or while a rejected sync item remains unresolved.
+
+Online and offline checkout:
+
+- Cash and manually confirmed card sales complete with correct totals and stock changes.
+- Receipt numbers are unique across two registers and cannot be reused.
+- An offline sale consumes a reserved receipt number, prints locally, survives restart, and syncs exactly once after reconnection.
+- Offline checkout is blocked when the reserved number block is exhausted.
+- An offline oversell syncs once as `acceptedWithConflicts`, preserves the financial sale, and creates a visible manager stock-reconciliation record.
+
+Live sync and concurrency:
+
+- Other registers receive committed stock changes within two seconds.
+- Two simultaneous attempts to sell the last unit produce exactly one successful sale.
+- SSE reconnects with browser-managed `Last-Event-ID`; an expired replay position triggers a full catalog refresh.
+
+Hardware and security:
+
+- QZ Tray starts with the terminal, connects over secure localhost WebSocket, and prints through signed requests without warning dialogs.
+- With Elite disconnected, the device signer produces a valid signed receipt request without exposing private key material to Angular.
+- Chrome Local Network Access is provisioned for the Elite origin.
+- Cash receipts print and the drawer opens; card receipts print and the drawer remains closed.
+- Printer failure never rolls back an already committed sale, and receipt retry works.
+- Manager PIN retry limits, temporary lockout, scoped approvals, and audit records pass automated and physical tests.
+
+Corrections and reporting:
+
+- Same-shift void restores stock, excludes the value from net sales, updates the linked Elite order/payment, and is audited.
+- Full and partial refunds enforce remaining refundable quantity, restore returned stock, update reports and customer LTV, and are audited.
+- X report is repeatable and non-destructive.
+- Z report totals match known cash/card/refund/void transactions, stores an immutable record, and closes the shift once.

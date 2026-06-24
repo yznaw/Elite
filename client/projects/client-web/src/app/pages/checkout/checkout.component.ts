@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
@@ -25,6 +25,9 @@ interface CheckoutForm {
   city: string;
   country: string;
 }
+
+type CustomerField = 'firstName' | 'lastName' | 'email' | 'phone';
+type DeliveryField = 'zone' | 'street' | 'building' | 'city';
 
 @Component({
   selector: 'cw-checkout',
@@ -77,6 +80,9 @@ export class CheckoutComponent implements OnInit {
   readonly error = signal('');
   readonly orderNumber = signal('');
 
+  private quoteRequestVersion = 0;
+  private quotedDeliveryKey = '';
+
   readonly form = signal<CheckoutForm>({
     firstName: '',
     lastName: '',
@@ -91,9 +97,47 @@ export class CheckoutComponent implements OnInit {
     country: 'Qatar',
   });
 
+  readonly touched = signal<Record<CustomerField, boolean>>({
+    firstName: false,
+    lastName: false,
+    email: false,
+    phone: false,
+  });
+
+  readonly deliveryTouched = signal<Record<DeliveryField, boolean>>({
+    zone: false,
+    street: false,
+    building: false,
+    city: false,
+  });
+
   readonly subtotal = computed(() => this.cart.subtotal());
   readonly deliveryFee = computed(() => this.shippingQuote()?.amount || 0);
   readonly total = computed(() => (this.placed() ? this.placedTotal() : this.subtotal() + this.deliveryFee()));
+
+  constructor() {
+    effect((onCleanup) => {
+      const currentStep = this.step();
+      const form = this.form();
+      const items = this.cart.items();
+      const requestVersion = ++this.quoteRequestVersion;
+
+      if (currentStep !== 1 || !this.canRequestDeliveryQuote(form, items.length)) {
+        this.quoteLoading.set(false);
+        return;
+      }
+
+      const deliveryKey = this.deliveryQuoteKey(form, items);
+      if (deliveryKey === this.quotedDeliveryKey) return;
+
+      this.quoteLoading.set(true);
+      const timer = window.setTimeout(() => {
+        void this.requestDeliveryQuote(deliveryKey, requestVersion);
+      }, 700);
+
+      onCleanup(() => window.clearTimeout(timer));
+    }, { allowSignalWrites: true });
+  }
 
   readonly t = (key: string): string => this.i18n.t(key);
   readonly price = (value: number): string => this.i18n.price(value);
@@ -108,9 +152,28 @@ export class CheckoutComponent implements OnInit {
 
   set<K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
-    if (['phone', 'address', 'zone', 'street', 'building', 'additionalDetails', 'city', 'country'].includes(String(key))) {
+    if (['phone', 'address', 'zone', 'street', 'building', 'city', 'country'].includes(String(key))) {
+      this.quoteRequestVersion += 1;
+      this.quotedDeliveryKey = '';
       this.shippingQuote.set(null);
+      this.error.set('');
     }
+  }
+
+  markTouched(field: CustomerField): void {
+    this.touched.update((current) => ({ ...current, [field]: true }));
+  }
+
+  showFieldError(field: CustomerField): boolean {
+    return this.touched()[field] && !this.isCustomerFieldValid(field);
+  }
+
+  markDeliveryTouched(field: DeliveryField): void {
+    this.deliveryTouched.update((current) => ({ ...current, [field]: true }));
+  }
+
+  showDeliveryFieldError(field: DeliveryField): boolean {
+    return this.deliveryTouched()[field] && !this.isDeliveryFieldValid(field);
   }
 
   inputValue(event: Event): string {
@@ -124,6 +187,11 @@ export class CheckoutComponent implements OnInit {
   async next(): Promise<void> {
     this.error.set('');
     if (!this.isCurrentStepValid()) {
+      if (this.step() === 0) {
+        this.touched.set({ firstName: true, lastName: true, email: true, phone: true });
+      } else if (this.step() === 1) {
+        this.deliveryTouched.set({ zone: true, street: true, building: true, city: true });
+      }
       this.error.set(this.t(`checkout.error.step${this.step()}`));
       return;
     }
@@ -210,7 +278,7 @@ export class CheckoutComponent implements OnInit {
         shippingAddress: {
           fullName,
           phone: form.phone.trim(),
-          line1: form.address.trim(),
+          line1: this.deliveryLine1(form),
           zone: form.zone.trim(),
           street: form.street.trim(),
           building: form.building.trim(),
@@ -232,7 +300,6 @@ export class CheckoutComponent implements OnInit {
     // ── Step 2: Redirect to Sadad payment page ────────────────────────────
     this.redirecting.set(true);
     try {
-      this.cart.clear();
       // This call builds a hidden form and submits it — browser navigates away.
       await this.paymentService.redirectToSadadCheckout(orderId);
     } catch {
@@ -243,12 +310,19 @@ export class CheckoutComponent implements OnInit {
 
   private async ensureDeliveryQuote(): Promise<boolean> {
     const existing = this.shippingQuote();
-    if (existing?.available) return true;
+    const deliveryKey = this.deliveryQuoteKey(this.form(), this.cart.items());
+    if (existing?.available && deliveryKey === this.quotedDeliveryKey) return true;
     if (this.quoteLoading()) return false;
 
+    const requestVersion = ++this.quoteRequestVersion;
+    this.quoteLoading.set(true);
+    return this.requestDeliveryQuote(deliveryKey, requestVersion);
+  }
+
+  private async requestDeliveryQuote(deliveryKey: string, requestVersion: number): Promise<boolean> {
+    if (requestVersion !== this.quoteRequestVersion) return false;
     const form = this.form();
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
-    this.quoteLoading.set(true);
     try {
       const quote = await this.checkoutApi.getDeliveryQuote({
         customer: {
@@ -260,7 +334,7 @@ export class CheckoutComponent implements OnInit {
         shippingAddress: {
           fullName,
           phone: form.phone.trim(),
-          line1: form.address.trim(),
+          line1: this.deliveryLine1(form),
           zone: form.zone.trim(),
           street: form.street.trim(),
           building: form.building.trim(),
@@ -270,35 +344,108 @@ export class CheckoutComponent implements OnInit {
         },
         items: this.cart.items(),
       });
+
+      if (requestVersion !== this.quoteRequestVersion) return false;
+      this.quotedDeliveryKey = deliveryKey;
       this.shippingQuote.set(quote);
       if (!quote.available) {
         this.error.set(quote.message || this.t('checkout.error.deliveryUnavailable'));
         return false;
       }
+      this.error.set('');
       return true;
     } catch {
+      if (requestVersion !== this.quoteRequestVersion) return false;
       this.shippingQuote.set(null);
       this.error.set(this.t('checkout.error.deliveryQuote'));
       return false;
     } finally {
-      this.quoteLoading.set(false);
+      if (requestVersion === this.quoteRequestVersion) this.quoteLoading.set(false);
     }
   }
 
-  private isCurrentStepValid(): boolean {
+  isCurrentStepValid(): boolean {
     if (this.cart.items().length === 0) return false;
     const form = this.form();
     if (this.step() === 0) {
-      return Boolean(
-        form.firstName.trim() &&
-        form.lastName.trim() &&
-        form.email.trim() &&
-        form.phone.trim(),
-      );
+      return this.isCustomerFieldValid('firstName')
+        && this.isCustomerFieldValid('lastName')
+        && this.isCustomerFieldValid('email')
+        && this.isCustomerFieldValid('phone');
     }
     if (this.step() === 1) {
-      return Boolean(form.address.trim() && form.city.trim() && form.country);
+      return this.isDeliveryFieldValid('zone')
+        && this.isDeliveryFieldValid('street')
+        && this.isDeliveryFieldValid('building')
+        && this.isDeliveryFieldValid('city')
+        && Boolean(form.country);
     }
     return true;
+  }
+
+  private isCustomerFieldValid(field: CustomerField): boolean {
+    const value = this.form()[field];
+    if (field === 'firstName' || field === 'lastName') return this.isValidName(value);
+    if (field === 'email') return this.isValidEmail(value);
+    return this.isValidQatarPhone(value);
+  }
+
+  private isDeliveryFieldValid(field: DeliveryField): boolean {
+    return Boolean(this.form()[field].trim());
+  }
+
+  private isValidName(value: string): boolean {
+    const name = value.trim();
+    const letterCount = name.match(/\p{L}/gu)?.length ?? 0;
+    return letterCount >= 2 && /^[\p{L}\p{M}][\p{L}\p{M}'’ -]*$/u.test(name);
+  }
+
+  private isValidEmail(value: string): boolean {
+    const email = value.trim();
+    if (!email || email.length > 254 || email.includes('..')) return false;
+    return /^[^\s@.]+(?:\.[^\s@.]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(email);
+  }
+
+  private isValidQatarPhone(value: string): boolean {
+    const normalized = value
+      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+      .replace(/[\s().-]/g, '');
+    return /^(?:\+974|00974|974)?[3-7]\d{7}$/.test(normalized);
+  }
+
+  private canRequestDeliveryQuote(form: CheckoutForm, itemCount: number): boolean {
+    return itemCount > 0
+      && this.isCustomerFieldValid('firstName')
+      && this.isCustomerFieldValid('lastName')
+      && this.isCustomerFieldValid('phone')
+      && Boolean(
+        form.zone.trim()
+        && form.street.trim()
+        && form.building.trim()
+        && form.city.trim()
+        && form.country,
+      );
+  }
+
+  private deliveryLine1(form: CheckoutForm): string {
+    if (form.address.trim()) return form.address.trim();
+    return [
+      `Zone ${form.zone.trim()}`,
+      `Street ${form.street.trim()}`,
+      `Building ${form.building.trim()}`,
+    ].join(', ');
+  }
+
+  private deliveryQuoteKey(form: CheckoutForm, items: ReadonlyArray<{ id: string; variantId?: string; size: number; qty: number }>): string {
+    return JSON.stringify({
+      customer: [form.firstName.trim(), form.lastName.trim(), form.phone.trim()],
+      address: [
+        this.deliveryLine1(form),
+        form.city.trim(),
+        form.country,
+      ],
+      items: items.map((item) => [item.id, item.variantId || '', item.size, item.qty]),
+    });
   }
 }

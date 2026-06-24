@@ -128,6 +128,21 @@ export class CollectionComponent implements OnInit, OnDestroy {
     return children.find((c) => c.handle === key || c.id === key) ?? null;
   });
 
+  readonly activeCollectionDisplayTitle = computed(() => {
+    if (this.activeSubCollectionKey() === 'all') {
+      return `${this.activeCollection()?.title ?? ''} / All`;
+    }
+    const sub = this.activeSubCollection();
+    if (sub) return `${this.activeCollection()?.title ?? ''} / ${sub.title}`;
+    return this.activeCollection()?.title ?? '';
+  });
+
+  readonly showCollectionCatalog = computed(() => {
+    const collection = this.activeCollection();
+    if (!collection) return false;
+    return collection.children.length === 0 || this.activeSubCollectionKey() !== null;
+  });
+
   /** Total unique product count across the parent + all its sub-collections. */
   readonly activeCollectionTotalCount = computed((): number => {
     const col = this.activeCollection();
@@ -244,6 +259,13 @@ export class CollectionComponent implements OnInit, OnDestroy {
     if (sub) {
       queryParams['col'] = sub.handle || sub.id;
       queryParams['colName'] = sub.title;
+      queryParams['parentCol'] = active?.handle || active?.id || '';
+      queryParams['parentColName'] = active?.title || '';
+    } else if (active && this.activeSubCollectionKey() === 'all') {
+      queryParams['col'] = 'all';
+      queryParams['colName'] = 'All';
+      queryParams['parentCol'] = active.handle || active.id;
+      queryParams['parentColName'] = active.title;
     } else if (active) {
       queryParams['col'] = active.handle || active.id;
       queryParams['colName'] = active.title;
@@ -314,7 +336,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.selectedFilters.set(this.emptySelectedFilters());
     this.mobilePage.set(0);
     if (!sub) {
-      void this.router.navigate(['/collection', parent.handle || parent.id]);
+      void this.router.navigate(['/collection', parent.handle || parent.id, 'all']);
     } else {
       void this.router.navigate(['/collection', parent.handle || parent.id, sub.handle || sub.id]);
     }
@@ -564,22 +586,55 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
     const sub = this.activeSubCollection();
     if (sub) {
-      // Viewing a specific sub-collection: show only its products.
-      const ids = new Set(sub.productIds);
-      return this.allProducts().filter((p) => ids.has(p.id));
+      // Viewing a specific sub-collection: keep the sub's own ordering.
+      return this.productsFromIds(sub.productIds);
     }
 
-    // Viewing a parent collection: merge parent's own products + all children's products.
-    const allIds = new Set<string>([
-      ...collection.productIds,
-      ...(collection.children ?? []).flatMap((c) => c.productIds),
-    ]);
-    return this.allProducts().filter((p) => allIds.has(p.id));
+    // Viewing a parent collection: show child-linked products first, then parent-only products.
+    const orderedIds = this.orderedCollectionProductIds(collection);
+    return this.productsFromIds(orderedIds);
   }
 
   private findCollection(key: string | null): StorefrontCollection | undefined {
     if (!key) return undefined;
     return this.collections().find((collection) => collection.id === key || collection.handle === key);
+  }
+
+  private productsFromIds(ids: string[]): Product[] {
+    if (!ids.length) return [];
+
+    const byId = new Map(this.allProducts().map((product) => [product.id, product] as const));
+    const seen = new Set<string>();
+    const ordered: Product[] = [];
+
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const product = byId.get(id);
+      if (product) ordered.push(product);
+    }
+
+    return ordered;
+  }
+
+  private orderedCollectionProductIds(collection: StorefrontCollection): string[] {
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+    const pushIds = (ids: string[]) => {
+      for (const id of ids) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ordered.push(id);
+      }
+    };
+
+    // Child collections first, then any products linked directly to the parent.
+    for (const child of collection.children ?? []) {
+      pushIds(child.productIds || []);
+    }
+    pushIds(collection.productIds || []);
+
+    return ordered;
   }
 
   private matchesTextFilter(selected: string[], values: string[]): boolean {

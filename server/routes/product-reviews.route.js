@@ -35,10 +35,13 @@ const router = Router();
 router.post('/:id/reviews', asyncHandler(async (req, res) => {
   const { body, rating, title, authorName, authorEmail, authorPhone, source } = req.body;
 
-  if (!body || typeof body !== 'string' || !body.trim()) {
-    return validationError(res, { body: 'A message is required.' });
-  }
+  const bodyText = typeof body === 'string' ? body.trim() : null;
   if (!validateRating(rating, res)) return;
+
+  // A visitor can leave a quick star rating or a written note (or both).
+  if (!bodyText && (rating === undefined || rating === null)) {
+    return validationError(res, { base: 'Please provide a rating or a message.' });
+  }
 
   const client = await db.pool.connect();
   try {
@@ -60,7 +63,7 @@ router.post('/:id/reviews', asyncHandler(async (req, res) => {
         req.params.id,
         rating ?? null,
         title?.trim() || null,
-        body.trim(),
+        bodyText || null,
         authorName?.trim()  || null,
         authorEmail?.trim() || null,
         authorPhone?.trim() || null,

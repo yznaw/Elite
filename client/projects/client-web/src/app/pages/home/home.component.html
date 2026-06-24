@@ -24,6 +24,7 @@
                 </div>
 
                 <div
+                  #heroStage
                   class="hero-stage"
                   (pointerdown)="onHeroPointerDown($event)"
                   (pointerup)="onHeroPointerUp($event)"
@@ -40,6 +41,7 @@
                   </button>
 
                   <figure
+                    #heroProduct
                     class="hero-product"
                     [attr.aria-label]="activeHeroItem().alt"
                   >
@@ -85,29 +87,26 @@
 
                   @for (callout of activeHeroCallouts(); track callout.id) {
                     <article
+                      #heroCallout
                       class="hero-callout"
                       [ngClass]="'hero-callout--' + callout.id"
+                      [attr.data-callout-id]="callout.id"
                       [style.--delay]="calloutDelay(callout.id)"
                     >
                       <span class="callout-line" aria-hidden="true"
                         ><span></span
                       ></span>
                       <div class="callout-pill">
-                        <picture>
-                          <source
-                            [srcset]="toWebp(callout.thumbnail)"
-                            type="image/webp"
-                          />
+                        <span class="callout-pill__icon" aria-hidden="true">
                           <img
-                            [src]="callout.thumbnail"
-                            [alt]="callout.alt"
+                            [src]="mobileFeatureIcon(callout.id)"
+                            alt=""
                             loading="lazy"
                             decoding="async"
                           />
-                        </picture>
+                        </span>
                         <div>
                           <strong>{{ calloutTitle(callout) }}</strong>
-                          <span>{{ calloutSubtitle(callout) }}</span>
                         </div>
                       </div>
                     </article>

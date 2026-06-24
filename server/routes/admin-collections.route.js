@@ -200,7 +200,7 @@ async function replaceProducts(client, tenantId, collectionId, productIds) {
 }
 
 /** Validate parentId — must belong to this tenant, not be the collection itself,
- *  not create a cycle, and must itself be a top-level collection (max 2 levels). */
+ *  and must not create a cycle anywhere in the hierarchy. */
 async function resolveParentId(client, tenantId, parentId, selfId) {
   if (!parentId) return null;
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -228,9 +228,6 @@ async function resolveParentId(client, tenantId, parentId, selfId) {
     [tenantId, parentId],
   );
   if (check.rowCount === 0) return null;
-
-  // Enforce max 2 levels: the proposed parent must itself be top-level (no parent).
-  if (check.rows[0].parent_id) return null;
 
   return parentId;
 }
