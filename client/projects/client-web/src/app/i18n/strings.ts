@@ -350,14 +350,13 @@ const EN = {
   'checkoutResult.cancelledBody': 'No payment was completed. Your cart is still available if you would like to try again.',
   'checkoutResult.tryAgain': 'Try Again',
 
-  'checkout.resume.kicker': 'Payment In Progress',
-  'checkout.resume.title': 'You left a payment unfinished',
-  'checkout.resume.body': 'An order was created but the payment was not completed. You can check its status or start a new order.',
+  'checkout.resume.kicker': 'Order Pending',
+  'checkout.resume.title': 'You have an unfinished order',
+  'checkout.resume.body': 'You left before completing payment. Continue to pay, or go back to update your details.',
   'checkout.resume.orderLabel': 'Order Reference',
-  'checkout.resume.checkStatus': 'Check Payment Status',
+  'checkout.resume.continue': 'Continue to Payment',
+  'checkout.resume.updateDetails': 'Update My Details',
   'checkout.resume.newOrder': 'Start New Order',
-  'checkout.resume.checking': 'Checking status...',
-  'checkout.resume.error': 'Could not retrieve order status. Please try again or contact us.',
 
   // ─────────────────────────────────────────────────────────────────────
   //  Story page
@@ -786,14 +785,13 @@ const AR: Record<keyof typeof EN, string> = {
   'checkoutResult.cancelledBody': 'لم تكتمل أي عملية دفع. لا تزال سلتك محفوظة ويمكنك المحاولة مرة أخرى.',
   'checkoutResult.tryAgain': 'حاول مجدداً',
 
-  'checkout.resume.kicker': 'دفع قيد التنفيذ',
-  'checkout.resume.title': 'غادرت عملية دفع لم تكتمل',
-  'checkout.resume.body': 'تم إنشاء طلب لكن الدفع لم يكتمل. يمكنك التحقق من حالته أو بدء طلب جديد.',
+  'checkout.resume.kicker': 'طلب معلّق',
+  'checkout.resume.title': 'لديك طلب لم يكتمل',
+  'checkout.resume.body': 'غادرت قبل إتمام الدفع. يمكنك المتابعة للدفع، أو العودة لتحديث بياناتك.',
   'checkout.resume.orderLabel': 'رقم الطلب',
-  'checkout.resume.checkStatus': 'تحقق من حالة الدفع',
+  'checkout.resume.continue': 'متابعة للدفع',
+  'checkout.resume.updateDetails': 'تحديث بياناتي',
   'checkout.resume.newOrder': 'ابدأ طلباً جديداً',
-  'checkout.resume.checking': 'جارٍ التحقق...',
-  'checkout.resume.error': 'تعذّر الحصول على حالة الطلب. حاول مرة أخرى أو تواصل معنا.',
 
   // Story
   'story.headline.line1': 'حرفة',

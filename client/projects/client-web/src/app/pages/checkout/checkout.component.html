@@ -78,32 +78,36 @@
           {{ resumeOrderId() }}
         </div>
       </div>
-      @if (resumeError()) {
-        <p
-          style="
-            font-family: var(--ff-sans);
-            font-size: 11px;
-            color: #f3a7a7;
-            margin-bottom: 16px;
-          "
-        >
-          {{ resumeError() }}
-        </p>
-      }
       <div style="display: flex; flex-direction: column; gap: 12px">
         <button
           class="btn-gold"
-          [disabled]="resumeChecking()"
-          (click)="resumeCheckStatus()"
+          (click)="resumeContinue()"
           style="padding: 16px; font-size: 11px; letter-spacing: 0.18em"
         >
-          {{ resumeChecking() ? t("checkout.resume.checking") : t("checkout.resume.checkStatus") }}
+          {{ t("checkout.resume.continue") }}
         </button>
         <button
           class="btn-outline"
-          [disabled]="resumeChecking()"
-          (click)="resumeStartNew()"
+          (click)="resumeUpdateDetails()"
           style="padding: 14px; font-size: 11px; letter-spacing: 0.12em"
+        >
+          {{ t("checkout.resume.updateDetails") }}
+        </button>
+        <button
+          (click)="resumeStartNew()"
+          style="
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: var(--ff-sans);
+            font-size: 10px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 8px;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+          "
         >
           {{ t("checkout.resume.newOrder") }}
         </button>

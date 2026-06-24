@@ -55,8 +55,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   // Set when the user returns to /checkout after being sent to Sadad.
   // While non-null the recovery screen is shown instead of the checkout form.
   readonly resumeOrderId  = signal<string | null>(null);
-  readonly resumeChecking = signal(false);
-  readonly resumeError    = signal('');
+  readonly resumeError = signal('');
 
   // Stable idempotency key for the current checkout attempt. Generated lazily on
   // the first placeOrder() call and reused on retries, so a double-tap or retry
@@ -264,38 +263,26 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     window.scrollTo(0, 0);
   }
 
-  // Called from the recovery screen: asks the server for the current payment
-  // status of the pending order and routes the user to the correct result page.
-  // Clears the sessionStorage flag on either outcome.
-  async resumeCheckStatus(): Promise<void> {
-    const orderId = this.resumeOrderId();
-    if (!orderId || this.resumeChecking()) return;
-    this.resumeChecking.set(true);
+  // Continue to payment with the existing pending order — jump straight to step 2.
+  resumeContinue(): void {
+    this.resumeOrderId.set(null);
     this.resumeError.set('');
-    try {
-      const res = await firstValueFrom(
-        this.http.get<{ success: boolean; data: { paymentStatus: string; publicNumber: string } }>(
-          `${this.apiBase}/payments/order-status/${encodeURIComponent(orderId)}`,
-        ),
-      );
-      const status = res.data?.paymentStatus;
-      const orderRef = res.data?.publicNumber || orderId;
-      sessionStorage.removeItem(PENDING_ORDER_KEY);
-      if (status === 'paid') {
-        void this.router.navigate(['/thank-you'], { queryParams: { order: orderRef } });
-      } else {
-        // 'pending' here means the user left Sadad without completing payment —
-        // treat it as cancelled, not a hard failure, so the message stays calm.
-        const reason = (status === 'failed') ? 'failed' : 'cancelled';
-        void this.router.navigate(['/checkout/failure'], {
-          queryParams: { order: orderRef, reason },
-        });
-      }
-    } catch {
-      this.resumeError.set(this.t('checkout.resume.error'));
-    } finally {
-      this.resumeChecking.set(false);
-    }
+    this.redirecting.set(false);
+    this.placing.set(false);
+    this.step.set(2);
+    window.scrollTo(0, 0);
+  }
+
+  // Go back to details so the user can update address/info before retrying.
+  // The pending order stays; the user will re-submit from step 0.
+  resumeUpdateDetails(): void {
+    this.resumeOrderId.set(null);
+    this.resumeError.set('');
+    this.redirecting.set(false);
+    this.placing.set(false);
+    this.idempotencyKey = null; // new details = new order
+    this.step.set(0);
+    window.scrollTo(0, 0);
   }
 
   // Called from the recovery screen: user chooses to ignore the pending order
