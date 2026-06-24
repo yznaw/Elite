@@ -241,6 +241,22 @@ async function ensureAllMigrations(client) {
       ON policies (tenant_id, sort_order, created_at)
   `);
 
+  // ── Migration 014: add 'cancelled' to order_payment_status enum ─────────────
+  // Required by the pending-order cleanup job. ALTER TYPE ADD VALUE is
+  // idempotent via the IF NOT EXISTS guard (PostgreSQL 9.6+).
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_enum
+         WHERE enumtypid = 'order_payment_status'::regtype
+           AND enumlabel = 'cancelled'
+      ) THEN
+        ALTER TYPE order_payment_status ADD VALUE 'cancelled';
+      END IF;
+    END $$
+  `);
+
   _done = true;
 }
 
