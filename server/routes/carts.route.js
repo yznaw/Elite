@@ -329,6 +329,11 @@ router.post('/checkout', asyncHandler(async (req, res) => {
   if (nbox.isConfigured() && !checkout.shippingQuote?.available) errors.push('A valid NBOX delivery quote is required.');
   if (errors.length > 0) return validationError(res, errors);
 
+  // Idempotency: the client sends a stable key per checkout attempt. If the same
+  // key was already used (double-tap, retry, network re-send), return the
+  // existing order instead of creating a duplicate.
+  const idempotencyKey = String(req.body.idempotencyKey || '').trim() || null;
+
   const client = await db.pool.connect();
   let createdOrder = null;
   let tenantId = null;
@@ -339,6 +344,27 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     inTransaction = true;
     const tenant = await ensureDefaultTenant(client);
     tenantId = tenant.id;
+
+    if (idempotencyKey) {
+      const existing = await client.query(
+        'SELECT * FROM orders WHERE tenant_id = $1 AND idempotency_key = $2',
+        [tenant.id, idempotencyKey],
+      );
+      if (existing.rowCount > 0) {
+        await client.query('ROLLBACK');
+        const dup = existing.rows[0];
+        return created(res, {
+          id: dup.id,
+          orderNumber: dup.public_number,
+          total: fromCents(dup.total_cents),
+          delivery: fromCents(dup.shipping_cents),
+          payment: dup.payment_status,
+          fulfillment: dup.fulfillment_status,
+          nbox: { quote: nboxQuoteMetadata(checkout.shippingQuote) },
+        }, 'Order already exists.');
+      }
+    }
+
     const customerId = await upsertCustomer(client, tenant.id, checkout.customer, checkout.shippingAddress);
     const subtotalCents = checkout.items.reduce((sum, item) => {
       const qty = Number(item.qty || item.quantity) || 1;
@@ -354,9 +380,9 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         INSERT INTO orders (
           tenant_id, public_number, customer_id, customer_email, customer_name, customer_phone,
           payment_status, paid_at, fulfillment_status, subtotal_cents, shipping_cents, total_cents, shipping_address, billing_address,
-          metadata
+          metadata, idempotency_key
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'awaiting', $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'awaiting', $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb, $15)
         RETURNING *
       `,
       [
@@ -384,6 +410,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
             status: paymentStatus,
           },
         }),
+        idempotencyKey,
       ],
     );
     createdOrder = order.rows[0];
@@ -486,6 +513,10 @@ router.post('/checkout', asyncHandler(async (req, res) => {
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
+  // Guard: this route is matched by any unmatched /carts/* GET (e.g. a stray
+  // GET to /carts/shipping-quote, which is POST-only). Without this check the
+  // non-UUID value reaches Postgres and throws "invalid input syntax for uuid".
+  if (!isUuid(req.params.id)) return notFound(res, 'Cart not found.');
   const client = await db.pool.connect();
   try {
     const cart = await loadCart(client, req.params.id);

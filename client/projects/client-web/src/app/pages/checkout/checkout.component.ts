@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
@@ -41,7 +41,7 @@ type DeliveryField = 'zone' | 'street' | 'building' | 'city';
   templateUrl: './checkout.component.html',
   styleUrl: './checkout.component.scss',
 })
-export class CheckoutComponent implements OnInit {
+export class CheckoutComponent implements OnInit, OnDestroy {
   readonly cart = inject(CartService);
   private readonly checkoutApi = inject(CheckoutService);
   private readonly paymentService = inject(PaymentService);
@@ -58,17 +58,44 @@ export class CheckoutComponent implements OnInit {
   readonly resumeChecking = signal(false);
   readonly resumeError    = signal('');
 
+  // Stable idempotency key for the current checkout attempt. Generated lazily on
+  // the first placeOrder() call and reused on retries, so a double-tap or retry
+  // returns the same order instead of creating a duplicate. Cleared after a
+  // successful order so the next checkout gets a fresh key.
+  private idempotencyKey: string | null = null;
+
   private get apiBase(): string {
     const { hostname, protocol } = window.location;
     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
     return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
   }
 
-  async ngOnInit(): Promise<void> {
+  // Bound reference so we can add AND remove the same listener.
+  private readonly onPageShow = (event: PageTransitionEvent): void => {
+    // event.persisted is true when the page is restored from the bfcache —
+    // e.g. the user hit Back from the Sadad payment page. In that case
+    // ngOnInit does NOT run again, so we must re-check the pending flag here.
+    if (event.persisted) {
+      this.checkPendingOrder();
+    }
+  };
+
+  private checkPendingOrder(): void {
     const pendingId = sessionStorage.getItem(PENDING_ORDER_KEY);
     if (pendingId) {
       this.resumeOrderId.set(pendingId);
     }
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('pageshow', this.onPageShow);
+  }
+
+  async ngOnInit(): Promise<void> {
+    // Covers the normal navigation case (fresh load / SPA route).
+    this.checkPendingOrder();
+    // Covers the bfcache case (browser Back from Sadad restores a frozen page).
+    window.addEventListener('pageshow', this.onPageShow);
 
     try {
       const res = await firstValueFrom(
@@ -274,6 +301,9 @@ export class CheckoutComponent implements OnInit {
     sessionStorage.removeItem(PENDING_ORDER_KEY);
     this.resumeOrderId.set(null);
     this.resumeError.set('');
+    // Fresh key so the new attempt creates a new order, not a dedup hit on the
+    // abandoned one.
+    this.idempotencyKey = null;
   }
 
   onImgError(e: Event): void {
@@ -308,6 +338,12 @@ export class CheckoutComponent implements OnInit {
     return quote.amount > 0 ? this.price(quote.amount) : this.t('checkout.delivery.free');
   }
 
+  private newIdempotencyKey(): string {
+    return (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `co-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   private async placeOrder(): Promise<void> {
     if (this.placing() || this.redirecting()) return;
     if (this.cart.items().length === 0) {
@@ -318,6 +354,11 @@ export class CheckoutComponent implements OnInit {
 
     const form = this.form();
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+
+    // Reuse the key across retries; only mint a new one if none exists yet.
+    if (!this.idempotencyKey) {
+      this.idempotencyKey = this.newIdempotencyKey();
+    }
 
     // ── Step 1: Create the order (payment_status = pending) ───────────────
     this.placing.set(true);
@@ -343,6 +384,7 @@ export class CheckoutComponent implements OnInit {
         },
         items: this.cart.items(),
         shippingQuote: this.shippingQuote()!,
+        idempotencyKey: this.idempotencyKey,
       });
       orderId = order.id; // UUID for payment gateway
     } catch {

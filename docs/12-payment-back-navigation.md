@@ -24,6 +24,9 @@ Beyond the back-navigation problem, a full audit of the payment flow revealed ad
 | Sadad redirects to `/checkout/failure` (root cancel) | Already handled by `sadadRootReturnGuard` | Unchanged, flag cleared on arrival |
 | Successful payment → `/thank-you` | `sessionStorage` flag not cleared | Flag cleared on arrival |
 | Failed/cancelled payment → `/checkout/failure` | `sessionStorage` flag not cleared | Flag cleared on arrival |
+| Browser restores `/checkout` from bfcache on Back | `ngOnInit` does not re-run, recovery screen never shows | `pageshow` listener re-checks the flag on bfcache restore |
+| Double-tap / retry / re-send of "Place Order" | Two (or more) orders created | Idempotency key dedupes — same order returned |
+| Stray `GET /carts/shipping-quote` (POST-only route) | Postgres throws "invalid input syntax for uuid", logs spammed | UUID guard returns clean 404 |
 | Pending orders from abandoned sessions | Stay as `pending` forever, pollute admin | Automatically cancelled after 6 hours by cleanup job |
 
 ---
@@ -33,6 +36,15 @@ Beyond the back-navigation problem, a full audit of the payment flow revealed ad
 ### Why it happens
 
 The Sadad redirect is a full-page form POST. The browser replaces the history entry entirely. When the customer hits Back, Angular re-bootstraps from scratch — there is no in-memory state. `sessionStorage` is the only reliable cross-navigation store: it survives the Back navigation but is discarded when the tab is closed.
+
+### The bfcache trap (important)
+
+There are two ways the browser returns to `/checkout` on Back:
+
+1. **Fresh load** — Angular re-bootstraps, `ngOnInit` runs, reads `sessionStorage`, shows the recovery screen. Works.
+2. **bfcache restore** — the browser serves a frozen snapshot of `/checkout` from the back-forward cache. `ngOnInit` does **not** run, so the flag is never re-checked and the user sees the old checkout form.
+
+Case 2 is common on mobile Safari and Chrome. The fix is a `pageshow` listener that fires on every restore; when `event.persisted` is `true` (bfcache), it re-runs the pending-order check. Both `ngOnInit` and `pageshow` call the same `checkPendingOrder()` method, and the listener is removed in `ngOnDestroy`.
 
 ### Storage Key
 
@@ -81,7 +93,7 @@ Clearing the cart when the order is created would mean: if the customer hits Bac
 
 | File | Change |
 |---|---|
-| `client/.../checkout/checkout.component.ts` | Store flag before redirect; detect on init; `resumeCheckStatus()` and `resumeStartNew()` |
+| `client/.../checkout/checkout.component.ts` | Store flag before redirect; detect on init AND on bfcache restore (`pageshow`); `resumeCheckStatus()` and `resumeStartNew()` |
 | `client/.../checkout/checkout.component.html` | Recovery screen rendered when `resumeOrderId()` is set |
 | `client/.../thank-you/thank-you.component.ts` | Clear flag in constructor |
 | `client/.../checkout-result/checkout-result.component.ts` | Clear flag in constructor |
@@ -205,7 +217,7 @@ UPDATE orders
    AND created_at < NOW() - '6 hours'::interval  -- default, override via PENDING_ORDER_ABANDON_HOURS
 ```
 
-The threshold is configurable via the `PENDING_ORDER_ABANDON_HOURS` environment variable (default: `2`).
+The threshold is configurable via the `PENDING_ORDER_ABANDON_HOURS` environment variable (default: `6`).
 
 The job runs once 1 minute after boot (to let the DB settle), then every 30 minutes. Errors are logged as warnings and never crash the server.
 
@@ -220,7 +232,69 @@ The job runs once 1 minute after boot (to let the DB settle), then every 30 minu
 
 | Variable | Default | Description |
 |---|---|---|
-| `PENDING_ORDER_ABANDON_HOURS` | `2` | Hours before a pending order is auto-cancelled |
+| `PENDING_ORDER_ABANDON_HOURS` | `6` | Hours before a pending order is auto-cancelled |
+
+> Requires the `cancelled` value on the `order_payment_status` enum (added by Migration 014 in `ensure-migrations.js`). See Part 6.
+
+---
+
+## Part 5 — Storefront Checkout Idempotency
+
+### The bug
+
+The "Place Order" button is disabled in the UI while a request is in flight, but the **server** had no protection. A fast double-tap, a retry after a flaky network, or a re-sent request could each create a separate duplicate order. The `orders.idempotency_key` column and its unique index already existed (Migration 013) but were only used by the admin order route — the storefront checkout ignored them.
+
+### The fix
+
+- The client mints a stable idempotency key (`crypto.randomUUID()`) on the first `placeOrder()` call and reuses it on retries. It is reset after "Start New Order" so a deliberately fresh attempt creates a fresh order.
+- `checkout.service.createOrder()` forwards the key to `POST /api/carts/checkout`.
+- The server checks `orders.idempotency_key` before inserting. If the key was already used, it returns the existing order instead of creating a duplicate.
+
+This is stronger than the UI button-disable because it survives page reloads, network retries, and any client-side state loss.
+
+### Files Changed (idempotency)
+
+| File | Change |
+|---|---|
+| `client/.../checkout/checkout.component.ts` | Generate/reuse/reset stable `idempotencyKey`; send it with `createOrder` |
+| `client/.../services/checkout.service.ts` | Accept and forward `idempotencyKey` |
+| `server/routes/carts.route.js` | Dedup check against `idempotency_key`; store it on the new order |
+
+---
+
+## Part 6 — Migration Chain Robustness
+
+A set of production errors (`cannot drop columns from view`, `invalid input value for enum: cancelled`, `column "size_chart" does not exist`) all traced back to **one** cause: `ensureAllMigrations` aborting partway, so later migrations never ran.
+
+| Problem | Cause | Fix |
+|---|---|---|
+| `cannot drop columns from view` | `CREATE OR REPLACE VIEW` cannot change a view's column set; it threw and aborted the whole chain | `DROP VIEW IF EXISTS` + `CREATE VIEW` for `v_customer_order_stats` |
+| `invalid input value for enum: cancelled` | `ALTER TYPE ... ADD VALUE` cannot run inside a `DO $$` block | Run it directly with `ADD VALUE IF NOT EXISTS`, catch duplicate-object `42710` (Migration 014) |
+| `column "size_chart" does not exist` | Migration 015 never ran because the chain aborted at the view | Chain now completes; the `size_chart` step is also guarded against `42P01` (undefined_table) since the table is created later |
+
+### Files Changed (migrations)
+
+| File | Change |
+|---|---|
+| `server/db/ensure-migrations.js` | View DROP+CREATE; enum `ADD VALUE` outside DO block; guarded `size_chart` step |
+
+---
+
+## Part 7 — Cart Route UUID Guard
+
+### The bug
+
+`GET /api/carts/:id` matched any unmatched `/carts/*` GET, including a stray `GET /carts/shipping-quote` (the real route is POST). The non-UUID value reached Postgres and threw `invalid input syntax for type uuid`, spamming the error log.
+
+### The fix
+
+`GET /carts/:id` validates the param is a UUID before querying; non-UUID paths return a clean 404.
+
+### Files Changed (route guard)
+
+| File | Change |
+|---|---|
+| `server/routes/carts.route.js` | `isUuid` guard on `GET /carts/:id` |
 
 ---
 
@@ -231,3 +305,21 @@ The job runs once 1 minute after boot (to let the DB settle), then every 30 minu
 ## Why Not `abandoned` as a Separate Status?
 
 Adding an `abandoned` status requires a new DB enum value, a network call on a user action that should feel instant, and handling the case where that call fails. The simpler model: `pending` orders older than a threshold are `cancelled` by the cleanup job. One mechanism handles all abandonment cases — back button, closed tab, network drop — without client coordination.
+
+---
+
+## Deployment Notes
+
+Both server and client changed across these parts.
+
+- **Server changes** (migrations, callback/webhook guards, cleanup job, idempotency check, route guard) take effect on `pm2 restart`. The migration chain self-heals the schema on boot.
+- **Client changes** (recovery screen, bfcache listener, idempotency key) are part of the compiled Angular bundle. A `git pull` alone does **not** update what the browser serves — the storefront must be rebuilt:
+
+```bash
+cd /var/www/elite
+git pull origin admin-bugs-fixes
+cd client && npm run build:web      # rebuild storefront bundle
+cd .. && pm2 restart elite-api
+```
+
+If the recovery screen does not appear after a confirmed rebuild, open DevTools → Application → Session Storage and confirm `elite_pending_order` is set — that isolates the write side from the read side.
