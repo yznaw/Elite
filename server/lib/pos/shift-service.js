@@ -63,6 +63,13 @@ async function openShift(context, body) {
   const openingFloatCents = cents(body?.openingFloatCents, 'openingFloatCents');
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context, { lock: true });
+    const active = await client.query(
+      `SELECT id FROM pos_shifts
+       WHERE tenant_id = $1 AND register_id = $2 AND state IN ('open', 'closing')
+       LIMIT 1`,
+      [context.tenantId, register.id],
+    );
+    assertPos(!active.rowCount, 409, 'SHIFT_ALREADY_OPEN', 'This register already has an open shift.');
     const result = await client.query(
       `INSERT INTO pos_shifts (tenant_id, register_id, cashier_id, opening_float_cents)
        VALUES ($1, $2, $3, $4)
@@ -132,6 +139,23 @@ async function closeShift(context, body) {
     assertPos(shift, 404, 'SHIFT_NOT_FOUND', 'POS shift not found.');
     assertPos(shift.register_id === register.id, 403, 'SHIFT_REGISTER_MISMATCH', 'Shift belongs to another register.');
     assertPos(shift.state === 'open', 409, 'SHIFT_NOT_OPEN', 'Only an open shift can be closed.');
+
+    const syncState = await client.query(
+      `SELECT COALESCE(sum(pending_count), 0)::integer AS pending_count,
+         COALESCE(sum(rejected_count), 0)::integer AS rejected_count
+       FROM pos_sync_states
+       WHERE tenant_id = $1 AND register_id = $2 AND shift_id = $3`,
+      [context.tenantId, register.id, shift.id],
+    );
+    const pendingCount = Number(syncState.rows[0].pending_count);
+    const rejectedCount = Number(syncState.rows[0].rejected_count);
+    assertPos(
+      pendingCount === 0 && rejectedCount === 0,
+      409,
+      'SHIFT_SYNC_INCOMPLETE',
+      'Shift cannot close while offline sales are pending or rejected.',
+      { pendingCount, rejectedCount },
+    );
 
     const override = await consumeOverride(client, context, 'z-report', body);
     await client.query(

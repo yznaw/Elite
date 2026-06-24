@@ -15,6 +15,11 @@
         <span class="shift-chip">Shift open</span>
       }
       <span class="cashier">{{ auth.user()?.name }}</span>
+      @if (phase() === 'selling') {
+        <button class="header-tool" type="button" (click)="syncPendingSales()" [disabled]="!online() || syncing()">
+          {{ syncing() ? 'Syncing' : 'Queue ' + pendingSales() }}
+        </button>
+      }
       <button class="exit-button" type="button" (click)="exitPos()">Admin</button>
     </div>
   </header>
@@ -91,6 +96,26 @@
   }
 
   @if (phase() === 'selling') {
+    <nav class="pos-tools" aria-label="POS operations">
+      <div>
+        <button type="button" [disabled]="!cart().length" (click)="dialog.set('park')">Park sale</button>
+        <button type="button" (click)="dialog.set('parked'); loadParkedCarts()">Parked <span>{{ parkedCarts().length }}</span></button>
+        <button type="button" [disabled]="!online()" (click)="dialog.set('operations')">Returns / voids</button>
+      </div>
+      <div>
+        <button type="button" (click)="openHardwareDialog()">Hardware <i [class.ready]="hardware.connected()"></i></button>
+        <button type="button" [disabled]="!online()" (click)="openShiftDialog()">Shift report</button>
+      </div>
+    </nav>
+    @if (!online()) {
+      <div class="offline-notice">
+        Offline mode: sales are receipted locally and queued for synchronization.
+        @if (catalogCachedAt()) { <span>Catalog cached {{ catalogCachedAt() | date:'short' }}</span> }
+      </div>
+    }
+    @if (rejectedSales() > 0) {
+      <div class="offline-notice rejected">{{ rejectedSales() }} rejected offline sale(s) require manager review before shift close.</div>
+    }
     <section class="workspace">
       <div class="catalog-panel">
         <div class="catalog-tools">
@@ -224,6 +249,7 @@
         } @else {
           <div class="card-confirmation">
             Confirm the payment on the external card terminal before completing this sale.
+            @if (!online()) { <b> Offline card confirmation cannot be verified by Elite until synchronization.</b> }
           </div>
         }
         <button class="primary-action" type="button" [disabled]="busy()" (click)="completeSale()">
@@ -248,7 +274,136 @@
           }
         </dl>
         <button class="primary-action" type="button" (click)="closeReceipt()">New sale</button>
-        <small>Printing will be connected after the approved QZ Tray hardware spike.</small>
+        <button class="secondary-action" type="button" (click)="reprintLastSale()">Print again</button>
+        <small>{{ sale.status === 'pending-sync' ? 'Saved offline and waiting to synchronize.' : 'Saved in Elite.' }}</small>
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'park') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <span class="eyebrow">PARK SALE</span>
+        <h2>Hold this cart</h2>
+        <label>Reference<input [(ngModel)]="parkLabel" placeholder="Customer or note" maxlength="80" /></label>
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="parkCurrentCart()">Park {{ cartCount() }} item(s)</button>
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'parked') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <span class="eyebrow">PARKED SALES</span>
+        <h2>Resume a cart</h2>
+        <div class="parked-list">
+          @for (parked of parkedCarts(); track parked.parkedCartId) {
+            <button type="button" (click)="restoreParkedCart(parked)">
+              <span><b>{{ parked.label || 'Unlabelled sale' }}</b><small>{{ parked.payload.items.length }} lines · {{ parked.updatedAt | date:'short' }}</small></span>
+              <strong>Resume</strong>
+            </button>
+          } @empty { <p class="utility-empty">No parked sales for this cashier.</p> }
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'operations') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet operations-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <span class="eyebrow">POST-SALE CORRECTION</span>
+        <h2>Refund or void</h2>
+        <div class="lookup-row">
+          <input [(ngModel)]="transactionLookup" placeholder="Receipt number or transaction ID" />
+          <button type="button" [disabled]="busy()" (click)="lookupTransaction()">Find</button>
+        </div>
+        @if (operationTransaction(); as transaction) {
+          <div class="transaction-summary">
+            <span>#{{ transaction.receiptNumber }}</span><b>{{ formatMoney(transaction.totalCents) }}</b><em>{{ transaction.status }}</em>
+          </div>
+          <div class="refund-lines">
+            @for (item of transaction.items || []; track item.id) {
+              <div>
+                <span><b>{{ item.name }}</b><small>{{ item.refundableQty }} refundable</small></span>
+                <label>Qty<input type="number" min="0" [max]="item.refundableQty" [ngModel]="refundQuantities[item.id] || 0" (ngModelChange)="refundQuantities[item.id] = +$event" /></label>
+                <label class="restock-check"><input type="checkbox" [ngModel]="refundRestock[item.id] !== false" (ngModelChange)="refundRestock[item.id] = $event" /> Restock</label>
+              </div>
+            }
+          </div>
+          <label>Reason<input [(ngModel)]="correctionReason" placeholder="Required permanent reason" /></label>
+          <label>Manager PIN<input [(ngModel)]="managerPin" type="password" inputmode="numeric" maxlength="8" /></label>
+          <div class="correction-actions">
+            <button type="button" [disabled]="busy() || transaction.status !== 'completed'" (click)="refundCurrentTransaction()">Refund selected</button>
+            <button class="danger-action" type="button" [disabled]="busy() || transaction.status !== 'completed' || !!transaction.refunds?.length" (click)="voidCurrentTransaction()">Void entire sale</button>
+          </div>
+        }
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'hardware') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <span class="eyebrow">QZ TRAY</span>
+        <h2>Receipt hardware</h2>
+        <label>Printer name<input [(ngModel)]="hardwarePrinter" placeholder="Exact QZ printer name" /></label>
+        <label>Offline device signer<input [(ngModel)]="hardwareSignerUrl" placeholder="http://127.0.0.1:8182" /></label>
+        <label>Cash drawer
+          <select [(ngModel)]="hardwareDrawerPulse">
+            <option value="epson-pin-2">ESC/POS pin 2</option>
+            <option value="epson-pin-5">ESC/POS pin 5</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </label>
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="saveHardware()">Save and connect</button>
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'shift') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet shift-report-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <span class="eyebrow">X / Z REPORT</span>
+        <h2>Current shift</h2>
+        @if (shiftSummary(); as summary) {
+          <div class="report-grid">
+            <span>Gross <b>{{ formatMoney(summary.grossSalesCents) }}</b></span>
+            <span>Refunds <b>{{ formatMoney(summary.refundTotalCents) }}</b></span>
+            <span>Voids <b>{{ formatMoney(summary.voidTotalCents) }}</b></span>
+            <span>Net <b>{{ formatMoney(summary.netSalesCents) }}</b></span>
+            <span>Expected cash <b>{{ formatMoney(summary.expectedCashCents) }}</b></span>
+            <span>Transactions <b>{{ summary.transactionCount }}</b></span>
+          </div>
+          @if (syncConflicts().length) {
+            <h3>Offline conflicts</h3>
+            @for (conflict of syncConflicts(); track conflict.conflictId) {
+              <div class="conflict-row">
+                <span><b>#{{ conflict.receiptNumber }} · {{ conflict.productName }}</b><small>{{ conflict.type }}</small></span>
+                <button type="button" (click)="resolveSyncConflict(conflict)">Resolve</button>
+              </div>
+            }
+            <label>Resolution note<input [(ngModel)]="conflictResolution" placeholder="How physical stock was reconciled" /></label>
+          }
+          @if (rejectedSales() > 0) {
+            <h3>Rejected offline sales</h3>
+            @for (sale of queuedSales(); track sale.idempotencyKey) {
+              @if (sale.status === 'rejected') {
+                <div class="conflict-row rejected-sale">
+                  <span><b>#{{ sale.receiptNumber }}</b><small>{{ sale.lastError }}</small></span>
+                  <button type="button" (click)="retryRejectedSale(sale)">Retry</button>
+                </div>
+              }
+            }
+          }
+          <label class="money-field"><span>Physical cash</span><div><b>QAR</b><input [(ngModel)]="physicalCash" inputmode="decimal" /></div></label>
+          <label>Manager PIN<input [(ngModel)]="managerPin" type="password" inputmode="numeric" maxlength="8" /></label>
+          <button class="primary-action" type="button" [disabled]="busy() || pendingSales() > 0 || rejectedSales() > 0" (click)="closeCurrentShift()">Create Z report and close</button>
+        }
       </section>
     </div>
   }

@@ -400,18 +400,23 @@ Response:
 
 ```json
 {
-  "accepted": ["uuid"],
+  "accepted": [
+    { "idempotencyKey": "uuid", "transactionId": "uuid" }
+  ],
   "acceptedWithConflicts": [
     {
       "idempotencyKey": "uuid",
-      "conflictId": "uuid",
-      "reason": "INSUFFICIENT_STOCK|PRICE_CHANGED"
+      "transactionId": "uuid",
+      "conflicts": [
+        { "conflictId": "uuid", "type": "insufficient_stock|price_changed", "variantId": "uuid" }
+      ]
     }
   ],
   "rejected": [
     {
       "idempotencyKey": "uuid",
       "reason": "INVALID_PAYLOAD|INVALID_RECEIPT_NUMBER|UNAUTHORIZED_REGISTER",
+      "code": "string",
       "message": "string"
     }
   ]
@@ -845,6 +850,12 @@ Customer history:
 - The UI clearly labels POS-originated transactions.
 
 ## 13. Security And Audit
+
+POS operator roles:
+
+- V1 reuses Elite's existing `user_role` enum (`owner`, `admin`, `manager`, `viewer`). The POS API is open to `owner`, `admin`, and `manager`. There is no dedicated low-privilege `cashier` role in v1.
+- Because every POS operator already holds a manager-tier role, the cashier/manager separation for restricted actions (refund, void, Z report) is enforced by **knowledge of a manager PIN**, not by a distinct identity. The PIN is a second factor layered on the authenticated session, and every approval is scoped, short-lived, single-use, and audited.
+- A dedicated `cashier` role with reduced base permissions is deferred. Introducing it requires extending the `user_role` enum and the admin permission model, and is tracked as a post-v1 hardening item.
 
 Manager PIN:
 

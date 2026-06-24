@@ -134,6 +134,7 @@ async function loadSale(client, tenantId, transactionId) {
   uuid(transactionId, 'transactionId');
   const transactionResult = await client.query(
     `SELECT t.*, r.receipt_number, o.public_number,
+       au.full_name AS cashier_name, reg.display_name AS register_name,
        COALESCE(jsonb_agg(jsonb_build_object(
          'id', i.id,
          'variantId', i.variant_id,
@@ -148,18 +149,40 @@ async function loadSale(client, tenantId, transactionId) {
      FROM pos_transactions t
      JOIN pos_receipts r ON r.id = t.receipt_id
      JOIN orders o ON o.id = t.order_id
+     JOIN admin_users au ON au.id = t.cashier_id
+     JOIN pos_registers reg ON reg.id = t.register_id
      LEFT JOIN pos_transaction_items i ON i.transaction_id = t.id
      WHERE t.tenant_id = $1 AND t.id = $2
-     GROUP BY t.id, r.receipt_number, o.public_number`,
+     GROUP BY t.id, r.receipt_number, o.public_number, au.full_name, reg.display_name`,
     [tenantId, transactionId],
   );
   assertPos(transactionResult.rowCount === 1, 404, 'TRANSACTION_NOT_FOUND', 'POS transaction not found.');
   const row = transactionResult.rows[0];
+  const refundResult = await client.query(
+    `SELECT rf.id, rf.amount_cents, rf.method, rf.reason, rf.status, rf.created_at,
+       rr.receipt_number
+     FROM pos_refunds rf
+     JOIN pos_receipts rr ON rr.id = rf.receipt_id
+     WHERE rf.tenant_id = $1 AND rf.original_transaction_id = $2
+     ORDER BY rf.created_at`,
+    [tenantId, transactionId],
+  );
+  const refundedQuantityResult = await client.query(
+    `SELECT ri.original_transaction_item_id AS item_id,
+       COALESCE(sum(ri.quantity) FILTER (WHERE rf.status = 'completed'), 0)::integer AS quantity
+     FROM pos_refund_items ri
+     JOIN pos_refunds rf ON rf.id = ri.refund_id
+     WHERE ri.tenant_id = $1 AND rf.original_transaction_id = $2
+     GROUP BY ri.original_transaction_item_id`,
+    [tenantId, transactionId],
+  );
+  const refundedByItem = new Map(refundedQuantityResult.rows.map((item) => [item.item_id, Number(item.quantity)]));
   const receiptNumber = Number(row.receipt_number);
   const items = (row.items || []).map((item) => ({
     ...item,
     unitPriceCents: Number(item.unitPriceCents),
     lineTotalCents: Number(item.lineTotalCents),
+    refundableQty: Math.max(0, Number(item.quantity) - (refundedByItem.get(item.id) || 0)),
   }));
   return {
     transactionId: row.id,
@@ -173,14 +196,28 @@ async function loadSale(client, tenantId, transactionId) {
     totalCents: Number(row.total_cents),
     amountTenderedCents: Number(row.amount_tendered_cents),
     changeGivenCents: Number(row.change_given_cents),
+    voidReason: row.void_reason || null,
+    voidedAt: row.voided_at || null,
     items,
+    refunds: refundResult.rows.map((refund) => ({
+      refundId: refund.id,
+      amountCents: Number(refund.amount_cents),
+      method: refund.method,
+      reason: refund.reason,
+      status: refund.status,
+      receiptNumber: String(refund.receipt_number).padStart(8, '0'),
+      createdAt: refund.created_at,
+    })),
     stockUpdates: [],
     receipt: {
       qrCodeValue: `elite-pos:${row.id}`,
       receiptData: {
         receiptNumber: String(receiptNumber).padStart(8, '0'),
         transactionId: row.id,
-        createdAt: row.server_received_at,
+        createdAt: row.client_created_at || row.server_received_at,
+        cashierName: row.cashier_name || '',
+        registerId: row.register_id,
+        registerName: row.register_name || '',
         paymentMethod: row.payment_method,
         items,
         subtotalCents: Number(row.subtotal_cents),
@@ -188,13 +225,18 @@ async function loadSale(client, tenantId, transactionId) {
         totalCents: Number(row.total_cents),
         amountTenderedCents: Number(row.amount_tendered_cents),
         changeGivenCents: Number(row.change_given_cents),
+        lookupCode: `elite-pos:${row.id}`,
       },
     },
   };
 }
 
-async function createSale(context, body) {
+async function createSale(context, body, options = {}) {
   const sale = normalizeSale(body);
+  const offline = options.offline === true;
+  if (offline) {
+    assertPos(sale.clientCreatedAt, 422, 'INVALID_TIMESTAMP', 'Offline sales require clientCreatedAt.');
+  }
   return inTransaction(async (client) => {
     const existing = await client.query(
       `SELECT id, register_id, cashier_id
@@ -208,7 +250,18 @@ async function createSale(context, body) {
         'IDEMPOTENCY_KEY_CONFLICT',
         'This idempotency key belongs to another POS session.',
       );
-      return loadSale(client, context.tenantId, existing.rows[0].id);
+      const result = await loadSale(client, context.tenantId, existing.rows[0].id);
+      const conflicts = await client.query(
+        `SELECT id, conflict_type, variant_id FROM pos_sync_conflicts
+         WHERE tenant_id = $1 AND transaction_id = $2 ORDER BY created_at`,
+        [context.tenantId, existing.rows[0].id],
+      );
+      result.syncConflicts = conflicts.rows.map((conflict) => ({
+        conflictId: conflict.id,
+        type: conflict.conflict_type,
+        variantId: conflict.variant_id,
+      }));
+      return result;
     }
 
     await requireRegister(client, context, { lock: true });
@@ -241,21 +294,43 @@ async function createSale(context, body) {
     const variants = new Map(variantsResult.rows.map((row) => [row.id, row]));
 
     let subtotalCents = 0;
+    const pendingConflicts = [];
     const saleLines = sale.items.map((item) => {
       const variant = variants.get(item.variantId);
       assertPos(variant.is_active && variant.product_status === 'active', 422, 'VARIANT_INACTIVE', `${variant.sku} is not available for sale.`);
-      assertPos(Number(variant.stock_quantity) >= item.quantity, 409, 'INSUFFICIENT_STOCK', `${variant.sku} has insufficient stock.`, {
-        variantId: variant.id,
-        available: Number(variant.stock_quantity),
-      });
-      assertPos(Number(variant.price_cents) === item.unitPriceCents, 409, 'PRICE_CHANGED', `${variant.sku} price changed.`, {
-        variantId: variant.id,
-        priceCents: Number(variant.price_cents),
-      });
-      const lineTotalCents = Number(variant.price_cents) * item.quantity;
+      const availableStock = Number(variant.stock_quantity);
+      const catalogPriceCents = Number(variant.price_cents);
+      if (availableStock < item.quantity) {
+        assertPos(offline, 409, 'INSUFFICIENT_STOCK', `${variant.sku} has insufficient stock.`, {
+          variantId: variant.id,
+          available: availableStock,
+        });
+        pendingConflicts.push({
+          type: 'insufficient_stock',
+          variantId: variant.id,
+          expectedValue: item.quantity,
+          actualValue: availableStock,
+          shortageQuantity: item.quantity - availableStock,
+        });
+      }
+      if (catalogPriceCents !== item.unitPriceCents) {
+        assertPos(offline, 409, 'PRICE_CHANGED', `${variant.sku} price changed.`, {
+          variantId: variant.id,
+          priceCents: catalogPriceCents,
+        });
+        pendingConflicts.push({
+          type: 'price_changed',
+          variantId: variant.id,
+          expectedValue: item.unitPriceCents,
+          actualValue: catalogPriceCents,
+          shortageQuantity: null,
+        });
+      }
+      const unitPriceCents = offline ? item.unitPriceCents : catalogPriceCents;
+      const lineTotalCents = unitPriceCents * item.quantity;
       assertPos(Number.isSafeInteger(lineTotalCents), 422, 'ORDER_TOTAL_TOO_LARGE', 'Order total exceeds the supported limit.');
       subtotalCents += lineTotalCents;
-      return { ...item, variant, lineTotalCents };
+      return { ...item, variant, unitPriceCents, lineTotalCents };
     });
     assertPos(subtotalCents <= MAX_ORDER_CENTS, 422, 'ORDER_TOTAL_TOO_LARGE', 'Order total exceeds the supported limit.');
     const totalCents = subtotalCents;
@@ -294,7 +369,7 @@ async function createSale(context, body) {
         customer?.full_name || 'Walk-in customer',
         customer?.phone || null,
         totalCents,
-        JSON.stringify({ source: 'pos', registerId: context.registerId, receiptNumber: sale.receiptNumber }),
+        JSON.stringify({ source: 'pos', offline, registerId: context.registerId, receiptNumber: sale.receiptNumber }),
       ],
     );
     const orderId = orderResult.rows[0].id;
@@ -303,15 +378,15 @@ async function createSale(context, body) {
         (tenant_id, order_id, provider, method, status, amount_cents, currency, processed_at, raw_payload)
        VALUES ($1,$2,'pos-manual',$3,'paid',$4,'QAR',now(),$5::jsonb)
        RETURNING id`,
-      [context.tenantId, orderId, sale.payment.method, totalCents, JSON.stringify({ source: 'pos' })],
+      [context.tenantId, orderId, sale.payment.method, totalCents, JSON.stringify({ source: 'pos', offline })],
     );
     const transactionResult = await client.query(
       `INSERT INTO pos_transactions (
          tenant_id, order_id, receipt_id, register_id, shift_id, cashier_id, customer_id,
          idempotency_key, payment_method, subtotal_cents, tax_cents, total_cents,
          cash_amount_cents, card_amount_cents, amount_tendered_cents, change_given_cents,
-         client_created_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$10,$11,$12,$13,$14,$15)
+         client_created_at, metadata
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$10,$11,$12,$13,$14,$15,$16::jsonb)
        RETURNING id`,
       [
         context.tenantId,
@@ -329,6 +404,7 @@ async function createSale(context, body) {
         sale.payment.amountTenderedCents,
         sale.payment.changeGivenCents,
         sale.clientCreatedAt,
+        JSON.stringify({ offline }),
       ],
     );
     const transactionId = transactionResult.rows[0].id;
@@ -354,10 +430,10 @@ async function createSale(context, body) {
           title || null,
           v.size,
           line.quantity,
-          Number(v.price_cents),
+          line.unitPriceCents,
           line.lineTotalCents,
           v.image_url || null,
-          JSON.stringify({ color: v.color || null, material: v.material || null, source: 'pos' }),
+          JSON.stringify({ color: v.color || null, material: v.material || null, source: 'pos', offline }),
         ],
       );
       await client.query(
@@ -377,14 +453,14 @@ async function createSale(context, body) {
           v.product_name,
           title || null,
           line.quantity,
-          Number(v.price_cents),
+          line.unitPriceCents,
           line.lineTotalCents,
         ],
       );
       const stockResult = await client.query(
         `UPDATE product_variants
-         SET stock_quantity = stock_quantity - $3
-         WHERE tenant_id = $1 AND id = $2 AND stock_quantity >= $3
+         SET stock_quantity = ${offline ? 'GREATEST(stock_quantity - $3, 0)' : 'stock_quantity - $3'}
+         WHERE tenant_id = $1 AND id = $2 ${offline ? '' : 'AND stock_quantity >= $3'}
          RETURNING stock_quantity`,
         [context.tenantId, v.id, line.quantity],
       );
@@ -397,6 +473,31 @@ async function createSale(context, body) {
          VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,
         [context.tenantId, JSON.stringify({ variantId: v.id, stock, sourceRegisterId: context.registerId })],
       );
+    }
+
+    const syncConflicts = [];
+    for (const conflict of pendingConflicts) {
+      const inserted = await client.query(
+        `INSERT INTO pos_sync_conflicts (
+           tenant_id, transaction_id, variant_id, conflict_type,
+           expected_value, actual_value, shortage_quantity
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+         RETURNING id, conflict_type, variant_id`,
+        [
+          context.tenantId,
+          transactionId,
+          conflict.variantId,
+          conflict.type,
+          conflict.expectedValue,
+          conflict.actualValue,
+          conflict.shortageQuantity,
+        ],
+      );
+      syncConflicts.push({
+        conflictId: inserted.rows[0].id,
+        type: inserted.rows[0].conflict_type,
+        variantId: inserted.rows[0].variant_id,
+      });
     }
 
     await client.query(
@@ -428,15 +529,17 @@ async function createSale(context, body) {
       );
     }
     await client.query('UPDATE pos_receipts SET entity_id = $1 WHERE id = $2', [transactionId, receipt.id]);
-    await audit(client, context, 'pos.sale.completed', 'pos_transaction', transactionId, {
+    await audit(client, context, offline ? 'pos.sale.offline-synced' : 'pos.sale.completed', 'pos_transaction', transactionId, {
       orderId,
       paymentId: paymentResult.rows[0].id,
       receiptNumber: sale.receiptNumber,
       totalCents,
+      conflicts: syncConflicts.length,
     });
 
     const result = await loadSale(client, context.tenantId, transactionId);
     result.stockUpdates = stockUpdates;
+    result.syncConflicts = syncConflicts;
     return result;
   });
 }

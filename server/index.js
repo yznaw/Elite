@@ -164,7 +164,7 @@ app.use((err, req, res, _next) => {
 });
 
 // ─── Boot: seed default tenant + admin user, then start ──────────────────────
-async function bootstrap() {
+async function prepareDatabase() {
   if (process.env.DATABASE_URL) {
     const client = await db.pool.connect();
     try {
@@ -182,14 +182,27 @@ async function bootstrap() {
   } else {
     console.warn('DATABASE_URL not set — skipping tenant + admin-user bootstrap.');
   }
+}
 
-  app.listen(PORT, () => {
-    console.log(`✅  Elite API running at http://localhost:${PORT}/api`);
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+async function startServer(port = PORT) {
+  await prepareDatabase();
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      const address = server.address();
+      const activePort = typeof address === 'object' && address ? address.port : port;
+      console.log(`Elite API running at http://localhost:${activePort}/api`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      resolve(server);
+    });
+    server.once('error', reject);
   });
 }
 
-bootstrap().catch((err) => {
-  console.error('Fatal startup error:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  startServer().catch((err) => {
+    console.error('Fatal startup error:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, prepareDatabase, startServer };

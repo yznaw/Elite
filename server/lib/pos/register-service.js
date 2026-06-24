@@ -13,6 +13,13 @@ function hash(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
+function credentialMatches(storedHash, credential) {
+  if (!storedHash) return false;
+  const expected = Buffer.from(String(storedHash));
+  const actual = Buffer.from(hash(credential));
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
 async function createEnrollmentToken(context, body) {
   assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can enroll POS terminals.');
   const displayName = nonEmpty(body?.displayName, 'displayName', 80);
@@ -81,7 +88,7 @@ async function checkInRegister(context, body) {
       [context.tenantId, registerId],
     );
     const register = result.rows[0];
-    assertPos(register && register.credential_hash === hash(credential), 401, 'REGISTER_CREDENTIAL_INVALID', 'Register credentials are invalid.');
+    assertPos(register && credentialMatches(register.credential_hash, credential), 401, 'REGISTER_CREDENTIAL_INVALID', 'Register credentials are invalid.');
     assertPos(register.status === 'active', 403, 'REGISTER_DISABLED', 'This POS register is disabled or revoked.');
 
     await client.query('UPDATE pos_registers SET last_seen_at = now() WHERE id = $1', [register.id]);
@@ -92,12 +99,19 @@ async function checkInRegister(context, body) {
       [context.tenantId, register.id],
     );
     const receiptResult = await client.query(
-      `SELECT b.range_end - b.range_start + 1 - count(r.id)::bigint AS remaining
-       FROM pos_receipt_number_blocks b
-       LEFT JOIN pos_receipts r ON r.block_id = b.id
-       WHERE b.tenant_id = $1 AND b.register_id = $2
-       GROUP BY b.id
-       ORDER BY b.allocated_at DESC LIMIT 1`,
+      `SELECT (
+         COALESCE((
+           SELECT sum(range_end - range_start + 1)
+           FROM pos_receipt_number_blocks
+           WHERE tenant_id = $1 AND register_id = $2
+         ), 0)
+         - COALESCE((
+           SELECT count(*)
+           FROM pos_receipts r
+           JOIN pos_receipt_number_blocks b ON b.id = r.block_id
+           WHERE b.tenant_id = $1 AND b.register_id = $2
+         ), 0)
+       )::bigint AS remaining`,
       [context.tenantId, register.id],
     );
 

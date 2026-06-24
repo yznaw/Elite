@@ -250,27 +250,28 @@ See `server/routes/admin-ref.route.js`. Colors, materials, size sets. See [Refer
 
 ### POS (`/api/pos/*`)
 
-See `server/routes/admin-pos.route.js`. All endpoints require an active admin/cashier session.
+See `server/routes/pos.route.js`. All endpoints require an authenticated owner/admin/manager session; operational endpoints also require an active enrolled register bound to that session.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/pos/products/search?q=` | Search products by name, SKU, or barcode (min 2 chars) |
-| `GET` | `/api/pos/products/scan/:barcode` | Instant barcode lookup — returns variant + product |
-| `POST` | `/api/pos/transactions` | Create & finalize a sale; atomically decrements stock |
-| `GET` | `/api/pos/transactions` | Transaction history (`?from=&to=&cashierId=&page=`) |
-| `GET` | `/api/pos/transactions/:id` | Single transaction with all line items |
-| `GET` | `/api/pos/transactions/:id/receipt` | Receipt data for print / email |
-| `POST` | `/api/pos/transactions/:id/email` | Email receipt — body: `{ email }` |
-| `POST` | `/api/pos/transactions/:id/void` | Void open transaction — body: `{ managerPin }` |
-| `POST` | `/api/pos/refunds` | Full or partial refund — body: `{ originalTxId, items[], managerPin }` |
-| `GET` | `/api/pos/shift/summary` | Live shift totals (X Report data) — `?date=` |
-| `POST` | `/api/pos/shift/z-report` | Close the day — generates immutable Z Report — body: `{ cashierCount, managerPin }` |
-| `GET` | `/api/pos/shift/z-reports` | List past Z Reports — `?from=&to=` |
-| `POST` | `/api/pos/print/receipt` | Build ESC/POS byte stream; send to thermal printer via TCP socket |
-| `POST` | `/api/pos/print/labels` | Generate barcode labels (Code 128/EAN-13) — body: `{ variants: [{id, qty}] }` |
-| `GET` | `/api/pos/parked` | List parked carts for current cashier |
-| `POST` | `/api/pos/parked` | Save a parked cart — body: `{ items[], label? }` |
-| `DELETE` | `/api/pos/parked/:id` | Delete a parked cart (on resume or expiry) |
+| `POST` | `/api/pos/registers/enrollment-tokens` | Create one-time terminal enrollment token |
+| `POST` | `/api/pos/registers/enroll` | Enroll and bind a physical register |
+| `POST` | `/api/pos/registers/check-in` | Validate stored register credentials |
+| `POST` | `/api/pos/registers/receipt-number-blocks` | Reserve 100 tenant-wide receipt numbers |
+| `GET` | `/api/pos/products/search?q=` | Search active variants by name, SKU, or barcode |
+| `GET` | `/api/pos/products/barcode/:barcode` | Exact active barcode lookup |
+| `POST` | `/api/pos/transactions` | Create/finalize a sale atomically |
+| `POST` | `/api/pos/transactions/sync` | Synchronize offline sale batches |
+| `GET` | `/api/pos/transactions/lookup/:lookup` | Resolve receipt, sale QR, refund QR, or transaction reference |
+| `POST` | `/api/pos/transactions/:id/void` | Same-shift manager-approved void |
+| `POST` | `/api/pos/refunds` | Full/partial manager-approved refund |
+| `GET/POST/DELETE` | `/api/pos/parked-carts` | List, create, or consume parked carts |
+| `GET` | `/api/pos/shifts/current` | Current X-style shift summary |
+| `POST` | `/api/pos/shifts/z-report` | Manager-approved shift close and immutable Z report |
+| `GET` | `/api/pos/events` | Authenticated SSE stock/event stream |
+| `GET/POST` | `/api/pos/print/{certificate,sign}` | QZ certificate and restricted request signing |
+
+The complete endpoint and payload reference is in [12 – POS System and Integration](./12-pos-system.md#11-pos-api-reference).
 
 ---
 
@@ -312,8 +313,9 @@ cp server/.env.example server/.env
 | `DEFAULT_ADMIN_EMAIL` | `admin@elite.local` | No | Email for the auto-seeded admin user (first boot only) |
 | `DEFAULT_ADMIN_PASSWORD` | `elite-admin` | No | Password for the auto-seeded admin — **change immediately in production** |
 | `DEFAULT_ADMIN_NAME` | `Yusuf Hamad` | No | Display name for the auto-seeded admin user |
-| `PRINTER_HOST` | — | No | IP of Bixolon thermal printer for TCP socket printing |
-| `PRINTER_PORT` | `9100` | No | TCP port for ESC/POS printer socket |
+| `QZ_SIGNING_CERT_PATH` | — | Yes for online POS printing | Path to the public QZ signing certificate |
+| `QZ_SIGNING_KEY_PATH` | — | Yes for online POS printing | Path to the restricted PKCS#8 QZ private key |
+| `POS_PRINTER_ALLOWLIST` | — | Yes for POS printing | Comma-separated exact QZ printer queue names |
 
 ---
 
@@ -478,7 +480,7 @@ server/
     └── contact.route.js             ← Public contact form
 ```
 
-> **POS backend (`admin-pos.route.js`) is planned but not yet built.** The endpoint table above in the POS section describes the target API. Implementation follows the acceptance criteria in [`docs/pos-system-plan.html`](./pos-system-plan.html).
+> **POS backend is implemented in `pos.route.js` and `server/lib/pos/*`.** See [12 – POS System and Integration](./12-pos-system.md) for the canonical architecture and API guide.
 
 ### Session & Auth
 

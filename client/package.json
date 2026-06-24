@@ -7,6 +7,7 @@
     "build:web": "ng build client-web --configuration production",
     "build:admin": "ng build admin-portal --configuration production",
     "build:all": "npm run build:web && npm run build:admin",
+    "test:e2e": "playwright test",
     "lint": "ng lint",
     "test": "ng test"
   },
@@ -20,6 +21,7 @@
     "@angular/platform-browser": "^17.3.0",
     "@angular/platform-browser-dynamic": "^17.3.0",
     "@angular/router": "^17.3.0",
+    "qz-tray": "^2.2.6",
     "rxjs": "~7.8.0",
     "tslib": "^2.6.0",
     "zone.js": "~0.14.0"
@@ -28,6 +30,7 @@
     "@angular-devkit/build-angular": "^17.3.0",
     "@angular/cli": "^17.3.0",
     "@angular/compiler-cli": "^17.3.0",
+    "@playwright/test": "^1.53.2",
     "@types/node": "^18.18.0",
     "typescript": "~5.4.0"
   }

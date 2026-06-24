@@ -55,10 +55,10 @@ All pages are lazy-loaded:
 | `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel |
 | `/settings` | `SettingsComponent` | **General tab:** Store info (name, currency, timezone, language — `PATCH /api/admin/settings/store`) + **Low Stock Threshold** number input — sets `StoreConfigService.lowStockThreshold()`, persisted tenant-scoped via `StorageService`, consumed by catalog and dashboard. **Team tab:** team members (list, role change, status toggle — `GET/PATCH /api/admin/settings/team/:id`). **Team Invitations** — invite by email + role (`POST /api/admin/settings/invitations`), shows generated invite link in a copy-able input, lists pending invitations with revoke button. **Integrations tab.** Owner/admin only. |
 | `/accept-invite` | `AcceptInviteComponent` | Public — reads `?token=` query param, validates via `GET /api/invitations/validate`, shows name/password/confirm form. On submit calls `POST /api/invitations/accept`. Redirects to login on success. Invitation token is single-use and expires after 48 h. |
-| `/pos` | `PosComponent` | **Point of Sale** *(planned — not yet built)*. Full-screen dark-theme cashier interface. Touch-optimized product grid, live cart panel, USB + camera barcode scanning, Cash / Card / Split checkout, ESC/POS thermal receipt printing (Bixolon 80mm via WebUSB/TCP), automated cash drawer trigger (RJ12), barcode label generation (Code 128/EAN-13 30×20mm), Park & Resume multi-session carts, offline-first PWA with IndexedDB queue, X Report (mid-shift read), Z Report (end-of-day close with cash float & variance), full/partial returns & refunds, Manager PIN role-based security. Hides sidebar/topbar — renders standalone full-width. See [`docs/pos-system-plan.html`](./pos-system-plan.html) for acceptance criteria. |
+| `/pos` | `PosComponent` | **Point of Sale.** Full-screen cashier interface with product/SKU/barcode search, cart, cash/manual-card checkout, reserved receipt numbers, QZ Tray receipts/drawer control, IndexedDB offline queue, parked carts, refunds, voids, shift summary/Z close, live stock events, and manager PIN approvals. Owner/admin/manager only. See [12 – POS System and Integration](./12-pos-system.md). |
 | `**` | — | Redirects to `/dashboard` |
 
-> Every route except `/login`, `/forgot-password`, `/reset-password`, and `/accept-invite` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` will be gated by `roleGuard(['owner','admin','cashier'])` when built. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
+> Every route except `/login`, `/forgot-password`, `/reset-password`, and `/accept-invite` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` is gated by `roleGuard(['owner','admin','manager'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
 
 ---
 
@@ -645,73 +645,13 @@ See [08 – Database & API Implementation](./08-database-api-implementation.md) 
 
 ## POS System
 
-> **Status: Planned — not yet built.** The architecture below is the target design. Implementation follows the acceptance criteria in [`docs/pos-system-plan.html`](./pos-system-plan.html). The server route (`admin-pos.route.js`), Angular page (`pages/pos/`), and POS services do not yet exist in the codebase.
+> **Status: Implemented baseline.** The `/pos` route is a standalone full-screen Angular page backed by authenticated `/api/pos/*` routes, PostgreSQL POS records, IndexedDB offline state, a service-worker app shell, and QZ Tray hardware integration.
 
-The `/pos` route will be a standalone full-screen page that hides the sidebar and topbar. It is designed as a **Progressive Web App (PWA)** with offline support.
+The implemented workflow covers register enrollment, shift open/close, catalog and barcode lookup, cash/manual-card checkout, offline synchronization, parked carts, receipt printing, refunds, same-shift voids, manager approvals, live stock events, and conflict reconciliation.
 
-### Target Architecture
+Printing uses QZ Tray with authenticated server-side signing and a loopback device signer for offline operation. It does not use the older proposed WebUSB or direct TCP printer design.
 
-```
-pages/pos/                          (planned)
-├── pos.component.ts                ← Main layout (left grid + right cart, full-width dark theme)
-├── pos-product-grid.component.ts   ← Scrollable 3-col product grid, tap-to-add
-├── pos-cart.component.ts           ← Live order panel with qty controls, discount field
-├── pos-checkout.component.ts       ← Cash / Card / Split payment modals + change calculator
-├── pos-receipt.component.ts        ← ESC/POS receipt overlay (print + email + new sale)
-├── pos-scanner.component.ts        ← Camera viewfinder via @zxing/browser
-├── pos-refund.component.ts         ← Returns flow (scan receipt QR or lookup by order ID)
-├── pos-z-report.component.ts       ← X Report (mid-shift) and Z Report (end-of-day close)
-├── pos-label-print.component.ts    ← Barcode label generation (Code 128/EAN-13, 30×20mm)
-└── pos-manager-pin.component.ts    ← Manager PIN overlay for restricted actions
-
-services/                           (planned)
-├── pos.service.ts                  ← Cart state (Angular signals), scan logic, transaction API
-├── pos-sync.service.ts             ← Offline IndexedDB queue + background sync on reconnect
-└── escpos.service.ts               ← ESC/POS byte stream builder, WebUSB/TCP printer + cash drawer
-```
-
-### Scanner Input
-
-**USB Barcode Scanner** (HID keyboard emulation) — zero config. The search input detects ≥ 6 keystrokes arriving within 100ms and treats the sequence as a scan, not manual typing. Auto-looks up `product_variants.barcode`.
-
-**Camera Scanner** — `@zxing/browser`, triggered by the "📷 Camera Scan" button. Uses `facingMode: 'environment'` (rear camera). Supports EAN-13, EAN-8, Code 128, QR.
-
-### ESC/POS Thermal Printing
-
-Receipts are sent as raw ESC/POS byte streams to a Bixolon 80mm thermal printer via:
-- **WebUSB** — direct USB connection from the browser (Chrome/Edge on Windows)
-- **TCP Socket** — server calls `POST /api/pos/print/receipt`, which opens a TCP socket to the printer on port 9100
-
-After each cash sale the server sends an RJ12 cash drawer pulse (`ESC p 0x00 0x19 0xFA`) through the printer.
-
-### Offline PWA
-
-Service Worker caches the app shell and product catalog. Sales made offline are queued to **IndexedDB** via `pos-sync.service.ts` and auto-posted to `POST /api/pos/transactions` when connectivity is restored. A banner shows pending queue count.
-
-### Park & Resume
-
-Up to 5 carts can be suspended simultaneously. Parked carts are stored in `pos_parked_carts` (server, 4-hour TTL) and also in IndexedDB for offline access.
-
-### Role-Based Security (Manager PIN)
-
-| Action | Cashier | Manager |
-|---|---|---|
-| Apply discount > 10% | ✗ | ✔ (PIN) |
-| Void transaction | ✗ | ✔ (PIN) |
-| Process refund | ✗ | ✔ (PIN) |
-| Run Z Report (close day) | ✗ | ✔ (PIN) |
-| Manual cash drawer open | ✗ | ✔ (PIN) |
-
-PINs are stored as bcrypt hashes in `admin_users.pos_pin_hash`. The PIN overlay does not log out the active cashier session.
-
-### X Report & Z Report
-
-- **X Report** — read-only mid-shift snapshot. Any role can run it. Does not reset counters.
-- **Z Report** — end-of-day close. Manager PIN required. Saves an immutable signed record to `pos_z_reports`. Includes: gross sales, refunds, net sales, cash/card breakdown, opening float, expected cash, physical cash count, and over/short variance.
-
-### Barcode Label Printing
-
-Labels are generated client-side using `bwip-js`. Format: Code 128 (alphanumeric SKU) or EAN-13 (numeric). Size: 30×20mm. Compatible with Dymo LabelWriter 450 and Zebra ZD220. Bulk print is available from the Catalog page (select variants → "Print Labels").
+For architecture, data flow, current limitations, API behavior, setup, testing, and operations, use [12 – POS System and Integration](./12-pos-system.md). For physical terminal installation and acceptance, use the [POS Hardware Runbook](./pos-hardware-runbook.md).
 
 ---
 

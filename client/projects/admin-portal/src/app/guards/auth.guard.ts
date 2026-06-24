@@ -13,7 +13,12 @@ export const authGuard: CanMatchFn = async (_route, segments: UrlSegment[]) => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  const user = await auth.me();
+  // The POS shell must be restartable during an outage. This permits only the
+  // locally cached identity to open /pos; every queued write is authenticated
+  // and authorized again by the API when connectivity returns.
+  if (!navigator.onLine && segments[0]?.path === 'pos' && auth.user()) return true;
+
+  const user = await auth.me({ allowCachedOnNetworkError: segments[0]?.path === 'pos' });
   if (user) return true;
 
   const returnUrl = '/' + segments.map((s) => s.path).join('/');

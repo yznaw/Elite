@@ -79,8 +79,10 @@
             "browser": "projects/admin-portal/src/main.ts",
             "polyfills": ["zone.js"],
             "tsConfig": "projects/admin-portal/tsconfig.app.json",
+            "allowedCommonJsDependencies": ["qz-tray"],
             "assets": [
               "projects/admin-portal/src/favicon.ico",
+              "projects/admin-portal/src/pos-sw.js",
               "projects/admin-portal/src/favicon-32x32.png",
               "projects/admin-portal/src/favicon-192x192.png",
               "projects/admin-portal/src/favicon-512x512.png",

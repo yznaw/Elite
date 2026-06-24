@@ -34,14 +34,18 @@ export class AuthService {
   readonly role = computed<UserRole | null>(() => this._user()?.role ?? null);
 
   /** Hit `/api/auth/me`. Returns the user on success, `null` on 401. */
-  me(): Promise<AuthUser | null> {
+  me(options: { allowCachedOnNetworkError?: boolean } = {}): Promise<AuthUser | null> {
+    const cachedUser = this._user();
     return firstValueFrom(
       this.api.get<AuthUser>('/auth/me').pipe(
         map((u) => {
           this.setUser(u);
           return u;
         }),
-        catchError(() => {
+        catchError((error: { status?: number }) => {
+          if (options.allowCachedOnNetworkError && error?.status === 0 && cachedUser) {
+            return of(cachedUser);
+          }
           this.setUser(null);
           return of(null);
         }),

@@ -238,37 +238,21 @@ See [06 – White-Label Guide](./06-white-label-guide.md#step-3-update-storefron
 
 ### Run the POS in Development
 
-The POS page runs at `http://localhost:4300/pos`. The standard `npm run dev` command starts everything including the POS route.
-
-For hardware testing (thermal printer, cash drawer), the Express server must be reachable from the POS terminal. Set `PRINTER_HOST` in `server/.env` to your Bixolon printer's IP address:
+The POS page runs at `http://localhost:4300/pos`. From the repository root, start the API and admin portal in separate terminals:
 
 ```bash
-PRINTER_HOST=192.168.1.100
-PRINTER_PORT=9100
+npm run server
 ```
 
-To test USB printing via WebUSB, open the POS in Chrome/Edge (WebUSB is not supported in Firefox or Safari). The browser will prompt for USB device permission on first use.
-
-To simulate a USB barcode scan in dev, focus the search input and type any 6+ character string followed by Enter within 100ms — or use a real USB scanner.
-
-### POS npm Packages
-
-| Package | Location | Purpose |
-|---|---|---|
-| `@zxing/browser` | `client/` | Camera-based barcode/QR scanning |
-| `bwip-js` | `client/` | Barcode image generation for labels (Code 128, EAN-13) |
-| `dexie` | `client/` | IndexedDB wrapper for offline cart queue |
-| `escpos-buffer` | `server/` | ESC/POS byte stream builder for thermal receipts |
-| `bcrypt` | `server/` | Manager PIN hashing |
-
-Install after cloning:
 ```bash
-# client
-cd client && npm install @zxing/browser bwip-js dexie
-
-# server
-cd server && npm install escpos-buffer bcrypt
+npm run admin
 ```
+
+The standard `npm run dev` command also starts the storefront, API, and admin portal together.
+
+Sign in with an owner/admin/manager account, open `/pos`, enroll the browser as a register, and open a shift. Hardware is optional for normal application development; sales remain saved when printing is unavailable.
+
+Printing uses QZ Tray, not direct WebUSB or server TCP printing. For development architecture and tests, see [12 – POS System and Integration](./12-pos-system.md). For QZ Tray, printer, drawer, scanner, and local signer setup, see the [POS Hardware Runbook](./pos-hardware-runbook.md).
 
 ---
 
@@ -316,8 +300,8 @@ Elite/
 │       ├── invitations.route.js               ← Public: validate token + accept invite
 │       ├── products.route.js                  ← Public storefront listing
 │       ├── carts.route.js                     ← Public cart
+│       ├── pos.route.js                       ← Authenticated POS API
 │       └── contact.route.js                   ← Public contact form
-│                                              (admin-pos.route.js — planned, not yet built)
 │
 ├── client/
 │   ├── angular.json                           ← Angular workspace config

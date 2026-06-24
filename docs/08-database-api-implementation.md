@@ -519,7 +519,7 @@ Temporary smoke-test rows were removed after testing where appropriate.
 - **Analytics** — wire `AnalyticsComponent` to `GET /api/admin/analytics/overview`; remove remaining `mock.ts` import
 - **Password reset emails** — `POST /api/auth/forgot` currently logs the reset URL to stdout; wire a real email transport (Resend / SES / SendGrid) in production
 - **Team invitation emails** — `POST /api/admin/settings/invitations` returns `inviteLink` in the response body; the admin copies it manually. Wire email delivery in production
-- **POS backend** — `admin-pos.route.js` is planned but not yet built; see `docs/pos-system-plan.html`
+- **POS production certification** — the backend and cashier UI are implemented; complete physical QZ/printer/drawer/scanner acceptance using [12 – POS System and Integration](./12-pos-system.md) and the [POS Hardware Runbook](./pos-hardware-runbook.md)
 - **S3 / Supabase storage** — currently disk-only; add driver in `server/lib/storage.js` and set `STORAGE_DRIVER` env
 
 ---

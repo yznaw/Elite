@@ -29,16 +29,20 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   // The guard probes /auth/me on every navigation — a 401 there is the
   // normal "not logged in" signal, not an error worth toasting.
   const isAuthProbe = /\/api\/auth\/(me|login)$/.test(req.url);
+  const isPosRequest = /\/api\/pos\//.test(req.url);
+  const isRegisterProbe = /\/api\/pos\/registers\/current$/.test(req.url);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
       // status 0 covers network failures, CORS blocks, DNS errors, and timeouts
       if (err.status === 0) {
-        toast.error(
-          t('error.network.title'),
-          t('error.network.sub'),
-          { label: t('common.retry'), run: () => {} },
-        );
+        if (!isPosRequest) {
+          toast.error(
+            t('error.network.title'),
+            t('error.network.sub'),
+            { label: t('common.retry'), run: () => {} },
+          );
+        }
       } else if (err.status === 401) {
         const onLogin = router.url.startsWith('/login');
         if (!isAuthProbe && !onLogin) {
@@ -75,7 +79,7 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           t('error.server.sub'),
           { label: t('common.retry'), run: () => {} },
         );
-      } else {
+      } else if (!(err.status === 428 && isRegisterProbe)) {
         toast.error(
           t('error.unknown.title'),
           `${err.status} — ${err.statusText || t('error.unknown.sub')}`,
