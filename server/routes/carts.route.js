@@ -415,6 +415,24 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     );
     createdOrder = order.rows[0];
 
+    // Cancel any other pending orders from the same customer that were created
+    // before this one. Handles the case where the user went back from Sadad,
+    // changed their details, and submitted a new order — the previous pending
+    // order is cancelled immediately instead of waiting for the 6h cleanup job.
+    await client.query(
+      `UPDATE orders
+          SET payment_status = 'cancelled',
+              updated_at     = NOW()
+        WHERE tenant_id      = $1
+          AND customer_email = $2
+          AND payment_status = 'pending'
+          AND id            != $3`,
+      [tenantId, checkout.customer.email, createdOrder.id],
+    ).catch((err) => {
+      // Non-critical — cleanup job will handle them at the 6h mark.
+      console.warn('[checkout] Could not cancel prior pending orders:', err.message);
+    });
+
     for (const item of checkout.items) {
       const qty = Number(item.qty || item.quantity) || 1;
       const unit = toCents(item.price);
