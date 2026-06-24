@@ -169,7 +169,7 @@ async function bootstrap() {
     const client = await db.pool.connect();
     try {
       const tenant = await ensureDefaultTenant(client);
-      await ensureAllMigrations(client);           // migrations 002 – 006
+      await ensureAllMigrations(client);           // migrations 002 – 015
       await ensureReferenceSchema(client, tenant.id);
       await ensureProductRecommendationsSchema(client);
       await ensureRestockNotificationsSchema(client);
