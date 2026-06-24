@@ -284,8 +284,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       if (status === 'paid') {
         void this.router.navigate(['/thank-you'], { queryParams: { order: orderRef } });
       } else {
+        // 'pending' here means the user left Sadad without completing payment —
+        // treat it as cancelled, not a hard failure, so the message stays calm.
+        const reason = (status === 'failed') ? 'failed' : 'cancelled';
         void this.router.navigate(['/checkout/failure'], {
-          queryParams: { order: orderRef, reason: status === 'cancelled' ? 'cancelled' : 'failed' },
+          queryParams: { order: orderRef, reason },
         });
       }
     } catch {
@@ -304,6 +307,14 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     // Fresh key so the new attempt creates a new order, not a dedup hit on the
     // abandoned one.
     this.idempotencyKey = null;
+    // Reset the stuck UI: on bfcache restore these signals are frozen from just
+    // before the Sadad redirect (step 2, redirecting=true). Send the user back
+    // to the first step with a clean state instead of the "Redirecting..." form.
+    this.redirecting.set(false);
+    this.placing.set(false);
+    this.error.set('');
+    this.step.set(0);
+    window.scrollTo(0, 0);
   }
 
   onImgError(e: Event): void {
