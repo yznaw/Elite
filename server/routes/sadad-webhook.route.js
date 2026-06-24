@@ -64,17 +64,22 @@ router.post('/', async (req, res) => {
       console.warn('[sadad-webhook] No payments record for order', { websiteRefNo });
     }
 
+    // Idempotency: Sadad may deliver the same webhook more than once.
+    // If this transaction was already recorded, skip the update entirely.
     if (existing.rows[0]?.provider_payment_id === transactionNumber) {
       console.log('[sadad-webhook] Duplicate — already processed', { transactionNumber });
+      return;
     }
 
-    // Update orders table
+    // Guard: never downgrade a paid order. Same race-condition protection as
+    // the callback handler — whichever arrives first wins, the other is a no-op.
     const orderResult = await client.query(
       `UPDATE orders
           SET payment_status = $1::order_payment_status,
               paid_at        = CASE WHEN $1::order_payment_status = 'paid' THEN NOW() ELSE paid_at END,
               updated_at     = NOW()
         WHERE id = $2::uuid
+          AND payment_status != 'paid'
         RETURNING tenant_id`,
       [paymentStatus, websiteRefNo],
     );

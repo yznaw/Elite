@@ -126,19 +126,36 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
   let publicOrderNumber = '';
   let paymentUpdateSaved = false;
   try {
+    // Guard: never downgrade a paid order. The Sadad webhook and callback can
+    // arrive in any order. If the webhook already marked this order 'paid',
+    // the WHERE clause prevents the callback from overwriting it.
     const orderResult = await client.query(
       `UPDATE orders
           SET payment_status = $1::order_payment_status,
               paid_at        = CASE WHEN $1::order_payment_status = 'paid' THEN NOW() ELSE paid_at END,
               updated_at     = NOW()
         WHERE id = $2::uuid
+          AND payment_status != 'paid'
         RETURNING tenant_id, public_number`,
       [paymentStatus, orderId],
     );
 
     if (orderResult.rowCount === 0) {
-      console.warn('[sadad-callback] Order not found', { orderId, transactionNumber });
-      return res.redirect(`${storefrontBase(req)}/checkout/failure?reason=order_not_found`);
+      // rowCount is 0 for two reasons:
+      //   1. Order does not exist → genuine error.
+      //   2. Order is already 'paid' → webhook arrived first and updated it.
+      //      In that case we still want to send the customer to /thank-you.
+      const existing = await client.query(
+        `SELECT public_number, payment_status FROM orders WHERE id = $1::uuid`,
+        [orderId],
+      );
+      if (existing.rowCount === 0) {
+        console.warn('[sadad-callback] Order not found', { orderId, transactionNumber });
+        return res.redirect(`${storefrontBase(req)}/checkout/failure?reason=order_not_found`);
+      }
+      const alreadyPaid = existing.rows[0];
+      console.log('[sadad-callback] Order already paid — redirecting to thank-you', { orderId });
+      return res.redirect(`${storefrontBase(req)}/thank-you?order=${encodeURIComponent(alreadyPaid.public_number)}`);
     }
 
     const updatedOrder = orderResult.rows[0];
@@ -259,6 +276,38 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
     return res.redirect(`${sf}/checkout/failure?order=${orderRef}&reason=${encodeURIComponent(payload.RESPMSG || 'failed')}`);
   }
   return res.redirect(`${sf}/checkout/pending?order=${orderRef}`);
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/payments/order-status/:orderId
+// Lets the storefront check if a pending order was paid after the user returns
+// from the Sadad payment page via browser back.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/order-status/:orderId', asyncHandler(async (req, res) => {
+  const { orderId } = req.params;
+
+  if (!orderId) {
+    return res.status(400).json({ success: false, message: 'orderId is required' });
+  }
+
+  const { rows } = await db.pool.query(
+    `SELECT id, payment_status, public_number
+       FROM orders
+      WHERE id = $1::uuid`,
+    [orderId],
+  );
+
+  if (rows.length === 0) {
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      paymentStatus: rows[0].payment_status,
+      publicNumber:  rows[0].public_number,
+    },
+  });
 }));
 
 module.exports = router;

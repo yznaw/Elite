@@ -10,6 +10,11 @@ import { DeliveryQuote } from '../../services/checkout.service';
 import { PaymentService } from '../../services/payment.service';
 import { I18nService } from '../../services/i18n.service';
 
+// sessionStorage key written just before the browser is sent to Sadad.
+// If the user hits Back, ngOnInit reads this key and shows the recovery screen
+// instead of the normal checkout form, preventing duplicate order submission.
+const PENDING_ORDER_KEY = 'elite_pending_order';
+
 const STEPS = ['checkout.step.details', 'checkout.step.delivery', 'checkout.step.payment'] as const;
 
 interface CheckoutForm {
@@ -47,6 +52,12 @@ export class CheckoutComponent implements OnInit {
   readonly termsHandle   = signal<string | null>(null);
   readonly privacyHandle = signal<string | null>(null);
 
+  // Set when the user returns to /checkout after being sent to Sadad.
+  // While non-null the recovery screen is shown instead of the checkout form.
+  readonly resumeOrderId  = signal<string | null>(null);
+  readonly resumeChecking = signal(false);
+  readonly resumeError    = signal('');
+
   private get apiBase(): string {
     const { hostname, protocol } = window.location;
     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
@@ -54,6 +65,11 @@ export class CheckoutComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    const pendingId = sessionStorage.getItem(PENDING_ORDER_KEY);
+    if (pendingId) {
+      this.resumeOrderId.set(pendingId);
+    }
+
     try {
       const res = await firstValueFrom(
         this.http.get<{ success: boolean; data: { handle: string; policyType: string }[] }>(`${this.apiBase}/policies`),
@@ -221,6 +237,45 @@ export class CheckoutComponent implements OnInit {
     window.scrollTo(0, 0);
   }
 
+  // Called from the recovery screen: asks the server for the current payment
+  // status of the pending order and routes the user to the correct result page.
+  // Clears the sessionStorage flag on either outcome.
+  async resumeCheckStatus(): Promise<void> {
+    const orderId = this.resumeOrderId();
+    if (!orderId || this.resumeChecking()) return;
+    this.resumeChecking.set(true);
+    this.resumeError.set('');
+    try {
+      const res = await firstValueFrom(
+        this.http.get<{ success: boolean; data: { paymentStatus: string; publicNumber: string } }>(
+          `${this.apiBase}/payments/order-status/${encodeURIComponent(orderId)}`,
+        ),
+      );
+      const status = res.data?.paymentStatus;
+      const orderRef = res.data?.publicNumber || orderId;
+      sessionStorage.removeItem(PENDING_ORDER_KEY);
+      if (status === 'paid') {
+        void this.router.navigate(['/thank-you'], { queryParams: { order: orderRef } });
+      } else {
+        void this.router.navigate(['/checkout/failure'], {
+          queryParams: { order: orderRef, reason: status === 'cancelled' ? 'cancelled' : 'failed' },
+        });
+      }
+    } catch {
+      this.resumeError.set(this.t('checkout.resume.error'));
+    } finally {
+      this.resumeChecking.set(false);
+    }
+  }
+
+  // Called from the recovery screen: user chooses to ignore the pending order
+  // and start fresh. The pending order is left for the cleanup job to cancel.
+  resumeStartNew(): void {
+    sessionStorage.removeItem(PENDING_ORDER_KEY);
+    this.resumeOrderId.set(null);
+    this.resumeError.set('');
+  }
+
   onImgError(e: Event): void {
     (e.target as HTMLImageElement).style.display = 'none';
   }
@@ -298,11 +353,14 @@ export class CheckoutComponent implements OnInit {
     this.placing.set(false);
 
     // ── Step 2: Redirect to Sadad payment page ────────────────────────────
+    // Store the orderId so we can detect if the user hits Back from Sadad.
+    sessionStorage.setItem(PENDING_ORDER_KEY, orderId);
     this.redirecting.set(true);
     try {
       // This call builds a hidden form and submits it — browser navigates away.
       await this.paymentService.redirectToSadadCheckout(orderId);
     } catch {
+      sessionStorage.removeItem(PENDING_ORDER_KEY);
       this.redirecting.set(false);
       this.error.set(this.t('checkout.error.payment'));
     }
