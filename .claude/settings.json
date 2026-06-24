@@ -76,7 +76,9 @@
       "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -c \"SELECT name FROM ref_size_sets ORDER BY sort_order;\")",
       "Bash(xargs cat -n)",
       "Bash(echo \"EXIT: $?\")",
-      "Bash(node -c server/routes/carts.route.js)"
+      "Bash(node -c server/routes/carts.route.js)",
+      "Bash(git fetch *)",
+      "Bash(git rebase *)"
     ]
   }
 }
