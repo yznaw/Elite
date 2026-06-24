@@ -58,6 +58,12 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   readonly resumeChecking = signal(false);
   readonly resumeError    = signal('');
 
+  // Stable idempotency key for the current checkout attempt. Generated lazily on
+  // the first placeOrder() call and reused on retries, so a double-tap or retry
+  // returns the same order instead of creating a duplicate. Cleared after a
+  // successful order so the next checkout gets a fresh key.
+  private idempotencyKey: string | null = null;
+
   private get apiBase(): string {
     const { hostname, protocol } = window.location;
     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
@@ -295,6 +301,9 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     sessionStorage.removeItem(PENDING_ORDER_KEY);
     this.resumeOrderId.set(null);
     this.resumeError.set('');
+    // Fresh key so the new attempt creates a new order, not a dedup hit on the
+    // abandoned one.
+    this.idempotencyKey = null;
   }
 
   onImgError(e: Event): void {
@@ -329,6 +338,12 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     return quote.amount > 0 ? this.price(quote.amount) : this.t('checkout.delivery.free');
   }
 
+  private newIdempotencyKey(): string {
+    return (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `co-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   private async placeOrder(): Promise<void> {
     if (this.placing() || this.redirecting()) return;
     if (this.cart.items().length === 0) {
@@ -339,6 +354,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
     const form = this.form();
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+
+    // Reuse the key across retries; only mint a new one if none exists yet.
+    if (!this.idempotencyKey) {
+      this.idempotencyKey = this.newIdempotencyKey();
+    }
 
     // ── Step 1: Create the order (payment_status = pending) ───────────────
     this.placing.set(true);
@@ -364,6 +384,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
         },
         items: this.cart.items(),
         shippingQuote: this.shippingQuote()!,
+        idempotencyKey: this.idempotencyKey,
       });
       orderId = order.id; // UUID for payment gateway
     } catch {

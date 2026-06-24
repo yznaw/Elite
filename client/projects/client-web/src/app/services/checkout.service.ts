@@ -58,6 +58,7 @@ export class CheckoutService {
     shippingAddress: CheckoutAddress;
     items: CartItem[];
     shippingQuote: DeliveryQuote;
+    idempotencyKey?: string;
     payment?: {
       provider: string;
       method: string;
