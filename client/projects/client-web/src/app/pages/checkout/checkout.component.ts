@@ -223,6 +223,9 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       this.shippingQuote.set(null);
       this.error.set('');
     }
+    // Any field change invalidates the pending order — a different submission
+    // must create a new order, not return the old one via idempotency dedup.
+    this.idempotencyKey = null;
   }
 
   markTouched(field: CustomerField): void {
@@ -274,6 +277,9 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
   back(): void {
     this.error.set('');
+    // Going back means the user may change details — reset the key so the next
+    // Place Order creates a fresh order instead of returning the old one.
+    this.idempotencyKey = null;
     this.step.update((s) => Math.max(0, s - 1));
   }
 
