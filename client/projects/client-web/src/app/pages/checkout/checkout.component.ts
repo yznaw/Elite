@@ -10,10 +10,13 @@ import { DeliveryQuote } from '../../services/checkout.service';
 import { PaymentService } from '../../services/payment.service';
 import { I18nService } from '../../services/i18n.service';
 
-// sessionStorage key written just before the browser is sent to Sadad.
-// If the user hits Back, ngOnInit reads this key and shows the recovery screen
-// instead of the normal checkout form, preventing duplicate order submission.
-const PENDING_ORDER_KEY = 'elite_pending_order';
+// Written just before the browser is sent to Sadad. On Back, ngOnInit reads
+// this and silently resumes the checkout at the Payment step.
+const PENDING_ORDER_KEY  = 'elite_pending_order';
+// Persists the form data across the Sadad redirect so it can be restored after
+// a bfcache reload. Cleared together with PENDING_ORDER_KEY on resume.
+const PENDING_FORM_KEY   = 'elite_pending_form';
+const PENDING_QUOTE_KEY  = 'elite_pending_quote';
 
 const STEPS = ['checkout.step.details', 'checkout.step.delivery', 'checkout.step.payment'] as const;
 
@@ -69,18 +72,37 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   private readonly onPageShow = (event: PageTransitionEvent): void => {
     // event.persisted is true when the page is restored from the bfcache —
     // e.g. the user hit Back from the Sadad payment page. ngOnInit does NOT
-    // run in that case, so we handle it here instead.
-    if (event.persisted) {
-      this.silentResume();
+    // run, and Angular's change detection does not re-run on frozen signals
+    // (redirecting, shippingQuote, etc. are all stale). Force a clean reload
+    // so ngOnInit runs fresh and silentResume() works correctly.
+    if (event.persisted && sessionStorage.getItem(PENDING_ORDER_KEY)) {
+      window.location.reload();
     }
   };
 
   // If the user hit Back from Sadad, silently put them back at the Payment step.
-  // No decision screen — the order exists, everything is filled in, just resume.
+  // Called from ngOnInit (normal navigation) — bfcache case triggers a reload
+  // so ngOnInit always runs fresh here.
   private silentResume(): void {
     const pendingId = sessionStorage.getItem(PENDING_ORDER_KEY);
     if (!pendingId) return;
+
+    // Restore form data so the delivery quote re-fetch has all required fields.
+    try {
+      const savedForm = sessionStorage.getItem(PENDING_FORM_KEY);
+      if (savedForm) this.form.set(JSON.parse(savedForm));
+
+      const savedQuote = sessionStorage.getItem(PENDING_QUOTE_KEY);
+      if (savedQuote) {
+        const q = JSON.parse(savedQuote);
+        this.shippingQuote.set(q);
+        this.quotedDeliveryKey = this.deliveryQuoteKey(this.form(), this.cart.items());
+      }
+    } catch { /* ignore — form stays at defaults */ }
+
     sessionStorage.removeItem(PENDING_ORDER_KEY);
+    sessionStorage.removeItem(PENDING_FORM_KEY);
+    sessionStorage.removeItem(PENDING_QUOTE_KEY);
     this.redirecting.set(false);
     this.placing.set(false);
     this.step.set(2);
@@ -354,14 +376,19 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     this.placing.set(false);
 
     // ── Step 2: Redirect to Sadad payment page ────────────────────────────
-    // Store the orderId so we can detect if the user hits Back from Sadad.
+    // Persist state before navigation so silentResume() can restore it on Back.
     sessionStorage.setItem(PENDING_ORDER_KEY, orderId);
+    sessionStorage.setItem(PENDING_FORM_KEY, JSON.stringify(this.form()));
+    const quote = this.shippingQuote();
+    if (quote) sessionStorage.setItem(PENDING_QUOTE_KEY, JSON.stringify(quote));
     this.redirecting.set(true);
     try {
       // This call builds a hidden form and submits it — browser navigates away.
       await this.paymentService.redirectToSadadCheckout(orderId);
     } catch {
       sessionStorage.removeItem(PENDING_ORDER_KEY);
+      sessionStorage.removeItem(PENDING_FORM_KEY);
+      sessionStorage.removeItem(PENDING_QUOTE_KEY);
       this.redirecting.set(false);
       this.error.set(this.t('checkout.error.payment'));
     }
