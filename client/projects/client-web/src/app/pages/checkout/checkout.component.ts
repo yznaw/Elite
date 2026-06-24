@@ -52,10 +52,6 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   readonly termsHandle   = signal<string | null>(null);
   readonly privacyHandle = signal<string | null>(null);
 
-  // Set when the user returns to /checkout after being sent to Sadad.
-  // While non-null the recovery screen is shown instead of the checkout form.
-  readonly resumeOrderId  = signal<string | null>(null);
-  readonly resumeError = signal('');
 
   // Stable idempotency key for the current checkout attempt. Generated lazily on
   // the first placeOrder() call and reused on retries, so a double-tap or retry
@@ -72,18 +68,23 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   // Bound reference so we can add AND remove the same listener.
   private readonly onPageShow = (event: PageTransitionEvent): void => {
     // event.persisted is true when the page is restored from the bfcache —
-    // e.g. the user hit Back from the Sadad payment page. In that case
-    // ngOnInit does NOT run again, so we must re-check the pending flag here.
+    // e.g. the user hit Back from the Sadad payment page. ngOnInit does NOT
+    // run in that case, so we handle it here instead.
     if (event.persisted) {
-      this.checkPendingOrder();
+      this.silentResume();
     }
   };
 
-  private checkPendingOrder(): void {
+  // If the user hit Back from Sadad, silently put them back at the Payment step.
+  // No decision screen — the order exists, everything is filled in, just resume.
+  private silentResume(): void {
     const pendingId = sessionStorage.getItem(PENDING_ORDER_KEY);
-    if (pendingId) {
-      this.resumeOrderId.set(pendingId);
-    }
+    if (!pendingId) return;
+    sessionStorage.removeItem(PENDING_ORDER_KEY);
+    this.redirecting.set(false);
+    this.placing.set(false);
+    this.step.set(2);
+    window.scrollTo(0, 0);
   }
 
   ngOnDestroy(): void {
@@ -92,7 +93,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     // Covers the normal navigation case (fresh load / SPA route).
-    this.checkPendingOrder();
+    this.silentResume();
     // Covers the bfcache case (browser Back from Sadad restores a frozen page).
     window.addEventListener('pageshow', this.onPageShow);
 
@@ -263,46 +264,6 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     window.scrollTo(0, 0);
   }
 
-  // Continue to payment with the existing pending order — jump straight to step 2.
-  resumeContinue(): void {
-    this.resumeOrderId.set(null);
-    this.resumeError.set('');
-    this.redirecting.set(false);
-    this.placing.set(false);
-    this.step.set(2);
-    window.scrollTo(0, 0);
-  }
-
-  // Go back to details so the user can update address/info before retrying.
-  // The pending order stays; the user will re-submit from step 0.
-  resumeUpdateDetails(): void {
-    this.resumeOrderId.set(null);
-    this.resumeError.set('');
-    this.redirecting.set(false);
-    this.placing.set(false);
-    this.idempotencyKey = null; // new details = new order
-    this.step.set(0);
-    window.scrollTo(0, 0);
-  }
-
-  // Called from the recovery screen: user chooses to ignore the pending order
-  // and start fresh. The pending order is left for the cleanup job to cancel.
-  resumeStartNew(): void {
-    sessionStorage.removeItem(PENDING_ORDER_KEY);
-    this.resumeOrderId.set(null);
-    this.resumeError.set('');
-    // Fresh key so the new attempt creates a new order, not a dedup hit on the
-    // abandoned one.
-    this.idempotencyKey = null;
-    // Reset the stuck UI: on bfcache restore these signals are frozen from just
-    // before the Sadad redirect (step 2, redirecting=true). Send the user back
-    // to the first step with a clean state instead of the "Redirecting..." form.
-    this.redirecting.set(false);
-    this.placing.set(false);
-    this.error.set('');
-    this.step.set(0);
-    window.scrollTo(0, 0);
-  }
 
   onImgError(e: Event): void {
     (e.target as HTMLImageElement).style.display = 'none';
