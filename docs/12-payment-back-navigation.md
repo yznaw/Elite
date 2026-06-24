@@ -317,7 +317,7 @@ Both server and client changed across these parts.
 
 ```bash
 cd /var/www/elite
-git pull origin admin-bugs-fixes
+git pull origin main
 cd client && npm run build:web      # rebuild storefront bundle
 cd .. && pm2 restart elite-api
 ```
