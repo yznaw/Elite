@@ -19,4 +19,10 @@ export class CheckoutResultComponent {
   readonly isPending = signal(this.route.snapshot.routeConfig?.path === 'checkout/pending');
   readonly isCancelled = signal(this.reason() === 'cancelled');
   readonly t = (key: string): string => this.i18n.t(key);
+
+  constructor() {
+    // Payment completed (success or failure) — clear the back-navigation flag
+    // so the recovery screen does not appear if the user navigates back later.
+    sessionStorage.removeItem('elite_pending_order');
+  }
 }

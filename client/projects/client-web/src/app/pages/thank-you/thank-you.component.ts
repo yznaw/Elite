@@ -21,5 +21,8 @@ export class ThankYouComponent {
 
   constructor() {
     this.cart.clear();
+    // Payment confirmed — clear the back-navigation flag so the recovery screen
+    // does not appear if the user navigates back to /checkout later.
+    sessionStorage.removeItem('elite_pending_order');
   }
 }

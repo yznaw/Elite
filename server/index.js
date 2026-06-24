@@ -15,6 +15,7 @@ const { ensureProductRecommendationsSchema } = require('./db/product-recommendat
 const { ensureRestockNotificationsSchema } = require('./db/restock-notifications-schema');
 const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
+const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -180,6 +181,8 @@ async function bootstrap() {
   } else {
     console.warn('DATABASE_URL not set — skipping tenant + admin-user bootstrap.');
   }
+
+  startPendingOrderCleanup();
 
   app.listen(PORT, () => {
     console.log(`✅  Elite API running at http://localhost:${PORT}/api`);

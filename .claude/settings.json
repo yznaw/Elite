@@ -73,7 +73,8 @@
       "Bash(pkill -f \"node.*server\")",
       "Bash(lsof -ti:3000)",
       "Bash(xargs kill -9)",
-      "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -c \"SELECT name FROM ref_size_sets ORDER BY sort_order;\")"
+      "Bash(PGPASSWORD=elite_password psql -h localhost -U elite -d elite -c \"SELECT name FROM ref_size_sets ORDER BY sort_order;\")",
+      "Bash(xargs cat -n)"
     ]
   }
 }
