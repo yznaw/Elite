@@ -480,7 +480,7 @@ router.post('/:id/restock-notifications', async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      data: inserted.rows[0],
+      data: inserted,
       message: 'Restock notification saved.',
     });
   } catch (err) {
