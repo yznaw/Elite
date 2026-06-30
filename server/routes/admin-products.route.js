@@ -68,7 +68,7 @@ function validateProduct(body) {
   return errors;
 }
 
-async function replaceVariants(client, tenantId, productId, variants) {
+async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true } = {}) {
   // Collect incoming SKUs so we can remove variants that were deleted in the UI
   const incomingSkus = variants.map(v => String(v.sku || '').trim()).filter(Boolean);
 
@@ -135,8 +135,9 @@ async function replaceVariants(client, tenantId, productId, variants) {
           -- Preserve existing stock when the editor sends 0 but DB already has a real value
           -- (protects against a product save overwriting a bulk-stock-update)
           stock_quantity     = CASE
+            WHEN ${trustZeroStock} THEN EXCLUDED.stock_quantity
             WHEN EXCLUDED.stock_quantity > 0 THEN EXCLUDED.stock_quantity
-            ELSE GREATEST(product_variants.stock_quantity, EXCLUDED.stock_quantity)
+            ELSE product_variants.stock_quantity
           END,
           updated_at = NOW()
       `,
@@ -256,11 +257,14 @@ async function replaceColorImages(client, tenantId, productId, urls, colorsByUrl
       const colorKey = String(color).trim().toLowerCase();
       if (!colorKey) continue;
 
+      // Strip /api/ prefix that the Angular client adds for proxy routing
+      const rawUrl = url.startsWith('/api/') ? url.slice(4) : url;
       const { rows } = await client.query(
         `SELECT id FROM media_assets
-         WHERE tenant_id = $1 AND (storage_url = $2 OR preview_url = $2)
+         WHERE tenant_id = $1 AND (storage_url = $2 OR preview_url = $2
+                                OR storage_url = $3 OR preview_url = $3)
          LIMIT 1`,
-        [tenantId, url],
+        [tenantId, url, rawUrl],
       );
       if (!rows[0]) continue;
 
@@ -319,6 +323,7 @@ async function replaceRecommendations(client, tenantId, productId, relatedProduc
 }
 
 function mapAdminProduct(row) {
+  const desc = row.description || {};
   return {
     id: row.id,
     name: row.name,
@@ -332,13 +337,12 @@ function mapAdminProduct(row) {
     images: row.images || [],
     imageColors: normalizeImageColors(row.image_colors),
     variants: row.variants || [],
+    enDesc: desc.en || '',
+    arDesc: desc.ar || '',
     metaTitle: row.meta_title || '',
     metaDesc: row.meta_desc || '',
     slug: row.slug || '',
     relatedProductIds: row.related_product_ids || [],
-    metaTitle: row.meta_title || '',
-    metaDesc: row.meta_desc || '',
-    slug: row.slug || '',
   };
 }
 
@@ -351,23 +355,22 @@ async function loadAdminProduct(client, tenantId, productId) {
       SELECT
         p.*,
         COALESCE(primary_media.preview_url, primary_media.storage_url, '') AS image,
-        COALESCE(
-          jsonb_agg(
-            DISTINCT jsonb_build_object(
-              'id', pv.id,
-              'sku', pv.sku,
-              'size', pv.size,
-              'color', pv.color,
-              'material', pv.material,
-              'price', round(pv.price_cents / 100.0),
-              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
-              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
-              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
-              'stock', pv.stock_quantity
-            )
-          ) FILTER (WHERE pv.id IS NOT NULL),
-          '[]'::jsonb
-        ) AS variants,
+        COALESCE((
+          SELECT jsonb_agg(jsonb_build_object(
+            'id', pv.id,
+            'sku', pv.sku,
+            'size', pv.size,
+            'color', pv.color,
+            'material', pv.material,
+            'price', round(pv.price_cents / 100.0),
+            'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
+            'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
+            'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
+            'stock', pv.stock_quantity
+          ) ORDER BY pv.sort_order, pv.created_at)
+          FROM product_variants pv
+          WHERE pv.product_id = p.id
+        ), '[]'::jsonb) AS variants,
         COALESCE((
           SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
           FROM media_links ml
@@ -385,7 +388,6 @@ async function loadAdminProduct(client, tenantId, productId) {
         ), ARRAY[]::uuid[]) AS related_product_ids,
         pt_ar.name AS name_ar
       FROM products p
-      LEFT JOIN product_variants pv ON pv.product_id = p.id
       LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
       LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
       WHERE p.tenant_id = $1 AND p.id = $2 AND p.status <> 'archived'
@@ -486,6 +488,14 @@ async function upsertProduct(client, tenant, product) {
 
   const saved = upserted.rows[0];
   await replaceVariants(client, tenant.id, saved.id, variants);
+  // Re-sum variant stock onto the product row so the catalog total is always
+  // accurate even when the stock-preservation branch kept a different value.
+  if (variants.length > 0) {
+    await client.query(
+      'UPDATE products SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1), updated_at = now() WHERE id = $1',
+      [saved.id],
+    );
+  }
   await replaceImages(client, tenant.id, saved.id, images, imageColors);
   if (hasRelatedProductIds) {
     await replaceRecommendations(client, tenant.id, saved.id, product.relatedProductIds);
@@ -519,21 +529,20 @@ router.get('/', asyncHandler(async (_req, res) => {
         SELECT
           p.*,
           COALESCE(primary_media.preview_url, primary_media.storage_url, '') AS image,
-          COALESCE(
-            jsonb_agg(
-              DISTINCT jsonb_build_object(
-                'id', pv.id,
-                'sku', pv.sku,
-                'size', pv.size,
-                'color', pv.color,
-                'material', pv.material,
-                'price', round(pv.price_cents / 100.0),
-                'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
-                'stock', pv.stock_quantity
-              )
-            ) FILTER (WHERE pv.id IS NOT NULL),
-            '[]'::jsonb
-          ) AS variants,
+          COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', pv.id,
+              'sku', pv.sku,
+              'size', pv.size,
+              'color', pv.color,
+              'material', pv.material,
+              'price', round(pv.price_cents / 100.0),
+              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
+              'stock', pv.stock_quantity
+            ) ORDER BY pv.sort_order, pv.created_at)
+            FROM product_variants pv
+            WHERE pv.product_id = p.id
+          ), '[]'::jsonb) AS variants,
           COALESCE((
             SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
             FROM media_links ml
@@ -551,7 +560,6 @@ router.get('/', asyncHandler(async (_req, res) => {
           ), ARRAY[]::uuid[]) AS related_product_ids,
           pt_ar.name AS name_ar
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.status <> 'archived'
@@ -579,21 +587,20 @@ router.get('/:id', asyncHandler(async (req, res) => {
         SELECT
           p.*,
           COALESCE(primary_media.preview_url, primary_media.storage_url, '') AS image,
-          COALESCE(
-            jsonb_agg(
-              DISTINCT jsonb_build_object(
-                'id', pv.id,
-                'sku', pv.sku,
-                'size', pv.size,
-                'color', pv.color,
-                'material', pv.material,
-                'price', round(pv.price_cents / 100.0),
-                'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
-                'stock', pv.stock_quantity
-              )
-            ) FILTER (WHERE pv.id IS NOT NULL),
-            '[]'::jsonb
-          ) AS variants,
+          COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', pv.id,
+              'sku', pv.sku,
+              'size', pv.size,
+              'color', pv.color,
+              'material', pv.material,
+              'price', round(pv.price_cents / 100.0),
+              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
+              'stock', pv.stock_quantity
+            ) ORDER BY pv.sort_order, pv.created_at)
+            FROM product_variants pv
+            WHERE pv.product_id = p.id
+          ), '[]'::jsonb) AS variants,
           COALESCE((
             SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
             FROM media_links ml
@@ -611,7 +618,6 @@ router.get('/:id', asyncHandler(async (req, res) => {
           ), ARRAY[]::uuid[]) AS related_product_ids,
           pt_ar.name AS name_ar
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status <> 'archived'
@@ -970,7 +976,7 @@ router.post('/:id/duplicate', asyncHandler(async (req, res) => {
       stock: 0,
       variants: (source.variants || []).map(v => ({
         ...v,
-        sku: v.sku.replace(source.sku, newSku),
+        sku: v.sku.replaceAll(source.sku, newSku),
       })),
     });
     const product = await loadAdminProduct(client, tenant.id, saved.id);

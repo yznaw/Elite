@@ -29,6 +29,8 @@ export interface Product {
   imageColors?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
+  enDesc?: string;
+  arDesc?: string;
   metaTitle?: string;
   metaDesc?: string;
   slug?: string;

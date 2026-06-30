@@ -1946,8 +1946,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       price: p.price,
       stock: p.stock,
       hidden: p.hidden,
-      enDesc: 'Hand-stitched in our Doha atelier from full-grain camel leather. Each pair takes 48 hours of single-artisan attention. Limited to 40 pairs per season.',
-      arDesc: 'مصنوع يدويًا في ورشتنا في الدوحة من جلد الجمل الكامل الحبيبات. كل زوج يستغرق 48 ساعة من الاهتمام الحرفي الواحد. محدود بـ 40 زوجًا في الموسم.',
+      enDesc: p.enDesc ?? '',
+      arDesc: p.arDesc ?? '',
       metaTitle: p.metaTitle || `${p.name} · ${p.brand} · Elite Collection`,
       metaDesc: p.metaDesc || `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
       slug: p.slug || p.name.toLowerCase().replace(/\s+/g, '-'),
@@ -2221,6 +2221,37 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return this.refColors().find(c => c.name_en === name)?.hex ?? '#e5e7eb';
   }
 
+  /**
+   * Derives the SKU color segment for a given color name.
+   * Strategy: strip non-letters, uppercase, take up to 3 chars.
+   * e.g. "Taupe" → "TAU", "Milk White" → "MIL", "Black" → "BLA"
+   * This is used when generating new variant SKUs in the product editor.
+   * Bulk-imported SKUs carry their own codes from the CSV.
+   */
+  private colorToSkuCode(colorName: string): string {
+    return colorName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3) || 'CLR';
+  }
+
+  /**
+   * Extracts the color code segment from an existing variant SKU.
+   * Given baseSku = "3513-RBR" and variantSku = "3513-RBR-RP-5",
+   * returns "RP". Returns null if the SKU doesn't start with baseSku or
+   * has no extra segments to parse.
+   */
+  private extractColorCodeFromSku(baseSku: string, variantSku: string): string | null {
+    if (!baseSku || !variantSku || !variantSku.startsWith(baseSku + '-')) return null;
+    const rest = variantSku.slice(baseSku.length + 1); // e.g. "RP-5" or "RP-5.5"
+    const segments = rest.split('-');
+    // The last segment is typically numeric (the size); the one before it is the color code.
+    if (segments.length >= 2) {
+      const last = segments[segments.length - 1];
+      const isSize = /^\d+(\.\d+)?$/.test(last) || /^(XS|S|M|L|XL|XXL|XXXL|OS)$/i.test(last);
+      if (isSize) return segments[segments.length - 2];
+    }
+    // Only one segment after base — could be just a color code (no size yet)
+    return segments[0] || null;
+  }
+
   colorSwatchImage(name: string | undefined): string | null {
     if (!name) return null;
     return this.refColors().find(c => c.name_en === name)?.swatch_image_url ?? null;
@@ -2257,9 +2288,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   addVariantForColor(colorName: string): void {
     const f = this.form();
+    const colorCode = this.colorToSkuCode(colorName);
     const next: ProductVariant = {
       id:       'V-' + Date.now().toString(36),
-      sku:      f.sku ? `${f.sku}-${colorName.toUpperCase().slice(0,3)}-NEW` : '',
+      sku:      f.sku ? `${f.sku}-${colorCode}-NEW` : '',
       size:     '',
       color:    colorName,
       material: '',
@@ -2284,9 +2316,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     );
     const toAdd = ss.sizes.filter(sz => !existingSizes.has(sz));
     if (toAdd.length === 0) { this.toast.info(this.t('product.variants.allSizesAdded'), ss.name); return; }
+    const colorCode = this.colorToSkuCode(colorName);
     const newVariants: ProductVariant[] = toAdd.map(sz => ({
       id:       'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
-      sku:      f.sku ? `${f.sku}-${colorName.toUpperCase().slice(0,3)}-${sz}` : '',
+      sku:      f.sku ? `${f.sku}-${colorCode}-${sz}` : '',
       size:     sz,
       color:    colorName,
       material: '',
@@ -2308,11 +2341,34 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return items.reduce((sum, item) => sum + (Number(item.v.stock) || 0), 0);
   }
 
-  /** Renames all variants in a color group to a new color name. */
+  /** Renames all variants in a color group to a new color name, updating SKU segments too. */
   renameGroupColor(colorKey: string, newColor: string): void {
-    const next = this.form().variants.map(v => {
+    const f = this.form();
+    const baseSku = f.sku;
+    const newCode = this.colorToSkuCode(newColor);
+
+    // Find the old color code by inspecting the first matching variant's SKU
+    const firstMatch = f.variants.find(v => (v.color || '').trim().toLowerCase() === colorKey);
+    const oldCode = firstMatch && baseSku
+      ? this.extractColorCodeFromSku(baseSku, firstMatch.sku)
+      : null;
+
+    const next = f.variants.map(v => {
       const key = (v.color || '').trim().toLowerCase() || '__none__';
-      return key === colorKey ? { ...v, color: newColor } : v;
+      if (key !== colorKey) return v;
+
+      let newSku = v.sku;
+      if (baseSku && oldCode && newSku.startsWith(baseSku + '-')) {
+        // Replace only the first occurrence of the old code segment after baseSku
+        const afterBase = newSku.slice(baseSku.length + 1);
+        const replaced = afterBase.replace(
+          new RegExp(`^${oldCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(-|$)`),
+          `${newCode}$1`
+        );
+        newSku = `${baseSku}-${replaced}`;
+      }
+
+      return { ...v, color: newColor, sku: newSku };
     });
     this.set('variants', next);
   }
@@ -2534,6 +2590,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.price = saved.price;
       this.product.stock = saved.stock;
       this.product.hidden = saved.hidden;
+      this.product.enDesc = saved.enDesc ?? f.enDesc;
+      this.product.arDesc = saved.arDesc ?? f.arDesc;
       this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
       this.product.images = [...(saved.images ?? f.images)];
       this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };

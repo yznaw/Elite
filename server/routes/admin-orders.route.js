@@ -52,12 +52,13 @@ function mapPayment(status) {
 async function loadAdminOrder(client, tenantId, id) {
   const result = await client.query(
     `
-      SELECT o.*, COUNT(oi.id)::integer AS items_count, s.tracking_number,
-        COALESCE(jsonb_agg(DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0), 'img', oi.media_url)) FILTER (WHERE oi.id IS NOT NULL), '[]'::jsonb) AS items,
+      SELECT o.*,
+        (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
+        s.tracking_number,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail) ORDER BY t.occurred_at) FROM order_timeline_entries t WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', to_char(n.created_at, 'YYYY-MM-DD HH24:MI'), 'author', 'Admin', 'initials', 'AD', 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n WHERE n.order_id = o.id), '[]'::jsonb) AS notes
       FROM orders o
-      LEFT JOIN order_items oi ON oi.order_id = o.id
       LEFT JOIN shipments s ON s.order_id = o.id
       WHERE o.tenant_id = $1 AND (o.id::text = $2 OR o.public_number = $2)
       GROUP BY o.id, s.tracking_number
@@ -117,16 +118,10 @@ router.get('/', asyncHandler(async (req, res) => {
       `
         SELECT
           o.*,
-          COUNT(oi.id)::integer AS items_count,
+          (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
           s.tracking_number,
-          COALESCE(
-            jsonb_agg(
-              DISTINCT jsonb_build_object('n', oi.product_name, 's', COALESCE(oi.size, ''), 'q', oi.quantity, 'p', round(oi.unit_price_cents / 100.0), 'img', oi.media_url)
-            ) FILTER (WHERE oi.id IS NOT NULL),
-            '[]'::jsonb
-          ) AS items
+          COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items
         FROM orders o
-        LEFT JOIN order_items oi ON oi.order_id = o.id
         LEFT JOIN shipments s ON s.order_id = o.id
         WHERE ${whereClause}
         GROUP BY o.id, s.tracking_number

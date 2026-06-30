@@ -35,6 +35,24 @@ The implementation added:
 - Sidebar collapse: `SidebarToggleService.collapsed` signal added. App shell grid uses `--sidebar-w` CSS variable (240px ↔ 68px).
 - Storefront content expanded: `storefront-content.route.js` now normalizes `heroSlider`, `promise`, `stats`, and `contact` sections. `store_settings.home_content` JSONB stores all of them.
 
+**June 2026 — Product system fixes (admin-products, bulk-import, storefront):**
+
+- **`mapAdminProduct()` cleanup:** Removed duplicate keys (`metaTitle`, `metaDesc`, `slug`, `relatedProductIds`) that were being emitted twice. Added `enDesc` / `arDesc` extracted from the `description` JSONB column so the front end receives them as flat strings.
+- **Correlated subquery for variants:** All product queries (admin list, admin detail, storefront) replaced `jsonb_agg(DISTINCT ...)` with a correlated subquery using `ORDER BY sort_order, created_at`. PostgreSQL does not support `ORDER BY` in a `DISTINCT` aggregate, which returned variants in random order.
+- **Same fix in orders and customers:** `admin-orders.route.js` and `admin-customers.route.js` had the same `jsonb_agg(DISTINCT ...)` pattern for order items — both converted to correlated subqueries ordered by `order_items.id`.
+- **Stock auto-sum:** After every `replaceVariants()` call in the admin save flow, `products.stock_quantity` is recomputed as `SUM(product_variants.stock_quantity)` to keep product-level stock accurate.
+- **`trustZeroStock` flag:** `replaceVariants()` now accepts `{ trustZeroStock }`. The editor always passes `true` (zero means zero); bulk import passes `false` (zero means "no data", preserve existing stock).
+- **Color image URL normalization:** `replaceColorImages()` strips the `/api/` prefix before looking up image URLs in `media_assets`, handling both direct and proxy-prefixed URLs.
+- **Bulk import — Arabic preservation:** Re-importing a product reads the existing `description.ar` from the DB and carries it forward. Previously `ar` was always reset to `''`.
+- **Bulk import — brand from tenant:** `brand` on insert/update is now `tenant.name` instead of the hardcoded string `'Elite'`.
+- **Bulk import — base SKU update:** The `UPDATE` path now also updates `products.sku` when re-importing, so SKU changes in the CSV are reflected.
+- **Bulk import — `color_ref_id`:** The variant `INSERT` and `ON CONFLICT DO UPDATE` now set `color_ref_id` via an inline subquery against `ref_colors`, linking each variant to its canonical color.
+- **Bulk import — stock preservation:** Variant rows with `stock_quantity = 0` in the CSV no longer zero out existing stock.
+- **Bulk import — whitespace normalization:** Product name grouping normalizes internal whitespace (`\s+` → single space) before comparison.
+- **Product drawer — description pre-fill:** `makeFormFromProduct()` now populates `enDesc` / `arDesc` from the server-supplied values instead of empty placeholder strings.
+- **Product drawer — SKU code helper:** `colorToSkuCode()` replaces the inline `.toUpperCase().slice(0,3)` used when adding colors, correctly stripping non-alpha characters. `extractColorCodeFromSku()` parses the color segment out of a full variant SKU.
+- **Product drawer — color rename updates SKUs:** `renameGroupColor()` now rewrites the color segment in all affected variant SKUs when a color group is renamed.
+
 **Previous June 2026 additions:**
 
 - `ApiClient.mediaUrl()` — converts `/uploads/` → `/api/uploads/` so all media URLs route through the Nginx `/api` proxy in production. Used by `AdminMediaService`, `AdminProductsService`, `MediaUploadService`, and `HomeContentComponent`.
@@ -366,7 +384,7 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 | `GET` | `/api/admin/customers/:id` | `SELECT` one customer |
 | `POST` | `/api/admin/customers` | `INSERT ... ON CONFLICT DO UPDATE` customer |
 | `PATCH` | `/api/admin/customers/:id` | `UPDATE` customer profile |
-| `DELETE` | `/api/admin/customers/:id` | `DELETE` customer |
+| `DELETE` | `/api/admin/customers/:id` | Soft-delete — sets `deleted_at = now()`, order history preserved |
 
 ### Orders
 

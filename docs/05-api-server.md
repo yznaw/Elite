@@ -492,7 +492,7 @@ Admin authentication uses **server-side sessions** (no JWT):
 
 - Accepts a `multipart/form-data` CSV upload (field: `csv`, max 10 MB)
 - **Dry-run mode:** pass `?dryRun=true` (or `?dryRun=1`). The full pipeline runs inside a DB transaction that is ROLLBACKed instead of COMMITted at the end. Preview results are identical to a real import. `productId` and `imagesUploaded` are `null`/`0` in dry-run items.
-- Groups rows by **English Name** — each unique name becomes one `products` record
+- Groups rows by **English Name** — each unique name becomes one `products` record. Internal whitespace is normalized (`\s+` → single space) before grouping to prevent duplicate products from formatting differences in the CSV.
 - Each color row within a group → one `product_variants` row (SKU + color + price)
 - Images are downloaded from Google Drive folder links (`GOOGLE_API_KEY` env var required for folder listing). Images are **skipped** in dry-run mode.
 - Streams progress as **NDJSON** (one JSON object per line, chunked transfer encoding):
@@ -501,6 +501,14 @@ Admin authentication uses **server-side sessions** (no JWT):
   - `{ type:'item', current, total, name, status, variantsCreated, variantsUpdated, imagesUploaded, imagesFailed, error }` — after each product
   - `{ type:'done', summary }` — final counts
 - Template download: `GET /api/admin/bulk-import/template`
+
+**June 2026 bulk import fixes:**
+- **Arabic description preservation:** On re-import, the existing `description.ar` value is read from the DB and kept. Previously re-importing always wrote `ar: ''`, erasing Arabic descriptions set by the editor.
+- **Brand from tenant config:** `brand` is now set to `tenant.name` (not the hardcoded string `'Elite'`) so white-label tenants get the correct brand on bulk import.
+- **Base SKU updated on re-import:** The `UPDATE` branch now also sets `products.sku = $3` so re-importing a product updates its base SKU if it changed.
+- **`color_ref_id` set on variant upsert:** Both the `INSERT` and the `ON CONFLICT DO UPDATE` branches now set `color_ref_id` via an inline subquery against `ref_colors`, linking the variant to the normalized color reference.
+- **Stock preserved on re-import:** Variants with `stock_quantity = 0` in the CSV no longer zero out existing stock. Only positive CSV stock values overwrite; zero is treated as "no data".
+- **SKU normalization fix:** `v.sku.replace()` changed to `v.sku.replaceAll()` so all hyphens are replaced when constructing variant SKUs, not just the first one.
 
 ### Bulk Delete endpoint (`POST /api/admin/products/bulk-delete`)
 
@@ -515,6 +523,11 @@ Admin authentication uses **server-side sessions** (no JWT):
 - Calls `replaceVariants()` internally, which deletes all old variants and re-inserts them
 - **FK safety:** Before deleting variants, `cart_items.variant_id` is set to `NULL` for any cart items referencing those variants (`cart_items.variant_id` is `ON DELETE RESTRICT`). Cart items survive with their product reference intact.
 - **SEO fields:** `meta_title` and `meta_desc` are included in the `UPDATE` query (added by migration `004_product_meta_seo.sql`). Returned in the response via `mapAdminProduct()`.
+- **Description fields (June 2026):** `mapAdminProduct()` extracts `enDesc` and `arDesc` from the `description` JSONB column (`{ en, ar }`) so the front end receives them as flat strings. Duplicate response keys (`metaTitle`, `metaDesc`, `slug`, `relatedProductIds`) removed from `mapAdminProduct()`.
+- **Stock auto-sum (June 2026):** After `replaceVariants()`, `products.stock_quantity` is recomputed as `SUM(product_variants.stock_quantity)` so the product-level stock stays in sync with variants.
+- **`trustZeroStock` flag (June 2026):** `replaceVariants()` accepts `{ trustZeroStock }`. When `true` (editor save), zero stock always overwrites. When `false` (bulk import), existing non-zero stock is preserved if the incoming value is 0.
+- **Variant ordering fix (June 2026):** All product queries use a correlated subquery with `ORDER BY sort_order, created_at` instead of `jsonb_agg(DISTINCT ...)`. PostgreSQL does not support `ORDER BY` inside `DISTINCT` aggregate — this was causing variants to come back in unpredictable order.
+- **Color image URL fix (June 2026):** `replaceColorImages()` normalizes `/api/`-prefixed image URLs before looking them up in `media_assets`.
 
 ### Reference data endpoints (`/api/admin/ref/*`)
 
