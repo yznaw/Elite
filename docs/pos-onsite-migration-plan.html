@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>On-Site POS Migration Plan — swiftPOS → Elite POS</title>
+<style>
+  :root {
+    --gold: #C9A84C; --gold-light: #F5EDD6; --gold-mid: #E8D5A0;
+    --ink: #1A1A2E; --ink-2: #3D3D5C; --muted: #6B7280;
+    --surface: #FFFFFF; --bg: #F8F7F4; --bg-2: #F0EDE6; --border: #E5E0D5;
+    --green: #16A34A; --green-bg: #F0FDF4; --green-border: #BBF7D0;
+    --blue: #2563EB; --blue-bg: #EFF6FF;
+    --orange: #D97706; --orange-bg: #FFFBEB;
+    --red: #DC2626; --red-bg: #FEF2F2;
+    --purple: #7C3AED; --purple-bg: #F5F3FF;
+    --radius: 12px; --shadow: 0 2px 12px rgba(0,0,0,.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--ink); line-height: 1.6; }
+
+  .hero {
+    background: linear-gradient(135deg, #1A1A2E 0%, #2D2D4A 60%, #3D3525 100%);
+    color: #fff; padding: 56px 48px 48px; position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 80% 50%, rgba(201,168,76,.18) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(201,168,76,.18); border: 1px solid rgba(201,168,76,.35);
+    color: #E8D5A0; font-size: 12px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 5px 14px; border-radius: 20px; margin-bottom: 20px;
+  }
+  .hero h1 { font-size: 34px; font-weight: 800; line-height: 1.2; margin-bottom: 12px; }
+  .hero h1 span { color: var(--gold); }
+  .hero p { font-size: 16px; opacity: .68; max-width: 660px; }
+  .hero-meta { display: flex; gap: 32px; margin-top: 32px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,.1); flex-wrap: wrap; }
+  .hero-stat { display: flex; flex-direction: column; gap: 2px; }
+  .hero-stat-n { font-size: 24px; font-weight: 800; color: var(--gold); }
+  .hero-stat-l { font-size: 12px; opacity: .5; text-transform: uppercase; letter-spacing: .06em; }
+
+  .banner {
+    max-width: 960px; margin: -24px auto 0; position: relative; z-index: 5;
+    background: var(--red-bg); border: 1.5px solid #FCA5A5; border-radius: var(--radius);
+    padding: 18px 24px; box-shadow: var(--shadow); display: flex; gap: 14px; align-items: flex-start;
+  }
+  .banner .ic { font-size: 20px; line-height: 1.4; }
+  .banner b { color: var(--red); display: block; margin-bottom: 3px; font-size: 14px; }
+  .banner p { font-size: 13.5px; color: var(--ink-2); }
+
+  .page { max-width: 960px; margin: 0 auto; padding: 40px 32px 80px; }
+
+  .section { display: flex; align-items: center; gap: 14px; margin: 48px 0 16px; }
+  .sec-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .sec-title { font-size: 18px; font-weight: 800; }
+  .sec-sub { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .sec-line { flex: 1; height: 1px; background: var(--border); }
+  .sec-badge {
+    font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 20px; flex-shrink: 0; white-space: nowrap;
+  }
+  .sec-badge.critical { background: #FEE2E2; color: #991B1B; }
+  .sec-badge.important { background: #FEF3C7; color: #92400E; }
+  .sec-badge.info { background: #DBEAFE; color: #1E40AF; }
+  .sec-badge.safe { background: var(--green-bg); color: #15803D; }
+
+  .phase-nav {
+    display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 8px;
+  }
+  .phase-pill {
+    font-size: 12.5px; font-weight: 700; padding: 7px 14px; border-radius: 20px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+  }
+  .phase-pill.a { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+  .phase-pill.b { border-color: var(--orange); color: var(--orange); background: var(--orange-bg); }
+  .phase-pill.c { border-color: var(--green); color: #15803D; background: var(--green-bg); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px 24px; margin-bottom: 14px; box-shadow: var(--shadow);
+  }
+  .card h3 { font-size: 15.5px; font-weight: 800; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .card .step-n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 6px; background: var(--gold-light); color: var(--ink);
+    font-size: 12px; font-weight: 800; flex-shrink: 0;
+  }
+  .card p.desc { font-size: 13.5px; color: var(--ink-2); margin-bottom: 10px; }
+  .card ul, .card ol { margin-left: 20px; font-size: 13.5px; color: var(--ink-2); }
+  .card li { margin-bottom: 5px; }
+  .card .why {
+    margin-top: 10px; padding: 10px 14px; background: var(--bg-2); border-radius: 8px;
+    font-size: 12.5px; color: var(--ink-2); border-left: 3px solid var(--gold);
+  }
+  .card .why b { color: var(--ink); }
+
+  .tag {
+    display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
+    padding: 3px 9px; border-radius: 6px; margin-left: 8px; text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .tag.noimpact { background: var(--green-bg); color: #15803D; }
+  .tag.readonly { background: var(--blue-bg); color: var(--blue); }
+  .tag.risk { background: var(--red-bg); color: var(--red); }
+  .tag.window { background: var(--purple-bg); color: var(--purple); }
+
+  .devicebox {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 14px; margin: 16px 0 24px;
+  }
+  .device {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; box-shadow: var(--shadow);
+  }
+  .device .dic { font-size: 22px; margin-bottom: 8px; }
+  .device h4 { font-size: 13.5px; font-weight: 800; margin-bottom: 4px; }
+  .device p { font-size: 12px; color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 14px 0; }
+  th { text-align: left; background: var(--bg-2); padding: 9px 12px; font-weight: 700; color: var(--ink-2); font-size: 12px; }
+  td { padding: 9px 12px; border-top: 1px solid var(--border); color: var(--ink-2); }
+  tr:first-child td { border-top: none; }
+
+  .checklist { list-style: none; margin: 10px 0 0; }
+  .checklist li {
+    display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; font-size: 13.5px; color: var(--ink-2);
+  }
+  .checklist li::before {
+    content: '☐'; color: var(--gold); font-size: 15px; flex-shrink: 0; line-height: 1.4;
+  }
+
+  .callout {
+    border-radius: var(--radius); padding: 16px 20px; margin: 16px 0; font-size: 13.5px;
+  }
+  .callout.info { background: var(--blue-bg); border: 1px solid #BFDBFE; color: var(--ink-2); }
+  .callout.warn { background: var(--orange-bg); border: 1px solid #FDE68A; color: var(--ink-2); }
+  .callout.danger { background: var(--red-bg); border: 1px solid #FCA5A5; color: var(--ink-2); }
+  .callout.ok { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--ink-2); }
+  .callout b { color: var(--ink); }
+
+  code {
+    background: var(--bg-2); padding: 2px 6px; border-radius: 5px; font-size: 12px;
+    font-family: 'SF Mono', Consolas, monospace; color: var(--ink);
+  }
+
+  .record-box {
+    background: #1A1A2E; color: #E8D5A0; border-radius: var(--radius); padding: 20px 24px;
+    font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; line-height: 1.8;
+    margin-top: 12px;
+  }
+
+  footer { text-align: center; padding: 32px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <span class="hero-badge">⚙ Field Deployment Plan</span>
+  <h1>swiftPOS → <span>Elite POS</span> On-Site Migration</h1>
+  <p>The client is currently live on swiftPOS (v10.3.1) running on a Posiflex terminal with a USB barcode scanner and a Bixolon thermal printer. This plan gets you from "test compatibility" to "safe cutover" without touching their running system until you are ready.</p>
+  <div class="hero-meta">
+    <div class="hero-stat"><div class="hero-stat-n">3</div><div class="hero-stat-l">Phases</div></div>
+    <div class="hero-stat"><div class="hero-stat-n">0</div><div class="hero-stat-l">Live-system changes in Phase 1</div></div>
+    <div class="hero-stat"><div class="hero-stat-n">1</div><div class="hero-stat-l">Scheduled cutover window</div></div>
+  </div>
+</div>
+
+<div class="banner">
+  <div class="ic">🛑</div>
+  <div>
+    <b>Do not touch the live swiftPOS install during Phase 1 or 2.</b>
+    <p>Everything in Phase 1 (audit) and Phase 2 (compatibility test) is designed to run alongside swiftPOS with zero risk to the client's ability to sell today. Nothing gets uninstalled, no drivers get replaced, and no cables get moved permanently until Phase 3 is explicitly scheduled and approved.</p>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="phase-nav">
+    <span class="phase-pill a">Phase 1 — Audit (read-only)</span>
+    <span class="phase-pill b">Phase 2 — Isolated hardware test</span>
+    <span class="phase-pill c">Phase 3 — Scheduled cutover</span>
+  </div>
+
+  <div class="callout info">
+    <b>What's actually in front of you:</b> a Posiflex all-in-one terminal running swiftPOS 10.3.1 (data path <code>D:\SwiftPOS_Elite\Data</code>), a corded USB HID handheld barcode scanner, a Bixolon thermal receipt printer (drawer-kick capable), and what looks like a separate QNB payment terminal for card transactions. None of this hardware is Elite-specific — a barcode scanner and an ESC/POS Bixolon printer are exactly the class of hardware Elite POS is already built to support (see the <a href="./pos-hardware-runbook.md">Elite POS Hardware Runbook</a>). The unknown is driver/queue configuration and whether this exact printer model behaves as expected, not whether the hardware category is compatible.
+  </div>
+
+  <div class="devicebox">
+    <div class="device"><div class="dic">🖥️</div><h4>Posiflex Terminal</h4><p>Windows PC currently running swiftPOS 10.3.1. Will later run Chrome/Edge for Elite's browser-based <code>/pos</code> UI.</p></div>
+    <div class="device"><div class="dic">📷</div><h4>USB Barcode Scanner</h4><p>Corded, keyboard-wedge style (green scan line visible). Needs Enter-suffix confirmation.</p></div>
+    <div class="device"><div class="dic">🧾</div><h4>Bixolon Printer</h4><p>80mm-class ESC/POS thermal printer, likely with a cash-drawer kick port. Exact model/firmware must be recorded.</p></div>
+    <div class="device"><div class="dic">💳</div><h4>QNB Payment Terminal</h4><p>Separate card terminal, not controlled by either POS software — card sales are manually confirmed after an external approval.</p></div>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="section">
+    <div class="sec-icon" style="background:var(--blue-bg)">🔍</div>
+    <div><div class="sec-title">Phase 1 — Audit the Current Setup</div><div class="sec-sub">Document everything. Change nothing. Client keeps selling on swiftPOS the whole time.</div></div>
+    <div class="sec-line"></div>
+    <span class="sec-badge info">Read-only</span>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">1</span> Record swiftPOS's current configuration <span class="tag noimpact">No impact</span></h3>
+    <p class="desc">Before anything else, capture what "working" looks like today so you have a rollback reference and can prove nothing broke.</p>
+    <ul>
+      <li>Screenshot the swiftPOS main menu (version <code>10.3.1</code>, build <code>901-1543-19.09.27</code>, data path <code>D:\SwiftPOS_Elite\Data</code> — already visible in the title bar).</li>
+      <li>Open <b>Utilities</b> and note any hardware configuration screens (printer name, port, drawer settings) swiftPOS itself uses — this tells you the actual working driver/port config for this exact printer and scanner.</li>
+      <li>Confirm who the current manager/login users are (seen: <code>SALIM</code>) and how shifts/reports currently close — you'll need to know their existing end-of-day routine so Elite's shift/Z-report flow doesn't surprise them.</li>
+      <li>Ask the client (or check swiftPOS reports) roughly how many transactions/day and what hours the register is unattended, to size your eventual cutover window.</li>
+    </ul>
+    <div class="why"><b>Why:</b> If Phase 3 cutover ever needs a rollback, you need to know exactly what "before" looked like. This step also tells you the real driver/port settings this specific printer needs, which saves you guessing in Phase 2.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">2</span> Physically trace and label every cable <span class="tag noimpact">No impact</span></h3>
+    <p class="desc">Follow each cable by hand rather than assuming from the photos.</p>
+    <ul>
+      <li>Scanner → confirm it plugs into a USB port on the terminal (not a separate hub/dongle that could be a proprietary interface).</li>
+      <li>Bixolon printer → confirm its connection type: USB, serial, or network/Ethernet. This changes the entire driver approach in Phase 2.</li>
+      <li>Cash drawer → confirm the drawer cable runs from the <b>printer's</b> drawer-kick port, not from the terminal directly. (Photo 3 shows the printer with what could be a modem/handset next to it — visually confirm the drawer separately; it doesn't appear connected in the photo provided.)</li>
+      <li>QNB payment terminal → confirm it is fully independent (its own network/phone line), not looped through the POS terminal at all.</li>
+    </ul>
+    <div class="why"><b>Why:</b> Elite's architecture assumes the drawer is wired to the printer, never the terminal directly (see Hardware Runbook §7). If this install differs, that changes your Phase 2 test plan and Phase 3 rewiring steps.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">3</span> Identify exact hardware models and firmware <span class="tag noimpact">No impact</span></h3>
+    <ul>
+      <li>Bixolon: full model number (e.g. SRP-350plusIII) and firmware version — check a label on the underside/back, or Windows' installed printer driver properties.</li>
+      <li>Scanner: model/serial (there's a maintenance label visible in your photo, but it's obscured — check for a manufacturer name and model on the underside).</li>
+      <li>Terminal: confirm Windows version/edition (visible taskbar suggests Windows 10) and available USB ports/free ports for testing.</li>
+    </ul>
+    <div class="why"><b>Why:</b> The Hardware Runbook explicitly warns not to assume two printer models with similar names share cutter/QR/drawer behavior — you must certify the <i>exact</i> model, not "a Bixolon."</div>
+  </div>
+
+  <div class="callout ok">
+    <b>Phase 1 exit criteria:</b> you have photos/notes of swiftPOS's working hardware config, confirmed cable routing, and exact model numbers for printer + scanner — and swiftPOS has not been touched, stopped, or reconfigured at any point.
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="section">
+    <div class="sec-icon" style="background:var(--orange-bg)">🧪</div>
+    <div><div class="sec-title">Phase 2 — Test Elite POS Against This Hardware in Isolation</div><div class="sec-sub">Your own laptop or a spare machine. Same scanner/printer, borrowed briefly. swiftPOS keeps running.</div></div>
+    <div class="sec-line"></div>
+    <span class="sec-badge important">Zero contact with live install</span>
+  </div>
+
+  <div class="callout warn">
+    <b>Key constraint:</b> a USB scanner and a USB/network printer can only be actively claimed by one machine at a time. To test them against Elite without disrupting swiftPOS, you either (a) borrow the scanner/printer's cable for a few minutes during a quiet moment and plug into your own laptop, or (b) if the printer is network-connected, you can test print jobs to it from your laptop over the network without ever unplugging anything, while swiftPOS still owns its own USB scanner connection separately. Confirm which situation you're in during Phase 1, Step 2.
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">4</span> Set up an isolated Elite POS test session <span class="tag readonly">Your own machine</span></h3>
+    <ol>
+      <li>Bring a laptop (or use a spare machine on-site) with Chrome/Edge installed.</li>
+      <li>Log in to Elite admin as owner/admin, open <code>/pos</code>, and enroll a <b>test register</b> with an obviously temporary name like <code>TEST-Onsite-Visit</code> — never reuse or overwrite a production register identity.</li>
+      <li>Open a test shift with a nominal opening float on a <b>test tenant or sandboxed product catalog</b> if available, so any test sales don't pollute real sales/inventory reporting.</li>
+    </ol>
+    <div class="why"><b>Why:</b> This confirms Elite's own software side works before you introduce hardware variables, and guarantees nothing you do here can appear in the client's real sales/inventory numbers.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">5</span> Test the barcode scanner against Elite <span class="tag readonly">Borrowed briefly</span></h3>
+    <ol>
+      <li>Unplug the scanner from the Posiflex terminal, plug it into your test laptop. (swiftPOS will simply show no scanner connected until you plug it back — no data loss, no config change.)</li>
+      <li>In Elite <code>/pos</code>, focus the barcode input field and scan a real product barcode from the client's catalog.</li>
+      <li>Confirm the scan appends Enter automatically and one exact variant is added to the cart (Hardware Runbook §8).</li>
+      <li>Scan an unknown/random barcode and confirm the cart does not change.</li>
+      <li>Scan the same code 10 times quickly and confirm consistent results.</li>
+      <li>Reconnect the scanner to the Posiflex terminal immediately after testing and confirm swiftPOS sees it again before you leave that station.</li>
+    </ol>
+    <div class="why"><b>Why:</b> this is the exact acceptance test in Hardware Runbook §13.G — passing it here means the scanner model itself is proven compatible before it's ever wired into a live register.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">6</span> Test the Bixolon printer against Elite <span class="tag readonly">Borrowed briefly / network test</span></h3>
+    <ol>
+      <li>If USB: briefly disconnect from the Posiflex terminal, connect to your test laptop, and install the vendor Windows driver fresh (don't assume your laptop already has it).</li>
+      <li>If network-connected: no need to disconnect anything — add the printer's IP as a queue on your laptop directly.</li>
+      <li>Create a stable queue name, set 80mm paper width, and disable any "convert to graphic" transformation mode so raw ESC/POS passes through (Hardware Runbook §6).</li>
+      <li>Install and start QZ Tray 2.2.x on your test laptop, confirm the printer queue appears with the exact name.</li>
+      <li>Complete a test cash sale in Elite's sandboxed session and confirm: receipt prints once, in readable ESC/POS (not garbled), with correct 80mm formatting.</li>
+      <li>If a drawer is wired to this printer, confirm it pulses once on the cash sale and confirm Pin 2 works before trying Pin 5.</li>
+      <li>Reconnect everything to the Posiflex terminal exactly as found.</li>
+    </ol>
+    <div class="why"><b>Why:</b> This is the highest-risk unknown from Phase 1 — printer driver quirks are model-specific. Proving this now means Phase 3 has no surprises on the one component most likely to misbehave.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">7</span> Confirm offline behavior works on this hardware <span class="tag noimpact">Sandbox only</span></h3>
+    <ol>
+      <li>With the test register still connected to scanner + printer, disconnect your test laptop's network/WiFi entirely.</li>
+      <li>Complete a sandbox sale and confirm it queues locally, gets a reserved receipt number, and still prints via the local QZ signer (Hardware Runbook §10, §13.E).</li>
+      <li>Reconnect network and confirm the queued sale syncs and the queue count returns to zero.</li>
+    </ol>
+    <div class="why"><b>Why:</b> offline resilience is one of Elite POS's core selling points over swiftPOS — proving it works on this exact hardware combination before cutover avoids discovering a gap on day one of go-live.</div>
+  </div>
+
+  <div class="callout ok">
+    <b>Phase 2 exit criteria:</b> scanner and printer both pass their individual acceptance tests against Elite POS on a throwaway test register/tenant. swiftPOS was briefly interrupted only for cable-swap moments (ideally during off-hours) and was fully restored afterward. No real client data touched Elite.
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="section">
+    <div class="sec-icon" style="background:var(--green-bg)">🚀</div>
+    <div><div class="sec-title">Phase 3 — Scheduled Cutover</div><div class="sec-sub">Only after Phase 2 passes. Requires a pre-agreed window and a rollback plan.</div></div>
+    <div class="sec-line"></div>
+    <span class="sec-badge critical">Live-system change</span>
+  </div>
+
+  <div class="callout danger">
+    <b>Do not start Phase 3 the same day as Phase 1/2</b> unless the client has explicitly approved combining them. Cutover should happen during a scheduled closed/low-traffic window, with the client aware that swiftPOS will be unavailable during the switch and a rollback path is agreed in advance.
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">8</span> Agree the cutover window and rollback plan <span class="tag window">Scheduling</span></h3>
+    <ul>
+      <li>Pick a closed hour or lowest-traffic period based on the transaction volume you learned in Phase 1.</li>
+      <li>Confirm with the client: "if anything goes wrong, we revert to swiftPOS and try again another day" — get this agreed verbally/in writing before you start.</li>
+      <li>Do <b>not</b> uninstall swiftPOS during this cutover. Leave it installed and untouched on the machine as the rollback path until Elite POS has been running successfully in production for an agreed trial period (recommend at least one full week of real trading days).</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">9</span> Wire the terminal for Elite POS <span class="tag risk">Live change</span></h3>
+    <ol>
+      <li>Reconnect scanner and printer to the Posiflex terminal permanently (they were already tested against this exact terminal's ports in Phase 2 if possible, or an identical port type).</li>
+      <li>Install the printer driver, QZ Tray, and the Elite offline device signer per Hardware Runbook §5–§10, using the production Elite origin and real signing certificates (not test ones).</li>
+      <li>Follow Hardware Runbook §11–§12 to enroll this specific register under its real, permanent name (e.g. <code>Main Counter 1</code>) and configure hardware settings in Elite.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">10</span> Run the full acceptance suite before letting the client sell live <span class="tag risk">Required gate</span></h3>
+    <p class="desc">Do not release the register for real trading until every applicable test in <a href="./pos-hardware-runbook.md">Hardware Runbook §13</a> passes: online cash sale, online card sale, refund receipt, printer failure safety, offline sale and print, restart recovery, and scanner reliability.</p>
+    <div class="record-box">Store/Tenant:
+Register display name:
+Elite register ID:
+Terminal asset/serial:
+Printer model/serial/firmware:
+Scanner model/serial:
+
+Online cash test:            PASS / FAIL
+Online card/no-drawer test:  PASS / FAIL
+Refund receipt + QR test:    PASS / FAIL
+Printer failure/reprint test:PASS / FAIL
+Offline print/sync test:     PASS / FAIL
+Restart recovery test:       PASS / FAIL
+Scanner test:                PASS / FAIL
+
+Tested by:
+Date/time:
+Rollback path confirmed with client: YES / NO
+Approved for production by:</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="step-n">11</span> Run a parallel/trial period before fully retiring swiftPOS <span class="tag risk">Business decision</span></h3>
+    <ul>
+      <li>Let the client run real sales on Elite POS for an agreed trial window while swiftPOS stays installed but idle.</li>
+      <li>Check in daily during the trial: any print failures, drawer issues, offline sync surprises, or workflow confusion for the cashier.</li>
+      <li>Only decommission/uninstall swiftPOS once the client explicitly signs off that Elite POS is trusted for daily use.</li>
+    </ul>
+    <div class="why"><b>Why:</b> the biggest real-world migration risk isn't the software, it's a live business losing the ability to sell. Keeping the old system as a safety net for a defined trial period costs nothing and removes essentially all downside risk.</div>
+  </div>
+
+  <div class="section">
+    <div class="sec-icon" style="background:var(--gold-light)">📋</div>
+    <div><div class="sec-title">Quick Reference — What Changes When</div></div>
+    <div class="sec-line"></div>
+  </div>
+
+  <table>
+    <tr><th>Phase</th><th>Touches live swiftPOS?</th><th>Touches client's real data?</th><th>Reversible?</th></tr>
+    <tr><td>1 — Audit</td><td>No</td><td>No (read-only observation)</td><td>N/A — nothing changed</td></tr>
+    <tr><td>2 — Isolated hardware test</td><td>Brief cable unplug/replug only</td><td>No (test tenant/register only)</td><td>Fully — reconnect and continue</td></tr>
+    <tr><td>3 — Cutover</td><td>Yes — becomes the primary system</td><td>Yes — real sales move to Elite</td><td>Yes, if swiftPOS is kept installed during trial period</td></tr>
+  </table>
+
+</div>
+
+<footer>Elite Collection — Internal deployment reference. Pair with the <a href="./pos-hardware-runbook.md">POS Hardware Runbook</a> for full acceptance test detail.</footer>
+
+</body>
+</html>

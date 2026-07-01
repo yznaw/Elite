@@ -21,6 +21,7 @@
 | 10 | [NBOX Integration](./10-nbox-integration.md) | Backend/DevOps | Delivery quote, shipment booking, and shipment status webhook flow |
 | 11 | [Storefront Analytics](./11-storefront-analytics.md) | Frontend/Backend Devs | First-party click/session/visitor tracking, ingestion, and the live admin analytics page |
 | 12 | [POS System and Integration](./12-pos-system.md) | Operations/Developers/DevOps | Implemented POS architecture, Elite data integration, offline sync, API, security, deployment, testing, and rollout |
+| 13 | [POS Review & Hardening Roadmap](./13-pos-review-roadmap.md) | Backend/Frontend Devs | Concurrency and offline-resilience audit of the POS core, with a prioritized fix list for locking and offline-queue durability |
 
 ---
 
@@ -37,6 +38,7 @@
 | [Master Plan](./master-plan.html) | Full backlog — what's live vs what still needs building, with acceptance criteria per feature. Click items to track progress. |
 | [POS System Plan](./pos-system-plan.html) | POS build — acceptance criteria per phase and sign-off gates for milestone payments (QAR 19,000 total). |
 | [POS Hardware Runbook](./pos-hardware-runbook.md) | Physical terminal, QZ Tray, Bixolon printer, cash drawer, scanner, offline signer, and acceptance procedure. |
+| [On-Site Migration Plan (swiftPOS → Elite POS)](./pos-onsite-migration-plan.html) | Phased field plan for testing hardware compatibility and cutting over a client's live swiftPOS install to Elite POS without risking their running business. |
 | [Production Launch](./production-launch.html) | Pre-launch checklist and go-live readiness tracker. |
 
 ---

@@ -62,7 +62,8 @@
       "Bash(cp /tmp/fav32.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-32x32.png')",
       "Bash(cp /tmp/fav192.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-192x192.png')",
       "Bash(cp /tmp/fav512.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-512x512.png')",
-      "Bash(cp /tmp/apple-touch.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/apple-touch-icon.png')"
+      "Bash(cp /tmp/apple-touch.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/apple-touch-icon.png')",
+      "Bash(open \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/docs/pos-onsite-migration-plan.html\")"
     ]
   }
 }
