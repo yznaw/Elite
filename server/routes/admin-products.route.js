@@ -663,6 +663,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
 
     let updated = 0;
     const notFound = [];
+    const changedProductIds = new Set();
 
     for (const item of updates) {
       const sku = String(item.sku || '').trim();
@@ -678,6 +679,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
       if (varResult.rowCount > 0) {
         // Re-sum all variant stock onto the parent product so the catalog stock total stays accurate
         const productId = varResult.rows[0].product_id;
+        changedProductIds.add(productId);
         await client.query(
           'UPDATE products SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1), updated_at = now() WHERE id = $1',
           [productId],
@@ -692,12 +694,16 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
         if (prodResult.rowCount === 0) {
           notFound.push(sku);
         } else {
+          changedProductIds.add(prodResult.rows[0].id);
           updated += prodResult.rowCount;
         }
       }
     }
 
     await client.query('COMMIT');
+    for (const productId of changedProductIds) {
+      await processRestockNotifications(client, tenant.id, productId);
+    }
     ok(res, { updated, notFound }, `${updated} variant(s) updated.`);
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
