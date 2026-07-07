@@ -359,6 +359,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.error.set('Tendered cash is less than the total.');
       return;
     }
+    const amountTenderedCents = tenderedCents ?? 0;
 
     this.busy.set(true);
     this.error.set('');
@@ -386,8 +387,8 @@ export class PosComponent implements OnInit, OnDestroy {
           method,
           cashAmountCents: method === 'cash' ? totalCents : 0,
           cardAmountCents: method === 'card' ? totalCents : 0,
-          amountTenderedCents: tenderedCents,
-          changeGivenCents: method === 'cash' ? tenderedCents - totalCents : 0,
+          amountTenderedCents,
+          changeGivenCents: method === 'cash' ? amountTenderedCents - totalCents : 0,
         },
         clientCreatedAt,
       };
