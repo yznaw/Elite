@@ -23,7 +23,7 @@ router.get('/size-sets', asyncHandler(async (_req, res) => {
   res.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
   const tenant = await ensureDefaultTenant(db);
   const { rows } = await db.query(
-    `SELECT id, name, sizes, sort_order
+    `SELECT id, name, sizes, size_chart, tip, sort_order
      FROM ref_size_sets
      WHERE tenant_id = $1
      ORDER BY sort_order, name`,

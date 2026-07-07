@@ -64,7 +64,9 @@ const META: Record<string, PageMeta> = {
       <div class="topbar-actions">
         <div class="topbar-search-desk inp-search" style="width:240px;position:relative;">
           <ap-icon name="search" [size]="14"/>
-          <input class="inp with-icon" [placeholder]="t('topbar.search.placeholder')"/>
+          <input class="inp with-icon" [placeholder]="t('topbar.search.placeholder')"
+                 #deskSearchInput
+                 (keydown.enter)="submitSearch(deskSearchInput.value); deskSearchInput.value = ''"/>
         </div>
 
         <button class="topbar-search-mobile icon-btn" [attr.aria-label]="t('common.search')" (click)="toggleSearch()">
@@ -136,6 +138,8 @@ const META: Record<string, PageMeta> = {
             class="inp with-icon"
             [placeholder]="t('topbar.search.placeholder')"
             (keydown.escape)="toggleSearch()"
+            (keydown.enter)="submitSearch(mobileSearchInput.value); mobileSearchInput.value = ''; toggleSearch()"
+            #mobileSearchInput
             autofocus
           />
         </div>
@@ -358,6 +362,12 @@ export class TopbarComponent {
 
   toggleSearch(): void  { this.searchOpen.update((o) => !o); }
   toggleUserDrop(): void { this.userDropOpen.update((v) => !v); }
+
+  submitSearch(query: string): void {
+    const q = query.trim();
+    if (!q) return;
+    void this.router.navigate(['/catalog'], { queryParams: { q } });
+  }
 
   @HostListener('document:click', ['$event'])
   onDocClick(e: Event): void {

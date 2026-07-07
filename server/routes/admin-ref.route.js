@@ -285,11 +285,9 @@ router.delete('/materials/:id', asyncHandler(async (req, res) => {
 
 router.get('/size-sets', asyncHandler(async (_req, res) => {
   const tenant = await ensureDefaultTenant(db);
-  // usage_hint: count distinct products that have at least one variant
-  // whose size appears in this size set's sizes array (heuristic — no FK).
   const { rows } = await db.query(
     `SELECT
-       ss.id, ss.name, ss.sizes, ss.sort_order,
+       ss.id, ss.name, ss.sizes, ss.size_chart, ss.tip, ss.sort_order,
        (
          SELECT COUNT(DISTINCT pv.product_id)::int
          FROM product_variants pv
@@ -309,45 +307,47 @@ router.get('/size-sets', asyncHandler(async (_req, res) => {
 router.post('/size-sets/:id/duplicate', asyncHandler(async (req, res) => {
   const tenant = await ensureDefaultTenant(db);
   const src = await db.query(
-    'SELECT name, sizes, sort_order FROM ref_size_sets WHERE id=$1 AND tenant_id=$2',
+    'SELECT name, sizes, size_chart, tip, sort_order FROM ref_size_sets WHERE id=$1 AND tenant_id=$2',
     [req.params.id, tenant.id],
   );
   if (!src.rowCount) return notFound(res);
-  const { name, sizes, sort_order } = src.rows[0];
+  const { name, sizes, size_chart, tip, sort_order } = src.rows[0];
   const { rows } = await db.query(
-    `INSERT INTO ref_size_sets (tenant_id, name, sizes, sort_order)
-     VALUES ($1,$2,$3,$4)
-     RETURNING id, name, sizes, sort_order, 0 AS usage_hint`,
-    [tenant.id, `Copy of ${name}`, sizes, sort_order + 1],
+    `INSERT INTO ref_size_sets (tenant_id, name, sizes, size_chart, tip, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id, name, sizes, size_chart, tip, sort_order, 0 AS usage_hint`,
+    [tenant.id, `Copy of ${name}`, sizes, JSON.stringify(size_chart ?? []), tip ?? null, sort_order + 1],
   );
   created(res, rows[0]);
 }));
 
 router.post('/size-sets', asyncHandler(async (req, res) => {
   const tenant = await ensureDefaultTenant(db);
-  const { name, sizes = [], sort_order = 0 } = req.body ?? {};
+  const { name, sizes = [], size_chart = [], tip = null, sort_order = 0 } = req.body ?? {};
   if (!String(name ?? '').trim()) return validationError(res, ['Size set name is required.']);
   if (!Array.isArray(sizes)) return validationError(res, ['sizes must be an array.']);
+  if (!Array.isArray(size_chart)) return validationError(res, ['size_chart must be an array.']);
   const { rows } = await db.query(
-    `INSERT INTO ref_size_sets (tenant_id, name, sizes, sort_order)
-     VALUES ($1,$2,$3,$4)
-     RETURNING id, name, sizes, sort_order`,
-    [tenant.id, name.trim(), JSON.stringify(sizes), sort_order],
+    `INSERT INTO ref_size_sets (tenant_id, name, sizes, size_chart, tip, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id, name, sizes, size_chart, tip, sort_order`,
+    [tenant.id, name.trim(), JSON.stringify(sizes), JSON.stringify(size_chart), tip || null, sort_order],
   );
   created(res, rows[0]);
 }));
 
 router.put('/size-sets/:id', asyncHandler(async (req, res) => {
   const tenant = await ensureDefaultTenant(db);
-  const { name, sizes, sort_order = 0 } = req.body ?? {};
+  const { name, sizes, size_chart = [], tip = null, sort_order = 0 } = req.body ?? {};
   if (!String(name ?? '').trim()) return validationError(res, ['Size set name is required.']);
   if (!Array.isArray(sizes)) return validationError(res, ['sizes must be an array.']);
+  if (!Array.isArray(size_chart)) return validationError(res, ['size_chart must be an array.']);
   const { rows } = await db.query(
     `UPDATE ref_size_sets
-     SET name=$3, sizes=$4, sort_order=$5
+     SET name=$3, sizes=$4, size_chart=$5, tip=$6, sort_order=$7
      WHERE id=$1 AND tenant_id=$2
-     RETURNING id, name, sizes, sort_order`,
-    [req.params.id, tenant.id, name.trim(), JSON.stringify(sizes), sort_order],
+     RETURNING id, name, sizes, size_chart, tip, sort_order`,
+    [req.params.id, tenant.id, name.trim(), JSON.stringify(sizes), JSON.stringify(size_chart), tip || null, sort_order],
   );
   if (!rows.length) return notFound(res);
   ok(res, rows[0]);

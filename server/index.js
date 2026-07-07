@@ -16,6 +16,7 @@ const { ensureRestockNotificationsSchema } = require('./db/restock-notifications
 const { ensurePosSchema } = require('./db/pos-schema');
 const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
+const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -169,7 +170,7 @@ async function prepareDatabase() {
     const client = await db.pool.connect();
     try {
       const tenant = await ensureDefaultTenant(client);
-      await ensureAllMigrations(client);           // migrations 002 – 006
+      await ensureAllMigrations(client);           // migrations 002 – 015
       await ensureReferenceSchema(client, tenant.id);
       await ensureProductRecommendationsSchema(client);
       await ensureRestockNotificationsSchema(client);

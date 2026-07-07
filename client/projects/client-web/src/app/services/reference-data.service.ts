@@ -17,10 +17,18 @@ interface RefColor {
   sort_order: number;
 }
 
+export interface SizeChartRow {
+  uk: string;
+  eu: string;
+  us: string;
+}
+
 export interface RefSizeSet {
   id: string;
   name: string;
   sizes: string[];
+  size_chart: SizeChartRow[];
+  tip?: string | null;
   sort_order: number;
 }
 
@@ -119,7 +127,9 @@ export class ReferenceDataService {
           ? res.data.map((set) => ({
             ...set,
             sizes: Array.isArray(set.sizes) ? set.sizes.map((size) => String(size).trim()).filter(Boolean) : [],
-          })).filter((set) => set.name && set.sizes.length > 0)
+            size_chart: Array.isArray(set.size_chart) ? set.size_chart : [],
+            tip: set.tip ?? null,
+          })).filter((set) => set.name && (set.sizes.length > 0 || set.size_chart.length > 0))
           : [];
         this._sizeSets.set(sets);
         this.sizeSetsLoadedAt = Date.now();

@@ -198,8 +198,13 @@ async function ensureAllMigrations(client) {
       ON orders (tenant_id, idempotency_key)
       WHERE idempotency_key IS NOT NULL
   `);
+  // DROP + CREATE (not CREATE OR REPLACE): the latter fails with
+  // "cannot drop columns from view" when the existing view in production has a
+  // different column set. Dropping first sidesteps that and is safe — the view
+  // is derived, holds no data.
+  await client.query(`DROP VIEW IF EXISTS v_customer_order_stats`);
   await client.query(`
-    CREATE OR REPLACE VIEW v_customer_order_stats AS
+    CREATE VIEW v_customer_order_stats AS
     SELECT
       customer_id,
       COUNT(*)::int                                            AS orders_count,
@@ -240,6 +245,38 @@ async function ensureAllMigrations(client) {
     CREATE INDEX IF NOT EXISTS policies_tenant_sort_idx
       ON policies (tenant_id, sort_order, created_at)
   `);
+
+  // ── Migration 014: add 'cancelled' to order_payment_status enum ─────────────
+  // Required by the pending-order cleanup job.
+  // ALTER TYPE ... ADD VALUE cannot run inside a DO/transaction block, so it is
+  // issued directly. IF NOT EXISTS makes it idempotent (PostgreSQL 12+); on
+  // older versions the duplicate-object error (42710) is caught and ignored.
+  try {
+    await client.query(`ALTER TYPE order_payment_status ADD VALUE IF NOT EXISTS 'cancelled'`);
+  } catch (err) {
+    if (err.code !== '42710') {
+      console.warn('[migrations] Could not add cancelled to order_payment_status:', err.message);
+    }
+  }
+
+  // ── Migration 015: size_chart column on ref_size_sets ──────────────────────
+  // Store UK/EU/US conversion rows. Each row: { uk: string, eu: string, us: string }
+  // sizes array is kept for backward compat (variants match by EU size value).
+  // tip: optional text shown below the chart (e.g. "If between sizes, select larger").
+  // Guarded: ref_size_sets is created in reference-schema.js (runs after this).
+  // If it does not exist yet, reference-schema.js adds these columns itself —
+  // so a failure here is non-fatal and must not abort the migration chain.
+  try {
+    await client.query(`
+      ALTER TABLE ref_size_sets
+        ADD COLUMN IF NOT EXISTS size_chart jsonb NOT NULL DEFAULT '[]',
+        ADD COLUMN IF NOT EXISTS tip        text
+    `);
+  } catch (err) {
+    if (err.code !== '42P01') { // 42P01 = undefined_table (created later)
+      console.warn('[migrations] size_chart migration skipped:', err.message);
+    }
+  }
 
   _done = true;
 }

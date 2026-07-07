@@ -5,13 +5,31 @@
     </div>
 
     <p class="result-kicker">
-      {{ isPending() ? t('checkoutResult.pendingKicker') : t('checkoutResult.failureKicker') }}
+      {{
+        isPending()
+          ? t('checkoutResult.pendingKicker')
+          : isCancelled()
+            ? t('checkoutResult.cancelledKicker')
+            : t('checkoutResult.failureKicker')
+      }}
     </p>
     <h1 class="serif result-title">
-      {{ isPending() ? t('checkoutResult.pendingTitle') : t('checkoutResult.failureTitle') }}
+      {{
+        isPending()
+          ? t('checkoutResult.pendingTitle')
+          : isCancelled()
+            ? t('checkoutResult.cancelledTitle')
+            : t('checkoutResult.failureTitle')
+      }}
     </h1>
     <p class="result-copy">
-      {{ isPending() ? t('checkoutResult.pendingBody') : t('checkoutResult.failureBody') }}
+      {{
+        isPending()
+          ? t('checkoutResult.pendingBody')
+          : isCancelled()
+            ? t('checkoutResult.cancelledBody')
+            : t('checkoutResult.failureBody')
+      }}
     </p>
 
     @if (orderNumber()) {

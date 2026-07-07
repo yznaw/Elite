@@ -135,20 +135,19 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
 
 function variantsSelect() {
   return `
-          COALESCE(
-            jsonb_agg(
-              DISTINCT jsonb_build_object(
-                'id', pv.id,
-                'sku', pv.sku,
-                'size', pv.size,
-                'color', pv.color,
-                'material', pv.material,
-                'price', round(pv.price_cents / 100.0),
-                'stock', pv.stock_quantity
-              )
-            ) FILTER (WHERE pv.id IS NOT NULL),
-            '[]'::jsonb
-          ) AS variants`;
+          COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', sv.id,
+              'sku', sv.sku,
+              'size', sv.size,
+              'color', sv.color,
+              'material', sv.material,
+              'price', round(sv.price_cents / 100.0),
+              'stock', sv.stock_quantity
+            ) ORDER BY sv.sort_order, sv.created_at)
+            FROM product_variants sv
+            WHERE sv.product_id = p.id AND sv.is_active = true
+          ), '[]'::jsonb) AS variants`;
 }
 
 function imageVariantsSelect() {
