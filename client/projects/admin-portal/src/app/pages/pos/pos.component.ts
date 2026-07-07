@@ -286,7 +286,7 @@ export class PosComponent implements OnInit, OnDestroy {
 
     const method = this.paymentMethod();
     const tenderedCents = method === 'cash' ? this.moneyInputToCents(this.tendered) : 0;
-    if (tenderedCents === null || tenderedCents < this.totalCents()) {
+    if (method === 'cash' && (tenderedCents === null || tenderedCents < this.totalCents())) {
       this.error.set('Tendered cash is less than the total.');
       return;
     }

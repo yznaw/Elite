@@ -63,7 +63,14 @@
       "Bash(cp /tmp/fav192.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-192x192.png')",
       "Bash(cp /tmp/fav512.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/favicon-512x512.png')",
       "Bash(cp /tmp/apple-touch.png '/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/client/projects/admin-portal/src/apple-touch-icon.png')",
-      "Bash(open \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/docs/pos-onsite-migration-plan.html\")"
+      "Bash(open \"/Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Drive/My Clinets/elitecollection/eliteCode/Elite/docs/pos-onsite-migration-plan.html\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/qz-tray/package.json'\\).version\\)\")",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P)",
+      "Bash(kill 73958)",
+      "Bash(nohup npx ng serve admin-portal --port 4300 --host 0.0.0.0 --disable-host-check)",
+      "Bash(disown)",
+      "Read(//Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Clinets/elitecollection/eliteCode/Elite/server/**)",
+      "Bash(kill 74486)"
     ]
   }
 }

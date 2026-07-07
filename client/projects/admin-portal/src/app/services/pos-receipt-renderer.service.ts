@@ -53,7 +53,7 @@ export class PosReceiptRenderer {
 
     if (receipt.cashierName) output.push(`Cashier: ${this.truncate(receipt.cashierName, this.width - 9)}\n`);
     if (receipt.registerName) output.push(`Register: ${this.truncate(receipt.registerName, this.width - 10)}\n`);
-    if (receipt.registerId) output.push(`Reg ID: ${this.truncate(receipt.registerId, this.width - 8)}\n`);
+    if (receipt.registerId) output.push(`Reg ID:\n${this.truncate(receipt.registerId, this.width)}\n`);
     output.push(this.rule());
 
     for (const item of receipt.items ?? []) {

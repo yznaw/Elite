@@ -71,7 +71,13 @@ async function voidTransaction(context, transactionIdValue, body) {
     assertPos(transactionResult.rowCount === 1, 404, 'TRANSACTION_NOT_FOUND', 'POS transaction not found.');
     const transaction = transactionResult.rows[0];
     assertPos(transaction.register_id === register.id, 403, 'VOID_REGISTER_MISMATCH', 'Only the original register can void this sale.');
-    assertPos(transaction.cashier_id === context.userId, 403, 'VOID_CASHIER_MISMATCH', 'Only the original cashier can void this sale.');
+    const sameCashier = transaction.cashier_id === context.userId;
+    assertPos(
+      sameCashier || body?.managerOverrideId,
+      403,
+      'VOID_CASHIER_MISMATCH',
+      'Only the original cashier can void this sale. A manager approval is required to void on their behalf.',
+    );
     assertPos(transaction.status === 'completed', 409, 'TRANSACTION_NOT_VOIDABLE', 'Transaction is already voided.');
 
     const shiftResult = await client.query(
