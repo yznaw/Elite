@@ -8,6 +8,9 @@ export interface PosCatalogItem {
   variantId: string;
   name: string;
   variant: string;
+  size: string;
+  color: string;
+  material: string;
   sku: string;
   barcode: string;
   priceCents: number;

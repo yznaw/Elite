@@ -1,7 +1,9 @@
 <main class="pos-shell">
   <header class="pos-header">
     <div class="brand-lockup">
-      <span class="brand-mark">E</span>
+      <span class="brand-mark">
+        <img src="/assets/brand/elite-logo-cream.png" alt="Elite" />
+      </span>
       <div>
         <strong>Elite POS</strong>
         <span>{{ register()?.displayName || 'Terminal setup' }}</span>
@@ -139,31 +141,35 @@
             <span class="eyebrow">CATALOG</span>
             <h1>{{ searchQuery ? 'Search results' : 'Available products' }}</h1>
           </div>
-          <span>{{ products().length }} variants</span>
+          <span>{{ productGroups().length }} items &middot; {{ products().length }} variants</span>
         </div>
 
-        <div class="product-grid">
-          @for (product of products(); track product.variantId) {
+        <div class="product-grid product-grid--items">
+          @for (group of productGroups(); track group.id) {
             <button
-              class="product-card"
+              class="product-card product-card--item"
               type="button"
-              [disabled]="product.stock <= 0"
-              (click)="addToCart(product)"
+              [disabled]="group.stock <= 0"
+              (click)="openVariantPicker(group)"
             >
               <div class="product-visual">
-                @if (product.imageUrl) {
-                  <img [src]="productImage(product)" [alt]="product.name" />
+                @if (productGroupImage(group)) {
+                  <img [src]="productGroupImage(group)" [alt]="group.title" />
                 } @else {
-                  <span>{{ product.name.slice(0, 1) }}</span>
+                  <span>{{ group.title.slice(0, 1) }}</span>
                 }
-                <i [class.low]="product.stock > 0 && product.stock <= 3">
-                  {{ product.stock > 0 ? product.stock + ' in stock' : 'Sold out' }}
+                <i [class.low]="group.stock > 0 && group.stock <= 3">
+                  {{ group.stock > 0 ? group.stock + ' in stock' : 'Sold out' }}
                 </i>
               </div>
               <div class="product-copy">
-                <strong>{{ product.name }}</strong>
-                <small>{{ product.variant || product.sku }}</small>
-                <b>{{ formatMoney(product.priceCents) }}</b>
+                <strong>{{ group.title }}</strong>
+                <small>
+                  {{ group.items.length }} variant{{ group.items.length === 1 ? '' : 's' }}
+                  &middot;
+                  choose size/color
+                </small>
+                <b>{{ groupPriceLabel(group) }}</b>
               </div>
             </button>
           } @empty {
@@ -224,6 +230,81 @@
         </div>
       </aside>
     </section>
+  }
+
+  @if (selectedProductGroup(); as group) {
+    <div class="modal-backdrop" (click)="closeVariantPicker()">
+      <section class="variant-picker" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="closeVariantPicker()">Close</button>
+        <span class="eyebrow">SELECT VARIANT</span>
+        <h2>{{ group.title }}</h2>
+
+        <div class="variant-picker-grid">
+          <div class="variant-color-pane">
+            <span class="variant-pane-label">Colors</span>
+            <div class="variant-color-tools">
+              <input
+                [(ngModel)]="variantColorQuery"
+                placeholder="Search color"
+                autocomplete="off"
+              />
+            </div>
+            <div class="variant-color-list">
+              @for (color of visibleVariantColorGroups(); track color.key) {
+                <button
+                  class="variant-color-button"
+                  type="button"
+                  [class.active]="selectedVariantColorGroup().key === color.key"
+                  (click)="chooseVariantColor(color.key)"
+                >
+                  <strong>{{ color.label }}</strong>
+                  <span>{{ color.stock }} in stock</span>
+                </button>
+              } @empty {
+                <div class="variant-empty">No colors match.</div>
+              }
+            </div>
+          </div>
+
+          <div class="variant-size-pane">
+            @if (selectedVariantColorGroup(); as selectedColor) {
+              <div class="variant-size-heading">
+                <span class="variant-pane-label">Sizes</span>
+                <b>{{ selectedColor.label }}</b>
+              </div>
+
+              <div class="variant-size-grid">
+                @for (product of selectedColor.items; track product.variantId) {
+                  <button
+                    class="variant-size-button"
+                    type="button"
+                    [class.active]="selectedVariant()?.variantId === product.variantId"
+                    [disabled]="product.stock <= 0"
+                    (click)="chooseVariantSize(product)"
+                  >
+                    <strong>{{ sizeLabel(product) }}</strong>
+                    @if (product.material) { <em>{{ product.material }}</em> }
+                    <span [class.low]="product.stock > 0 && product.stock <= 3">
+                      {{ product.stock > 0 ? product.stock + ' available' : 'Sold out' }}
+                    </span>
+                    <b>{{ formatMoney(product.priceCents) }}</b>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="variant-add-bar">
+          @if (selectedVariant(); as selected) {
+            <span>{{ selected.color || 'Default' }} / {{ sizeLabel(selected) }} · {{ formatMoney(selected.priceCents) }}</span>
+          } @else {
+            <span>Select a size to continue</span>
+          }
+          <button type="button" [disabled]="!selectedVariant()" (click)="addSelectedVariant()">Add to cart</button>
+        </div>
+      </section>
+    </div>
   }
 
   @if (paymentOpen()) {

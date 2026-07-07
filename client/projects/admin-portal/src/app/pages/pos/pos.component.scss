@@ -1,10 +1,10 @@
 :host {
   --pos-ink: #17221f;
-  --pos-green: #064b3d;
+  --pos-green: #004538;
   --pos-mint: #d9eee6;
   --pos-cream: #f3f0e8;
   --pos-paper: #fffefa;
-  --pos-orange: #e86b38;
+  --pos-orange: #b8924a;
   --pos-line: rgba(23, 34, 31, 0.13);
   display: block;
   width: 100vw;
@@ -38,7 +38,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  background: var(--pos-ink);
+  background: var(--pos-green);
   color: #fff;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -63,6 +63,13 @@ button {
   color: #edd6a7;
   font-family: Georgia, serif;
   font-size: 21px;
+}
+
+.brand-mark img {
+  width: 28px;
+  height: 28px;
+  display: block;
+  object-fit: contain;
 }
 
 .brand-lockup div {
@@ -478,8 +485,8 @@ label input:focus {
 
 .pos-tools > div { display: flex; gap: 5px; }
 .pos-tools button {
-  padding: 7px 10px;
-  border: 1px solid var(--pos-line);
+  padding: 15px 20px;
+  border: 1px solid #000;
   border-radius: 3px;
   background: #fff;
   font-size: 10px;
@@ -585,6 +592,10 @@ label input:focus {
   gap: 12px;
 }
 
+.product-grid--items {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
 .product-card {
   padding: 0;
   border: 1px solid var(--pos-line);
@@ -603,6 +614,10 @@ label input:focus {
 .product-card:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.product-card--item .product-copy {
+  min-height: 112px;
 }
 
 .product-visual {
@@ -862,6 +877,17 @@ label input:focus {
   animation: sheetIn 0.2s ease-out both;
 }
 
+.variant-picker {
+  width: min(100%, 640px);
+  max-height: min(88vh, 760px);
+  padding: 32px;
+  overflow: auto;
+  background: var(--pos-paper);
+  border: 1px solid var(--pos-line);
+  box-shadow: 0 24px 80px rgba(23, 34, 31, 0.18);
+  animation: sheetIn 0.2s ease-out both;
+}
+
 @keyframes sheetIn {
   from { opacity: 0; transform: translateY(14px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -877,6 +903,171 @@ label input:focus {
 .receipt-card h2 {
   margin: 8px 0 24px;
   font-size: 45px;
+}
+
+.variant-picker h2 {
+  margin: 8px 0 4px;
+  font-family: Georgia, serif;
+  font-size: 34px;
+  font-weight: 500;
+}
+
+.variant-add-bar span {
+  color: #737c78;
+  font-size: 10px;
+}
+
+.variant-picker-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.45fr);
+  gap: 18px;
+}
+
+.variant-color-pane,
+.variant-size-pane {
+  min-width: 0;
+}
+
+.variant-pane-label {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--pos-orange);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.variant-color-list {
+  display: grid;
+  gap: 9px;
+}
+
+.variant-color-tools {
+  margin-bottom: 10px;
+}
+
+.variant-color-tools input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--pos-line);
+  background: #fff;
+  color: var(--pos-ink);
+  font-size: 12px;
+}
+
+.variant-color-button,
+.variant-size-button {
+  border: 1px solid var(--pos-line);
+  background: #fff;
+  color: var(--pos-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.variant-color-button {
+  min-height: 76px;
+  padding: 16px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
+.variant-color-button.active,
+.variant-size-button.active {
+  border-color: var(--pos-green);
+  background: var(--pos-mint);
+}
+
+.variant-size-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.variant-color-button strong {
+  font-family: Georgia, serif;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.variant-size-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.variant-size-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.variant-size-button {
+  min-height: 132px;
+  padding: 18px;
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+}
+
+.variant-size-button strong {
+  font-family: Georgia, serif;
+  font-size: 32px;
+  font-weight: 500;
+}
+
+.variant-size-button em {
+  color: #7d8582;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.variant-size-button span {
+  color: #737c78;
+  font-size: 10px;
+}
+
+.variant-size-button span.low {
+  color: var(--pos-orange);
+  font-weight: 800;
+}
+
+.variant-size-button b {
+  color: var(--pos-green);
+  font-size: 14px;
+}
+
+.variant-empty {
+  padding: 24px 16px;
+  border: 1px dashed var(--pos-line);
+  color: #737c78;
+  font-size: 11px;
+  text-align: center;
+}
+
+.variant-add-bar {
+  margin-top: 24px;
+  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--pos-line);
+}
+
+.variant-add-bar button {
+  min-width: 150px;
+  padding: 14px 18px;
+  border: 0;
+  background: var(--pos-orange);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.variant-add-bar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .payment-methods {
@@ -1145,6 +1336,13 @@ label input:focus {
   .cart-panel { min-height: 55vh; border-top: 1px solid var(--pos-line); border-left: 0; }
   .cart-lines { min-height: 220px; }
   .payment-sheet, .receipt-card { padding: 26px 22px; }
+  .variant-picker { padding: 26px 18px; }
+  .variant-picker-grid { grid-template-columns: 1fr; }
+  .variant-color-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .variant-color-button { min-height: 68px; }
+  .variant-size-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .variant-add-bar { flex-direction: column; align-items: stretch; }
+  .variant-add-bar button { width: 100%; }
   .utility-sheet { padding: 24px 18px; }
   .report-grid { grid-template-columns: repeat(2, 1fr); }
   .refund-lines > div { grid-template-columns: 1fr 70px; }

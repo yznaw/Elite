@@ -24,6 +24,21 @@ import { PosHardwareService } from '../../services/pos-hardware.service';
 type PosPhase = 'loading' | 'enrollment' | 'shift' | 'selling';
 type PaymentMethod = 'cash' | 'card';
 interface CartLine { item: PosCatalogItem; quantity: number }
+interface ProductGroup {
+  id: string;
+  title: string;
+  stock: number;
+  imageUrl: string;
+  priceMinCents: number;
+  priceMaxCents: number;
+  items: PosCatalogItem[];
+}
+interface VariantColorGroup {
+  key: string;
+  label: string;
+  stock: number;
+  items: PosCatalogItem[];
+}
 type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift';
 
 @Component({
@@ -57,6 +72,9 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly queuedSales = signal<PosQueuedSale[]>([]);
   readonly syncing = signal(false);
   readonly catalogCachedAt = signal<string | null>(null);
+  readonly selectedProductId = signal<string | null>(null);
+  readonly selectedVariantColorKey = signal<string | null>(null);
+  readonly selectedVariantId = signal<string | null>(null);
   readonly dialog = signal<PosDialog>('none');
   readonly parkedCarts = signal<PosParkedCart[]>([]);
   readonly operationTransaction = signal<PosSaleResult | null>(null);
@@ -68,11 +86,62 @@ export class PosComponent implements OnInit, OnDestroy {
   ));
   readonly cartCount = computed(() => this.cart().reduce((total, line) => total + line.quantity, 0));
   readonly changeCents = computed(() => Math.max(0, this.tenderedCents() - this.totalCents()));
+  readonly productGroups = computed<ProductGroup[]>(() => {
+    const groups = new Map<string, ProductGroup>();
+    for (const product of this.products()) {
+      const id = product.productId || product.name;
+      let group = groups.get(id);
+      if (!group) {
+        group = {
+          id,
+          title: product.name,
+          stock: 0,
+          imageUrl: product.imageUrl,
+          priceMinCents: product.priceCents,
+          priceMaxCents: product.priceCents,
+          items: [],
+        };
+        groups.set(id, group);
+      }
+      group.stock += product.stock;
+      if (!group.imageUrl && product.imageUrl) group.imageUrl = product.imageUrl;
+      group.priceMinCents = Math.min(group.priceMinCents, product.priceCents);
+      group.priceMaxCents = Math.max(group.priceMaxCents, product.priceCents);
+      group.items.push(product);
+    }
+    return Array.from(groups.values());
+  });
+  readonly selectedProductGroup = computed(() => {
+    const selectedId = this.selectedProductId();
+    return selectedId ? this.productGroups().find((group) => group.id === selectedId) || null : null;
+  });
+  readonly selectedVariantColorGroups = computed(() => {
+    const group = this.selectedProductGroup();
+    return group ? this.buildVariantColorGroups(group.items) : [];
+  });
+  readonly visibleVariantColorGroups = computed(() => {
+    const query = this.variantColorQuery.trim().toLowerCase();
+    return this.selectedVariantColorGroups().filter((group) => {
+      return !query || group.label.toLowerCase().includes(query);
+    });
+  });
+  readonly selectedVariantColorGroup = computed(() => {
+    const selectedKey = this.selectedVariantColorKey();
+    const colorGroups = this.selectedVariantColorGroups();
+    return colorGroups.find((group) => group.key === selectedKey) || colorGroups[0] || null;
+  });
+  readonly selectedVariant = computed(() => {
+    const variantId = this.selectedVariantId();
+    const colorGroup = this.selectedVariantColorGroup();
+    if (!variantId || !colorGroup) return null;
+    return colorGroup.items.find((item) => item.variantId === variantId) || null;
+  });
 
   enrollmentToken = '';
   terminalName = '';
   openingFloat = '0';
   searchQuery = '';
+  variantColorQuery = '';
   barcode = '';
   tendered = '';
   parkLabel = '';
@@ -631,8 +700,80 @@ export class PosComponent implements OnInit, OnDestroy {
     return this.pos.mediaUrl(item.imageUrl);
   }
 
+  productGroupImage(group: ProductGroup): string {
+    return group.imageUrl ? this.pos.mediaUrl(group.imageUrl) : '';
+  }
+
+  groupPriceLabel(group: ProductGroup): string {
+    if (group.priceMinCents === group.priceMaxCents) return this.formatMoney(group.priceMinCents);
+    return `${this.formatMoney(group.priceMinCents)} - ${this.formatMoney(group.priceMaxCents)}`;
+  }
+
+  sizeLabel(item: PosCatalogItem): string {
+    return item.size || item.variant || item.sku;
+  }
+
+  chooseVariantColor(colorKey: string): void {
+    this.selectedVariantColorKey.set(colorKey);
+    const colorGroup = this.selectedVariantColorGroups().find((group) => group.key === colorKey);
+    this.selectedVariantId.set(this.firstAvailableVariant(colorGroup)?.variantId || null);
+  }
+
+  chooseVariantSize(item: PosCatalogItem): void {
+    if (item.stock <= 0) return;
+    this.selectedVariantId.set(item.variantId);
+  }
+
+  addSelectedVariant(): void {
+    const variant = this.selectedVariant();
+    if (variant) this.chooseVariant(variant);
+  }
+
+  openVariantPicker(group: ProductGroup): void {
+    if (!group.items.length) return;
+    this.selectedProductId.set(group.id);
+    const colorGroups = this.buildVariantColorGroups(group.items);
+    const initialColor = colorGroups.find((color) => color.stock > 0) || colorGroups[0] || null;
+    this.selectedVariantColorKey.set(initialColor?.key || null);
+    this.selectedVariantId.set(this.firstAvailableVariant(initialColor)?.variantId || null);
+  }
+
+  closeVariantPicker(): void {
+    this.selectedProductId.set(null);
+    this.selectedVariantColorKey.set(null);
+    this.selectedVariantId.set(null);
+    this.variantColorQuery = '';
+  }
+
+  chooseVariant(item: PosCatalogItem): void {
+    const existing = this.cart().find((line) => line.item.variantId === item.variantId);
+    this.addToCart(item);
+    if (!existing || existing.quantity < item.stock) this.closeVariantPicker();
+  }
+
   trackVariant(_index: number, value: PosCatalogItem | CartLine): string {
     return 'item' in value ? value.item.variantId : value.variantId;
+  }
+
+  private buildVariantColorGroups(items: PosCatalogItem[]): VariantColorGroup[] {
+    const groups = new Map<string, VariantColorGroup>();
+    for (const item of items) {
+      const label = item.color || 'Default';
+      const key = label.trim().toLowerCase() || 'default';
+      let group = groups.get(key);
+      if (!group) {
+        group = { key, label, stock: 0, items: [] };
+        groups.set(key, group);
+      }
+      group.stock += item.stock;
+      group.items.push(item);
+    }
+    return Array.from(groups.values());
+  }
+
+  private firstAvailableVariant(group: VariantColorGroup | null | undefined): PosCatalogItem | null {
+    if (!group) return null;
+    return group.items.find((item) => item.stock > 0) || group.items[0] || null;
   }
 
   private async enterSelling(): Promise<void> {
