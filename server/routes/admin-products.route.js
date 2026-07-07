@@ -69,8 +69,17 @@ function validateProduct(body) {
 }
 
 async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true } = {}) {
-  // Collect incoming SKUs so we can remove variants that were deleted in the UI
-  const incomingSkus = variants.map(v => String(v.sku || '').trim()).filter(Boolean);
+  // Resolve each variant's SKU up front. A variant saved without one (e.g. a
+  // manually-added row the admin never typed a SKU for) falls back to a
+  // generated-but-unique SKU instead of being silently dropped further down —
+  // product_variants.sku is NOT NULL + UNIQUE(tenant_id, sku), so every row
+  // needs one, and this list must match what's actually inserted below or the
+  // "removed" cleanup query would delete rows we're about to re-insert.
+  const resolved = variants.map((variant, index) => ({
+    variant,
+    sku: String(variant.sku || '').trim() || `${productId}-V${index}`,
+  }));
+  const incomingSkus = resolved.map((r) => r.sku);
 
   // Null-out cart references for variants being removed (ON DELETE RESTRICT)
   if (incomingSkus.length > 0) {
@@ -95,10 +104,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     await client.query('DELETE FROM product_variants WHERE product_id = $1', [productId]);
   }
 
-  for (const [index, variant] of variants.entries()) {
-    const sku = String(variant.sku || '').trim();
-    if (!sku) continue;
-
+  for (const [index, { variant, sku }] of resolved.entries()) {
     const costCents = variant.costPrice != null && variant.costPrice !== ''
       ? Math.max(0, Math.round(Number(variant.costPrice) * 100))
       : null;

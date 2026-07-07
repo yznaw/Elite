@@ -955,10 +955,12 @@ export class ReferenceComponent implements OnInit {
     if (!this.editSizeSet.name.trim()) { this.toast.error(this.t('reference.toast.sizeSetNameRequired')); return; }
     this.saving.set(true);
     try {
-      // Auto-derive sizes from EU column when a conversion chart is defined
+      // Auto-derive sizes from UK column when a conversion chart is defined —
+      // UK is the size convention actually used on stored variants and shown
+      // to customers on the storefront.
       const chart = this.editSizeSet.size_chart ?? [];
       const sizes = chart.length > 0
-        ? chart.map(r => r.eu).filter(Boolean)
+        ? chart.map(r => r.uk).filter(Boolean)
         : this.editSizeSet.sizes;
 
       const payload = { ...this.editSizeSet, sizes };

@@ -333,12 +333,6 @@ function readPreview(file: File): Promise<string> {
             }
 
             <div class="variants-cards">
-              <datalist id="size-options">
-                @for (ss of refSizeSets(); track ss.id) {
-                  @for (sz of ss.sizes; track sz) { <option [value]="sz">{{ sz }}</option> }
-                }
-              </datalist>
-
               <!-- ══ Color groups accordion ══ -->
               @for (group of colorGroups(); track group.colorKey) {
                 <div class="vcg" [class.vcg--open]="expandedGroups().has(group.colorKey)">
@@ -468,10 +462,23 @@ function readPreview(file: File): Promise<string> {
 
                           <!-- Size -->
                           <div class="vc-cell vc-cell--size">
-                            <input class="inp inp-sm vc-size-inp" list="size-options"
-                                   [placeholder]="'—'"
-                                   [ngModel]="item.v.size"
-                                   (ngModelChange)="updateVariant(item.globalIndex, { size: $event })"/>
+                            @if (refSizeSets().length > 0) {
+                              <select class="inp inp-sm vc-size-inp"
+                                      [ngModel]="item.v.size"
+                                      (ngModelChange)="updateVariant(item.globalIndex, { size: $event })">
+                                <option value="">—</option>
+                                @for (ss of refSizeSets(); track ss.id) {
+                                  <optgroup [label]="ss.name">
+                                    @for (sz of ss.sizes; track sz) { <option [value]="sz">{{ sz }}</option> }
+                                  </optgroup>
+                                }
+                              </select>
+                            } @else {
+                              <input class="inp inp-sm vc-size-inp"
+                                     [placeholder]="'—'"
+                                     [ngModel]="item.v.size"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { size: $event })"/>
+                            }
                           </div>
 
                           <!-- Stock -->
@@ -1785,6 +1792,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly refMaterials = signal<RefMaterial[]>([]);
   readonly refSizeSets  = signal<RefSizeSet[]>([]);
 
+
   readonly t = (k: string): string => this.i18n.t(k);
 
   /** Initial form snapshot — re-set whenever `currentId` changes. */
@@ -2192,11 +2200,26 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // Variants
   // ────────────────────────────────────────────────────────────────────
 
+  /**
+   * Returns `candidate`, or `candidate-2`, `candidate-3`, ... if it already
+   * collides with another variant's SKU. Two variants sharing a SKU collapse
+   * into one row on save (product_variants has a UNIQUE(tenant_id, sku)
+   * constraint), so newly-added rows must never reuse an existing SKU.
+   */
+  private uniqueVariantSku(candidate: string): string {
+    if (!candidate) return candidate;
+    const existing = new Set(this.form().variants.map(v => v.sku));
+    if (!existing.has(candidate)) return candidate;
+    let n = 2;
+    while (existing.has(`${candidate}-${n}`)) n++;
+    return `${candidate}-${n}`;
+  }
+
   addVariant(): void {
     const f = this.form();
     const next: ProductVariant = {
       id: 'V-' + Date.now().toString(36),
-      sku: f.sku ? `${f.sku}-NEW` : '',
+      sku: f.sku ? this.uniqueVariantSku(`${f.sku}-NEW`) : '',
       size: '',
       color: '',
       material: '',
@@ -2291,7 +2314,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const colorCode = this.colorToSkuCode(colorName);
     const next: ProductVariant = {
       id:       'V-' + Date.now().toString(36),
-      sku:      f.sku ? `${f.sku}-${colorCode}-NEW` : '',
+      sku:      f.sku ? this.uniqueVariantSku(`${f.sku}-${colorCode}-NEW`) : '',
       size:     '',
       color:    colorName,
       material: '',
