@@ -20,6 +20,7 @@ import {
   PosTransactionItem,
 } from '../../services/pos.service';
 import { PosHardwareService } from '../../services/pos-hardware.service';
+import { AdminRefService, RefColor } from '../../services/admin-ref.service';
 
 type PosPhase = 'loading' | 'enrollment' | 'shift' | 'selling';
 type PaymentMethod = 'cash' | 'card';
@@ -54,6 +55,7 @@ export class PosComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   readonly hardware = inject(PosHardwareService);
   readonly auth = inject(AuthService);
+  private readonly refApi = inject(AdminRefService);
 
   readonly phase = signal<PosPhase>('loading');
   readonly busy = signal(false);
@@ -80,6 +82,7 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly operationTransaction = signal<PosSaleResult | null>(null);
   readonly shiftSummary = signal<PosShiftSummary | null>(null);
   readonly syncConflicts = signal<PosSyncConflict[]>([]);
+  readonly refColors = signal<RefColor[]>([]);
   readonly totalCents = computed(() => this.cart().reduce(
     (total, line) => total + line.item.priceCents * line.quantity,
     0,
@@ -714,6 +717,21 @@ export class PosComponent implements OnInit, OnDestroy {
     return item.size || item.variant || item.sku;
   }
 
+  colorCssFor(name: string): string {
+    const normalized = this.normalizeColorName(name);
+    const refColor = this.refColors().find((color) => this.normalizeColorName(color.name_en) === normalized);
+    if (refColor?.hex) return refColor.hex;
+    const fallback = this.fallbackVariantColors[normalized]
+      || Object.entries(this.fallbackVariantColors).find(([key]) => normalized.includes(key))?.[1];
+    if (fallback) return fallback;
+    return this.colorFromName(normalized || 'default');
+  }
+
+  colorSwatchImageFor(name: string): string | null {
+    const normalized = this.normalizeColorName(name);
+    return this.refColors().find((color) => this.normalizeColorName(color.name_en) === normalized)?.swatch_image_url ?? null;
+  }
+
   chooseVariantColor(colorKey: string): void {
     this.selectedVariantColorKey.set(colorKey);
     const colorGroup = this.selectedVariantColorGroups().find((group) => group.key === colorKey);
@@ -781,9 +799,61 @@ export class PosComponent implements OnInit, OnDestroy {
     this.phase.set('selling');
     await this.loadProducts();
     if (this.online()) this.connectEvents();
-    await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.hardware.initialize()]);
+    await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.loadReferenceColors(), this.hardware.initialize()]);
     await this.syncPendingSales();
   }
+
+  private async loadReferenceColors(): Promise<void> {
+    if (!this.online()) return;
+    try {
+      this.refColors.set(await this.refApi.getColors());
+    } catch {
+      this.refColors.set([]);
+    }
+  }
+
+  private normalizeColorName(name: string): string {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  private colorFromName(name: string): string {
+    let hash = 0;
+    for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+    return `hsl(${hash} 42% 58%)`;
+  }
+
+  private readonly fallbackVariantColors: Record<string, string> = {
+    beige: '#d8c1a0',
+    black: '#171717',
+    blue: '#2f67b2',
+    brown: '#7b4a2d',
+    burgundy: '#7f1d3a',
+    camel: '#bf8f5c',
+    cream: '#f3ead7',
+    default: '#c9a84c',
+    gold: '#c9a84c',
+    gray: '#9ca3af',
+    green: '#2f7d57',
+    grey: '#9ca3af',
+    ivory: '#f7f0dc',
+    lavender: '#b6a1dc',
+    maroon: '#7f1d1d',
+    mint: '#9bd8c1',
+    navy: '#1f3763',
+    nude: '#e2bda6',
+    olive: '#73733f',
+    orange: '#d97706',
+    pink: '#e89ab5',
+    purple: '#7c4ab0',
+    red: '#c83f3f',
+    rose: '#d96d88',
+    silver: '#c7cbd1',
+    tan: '#c9a77d',
+    teal: '#25817e',
+    turquoise: '#29a9a6',
+    white: '#ffffff',
+    yellow: '#e4bd35',
+  };
 
   private async loadProducts(query = ''): Promise<void> {
     const sequence = ++this.searchSequence;

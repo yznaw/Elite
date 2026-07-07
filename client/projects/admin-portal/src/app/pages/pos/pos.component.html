@@ -255,10 +255,29 @@
                   class="variant-color-button"
                   type="button"
                   [class.active]="selectedVariantColorGroup().key === color.key"
+                  [style.--variant-color]="colorCssFor(color.label)"
+                  [style.border-left-color]="selectedVariantColorGroup().key === color.key ? colorCssFor(color.label) : 'transparent'"
+                  style="display:flex;align-items:center;gap:12px;border-left-width:4px;padding:14px 16px"
                   (click)="chooseVariantColor(color.key)"
                 >
-                  <strong>{{ color.label }}</strong>
-                  <span>{{ color.stock }} in stock</span>
+                  @if (colorSwatchImageFor(color.label); as swatchImage) {
+                    <img
+                      class="variant-color-swatch"
+                      [src]="swatchImage"
+                      [alt]="color.label"
+                      style="width:34px;height:34px;flex:0 0 34px;border:1px solid rgba(23,34,31,.14);border-radius:50%;object-fit:cover;box-shadow:inset 0 0 0 3px rgba(255,255,255,.52)"
+                    />
+                  } @else {
+                    <span
+                      class="variant-color-swatch"
+                      [style.background]="colorCssFor(color.label)"
+                      style="width:34px;height:34px;flex:0 0 34px;border:1px solid rgba(23,34,31,.14);border-radius:50%;box-shadow:inset 0 0 0 3px rgba(255,255,255,.52)"
+                    ></span>
+                  }
+                  <span class="variant-color-copy" style="min-width:0;display:grid;gap:6px">
+                    <strong>{{ color.label }}</strong>
+                    <span style="color:#737c78;font-size:10px">{{ color.stock }} in stock</span>
+                  </span>
                 </button>
               } @empty {
                 <div class="variant-empty">No colors match.</div>
