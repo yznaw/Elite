@@ -31,6 +31,27 @@ button {
   flex-direction: column;
 }
 
+.pos-shell.is-selling {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.pos-shell.is-selling .pos-header,
+.pos-shell.is-selling .error-strip,
+.selling-main {
+  grid-column: 1;
+}
+
+.selling-split { display: contents; }
+
+.selling-main {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+}
+
 .pos-header {
   min-height: 70px;
   padding: 0 24px;
@@ -469,7 +490,6 @@ label input:focus {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 390px;
 }
 
 .pos-tools {
@@ -700,6 +720,11 @@ label input:focus {
   border-left: 1px solid var(--pos-line);
 }
 
+.pos-shell.is-selling .cart-panel {
+  grid-column: 2;
+  grid-row: 1 / -1;
+}
+
 .cart-title {
   padding: 22px 22px 18px;
   border-bottom: 1px solid var(--pos-line);
@@ -912,22 +937,6 @@ label input:focus {
   font-weight: 500;
 }
 
-.variant-add-bar span {
-  color: #737c78;
-  font-size: 10px;
-}
-
-.variant-picker-grid {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.45fr);
-  gap: 18px;
-}
-
-.variant-color-pane,
-.variant-size-pane {
-  min-width: 0;
-}
-
 .variant-pane-label {
   display: block;
   margin-bottom: 9px;
@@ -939,21 +948,11 @@ label input:focus {
 }
 
 .variant-color-list {
-  display: grid;
-  gap: 9px;
-}
-
-.variant-color-tools {
-  margin-bottom: 10px;
-}
-
-.variant-color-tools input {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid var(--pos-line);
-  background: #fff;
-  color: var(--pos-ink);
-  font-size: 12px;
+  margin: 14px 0 18px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .variant-color-button,
@@ -966,11 +965,13 @@ label input:focus {
 }
 
 .variant-color-button {
-  min-height: 76px;
-  padding: 16px;
-  display: grid;
-  align-content: center;
+  min-height: 44px;
+  padding: 7px 12px 7px 8px;
+  display: flex;
+  align-items: center;
   gap: 8px;
+  white-space: nowrap;
+  border-radius: 999px;
 }
 
 .variant-color-button.active,
@@ -984,27 +985,15 @@ label input:focus {
   opacity: 0.5;
 }
 
-.variant-color-button strong {
-  font-family: Georgia, serif;
-  font-size: 19px;
-  font-weight: 500;
-}
-
-.variant-size-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .variant-size-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
 .variant-size-button {
-  min-height: 132px;
-  padding: 18px;
+  min-height: 118px;
+  padding: 14px;
   display: grid;
   align-content: space-between;
   gap: 8px;
@@ -1012,7 +1001,7 @@ label input:focus {
 
 .variant-size-button strong {
   font-family: Georgia, serif;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 500;
 }
 
@@ -1037,32 +1026,29 @@ label input:focus {
   font-size: 14px;
 }
 
-.variant-empty {
-  padding: 24px 16px;
-  border: 1px dashed var(--pos-line);
-  color: #737c78;
-  font-size: 11px;
-  text-align: center;
-}
-
 .variant-add-bar {
-  margin-top: 24px;
-  padding-top: 14px;
+  position: sticky;
+  bottom: -32px;
+  margin: 20px -32px -32px;
+  padding: 14px 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
   border-top: 1px solid var(--pos-line);
+  background: rgba(248, 245, 236, 0.96);
+  backdrop-filter: blur(10px);
 }
 
-.variant-add-bar button {
-  min-width: 150px;
-  padding: 14px 18px;
-  border: 0;
-  background: var(--pos-orange);
-  color: #fff;
-  font-weight: 800;
-  cursor: pointer;
+.variant-add-bar > span {
+  color: #737c78;
+  font-size: 10px;
+}
+
+.variant-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .variant-add-bar button:disabled {
@@ -1313,14 +1299,21 @@ label input:focus {
 .conflict-row small { color: var(--pos-orange); font-size: 9px; text-transform: uppercase; }
 
 @media (max-width: 1000px) {
-  .workspace { grid-template-columns: minmax(0, 1fr) 350px; }
+  .pos-shell.is-selling { grid-template-columns: minmax(0, 1fr) 350px; }
   .setup-stage { gap: 40px; }
   .product-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 
 @media (max-width: 760px) {
   :host { overflow: auto; }
-  .pos-shell { min-height: 100%; height: auto; }
+  .pos-shell,
+  .pos-shell.is-selling {
+    min-height: 100%;
+    height: auto;
+    display: flex;
+  }
+  .selling-split { display: block; }
+  .selling-main { display: block; }
   .pos-header { min-height: 62px; padding: 0 14px; }
   .cashier, .shift-chip { display: none; }
   .setup-stage, .shift-stage { grid-template-columns: 1fr; padding: 24px 16px; }
@@ -1337,12 +1330,11 @@ label input:focus {
   .cart-lines { min-height: 220px; }
   .payment-sheet, .receipt-card { padding: 26px 22px; }
   .variant-picker { padding: 26px 18px; }
-  .variant-picker-grid { grid-template-columns: 1fr; }
-  .variant-color-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .variant-color-button { min-height: 68px; }
+  .variant-color-list { flex-wrap: wrap; }
   .variant-size-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .variant-add-bar { flex-direction: column; align-items: stretch; }
-  .variant-add-bar button { width: 100%; }
+  .variant-add-bar { bottom: -26px; margin: 20px -18px -26px; padding: 14px 18px; flex-direction: column; align-items: stretch; }
+  .variant-summary-actions { align-items: stretch; }
+  .variant-summary-actions > button, .variant-add-bar > button { width: 100%; }
   .utility-sheet { padding: 24px 18px; }
   .report-grid { grid-template-columns: repeat(2, 1fr); }
   .refund-lines > div { grid-template-columns: 1fr 70px; }

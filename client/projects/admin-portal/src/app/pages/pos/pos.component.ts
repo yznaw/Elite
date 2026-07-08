@@ -77,6 +77,7 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly selectedProductId = signal<string | null>(null);
   readonly selectedVariantColorKey = signal<string | null>(null);
   readonly selectedVariantId = signal<string | null>(null);
+  readonly selectedVariantQuantity = signal(1);
   readonly dialog = signal<PosDialog>('none');
   readonly parkedCarts = signal<PosParkedCart[]>([]);
   readonly operationTransaction = signal<PosSaleResult | null>(null);
@@ -138,6 +139,16 @@ export class PosComponent implements OnInit, OnDestroy {
     const colorGroup = this.selectedVariantColorGroup();
     if (!variantId || !colorGroup) return null;
     return colorGroup.items.find((item) => item.variantId === variantId) || null;
+  });
+  readonly selectedVariantMaxQuantity = computed(() => {
+    const variant = this.selectedVariant();
+    if (!variant) return 0;
+    const inCart = this.cart().find((line) => line.item.variantId === variant.variantId)?.quantity || 0;
+    return Math.max(0, variant.stock - inCart);
+  });
+  readonly selectedVariantTotalCents = computed(() => {
+    const variant = this.selectedVariant();
+    return variant ? variant.priceCents * this.selectedVariantQuantity() : 0;
   });
 
   enrollmentToken = '';
@@ -736,16 +747,42 @@ export class PosComponent implements OnInit, OnDestroy {
     this.selectedVariantColorKey.set(colorKey);
     const colorGroup = this.selectedVariantColorGroups().find((group) => group.key === colorKey);
     this.selectedVariantId.set(this.firstAvailableVariant(colorGroup)?.variantId || null);
+    this.resetSelectedVariantQuantity();
   }
 
   chooseVariantSize(item: PosCatalogItem): void {
     if (item.stock <= 0) return;
     this.selectedVariantId.set(item.variantId);
+    this.resetSelectedVariantQuantity();
   }
 
   addSelectedVariant(): void {
     const variant = this.selectedVariant();
-    if (variant) this.chooseVariant(variant);
+    const quantity = Math.min(this.selectedVariantQuantity(), this.selectedVariantMaxQuantity());
+    if (!variant || quantity <= 0) return;
+    const existing = this.cart().find((line) => line.item.variantId === variant.variantId);
+    this.cart.update((lines) => existing
+      ? lines.map((line) => line.item.variantId === variant.variantId ? { ...line, quantity: line.quantity + quantity } : line)
+      : [...lines, { item: variant, quantity }]);
+    this.pendingIdempotencyKey = null;
+    this.closeVariantPicker();
+  }
+
+  changeSelectedVariantQuantity(delta: number): void {
+    const max = this.selectedVariantMaxQuantity();
+    this.selectedVariantQuantity.update((quantity) => Math.min(max, Math.max(1, quantity + delta)));
+  }
+
+  stockGaugePercent(item: PosCatalogItem, items: PosCatalogItem[]): number {
+    if (item.stock <= 0) return 0;
+    const max = Math.max(1, ...items.map((variant) => variant.stock));
+    return Math.max(8, Math.round((item.stock / max) * 100));
+  }
+
+  stockGaugeLabel(item: PosCatalogItem): string {
+    if (item.stock <= 0) return 'Sold out';
+    if (item.stock <= 3) return 'Low';
+    return 'In stock';
   }
 
   openVariantPicker(group: ProductGroup): void {
@@ -755,12 +792,14 @@ export class PosComponent implements OnInit, OnDestroy {
     const initialColor = colorGroups.find((color) => color.stock > 0) || colorGroups[0] || null;
     this.selectedVariantColorKey.set(initialColor?.key || null);
     this.selectedVariantId.set(this.firstAvailableVariant(initialColor)?.variantId || null);
+    this.resetSelectedVariantQuantity();
   }
 
   closeVariantPicker(): void {
     this.selectedProductId.set(null);
     this.selectedVariantColorKey.set(null);
     this.selectedVariantId.set(null);
+    this.selectedVariantQuantity.set(1);
     this.variantColorQuery = '';
   }
 
@@ -793,6 +832,10 @@ export class PosComponent implements OnInit, OnDestroy {
   private firstAvailableVariant(group: VariantColorGroup | null | undefined): PosCatalogItem | null {
     if (!group) return null;
     return group.items.find((item) => item.stock > 0) || group.items[0] || null;
+  }
+
+  private resetSelectedVariantQuantity(): void {
+    this.selectedVariantQuantity.set(this.selectedVariantMaxQuantity() > 0 ? 1 : 0);
   }
 
   private async enterSelling(): Promise<void> {
