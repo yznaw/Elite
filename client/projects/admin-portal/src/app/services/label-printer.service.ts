@@ -43,7 +43,14 @@ export class LabelPrinterService {
 
   printLabels(labels: VariantLabelData[]): void {
     if (labels.length === 0) return;
-    const win = window.open('', '_blank', 'noopener,noreferrer');
+    // No 'noopener'/'noreferrer' here: per spec, window.open() returns null
+    // whenever either is passed (even though the window still opens), which
+    // silently breaks writing the label content into it. This popup only
+    // ever renders content this service writes itself — no external
+    // navigation happens — so the tabnabbing risk those flags guard against
+    // doesn't apply here. Matches the existing invoice-print pattern in
+    // order-drawer.component.ts.
+    const win = window.open('', '_blank');
     if (!win) return;
 
     const cards = labels.map((l) => this.labelCard(l)).join('');

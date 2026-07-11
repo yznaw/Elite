@@ -647,6 +647,7 @@ Audit-sensitive actions include enrollment, receipt allocation, shift open/close
 ## 21. Related Documentation
 
 - [Elite POS Hardware Runbook](./pos-hardware-runbook.md)
+- [POS Field Setup Runbook](./pos-field-setup-runbook.html) — interactive on-site checklist for wiring one register and cutting it over from swiftPOS
 - [POS Integration Implementation Plan](./pos-integration-implementation-plan.md)
 - [POS System Plan and Acceptance Criteria](./pos-system-plan.html)
 - [Admin Portal](./04-admin-portal.md)

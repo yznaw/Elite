@@ -1,0 +1,582 @@
+<meta charset="UTF-8">
+<title>swiftPOS → Elite POS — Field Setup Runbook</title>
+<style>
+  :root {
+    --ink: #1C2420;
+    --paper: #F6F5F0;
+    --paper-2: #EFEDE4;
+    --line: #DEDBD0;
+    --muted: #6B6F66;
+    --accent: #B4903F;
+    --accent-ink: #4A3A18;
+    --ok: #3F7D54;
+    --ok-bg: #E7F1E9;
+    --warn: #A8752F;
+    --warn-bg: #F6EEDD;
+    --danger: #A23B33;
+    --danger-bg: #F7E9E7;
+    --card-bg: #FFFFFF;
+    --shadow: 0 1px 2px rgba(28,36,32,.06), 0 4px 16px rgba(28,36,32,.05);
+  }
+  :root[data-theme="dark"] {
+    --ink: #EAE7DC;
+    --paper: #14180F;
+    --paper-2: #1B2117;
+    --line: #2B322A;
+    --muted: #9BA396;
+    --accent: #D8BA6A;
+    --accent-ink: #2A2110;
+    --ok: #6CB183;
+    --ok-bg: #17281C;
+    --warn: #D2A25E;
+    --warn-bg: #2A2214;
+    --danger: #DB8478;
+    --danger-bg: #2C1917;
+    --card-bg: #1B2117;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #EAE7DC;
+      --paper: #14180F;
+      --paper-2: #1B2117;
+      --line: #2B322A;
+      --muted: #9BA396;
+      --accent: #D8BA6A;
+      --accent-ink: #2A2110;
+      --ok: #6CB183;
+      --ok-bg: #17281C;
+      --warn: #D2A25E;
+      --warn-bg: #2A2214;
+      --danger: #DB8478;
+      --danger-bg: #2C1917;
+      --card-bg: #1B2117;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .disp { font-family: "Avenir Next", "Century Gothic", "Futura", -apple-system, sans-serif; font-weight: 750; letter-spacing: -0.01em; text-wrap: balance; }
+  .mono { font-family: "SF Mono", "Roboto Mono", "Cascadia Code", Consolas, monospace; font-variant-numeric: tabular-nums; }
+  code { font-family: "SF Mono", "Roboto Mono", Consolas, monospace; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: 13px; color: var(--ink); }
+
+  .shell { max-width: 880px; margin: 0 auto; padding: 0 20px 80px; }
+
+  /* Sticky progress header */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner { max-width: 880px; margin: 0 auto; padding: 14px 20px 12px; }
+  .topbar-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 17px; margin: 0; }
+  .topbar .sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .progress-chip {
+    font-size: 12px; font-weight: 700; color: var(--accent-ink); background: var(--accent);
+    padding: 4px 11px; border-radius: 100px; white-space: nowrap;
+  }
+  :root[data-theme="dark"] .progress-chip, :root:not([data-theme="light"]) .progress-chip { color: var(--accent-ink); }
+  .progress-track { height: 4px; background: var(--line); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .25s ease; width: 0%; }
+  .phase-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .phase-nav a {
+    font-size: 11.5px; font-weight: 700; text-decoration: none; color: var(--muted);
+    border: 1px solid var(--line); padding: 4px 9px; border-radius: 100px;
+  }
+  .phase-nav a:hover { color: var(--ink); border-color: var(--muted); }
+
+  .intro { padding: 22px 0 6px; }
+  .intro h1 { font-size: 26px; margin: 0 0 8px; }
+  .intro p { color: var(--muted); max-width: 62ch; margin: 0; }
+  .intro-meta { display: flex; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
+  .intro-meta div { display: flex; flex-direction: column; gap: 1px; }
+  .intro-meta .n { font-size: 20px; font-weight: 800; font-family: "Avenir Next", -apple-system, sans-serif; }
+  .intro-meta .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  .rollback-note {
+    display: flex; gap: 12px; align-items: flex-start; margin: 22px 0;
+    background: var(--danger-bg); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .rollback-note .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-top: 6px; flex-shrink: 0; }
+  .rollback-note b { display: block; color: var(--danger); font-size: 13px; margin-bottom: 2px; }
+  .rollback-note p { margin: 0; font-size: 13px; color: var(--ink); opacity: .85; }
+
+  /* Phase sections */
+  .phase { margin: 40px 0 28px; scroll-margin-top: 130px; }
+  .phase-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .phase-num {
+    width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; font-family: "SF Mono", monospace;
+    background: var(--paper-2); color: var(--muted); border: 1px solid var(--line);
+  }
+  .phase-head h2 { font-size: 17px; margin: 0; }
+  .phase-head .risk { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 3px 8px; border-radius: 100px; margin-left: auto; white-space: nowrap; }
+  .risk.info { background: var(--paper-2); color: var(--muted); }
+  .risk.moderate { background: var(--warn-bg); color: var(--warn); }
+  .risk.critical { background: var(--danger-bg); color: var(--danger); }
+  .risk.safe { background: var(--ok-bg); color: var(--ok); }
+  .phase-desc { font-size: 13px; color: var(--muted); margin: 0 0 16px 36px; max-width: 60ch; }
+
+  .card {
+    background: var(--card-bg); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden;
+  }
+  .card-rail { display: flex; }
+  .rail-bar { width: 4px; flex-shrink: 0; }
+  .rail-bar.info { background: var(--line); }
+  .rail-bar.moderate { background: var(--warn); }
+  .rail-bar.critical { background: var(--danger); }
+  .card-body { padding: 16px 18px; flex: 1; min-width: 0; }
+  .card h3 { font-size: 14.5px; margin: 0 0 3px; }
+  .card .step-desc { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+
+  .checklist { list-style: none; margin: 0; padding: 0; }
+  .checklist li { border-top: 1px solid var(--line); }
+  .checklist li:first-child { border-top: none; }
+  .check-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 9px 2px;
+    cursor: pointer; user-select: none;
+  }
+  .check-box {
+    width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--muted);
+    flex-shrink: 0; margin-top: 1px; position: relative; transition: background .12s, border-color .12s;
+  }
+  .check-row.done .check-box { background: var(--ok); border-color: var(--ok); }
+  .check-box::after {
+    content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 9px;
+    border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); opacity: 0;
+  }
+  .check-row.done .check-box::after { opacity: 1; }
+  .check-text { font-size: 13.5px; color: var(--ink); }
+  .check-row.done .check-text { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+
+  .why {
+    margin-top: 10px; padding: 10px 13px; background: var(--paper-2); border-radius: 8px;
+    font-size: 12px; color: var(--muted); border-left: 3px solid var(--accent);
+  }
+  .why b { color: var(--ink); }
+
+  .env-block {
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; margin-top: 10px; font-size: 12.5px; overflow-x: auto;
+  }
+  .env-block .l { color: var(--muted); }
+
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 10px; margin-top: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .field input, .field select {
+    font: inherit; font-size: 13px; padding: 7px 9px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+    font-family: "SF Mono", Consolas, monospace;
+  }
+  .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
+  .pass-fail { display: flex; gap: 6px; margin-top: 4px; }
+  .pf-btn {
+    flex: 1; font-size: 12px; font-weight: 700; padding: 7px 0; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--muted); cursor: pointer;
+    font-family: inherit; transition: background .12s, color .12s, border-color .12s;
+  }
+  .pf-btn.pass.active { background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+  .pf-btn.fail.active { background: var(--danger-bg); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+
+  .record-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 700; padding: 9px 16px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .copy-toast { font-size: 12px; color: var(--ok); align-self: center; opacity: 0; transition: opacity .2s; }
+  .copy-toast.show { opacity: 1; }
+
+  .table-wrap { overflow-x: auto; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--muted); font-weight: 700; padding: 7px 10px; border-bottom: 1px solid var(--line); text-transform: uppercase; font-size: 10.5px; letter-spacing: .04em; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+
+  .source-note { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .progress-fill, .check-box, .pf-btn { transition: none; }
+  }
+
+  @media print {
+    .topbar { position: static; backdrop-filter: none; }
+    .phase-nav, .record-actions { display: none; }
+    .card { box-shadow: none; break-inside: avoid; }
+    body { background: #fff; color: #111; }
+  }
+
+  @media (max-width: 560px) {
+    .intro h1 { font-size: 21px; }
+    .field-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-row">
+      <div>
+        <h1 class="disp">Field Setup Runbook</h1>
+        <div class="sub">swiftPOS → Elite POS · Main Counter register</div>
+      </div>
+      <span class="progress-chip" id="progressChip">0 / 0 done</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="phase-nav">
+      <a href="#prep">Prep</a>
+      <a href="#hardware">Hardware</a>
+      <a href="#software">Software</a>
+      <a href="#link">Link to Elite</a>
+      <a href="#tests">Acceptance tests</a>
+      <a href="#cutover">Cutover</a>
+      <a href="#record">Record</a>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+
+  <div class="intro">
+    <h1 class="disp">Bring the new register up, prove it, then let it take over</h1>
+    <p>This is the on-site sequence for wiring one physical terminal to Elite POS and cutting it over from swiftPOS. Every checkbox here persists in this browser, so you can walk away mid-install and pick back up. Nothing in Prep → Acceptance touches swiftPOS's ability to sell — that only happens at the scheduled Cutover step, on purpose.</p>
+    <div class="intro-meta">
+      <div><span class="n mono">6</span><span class="l">Phases</span></div>
+      <div><span class="n mono">0</span><span class="l">Swaps before cutover</span></div>
+      <div><span class="n mono">1</span><span class="l">Scheduled window</span></div>
+    </div>
+  </div>
+
+  <div class="rollback-note">
+    <div class="dot"></div>
+    <div>
+      <b>swiftPOS stays installed until you have a signed-off trial week.</b>
+      <p>Don't uninstall it, don't repoint its data path, don't touch its printer/scanner config until Cutover is explicitly scheduled and the client has agreed on a rollback. It is your safety net, not a leftover to clean up early.</p>
+    </div>
+  </div>
+
+  <!-- PREP -->
+  <div class="phase" id="prep">
+    <div class="phase-head">
+      <div class="phase-num mono">00</div>
+      <h2 class="disp">Before you touch anything</h2>
+      <span class="risk info">Read-only</span>
+    </div>
+    <p class="phase-desc">Document what "working" looks like today. swiftPOS keeps selling the entire time.</p>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar info"></div><div class="card-body">
+      <ul class="checklist" data-group="prep">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Photograph swiftPOS's main menu, version, build, and data path (visible in its title bar)</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Open swiftPOS Utilities and note its printer name/port/drawer settings — this is the real working driver config for this exact printer</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Confirm current login/manager users and how shifts currently close</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Get a rough daily transaction count and quietest hour, to size the cutover window later</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Trace every cable by hand: scanner → USB port; printer → USB/serial/network; drawer → printer's kick port (never the terminal); card terminal → fully independent line</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Record exact printer model + firmware and scanner model — never assume two similarly-named models behave the same</span></label></li>
+      </ul>
+    </div></div></div>
+  </div>
+
+  <!-- HARDWARE -->
+  <div class="phase" id="hardware">
+    <div class="phase-head">
+      <div class="phase-num mono">01</div>
+      <h2 class="disp">Physical hardware</h2>
+      <span class="risk moderate">Cable swaps</span>
+    </div>
+    <p class="phase-desc">Do this on a spare/test machine first if swiftPOS can't be interrupted. Reconnect exactly as found afterward.</p>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar moderate"></div><div class="card-body">
+      <h3>Barcode scanner</h3>
+      <p class="step-desc">USB HID keyboard-wedge — no drivers, just configuration.</p>
+      <ul class="checklist" data-group="hw-scanner">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Connect by USB, confirm it enumerates as a keyboard device</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Set scanner suffix to Enter / Carriage Return</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Match keyboard layout to the Windows session; disable any scanner-added prefix</span></label></li>
+      </ul>
+    </div></div></div>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar moderate"></div><div class="card-body">
+      <h3>Bixolon receipt printer</h3>
+      <p class="step-desc">The highest-risk unknown — driver quirks are model-specific.</p>
+      <ul class="checklist" data-group="hw-printer">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Connect via the deployment-approved method (USB / serial / network)</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Install the vendor Windows driver</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Create a stable queue name that won't get renamed on USB reconnect</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Set 80&nbsp;mm paper width</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Disable any "convert to graphic" transform — raw ESC/POS must pass through</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Print a Windows test page to confirm transport (this does not validate ESC/POS itself)</span></label></li>
+      </ul>
+      <div class="why"><b>Why it matters:</b> the queue name entered here must exactly match <code>POS_PRINTER_ALLOWLIST</code>, the local signer's allowlist, and the Hardware dialog in <code>/pos</code> — a mismatch anywhere in that chain silently blocks printing.</div>
+    </div></div></div>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar moderate"></div><div class="card-body">
+      <h3>Cash drawer</h3>
+      <ul class="checklist" data-group="hw-drawer">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Power off the printer before connecting anything</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Wire the drawer cable into the <b>printer's</b> kick port, never the terminal</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Power the printer back on</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Start with Pin 2 in Elite's hardware settings; try Pin 5 only if the manual specifies it; choose Disabled if no drawer</span></label></li>
+      </ul>
+    </div></div></div>
+  </div>
+
+  <!-- SOFTWARE -->
+  <div class="phase" id="software">
+    <div class="phase-head">
+      <div class="phase-num mono">02</div>
+      <h2 class="disp">Software on the terminal</h2>
+      <span class="risk moderate">New install</span>
+    </div>
+    <p class="phase-desc">A dedicated browser profile, the print bridge, and the offline signer — all local to this one machine.</p>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar moderate"></div><div class="card-body">
+      <h3>Browser + QZ Tray</h3>
+      <ul class="checklist" data-group="sw-qz">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Create/use one dedicated production Chrome or Edge profile for this register — not a personal profile</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Install QZ Tray 2.2.x, set it to start with Windows</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Import/trust the approved signing certificate</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Confirm the Bixolon queue appears in QZ with the exact expected name</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Open Elite in this profile, accept the Chrome Local Network Access prompt</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Confirm printing shows no "unsigned job" warning — production must never rely on clicking through that dialog</span></label></li>
+      </ul>
+    </div></div></div>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar moderate"></div><div class="card-body">
+      <h3>Offline device signer</h3>
+      <p class="step-desc">Lets printing keep working — signed — when this register loses internet.</p>
+      <ul class="checklist" data-group="sw-signer">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Deploy <code>tools/pos-device-signer</code> (Node 20+) as a restricted, non-admin Windows service</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Point it at this register's own certificate/key — never a shared or reused one</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Confirm it binds <code>127.0.0.1</code> only — never a LAN address</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Set automatic restart on failure and rotating log capture</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Restart Windows once, confirm the health check passes with no terminal open</span></label></li>
+      </ul>
+      <div class="env-block mono">
+        <div><span class="l">ELITE_POS_QZ_CERT_PATH</span> = C:\ProgramData\ElitePOS\qz\digital-certificate.txt</div>
+        <div><span class="l">ELITE_POS_QZ_KEY_PATH</span> = C:\ProgramData\ElitePOS\qz\private-key.pem</div>
+        <div><span class="l">ELITE_POS_PRINTER_ALLOWLIST</span> = &lt;exact queue name from above&gt;</div>
+        <div><span class="l">ELITE_POS_ALLOWED_ORIGINS</span> = &lt;production Elite admin origin&gt;</div>
+        <div><span class="l">ELITE_POS_SIGNER_PORT</span> = 8182</div>
+      </div>
+      <div class="why"><b>Verify:</b> <code>curl http://127.0.0.1:8182/health</code> must return <code>ok</code> — from this machine only.</div>
+    </div></div></div>
+  </div>
+
+  <!-- LINK TO ELITE -->
+  <div class="phase" id="link">
+    <div class="phase-head">
+      <div class="phase-num mono">03</div>
+      <h2 class="disp">Link the register to Elite</h2>
+      <span class="risk info">One-time enrollment</span>
+    </div>
+    <p class="phase-desc">This is the actual "connect the machine to the system" step — everything before it was local prep.</p>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar info"></div><div class="card-body">
+      <ul class="checklist" data-group="link-enroll">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Sign in to Elite as owner/admin, in this register's dedicated browser profile</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Open <code>/pos</code>, enter a stable register name (e.g. "Main Counter 1"), select Connect register</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Record the register name + server-side register ID below in this browser's profile — the credential is issued once and lives in IndexedDB; don't clear this profile afterward</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Open Hardware settings: enter the exact QZ printer queue name, signer URL <code>http://127.0.0.1:8182</code>, and drawer pin</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Save, confirm the hardware indicator shows a successful QZ connection</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Open a test shift with the agreed opening float</span></label></li>
+      </ul>
+      <div class="field-grid">
+        <div class="field"><label>Register display name</label><input type="text" data-persist="reg-name" placeholder="Main Counter 1"></div>
+        <div class="field"><label>Elite register ID</label><input type="text" data-persist="reg-id" placeholder="uuid"></div>
+        <div class="field"><label>Printer queue name</label><input type="text" data-persist="reg-queue" placeholder="BIXOLON SRP-350plusIII"></div>
+        <div class="field"><label>Drawer pin</label><input type="text" data-persist="reg-pin" placeholder="Pin 2 / Pin 5 / Disabled"></div>
+      </div>
+    </div></div></div>
+  </div>
+
+  <!-- ACCEPTANCE TESTS -->
+  <div class="phase" id="tests">
+    <div class="phase-head">
+      <div class="phase-num mono">04</div>
+      <h2 class="disp">Acceptance tests</h2>
+      <span class="risk critical">Required gate</span>
+    </div>
+    <p class="phase-desc">Do not let anyone sell on this register for real until every applicable row here is Pass.</p>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar critical"></div><div class="card-body">
+      <div id="testRows"></div>
+    </div></div></div>
+  </div>
+
+  <!-- CUTOVER -->
+  <div class="phase" id="cutover">
+    <div class="phase-head">
+      <div class="phase-num mono">05</div>
+      <h2 class="disp">Cutover &amp; trial period</h2>
+      <span class="risk critical">Business decision</span>
+    </div>
+    <p class="phase-desc">The real risk isn't the software — it's the shop losing the ability to sell. This phase exists to remove that risk.</p>
+
+    <div class="card"><div class="card-rail"><div class="rail-bar critical"></div><div class="card-body">
+      <ul class="checklist" data-group="cutover">
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Pick a closed or lowest-traffic hour based on the transaction volume noted in Prep</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Get explicit agreement: "if anything goes wrong, we revert to swiftPOS and retry another day"</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Leave swiftPOS installed and untouched — it is the rollback path, not clutter to remove</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Run real sales on Elite for an agreed trial window (recommend at least one full trading week)</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Check in daily during the trial for print failures, drawer issues, or offline-sync surprises</span></label></li>
+        <li><label class="check-row"><span class="check-box"></span><span class="check-text">Only decommission swiftPOS once the client explicitly signs off that Elite is trusted for daily use</span></label></li>
+      </ul>
+    </div></div></div>
+  </div>
+
+  <!-- RECORD -->
+  <div class="phase" id="record">
+    <div class="phase-head">
+      <div class="phase-num mono">06</div>
+      <h2 class="disp">Per-register acceptance record</h2>
+      <span class="risk safe">Sign-off</span>
+    </div>
+    <p class="phase-desc">Fill this in as you go, then copy it into the deployment ticket.</p>
+
+    <div class="card"><div class="card-body">
+      <div class="field-grid">
+        <div class="field"><label>Store / tenant</label><input type="text" data-persist="rec-store" placeholder="Elite Collection — Doha"></div>
+        <div class="field"><label>Terminal asset / serial</label><input type="text" data-persist="rec-terminal"></div>
+        <div class="field"><label>Printer model / serial / firmware</label><input type="text" data-persist="rec-printer"></div>
+        <div class="field"><label>Scanner model / serial</label><input type="text" data-persist="rec-scanner"></div>
+        <div class="field"><label>Tested by</label><input type="text" data-persist="rec-tester"></div>
+        <div class="field"><label>Date / time</label><input type="text" data-persist="rec-date"></div>
+        <div class="field"><label>Rollback confirmed with client</label><input type="text" data-persist="rec-rollback" placeholder="YES / NO"></div>
+        <div class="field"><label>Approved for production by</label><input type="text" data-persist="rec-approver"></div>
+      </div>
+      <div class="record-actions">
+        <button class="btn primary" id="copyRecordBtn">Copy record as text</button>
+        <span class="copy-toast" id="copyToast">Copied</span>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="source-note">Field companion to the POS Hardware Runbook and the swiftPOS on-site migration plan. Checkbox and field state is saved to this browser only.</div>
+
+</div>
+
+<script>
+(function () {
+  var STORAGE_KEY = 'elite-pos-runbook-v1';
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (e) { state = {}; }
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    updateProgress();
+  }
+
+  function updateProgress() {
+    var rows = document.querySelectorAll('.check-row');
+    var done = 0;
+    rows.forEach(function (r) { if (r.classList.contains('done')) done++; });
+    document.getElementById('progressChip').textContent = done + ' / ' + rows.length + ' done';
+    var pct = rows.length ? Math.round((done / rows.length) * 100) : 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  // Checklist items
+  var idx = 0;
+  document.querySelectorAll('.checklist').forEach(function (list) {
+    var group = list.getAttribute('data-group');
+    list.querySelectorAll('.check-row').forEach(function (row, i) {
+      var key = 'check:' + group + ':' + i;
+      if (state[key]) row.classList.add('done');
+      row.addEventListener('click', function () {
+        row.classList.toggle('done');
+        state[key] = row.classList.contains('done');
+        save();
+      });
+    });
+  });
+
+  // Persisted text fields
+  document.querySelectorAll('[data-persist]').forEach(function (input) {
+    var key = 'field:' + input.getAttribute('data-persist');
+    if (state[key]) input.value = state[key];
+    input.addEventListener('input', function () { state[key] = input.value; save(); });
+  });
+
+  // Acceptance test rows
+  var TESTS = [
+    ['Online cash sale', 'Receipt prints once, drawer opens once, tendered/change correct, cashier + register ID + SKUs + lookup QR all present'],
+    ['Online card sale', 'External terminal confirms first, receipt prints once, drawer does NOT open'],
+    ['Refund receipt + QR', 'Partial refund with manager PIN; refund receipt lists items/SKUs/reason; QR resolves to original sale'],
+    ['Printer failure safety', 'Disconnect printer mid-flow, sale still saves; reconnect and reprint without a duplicate transaction or drawer pulse'],
+    ['Offline sale + print', 'Disconnect network entirely, sale queues with a reserved receipt number and prints via the local signer; reconnect and confirm sync to zero'],
+    ['Restart recovery', 'Reboot Windows; QZ, signer, register identity, shift, and catalog cache all come back without manual steps'],
+    ['Scanner reliability', 'Scan a known barcode 10× at normal speed — each resolves correctly; scan an unknown code — cart does not change']
+  ];
+  var testsHost = document.getElementById('testRows');
+  TESTS.forEach(function (t, i) {
+    var key = 'test:' + i;
+    var val = state[key] || '';
+    var row = document.createElement('div');
+    row.style.padding = '12px 2px';
+    if (i > 0) row.style.borderTop = '1px solid var(--line)';
+    row.innerHTML =
+      '<h3 style="margin:0 0 2px">' + t[0] + '</h3>' +
+      '<p class="step-desc" style="margin:0 0 8px">' + t[1] + '</p>' +
+      '<div class="pass-fail">' +
+        '<button class="pf-btn pass" data-key="' + key + '" data-val="pass">Pass</button>' +
+        '<button class="pf-btn fail" data-key="' + key + '" data-val="fail">Fail</button>' +
+      '</div>';
+    testsHost.appendChild(row);
+    var passBtn = row.querySelector('.pf-btn.pass');
+    var failBtn = row.querySelector('.pf-btn.fail');
+    function render() {
+      passBtn.classList.toggle('active', state[key] === 'pass');
+      failBtn.classList.toggle('active', state[key] === 'fail');
+    }
+    render();
+    passBtn.addEventListener('click', function () { state[key] = state[key] === 'pass' ? '' : 'pass'; save(); render(); });
+    failBtn.addEventListener('click', function () { state[key] = state[key] === 'fail' ? '' : 'fail'; save(); render(); });
+  });
+
+  updateProgress();
+
+  // Copy record
+  document.getElementById('copyRecordBtn').addEventListener('click', function () {
+    var get = function (k) { return state['field:' + k] || ''; };
+    var testLines = TESTS.map(function (t, i) {
+      var v = state['test:' + i];
+      return t[0] + ': ' + (v === 'pass' ? 'PASS' : v === 'fail' ? 'FAIL' : '—');
+    }).join('\n');
+    var text =
+      'Store/Tenant: ' + get('rec-store') + '\n' +
+      'Register display name: ' + get('reg-name') + '\n' +
+      'Elite register ID: ' + get('reg-id') + '\n' +
+      'Terminal asset/serial: ' + get('rec-terminal') + '\n' +
+      'Printer model/serial/firmware: ' + get('rec-printer') + '\n' +
+      'Printer queue name: ' + get('reg-queue') + '\n' +
+      'Drawer pin: ' + get('reg-pin') + '\n' +
+      'Scanner model/serial: ' + get('rec-scanner') + '\n\n' +
+      testLines + '\n\n' +
+      'Tested by: ' + get('rec-tester') + '\n' +
+      'Date/time: ' + get('rec-date') + '\n' +
+      'Rollback path confirmed with client: ' + get('rec-rollback') + '\n' +
+      'Approved for production by: ' + get('rec-approver') + '\n';
+    var toast = document.getElementById('copyToast');
+    function flashToast() {
+      toast.classList.add('show');
+      setTimeout(function () { toast.classList.remove('show'); }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(flashToast).catch(flashToast);
+    } else {
+      flashToast();
+    }
+  });
+})();
+</script>

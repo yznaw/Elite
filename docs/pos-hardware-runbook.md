@@ -1,7 +1,7 @@
 # Elite POS Hardware Integration Runbook
 
 > **Purpose:** Provision and certify one physical Elite register using a Posiflex-class Windows terminal, QZ Tray, a Bixolon 80 mm ESC/POS printer, a printer-connected cash drawer, and a USB HID barcode scanner.  
-> **Related:** Read [Elite POS System and Integration Guide](./12-pos-system.md) before using this runbook.
+> **Related:** Read [Elite POS System and Integration Guide](./12-pos-system.md) before using this runbook. For an interactive, checkbox-driven version of this same sequence to use on-site, see the [POS Field Setup Runbook](./pos-field-setup-runbook.html).
 
 ## 1. Supported Hardware Model
 
