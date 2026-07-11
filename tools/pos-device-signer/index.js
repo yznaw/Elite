@@ -25,7 +25,11 @@ function cors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
-  res.setHeader('Access-Control-Allow-Headers', 'content-type');
+  // Mirror back whatever headers the browser's preflight actually asked for,
+  // instead of a fixed list — QZ Tray's client can send headers beyond just
+  // content-type, and a hardcoded allowlist here silently blocks any of them.
+  const requestedHeaders = req.headers['access-control-request-headers'];
+  res.setHeader('Access-Control-Allow-Headers', requestedHeaders || 'content-type');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
 }
 
