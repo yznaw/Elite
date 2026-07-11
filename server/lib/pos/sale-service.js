@@ -65,7 +65,7 @@ async function findByBarcode(context, barcodeValue) {
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
-       WHERE pv.tenant_id = $1 AND pv.barcode = $2
+       WHERE pv.tenant_id = $1 AND lower(pv.barcode) = lower($2)
          AND p.status = 'active' AND pv.is_active = true`,
       [context.tenantId, barcode],
     );
