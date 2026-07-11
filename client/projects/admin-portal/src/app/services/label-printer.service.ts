@@ -53,7 +53,7 @@ export class LabelPrinterService {
     const win = window.open('', '_blank');
     if (!win) return;
 
-    const cards = labels.map((l) => this.labelCard(l)).join('');
+    const cards = labels.map((l, i) => this.labelCard(l, i === labels.length - 1)).join('');
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -61,32 +61,42 @@ export class LabelPrinterService {
 <title>Product Labels</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#f2f2f2;padding:16px;}
-  .toolbar{display:flex;justify-content:center;margin-bottom:16px;}
+  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#f2f2f2;padding:16px;display:flex;flex-direction:column;align-items:center;}
+  .toolbar{margin-bottom:16px;}
   .print-btn{padding:10px 22px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;}
-  .sheet{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
+  /* 80mm-wide continuous roll: labels stack one after another down the
+     strip, not side-by-side — this is receipt paper, not die-cut label
+     stock. A dashed line marks where to cut by hand between labels, since
+     browser printing has no way to send a partial-cut command mid-job. */
+  .sheet{width:76mm;background:#fff;}
   .label{
-    width:50mm;min-height:30mm;background:#fff;border:1px solid #ccc;border-radius:4px;
-    padding:4mm;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    text-align:center;gap:2px;break-inside:avoid;page-break-inside:avoid;
+    width:100%; padding:3mm 2mm; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; gap:2px;
   }
+  .cut-line{border-top:1px dashed #999; margin:0 2mm;}
   .label-brand{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#666;}
   .label-name{font-size:11px;font-weight:700;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .label-variant{font-size:9.5px;color:#444;}
   .label-barcode svg{width:100%;height:auto;max-height:14mm;}
   .label-code{font-size:8.5px;font-family:'SFMono-Regular',Consolas,monospace;letter-spacing:.03em;color:#333;}
   .label-price{font-size:11px;font-weight:700;margin-top:2px;}
+  .feed-tail{height:12mm;}
   @media print{
+    /* Fixed 80mm width, auto height — without this, the browser falls
+       back to the printer driver's own reported page size, which for a
+       continuous-roll receipt printer is an enormous fixed virtual length
+       (e.g. 3276mm). That mismatch is what fed through a long blank strip
+       last time: the labels rendered at the top of a page the printer
+       thought was several metres long. */
+    @page{size:80mm auto; margin:0;}
     body{background:#fff;padding:0;}
     .toolbar{display:none;}
-    .sheet{gap:2mm;}
-    @page{margin:8mm;}
   }
 </style>
 </head>
 <body>
   <div class="toolbar"><button class="print-btn" onclick="window.print()">Print ${labels.length} Label${labels.length > 1 ? 's' : ''}</button></div>
-  <div class="sheet">${cards}</div>
+  <div class="sheet">${cards}<div class="feed-tail"></div></div>
 </body>
 </html>`;
 
@@ -94,7 +104,7 @@ export class LabelPrinterService {
     win.document.close();
   }
 
-  private labelCard(l: VariantLabelData): string {
+  private labelCard(l: VariantLabelData, isLast: boolean): string {
     return `
       <div class="label">
         <div class="label-brand">${escapeHtml(l.brand)}</div>
@@ -103,6 +113,6 @@ export class LabelPrinterService {
         <div class="label-barcode">${this.renderBarcodeSvg(l.barcode)}</div>
         <div class="label-code">${escapeHtml(l.barcode)}</div>
         <div class="label-price">${escapeHtml(l.currency)} ${l.price.toFixed(2)}</div>
-      </div>`;
+      </div>${isLast ? '' : '<div class="cut-line"></div>'}`;
   }
 }
