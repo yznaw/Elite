@@ -1,6 +1,8 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
@@ -25,6 +27,8 @@ export class ContactComponent implements OnInit {
   private readonly i18n        = inject(I18nService);
   readonly locale              = inject(LocaleService);
   private readonly homeContent = inject(HomeContentService);
+  private readonly http        = inject(HttpClient);
+  private readonly apiBase     = this.resolveApiBase();
 
   readonly t = (key: string): string => this.i18n.t(key);
   readonly contactContent = computed(() => this.homeContent.contentData().contact);
@@ -42,6 +46,8 @@ export class ContactComponent implements OnInit {
 
   readonly form      = signal<ContactForm>({ name: '', email: '', phone: '', subject: '', message: '' });
   readonly submitted = signal(false);
+  readonly submitting = signal(false);
+  readonly error = signal('');
 
   ngOnInit(): void {
     void this.homeContent.refresh(true);
@@ -51,8 +57,48 @@ export class ContactComponent implements OnInit {
     this.form.update((f) => ({ ...f, [key]: value }));
   }
 
-  onSubmit(): void {
-    this.submitted.set(true);
+  async onSubmit(): Promise<void> {
+    if (this.submitting()) return;
+
+    const form = this.form();
+    const payload = {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      subject: form.subject ? this.t(form.subject) : '',
+      message: form.message.trim(),
+      locale: this.locale.locale(),
+    };
+
+    if (!payload.name || !payload.email || !payload.message) {
+      this.error.set(this.t('contact.error.required'));
+      return;
+    }
+
+    this.submitting.set(true);
+    this.error.set('');
+
+    try {
+      await firstValueFrom(this.http.post(`${this.apiBase}/contact`, payload));
+      this.submitted.set(true);
+      this.form.set({ name: '', email: '', phone: '', subject: '', message: '' });
+    } catch {
+      this.error.set(this.t('contact.error.submit'));
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  private resolveApiBase(): string {
+    const { hostname, protocol } = window.location;
+    const isLocal = hostname === 'localhost'
+      || hostname === '127.0.0.1'
+      || hostname === '::1'
+      || hostname === '[::1]'
+      || /^10\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
   }
 
   private sanitizePhone(phone: string): string {

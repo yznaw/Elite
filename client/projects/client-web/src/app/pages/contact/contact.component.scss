@@ -206,6 +206,18 @@
   letter-spacing: 0.2em;
 }
 
+.contact-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.contact-error {
+  margin: -8px 0 16px;
+  color: #9f2f2f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* ── Info column ─────────────────────────────────── */
 .contact-info-col {
   display: flex;

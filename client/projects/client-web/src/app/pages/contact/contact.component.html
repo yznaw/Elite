@@ -96,7 +96,12 @@
             <textarea class="float-input" rows="5" [ngModel]="form().message" (ngModelChange)="set('message',$event)" name="message" placeholder=" " style="resize:vertical;min-height:120px;"></textarea>
             <label class="float-label">{{ t('contact.field.message') }}</label>
           </div>
-          <button type="submit" class="btn-gold contact-submit">{{ t('contact.send') }}</button>
+          @if (error()) {
+            <p class="contact-error">{{ error() }}</p>
+          }
+          <button type="submit" class="btn-gold contact-submit" [disabled]="submitting()">
+            {{ submitting() ? t('contact.sending') : t('contact.send') }}
+          </button>
         </form>
       </section>
 

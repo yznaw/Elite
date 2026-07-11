@@ -406,6 +406,9 @@ const EN = {
 
   'contact.form.title': 'Send an Enquiry',
   'contact.send': 'Send Message',
+  'contact.sending': 'Sending...',
+  'contact.error.required': 'Please enter your name, email, and message.',
+  'contact.error.submit': 'Could not send your message. Please try again or contact us on WhatsApp.',
   'contact.success.kicker': 'Message Received',
   'contact.success.headline.line1': 'A Client Advisor',
   'contact.success.headline.line2': 'Will Be in Touch',
@@ -830,6 +833,9 @@ const AR: Record<keyof typeof EN, string> = {
 
   'contact.form.title': 'أرسل استفساراً',
   'contact.send': 'إرسال الرسالة',
+  'contact.sending': 'جارٍ الإرسال...',
+  'contact.error.required': 'يرجى إدخال الاسم والبريد الإلكتروني والرسالة.',
+  'contact.error.submit': 'تعذر إرسال رسالتك. حاول مرة أخرى أو تواصل معنا عبر واتساب.',
   'contact.success.kicker': 'تم استلام الرسالة',
   'contact.success.headline.line1': 'مستشار العملاء',
   'contact.success.headline.line2': 'سيتواصل معك',
