@@ -75,11 +75,40 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
   // product_variants.sku is NOT NULL + UNIQUE(tenant_id, sku), so every row
   // needs one, and this list must match what's actually inserted below or the
   // "removed" cleanup query would delete rows we're about to re-insert.
-  const resolved = variants.map((variant, index) => ({
-    variant,
-    sku: String(variant.sku || '').trim() || `${productId}-V${index}`,
-  }));
+  const resolved = variants.map((variant, index) => {
+    const sku = String(variant.sku || '').trim() || `${productId}-V${index}`;
+    // Barcode defaults to the variant's own SKU (printed as a Code128 label
+    // and scanned back at POS) unless a real supplier-issued barcode was
+    // entered — see docs/12-pos-system.md for the POS barcode lookup flow.
+    const barcode = String(variant.barcode || '').trim() || sku;
+    return { variant, sku, barcode };
+  });
   const incomingSkus = resolved.map((r) => r.sku);
+
+  // product_variants has a UNIQUE(tenant_id, barcode) partial index — check
+  // for collisions up front so a duplicate manually-typed barcode surfaces as
+  // a clear 400 instead of a raw Postgres constraint error.
+  const seenBarcodes = new Map();
+  for (const { barcode } of resolved) seenBarcodes.set(barcode, (seenBarcodes.get(barcode) || 0) + 1);
+  const dupeInBatch = [...seenBarcodes.entries()].find(([, count]) => count > 1)?.[0];
+  if (dupeInBatch) {
+    const err = new Error(`Barcode "${dupeInBatch}" is used by more than one variant on this product. Barcodes must be unique.`);
+    err.status = 400;
+    throw err;
+  }
+  if (resolved.length > 0) {
+    const clash = await client.query(
+      `SELECT barcode FROM product_variants
+       WHERE tenant_id = $1 AND product_id <> $2 AND barcode = ANY($3::text[])
+       LIMIT 1`,
+      [tenantId, productId, resolved.map((r) => r.barcode)],
+    );
+    if (clash.rowCount > 0) {
+      const err = new Error(`Barcode "${clash.rows[0].barcode}" is already used by another product. Barcodes must be unique.`);
+      err.status = 400;
+      throw err;
+    }
+  }
 
   // Null-out cart references for variants being removed (ON DELETE RESTRICT)
   if (incomingSkus.length > 0) {
@@ -104,7 +133,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     await client.query('DELETE FROM product_variants WHERE product_id = $1', [productId]);
   }
 
-  for (const [index, { variant, sku }] of resolved.entries()) {
+  for (const [index, { variant, sku, barcode }] of resolved.entries()) {
     const costCents = variant.costPrice != null && variant.costPrice !== ''
       ? Math.max(0, Math.round(Number(variant.costPrice) * 100))
       : null;
@@ -119,16 +148,17 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     await client.query(
       `
         INSERT INTO product_variants (
-          tenant_id, product_id, sku, size, color, material,
+          tenant_id, product_id, sku, barcode, size, color, material,
           price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order, is_active,
           color_ref_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true,
           (SELECT id FROM ref_colors
-           WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($5))
+           WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($6))
            LIMIT 1))
         ON CONFLICT (tenant_id, sku) DO UPDATE SET
           product_id         = EXCLUDED.product_id,
+          barcode            = EXCLUDED.barcode,
           size               = EXCLUDED.size,
           color              = EXCLUDED.color,
           material           = EXCLUDED.material,
@@ -151,6 +181,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
         tenantId,
         productId,
         sku,
+        barcode,
         String(variant.size || '').trim() || null,
         colorText,
         String(variant.material || '').trim() || null,
@@ -365,6 +396,7 @@ async function loadAdminProduct(client, tenantId, productId) {
           SELECT jsonb_agg(jsonb_build_object(
             'id', pv.id,
             'sku', pv.sku,
+            'barcode', pv.barcode,
             'size', pv.size,
             'color', pv.color,
             'material', pv.material,
@@ -539,6 +571,7 @@ router.get('/', asyncHandler(async (_req, res) => {
             SELECT jsonb_agg(jsonb_build_object(
               'id', pv.id,
               'sku', pv.sku,
+              'barcode', pv.barcode,
               'size', pv.size,
               'color', pv.color,
               'material', pv.material,
@@ -597,6 +630,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
             SELECT jsonb_agg(jsonb_build_object(
               'id', pv.id,
               'sku', pv.sku,
+              'barcode', pv.barcode,
               'size', pv.size,
               'color', pv.color,
               'material', pv.material,

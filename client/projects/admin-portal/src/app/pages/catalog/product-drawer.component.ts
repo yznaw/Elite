@@ -18,6 +18,7 @@ import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../servic
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
 import { AdminMediaService } from '../../services/admin-media.service';
 import { StorageService } from '../../services/storage.service';
+import { LabelPrinterService } from '../../services/label-printer.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
@@ -510,6 +511,12 @@ function readPreview(file: File): Promise<string> {
 
                           <!-- Actions -->
                           <div class="vc-cell vc-cell--actions">
+                            <button class="vt-print" type="button"
+                                    (click)="printVariantLabel(item.v)"
+                                    [title]="t('product.variants.printLabel')"
+                                    [attr.aria-label]="t('product.variants.printLabel')">
+                              <ap-icon name="barcode" [size]="13"/>
+                            </button>
                             <button class="vt-expand" type="button"
                                     [class.is-open]="expandedVariants().has(item.v.id)"
                                     (click)="toggleVariantExpand(item.v.id)"
@@ -524,9 +531,9 @@ function readPreview(file: File): Promise<string> {
                           </div>
                         </div>
 
-                        <!-- Expandable detail: Material | Cost | Shipping | Total Cost · Margin -->
+                        <!-- Expandable detail: Material | Barcode | Cost | Shipping | Total Cost · Margin -->
                         @if (expandedVariants().has(item.v.id)) {
-                          <div class="vc-detail vc-detail--5col">
+                          <div class="vc-detail vc-detail--6col">
                             <div class="vc-field">
                               <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
                               @if (refMaterials().length > 0) {
@@ -543,6 +550,12 @@ function readPreview(file: File): Promise<string> {
                                        [ngModel]="item.v.material"
                                        (ngModelChange)="updateVariant(item.globalIndex, { material: $event })"/>
                               }
+                            </div>
+                            <div class="vc-field">
+                              <label class="vc-lbl">{{ t('product.variants.col.barcode') }}</label>
+                              <input class="inp inp-sm mono" [placeholder]="variantBarcodePreview(item.v)"
+                                     [ngModel]="item.v.barcode"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { barcode: $event })"/>
                             </div>
                             <div class="vc-field">
                               <label class="vc-lbl">{{ t('product.variants.col.cost') }} (QAR)</label>
@@ -596,6 +609,9 @@ function readPreview(file: File): Promise<string> {
                 <div class="row gap-sm" style="flex-wrap:wrap;">
                   <button class="btn btn-outline btn-sm" (click)="openBulkStock()">
                     <ap-icon name="chart" [size]="12"/> {{ t('product.variants.bulkStock') }}
+                  </button>
+                  <button class="btn btn-outline btn-sm" (click)="printAllVariantLabels()">
+                    <ap-icon name="barcode" [size]="12"/> {{ t('product.variants.printAllLabels') }}
                   </button>
                   <button class="btn btn-outline btn-sm" (click)="addVariant()">
                     <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
@@ -1541,6 +1557,7 @@ function readPreview(file: File): Promise<string> {
       animation: vc-reveal 0.14s ease-out;
     }
     .vc-detail--5col { grid-template-columns: 1.4fr 1fr 1fr 0.9fr 0.9fr; }
+    .vc-detail--6col { grid-template-columns: 1.2fr 1.3fr 0.9fr 0.9fr 0.8fr 0.8fr; }
     /* Margin/total-cost fields inside detail: label + value stacked */
     .vc-field--margin,
     .vc-field--total-cost { flex-direction: column; align-items: flex-start; gap: 5px; }
@@ -1590,6 +1607,19 @@ function readPreview(file: File): Promise<string> {
       border-color: rgba(239, 68, 68, 0.3);
       background: rgba(239, 68, 68, 0.06);
     }
+
+    .vt-print {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: all 0.12s;
+      flex-shrink: 0;
+    }
+    .vt-print:hover { color: var(--gold); border-color: rgba(193,154,91,0.3); background: var(--gold-3); }
 
     .margin-pill {
       display: inline-block;
@@ -1645,8 +1675,34 @@ function readPreview(file: File): Promise<string> {
       .vc-cell--actions { grid-column: 5; grid-row: 1 / 3; align-self: center; flex-direction: column; }
       .vc-detail { grid-template-columns: 1fr 1fr; }
       .vc-detail--5col { grid-template-columns: 1fr 1fr 1fr; }
+      .vc-detail--6col { grid-template-columns: 1fr 1fr; }
       .vc-field--margin,
       .vc-field--total-cost { display: none; }
+
+      /* Grouped (color-accordion) size rows: Size | Stock | Price + stacked
+         actions, all in a single row. SKU is hidden here too (same tradeoff
+         as the ungrouped row above) — it's still visible in the desktop
+         table and editable via the SKU field itself when needed.
+         Every cell's grid-row is reset to 1 here — the generic (ungrouped)
+         mobile rules above target these same cell classes with grid-row: 2,
+         and since those selectors share this rule's specificity, leaving
+         any cell's row unset lets that stale rule win and reopens a phantom
+         second row that the actions column (grid-row: 1 / 3) bleeds into. */
+      .vc-header--group { display: none; }
+      .vc-row--grouped {
+        grid-template-columns: 1fr 1fr 1fr 44px !important;
+        grid-template-rows: auto !important;
+      }
+      .vc-row--grouped .vc-cell--size   { grid-column: 1; grid-row: 1; }
+      .vc-row--grouped .vc-cell--num    { grid-column: 2; grid-row: 1; }
+      .vc-row--grouped .vc-cell--price  { grid-column: 3; grid-row: 1; }
+      .vc-row--grouped .vc-cell--sku    { display: none; }
+      .vc-row--grouped .vc-cell--actions {
+        grid-column: 4;
+        grid-row: 1;
+        flex-direction: column;
+        align-self: center;
+      }
     }
     .related-picker {
       display: grid;
@@ -1787,6 +1843,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly uploads = inject(MediaUploadService);
   private readonly mediaApi = inject(AdminMediaService);
   private readonly storage = inject(StorageService);
+  private readonly labelPrinter = inject(LabelPrinterService);
 
   readonly refColors   = signal<RefColor[]>([]);
   readonly refMaterials = signal<RefMaterial[]>([]);
@@ -2457,6 +2514,34 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (n === 0) return '';
     const tpl = n === 1 ? this.t('product.variants.summary.one') : this.t('product.variants.summary.many');
     return tpl.replace('{n}', String(n));
+  }
+
+  /** Barcode preview — mirrors the server default (falls back to SKU) so the
+      admin sees what will actually be saved before it round-trips. */
+  variantBarcodePreview(v: ProductVariant): string {
+    return (v.barcode || '').trim() || (v.sku || '').trim();
+  }
+
+  private variantLabelData(v: ProductVariant) {
+    return {
+      brand: this.product?.brand || 'Elite',
+      productName: this.form().name || '',
+      variantLabel: [v.color, v.size].filter(Boolean).join(' · '),
+      sku: v.sku || '',
+      barcode: this.variantBarcodePreview(v),
+      price: Number(v.price) || 0,
+      currency: 'QAR',
+    };
+  }
+
+  printVariantLabel(v: ProductVariant): void {
+    this.labelPrinter.printLabels([this.variantLabelData(v)]);
+  }
+
+  printAllVariantLabels(): void {
+    const variants = this.form().variants;
+    if (variants.length === 0) return;
+    this.labelPrinter.printLabels(variants.map((v) => this.variantLabelData(v)));
   }
 
   toggleVariantExpand(id: string): void {

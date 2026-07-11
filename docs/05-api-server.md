@@ -530,6 +530,7 @@ Admin authentication uses **server-side sessions** (no JWT):
 - **`trustZeroStock` flag (June 2026):** `replaceVariants()` accepts `{ trustZeroStock }`. When `true` (editor save), zero stock always overwrites. When `false` (bulk import), existing non-zero stock is preserved if the incoming value is 0.
 - **Variant ordering fix (June 2026):** All product queries use a correlated subquery with `ORDER BY sort_order, created_at` instead of `jsonb_agg(DISTINCT ...)`. PostgreSQL does not support `ORDER BY` inside `DISTINCT` aggregate — this was causing variants to come back in unpredictable order.
 - **Color image URL fix (June 2026):** `replaceColorImages()` normalizes `/api/`-prefixed image URLs before looking them up in `media_assets`.
+- **Barcode default (2026-07):** `replaceVariants()` resolves `barcode = trim(variant.barcode) || sku` for every row before insert/update, and throws a 400 if two variants in the save (or an existing variant on a different product) would resolve to the same barcode — `product_variants` has a `UNIQUE(tenant_id, barcode)` partial index (`015_pos_foundation.sql`). `admin-bulk-import.route.js` applies the same default (optional CSV `barcode`/`ean`/`upc` column, else falls back to SKU). Pre-existing variants are backfilled once via `ensure-migrations.js` (`UPDATE product_variants SET barcode = sku WHERE barcode IS NULL OR blank`, idempotent).
 
 ### Reference data endpoints (`/api/admin/ref/*`)
 

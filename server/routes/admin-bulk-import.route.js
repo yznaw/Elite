@@ -85,6 +85,7 @@ function csvToObjects(text) {
     cost:         headers.findIndex(h => h === 'cost-qar' || h === 'cost_qar' || h === 'cost qar' || h === 'cost'),
     shippingCost: headers.findIndex(h => h === 'shipping cost' || h === 'shipping_cost' || h === 'shipping'),
     collection:   headers.findIndex(h => h === 'collections' || h === 'collection'),
+    barcode:      headers.findIndex(h => h === 'barcode' || h === 'ean' || h === 'upc'),
   };
   const objects = [];
   let lastDesc = '', lastName = '', lastNameAr = '', lastCollection = '', lastImage = '', lastColor = '';
@@ -121,6 +122,7 @@ function csvToObjects(text) {
       costRaw:      idx.cost >= 0 ? (row[idx.cost] || '').trim() : '',
       shippingRaw:  idx.shippingCost >= 0 ? (row[idx.shippingCost] || '').trim() : '',
       collection:   rawCollection || lastCollection,
+      barcode:      idx.barcode >= 0 ? (row[idx.barcode] || '').trim() : '',
     });
   }
   return objects;
@@ -431,19 +433,23 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           // Use explicit color from CSV; fall back to SKU-inferred color
           const colorVal = (row.color || '').trim() || inferColorFromSku(row.sku) || null;
 
+          // Barcode defaults to the variant's own SKU — see replaceVariants()
+          // in admin-products.route.js for the same convention.
+          const barcodeVal = (row.barcode || '').trim() || row.sku;
+
           const varResult = await client.query(
             `INSERT INTO product_variants
-               (tenant_id, product_id, sku, color, size, price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order, color_ref_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-               (SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($4)) LIMIT 1))
+               (tenant_id, product_id, sku, barcode, color, size, price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order, color_ref_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+               (SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($5)) LIMIT 1))
              ON CONFLICT (tenant_id, sku) DO UPDATE SET
-               product_id=$2, color=$4, size=$5, price_cents=$6,
-               cost_price_cents=$7, shipping_cost_cents=$8,
-               stock_quantity=CASE WHEN $9::int > 0 THEN $9::int ELSE product_variants.stock_quantity END,
-               sort_order=$10, updated_at=NOW(),
-               color_ref_id=(SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($4)) LIMIT 1)
+               product_id=$2, barcode=$4, color=$5, size=$6, price_cents=$7,
+               cost_price_cents=$8, shipping_cost_cents=$9,
+               stock_quantity=CASE WHEN $10::int > 0 THEN $10::int ELSE product_variants.stock_quantity END,
+               sort_order=$11, updated_at=NOW(),
+               color_ref_id=(SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($5)) LIMIT 1)
              RETURNING id, (xmax=0) AS inserted`,
-            [tenant.id, productId, row.sku, colorVal, sizeVal,
+            [tenant.id, productId, row.sku, barcodeVal, colorVal, sizeVal,
              priceCents, costCents, shippingCents, stockQty, varIdx]
           );
           const variantId = varResult.rows[0].id;

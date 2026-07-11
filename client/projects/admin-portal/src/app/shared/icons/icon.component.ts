@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 
 export type IconName =
   | 'dash' | 'catalog' | 'collections' | 'store' | 'orders' | 'users' | 'chart' | 'sync' | 'settings'
-  | 'media' | 'search' | 'bell' | 'plus' | 'x' | 'drag' | 'edit' | 'trash' | 'eye'
+  | 'media' | 'search' | 'barcode' | 'bell' | 'plus' | 'x' | 'drag' | 'edit' | 'trash' | 'eye'
   | 'upload' | 'download' | 'cube' | 'link' | 'unlink' | 'wand' | 'check' | 'arrow' | 'arrowUp' | 'arrowDn'
   | 'csv' | 'clock' | 'spinner' | 'list' | 'filter' | 'grid' | 'rows' | 'copy' | 'print' | 'warning' | 'mail' | 'info' | 'team'
   | 'reference' | 'hierarchy' | 'star' | 'phone' | 'whatsapp'
@@ -217,6 +217,11 @@ export type IconName =
       @case ('print') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
           <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+        </svg>
+      }
+      @case ('barcode') {
+        <svg viewBox="0 0 24 24" fill="currentColor" [attr.width]="size" [attr.height]="size">
+          <rect x="2" y="3" width="1.6" height="18"/><rect x="5" y="3" width="1" height="18"/><rect x="7.3" y="3" width="2.2" height="18"/><rect x="10.8" y="3" width="1" height="18"/><rect x="13" y="3" width="1.6" height="18"/><rect x="16" y="3" width="1" height="18"/><rect x="18.4" y="3" width="2.2" height="18"/><rect x="21.6" y="3" width="1" height="18"/>
         </svg>
       }
       @case ('warning') {

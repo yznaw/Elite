@@ -302,6 +302,7 @@ const EN = {
   'product.variants.col.size': 'Size',
   'product.variants.col.color': 'Color',
   'product.variants.col.material': 'Material',
+  'product.variants.col.barcode': 'Barcode',
   'product.variants.col.price': 'Price',
   'product.variants.col.cost': 'Cost',
   'product.variants.col.margin': 'Margin',
@@ -317,6 +318,8 @@ const EN = {
   'product.variants.placeholder.color': 'Black',
   'product.variants.placeholder.material': 'Calf Leather',
   'product.variants.removeConfirm': 'Remove this variant?',
+  'product.variants.printLabel': 'Print barcode label',
+  'product.variants.printAllLabels': 'Print Labels',
 
   'product.field.name': 'Product Name (English)',
   'product.field.nameAr': 'Arabic Name',
@@ -1852,6 +1855,7 @@ const AR: Record<keyof typeof EN, string> = {
   'product.variants.col.size': 'المقاس',
   'product.variants.col.color': 'اللون',
   'product.variants.col.material': 'الخامة',
+  'product.variants.col.barcode': 'الباركود',
   'product.variants.col.price': 'السعر',
   'product.variants.col.cost': 'التكلفة',
   'product.variants.col.margin': 'الهامش',
@@ -1867,6 +1871,8 @@ const AR: Record<keyof typeof EN, string> = {
   'product.variants.placeholder.color': 'أسود',
   'product.variants.placeholder.material': 'جلد عجل',
   'product.variants.removeConfirm': 'حذف هذا المتغيّر؟',
+  'product.variants.printLabel': 'طباعة ملصق الباركود',
+  'product.variants.printAllLabels': 'طباعة الملصقات',
 
   'product.field.name': 'اسم المنتج (إنجليزي)',
   'product.field.nameAr': 'الاسم بالعربية',

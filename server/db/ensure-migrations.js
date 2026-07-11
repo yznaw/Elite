@@ -261,7 +261,8 @@ async function ensureAllMigrations(client) {
 
   // ── Migration 015: size_chart column on ref_size_sets ──────────────────────
   // Store UK/EU/US conversion rows. Each row: { uk: string, eu: string, us: string }
-  // sizes array is kept for backward compat (variants match by EU size value).
+  // sizes array is kept for backward compat (variants match by UK size value —
+  // UK is the convention actually used on stored variants and shown to customers).
   // tip: optional text shown below the chart (e.g. "If between sizes, select larger").
   // Guarded: ref_size_sets is created in reference-schema.js (runs after this).
   // If it does not exist yet, reference-schema.js adds these columns itself —
@@ -276,6 +277,21 @@ async function ensureAllMigrations(client) {
     if (err.code !== '42P01') { // 42P01 = undefined_table (created later)
       console.warn('[migrations] size_chart migration skipped:', err.message);
     }
+  }
+
+  // ── Backfill: product_variants.barcode defaults to SKU ──────────────────
+  // The barcode column existed since migration 001 but nothing ever wrote to
+  // it before POS barcode label printing shipped. Give every existing row
+  // without one a barcode matching its own SKU (already unique per tenant),
+  // so the whole catalog becomes scannable without re-saving every product.
+  try {
+    await client.query(`
+      UPDATE product_variants
+      SET barcode = sku, updated_at = now()
+      WHERE barcode IS NULL OR btrim(barcode) = ''
+    `);
+  } catch (err) {
+    console.warn('[migrations] barcode backfill skipped:', err.message);
   }
 
   _done = true;

@@ -87,7 +87,7 @@ Located in `app/shared/`:
 | `AvatarComponent` | `avatar/` | User avatar with initials |
 | `TriggerBadgeComponent` | `trigger-badge/` | Shows who triggered an action (manual vs auto) |
 | `EmptyStateComponent` | `empty-state/` | Empty data state with icon and message |
-| `IconsComponent` | `icons/` | Centralized SVG icon library. Available icon names: `dash`, `catalog`, `collections` (envelope stack — sidebar nav for Collections, collection empty states), `store`, `orders`, `users`, `chart`, `sync`, `settings`, `media`, `search`, `bell`, `plus`, `x`, `drag`, `edit`, `trash`, `eye`, `upload`, `download`, `cube`, `link`, `unlink`, `wand`, `check`, `arrow`, `arrowUp`, `arrowDn`, `csv`, `clock`, `spinner`, `list`, `filter`, `grid`, `rows`, `copy`, `print`, `warning`, `mail`, `info`, `team`, `reference` (tag/label — sidebar nav for Reference data), `hierarchy` (nested-list — sub-collection tree). See `icon.component.ts` for SVG definitions. |
+| `IconsComponent` | `icons/` | Centralized SVG icon library. Available icon names: `dash`, `catalog`, `collections` (envelope stack — sidebar nav for Collections, collection empty states), `store`, `orders`, `users`, `chart`, `sync`, `settings`, `media`, `search`, `barcode` (vertical bars — variant "Print Label" action), `bell`, `plus`, `x`, `drag`, `edit`, `trash`, `eye`, `upload`, `download`, `cube`, `link`, `unlink`, `wand`, `check`, `arrow`, `arrowUp`, `arrowDn`, `csv`, `clock`, `spinner`, `list`, `filter`, `grid`, `rows`, `copy`, `print`, `warning`, `mail`, `info`, `team`, `reference` (tag/label — sidebar nav for Reference data), `hierarchy` (nested-list — sub-collection tree). See `icon.component.ts` for SVG definitions. |
 | `RichTextComponent` | `rich-text/` | Lightweight `contenteditable` editor with bold/italic/underline/list/link/clear toolbar. Honours `dir` for RTL editing. Used for product descriptions (EN + AR). |
 
 ### Feedback
@@ -388,8 +388,18 @@ The variant table column order was researched against Shopify, WooCommerce, BigC
 | **Price** | ✅ | Core commercial field; inline "QAR" prefix |
 | **SKU** | ✅ | All platforms keep it visible — warehouse, POS, barcodes |
 | Material | ⌄ collapsible | Set once at setup, never changed day-to-day |
+| Barcode | ⌄ collapsible | Defaults to the variant's own SKU on save unless overridden — see "Barcode & label printing" below |
 | Cost | ⌄ collapsible | Finance input entered once; drives margin |
 | Margin | ⌄ collapsible | Read-only calculated output; "set cost to calculate" hint |
+
+### Barcode & label printing (2026-07)
+
+Every variant now carries a `barcode` (`product_variants.barcode`), scanned by POS (`GET /api/pos/products/barcode/:barcode`, see [12 — POS System](./12-pos-system.md)). There is no separate barcode-numbering scheme — barcode defaults to the variant's own SKU (encoded as Code128, which handles arbitrary alphanumeric strings), editable per-variant in the collapsible detail row if a real supplier-issued barcode exists instead.
+
+- **Server default:** `replaceVariants()` in `admin-products.route.js` resolves `barcode = trim(variant.barcode) || sku` for every row before insert, and rejects (400) a save where two variants would resolve to the same barcode (`product_variants` has `UNIQUE(tenant_id, barcode)` partial index from `015_pos_foundation.sql`).
+- **Existing catalog backfill:** `ensure-migrations.js` runs `UPDATE product_variants SET barcode = sku WHERE barcode IS NULL OR blank` on every server boot (idempotent), so pre-existing variants become scannable without being re-saved.
+- **Size dropdown grouping:** the per-variant size field is a `<select>` grouped by Reference Size Set (`<optgroup>` per set) rather than one flattened list — prevents picking a value from the wrong set (e.g. a Belts-cm size on a shoe variant).
+- **Label printing:** `LabelPrinterService` (`services/label-printer.service.ts`) renders Code128 barcodes via `jsbarcode` into a print-ready popup window (same `window.open` + `window.print()` pattern as the order invoice), showing brand, product name, variant, barcode, and price. Triggered per-variant ("Print barcode label" icon) or in bulk for the whole product ("Print Labels" in the variants footer).
 
 ### CSS Grid
 
