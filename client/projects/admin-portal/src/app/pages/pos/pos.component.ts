@@ -375,6 +375,7 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     const amountTenderedCents = tenderedCents ?? 0;
 
+    let completedSale: { receiptData: unknown; openDrawer: boolean } | null = null;
     this.busy.set(true);
     this.error.set('');
     try {
@@ -426,15 +427,23 @@ export class PosComponent implements OnInit, OnDestroy {
       this.pendingIdempotencyKey = null;
       this.paymentOpen.set(false);
       this.lastSale.set(result);
-      try {
-        await this.hardware.printReceipt(result.receipt.receiptData, method === 'cash');
-      } catch (printError) {
-        this.error.set(`Sale saved. Receipt was not printed: ${this.errorMessage(printError)}`);
-      }
+      // The sale is fully committed at this point. Printing is best-effort and
+      // must not hold the `busy` flag — otherwise a slow/failed print would
+      // keep "Take payment" disabled for the next customer. Print after the
+      // finally releases busy; QZ calls are themselves timeout-guarded.
+      completedSale = { receiptData: result.receipt.receiptData, openDrawer: method === 'cash' };
     } catch (error) {
       this.error.set(this.errorMessage(error));
     } finally {
       this.busy.set(false);
+    }
+
+    if (completedSale) {
+      try {
+        await this.hardware.printReceipt(completedSale.receiptData, completedSale.openDrawer);
+      } catch (printError) {
+        this.error.set(`Sale saved. Receipt was not printed: ${this.errorMessage(printError)}`);
+      }
     }
   }
 

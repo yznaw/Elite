@@ -62,20 +62,20 @@ interface Review {
               <span>{{ product()!.reviewCount }} {{ product()!.reviewCount === 1 ? t('feedback.review') : t('feedback.reviews') }}</span>
             </div>
           </div>
-          <!-- Kiosk actions (product only) -->
+          <!-- Experience actions (product only) -->
           @if (!isGeneral) {
-            <div class="fbd-kiosk-actions">
-              <a [href]="kioskUrl(product()!.id)" target="_blank" rel="noopener noreferrer"
-                 class="fbd-action-btn fbd-kiosk-open" title="Open kiosk for this product">
+            <div class="fbd-experience-actions">
+              <a [href]="experienceUrl(product()!.id)" target="_blank" rel="noopener noreferrer"
+                 class="fbd-action-btn fbd-experience-open" title="Open experience for this product">
                 <ap-icon name="phone" [size]="12"/>
-                {{ t('feedback.detail.kioskOpen') }}
+                {{ t('feedback.detail.experienceOpen') }}
               </a>
               <button class="fbd-action-btn" type="button"
-                      [class.copied]="kioskLinkCopied()"
-                      (click)="copyKioskLink(product()!.id)"
-                      title="Copy kiosk URL for iPad setup">
-                <ap-icon [name]="kioskLinkCopied() ? 'check' : 'copy'" [size]="12"/>
-                {{ kioskLinkCopied() ? t('feedback.copied') : t('feedback.copyLink') }}
+                      [class.copied]="experienceLinkCopied()"
+                      (click)="copyExperienceLink(product()!.id)"
+                      title="Copy experience URL for iPad setup">
+                <ap-icon [name]="experienceLinkCopied() ? 'check' : 'copy'" [size]="12"/>
+                {{ experienceLinkCopied() ? t('feedback.copied') : t('feedback.copyLink') }}
               </button>
             </div>
           }
@@ -112,8 +112,8 @@ interface Review {
               <div class="fbd-rev-head">
                 <span class="fbd-stars">{{ starsLabel(r.rating) }}</span>
                 <div class="fbd-rev-meta">
-                  <span class="fbd-source-badge" [class.kiosk]="r.source === 'kiosk'">
-                    {{ r.source === 'kiosk' ? t('feedback.source.kiosk') : t('feedback.source.storefront') }}
+                  <span class="fbd-source-badge" [class.experience]="isExperienceSource(r.source)">
+                    {{ isExperienceSource(r.source) ? t('feedback.source.experience') : t('feedback.source.storefront') }}
                   </span>
                   <span class="muted small">{{ r.createdAt | date:'d MMM y' }}</span>
                 </div>
@@ -237,14 +237,14 @@ interface Review {
     .fbd-avg       { font-weight: 700; color: var(--ink); }
     .fbd-sep       { opacity: .4; }
 
-    /* Kiosk actions */
-    .fbd-kiosk-actions {
+    /* Experience actions */
+    .fbd-experience-actions {
       display: flex; gap: 6px; margin-inline-start: auto; flex-shrink: 0;
     }
-    .fbd-kiosk-open {
+    .fbd-experience-open {
       color: #7c5cbf; border-color: rgba(124,92,191,.3); background: rgba(124,92,191,.06);
     }
-    .fbd-kiosk-open:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
+    .fbd-experience-open:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
 
     /* Review cards */
     .fbd-reviews   { display: flex; flex-direction: column; gap: 14px; }
@@ -259,7 +259,7 @@ interface Review {
       border-radius: 99px; background: rgba(2,70,56,.06); color: var(--green);
       border: 1px solid rgba(2,70,56,.12);
     }
-    .fbd-source-badge.kiosk { background: rgba(184,146,74,.08); color: var(--gold-dim, #8a7a62); border-color: rgba(184,146,74,.2); }
+    .fbd-source-badge.experience { background: rgba(184,146,74,.08); color: var(--gold-dim, #8a7a62); border-color: rgba(184,146,74,.2); }
 
     .fbd-rev-title { font-size: 14px; font-weight: 700; color: var(--ink); font-style: italic; }
     .fbd-rev-body  { font-size: 13px; color: var(--ink-2); line-height: 1.65; }
@@ -336,7 +336,7 @@ export class FeedbackDetailComponent implements OnInit {
   readonly loading         = signal(true);
   readonly product         = signal<ReviewProduct | null>(null);
   readonly reviews         = signal<Review[]>([]);
-  readonly kioskLinkCopied = signal(false);
+  readonly experienceLinkCopied = signal(false);
 
   isGeneral = false;
 
@@ -386,14 +386,18 @@ export class FeedbackDetailComponent implements OnInit {
     return `https://wa.me/${phone.replace(/\D/g, '')}`;
   }
 
-  kioskUrl(productId: string): string {
-    return `${this.storefrontBase}/kiosk?product=${productId}`;
+  isExperienceSource(source: string): boolean {
+    return source === 'experience' || source === 'kiosk';
   }
 
-  copyKioskLink(productId: string): void {
-    navigator.clipboard.writeText(this.kioskUrl(productId)).then(() => {
-      this.kioskLinkCopied.set(true);
-      setTimeout(() => this.kioskLinkCopied.set(false), 2000);
+  experienceUrl(productId: string): string {
+    return `${this.storefrontBase}/experience?product=${productId}`;
+  }
+
+  copyExperienceLink(productId: string): void {
+    navigator.clipboard.writeText(this.experienceUrl(productId)).then(() => {
+      this.experienceLinkCopied.set(true);
+      setTimeout(() => this.experienceLinkCopied.set(false), 2000);
     });
   }
 

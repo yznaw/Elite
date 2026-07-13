@@ -42,9 +42,9 @@ interface FeedbackSummary {
           <h1 class="fb-title">{{ t('nav.feedback') }}</h1>
           <p class="fb-sub">{{ t('feedback.sub') }}</p>
         </div>
-        <a [href]="kioskBaseUrl" target="_blank" rel="noopener noreferrer" class="fb-kiosk-btn">
+        <a [href]="experienceBaseUrl" target="_blank" rel="noopener noreferrer" class="fb-experience-btn">
           <ap-icon name="phone" [size]="13"/>
-          {{ t('feedback.openKiosk') }}
+          {{ t('feedback.openExperience') }}
         </a>
       </div>
 
@@ -166,7 +166,7 @@ interface FeedbackSummary {
     .fb-title  { font-size: 22px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
     .fb-sub    { font-size: 12px; color: var(--muted); }
 
-    .fb-kiosk-btn {
+    .fb-experience-btn {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 8px 16px; font-size: 12px; font-weight: 700;
       border-radius: 6px; border: 1px solid rgba(124,92,191,.3);
@@ -174,7 +174,7 @@ interface FeedbackSummary {
       text-decoration: none; white-space: nowrap; flex-shrink: 0;
       transition: all .13s;
     }
-    .fb-kiosk-btn:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
+    .fb-experience-btn:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
 
     .fb-stats {
       display: grid;
@@ -276,13 +276,13 @@ export class FeedbackComponent implements OnInit {
   readonly general  = signal<GeneralFeedback | null>(null);
   readonly summary  = signal<FeedbackSummary>({ totalReviews: 0, avgRating: null, productCount: 0, generalCount: 0 });
 
-  readonly kioskBaseUrl = (() => {
-    if (typeof window === 'undefined') return '/kiosk';
+  readonly experienceBaseUrl = (() => {
+    if (typeof window === 'undefined') return '/experience';
     const h = window.location.hostname;
     if (h === 'localhost' || h === '127.0.0.1') {
-      return `${window.location.protocol}//${h}:4200/kiosk`;
+      return `${window.location.protocol}//${h}:4200/experience`;
     }
-    return 'https://elitecollections.qa/kiosk';
+    return 'https://elitecollections.qa/experience';
   })();
 
   async ngOnInit(): Promise<void> {

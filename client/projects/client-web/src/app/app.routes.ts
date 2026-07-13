@@ -85,9 +85,9 @@ export const routes: Routes = [
       ),
   },
   {
-    path: 'kiosk',
+    path: 'experience',
     loadComponent: () =>
-      import('./pages/kiosk/kiosk.component').then((m) => m.KioskComponent),
+      import('./pages/experience/experience.component').then((m) => m.ExperienceComponent),
   },
   {
     path: 'policy/:handle',

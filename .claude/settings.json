@@ -70,7 +70,8 @@
       "Bash(nohup npx ng serve admin-portal --port 4300 --host 0.0.0.0 --disable-host-check)",
       "Bash(disown)",
       "Read(//Users/alaa/Library/CloudStorage/GoogleDrive-alaa.94x@gmail.com/My Clinets/elitecollection/eliteCode/Elite/server/**)",
-      "Bash(kill 74486)"
+      "Bash(kill 74486)",
+      "Bash(git mv *)"
     ]
   }
 }

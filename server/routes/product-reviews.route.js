@@ -67,7 +67,7 @@ router.post('/:id/reviews', asyncHandler(async (req, res) => {
         authorName?.trim()  || null,
         authorEmail?.trim() || null,
         authorPhone?.trim() || null,
-        source === 'kiosk' ? 'kiosk' : 'storefront',
+        source === 'experience' || source === 'kiosk' ? 'experience' : 'storefront',
       ],
     );
 
@@ -109,7 +109,7 @@ generalRouter.post('/', asyncHandler(async (req, res) => {
         authorName?.trim()  || null,
         authorEmail?.trim() || null,
         authorPhone?.trim() || null,
-        source === 'kiosk' ? 'kiosk' : 'storefront',
+        source === 'experience' || source === 'kiosk' ? 'experience' : 'storefront',
       ],
     );
 
