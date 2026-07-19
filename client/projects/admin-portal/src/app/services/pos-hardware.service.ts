@@ -136,7 +136,7 @@ export class PosHardwareService {
     await this.connectWebsocket(2, 1);
     const profile = await this.getBusinessProfile();
     logStage('printReceipt — business profile', { loaded: Boolean(profile) });
-    const rendered = this.renderer.render(receiptData as PosReceiptData, profile);
+    const rendered = await this.renderer.render(receiptData as PosReceiptData, profile);
     // The receipt body is a rasterized image (Arabic needs real text shaping,
     // which raw ESC/POS text mode cannot do — see pos-receipt-renderer.service.ts)
     // printed through QZ's escpos image path; the QR/cut footer is still sent
