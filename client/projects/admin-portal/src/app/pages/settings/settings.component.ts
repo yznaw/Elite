@@ -169,6 +169,41 @@ type Tab = 'general' | 'team' | 'integrations';
             </div>
           }
         </div>
+
+        @if (canManageRegisters()) {
+          <div class="card card-pad mt-24" style="max-width:680px;">
+            <div class="card-header mb-16">
+              <div>
+                <div class="card-title">{{ t('settings.registers.title') }}</div>
+                <div class="card-sub">{{ t('settings.registers.sub') }}</div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div>
+                <label class="lbl">{{ t('settings.registers.nameLabel') }}</label>
+                <input class="inp" [ngModel]="newRegisterName()" (ngModelChange)="newRegisterName.set($event)"
+                       [placeholder]="t('settings.registers.namePlaceholder')"/>
+              </div>
+            </div>
+
+            <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+              <button class="btn btn-gold" [disabled]="generatingRegisterToken() || !newRegisterName().trim()" (click)="generateRegisterToken()">
+                @if (generatingRegisterToken()) { <ap-spinner [size]="12"/> {{ t('settings.registers.generating') }} }
+                @else { {{ t('settings.registers.generate') }} }
+              </button>
+            </div>
+
+            @if (registerToken()) {
+              <div class="invite-link-box">
+                <ap-icon name="link" [size]="13"/>
+                <input class="inv-link-input" [value]="registerToken()" readonly (click)="copyRegisterToken()"/>
+                <button class="btn btn-outline btn-sm" (click)="copyRegisterToken()">{{ t('settings.registers.copyCode') }}</button>
+              </div>
+              <div class="muted small" style="margin-top:4px;">{{ t('settings.registers.expiry') }}</div>
+            }
+          </div>
+        }
       }
 
       @if (tab() === 'team') {
@@ -370,6 +405,12 @@ export class SettingsComponent implements OnInit {
     footerStampAr: '', footerStampEn: '',
   });
 
+  // ── POS registers ────────────────────────────────────────────────────────
+  readonly canManageRegisters = computed(() => this.auth.hasRole('owner', 'admin'));
+  readonly newRegisterName = signal('');
+  readonly generatingRegisterToken = signal(false);
+  readonly registerToken = signal<string | null>(null);
+
   // ── Team ──────────────────────────────────────────────────────────────────
   readonly loadingTeam = signal(true);
   readonly team = signal<TeamMember[]>([]);
@@ -456,6 +497,37 @@ export class SettingsComponent implements OnInit {
     } finally {
       this.savingReceiptProfile.set(false);
     }
+  }
+
+  /**
+   * Splits token creation from consumption: the POS enrollment screen mints
+   * and consumes a token in the same click (self-enroll), which only works
+   * if you're physically at the register. This generates one from Settings
+   * so it can be relayed to someone setting up a register elsewhere — the
+   * server already treats it as single-use with a 15-minute TTL.
+   */
+  async generateRegisterToken(): Promise<void> {
+    if (this.generatingRegisterToken() || !this.canManageRegisters()) return;
+    const name = this.newRegisterName().trim();
+    if (!name) return;
+    this.generatingRegisterToken.set(true);
+    try {
+      const { token } = await this.posApi.createEnrollmentToken(name);
+      this.registerToken.set(token);
+      this.toast.success(this.t('settings.toast.tokenCreated'), this.t('settings.toast.tokenCreated.sub'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.generatingRegisterToken.set(false);
+    }
+  }
+
+  copyRegisterToken(): void {
+    const token = this.registerToken();
+    if (!token) return;
+    navigator.clipboard.writeText(token).then(() => {
+      this.toast.success(this.t('settings.toast.codeCopied'));
+    }).catch(() => {});
   }
 
   private async loadTeam(): Promise<void> {

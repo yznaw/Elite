@@ -123,11 +123,21 @@ export class PosReceiptRenderer {
     };
   }
 
-  /** ESC/POS QR + cut, appended as raw commands after the rasterized image. */
+  /**
+   * ESC/POS QR + cut, appended as raw commands after the rasterized image.
+   * A feed of blank lines is inserted between the QR print command and the
+   * cut command — the QR renders printer-side (module size 4 ≈ 0.56mm/module
+   * at 180dpi), and a real test print showed the auto-cutter slicing through
+   * it because no gap was reserved after it. `\x1b d n` feeds n lines before
+   * the cut fires, guaranteeing clear paper below the QR regardless of how
+   * tall it renders for a given payload length.
+   */
   private footerCommands(receipt: PosReceiptData): string {
     const gs = '\x1d';
+    const esc = '\x1b';
     const lookup = receipt.lookupCode || `#${receipt.receiptNumber}`;
-    return this.qrCode(lookup) + gs + 'V' + '\x01';
+    const feedLines = '\x06'; // 6 lines ≈ well clear of the largest QR this payload will ever produce
+    return this.qrCode(lookup) + esc + 'd' + feedLines + gs + 'V' + '\x01';
   }
 
   private qrCode(data: string): string {
@@ -335,7 +345,12 @@ export class PosReceiptRenderer {
     ctx.fillStyle = '#999';
     ctx.fillText('SCAN TO LOOK UP THIS SALE', centerX, y);
     ctx.fillStyle = '#000';
-    y += 60; // reserve space for the physically-printed QR code below the image
+    // Reserve space for the physically-printed QR code below the image.
+    // Module size 4 at 180dpi ≈ 0.56mm/module; a short lookup code fits a
+    // version 1-2 QR (21-25 modules/side) ≈ 100-140px tall. The feed lines
+    // in footerCommands() add further clearance before the cut, but the
+    // image itself should already leave the QR's expected footprint clear.
+    y += 140;
 
     return y;
   }

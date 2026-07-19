@@ -441,6 +441,7 @@
         @if (operationTransaction(); as transaction) {
           <div class="transaction-summary">
             <span>#{{ transaction.receiptNumber }}</span><b>{{ formatMoney(transaction.totalCents) }}</b><em>{{ transaction.status }}</em>
+            <button type="button" class="reprint-action" [disabled]="busy()" (click)="reprintLookedUpTransaction()">Reprint receipt</button>
           </div>
           <div class="refund-lines">
             @for (item of transaction.items || []; track item.id) {

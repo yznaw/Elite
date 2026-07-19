@@ -1240,6 +1240,15 @@ label input:focus {
 }
 .transaction-summary b { margin-left: auto; }
 .transaction-summary em { color: #63716c; font-size: 10px; font-style: normal; text-transform: uppercase; }
+.transaction-summary .reprint-action {
+  padding: 6px 12px;
+  border: 1px solid var(--pos-line);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.transaction-summary .reprint-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .refund-lines { border-top: 1px solid var(--pos-line); }
 .refund-lines > div {

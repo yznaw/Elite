@@ -146,7 +146,13 @@ export class PosHardwareService {
         type: 'raw',
         format: 'image',
         data: rendered.imageDataUrl,
-        options: { language: 'escpos', dotDensity: 'double' },
+        // QZ's default quantization ("alpha", threshold 127) applies a hard
+        // black/white cutoff per pixel — a real test print showed this
+        // dropping thin anti-aliased strokes out of small canvas-rendered
+        // text (whole letters vanishing mid-word). "dither" spreads the
+        // rounding error across neighboring pixels instead of a hard cutoff,
+        // which reads far more faithfully for text at this size/DPI.
+        options: { language: 'escpos', dotDensity: 'double', quantization: 'dither' },
       },
       rendered.footerCommands,
     ];

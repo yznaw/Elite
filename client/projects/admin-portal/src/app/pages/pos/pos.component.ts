@@ -499,6 +499,25 @@ export class PosComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Reprints whatever transaction is currently looked up in the void/refund
+   * panel — the only reprint path before this covered just the sale that was
+   * just rung up (`reprintLastSale`, backed by an in-memory signal that's
+   * gone after the modal closes or the tab reloads). This one works for any
+   * past transaction, since `findTransaction` always returns a full
+   * `receipt.receiptData` reconstructed from the database.
+   */
+  async reprintLookedUpTransaction(): Promise<void> {
+    const transaction = this.operationTransaction();
+    if (!transaction) return;
+    try {
+      await this.hardware.printReceipt(transaction.receipt.receiptData, false);
+      this.toast.success('Receipt reprinted');
+    } catch (error) {
+      this.toast.warning("Couldn't reprint receipt", this.errorMessage(error));
+    }
+  }
+
   async syncPendingSales(): Promise<void> {
     if (!this.online() || this.syncing()) return;
     const shiftId = this.shiftId();
