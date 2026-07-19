@@ -155,14 +155,13 @@ The signer source is in `tools/pos-device-signer` and requires Node.js 20 or new
 - `GET /qz/certificate`
 - `POST /qz/sign`
 
-It validates browser origin, request size, QZ operation, and printer allowlist, then signs locally. It never returns the private key.
+It validates browser origin and request size, then signs locally. It never returns the private key. It cannot enforce a printer/call-type allowlist — QZ Tray's client only sends a hash of the call, never the printer name it hashed — so printer scoping happens earlier, at the API's own authenticated/enrolled-register checks.
 
 ### Environment
 
 ```dotenv
 ELITE_POS_QZ_CERT_PATH=C:\ProgramData\ElitePOS\qz\digital-certificate.txt
 ELITE_POS_QZ_KEY_PATH=C:\ProgramData\ElitePOS\qz\private-key.pem
-ELITE_POS_PRINTER_ALLOWLIST=BIXOLON SRP-350plusIII
 ELITE_POS_ALLOWED_ORIGINS=https://admin.example.com
 ELITE_POS_SIGNER_PORT=8182
 ```
@@ -332,7 +331,6 @@ Do not release the register until every applicable test passes.
 - Confirm the signer service starts automatically.
 - Confirm its key paths and service-account permissions.
 - Confirm `ELITE_POS_ALLOWED_ORIGINS` matches the browser origin exactly.
-- Confirm the printer name is in `ELITE_POS_PRINTER_ALLOWLIST`.
 - Inspect signer logs for denied operations or malformed requests.
 
 ### Receipt prints unreadable symbols

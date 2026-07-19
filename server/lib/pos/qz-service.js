@@ -8,13 +8,6 @@ const SIGNING_WINDOW_MS = 60 * 1000;
 const SIGNING_LIMIT = 120;
 const signingWindows = new Map();
 
-function configuredPrinters() {
-  return new Set(String(process.env.POS_PRINTER_ALLOWLIST || '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean));
-}
-
 function loadConfiguredFile(variable, label) {
   const filePath = String(process.env[variable] || '').trim();
   assertPos(filePath, 503, 'QZ_NOT_CONFIGURED', `${label} is not configured.`);
@@ -25,30 +18,33 @@ function loadConfiguredFile(variable, label) {
   }
 }
 
+/**
+ * QZ Tray's client library (qz-tray.js `_qz.websocket.setup` signing flow)
+ * hashes the call payload (SHA-256 of `{ call, params, timestamp }`) BEFORE
+ * asking the signature promise to sign it — the server only ever receives
+ * that opaque hash digest, never the original call name/printer/params.
+ * `JSON.parse()`-ing it and trying to allowlist by call type or printer
+ * name (the previous implementation here) is therefore structurally
+ * impossible: the hash is not JSON and never contains the printer name, so
+ * every real signing request was being rejected with QZ_REQUEST_INVALID.
+ *
+ * The server's role in QZ's signing model is only to prove possession of
+ * the private key for whatever digest the already-trusted client produced
+ * — it is not a place that can verify *what* is being printed. That check
+ * has to happen earlier, in this server's own /pos/transactions and print
+ * endpoints (which already scope printing to an authenticated, enrolled
+ * register), not by inspecting the QZ signing payload.
+ *
+ * TODO(security follow-up): if per-printer server-side enforcement is
+ * needed later, it requires changing the client to send the plaintext
+ * `{ call, params, timestamp }` alongside the hash so the server can
+ * recompute and compare before signing — QZ Tray does not support this out
+ * of the box today.
+ */
 function parseQzRequest(rawRequest) {
   const request = nonEmpty(rawRequest, 'request', MAX_SIGNING_REQUEST_BYTES);
   assertPos(Buffer.byteLength(request, 'utf8') <= MAX_SIGNING_REQUEST_BYTES, 413, 'QZ_REQUEST_TOO_LARGE', 'QZ signing request is too large.');
-  let payload;
-  try {
-    payload = JSON.parse(request);
-  } catch {
-    assertPos(false, 422, 'QZ_REQUEST_INVALID', 'QZ signing request must be valid JSON.');
-  }
-  const call = String(payload?.call || payload?.method || '').toLowerCase();
-  const allowedCall = call === 'websocket'
-    || call === 'print'
-    || call === 'printers.find'
-    || call === 'printers.getdefault'
-    || call === 'getversion';
-  assertPos(allowedCall, 403, 'QZ_OPERATION_DENIED', `QZ operation ${call || 'unknown'} is not allowed.`);
-
-  if (call === 'print') {
-    const printers = configuredPrinters();
-    assertPos(printers.size > 0, 503, 'QZ_PRINTERS_NOT_CONFIGURED', 'No POS printer allowlist is configured.');
-    const serialized = JSON.stringify(payload);
-    assertPos([...printers].some((printer) => serialized.includes(printer)), 403, 'QZ_PRINTER_DENIED', 'The requested printer is not approved for POS use.');
-  }
-  return { request, payload, call, drawerCommand: /(?:\\u0010\\u0014|\\u001b\\u0070|cash.?drawer)/i.test(request) };
+  return { request };
 }
 
 function enforceRateLimit(registerId) {
@@ -84,9 +80,12 @@ async function signQzRequest(context, rawRequest) {
     }
     const privateKey = loadConfiguredFile('QZ_SIGNING_KEY_PATH', 'QZ signing private key');
     const signature = crypto.sign('RSA-SHA512', Buffer.from(parsed.request, 'utf8'), privateKey).toString('base64');
-    if (parsed.drawerCommand) {
-      await audit(client, context, 'pos.drawer.command-signed', 'pos_register', register.id, { call: parsed.call });
-    }
+    // Every QZ call this register makes (print, drawer pulse, printer
+    // discovery) gets signed through this one endpoint, and the payload is
+    // an opaque hash (see parseQzRequest) — there is no way to tell which
+    // kind of call this was from here, so log every signed request rather
+    // than pretending to distinguish "drawer" from "print" as before.
+    await audit(client, context, 'pos.qz-sign.approved', 'pos_register', register.id);
     return { signature };
   }).then((result) => {
     if (result.error) throw result.error;

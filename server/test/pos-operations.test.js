@@ -5,20 +5,28 @@ const { normalizeCartPayload } = require('../lib/pos/parked-cart-service');
 const { parseQzRequest } = require('../lib/pos/qz-service');
 const { syncRejectionReason } = require('../lib/pos/sync-service');
 
-test('QZ signing allowlist accepts an approved printer and rejects another printer', () => {
-  process.env.POS_PRINTER_ALLOWLIST = 'BIXOLON SRP-350plusIII';
-  const request = JSON.stringify({ call: 'print', params: { printer: { name: 'BIXOLON SRP-350plusIII' } } });
-  assert.equal(parseQzRequest(request).call, 'print');
+// QZ Tray's real client library only ever sends a SHA-256 hash digest to be
+// signed (see qz-service.js's parseQzRequest doc comment) — never the
+// original call/printer/params JSON, so the server cannot allowlist by
+// printer or call type here. These tests cover the real contract: any
+// non-empty, size-bounded string is accepted and returned as-is for signing.
+test('QZ signing accepts an opaque hash payload for signing', () => {
+  const hashLikeRequest = 'f4b46a4c9d8f9e0c0b2a1e3d5c7f9a1b3d5f7e9c1b3d5f7e9c1b3d5f7e9c1b3d';
+  assert.equal(parseQzRequest(hashLikeRequest).request, hashLikeRequest);
+});
+
+test('QZ signing rejects an empty request', () => {
   assert.throws(
-    () => parseQzRequest(JSON.stringify({ call: 'print', params: { printer: { name: 'Office Laser' } } })),
-    (error) => error instanceof PosError && error.code === 'QZ_PRINTER_DENIED',
+    () => parseQzRequest(''),
+    (error) => error instanceof PosError && error.code === 'INVALID_FIELD',
   );
 });
 
-test('QZ signing rejects operations outside the POS allowlist', () => {
+test('QZ signing rejects an oversized request', () => {
+  const oversized = 'a'.repeat(200 * 1024);
   assert.throws(
-    () => parseQzRequest(JSON.stringify({ call: 'file.write', params: {} })),
-    (error) => error instanceof PosError && error.code === 'QZ_OPERATION_DENIED',
+    () => parseQzRequest(oversized),
+    (error) => error instanceof PosError && (error.code === 'QZ_REQUEST_TOO_LARGE' || error.code === 'INVALID_FIELD'),
   );
 });
 

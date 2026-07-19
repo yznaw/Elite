@@ -5,9 +5,7 @@ const http = require('node:http');
 const port = Number.parseInt(process.env.ELITE_POS_SIGNER_PORT || '8182', 10);
 const certificatePath = process.env.ELITE_POS_QZ_CERT_PATH;
 const privateKeyPath = process.env.ELITE_POS_QZ_KEY_PATH;
-const allowedOrigins = new Set(String(process.env.ELITE_POS_ALLOWED_ORIGINS || 'http://localhost:4300')
-  .split(',').map((value) => value.trim()).filter(Boolean));
-const allowedPrinters = new Set(String(process.env.ELITE_POS_PRINTER_ALLOWLIST || '')
+const allowedOrigins = new Set(String(process.env.ELITE_POS_ALLOWED_ORIGINS || 'http://localhost:4300,https://admin.elitecollections.qa')
   .split(',').map((value) => value.trim()).filter(Boolean));
 const maxBytes = 128 * 1024;
 
@@ -38,17 +36,12 @@ function send(res, status, body, type = 'text/plain') {
   res.end(body);
 }
 
+// QZ Tray's client only ever sends a SHA-256 hash digest to be signed, never
+// the original { call, params } JSON it hashed (see server/lib/pos/
+// qz-service.js's parseQzRequest for the full explanation) — so this can
+// only bound the request size, not allowlist by call type or printer name.
 function allowedRequest(request) {
-  if (Buffer.byteLength(request, 'utf8') > maxBytes) return false;
-  let payload;
-  try { payload = JSON.parse(request); } catch { return false; }
-  const call = String(payload?.call || payload?.method || '').toLowerCase();
-  if (!['websocket', 'print', 'printers.find', 'printers.getdefault', 'getversion'].includes(call)) return false;
-  if (call === 'print') {
-    const serialized = JSON.stringify(payload);
-    return allowedPrinters.size > 0 && [...allowedPrinters].some((printer) => serialized.includes(printer));
-  }
-  return true;
+  return Buffer.byteLength(request, 'utf8') <= maxBytes;
 }
 
 const server = http.createServer((req, res) => {
