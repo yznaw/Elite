@@ -54,8 +54,12 @@ const QATAR_TIME_ZONE = 'Asia/Qatar';
  */
 @Injectable({ providedIn: 'root' })
 export class PosReceiptRenderer {
-  /** SRP-QE300 is an 80mm-class thermal printer; 576px matches its 203dpi print width. */
-  private readonly widthPx = 576;
+  /**
+   * SRP-QE300 spec: 80mm media, 180dpi, but only 72mm is actually printable
+   * (confirmed by a real test print — 576px, sized for 80mm at 203dpi, cut
+   * off the right ~15% of every line). 72mm / 25.4mm-per-inch * 180dpi ≈ 510px.
+   */
+  private readonly widthPx = 510;
   private readonly marginPx = 24;
   private readonly lineHeightPx = 30;
   private readonly smallLineHeightPx = 24;

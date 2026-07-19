@@ -1,7 +1,7 @@
 # Elite POS Hardware Integration Runbook
 
 > **Purpose:** Provision and certify one physical Elite register using a Posiflex-class Windows terminal, QZ Tray, a Bixolon 80 mm ESC/POS printer, a printer-connected cash drawer, and a USB HID barcode scanner.  
-> **Related:** Read [Elite POS System and Integration Guide](./12-pos-system.md) before using this runbook. For an interactive, checkbox-driven version of this same sequence to use on-site, see the [POS Field Setup Runbook](./pos-field-setup-runbook.html).
+> **Related:** Read [Elite POS System and Integration Guide](./12-pos-system.md) before using this runbook. For an interactive, checkbox-driven version of this same sequence to use on-site, see the [POS Field Setup Runbook](./pos-field-setup-runbook.html). For the technical postmortem of the two real QZ-signing bugs found and fixed during the first hardware test pass (server-side hash-vs-JSON mismatch, client-side `AsyncFunction` detection breaking under Angular's production build), see [15-pos-production-hardening-plan.md](./15-pos-production-hardening-plan.md)'s Phase 3 exit gate.
 
 ## 1. Supported Hardware Model
 
@@ -141,11 +141,58 @@ The implemented UI uses the barcode input and Enter submission. There is no came
 2. Configure QZ Tray to start when Windows starts.
 3. Confirm it is listening on its secure localhost WebSocket.
 4. Open QZ Tray and verify the Bixolon queue appears with the exact expected name.
-5. Import/trust the approved signing certificate according to the QZ deployment process.
+5. **Trust the signing certificate permanently via `authcert.override`** — see the exact tested procedure below. This is the step that prevents QZ Tray's "Action Required — Allow/Block" dialog from appearing on every single print.
 6. Open Elite in the production Chrome/Edge profile and accept required localhost/local-network permissions.
 7. Confirm signed printer discovery and printing do not show an unsigned-job warning.
 
-Do not approve a workflow that relies on an operator clicking through QZ unsigned warnings. Production commands must be signed.
+Do not approve a workflow that relies on an operator clicking through QZ unsigned warnings on every print. Production commands must be signed, and the certificate must be pre-trusted per step 5 so the dialog never appears during normal operation.
+
+### 9.1 Trusting the certificate with `authcert.override` (tested procedure)
+
+This makes QZ Tray permanently trust Elite's signing certificate on this specific Windows machine, so printing is silent — no per-print confirmation dialog. Confirmed working on a real POSIFLEX/Bixolon SRP-QE300 register on 2026-07-19.
+
+1. **Download the public certificate.** While logged into Elite in the browser on this register (so the session cookie is present), navigate to:
+   ```
+   https://admin.<your-domain>/api/pos/print/certificate
+   ```
+   This returns plain certificate text (starts with `-----BEGIN CERTIFICATE-----`). Save it via the browser's Save/Ctrl+S as a plain text file.
+
+   (A raw PowerShell `Invoke-WebRequest` to this URL will fail with "Authentication required" since it has no session cookie — using the logged-in browser tab is the simplest path. Also run `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12` first in PowerShell if you do script it, since Windows 10 LTSB-class machines often default to an older TLS version that the server rejects.)
+
+2. **Place it at a stable path.** Move/save the downloaded file to:
+   ```
+   C:\ProgramData\ElitePOS\qz\digital-certificate.txt
+   ```
+   Create the folder first if needed (PowerShell): `New-Item -ItemType Directory -Path "C:\ProgramData\ElitePOS\qz" -Force`
+
+3. **Find QZ Tray's properties file**, typically:
+   ```
+   C:\Program Files\QZ Tray\qz-tray.properties
+   ```
+   (Search with `Get-ChildItem -Path "C:\Program Files","C:\ProgramData","$env:LOCALAPPDATA" -Recurse -Filter "qz-tray.properties"` if the install location differs.)
+
+4. **Add the override line**, matching the file's existing escaping style (`:` → `\:`, `\` → `\\`). Requires an **elevated/Administrator** PowerShell or text editor, since the file lives under `Program Files`:
+   ```
+   authcert.override=C\:\\ProgramData\\ElitePOS\\qz\\digital-certificate.txt
+   ```
+   Example full file after the addition:
+   ```properties
+   #Sat Jul 11 15:08:56 AST 2026
+   ca.storepass=<redacted>
+   wss.host=0.0.0.0
+   wss.storepass=<redacted>
+   wss.alias=qz-tray
+   ca.alias=root-ca
+   ca.keystore=C\:\\ProgramData\\qz\\ssl\\root-ca.p12
+   wss.keystore=C\:\\ProgramData\\qz\\ssl\\qz-tray.p12
+   authcert.override=C\:\\ProgramData\\ElitePOS\\qz\\digital-certificate.txt
+   ```
+
+5. **Restart QZ Tray fully** — right-click its system tray icon → **Exit** (not just closing a window), then relaunch it.
+
+6. **Verify**: reload `/pos` in the browser, ring up a test sale, and print. No "Action Required" dialog should appear, and DevTools console should show `[pos-hardware] printReceipt — done` with no `FAILED` entries.
+
+**Record for this register:** certificate fingerprint and validity window (visible via QZ's own "View request details" panel on the Allow/Block dialog, before you've set the override — or via `openssl x509 -in digital-certificate.txt -noout -fingerprint -dates`). At time of writing for the pilot register: fingerprint `403bcfc4-4d49f23c...` (truncated), valid `2026-07-11` through `2031-07-10`. **Set a calendar reminder well before the expiry date** — printing will silently start failing once the certificate lapses, and every register using `authcert.override` will need the same re-trust procedure with the newly rotated certificate.
 
 ## 10. Provision the Offline Device Signer
 
@@ -316,14 +363,13 @@ Do not release the register until every applicable test passes.
 - Check whether Windows renamed the queue after a USB port change.
 - Restart the spooler and QZ Tray after driver installation.
 
-### QZ shows an unsigned/untrusted warning
+### QZ shows an unsigned/untrusted warning, or an "Action Required — Allow/Block" dialog on every print
 
-- Stop production use until corrected.
-- Confirm certificate and private key match.
-- Confirm the API or local signer is reachable.
-- Confirm QZ trusts the deployed certificate.
+- If the dialog's **Signature** field (via "View request details") shows anything other than **Valid**, stop production use until corrected — that's a genuine signing failure, not just a trust prompt. Confirm certificate and private key match, and that the API or local signer is reachable.
+- If the signature IS valid but the dialog still appears on every print, this is expected until the certificate is marked trusted — see §9.1 for the tested `authcert.override` procedure. This is a one-time-per-register step, not a bug.
+- If the on-screen Allow/Block dialog doesn't respond to clicks over a remote-desktop/remote-access session (button appears greyed out or unresponsive after checking "Remember this decision"), try the keyboard shortcut (`Alt+A` for Allow) or close any "View request details" popup layered on top first; native Windows security dialogs are known to have flaky mouse-click forwarding over some remote sessions. If nothing works remotely, this needs one physical click at the register — after that it's remembered permanently (or use `authcert.override` to skip the dialog entirely, recommended for unattended registers).
 - Confirm the admin origin exactly matches the local signer's allowlist.
-- Check certificate validity/renewal dates.
+- Check certificate validity/renewal dates (see §9.1 for where to find them).
 
 ### Online printing works but offline printing fails
 
@@ -333,12 +379,11 @@ Do not release the register until every applicable test passes.
 - Confirm `ELITE_POS_ALLOWED_ORIGINS` matches the browser origin exactly.
 - Inspect signer logs for denied operations or malformed requests.
 
-### Receipt prints unreadable symbols
+### Receipt prints unreadable symbols, or the right edge of every line is cut off
 
-- Confirm QZ raw printing and `ISO-8859-1` encoding.
-- Confirm the driver is not interpreting raw commands as text/graphics.
-- Test the printer's ESC/POS emulation mode.
-- Elite baseline receipts are English-only; do not expect Arabic glyph rendering.
+- The receipt body is rendered as a rasterized image (canvas → PNG → QZ's `format: 'image'`, `language: 'escpos'` path), not raw ESC/POS text — this is what makes Arabic text render correctly, since raw ESC/POS text mode cannot shape or reorder Arabic at all. If text looks garbled, the issue is in the canvas rendering or image-print path, not a printer code page setting.
+- If lines are cut off on the right side of the physical paper: the renderer's canvas width (`pos-receipt-renderer.service.ts`'s `widthPx`) must match the printer's actual **printable** width, not its paper/media width — these differ. For the SRP-QE300: 80mm media, but only 72mm is printable, at 180dpi → **510px**, not the 576px you'd get assuming a full 80mm at 203dpi. If a different printer model is used, confirm its printable width and DPI from its own spec sheet and recompute `widthPx` accordingly; do not assume all "80mm thermal printers" share the same DPI or printable width.
+- Elite's receipts are bilingual (Arabic + English) by design — see `pos_business_profile` in Settings → General for the legal trade name/address/phone fields printed on every receipt. If a printed receipt shows English only, that's very likely because `pos_business_profile` hasn't been filled in yet for this tenant, not a rendering bug — check the Settings screen first.
 
 ### QR does not scan
 
@@ -378,9 +423,10 @@ Do not release the register until every applicable test passes.
 1. Provision the replacement certificate/key before expiry.
 2. Update API and per-register signer secrets through the approved secret channel.
 3. Restart services.
-4. Verify online and offline signed print jobs.
-5. Revoke the old material after all terminals pass.
-6. Record rotation date, owner, and next expiry.
+4. **If any register uses `authcert.override` (§9.1), replace the `.txt` file at its configured path with the new certificate on every such register** — the override is pinned to that specific certificate file's contents, and printing will fail once the old certificate expires unless this file is updated first.
+5. Verify online and offline signed print jobs.
+6. Revoke the old material after all terminals pass.
+7. Record rotation date, owner, and next expiry.
 
 ### Register decommissioning
 
