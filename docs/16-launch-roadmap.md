@@ -4,7 +4,9 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: inventory ledger, cash movements/Z-report history, card settlement reconciliation, Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: receipt print-quality fixes (QR clipping, garbled text) + reprint/remote-enrollment UI, inventory ledger, cash movements/Z-report history, card settlement reconciliation, Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
+
+**In progress** (committed, not yet deployed to VPS): Phase 1 inventory ledger (baseline capture + drift-detection job, all 18 server tests passing).
 
 ---
 
@@ -29,6 +31,43 @@
 ### Test gate
 - [x] Button visible for owner/admin/manager roles via `AuthService.hasRole()`.
 - [ ] Manual: confirmed clickable on both desktop admin browser and, if relevant, the same browser profile used on a register — **still needs a real click-through check**, only build-verified so far.
+
+---
+
+## Phase 0.5 — Receipt print-quality fixes + reprint + remote enrollment
+
+**Why here:** found during real hardware testing on 2026-07-19 (see printed receipt review). Small, independent, no DB migration required for the print fixes — should land before Phase 8's legal sign-off since that phase requires a legible real receipt, and this phase is what makes it legible.
+
+### What to build
+
+**A. QR code clipped top/bottom on the printed receipt**
+- Root cause: the QR is **not** part of the canvas image — it's generated printer-side via raw ESC/POS `GS ( k` commands in `pos-receipt-renderer.service.ts`'s `qrCode()` (`footerCommands()`), sent as a separate print job appended after the receipt image. The code only reserves ~60px (~8.5mm) of blank space below the image for it, and the auto-cut command fires immediately after, with no explicit margin — the physical QR (module size 4, level-M correction) is very likely taller than the reserved space, so the cutter can cut through it before it's fully clear.
+- Fix: increase the reserved vertical space before the cut to comfortably exceed the real printed QR height for the actual payload length, and add an explicit feed/margin command between the QR print command and the cut command so there's guaranteed blank paper between them.
+- Verify module size (4) and error-correction level (M) are being kept — these are fine and not the cause; don't change them without reason.
+
+**B. Garbled/missing letters in printed text ("Net Cream" → "N t C  am 5", cashier name, etc.)**
+- Root cause: QZ Tray's default print quantization (`quantization: "alpha"`, `threshold: 127`) applies a hard black/white cutoff to the whole canvas image. The logo is already explicitly pre-thresholded to survive this (`drawThresholdedImage()`), but body/meta text is drawn with normal anti-aliased `ctx.fillText()` and never gets the same treatment — small font sizes (11-13px) and thin serif strokes (Georgia) lose faint anti-aliased edge pixels under a hard 50% cutoff, which drops letter fragments.
+- Fix (two complementary options, do both):
+  1. Pass an explicit `quantization`/`threshold` option in the QZ print call (`pos-hardware.service.ts`) tuned for this printer instead of relying on the silent default — try `dither` mode first since it's generally friendlier to anti-aliased source images than a hard alpha threshold.
+  2. Apply the same threshold-before-render treatment already used for the logo (`drawThresholdedImage()`) to the text layer, or bump the minimum font size for anything under ~13px so strokes survive thresholding at 180dpi.
+- Test by printing the exact same receipt content (with today's problem words: "Net Cream", a cashier's real name, "test-fit-print") after each fix and visually confirming full, legible characters — not just "looks better."
+
+**C. No durable reprint path for a saved-but-failed-to-print receipt**
+- Currently: if `hardware.printReceipt()` throws after a sale, the sale is safely in the DB but the only reprint UI (`reprintLastSale()` / "Print again" on the Sale Complete modal) is backed by an in-memory Angular signal (`lastSale`) — wiped on page reload, tab close, or once the next sale completes. There is no queue, no persistence, and no way to reprint an older transaction from the UI.
+- Server side already supports it: `GET /api/pos/transactions/:id` and the lookup-by-receipt-number variant both return full `receipt.receiptData` ready to feed straight into the existing render/print pipeline.
+- Fix: add a "Reprint receipt" action to the existing transaction lookup panel (`lookupTransaction()` / `operationTransaction()` in `pos.component.ts`, already used for void/refund) that calls `hardware.printReceipt()` with the looked-up transaction's `receipt.receiptData` — reuses code that already exists, no new server work needed.
+
+**D. No remote/admin UI to generate a POS enrollment token**
+- Currently: `createEnrollmentToken()` requires being physically at (or remoted into) the specific register at the moment of setup — token creation and consumption happen back-to-back in the same click (`enrollTerminal()` in `pos.component.ts`). There's no admin-portal "Settings → Registers" page to pre-generate a token remotely for a register being set up elsewhere (e.g. a new branch/location).
+- Server API already supports splitting these (`POST /pos/registers/enrollment-tokens` is already decoupled from `POST /pos/registers/enroll` server-side; the client just always calls both together).
+- Fix: add a small "Registers" section somewhere in Settings (owner/admin only) that calls `pos.service.ts`'s existing `createEnrollmentToken()` on its own, displays the resulting token/code (15-minute TTL, single-use — already enforced server-side), for a manager to relay to whoever is physically setting up the new register.
+
+### Test gate
+- [ ] Manual: print a real receipt containing "Net Cream", a real cashier name, and the CR/license footer line — every character legible, zero dropped letters, compared side-by-side against today's problem receipt.
+- [ ] Manual: print a receipt and confirm the QR code prints fully intact (not clipped top/bottom or left/right) on at least 5 consecutive prints (auto-cut timing can be marginal/intermittent, so one clean print isn't enough evidence).
+- [ ] Manual: scan the printed QR with an actual phone camera and, separately, a dedicated barcode/QR scanner if the shop has one — confirm both read it correctly.
+- [ ] Manual: look up a transaction from an hour/day ago in the POS lookup panel and successfully reprint its receipt.
+- [ ] Manual: an owner/admin generates a registration token from Settings without touching the target register, and a second person on a different device/register successfully enrolls using that token before it expires.
 
 ---
 
@@ -225,7 +264,8 @@ Confirmed as real future work, not started, since a second physical branch is pl
 ## Summary sequencing (at a glance)
 
 ```
-Phase 0  "Go to POS" admin link         ✅ done, needs a manual click-through
+Phase 0    "Go to POS" admin link         ✅ done, needs a manual click-through
+Phase 0.5  Receipt print fixes + reprint/remote-enrollment UI  ← do before Phase 8 (legal sign-off needs a legible receipt)
 Phase 1  Inventory ledger              ─┐
 Phase 2  Cashier follow-ups             │  can run in parallel with 1
 Phase 3  Cash movements + Z-history     │  (independent of 1, but grouped
