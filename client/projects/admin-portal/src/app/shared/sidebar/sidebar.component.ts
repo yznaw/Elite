@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -17,10 +17,9 @@ interface NavLink {
 }
 
 @Component({
-  selector: 'ap-sidebar',
-  standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent],
-  template: `
+    selector: 'ap-sidebar',
+    imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent],
+    template: `
     @if (toggle.open()) {
       <div class="sidebar-backdrop" (click)="toggle.close()" aria-hidden="true"></div>
     }
@@ -93,7 +92,8 @@ interface NavLink {
       </div>
     </aside>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: contents; }
 
     .sidebar {
@@ -315,7 +315,7 @@ interface NavLink {
       -webkit-backdrop-filter: blur(4px);
       animation: fadeIn 0.2s ease;
     }
-  `],
+  `]
 })
 export class SidebarComponent {
   private readonly i18n  = inject(I18nService);

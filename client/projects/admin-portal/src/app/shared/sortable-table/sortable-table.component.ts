@@ -1,6 +1,7 @@
 import {
   Component, ContentChildren, Directive, Input, QueryList,
   TemplateRef, computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../../services/i18n.service';
@@ -27,10 +28,10 @@ export class CellTplDirective {
 }
 
 @Component({
-  selector: 'ap-sortable-table',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-sortable-table',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="tbl-scroll">
     <table class="tbl">
       <thead>
@@ -67,7 +68,7 @@ export class CellTplDirective {
       </tbody>
     </table>
     </div>
-  `,
+  `
 })
 export class SortableTableComponent {
   private readonly i18n = inject(I18nService);

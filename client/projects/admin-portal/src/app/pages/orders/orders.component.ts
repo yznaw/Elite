@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -17,10 +17,9 @@ import { AdminOrdersService, OrderListParams } from '../../services/admin-orders
 import { Order, QAR } from '../../models';
 
 @Component({
-  selector: 'ap-orders',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, PaginationComponent, OrderDrawerComponent],
-  template: `
+    selector: 'ap-orders',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, PaginationComponent, OrderDrawerComponent],
+    template: `
     <div class="page-fade">
       <!-- Row 1: search + export -->
       <div class="row gap-sm mb-10">
@@ -208,7 +207,8 @@ import { Order, QAR } from '../../models';
       <ap-order-drawer [value]="o" (closed)="active.set(null)" (updated)="onOrderUpdated($event)"/>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .orders-filter-sel { width: auto; flex: 1; }
     .mb-10 { margin-bottom: 10px; }
     @media (max-width: 480px) { .orders-export-lbl { display: none; } }
@@ -272,7 +272,7 @@ import { Order, QAR } from '../../models';
     .oc-items { font-size: 12px; }
     .oc-total { font-size: 14px; font-weight: 700; color: var(--gold); font-family: var(--ff-mono); margin-inline-end: auto; }
     .oc-cta { font-size: 12px; color: var(--muted); text-align: end; margin-top: 8px; }
-  `],
+  `]
 })
 export class OrdersComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);

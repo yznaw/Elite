@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -10,19 +10,19 @@ import { BottomNavComponent } from './shared/bottom-nav/bottom-nav.component';
 import { SidebarToggleService } from './shared/sidebar-toggle.service';
 
 @Component({
-  selector: 'ap-root',
-  standalone: true,
-  imports: [
-    CommonModule,
-    RouterOutlet,
-    SidebarComponent,
-    TopbarComponent,
-    ToastComponent,
-    ConfirmDialogComponent,
-    BottomNavComponent,
-  ],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.scss',
+    selector: 'ap-root',
+    imports: [
+        CommonModule,
+        RouterOutlet,
+        SidebarComponent,
+        TopbarComponent,
+        ToastComponent,
+        ConfirmDialogComponent,
+        BottomNavComponent,
+    ],
+    templateUrl: './app.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './app.component.scss'
 })
 export class AppComponent {
   private readonly router = inject(Router);

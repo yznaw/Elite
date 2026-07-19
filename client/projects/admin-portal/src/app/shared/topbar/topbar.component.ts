@@ -1,4 +1,4 @@
-import { Component, computed, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { Component, computed, ElementRef, HostListener, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Location } from '@angular/common';
 import { NavigationEnd, Router } from '@angular/router';
@@ -31,10 +31,9 @@ const META: Record<string, PageMeta> = {
 };
 
 @Component({
-  selector: 'ap-topbar',
-  standalone: true,
-  imports: [CommonModule, IconComponent, AvatarComponent, LanguageSwitcherComponent, NotificationDropdownComponent],
-  template: `
+    selector: 'ap-topbar',
+    imports: [CommonModule, IconComponent, AvatarComponent, LanguageSwitcherComponent, NotificationDropdownComponent],
+    template: `
     <div class="topbar">
       <div class="row gap-sm" style="min-width:0;align-items:center;">
         <!-- Desktop/tablet: hamburger for sidebar drawer -->
@@ -102,7 +101,7 @@ const META: Record<string, PageMeta> = {
                 <ap-avatar [initials]="user()?.initials ?? '?'" size="lg"/>
                 <div class="user-drop-info">
                   <div class="user-drop-name">{{ user()?.name }}</div>
-                  <div class="user-drop-role">{{ t('settings.role.' + user()?.role) }}</div>
+                  <div class="user-drop-role">{{ t('settings.role.' + $safeNavigationMigration(user()?.role)) }}</div>
                   <div class="user-drop-email" [title]="user()?.email ?? ''">{{ user()?.email }}</div>
                 </div>
               </div>
@@ -153,7 +152,8 @@ const META: Record<string, PageMeta> = {
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .topbar {
       height: 64px;
       padding: 0 32px;
@@ -362,7 +362,7 @@ const META: Record<string, PageMeta> = {
       text-align: start;
     }
     .user-drop-logout:hover { background: var(--danger-bg); }
-  `],
+  `]
 })
 export class TopbarComponent {
   private readonly i18n     = inject(I18nService);

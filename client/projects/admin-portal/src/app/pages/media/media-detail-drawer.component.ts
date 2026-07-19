@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -14,10 +14,9 @@ interface Suggestion {
 }
 
 @Component({
-  selector: 'ap-media-detail-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent],
-  template: `
+    selector: 'ap-media-detail-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent],
+    template: `
     <div class="overlay" (click)="closed.emit()"></div>
     <div class="drawer">
       <div class="drawer-head">
@@ -153,7 +152,8 @@ interface Suggestion {
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .default-image-section {
       padding: 14px 20px;
       border-top: 1px solid var(--border-2);
@@ -169,7 +169,7 @@ interface Suggestion {
       font-size: 12px;
       font-weight: 700;
     }
-  `],
+  `]
 })
 export class MediaDetailDrawerComponent {
   @Input({ required: true }) set media(m: MediaFile) {

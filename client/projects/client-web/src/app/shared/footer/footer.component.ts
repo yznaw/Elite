@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -22,10 +22,9 @@ interface PolicyMeta {
 }
 
 @Component({
-  selector: 'cw-footer',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  template: `
+    selector: 'cw-footer',
+    imports: [CommonModule, RouterLink],
+    template: `
     <footer id="site-footer" class="site-footer">
       <div class="footer-grid" [class.has-legal]="policyLinks().length > 0">
         <div class="footer-brand">
@@ -74,7 +73,8 @@ interface PolicyMeta {
       </div>
     </footer>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .site-footer {
       border-top: 1px solid var(--border);
       padding: 52px 24px 32px;
@@ -234,7 +234,7 @@ interface PolicyMeta {
         flex-direction: column;
       }
     }
-  `],
+  `]
 })
 export class FooterComponent implements OnInit {
   private readonly i18n = inject(I18nService);

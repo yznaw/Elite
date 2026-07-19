@@ -1,5 +1,6 @@
 import {
   Component, OnInit, OnDestroy, inject, signal, computed, HostListener,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -96,10 +97,9 @@ const STRINGS: Record<ExperienceLang, Record<string, any>> = {
 };
 
 @Component({
-  selector: 'app-experience',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
+    selector: 'app-experience',
+    imports: [CommonModule, FormsModule],
+    template: `
     <div class="k-shell" [attr.dir]="lang() === 'ar' ? 'rtl' : 'ltr'"
          (click)="resetActivity()" (touchstart)="resetActivity()">
 
@@ -226,7 +226,8 @@ const STRINGS: Record<ExperienceLang, Record<string, any>> = {
 
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: block; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; }
 
     /* ── Shell ────────────────────────────── */
@@ -638,7 +639,7 @@ const STRINGS: Record<ExperienceLang, Record<string, any>> = {
       .k-rating-pill { padding: 10px 6px; }
       .k-feedback-chips { margin-bottom: 16px; }
     }
-  `],
+  `]
 })
 export class ExperienceComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);

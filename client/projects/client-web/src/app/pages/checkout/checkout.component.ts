@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
@@ -38,11 +38,11 @@ type CustomerField = 'firstName' | 'lastName' | 'email' | 'phone';
 type DeliveryField = 'zone' | 'street' | 'building' | 'city';
 
 @Component({
-  selector: 'cw-checkout',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  templateUrl: './checkout.component.html',
-  styleUrl: './checkout.component.scss',
+    selector: 'cw-checkout',
+    imports: [CommonModule, RouterLink],
+    templateUrl: './checkout.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './checkout.component.scss'
 })
 export class CheckoutComponent implements OnInit, OnDestroy {
   readonly cart = inject(CartService);

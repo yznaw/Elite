@@ -1,6 +1,7 @@
 import {
   Component, EventEmitter, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -28,10 +29,9 @@ interface FormShape {
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 
 @Component({
-  selector: 'ap-customer-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, AvatarComponent, PillComponent, SpinnerComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-customer-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, AvatarComponent, PillComponent, SpinnerComponent, SaveBarComponent],
+    template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide customer-drawer" [class.is-dirty]="dirty()">
 
@@ -231,7 +231,8 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .drawer-wide { width: min(640px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
 
@@ -339,7 +340,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
     @media (max-width: 720px) {
       .drawer-body { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important; }
     }
-  `],
+  `]
 })
 export class CustomerDrawerComponent implements OnInit, OnDestroy {
   @Input({ required: true }) customer!: Customer;

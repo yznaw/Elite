@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export type IconName =
@@ -12,10 +12,10 @@ export type IconName =
   | 'listBullet' | 'listOrdered' | 'quote' | 'undo' | 'redo' | 'externalLink';
 
 @Component({
-  selector: 'ap-icon',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-icon',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     @switch (name) {
       @case ('dash') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
@@ -321,7 +321,7 @@ export type IconName =
         </svg>
       }
     }
-  `,
+  `
 })
 export class IconComponent {
   @Input({ required: true }) name!: IconName;

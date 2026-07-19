@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PillComponent } from '../../shared/pill/pill.component';
@@ -13,10 +13,9 @@ import {
 } from '../../services/pos-reconciliation.service';
 
 @Component({
-  selector: 'ap-pos-reconciliation',
-  standalone: true,
-  imports: [CommonModule, DatePipe, FormsModule, PillComponent, SpinnerComponent],
-  template: `
+    selector: 'ap-pos-reconciliation',
+    imports: [CommonModule, DatePipe, FormsModule, PillComponent, SpinnerComponent],
+    template: `
     <div class="page-fade">
       <div class="card card-pad mb-24" style="max-width:720px;">
         <div class="card-title mb-16">{{ t('reconciliation.entry.title') }}</div>
@@ -130,7 +129,8 @@ import {
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .recon-table { display: grid; }
     .recon-row {
       padding: 14px 20px;
@@ -146,7 +146,7 @@ import {
     @media (max-width: 900px) {
       .recon-row { grid-template-columns: 1fr 1fr; }
     }
-  `],
+  `]
 })
 export class PosReconciliationComponent implements OnInit {
   private readonly i18n = inject(I18nService);

@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { Product } from '../../models/product.model';
@@ -17,10 +17,9 @@ const FALLBACK_SEARCH_IMAGE =
   'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=400&q=80&auto=format&fit=crop';
 
 @Component({
-  selector: 'cw-nav',
-  standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive],
-  template: `
+    selector: 'cw-nav',
+    imports: [CommonModule, RouterLink, RouterLinkActive],
+    template: `
     <nav class="nav-shell" [class.is-scrolled]="scrolled()" [attr.aria-label]="t('nav.menu')">
       <a routerLink="/" class="brand-link" [attr.aria-label]="t('brand.name')" data-track="nav-brand">
         <span class="brand-logo-wrap">
@@ -214,7 +213,8 @@ const FALLBACK_SEARCH_IMAGE =
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host {
       position: relative;
       z-index: 80;
@@ -868,7 +868,7 @@ const FALLBACK_SEARCH_IMAGE =
         transform: translateY(0) scale(1);
       }
     }
-  `],
+  `]
 })
 export class NavComponent {
   readonly cart = inject(CartService);

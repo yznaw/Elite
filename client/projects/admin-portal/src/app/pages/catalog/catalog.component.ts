@@ -1,11 +1,10 @@
-import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
-import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ProductDrawerComponent } from './product-drawer.component';
 import { BulkImportDialogComponent } from './bulk-import-dialog.component';
 import { I18nService } from '../../services/i18n.service';
@@ -25,10 +24,9 @@ type StatusFilter = 'all' | 'active' | 'hidden' | 'low-stock' | 'out-of-stock';
 type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
 @Component({
-  selector: 'ap-catalog',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, SpinnerComponent, ProductDrawerComponent, BulkImportDialogComponent],
-  template: `
+    selector: 'ap-catalog',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, ProductDrawerComponent, BulkImportDialogComponent],
+    template: `
     <div class="page-fade">
 
       <!-- ── Top bar ── -->
@@ -429,7 +427,8 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       />
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* ── Top bar rows ── */
     .tb-row1 { margin-bottom: 10px; }
     .search-box { width: 100%; position: relative; }
@@ -707,7 +706,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       /* Compact grid inside the sheet */
       .filter-panel-grid { grid-template-columns: 1fr 1fr; }
     }
-  `],
+  `]
 })
 export class CatalogComponent implements OnInit {
   private readonly i18n = inject(I18nService);

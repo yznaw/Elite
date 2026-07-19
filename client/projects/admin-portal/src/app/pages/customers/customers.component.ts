@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, debounceTime, takeUntil } from 'rxjs';
@@ -20,10 +20,9 @@ type View = 'table' | 'cards';
 const MOBILE_BP = 900;
 
 @Component({
-  selector: 'ap-customers',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, AvatarComponent, EmptyStateComponent, SortableTableComponent, CellTplDirective, PaginationComponent, CustomerDrawerComponent, OrderDrawerComponent],
-  template: `
+    selector: 'ap-customers',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, AvatarComponent, EmptyStateComponent, SortableTableComponent, CellTplDirective, PaginationComponent, CustomerDrawerComponent, OrderDrawerComponent],
+    template: `
     <div class="page-fade">
       <div class="row gap-sm mb-24" style="flex-wrap:wrap;">
         <div class="inp-search" style="flex:1;min-width:240px;position:relative;">
@@ -216,7 +215,8 @@ const MOBILE_BP = 900;
       />
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .view-toggle {
       display: inline-flex;
       align-items: center;
@@ -364,7 +364,7 @@ const MOBILE_BP = 900;
       -webkit-tap-highlight-color: transparent;
     }
     .customers-fab:active { transform: scale(.94); box-shadow: 0 2px 10px rgba(0,69,56,.25); }
-  `],
+  `]
 })
 export class CustomersComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);

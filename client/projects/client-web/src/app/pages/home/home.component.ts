@@ -10,6 +10,7 @@ import {
   computed,
   inject,
   signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
@@ -38,11 +39,11 @@ interface StorefrontCollection {
 const FEATURED_COLLECTION_HANDLES = ['men', 'sunglasses', 'kids'];
 
 @Component({
-  selector: 'cw-home',
-  standalone: true,
-  imports: [CommonModule],
-  templateUrl: './home.component.html',
-  styleUrl: './home.component.scss',
+    selector: 'cw-home',
+    imports: [CommonModule],
+    templateUrl: './home.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './home.component.scss'
 })
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly router       = inject(Router);

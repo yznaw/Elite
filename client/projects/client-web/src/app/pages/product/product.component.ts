@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -38,11 +38,11 @@ interface StorefrontCollectionLink {
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 
 @Component({
-  selector: 'cw-product',
-  standalone: true,
-  imports: [CommonModule],
-  templateUrl: './product.component.html',
-  styleUrl: './product.component.scss',
+    selector: 'cw-product',
+    imports: [CommonModule],
+    templateUrl: './product.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './product.component.scss'
 })
 export class ProductComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);

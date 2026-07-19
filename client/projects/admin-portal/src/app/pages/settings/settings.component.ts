@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -21,10 +21,9 @@ import { rolePillKind, PillInfo } from '../../shared/pill/status-pill';
 type Tab = 'general' | 'team' | 'integrations';
 
 @Component({
-  selector: 'ap-settings',
-  standalone: true,
-  imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent],
-  template: `
+    selector: 'ap-settings',
+    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent],
+    template: `
     <div class="page-fade">
       @if (tab() === 'general') {
         <ap-save-bar
@@ -364,7 +363,8 @@ type Tab = 'general' | 'team' | 'integrations';
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .inp-error { border-color: var(--danger) !important; }
     .inp-msg-error { font-size: 11px; color: var(--danger); margin-top: 4px; }
     .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
@@ -380,7 +380,7 @@ type Tab = 'general' | 'team' | 'integrations';
       .tabs::-webkit-scrollbar { display: none; }
       .tab { flex-shrink: 0; white-space: nowrap; padding: 10px 14px; }
     }
-  `],
+  `]
 })
 export class SettingsComponent implements OnInit {
   private readonly toast = inject(ToastService);

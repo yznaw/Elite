@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -29,10 +29,9 @@ interface Review {
 }
 
 @Component({
-  selector: 'ap-feedback-detail',
-  standalone: true,
-  imports: [CommonModule, IconComponent, EmptyStateComponent],
-  template: `
+    selector: 'ap-feedback-detail',
+    imports: [CommonModule, IconComponent, EmptyStateComponent],
+    template: `
     <div class="page-fade">
 
       <!-- Back -->
@@ -206,7 +205,8 @@ interface Review {
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .fbd-back {
       display: inline-flex; align-items: center; gap: 6px;
       font-size: 12px; font-weight: 600; color: var(--muted);
@@ -322,7 +322,7 @@ interface Review {
     .fbd-sk-line.narrow { width: 25%; }
     .fbd-sk-line.full   { width: 100%; }
     @keyframes shimmer { to { background-position: -200% 0; } }
-  `],
+  `]
 })
 export class FeedbackDetailComponent implements OnInit {
   private readonly api    = inject(ApiClient);

@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 // import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { KpiComponent } from '../../shared/kpi/kpi.component';
@@ -37,10 +37,9 @@ interface CostSummary {
 }
 
 @Component({
-  selector: 'ap-analytics',
-  standalone: true,
-  imports: [CommonModule, KpiComponent, LineChartComponent, BarChartComponent, PieChartComponent, EmptyStateComponent],
-  styles: [`
+    selector: 'ap-analytics',
+    imports: [CommonModule, KpiComponent, LineChartComponent, BarChartComponent, PieChartComponent, EmptyStateComponent],
+    styles: [`
     /* Range filter row: horizontal scroll on phone instead of wrapping */
     .range-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
     @media (max-width: 640px) {
@@ -95,7 +94,8 @@ interface CostSummary {
     .sort-btn { background: none; border: none; cursor: pointer; padding: 0 4px; opacity: .5; font-size: 10px; }
     .sort-btn.active { opacity: 1; color: var(--gold); }
   `],
-  template: `
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="page-fade">
       <div class="range-row mb-24">
         <div class="row gap-sm" style="flex-wrap:nowrap;">
@@ -345,7 +345,7 @@ interface CostSummary {
       </div>
 
     </div>
-  `,
+  `
 })
 export class AnalyticsComponent implements OnInit {
   readonly svc = inject(AdminAnalyticsService);

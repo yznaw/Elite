@@ -1,9 +1,8 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
-import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { PolicyDrawerComponent } from './policy-drawer.component';
 import { I18nService } from '../../services/i18n.service';
@@ -29,10 +28,9 @@ const PRESET_TYPES: PolicyType[] = [
 ];
 
 @Component({
-  selector: 'ap-policies',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, EmptyStateComponent, PolicyDrawerComponent],
-  template: `
+    selector: 'ap-policies',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, PolicyDrawerComponent],
+    template: `
     <div class="page-fade">
 
       <!-- Page header -->
@@ -150,7 +148,8 @@ const PRESET_TYPES: PolicyType[] = [
       (deleted)="onDeleted($event)"
     />
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: block; }
 
     /* ── Page header ─────────────────────────── */
@@ -267,7 +266,7 @@ const PRESET_TYPES: PolicyType[] = [
     @media (max-width: 480px) {
       .page-header { flex-direction: column; align-items: flex-start; }
     }
-  `],
+  `]
 })
 export class PoliciesComponent implements OnInit {
   private readonly i18n  = inject(I18nService);

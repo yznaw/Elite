@@ -1,14 +1,14 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { CartService } from '../../services/cart.service';
 import { I18nService } from '../../services/i18n.service';
 
 @Component({
-  selector: 'cw-cart-drawer',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'cw-cart-drawer',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     @if (cart.isOpen()) {
       <div class="cart-overlay" (click)="onOverlayClick($event)">
         <div class="cart-drawer">
@@ -104,7 +104,7 @@ import { I18nService } from '../../services/i18n.service';
         </div>
       </div>
     }
-  `,
+  `
 })
 export class CartDrawerComponent {
   readonly cart = inject(CartService);

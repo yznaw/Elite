@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -17,11 +17,11 @@ interface ContactForm {
 }
 
 @Component({
-  selector: 'cw-contact',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './contact.component.html',
-  styleUrl: './contact.component.scss',
+    selector: 'cw-contact',
+    imports: [CommonModule, FormsModule],
+    templateUrl: './contact.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './contact.component.scss'
 })
 export class ContactComponent implements OnInit {
   private readonly i18n        = inject(I18nService);

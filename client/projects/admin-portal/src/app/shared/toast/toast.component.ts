@@ -1,13 +1,13 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ToastService, Toast } from '../../services/toast.service';
 import { IconComponent } from '../icons/icon.component';
 
 @Component({
-  selector: 'ap-toast',
-  standalone: true,
-  imports: [CommonModule, IconComponent],
-  template: `
+    selector: 'ap-toast',
+    imports: [CommonModule, IconComponent],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="toast-stack" role="region" aria-label="Notifications">
       @for (t of toast.items(); track t.id) {
         <div class="toast" [class]="'toast ' + t.kind" role="status">
@@ -25,7 +25,7 @@ import { IconComponent } from '../icons/icon.component';
         </div>
       }
     </div>
-  `,
+  `
 })
 export class ToastComponent {
   readonly toast = inject(ToastService);

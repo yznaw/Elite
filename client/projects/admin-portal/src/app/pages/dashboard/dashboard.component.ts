@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -17,10 +17,9 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 
 @Component({
-  selector: 'ap-dashboard',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent, SpinnerComponent],
-  styles: [`
+    selector: 'ap-dashboard',
+    imports: [CommonModule, FormsModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent, SpinnerComponent],
+    styles: [`
     .range-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
     .range-pill {
@@ -47,7 +46,8 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
       .card-header .row.gap-sm.small { display: none; } /* hide chart legend on phone */
     }
   `],
-  template: `
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="page-fade">
       <div class="range-bar mb-16">
         <div class="range-pills">
@@ -177,7 +177,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
       </div>
       }
     </div>
-  `,
+  `
 })
 export class DashboardComponent implements OnInit {
   private readonly i18n = inject(I18nService);

@@ -1,13 +1,13 @@
-import { Component, Input, computed, signal } from '@angular/core';
+import { Component, Input, computed, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 interface Bar { label: string; value: number; }
 
 @Component({
-  selector: 'ap-bar-chart',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-bar-chart',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <svg [attr.viewBox]="'0 0 ' + w + ' ' + h" width="100%" preserveAspectRatio="none" style="display:block;">
       @for (b of bars(); track b.label) {
         <text [attr.x]="padL - 12" [attr.y]="b.y + b.h/2 + 4" text-anchor="end" font-size="11" fill="#3d4159" style="font-family: var(--ff-ui);" font-weight="500">{{ b.label }}</text>
@@ -16,7 +16,7 @@ interface Bar { label: string; value: number; }
         <text [attr.x]="padL + b.bw + 8" [attr.y]="b.y + b.h/2 + 4" font-size="11" fill="#0f2356" style="font-family: var(--ff-ui);" font-weight="600">{{ b.value.toLocaleString() }}</text>
       }
     </svg>
-  `,
+  `
 })
 export class BarChartComponent {
   @Input({ required: true }) set data(d: Bar[]) { this._data.set(d); }

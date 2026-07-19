@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -16,10 +16,9 @@ interface PolicyPage {
 }
 
 @Component({
-  selector: 'cw-policy',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  template: `
+    selector: 'cw-policy',
+    imports: [CommonModule, RouterLink],
+    template: `
     <div class="policy-page">
 
       <!-- Breadcrumb -->
@@ -75,7 +74,8 @@ interface PolicyPage {
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .policy-page {
       max-width: 760px;
       margin: 0 auto;
@@ -243,7 +243,7 @@ interface PolicyPage {
       .policy-content { padding: 24px 20px; }
       .policy-footer { padding: 16px 20px; }
     }
-  `],
+  `]
 })
 export class PolicyComponent implements OnInit {
   private readonly route  = inject(ActivatedRoute);

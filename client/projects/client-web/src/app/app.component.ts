@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -11,11 +11,11 @@ import { HomeContentService } from './services/home-content.service';
 import { AnalyticsService } from './services/analytics.service';
 
 @Component({
-  selector: 'cw-root',
-  standalone: true,
-  imports: [CommonModule, RouterOutlet, NavComponent, FooterComponent, CartDrawerComponent],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.scss',
+    selector: 'cw-root',
+    imports: [CommonModule, RouterOutlet, NavComponent, FooterComponent, CartDrawerComponent],
+    templateUrl: './app.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './app.component.scss'
 })
 export class AppComponent {
   private readonly router    = inject(Router);

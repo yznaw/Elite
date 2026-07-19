@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { IconComponent, IconName } from '../icons/icon.component';
@@ -22,10 +22,9 @@ const KIND_COLOR: Record<NotifKind, string> = {
 };
 
 @Component({
-  selector: 'ap-notification-dropdown',
-  standalone: true,
-  imports: [CommonModule, IconComponent],
-  template: `
+    selector: 'ap-notification-dropdown',
+    imports: [CommonModule, IconComponent],
+    template: `
     <div class="notif-wrap">
       <!-- Bell trigger -->
       <button class="icon-btn notif-bell" (click)="toggle()" [attr.title]="t('topbar.notifications')">
@@ -69,7 +68,8 @@ const KIND_COLOR: Record<NotifKind, string> = {
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .notif-wrap { position: relative; }
 
     .notif-bell { position: relative; }
@@ -218,7 +218,7 @@ const KIND_COLOR: Record<NotifKind, string> = {
         inset-inline-end: -60px;
       }
     }
-  `],
+  `]
 })
 export class NotificationDropdownComponent {
   readonly notifs = inject(NotificationService);

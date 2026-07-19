@@ -1,15 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { I18nService } from '../../services/i18n.service';
 import { CartService } from '../../services/cart.service';
 
 @Component({
-  selector: 'cw-thank-you',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  templateUrl: './thank-you.component.html',
-  styleUrl: './thank-you.component.scss',
+    selector: 'cw-thank-you',
+    imports: [CommonModule, RouterLink],
+    templateUrl: './thank-you.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './thank-you.component.scss'
 })
 export class ThankYouComponent {
   private readonly route = inject(ActivatedRoute);

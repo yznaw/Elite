@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -30,10 +30,9 @@ interface FeedbackSummary {
 }
 
 @Component({
-  selector: 'ap-feedback',
-  standalone: true,
-  imports: [CommonModule, IconComponent, EmptyStateComponent],
-  template: `
+    selector: 'ap-feedback',
+    imports: [CommonModule, IconComponent, EmptyStateComponent],
+    template: `
     <div class="page-fade">
 
       <!-- Header -->
@@ -161,7 +160,8 @@ interface FeedbackSummary {
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .fb-header { margin-bottom: 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .fb-title  { font-size: 22px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
     .fb-sub    { font-size: 12px; color: var(--muted); }
@@ -261,7 +261,7 @@ interface FeedbackSummary {
     .fb-skeleton-line.wide   { width: 60%; }
     .fb-skeleton-line.narrow { width: 35%; }
     @keyframes shimmer { to { background-position: -200% 0; } }
-  `],
+  `]
 })
 export class FeedbackComponent implements OnInit {
   private readonly api    = inject(ApiClient);

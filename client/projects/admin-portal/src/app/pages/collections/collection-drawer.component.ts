@@ -1,6 +1,7 @@
 import {
   Component, EventEmitter, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -30,10 +31,9 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
 @Component({
-  selector: 'ap-collection-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-collection-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, SaveBarComponent],
+    template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
 
@@ -454,7 +454,8 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .drawer-wide { width: min(720px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
 
@@ -647,7 +648,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     }
     .picker-row:hover { border-color: var(--green); background: rgba(2,70,56,0.03); }
     .picker-row.selected { background: rgba(2,70,56,0.05); border-color: rgba(2,70,56,0.25); }
-  `],
+  `]
 })
 export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private readonly _collections = signal<Collection[]>([]);

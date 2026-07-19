@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SpinnerComponent } from '../spinner/spinner.component';
 import { IconComponent } from '../icons/icon.component';
@@ -14,15 +14,14 @@ import { I18nService } from '../../services/i18n.service';
  * apply without any extra wrapper.
  */
 @Component({
-  selector: 'ap-save-bar',
-  standalone: true,
-  imports: [CommonModule, SpinnerComponent, IconComponent],
-  host: {
-    '[class.save-bar-top]': 'true',
-    '[class.dirty]': 'dirty',
-    '[class.shake]': 'shake',
-  },
-  template: `
+    selector: 'ap-save-bar',
+    imports: [CommonModule, SpinnerComponent, IconComponent],
+    host: {
+        '[class.save-bar-top]': 'true',
+        '[class.dirty]': 'dirty',
+        '[class.shake]': 'shake',
+    },
+    template: `
     <div class="row gap-sm" style="min-width:0;flex:1;">
       <span class="sb-label">{{ label || t('common.unsavedChanges') }}</span>
     </div>
@@ -41,10 +40,11 @@ import { I18nService } from '../../services/i18n.service';
       </button>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: flex; justify-content: space-between; align-items: center; padding: 0 24px; }
     .sb-label { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.9); }
-  `],
+  `]
 })
 export class SaveBarComponent {
   private readonly i18n = inject(I18nService);

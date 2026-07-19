@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -12,10 +12,9 @@ import { I18nService } from '../../services/i18n.service';
 type Tab = 'colors' | 'materials' | 'sizes';
 
 @Component({
-  selector: 'ap-reference',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
-  template: `
+    selector: 'ap-reference',
+    imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
+    template: `
     <div class="page-fade">
 
       <!-- ── Page header ── -->
@@ -349,7 +348,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
             <p class="ef-hint">{{ t('reference.field.swatchHint') }}</p>
           </div>
           <div class="edit-actions">
-            <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveColor(c?.id)">
+            <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveColor($safeNavigationMigration(c?.id))">
               @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
             </button>
             <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
@@ -363,7 +362,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
           <input class="inp inp-sm" [placeholder]="t('reference.field.nameEn')" [(ngModel)]="editMaterial.name_en" style="flex:1;min-width:140px;"/>
           <input class="inp inp-sm" [placeholder]="t('reference.field.nameAr')" dir="rtl" [(ngModel)]="editMaterial.name_ar" style="flex:1;min-width:120px;"/>
           <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editMaterial.sort_order"/>
-          <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveMaterial(m?.id)">
+          <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveMaterial($safeNavigationMigration(m?.id))">
             @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
           </button>
           <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
@@ -372,7 +371,8 @@ type Tab = 'colors' | 'materials' | 'sizes';
 
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .ref-header { margin-bottom: 24px; }
     .ref-title {
       font-size: 22px; font-weight: 800;
@@ -633,7 +633,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
       .ef-row { flex-direction: column; }
       .mat-edit { flex-direction: column; align-items: stretch; }
     }
-  `],
+  `]
 })
 export class ReferenceComponent implements OnInit {
   private readonly refApi  = inject(AdminRefService);

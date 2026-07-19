@@ -1,14 +1,14 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { I18nService } from '../../services/i18n.service';
 
 @Component({
-  selector: 'cw-checkout-result',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  templateUrl: './checkout-result.component.html',
-  styleUrl: './checkout-result.component.scss',
+    selector: 'cw-checkout-result',
+    imports: [CommonModule, RouterLink],
+    templateUrl: './checkout-result.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './checkout-result.component.scss'
 })
 export class CheckoutResultComponent {
   private readonly route = inject(ActivatedRoute);

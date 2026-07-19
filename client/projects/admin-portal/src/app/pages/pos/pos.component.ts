@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -47,11 +47,11 @@ interface VariantColorGroup {
 type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift' | 'cash-movement' | 'z-history';
 
 @Component({
-  selector: 'ap-pos',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './pos.component.html',
-  styleUrl: './pos.component.scss',
+    selector: 'ap-pos',
+    imports: [CommonModule, FormsModule],
+    templateUrl: './pos.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './pos.component.scss'
 })
 export class PosComponent implements OnInit, OnDestroy {
   private readonly pos = inject(PosService);

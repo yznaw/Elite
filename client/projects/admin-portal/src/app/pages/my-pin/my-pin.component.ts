@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { inject } from '@angular/core';
@@ -16,10 +16,10 @@ import { PosService } from '../../services/pos.service';
  * /settings with no other path to a working PIN. This is that path.
  */
 @Component({
-  selector: 'ap-my-pin',
-  standalone: true,
-  imports: [CommonModule, FormsModule, SpinnerComponent],
-  template: `
+    selector: 'ap-my-pin',
+    imports: [CommonModule, FormsModule, SpinnerComponent],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="page-fade">
       <div class="card card-pad" style="max-width:520px;">
         <div class="card-title mb-16">{{ t('settings.managerPin.title') }}</div>
@@ -39,7 +39,7 @@ import { PosService } from '../../services/pos.service';
         <div class="muted small mt-16">{{ t('settings.managerPin.hint') }}</div>
       </div>
     </div>
-  `,
+  `
 })
 export class MyPinComponent {
   private readonly i18n = inject(I18nService);

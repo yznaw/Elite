@@ -32,11 +32,10 @@ interface LogEntry {
 interface Summary { total: number; created: number; updated: number; failed: number; }
 
 @Component({
-  selector: 'ap-bulk-import-dialog',
-  standalone: true,
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, DatePipe, IconComponent],
-  template: `
+    selector: 'ap-bulk-import-dialog',
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    imports: [CommonModule, DatePipe, IconComponent],
+    template: `
     <div class="modal-overlay" (click)="onOverlayClick($event)">
       <div class="modal-panel" (click)="$event.stopPropagation()">
 
@@ -363,7 +362,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     /* Layout */
     .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px;}
     .modal-panel{background:var(--surface,#fff);border:1px solid var(--border,#e4e4e7);border-radius:16px;width:100%;max-width:660px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.15);}
@@ -489,7 +488,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
     .hist-chips{display:flex;gap:4px;flex-shrink:0;}
     .chip.sm{font-size:10px;padding:2px 7px;}
     .hist-detail{border-top:1px solid var(--border,#e4e4e7);max-height:180px;overflow-y:auto;}
-  `],
+  `]
 })
 export class BulkImportDialogComponent {
   @Output() closed   = new EventEmitter<void>();

@@ -13,12 +13,12 @@ import {
   computed,
   inject,
   signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
-import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { RichTextComponent } from '../../shared/rich-text/rich-text.component';
 import { I18nService } from '../../services/i18n.service';
@@ -57,10 +57,9 @@ const ALL_TYPES: PolicyType[] = [
 ];
 
 @Component({
-  selector: 'ap-policy-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-policy-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, RichTextComponent, SaveBarComponent],
+    template: `
     @if (open) {
       <div class="pol-backdrop" (click)="onBackdropClick($event)" aria-hidden="true"></div>
       <aside class="drawer" role="dialog" aria-modal="true" #drawerEl>
@@ -283,7 +282,8 @@ const ALL_TYPES: PolicyType[] = [
       </aside>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: contents; }
 
     /* ── Backdrop ────────────────────────────── */
@@ -488,7 +488,7 @@ const ALL_TYPES: PolicyType[] = [
     @media (max-width: 640px) {
       .drawer-section { padding: 18px 16px; }
     }
-  `],
+  `]
 })
 export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
   @Input() open = false;

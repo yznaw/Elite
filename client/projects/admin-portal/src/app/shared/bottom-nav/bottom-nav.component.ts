@@ -1,5 +1,6 @@
 import {
   AfterViewInit, Component, computed, inject, OnDestroy, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
@@ -24,10 +25,9 @@ interface SecondaryItem {
 }
 
 @Component({
-  selector: 'ap-bottom-nav',
-  standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent],
-  template: `
+    selector: 'ap-bottom-nav',
+    imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent],
+    template: `
     <!-- ── Bottom tab bar (phone only, CSS hides on ≥769px) ── -->
     <nav class="bottom-nav" [class.hidden]="navHidden()" aria-label="Main navigation">
 
@@ -109,7 +109,8 @@ interface SecondaryItem {
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* ── Only visible on phones ── */
     :host { display: contents; }
 
@@ -309,7 +310,7 @@ interface SecondaryItem {
         -webkit-tap-highlight-color: transparent;
       }
     }
-  `],
+  `]
 })
 export class BottomNavComponent implements AfterViewInit, OnDestroy {
   private readonly i18n   = inject(I18nService);

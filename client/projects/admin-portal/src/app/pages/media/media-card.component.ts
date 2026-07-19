@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { I18nService } from '../../services/i18n.service';
@@ -11,10 +11,10 @@ interface Suggestion {
 }
 
 @Component({
-  selector: 'ap-media-card',
-  standalone: true,
-  imports: [CommonModule, IconComponent],
-  template: `
+    selector: 'ap-media-card',
+    imports: [CommonModule, IconComponent],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="media-card" [class.selected]="selected" (click)="clicked.emit()">
       <div class="media-thumb">
         @if (media.kind === 'image') {
@@ -48,7 +48,7 @@ interface Suggestion {
         }
       </div>
     </div>
-  `,
+  `
 })
 export class MediaCardComponent {
   private readonly i18n = inject(I18nService);

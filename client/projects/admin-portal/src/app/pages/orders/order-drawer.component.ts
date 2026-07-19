@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -25,10 +25,9 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
 };
 
 @Component({
-  selector: 'ap-order-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent],
-  template: `
+    selector: 'ap-order-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent],
+    template: `
     <div class="overlay" (click)="closed.emit()"></div>
     <div class="drawer drawer-wide order-drawer">
       <div class="drawer-head">
@@ -268,7 +267,8 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .drawer-wide { width: min(640px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
 
@@ -436,7 +436,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
       .workflow-stepper .step:nth-child(3)::before,
       .workflow-stepper .step:nth-child(odd)::before { display: none; }
     }
-  `],
+  `]
 })
 export class OrderDrawerComponent {
   private readonly i18n = inject(I18nService);

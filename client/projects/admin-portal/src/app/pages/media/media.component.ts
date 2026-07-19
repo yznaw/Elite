@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -27,10 +27,9 @@ interface PendingUpload {
 }
 
 @Component({
-  selector: 'ap-media',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, EmptyStateComponent, PaginationComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
-  template: `
+    selector: 'ap-media',
+    imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, EmptyStateComponent, PaginationComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
+    template: `
     <div class="page-fade">
       <div class="grid-4 mb-24">
         <div class="stat-card">
@@ -217,7 +216,8 @@ interface PendingUpload {
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .upload-list {
       margin-top: 16px;
       display: flex;
@@ -344,7 +344,7 @@ interface PendingUpload {
       .upload-row { grid-template-columns: 32px 1fr auto; padding: 8px; }
       .upload-thumb { width: 32px; height: 32px; }
     }
-  `],
+  `]
 })
 export class MediaComponent implements OnInit {
   private readonly toast = inject(ToastService);

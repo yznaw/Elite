@@ -1,8 +1,7 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
-import { PillComponent } from '../../shared/pill/pill.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { CollectionDrawerComponent } from './collection-drawer.component';
 import { I18nService } from '../../services/i18n.service';
@@ -16,10 +15,9 @@ interface HierarchyGroup {
 }
 
 @Component({
-  selector: 'ap-collections',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, CollectionDrawerComponent],
-  template: `
+    selector: 'ap-collections',
+    imports: [CommonModule, FormsModule, IconComponent, EmptyStateComponent, CollectionDrawerComponent],
+    template: `
     <div class="page-fade">
       <div class="card mb-24" style="padding:14px 18px;">
         <div class="row gap-sm" style="flex-wrap:wrap;">
@@ -190,7 +188,8 @@ interface HierarchyGroup {
       />
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* Section labels */
     .section-label {
       display: flex; align-items: center; gap: 6px;
@@ -305,7 +304,7 @@ interface HierarchyGroup {
       background: var(--bg); padding: 1px 6px; border-radius: 10px;
       margin-inline-start: 2px; border: 1px solid var(--border-2);
     }
-  `],
+  `]
 })
 export class CollectionsComponent implements OnInit {
   private readonly i18n = inject(I18nService);

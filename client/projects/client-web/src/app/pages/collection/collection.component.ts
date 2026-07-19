@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -67,11 +67,11 @@ interface StorefrontCollection {
 }
 
 @Component({
-  selector: 'cw-collection',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './collection.component.html',
-  styleUrl: './collection.component.scss',
+    selector: 'cw-collection',
+    imports: [CommonModule, FormsModule],
+    templateUrl: './collection.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './collection.component.scss'
 })
 export class CollectionComponent implements OnInit, OnDestroy {
   private readonly products = inject(ProductsService);

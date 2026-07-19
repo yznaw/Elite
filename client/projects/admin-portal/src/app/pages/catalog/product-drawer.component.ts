@@ -1,6 +1,7 @@
 import {
   Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -48,10 +49,9 @@ function readPreview(file: File): Promise<string> {
 }
 
 @Component({
-  selector: 'ap-product-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-product-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent],
+    template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
       <!-- Header: title + status + save state — nav buttons live alongside close -->
@@ -866,7 +866,8 @@ function readPreview(file: File): Promise<string> {
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* Wider drawer for the editor — full screen on phones */
     .drawer-wide { width: min(800px, 100vw); }
     @media (max-width: 800px) { .drawer-wide { width: 100vw; } }
@@ -1797,7 +1798,7 @@ function readPreview(file: File): Promise<string> {
       /* Prevent chevron overlapping the variant summary text */
       .section-title .sec-chev { margin-inline-start: 8px; }
     }
-  `],
+  `]
 })
 export class ProductDrawerComponent implements OnInit, OnDestroy {
   /** Internal signals — reactive so `currentIndex` / `canPrev` / `canNext`

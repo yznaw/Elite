@@ -1,11 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { firstValueFrom } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
-import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { HOME_LAYOUT_BLOCKS, StorefrontService } from '../../services/storefront.service';
@@ -55,10 +54,9 @@ interface StorefrontContent {
 }
 
 @Component({
-  selector: 'ap-storefront',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-storefront',
+    imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
+    template: `
   <div class="page-fade sf-shell">
 
     <!-- ── Action bar ──────────────────────────────────────────── -->
@@ -1003,7 +1001,8 @@ interface StorefrontContent {
     </div>
   }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* Height tokens — change here and sticky tops update automatically */
     .sf-shell {
       --pubbar-h:    52px;
@@ -1820,7 +1819,7 @@ interface StorefrontContent {
       background: rgba(255,255,255,0.32);
       border-radius: 99px;
     }
-  `],
+  `]
 })
 export class StorefrontComponent implements OnInit, OnDestroy {
   private readonly toast          = inject(ToastService);

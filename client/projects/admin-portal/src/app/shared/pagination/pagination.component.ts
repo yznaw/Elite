@@ -1,13 +1,12 @@
-import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { I18nService } from '../../services/i18n.service';
 
 @Component({
-  selector: 'ap-pagination',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
+    selector: 'ap-pagination',
+    imports: [CommonModule, FormsModule],
+    template: `
     @if (totalPages > 1 || showSizeSelector) {
       <div class="pg-bar">
         @if (showSizeSelector) {
@@ -53,7 +52,8 @@ import { I18nService } from '../../services/i18n.service';
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .pg-bar {
       display: flex;
       align-items: center;
@@ -89,7 +89,7 @@ import { I18nService } from '../../services/i18n.service';
       /* First « and Last » are redundant on phone — hide them */
       .pg-jump { display: none; }
     }
-  `],
+  `]
 })
 export class PaginationComponent {
   private readonly i18n = inject(I18nService);
