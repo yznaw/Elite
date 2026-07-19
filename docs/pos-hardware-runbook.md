@@ -97,15 +97,27 @@ The signer limits request size, allows only QZ WebSocket/version/printer discove
 
 ## 6. Install and Configure the Printer
 
-1. Connect the Bixolon printer by the deployment-approved USB or network method.
-2. Install the vendor-supported Windows driver.
-3. Create a stable printer queue name. Avoid names that Windows may automatically rename after reconnecting USB ports.
-4. Set the correct 80 mm paper width.
-5. Disable driver transformations that convert raw ESC/POS to a graphic document when the driver offers raw/pass-through mode.
-6. Print the Windows test page only to verify transport; it does not validate ESC/POS.
-7. Record printer model, serial number, firmware, connection type, queue name, and assigned register.
+### 6.1 Physical connection
 
-The queue name must exactly match `POS_PRINTER_ALLOWLIST`, the local signer allowlist, and the value entered in Elite's Hardware dialog.
+1. Connect the Bixolon printer to the register PC via USB (or the deployment-approved network/serial interface, if not USB).
+2. Power on the printer and load an approved thermal paper roll. Set the correct paper width for the exact model in use — do not assume every "80mm-class" printer shares the same printable width or DPI; confirm from the model's own spec sheet (the SRP-QE300 specifically is 180dpi with a 72mm printable area on 80mm media, not the full 80mm — this is what the receipt renderer's canvas width is tuned for; a different model needs its own width recomputed, see the "Receipt prints unreadable symbols, or the right edge of every line is cut off" troubleshooting entry below).
+3. Windows should detect the printer and either auto-install a driver or prompt for one. If auto-detection fails, install the Bixolon-provided Windows driver package for the exact model from Bixolon's official downloads page.
+
+### 6.2 Windows printer queue
+
+1. Open **Settings → Devices → Printers & scanners** (or **Control Panel → Devices and Printers**).
+2. Create a stable printer queue name — avoid names Windows may auto-rename after a USB port change. Confirm the exact name character-for-character; write it down.
+3. Set the correct paper width in the driver's printer properties (see 6.1.2).
+4. Disable driver transformations that convert raw ESC/POS to a graphic document, if the driver offers a raw/pass-through mode — Elite's receipt body is already a rasterized image (see the print pipeline notes above), so double-transformation by the driver can corrupt output.
+5. Print the Windows test page only to verify transport (cable/driver connectivity); it does not validate ESC/POS or QZ Tray's signing path — that's confirmed separately in §13.
+6. Record printer model, serial number, firmware, connection type, queue name, and assigned register.
+
+### 6.3 Confirm QZ Tray sees it
+
+1. With QZ Tray running (§9) and its certificate trusted (§9.1), open Elite's Settings/Hardware dialog and use its "Find printers" action — the exact queue name from step 6.2.2 should appear.
+2. If it doesn't appear: restart the Windows print spooler (`services.msc` → "Print Spooler" → Restart), then restart QZ Tray fully (exit via its tray icon, then relaunch).
+
+The queue name entered in Elite's Hardware dialog must exactly match the Windows queue name from step 6.2.2. There is no separate server-side printer allowlist to keep in sync with it — printer scoping is enforced by register enrollment/authentication, not by inspecting the printer name in the signing request (see §9.1 and the "QZ shows an unsigned/untrusted warning" troubleshooting entry for why).
 
 ## 7. Connect the Cash Drawer
 
@@ -120,6 +132,8 @@ The queue name must exactly match `POS_PRINTER_ALLOWLIST`, the local signer allo
 Elite sends an ESC/POS `ESC p` pulse only for cash receipt printing. Card receipt printing must not pulse the drawer. A manual open should be treated as a controlled manager action; the current UI primarily opens the drawer through cash checkout.
 
 Never connect the drawer directly to a general computer port or improvise voltage/pin mappings.
+
+> **Note:** the drawer-kick pulse pin (`epson-pin-2` vs `epson-pin-5`) is configured per-register in Elite's Settings/Hardware screen. Confirm which pin your specific drawer cable uses before configuring — the wrong pin silently does nothing (no error is shown), so a drawer that "doesn't open" is often just the wrong pin selected, not a hardware fault.
 
 ## 8. Configure the Barcode Scanner
 
@@ -448,6 +462,27 @@ After updates to Windows, Chrome/Edge, QZ Tray, printer drivers, or firmware, re
 - Scanner test.
 - Restart recovery test.
 - Chrome Local Network Access verification.
+
+## 15.5 New Register / New Branch Setup Checklist
+
+Use this as the single top-to-bottom sequence when standing up a brand-new physical register — whether it's an additional till in the existing shop or the first register at a new branch location. Each step links back to its detailed section above.
+
+- [ ] **Confirm hardware model** matches §1 (register, printer, drawer, scanner) — do not assume a similar-looking model behaves identically; verify the exact printer model and firmware.
+- [ ] **Network/port access** per §3 — HTTPS to the Elite domain, QZ Tray's local WebSocket, `127.0.0.1:8182` for the offline signer. No inbound LAN rule needed for the signer.
+- [ ] **Windows account setup**: dedicated, non-administrator local account for POS use per the hardening plan's kiosk-hardening guidance (docs/15).
+- [ ] **Set Windows display to the screen's actual native resolution** — do not assume a higher resolution "looks fine." A POSIFLEX KS-7412 register's 12" panel is native 1024×768; running it at a higher resolution shrinks and blurs everything and produces a UI that feels too small for the touch screen. Confirm in Display Settings.
+- [ ] **Install and connect the printer** per §6 (physical connection → Windows queue → OS test page → confirm exact queue name).
+- [ ] **Connect the cash drawer** per §7, confirm the correct kick-pin.
+- [ ] **Configure the barcode scanner** per §8 (HID/keyboard-wedge, Enter-terminated).
+- [ ] **Install QZ Tray** per §9, confirm it starts with Windows and connects to its local WebSocket.
+- [ ] **Trust the signing certificate** per §9.1 (`authcert.override`) — this is required per-register; the certificate override is a local file path on each machine, it does not carry over from a previous register's setup.
+- [ ] **Provision the offline device signer** per §10 if this register needs to support genuinely offline printing (not just online-with-occasional-network-blips) — set its own `ELITE_POS_ALLOWED_ORIGINS`, cert/key paths, and confirm `/health` responds after a fresh Windows restart.
+- [ ] **Enroll the physical register** in Elite per §11: sign in as owner/admin on this register's dedicated browser profile, generate a one-time enrollment token from Settings, and complete enrollment. Each register gets its own identity — do not reuse one register's enrollment token or credential on a second machine.
+- [ ] **Configure hardware in Elite** per §12: enter the *exact* printer queue name from step 6.2.2, select the correct drawer pulse pin, set the offline signer URL if applicable.
+- [ ] **If this is a NEW BRANCH (not just a new till in the existing shop)**: stop here and confirm with the team before proceeding. True multi-location support (separate per-branch stock, location-scoped reporting) is not yet built — see [16-launch-roadmap.md](./16-launch-roadmap.md)'s Phase 11. Today, all registers across all physical locations would share one tenant-wide stock count, which is incorrect for a genuinely separate branch with its own inventory. Do not enroll a second-branch register into production until that data-model work is scoped and built, or stock levels across both locations WILL be wrong.
+- [ ] **Run the full acceptance test suite** per §13 (online cash sale, online card sale, refund receipt, printer failure safety, offline sale, restart recovery, scanner) before handing the register to staff.
+- [ ] **Confirm `pos_business_profile` is filled in** at Settings → General → Receipt & Legal Profile — this is tenant-wide, not per-register, so it only needs doing once, but confirm it's actually filled in for this tenant. A blank profile silently falls back to English-only defaults with no legal content.
+- [ ] **Complete the per-register acceptance record** per §16 and file it.
 
 ## 16. Per-Register Acceptance Record
 
