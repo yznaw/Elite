@@ -377,6 +377,12 @@ Do not release the register until every applicable test passes.
 - Check whether Windows renamed the queue after a USB port change.
 - Restart the spooler and QZ Tray after driver installation.
 
+### Printer configuration disappears (asks to re-enter the printer name again)
+
+- This is not a QZ or printer problem — it's the browser's **site data being cleared for the Elite origin**. The printer name, drawer/signer settings, register enrollment, and the offline sale queue all live in IndexedDB on that browser profile (`pos-local-store.service.ts`), scoped to that origin. Chrome/Edge's "Clear cookies" / "Clear browsing data" with **"Cookies and other site data"** checked wipes IndexedDB too, not just cookies, despite the label — this is the confirmed cause seen in production.
+- Fix at the browser level, not per-incident: on any register/kiosk machine, either (a) never run "clear cookies" against that browser profile, or (b) add the Elite admin origin as an exception in the browser's site-data settings (`chrome://settings/content/all` → find the origin → exclude it from clearing). If the machine's kiosk-lockdown policy wipes browser data automatically on every restart, that's incompatible with this app's local persistence entirely — including the offline sale queue, which is the more serious risk (a wipe mid-shift with unsynced offline sales would lose them). Confirm this isn't happening on a schedule.
+- After a wipe, re-setup is faster than before: opening the Hardware dialog on the POS with no printer configured now auto-runs QZ printer discovery and pre-fills the name if exactly one printer is found (or lists all found printers in a picker if there's more than one) — see `pos.component.ts`'s `discoverPrinters()`. You should not need to type the exact QZ printer name from memory.
+
 ### QZ shows an unsigned/untrusted warning, or an "Action Required — Allow/Block" dialog on every print
 
 - If the dialog's **Signature** field (via "View request details") shows anything other than **Valid**, stop production use until corrected — that's a genuine signing failure, not just a trust prompt. Confirm certificate and private key match, and that the API or local signer is reachable.

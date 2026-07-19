@@ -1213,6 +1213,23 @@ label input:focus {
 .parked-list strong { color: var(--pos-green); font-size: 10px; text-transform: uppercase; }
 .utility-empty { padding: 40px; color: #79817e; text-align: center; }
 
+.printer-scan-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.printer-scan-row input {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--pos-line);
+  outline: none;
+}
+.printer-scan-row button {
+  padding: 0 16px;
+  border: 1px solid var(--pos-line);
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.printer-scan-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+.printer-scan-hint { margin-top: 6px; color: #79817e; font-size: 11px; }
+
 .lookup-row { display: grid; grid-template-columns: 1fr auto; }
 .lookup-row input {
   min-width: 0;

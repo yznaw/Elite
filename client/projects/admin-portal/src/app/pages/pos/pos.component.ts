@@ -172,6 +172,8 @@ export class PosComponent implements OnInit, OnDestroy {
   hardwarePrinter = '';
   hardwareSignerUrl = 'http://127.0.0.1:8182';
   hardwareDrawerPulse: PosHardwareSettings['drawerPulse'] = 'epson-pin-2';
+  readonly discoveredPrinters = signal<string[]>([]);
+  readonly discoveringPrinters = signal(false);
   conflictResolution = '';
 
   private pendingIdempotencyKey: string | null = null;
@@ -698,6 +700,24 @@ export class PosComponent implements OnInit, OnDestroy {
     this.hardwareSignerUrl = settings?.deviceSignerUrl || 'http://127.0.0.1:8182';
     this.hardwareDrawerPulse = settings?.drawerPulse || 'epson-pin-2';
     this.dialog.set('hardware');
+    // Re-typing the exact QZ printer name from memory is the main friction
+    // point after site data gets cleared (browser "clear cookies" wipes the
+    // IndexedDB-stored setting too, not just cookies). Auto-scan whenever
+    // nothing is configured yet so re-setup is a click, not a memory test.
+    if (!this.hardwarePrinter) await this.discoverPrinters();
+  }
+
+  async discoverPrinters(): Promise<void> {
+    this.discoveringPrinters.set(true);
+    try {
+      const found = await this.hardware.printers();
+      this.discoveredPrinters.set(found);
+      if (found.length === 1 && !this.hardwarePrinter) this.hardwarePrinter = found[0];
+    } catch (error) {
+      this.toast.warning("Couldn't scan for printers", this.errorMessage(error));
+    } finally {
+      this.discoveringPrinters.set(false);
+    }
   }
 
   async saveHardware(): Promise<void> {

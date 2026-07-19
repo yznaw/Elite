@@ -469,7 +469,22 @@
         <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
         <span class="eyebrow">QZ TRAY</span>
         <h2>Receipt hardware</h2>
-        <label>Printer name<input [(ngModel)]="hardwarePrinter" placeholder="Exact QZ printer name" /></label>
+        <label>Printer name
+          <div class="printer-scan-row">
+            <input [(ngModel)]="hardwarePrinter" placeholder="Exact QZ printer name" list="discovered-printers" />
+            <button type="button" [disabled]="discoveringPrinters()" (click)="discoverPrinters()">
+              {{ discoveringPrinters() ? 'Scanning…' : 'Scan' }}
+            </button>
+          </div>
+          <datalist id="discovered-printers">
+            @for (name of discoveredPrinters(); track name) {
+              <option [value]="name"></option>
+            }
+          </datalist>
+          @if (discoveredPrinters().length > 1) {
+            <div class="printer-scan-hint">{{ discoveredPrinters().length }} printers found — pick one from the list.</div>
+          }
+        </label>
         <label>Offline device signer<input [(ngModel)]="hardwareSignerUrl" placeholder="http://127.0.0.1:8182" /></label>
         <label>Cash drawer
           <select [(ngModel)]="hardwareDrawerPulse">
