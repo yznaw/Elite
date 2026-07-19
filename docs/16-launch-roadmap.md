@@ -4,9 +4,9 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: card settlement reconciliation, Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
 
-**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`). All 19 server tests passing, client build green.
+**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`). All 20 server tests passing, client build green.
 
 ---
 
@@ -129,20 +129,27 @@
 
 ---
 
-## Phase 4 — Card settlement reconciliation
+## Phase 4 — Card settlement reconciliation ✅ Built, needs hardware/real-data verification
 
 **Why now:** depends on nothing else, but lower urgency than Phases 1-3 since the terminal-reference capture (already shipped) is the acute fix; full settlement matching is a "close the books cleanly" feature, not a transaction-integrity one.
 
 **Context:** the old POS system's own function-key menu has a "Close Batch" concept (likely end-of-day card batch settlement) and an "Audit Report" (likely a transaction/void/refund audit trail). Worth confirming with staff whether "Close Batch" on the old system actually talks to the card terminal/acquirer or is purely an internal record — that's real evidence about how card settlement already works day-to-day at this shop, and should inform this phase's design instead of guessing.
 
-### What to build
-- Settlement-import screen: manual/CSV entry of the bank's daily settlement total per register/business-day.
-- Matching job against `pos_card_reconciliation` (table already exists), flagging `exception` on mismatch beyond a small tolerance.
-- Exception-review UI requiring a manager note before marking resolved.
+**Status:** built and pushed (commit `23d46ad`). All 20 server tests pass (including a new dedicated E2E test covering matched/exception/resolve-requires-note), client builds clean.
+
+### What was built
+- New admin-only "Reconciliation" page (Settings-adjacent nav item, owner/admin/manager only — `pos-reconciliation.component.ts`), reachable at `/reconciliation`.
+- Manual entry of the bank's daily settlement total per register/business-day, matched against the POS's own card total within a QAR 1.00 tolerance (`card-reconciliation-service.js`).
+- A "Check POS total" button that recomputes the live POS-side card total for a register/day before a settlement figure is entered.
+- Exception-review flow: marking an exception `resolved` requires a manager note (enforced server-side, not just in the UI — verified by test).
+- Reconciliation history list with a status filter (pending/matched/exception/resolved).
+- **CSV bulk-import specifically was descoped** — the roadmap allowed "manual/CSV entry"; only manual single-day entry was built. If the bank consistently exports a CSV with many business-days' settlement totals at once, a bulk-import path can be added later without changing the underlying service.
+
+**Significant bug found and fixed while building this:** the production Postgres session runs with `TimeZone = Asia/Qatar` already configured (confirmed via `SHOW TIMEZONE` — not something this app sets, it's server/database-level config). This means a single `timestamptz AT TIME ZONE 'Asia/Qatar'` double-converts — the session already displays the value shifted to Qatar time, and applying `AT TIME ZONE` again shifts it a second time, landing on the wrong calendar day for anything computed near local midnight. Fixed in this phase's business-date bucketing by normalizing through UTC first: `(col AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Qatar'`, which is correct regardless of the session's own timezone setting. **This is exactly the trap Phase 5's test gate below already anticipated** — any other business-date bucketing added in Phase 5 (or anywhere else) must use this same double-conversion pattern, not a single `AT TIME ZONE`.
 
 ### Test gate
-- [ ] Unit test: a settlement total that matches POS card totals within tolerance is marked `matched` automatically.
-- [ ] Unit test: a mismatch is flagged `exception` and cannot be marked `resolved` without a note.
+- [x] Unit/integration test: a settlement total that matches POS card totals within tolerance is marked `matched` automatically. (Automated E2E test, `pos-card-reconciliation-e2e.test.js`.)
+- [x] Unit/integration test: a mismatch is flagged `exception` and cannot be marked `resolved` without a note. (Same test file — also confirms resolving twice doesn't create a duplicate row.)
 - [ ] Manual: run one real reconciliation cycle against an actual bank statement for a completed business day, confirm the numbers the system shows match what you'd calculate by hand.
 
 ---
@@ -150,6 +157,8 @@
 ## Phase 5 — Core reporting
 
 **Why now, not earlier:** this is explicitly gated on Phases 1, 3, and 4 — reports read from `inventory_movements`, `pos_cash_movements`, and `pos_card_reconciliation`, so building reports before those ledgers exist would mean reporting on incomplete/wrong data.
+
+**Important — read before starting:** Phase 4 discovered that this project's Postgres session already runs with `TimeZone = Asia/Qatar` set (not UTC). Any business-date bucketing in this phase's reports MUST normalize through UTC first — `(col AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Qatar'` — not a single `AT TIME ZONE 'Asia/Qatar'`, which double-converts and silently lands on the wrong day. See `server/lib/pos/card-reconciliation-service.js`'s `posCardTotal()` for the working pattern.
 
 ### What to build
 (As already scoped in docs/15 Phase 5 — unchanged, just confirming its real dependency here)
@@ -275,7 +284,7 @@ Phase 0.5  Receipt print fixes + reprint/remote-enrollment UI  ✅ built, needs 
 Phase 1  Inventory ledger              ─┐ ✅ built, needs hardware verification
 Phase 2  Cashier follow-ups             │  can run in parallel with 1
 Phase 3  Cash movements + Z-history     │  ✅ built, needs hardware verification
-Phase 4  Card settlement reconciliation ┘  (independent of 1, but grouped for one hardware-test session)
+Phase 4  Card settlement reconciliation ┘  ✅ built, needs real-data verification (independent of 1, but grouped for one hardware-test session)
 Phase 5  Core reporting                    ← depends on 1, 3, 4
 Phase 6  Angular upgrade                   ← independent, do anytime before 10
 Phase 7  PWA/offline hardening              ← independent, do anytime before 10
