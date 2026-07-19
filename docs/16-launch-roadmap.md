@@ -4,9 +4,9 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: Angular security upgrade, legal receipt sign-off, backups/DR, multi-branch data model.
 
-**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`). All 20 server tests passing, client build green.
+**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`), Manager-PIN-access + hardcoded-invite-link fixes (commit `6dba5c6`), Phase 7 PWA installability (commit `856a74b`) + offline resilience (commit `635dac1`). All 20 server tests passing, client build green.
 
 ---
 
@@ -192,16 +192,20 @@
 
 ---
 
-## Phase 7 — PWA / offline resilience hardening
+## Phase 7 — PWA / offline resilience hardening ✅ Built, needs hardware/kiosk verification
 
 **Why here:** this was Phase 2 in the original audit and hasn't been touched this session at all. It's real, separate work — installable manifest, generated service-worker precache, persistent storage request, connectivity-recovery polling, offline queue journal.
 
-### What to build
-(As scoped in the original audit's Phase 2 / docs/15's Phase 2 section)
-- Web app manifest + narrowed service-worker scope.
-- `navigator.storage.persist()` + quota monitoring + private-mode detection.
-- Periodic health-check polling independent of the browser's `online` event.
-- Append-only IndexedDB queue journal with an audit-window retention policy.
+**Status:** built and pushed across two commits — installability (`856a74b`): web app manifest + app-wide service-worker registration; offline resilience (`635dac1`): health-check polling, IndexedDB v4 journal, persistent storage. All 20 server tests pass, client builds clean.
+
+### What was built
+- `manifest.webmanifest` (name, 192/512 icons, `start_url: /dashboard`, `display: standalone`) linked from `index.html`. Note this deviates from docs/15's original narrower spec (`pos.webmanifest` scoped to `/pos` only) — the user's actual ask was "make the browser's install prompt appear" for the admin portal generally, not POS-specifically, so the manifest covers the whole app. If a separate POS-only installable experience is wanted later, this can be split.
+- Service-worker registration moved from `pos.component.ts`'s `ngOnInit` to `main.ts`, so it registers on first load of ANY page, not only after a user happens to visit `/pos` first (a manifest alone isn't enough for the install prompt — a fetch-handling SW must also be active).
+- **Fixed a regression this uncovered:** `pos-sw.js`'s navigate handler used to fall back to the cached `/pos` shell for any failed navigation. Harmless while POS-scoped; would have silently served the wrong page for an offline `/dashboard` or `/catalog` visit now that the worker is app-wide. Scoped the fallback to `/pos` paths only.
+- `GET /pos/health-check` (authenticated), polled with 15-30s jitter whenever offline or after a failed sale/sync — independent of the browser's `online`/`offline` events, which only reflect the network interface, not real API reachability. Fixes the exact gap docs/15 flagged (`pos.component.ts`'s sale-failure path only used to wait for a browser event or the next manual sync).
+- IndexedDB bumped 3→4 (additive only): new `pos-queue-journal` store logging `created`/`printed`/`sync_attempted`/`accepted`/`rejected` lifecycle events per offline sale, for a future support-bundle export. `pending-sales` rows are kept for a 7-day local audit window after syncing (`status: 'synced'`) instead of being deleted immediately; a cleanup sweep purges only synced rows past the window.
+- `navigator.storage.persist()` requested on POS init; a `false` result **warns** rather than hard-blocking shift-open (docs/15 specified a hard block, but `persist()`/quota heuristics are known to be unreliable across browsers — a false-positive block on a legitimate register would be worse than the offline-data-loss risk it guards against). Quota estimate polled every 5 minutes while the POS is open.
+- Status strip in the POS UI: pending count with oldest-pending age (2min/10min severity thresholds), last-sync time, and a distinct "server unreachable" indicator.
 
 ### Test gate
 - [ ] Lighthouse PWA installability check passes; app actually installs on the target Windows/Chrome kiosk setup.
@@ -209,6 +213,8 @@
 - [ ] Simulated "API down, LAN up" scenario recovers without any browser `online` event firing.
 - [ ] A sale made fully offline, then synced once connectivity returns, produces exactly one server-side transaction (no duplicate).
 - [ ] Manual: unplug the register's network cable mid-shift, ring up 2 real sales, plug the cable back in, confirm both sync correctly and the receipt-number sequence has no gaps or collisions.
+- [ ] Manual: confirm the install/download prompt actually appears in the browser's address bar or menu on the production admin portal URL.
+- [ ] Manual: verify an offline navigation to `/dashboard` (not `/pos`) shows a normal browser offline error, not the POS shell — this is the regression the `pos-sw.js` fix targets.
 
 ---
 
@@ -287,7 +293,7 @@ Phase 3  Cash movements + Z-history     │  ✅ built, needs hardware verificat
 Phase 4  Card settlement reconciliation ┘  ✅ built, needs real-data verification (independent of 1, but grouped for one hardware-test session)
 Phase 5  Core reporting                    ← depends on 1, 3, 4
 Phase 6  Angular upgrade                   ← independent, do anytime before 10
-Phase 7  PWA/offline hardening              ← independent, do anytime before 10
+Phase 7  PWA/offline hardening              ✅ built, needs hardware/kiosk verification
 Phase 8  Legal sign-off                    ← depends on business-profile being final
 Phase 9  Backup/DR                          ← independent, do anytime before 10
 Phase 10 Pilot & cutover                   ← gated on ALL of 1–9
