@@ -188,19 +188,29 @@ export class PosHardwareService {
     if (this.securityConfigured) return;
     logStage('configureSecurity — installing QZ signature handlers');
     qz.security.setSignatureAlgorithm('SHA512');
-    // QZ Tray's internal callCert/callSign helpers branch on
-    // `handler.constructor.name === "AsyncFunction"` to decide whether to
-    // call the handler directly or wrap it in `new Promise(handler)`. An
-    // arrow function like `() => this.fetchCertificate()` is a plain
-    // `Function` even though it returns a promise, so QZ takes the wrong
-    // branch and passes an already-settled Promise as if it were a Promise
-    // *executor* — `new Promise(aPromiseInstance)` throws "TypeError: ...
-    // is not a function" since a Promise instance isn't callable. Binding
-    // the real `async` class methods directly (instead of wrapping them in
-    // arrow functions) preserves their `AsyncFunction` constructor so QZ
-    // detects and calls them correctly.
-    qz.security.setCertificatePromise(this.fetchCertificate.bind(this), { rejectOnFailure: true });
-    qz.security.setSignaturePromise(this.fetchSignature.bind(this));
+    // QZ Tray's internal callCert/callSign helpers detect a genuine native
+    // `async function` via `handler.constructor.name === "AsyncFunction"`
+    // and call it directly; otherwise they fall back to a build-independent
+    // shape. Angular's production build (esbuild) transpiles our `async`
+    // class methods into a plain function wrapping a generator-runtime
+    // helper — `fetchSignature(t){return C(this,null,function*(){...})}` —
+    // so at runtime its constructor is just `Function`, never
+    // `AsyncFunction`, no matter how it's declared in source or bound.
+    // Relying on that constructor check is fragile against the build tool,
+    // so both handlers use the documented fallback shapes instead, which
+    // don't depend on how our async methods get compiled:
+    //  - certHandler (qz-tray.js callCert): must itself BE the executor
+    //    `(resolve, reject) => {...}` — QZ passes it straight into
+    //    `new Promise(certHandler)`, it does not call it first.
+    //  - signatureFactory (qz-tray.js callSign): must be a sync function
+    //    that, given the string to sign, RETURNS an executor — QZ calls
+    //    `signatureFactory(toSign)` and passes the result into `new Promise(...)`.
+    qz.security.setCertificatePromise((resolve: (v: string) => void, reject: (e: unknown) => void) => {
+      this.fetchCertificate().then(resolve, reject);
+    }, { rejectOnFailure: true });
+    qz.security.setSignaturePromise((request: string) => (resolve: (v: string) => void, reject: (e: unknown) => void) => {
+      this.fetchSignature(request).then(resolve, reject);
+    });
     this.securityConfigured = true;
   }
 

@@ -1,11 +1,20 @@
 declare module 'qz-tray' {
   interface QzConfig {}
 
+  type QzResolverExecutor = (resolve: (value: string) => void, reject: (error: unknown) => void) => void;
+
   interface QzApi {
     security: {
-      setCertificatePromise(handler: () => Promise<string>, options?: { rejectOnFailure?: boolean }): void;
+      // QZ Tray's callCert/callSign accept either a genuine `async function`
+      // (detected via `handler.constructor.name === "AsyncFunction"`, which
+      // esbuild's downlevel output for our async class methods does NOT
+      // preserve — see pos-hardware.service.ts's configureSecurity) or a
+      // build-independent Promise-executor shape, which is what this project
+      // uses. certHandler must itself be the executor; signatureFactory must
+      // be a sync function that returns one, given the string to sign.
+      setCertificatePromise(handler: QzResolverExecutor, options?: { rejectOnFailure?: boolean }): void;
       setSignatureAlgorithm(algorithm: 'SHA512'): void;
-      setSignaturePromise(handler: (request: string) => Promise<string>): void;
+      setSignaturePromise(handler: (request: string) => QzResolverExecutor): void;
     };
     websocket: {
       isActive(): boolean;
