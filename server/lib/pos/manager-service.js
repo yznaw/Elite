@@ -41,6 +41,11 @@ async function verifyManagerPin(context, body) {
 
   const outcome = await inTransaction(async (client) => {
     const register = await requireRegister(client, context);
+    const tenantResult = await client.query(
+      'SELECT pos_emergency_self_approval_enabled FROM tenants WHERE id = $1',
+      [context.tenantId],
+    );
+    const emergencySelfApprovalEnabled = Boolean(tenantResult.rows[0]?.pos_emergency_self_approval_enabled);
     const failuresResult = await client.query(
       `SELECT * FROM pos_pin_failures
        WHERE tenant_id = $1 AND register_id = $2 AND cashier_id = $3
@@ -62,6 +67,14 @@ async function verifyManagerPin(context, body) {
     );
     let managerId = null;
     for (const manager of managers.rows) {
+      // A manager-role cashier could otherwise approve their own void/refund/
+      // etc. by entering their own PIN — the cashier role is structurally
+      // excluded from this lookup already (see the role IN (...) filter
+      // above), but an owner/admin/manager acting as the till operator is
+      // not, so self-approval must be rejected explicitly here (docs/15
+      // Phase 3, P0-7) unless the tenant has opted into the audited
+      // emergency exception.
+      if (manager.id === context.userId && !emergencySelfApprovalEnabled) continue;
       if (await bcrypt.compare(pin, manager.pos_pin_hash)) {
         managerId = manager.id;
         break;
@@ -113,7 +126,12 @@ async function verifyManagerPin(context, body) {
       ],
     );
     const override = overrideResult.rows[0];
-    await audit(client, context, 'pos.manager-pin.approved', 'pos_manager_override', override.id, { action, managerId });
+    const isSelfApproval = managerId === context.userId;
+    await audit(client, context, 'pos.manager-pin.approved', 'pos_manager_override', override.id, {
+      action,
+      managerId,
+      ...(isSelfApproval ? { selfApproval: true, emergencySelfApprovalEnabled: true } : {}),
+    });
     return {
       value: { overrideId: override.id, token: rawToken, managerId, action, expiresAt: override.expires_at },
     };

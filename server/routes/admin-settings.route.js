@@ -79,6 +79,8 @@ router.get('/team', asyncHandler(async (_req, res) => {
 
 router.post('/team', asyncHandler(async (req, res) => {
   if (!req.body.email || !req.body.name) return validationError(res, ['Team member name and email are required.']);
+  const role = normalizeRole(req.body.role);
+  if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -90,7 +92,7 @@ router.post('/team', asyncHandler(async (req, res) => {
         SET full_name = EXCLUDED.full_name, initials = EXCLUDED.initials, role = EXCLUDED.role
         RETURNING id, full_name AS name, email, role, initials, created_at AS joined, status
       `,
-      [tenant.id, req.body.email, req.body.name, req.body.initials || initials(req.body.name), normalizeRole(req.body.role)],
+      [tenant.id, req.body.email, req.body.name, req.body.initials || initials(req.body.name), role],
     );
     created(res, result.rows[0], 'Team member saved.');
   } finally {
@@ -99,6 +101,11 @@ router.post('/team', asyncHandler(async (req, res) => {
 }));
 
 router.patch('/team/:id', asyncHandler(async (req, res) => {
+  let role = null;
+  if (req.body.role) {
+    role = normalizeRole(req.body.role);
+    if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+  }
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -112,7 +119,7 @@ router.patch('/team/:id', asyncHandler(async (req, res) => {
         WHERE tenant_id = $1 AND id = $2
         RETURNING id, full_name AS name, email, role, initials, created_at AS joined, status
       `,
-      [tenant.id, req.params.id, req.body.name, req.body.email, req.body.role ? normalizeRole(req.body.role) : null, req.body.status],
+      [tenant.id, req.params.id, req.body.name, req.body.email, role, req.body.status],
     );
     if (result.rowCount === 0) return notFound(res, 'Team member not found.');
     ok(res, result.rows[0], 'Team member updated.');
@@ -175,8 +182,10 @@ router.get('/invitations', asyncHandler(async (req, res) => {
 }));
 
 router.post('/invitations', asyncHandler(async (req, res) => {
-  const { email, role } = req.body;
+  const { email, role: rawRole } = req.body;
   if (!email) return validationError(res, ['Email is required.']);
+  const role = normalizeRole(rawRole);
+  if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -191,7 +200,7 @@ router.post('/invitations', asyncHandler(async (req, res) => {
            invited_by = EXCLUDED.invited_by,
            expires_at = NOW() + INTERVAL '48 hours',
            created_at = NOW()`,
-      [tenant.id, email.toLowerCase().trim(), normalizeRole(role), tokenHash, invitedBy],
+      [tenant.id, email.toLowerCase().trim(), role, tokenHash, invitedBy],
     );
     const inviteLink = `${process.env.ADMIN_ORIGIN || 'http://localhost:4300'}/accept-invite?token=${token}`;
     created(res, { email, inviteLink }, 'Invitation sent.');
@@ -220,8 +229,13 @@ function initials(name) {
   return String(name || 'User').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || 'U';
 }
 
+// Owner is not assignable through invite/team-edit — it is set only at
+// tenant creation. Cashier is POS-only (server/routes/pos.route.js).
+const ASSIGNABLE_ROLES = ['admin', 'manager', 'cashier', 'viewer'];
+
 function normalizeRole(role) {
-  return String(role || 'viewer').toLowerCase();
+  const value = String(role || 'viewer').toLowerCase();
+  return ASSIGNABLE_ROLES.includes(value) ? value : null;
 }
 
 module.exports = router;

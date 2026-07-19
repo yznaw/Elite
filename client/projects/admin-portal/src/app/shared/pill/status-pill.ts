@@ -34,3 +34,15 @@ export function fulfillmentPillKind(s: string): PillInfo {
     default:           return { kind: 'grey',  labelKey: 'pill.' + s,       label: s };
   }
 }
+
+/** Role badges: highest-privilege roles read as the "strongest" colors, cashier as a distinct till-only tier. */
+export function rolePillKind(role: string): PillInfo {
+  switch (String(role || '').toLowerCase()) {
+    case 'owner':   return { kind: 'gold',  labelKey: 'settings.role.owner',   label: 'Owner' };
+    case 'admin':   return { kind: 'green', labelKey: 'settings.role.admin',   label: 'Admin' };
+    case 'manager': return { kind: 'blue',  labelKey: 'settings.role.manager', label: 'Manager' };
+    case 'cashier': return { kind: 'amber', labelKey: 'settings.role.cashier', label: 'Cashier' };
+    case 'viewer':  return { kind: 'grey',  labelKey: 'settings.role.viewer',  label: 'Viewer' };
+    default:        return { kind: 'grey',  labelKey: 'settings.role.' + role, label: role };
+  }
+}

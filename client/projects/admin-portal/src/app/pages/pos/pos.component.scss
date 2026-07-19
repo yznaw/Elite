@@ -38,7 +38,6 @@ button {
 }
 
 .pos-shell.is-selling .pos-header,
-.pos-shell.is-selling .error-strip,
 .selling-main {
   grid-column: 1;
 }
@@ -172,27 +171,6 @@ button {
   color: rgba(255, 255, 255, 0.78);
 }
 
-.error-strip {
-  min-height: 42px;
-  padding: 9px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  background: #fde0d5;
-  color: #8f2f13;
-  border-bottom: 1px solid #f4bda9;
-  font-size: 12px;
-}
-
-.error-strip button {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .center-stage,
 .setup-stage,
 .shift-stage {
@@ -276,24 +254,6 @@ button {
   font-size: 14px;
 }
 
-.trust-list {
-  margin-top: 34px;
-  display: grid;
-  border-top: 1px solid var(--pos-line);
-}
-
-.trust-list span {
-  padding: 13px 0;
-  border-bottom: 1px solid var(--pos-line);
-  font-size: 12px;
-}
-
-.trust-list b {
-  margin-right: 18px;
-  color: var(--pos-orange);
-  font-size: 10px;
-}
-
 .setup-card,
 .shift-card,
 .shift-note,
@@ -349,22 +309,61 @@ label input:focus {
   box-shadow: 0 0 0 3px rgba(6, 75, 61, 0.08);
 }
 
-.divider {
-  margin: 24px 0;
+.enroll-tabs {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #8c938f;
-  font-size: 10px;
-  text-transform: uppercase;
+  margin-bottom: 24px;
+  border: 1px solid var(--pos-line);
+  border-radius: 3px;
+  overflow: hidden;
 }
 
-.divider::before,
-.divider::after {
-  content: '';
-  height: 1px;
+.enroll-tabs button {
   flex: 1;
-  background: var(--pos-line);
+  padding: 11px 10px;
+  border: 0;
+  background: #fff;
+  color: #69736f;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.enroll-tabs button + button {
+  border-left: 1px solid var(--pos-line);
+}
+
+.enroll-tabs button.active {
+  background: var(--pos-green);
+  color: #fff;
+}
+
+.enroll-hint {
+  display: block;
+  margin-top: -2px;
+  color: #858c89;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.enroll-success {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.enroll-success h2 {
+  font-family: Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.enroll-success p {
+  color: #69736f;
+  font-size: 13px;
 }
 
 .primary-action,

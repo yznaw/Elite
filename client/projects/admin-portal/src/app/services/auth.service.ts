@@ -3,7 +3,7 @@ import { firstValueFrom, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { ApiClient } from './api-client.service';
 
-export type UserRole = 'owner' | 'admin' | 'manager' | 'viewer';
+export type UserRole = 'owner' | 'admin' | 'manager' | 'cashier' | 'viewer';
 
 export interface AuthUser {
   id: string;

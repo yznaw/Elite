@@ -21,6 +21,7 @@ import {
 } from '../../services/pos.service';
 import { PosHardwareService } from '../../services/pos-hardware.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
+import { ToastService } from '../../services/toast.service';
 
 type PosPhase = 'loading' | 'enrollment' | 'shift' | 'selling';
 type PaymentMethod = 'cash' | 'card';
@@ -56,11 +57,13 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly hardware = inject(PosHardwareService);
   readonly auth = inject(AuthService);
   private readonly refApi = inject(AdminRefService);
+  private readonly toast = inject(ToastService);
 
   readonly phase = signal<PosPhase>('loading');
   readonly busy = signal(false);
   readonly online = signal(navigator.onLine);
-  readonly error = signal('');
+  readonly enrollMode = signal<'token' | 'create'>('token');
+  readonly justEnrolled = signal(false);
   readonly register = signal<PosCurrentRegister | null>(null);
   readonly shiftId = signal<string | null>(null);
   readonly products = signal<PosCatalogItem[]>([]);
@@ -158,6 +161,7 @@ export class PosComponent implements OnInit, OnDestroy {
   variantColorQuery = '';
   barcode = '';
   tendered = '';
+  terminalReference = '';
   parkLabel = '';
   transactionLookup = '';
   correctionReason = '';
@@ -201,7 +205,6 @@ export class PosComponent implements OnInit, OnDestroy {
 
   async initialize(): Promise<void> {
     this.busy.set(true);
-    this.error.set('');
     try {
       let current: PosCurrentRegister;
       try {
@@ -250,20 +253,25 @@ export class PosComponent implements OnInit, OnDestroy {
         this.phase.set('shift');
       }
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.warning('Could not resume this register', this.errorMessage(error));
       this.phase.set('enrollment');
     } finally {
       this.busy.set(false);
     }
   }
 
+  setEnrollMode(mode: 'token' | 'create'): void {
+    this.enrollMode.set(mode);
+    this.enrollmentToken = '';
+    this.terminalName = '';
+  }
+
   async enrollTerminal(): Promise<void> {
     if (!this.enrollmentToken.trim() && !this.terminalName.trim()) {
-      this.error.set('Enter an enrollment token or a name for this terminal.');
+      this.toast.warning('Enter an enrollment token or a name for this terminal.');
       return;
     }
     this.busy.set(true);
-    this.error.set('');
     try {
       let token = this.enrollmentToken.trim();
       if (!token) {
@@ -274,29 +282,53 @@ export class PosComponent implements OnInit, OnDestroy {
       await this.local.setRegister(identity);
       this.register.set(await this.pos.currentRegister());
       await this.ensureReceiptBlock();
+      this.toast.success('Register connected', identity.displayName);
+      this.justEnrolled.set(true);
+      await new Promise((resolve) => setTimeout(resolve, 900));
       this.phase.set('shift');
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.warning(...this.enrollmentErrorMessage(error));
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  private enrollmentErrorMessage(error: unknown): [string, string] {
+    if (this.isNetworkError(error)) {
+      return ["You're offline", 'Connect to the internet to enroll this register for the first time.'];
+    }
+    const code = this.errorCode(error);
+    const status = typeof error === 'object' && error !== null ? (error as { status?: number }).status : undefined;
+    if (status === 429) {
+      return ['Too many attempts', 'Wait a few minutes before trying again.'];
+    }
+    switch (code) {
+      case 'ENROLLMENT_TOKEN_EXPIRED':
+        return ['Token expired', 'Tokens are valid for 15 minutes. Ask your manager for a new one.'];
+      case 'ENROLLMENT_TOKEN_USED':
+        return ['Token already used', 'This token already connected a register. Ask your manager for a new one.'];
+      case 'ENROLLMENT_TOKEN_INVALID':
+        return ['Invalid token', 'Check for typos, or ask your manager to generate a new one.'];
+      default:
+        return ["Couldn't connect this register", this.errorMessage(error)];
     }
   }
 
   async openShift(): Promise<void> {
     const openingFloatCents = this.moneyInputToCents(this.openingFloat);
     if (openingFloatCents === null) {
-      this.error.set('Opening cash must be a valid non-negative amount.');
+      this.toast.warning('Opening cash must be a valid non-negative amount.');
       return;
     }
     this.busy.set(true);
-    this.error.set('');
     try {
       const shift = await this.pos.openShift(openingFloatCents);
       this.shiftId.set(shift.shiftId);
       await this.local.setShift(shift);
+      this.toast.success('Shift opened', `Opening float ${this.formatMoney(openingFloatCents)}`);
       await this.enterSelling();
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't open shift", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -310,7 +342,6 @@ export class PosComponent implements OnInit, OnDestroy {
   async scanBarcode(): Promise<void> {
     const value = this.barcode.trim();
     if (!value) return;
-    this.error.set('');
     try {
       const product = this.online()
         ? await this.pos.findBarcode(value)
@@ -319,7 +350,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.addToCart(product);
       this.barcode = '';
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.warning('Barcode not found', this.errorMessage(error));
     }
   }
 
@@ -327,7 +358,7 @@ export class PosComponent implements OnInit, OnDestroy {
     if (item.stock <= 0) return;
     const existing = this.cart().find((line) => line.item.variantId === item.variantId);
     if (existing && existing.quantity >= item.stock) {
-      this.error.set(`Only ${item.stock} units of ${item.name} are available.`);
+      this.toast.warning(`Only ${item.stock} units of ${item.name} are available.`);
       return;
     }
     this.cart.update((lines) => existing
@@ -355,12 +386,14 @@ export class PosComponent implements OnInit, OnDestroy {
     if (!this.cart().length) return;
     this.paymentMethod.set('cash');
     this.tendered = (this.totalCents() / 100).toFixed(2);
+    this.terminalReference = '';
     this.paymentOpen.set(true);
   }
 
   selectPayment(method: PaymentMethod): void {
     this.paymentMethod.set(method);
     if (method === 'cash') this.tendered = (this.totalCents() / 100).toFixed(2);
+    else this.terminalReference = '';
   }
 
   async completeSale(): Promise<void> {
@@ -370,14 +403,18 @@ export class PosComponent implements OnInit, OnDestroy {
     const method = this.paymentMethod();
     const tenderedCents = method === 'cash' ? this.moneyInputToCents(this.tendered) : 0;
     if (method === 'cash' && (tenderedCents === null || tenderedCents < this.totalCents())) {
-      this.error.set('Tendered cash is less than the total.');
+      this.toast.warning('Tendered cash is less than the total.');
+      return;
+    }
+    const terminalReference = this.terminalReference.trim();
+    if (method === 'card' && !terminalReference) {
+      this.toast.warning('Enter the terminal reference or approval code before completing a card sale.');
       return;
     }
     const amountTenderedCents = tenderedCents ?? 0;
 
     let completedSale: { receiptData: unknown; openDrawer: boolean } | null = null;
     this.busy.set(true);
-    this.error.set('');
     try {
       await this.ensureReceiptBlock();
       const receiptBlock = this.receiptBlock();
@@ -404,6 +441,7 @@ export class PosComponent implements OnInit, OnDestroy {
           cardAmountCents: method === 'card' ? totalCents : 0,
           amountTenderedCents,
           changeGivenCents: method === 'cash' ? amountTenderedCents - totalCents : 0,
+          terminalReference: method === 'card' ? terminalReference : undefined,
         },
         clientCreatedAt,
       };
@@ -433,7 +471,7 @@ export class PosComponent implements OnInit, OnDestroy {
       // finally releases busy; QZ calls are themselves timeout-guarded.
       completedSale = { receiptData: result.receipt.receiptData, openDrawer: method === 'cash' };
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't complete sale", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -442,7 +480,7 @@ export class PosComponent implements OnInit, OnDestroy {
       try {
         await this.hardware.printReceipt(completedSale.receiptData, completedSale.openDrawer);
       } catch (printError) {
-        this.error.set(`Sale saved. Receipt was not printed: ${this.errorMessage(printError)}`);
+        this.toast.warning('Sale saved, receipt not printed', this.errorMessage(printError));
       }
     }
   }
@@ -457,7 +495,7 @@ export class PosComponent implements OnInit, OnDestroy {
     try {
       await this.hardware.printReceipt(sale.receipt.receiptData, false);
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.warning("Couldn't reprint receipt", this.errorMessage(error));
     }
   }
 
@@ -491,11 +529,13 @@ export class PosComponent implements OnInit, OnDestroy {
       await this.reportSyncState();
       await this.loadProducts(this.searchQuery);
       if (response.acceptedWithConflicts.length) {
-        this.error.set(`${response.acceptedWithConflicts.length} offline sale conflict(s) need manager reconciliation.`);
+        this.toast.warning(
+          `${response.acceptedWithConflicts.length} offline sale conflict(s) need manager reconciliation.`,
+        );
       }
     } catch (error) {
       this.scheduleSyncRetry();
-      this.error.set(`Offline sync paused: ${this.errorMessage(error)}`);
+      this.toast.warning('Offline sync paused', this.errorMessage(error));
     } finally {
       this.syncing.set(false);
     }
@@ -516,9 +556,10 @@ export class PosComponent implements OnInit, OnDestroy {
       this.cart.set([]);
       this.parkLabel = '';
       this.dialog.set('none');
+      this.toast.success('Sale parked');
       await this.loadParkedCarts();
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't park sale", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -537,7 +578,7 @@ export class PosComponent implements OnInit, OnDestroy {
       }
       this.parkedCarts.set(await this.pos.listParkedCarts());
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.warning("Couldn't refresh parked sales", this.errorMessage(error));
     }
   }
 
@@ -559,7 +600,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.refundQuantities = Object.fromEntries((transaction.items || []).map((item) => [item.id, 0]));
       this.refundRestock = Object.fromEntries((transaction.items || []).map((item) => [item.id, true]));
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.warning('Transaction not found', this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -581,8 +622,9 @@ export class PosComponent implements OnInit, OnDestroy {
       this.operationTransaction.set(await this.pos.findTransaction(transaction.transactionId));
       this.managerPin = '';
       this.correctionReason = '';
+      this.toast.success('Sale voided');
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't void sale", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -623,8 +665,9 @@ export class PosComponent implements OnInit, OnDestroy {
       this.operationTransaction.set(await this.pos.findTransaction(transaction.transactionId));
       this.managerPin = '';
       this.correctionReason = '';
+      this.toast.success('Refund completed');
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't complete refund", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -647,8 +690,9 @@ export class PosComponent implements OnInit, OnDestroy {
         drawerPulse: this.hardwareDrawerPulse,
       });
       this.dialog.set('none');
+      this.toast.success('Hardware settings saved');
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't save hardware settings", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -663,7 +707,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.syncConflicts.set(conflicts);
       this.physicalCash = (summary.expectedCashCents / 100).toFixed(2);
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.warning("Couldn't load shift report", this.errorMessage(error));
     }
   }
 
@@ -673,7 +717,7 @@ export class PosComponent implements OnInit, OnDestroy {
     if (!summary || physicalCashCents === null || !this.managerPin) return;
     await this.refreshQueueState();
     if (this.pendingSales() || this.rejectedSales()) {
-      this.error.set('Resolve all pending and rejected offline sales before closing the shift.');
+      this.toast.warning('Resolve all pending and rejected offline sales before closing the shift.');
       return;
     }
     this.busy.set(true);
@@ -688,9 +732,10 @@ export class PosComponent implements OnInit, OnDestroy {
         managerOverrideToken: override.token,
       });
       this.dialog.set('none');
+      this.toast.success('Shift closed', 'Z report generated.');
       await this.router.navigate(['/dashboard']);
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't close shift", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -705,8 +750,9 @@ export class PosComponent implements OnInit, OnDestroy {
       this.syncConflicts.set(await this.pos.listConflicts());
       this.managerPin = '';
       this.conflictResolution = '';
+      this.toast.success('Conflict resolved');
     } catch (error) {
-      this.error.set(this.errorMessage(error));
+      this.toast.error("Couldn't resolve conflict", this.errorMessage(error));
     } finally {
       this.busy.set(false);
     }
@@ -935,7 +981,7 @@ export class PosComponent implements OnInit, OnDestroy {
         this.products.set(cached.products);
         this.catalogCachedAt.set(cached.cachedAt);
       } else if (sequence === this.searchSequence) {
-        this.error.set(this.errorMessage(error));
+        this.toast.warning("Couldn't load products", this.errorMessage(error));
       }
     }
   }
@@ -1001,7 +1047,7 @@ export class PosComponent implements OnInit, OnDestroy {
     idempotencyKey: string;
     receiptNumber: number;
     clientCreatedAt: string;
-    payment: { method: PaymentMethod; amountTenderedCents: number; changeGivenCents: number };
+    payment: { method: PaymentMethod; amountTenderedCents: number; changeGivenCents: number; terminalReference?: string };
   }, receiptNumber: number): unknown {
     const register = this.register();
     return {
@@ -1013,6 +1059,7 @@ export class PosComponent implements OnInit, OnDestroy {
       registerId: register?.registerId || '',
       registerName: register?.displayName || '',
       paymentMethod: payload.payment.method,
+      terminalReference: payload.payment.terminalReference,
       items: this.cart().map((line) => ({
         name: line.item.name,
         variant: line.item.variant,
@@ -1111,5 +1158,11 @@ export class PosComponent implements OnInit, OnDestroy {
       return candidate.error?.message || candidate.message || 'The POS request could not be completed.';
     }
     return 'The POS request could not be completed.';
+  }
+
+  private errorCode(error: unknown): string | null {
+    if (typeof error !== 'object' || error === null) return null;
+    const candidate = error as { error?: { code?: string } };
+    return candidate.error?.code || null;
   }
 }

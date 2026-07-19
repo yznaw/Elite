@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const morgan = require('morgan');
 const session = require('express-session');
 const PgSimple = require('connect-pg-simple')(session);
@@ -17,6 +18,10 @@ const { ensurePosSchema } = require('./db/pos-schema');
 const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
+const { assertProductionEnv, DEV_SESSION_SECRET } = require('./config/assert-env');
+const { csrfProtection } = require('./middleware/csrf');
+
+assertProductionEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,7 +49,9 @@ function originFromUrl(value) {
 }
 
 const configuredOrigins = csv(process.env.CORS_ORIGINS);
-const defaultAllowedOrigins = ['http://localhost:4200', 'http://localhost:4300'];
+// Dev-only convenience defaults — never trusted in production, where
+// CORS_ORIGINS must be set explicitly (enforced by assertProductionEnv above).
+const defaultAllowedOrigins = isProd ? [] : ['http://localhost:4200', 'http://localhost:4300'];
 const sadadAllowedOrigins = new Set([
   'https://sadadqa.com',
   'https://www.sadadqa.com',
@@ -74,6 +81,29 @@ if (isProd) app.set('trust proxy', 1);
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
 app.use(
+  helmet({
+    // Report-only for the first rollout window (docs/15 Phase 1) — flips to
+    // enforcing via CSP_REPORT_ONLY=false once violation reports are clean.
+    contentSecurityPolicy: {
+      reportOnly: process.env.CSP_REPORT_ONLY !== 'false',
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'self'"],
+      },
+    },
+    // The admin portal loads uploaded images/media cross-origin in dev.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+);
+
+app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. curl, Postman)
@@ -99,7 +129,7 @@ app.use(morgan('dev'));
 app.use(
   session({
     name: process.env.SESSION_COOKIE_NAME || 'elite.sid',
-    secret: process.env.SESSION_SECRET || 'dev-session-secret-change-me-in-production',
+    secret: process.env.SESSION_SECRET || DEV_SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     rolling: true,
@@ -116,6 +146,12 @@ app.use(
     },
   }),
 );
+
+// ─── CSRF (Origin/Sec-Fetch-Site + double-submit cookie) ─────────────────────
+// Behind a flag for the initial rollout per docs/15 Phase 1; defaults on.
+if (process.env.CSRF_ENFORCE !== 'false') {
+  app.use(csrfProtection({ allowedOriginCheck: isAllowedOrigin }));
+}
 
 // ─── Static uploads ──────────────────────────────────────────────────────────
 // Served at both /uploads/ (legacy, direct host access) AND /api/uploads/
@@ -161,6 +197,7 @@ app.use((err, req, res, _next) => {
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
+    ...(err.code ? { code: err.code } : {}),
   });
 });
 

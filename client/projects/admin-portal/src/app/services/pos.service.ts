@@ -143,6 +143,20 @@ export interface PosSaleInput {
   clientCreatedAt: string;
 }
 
+export interface PosBusinessProfile {
+  tradeNameAr: string;
+  tradeNameEn: string;
+  addressAr: string;
+  addressEn: string;
+  phone: string;
+  crLicenseNumber: string | null;
+  returnPolicyAr: string | null;
+  returnPolicyEn: string | null;
+  footerStampAr: string | null;
+  footerStampEn: string | null;
+  updatedAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PosService {
   private readonly api = inject(ApiClient);
@@ -181,6 +195,14 @@ export class PosService {
 
   allocateReceiptBlock(): Promise<PosReceiptBlock> {
     return firstValueFrom(this.api.post<PosReceiptBlock>('/pos/registers/receipt-number-blocks', {}));
+  }
+
+  businessProfile(): Promise<PosBusinessProfile | null> {
+    return firstValueFrom(this.api.get<PosBusinessProfile | null>('/pos/business-profile'));
+  }
+
+  updateBusinessProfile(profile: Omit<PosBusinessProfile, 'updatedAt'>): Promise<PosBusinessProfile> {
+    return firstValueFrom(this.api.put<PosBusinessProfile>('/pos/business-profile', profile));
   }
 
   openShift(openingFloatCents: number): Promise<PosShift> {

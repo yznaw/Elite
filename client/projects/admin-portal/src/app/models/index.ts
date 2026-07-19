@@ -140,11 +140,13 @@ export interface Trigger {
   label?: string;
 }
 
+export type TeamMemberRole = 'Owner' | 'Admin' | 'Manager' | 'Cashier' | 'Viewer';
+
 export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'Admin' | 'Manager' | 'Viewer';
+  role: TeamMemberRole;
   joined: string;
   initials: string;
 }

@@ -13,8 +13,10 @@ import { I18nService } from '../../services/i18n.service';
 import { AdminSettingsService, Invitation } from '../../services/admin-settings.service';
 import { AuthService } from '../../services/auth.service';
 import { StoreConfigService } from '../../services/store-config.service';
+import { PosService, PosBusinessProfile } from '../../services/pos.service';
 import { INTEGRATIONS } from '../../data/mock';
-import { TeamMember } from '../../models';
+import { TeamMember, TeamMemberRole } from '../../models';
+import { rolePillKind, PillInfo } from '../../shared/pill/status-pill';
 
 type Tab = 'general' | 'team' | 'integrations';
 
@@ -99,6 +101,74 @@ type Tab = 'general' | 'team' | 'integrations';
 
           }
         </div>
+
+        <div class="card card-pad mt-24" style="max-width:680px;">
+          <div class="card-header mb-16">
+            <div>
+              <div class="card-title">{{ t('settings.receiptProfile') }}</div>
+              <div class="card-sub">{{ t('settings.receiptProfile.sub') }}</div>
+            </div>
+          </div>
+
+          @if (loadingReceiptProfile()) {
+            <div class="row gap-sm" style="padding:24px 0;justify-content:center;">
+              <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+            </div>
+          } @else if (!canEditReceiptProfile()) {
+            <div class="muted small">{{ t('settings.receiptProfile.readOnly') }}</div>
+            <div class="col gap-sm mt-16">
+              <div><span class="muted small">{{ t('settings.receiptProfile.tradeNameEn') }}:</span> {{ receiptProfile().tradeNameEn || '—' }}</div>
+              <div><span class="muted small">{{ t('settings.receiptProfile.tradeNameAr') }}:</span> {{ receiptProfile().tradeNameAr || '—' }}</div>
+            </div>
+          } @else {
+            <div class="grid-2">
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.tradeNameEn') }}</label>
+                <input class="inp" [ngModel]="receiptProfile().tradeNameEn" (ngModelChange)="setReceiptProfile('tradeNameEn', $event)"/>
+              </div>
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.tradeNameAr') }}</label>
+                <input class="inp" dir="rtl" [ngModel]="receiptProfile().tradeNameAr" (ngModelChange)="setReceiptProfile('tradeNameAr', $event)"/>
+              </div>
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.addressEn') }}</label>
+                <input class="inp" [ngModel]="receiptProfile().addressEn" (ngModelChange)="setReceiptProfile('addressEn', $event)"/>
+              </div>
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.addressAr') }}</label>
+                <input class="inp" dir="rtl" [ngModel]="receiptProfile().addressAr" (ngModelChange)="setReceiptProfile('addressAr', $event)"/>
+              </div>
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.phone') }}</label>
+                <input class="inp" type="tel" placeholder="+974 XXXX XXXX" [ngModel]="receiptProfile().phone" (ngModelChange)="setReceiptProfile('phone', $event)"/>
+              </div>
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.crLicense') }}</label>
+                <input class="inp" [ngModel]="receiptProfile().crLicenseNumber" (ngModelChange)="setReceiptProfile('crLicenseNumber', $event)"/>
+              </div>
+            </div>
+
+            <div class="grid-2 mt-16">
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.returnPolicyEn') }}</label>
+                <textarea class="inp" rows="2" [ngModel]="receiptProfile().returnPolicyEn" (ngModelChange)="setReceiptProfile('returnPolicyEn', $event)"></textarea>
+              </div>
+              <div>
+                <label class="lbl">{{ t('settings.receiptProfile.returnPolicyAr') }}</label>
+                <textarea class="inp" dir="rtl" rows="2" [ngModel]="receiptProfile().returnPolicyAr" (ngModelChange)="setReceiptProfile('returnPolicyAr', $event)"></textarea>
+              </div>
+            </div>
+
+            <div class="muted small mt-16">{{ t('settings.receiptProfile.disclaimer') }}</div>
+
+            <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+              <button class="btn btn-gold" [disabled]="savingReceiptProfile() || !receiptProfile().tradeNameEn.trim()" (click)="saveReceiptProfile()">
+                @if (savingReceiptProfile()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+                @else { {{ t('common.save') }} }
+              </button>
+            </div>
+          }
+        </div>
       }
 
       @if (tab() === 'team') {
@@ -115,8 +185,12 @@ type Tab = 'general' | 'team' | 'integrations';
                 <select class="inp" [ngModel]="invite().role" (ngModelChange)="setInvite('role', $event)">
                   <option value="Admin">{{ t('settings.role.admin') }}</option>
                   <option value="Manager">{{ t('settings.role.manager') }}</option>
+                  <option value="Cashier">{{ t('settings.role.cashier') }}</option>
                   <option value="Viewer">{{ t('settings.role.viewer') }}</option>
                 </select>
+                @if (invite().role === 'Cashier') {
+                  <div class="muted small" style="margin-top:6px;">{{ t('settings.role.cashier.hint') }}</div>
+                }
               </div>
             </div>
             <div class="row gap-sm" style="flex-wrap:wrap;">
@@ -184,11 +258,17 @@ type Tab = 'general' | 'team' | 'integrations';
                   </div>
                 </ng-template>
                 <ng-template apCellTpl="role" let-r>
-                  <select class="inp" style="width:120px;padding:6px 10px;font-size:12px;" [ngModel]="r.role" (ngModelChange)="updateRole(r.id, $event)">
-                    <option value="Admin">{{ t('settings.role.admin') }}</option>
-                    <option value="Manager">{{ t('settings.role.manager') }}</option>
-                    <option value="Viewer">{{ t('settings.role.viewer') }}</option>
-                  </select>
+                  <div class="row gap-sm" style="align-items:center;">
+                    <ap-pill [kind]="rolePill(r.role).kind">{{ t(rolePill(r.role).labelKey) }}</ap-pill>
+                    @if (r.role !== 'Owner') {
+                      <select class="inp" style="width:110px;padding:4px 8px;font-size:11px;" [ngModel]="r.role" (ngModelChange)="updateRole(r.id, $event)">
+                        <option value="Admin">{{ t('settings.role.admin') }}</option>
+                        <option value="Manager">{{ t('settings.role.manager') }}</option>
+                        <option value="Cashier">{{ t('settings.role.cashier') }}</option>
+                        <option value="Viewer">{{ t('settings.role.viewer') }}</option>
+                      </select>
+                    }
+                  </div>
                 </ng-template>
                 <ng-template apCellTpl="actions" let-r>
                   <button class="btn btn-danger btn-sm" (click)="removeMember(r.id)"><ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}</button>
@@ -246,6 +326,7 @@ export class SettingsComponent implements OnInit {
   private readonly settingsApi = inject(AdminSettingsService);
   private readonly auth = inject(AuthService);
   private readonly storeConfig = inject(StoreConfigService);
+  private readonly posApi = inject(PosService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
@@ -279,10 +360,20 @@ export class SettingsComponent implements OnInit {
     this.lowStockThreshold() !== this._storeSnapshot.lowStockThreshold
   );
 
+  // ── POS receipt/legal profile ───────────────────────────────────────────────
+  readonly loadingReceiptProfile = signal(true);
+  readonly savingReceiptProfile = signal(false);
+  readonly canEditReceiptProfile = computed(() => this.auth.hasRole('owner', 'admin'));
+  readonly receiptProfile = signal({
+    tradeNameAr: '', tradeNameEn: '', addressAr: '', addressEn: '', phone: '',
+    crLicenseNumber: '', returnPolicyAr: '', returnPolicyEn: '',
+    footerStampAr: '', footerStampEn: '',
+  });
+
   // ── Team ──────────────────────────────────────────────────────────────────
   readonly loadingTeam = signal(true);
   readonly team = signal<TeamMember[]>([]);
-  readonly invite = signal({ name: '', email: '', role: 'Manager' as 'Admin' | 'Manager' | 'Viewer' });
+  readonly invite = signal({ name: '', email: '', role: 'Manager' as Exclude<TeamMemberRole, 'Owner'> });
   readonly inviting = signal(false);
   readonly pendingInvitations = signal<Invitation[]>([]);
   readonly inviteLink = signal<{ email: string; link: string } | null>(null);
@@ -303,7 +394,7 @@ export class SettingsComponent implements OnInit {
   ];
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadStore(), this.loadTeam()]);
+    await Promise.all([this.loadStore(), this.loadTeam(), this.loadReceiptProfile()]);
   }
 
   private async loadStore(): Promise<void> {
@@ -320,6 +411,50 @@ export class SettingsComponent implements OnInit {
       // keep defaults
     } finally {
       this.loadingStore.set(false);
+    }
+  }
+
+  private async loadReceiptProfile(): Promise<void> {
+    try {
+      const profile = await this.posApi.businessProfile();
+      if (profile) {
+        this.receiptProfile.set({
+          tradeNameAr: profile.tradeNameAr, tradeNameEn: profile.tradeNameEn,
+          addressAr: profile.addressAr, addressEn: profile.addressEn, phone: profile.phone,
+          crLicenseNumber: profile.crLicenseNumber || '',
+          returnPolicyAr: profile.returnPolicyAr || '', returnPolicyEn: profile.returnPolicyEn || '',
+          footerStampAr: profile.footerStampAr || '', footerStampEn: profile.footerStampEn || '',
+        });
+      }
+    } catch {
+      // keep defaults — the profile may simply not exist yet
+    } finally {
+      this.loadingReceiptProfile.set(false);
+    }
+  }
+
+  setReceiptProfile<K extends keyof ReturnType<typeof this.receiptProfile>>(key: K, value: string): void {
+    this.receiptProfile.update((p) => ({ ...p, [key]: value }));
+  }
+
+  async saveReceiptProfile(): Promise<void> {
+    if (this.savingReceiptProfile() || !this.canEditReceiptProfile()) return;
+    if (!this.receiptProfile().tradeNameEn.trim()) return;
+    this.savingReceiptProfile.set(true);
+    try {
+      const saved = await this.posApi.updateBusinessProfile(this.receiptProfile() as Omit<PosBusinessProfile, 'updatedAt'>);
+      this.receiptProfile.set({
+        tradeNameAr: saved.tradeNameAr, tradeNameEn: saved.tradeNameEn,
+        addressAr: saved.addressAr, addressEn: saved.addressEn, phone: saved.phone,
+        crLicenseNumber: saved.crLicenseNumber || '',
+        returnPolicyAr: saved.returnPolicyAr || '', returnPolicyEn: saved.returnPolicyEn || '',
+        footerStampAr: saved.footerStampAr || '', footerStampEn: saved.footerStampEn || '',
+      });
+      this.toast.success(this.t('settings.toast.saved'), this.t('settings.receiptProfile.saved.sub'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.savingReceiptProfile.set(false);
     }
   }
 
@@ -434,7 +569,11 @@ export class SettingsComponent implements OnInit {
     } catch { /* Global interceptor */ }
   }
 
-  async updateRole(id: string, role: 'Admin' | 'Manager' | 'Viewer'): Promise<void> {
+  rolePill(role: string): PillInfo {
+    return rolePillKind(role);
+  }
+
+  async updateRole(id: string, role: Exclude<TeamMemberRole, 'Owner'>): Promise<void> {
     const member = this.team().find((m) => m.id === id);
     if (!member || member.role === role) return;
     const previous = member.role;
@@ -496,7 +635,7 @@ export class SettingsComponent implements OnInit {
   }
 }
 
-function capitalizeRole(role: string): 'Admin' | 'Manager' | 'Viewer' {
+function capitalizeRole(role: string): TeamMemberRole {
   const r = String(role || 'viewer');
-  return (r.charAt(0).toUpperCase() + r.slice(1).toLowerCase()) as 'Admin' | 'Manager' | 'Viewer';
+  return (r.charAt(0).toUpperCase() + r.slice(1).toLowerCase()) as TeamMemberRole;
 }

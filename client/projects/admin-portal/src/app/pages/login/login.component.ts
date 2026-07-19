@@ -204,7 +204,10 @@ export class LoginComponent implements OnInit {
   }
 
   private redirectAfterLogin(): void {
-    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') || '/dashboard';
+    // Cashier is POS-only — there's nothing for them at /dashboard, so send
+    // them straight to the till unless they were deep-linked somewhere else.
+    const fallback = this.auth.role() === 'cashier' ? '/pos' : '/dashboard';
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') || fallback;
     this.router.navigateByUrl(returnUrl);
   }
 }

@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { requireAuth } = require('../middleware/require-auth');
+const { posPinLimiter } = require('../middleware/rate-limit');
 const { asyncHandler, created, ok } = require('./lib');
 const { PosError } = require('../lib/pos/errors');
 const {
@@ -18,9 +19,14 @@ const { deleteParkedCart, listParkedCarts, parkCart } = require('../lib/pos/park
 const { createRefund, findTransaction, voidTransaction } = require('../lib/pos/correction-service');
 const { listConflicts, resolveConflict } = require('../lib/pos/conflict-service');
 const { getQzCertificate, signQzRequest } = require('../lib/pos/qz-service');
+const { getBusinessProfile, updateBusinessProfile } = require('../lib/pos/business-profile-service');
 
 const router = Router();
-const POS_ROLES = ['owner', 'admin', 'manager'];
+// Cashier is POS-only and lowest privilege; manager-scoped actions (e.g.
+// setting another user's PIN, editing the business profile) are further
+// restricted inside their own service functions, not here — see
+// register-service.js's setManagerPin and business-profile-service.js.
+const POS_ROLES = ['owner', 'admin', 'manager', 'cashier'];
 
 // SSE replay-buffer retention. Connection-time pruning is throttled to roughly
 // hourly so a burst of reconnects does not run a global DELETE each time. This
@@ -56,11 +62,11 @@ function saveSession(req) {
   return new Promise((resolve, reject) => req.session.save((error) => (error ? reject(error) : resolve())));
 }
 
-router.post('/registers/enrollment-tokens', asyncHandler(async (req, res) => {
+router.post('/registers/enrollment-tokens', posPinLimiter, asyncHandler(async (req, res) => {
   created(res, await createEnrollmentToken(context(req), req.body));
 }));
 
-router.post('/registers/enroll', asyncHandler(async (req, res) => {
+router.post('/registers/enroll', posPinLimiter, asyncHandler(async (req, res) => {
   const register = await enrollRegister(context(req), req.body);
   req.session.posRegisterId = register.registerId;
   await saveSession(req);
@@ -82,11 +88,19 @@ router.post('/registers/receipt-number-blocks', asyncHandler(async (req, res) =>
   created(res, await allocateReceiptBlock(context(req)));
 }));
 
-router.put('/manager-pin', asyncHandler(async (req, res) => {
+router.get('/business-profile', asyncHandler(async (req, res) => {
+  ok(res, await getBusinessProfile(context(req)));
+}));
+
+router.put('/business-profile', asyncHandler(async (req, res) => {
+  ok(res, await updateBusinessProfile(context(req), req.body));
+}));
+
+router.put('/manager-pin', posPinLimiter, asyncHandler(async (req, res) => {
   ok(res, await setManagerPin(context(req), req.body));
 }));
 
-router.post('/manager/verify-pin', asyncHandler(async (req, res) => {
+router.post('/manager/verify-pin', posPinLimiter, asyncHandler(async (req, res) => {
   ok(res, await verifyManagerPin(context(req), req.body));
 }));
 

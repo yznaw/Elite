@@ -96,6 +96,13 @@ function normalizeSale(body) {
 
   const method = String(body?.payment?.method || '');
   assertPos(['cash', 'card'].includes(method), 422, 'PAYMENT_METHOD_INVALID', 'Payment method must be cash or card.');
+  // The card terminal at this shop is a standalone unit with no cable/API link
+  // to the POS (docs/15 Phase 4) — the only paper trail available is whatever
+  // reference/approval code the cashier reads off the terminal's own receipt,
+  // so it is captured here and required rather than accepted as a bare "paid".
+  const terminalReference = method === 'card'
+    ? nonEmpty(body?.payment?.terminalReference, 'payment.terminalReference', 80)
+    : null;
   const clientCreatedAt = body?.clientCreatedAt ? new Date(body.clientCreatedAt) : null;
   assertPos(!clientCreatedAt || !Number.isNaN(clientCreatedAt.getTime()), 422, 'INVALID_TIMESTAMP', 'clientCreatedAt must be a valid timestamp.');
   return {
@@ -110,6 +117,7 @@ function normalizeSale(body) {
       cardAmountCents: cents(body?.payment?.cardAmountCents, 'payment.cardAmountCents'),
       amountTenderedCents: cents(body?.payment?.amountTenderedCents, 'payment.amountTenderedCents'),
       changeGivenCents: cents(body?.payment?.changeGivenCents, 'payment.changeGivenCents'),
+      terminalReference,
     },
     clientCreatedAt,
   };
@@ -378,10 +386,17 @@ async function createSale(context, body, options = {}) {
     const orderId = orderResult.rows[0].id;
     const paymentResult = await client.query(
       `INSERT INTO payments
-        (tenant_id, order_id, provider, method, status, amount_cents, currency, processed_at, raw_payload)
-       VALUES ($1,$2,'pos-manual',$3,'paid',$4,'QAR',now(),$5::jsonb)
+        (tenant_id, order_id, provider, method, status, amount_cents, currency, processed_at, raw_payload, terminal_reference)
+       VALUES ($1,$2,'pos-manual',$3,'paid',$4,'QAR',now(),$5::jsonb,$6)
        RETURNING id`,
-      [context.tenantId, orderId, sale.payment.method, totalCents, JSON.stringify({ source: 'pos', offline })],
+      [
+        context.tenantId,
+        orderId,
+        sale.payment.method,
+        totalCents,
+        JSON.stringify({ source: 'pos', offline }),
+        sale.payment.terminalReference,
+      ],
     );
     const transactionResult = await client.query(
       `INSERT INTO pos_transactions (

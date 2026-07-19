@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, ok, validationError } = require('./lib');
+const { authAttemptLimiter } = require('../middleware/rate-limit');
 
 const router = Router();
 
@@ -28,6 +29,7 @@ function publicUser(row, tenantSlug) {
 
 router.post(
   '/login',
+  authAttemptLimiter,
   asyncHandler(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
@@ -114,6 +116,7 @@ router.post(
  */
 router.post(
   '/forgot',
+  authAttemptLimiter,
   asyncHandler(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (!email) return validationError(res, ['Email is required.']);
@@ -173,6 +176,7 @@ router.post(
  */
 router.post(
   '/reset',
+  authAttemptLimiter,
   asyncHandler(async (req, res) => {
     const rawToken = String(req.body?.token || '').trim();
     const password = String(req.body?.password || '');

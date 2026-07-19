@@ -9,7 +9,7 @@
 
 | Tool | Version | Check |
 |---|---|---|
-| Node.js | 18+ | `node -v` |
+| Node.js | 22 LTS (pinned in `server/package.json` `engines`) | `node -v` |
 | npm | 9+ | `npm -v` |
 | Angular CLI | 17+ | `npx ng version` |
 | Git | 2.30+ | `git --version` |

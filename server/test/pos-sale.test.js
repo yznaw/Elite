@@ -60,6 +60,33 @@ test('cash payment requires exact cash allocation and correct change', () => {
   );
 });
 
+test('normalizeSale requires a terminal reference for card payments', () => {
+  const body = validSale();
+  body.payment = {
+    method: 'card',
+    cashAmountCents: 0,
+    cardAmountCents: 3000,
+    amountTenderedCents: 0,
+    changeGivenCents: 0,
+  };
+  assert.throws(() => normalizeSale(body), (error) => {
+    assert.ok(error instanceof PosError);
+    assert.equal(error.code, 'INVALID_FIELD');
+    return true;
+  });
+
+  body.payment.terminalReference = 'APPR-004821';
+  const sale = normalizeSale(body);
+  assert.equal(sale.payment.terminalReference, 'APPR-004821');
+});
+
+test('normalizeSale ignores a terminal reference on cash payments', () => {
+  const body = validSale();
+  body.payment.terminalReference = 'should-be-ignored';
+  const sale = normalizeSale(body);
+  assert.equal(sale.payment.terminalReference, null);
+});
+
 test('card payment cannot carry cash tender fields', () => {
   assert.doesNotThrow(() => validatePayment({
     method: 'card',

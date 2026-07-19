@@ -25,7 +25,7 @@ export const routes: Routes = [
   },
   {
     path: 'pos',
-    canMatch: [authGuard, roleGuard(['owner', 'admin', 'manager'])],
+    canMatch: [authGuard, roleGuard(['owner', 'admin', 'manager', 'cashier'])],
     loadComponent: () =>
       import('./pages/pos/pos.component').then((m) => m.PosComponent),
   },
