@@ -353,6 +353,7 @@ export class SidebarComponent {
     { path: '/feedback',    labelKey: 'nav.feedback',    subKey: 'nav.feedback.sub',    icon: 'star'  },
     { path: '/policies',    labelKey: 'nav.policies',    subKey: 'nav.policies.sub',    icon: 'docs'  },
     { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart' },
+    { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'chart' },
     { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
     { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
   ];

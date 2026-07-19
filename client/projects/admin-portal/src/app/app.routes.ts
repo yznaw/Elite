@@ -97,6 +97,13 @@ export const routes: Routes = [
           import('./pages/reference/reference.component').then((m) => m.ReferenceComponent),
       },
       {
+        // Back-office card settlement reconciliation — no cashier access.
+        path: 'reconciliation',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/pos-reconciliation/pos-reconciliation.component').then((m) => m.PosReconciliationComponent),
+      },
+      {
         // Only owners and admins can manage workspace settings & team members.
         path: 'settings',
         canMatch: [roleGuard(['owner', 'admin'])],

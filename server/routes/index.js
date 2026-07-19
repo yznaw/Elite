@@ -10,6 +10,7 @@ const adminMediaRouter = require('./admin-media.route');
 const adminStorefrontRouter = require('./admin-storefront.route');
 const adminSettingsRouter = require('./admin-settings.route');
 const adminAnalyticsRouter = require('./admin-analytics.route');
+const adminPosReconciliationRouter = require('./admin-pos-reconciliation.route');
 const adminBulkImportRouter = require('./admin-bulk-import.route');
 const adminRefRouter = require('./admin-ref.route');
 const productsRouter = require('./products.route');
@@ -68,6 +69,10 @@ admin.use('/ref', adminRefRouter);
 // admins can manage everything; viewers/managers can read store settings.
 admin.use('/settings', adminSettingsRouter);
 admin.use('/policies', adminPoliciesRouter);
+// Back-office cash/card reconciliation — owner/admin/manager only, no
+// cashier access (cashiers don't reach the admin portal at all, but a
+// viewer account shouldn't submit settlement figures either).
+admin.use('/pos-reconciliation', requireAuth({ roles: ['owner', 'admin', 'manager'] }), adminPosReconciliationRouter);
 admin.use('/', reviewsAdminRouter);
 
 router.use('/admin', admin);
