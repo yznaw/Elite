@@ -14,11 +14,12 @@ import { AdminCustomersService } from '../../services/admin-customers.service';
 import { StoreConfigService } from '../../services/store-config.service';
 import { Order, Product, QAR } from '../../models';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 
 @Component({
   selector: 'ap-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent, SpinnerComponent],
   styles: [`
     .range-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
@@ -65,6 +66,11 @@ import { IconComponent } from '../../shared/icons/icon.component';
         }
       </div>
 
+      @if (loading()) {
+        <div class="row gap-sm" style="padding:60px 0;justify-content:center;">
+          <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+        </div>
+      } @else {
       <div class="kpi-grid mb-24">
         <ap-kpi
           [label]="revRangeLabel()"
@@ -169,6 +175,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
           <ng-template apCellTpl="total" let-r><span class="strong">{{ QAR(r.total) }}</span></ng-template>
         </ap-sortable-table>
       </div>
+      }
     </div>
   `,
 })
@@ -184,6 +191,7 @@ export class DashboardComponent implements OnInit {
   readonly QAR = QAR;
   readonly Math = Math;
 
+  readonly loading = signal(true);
   readonly orders = signal<Order[]>([]);
   readonly products = signal<Product[]>([]);
   readonly customers = signal<{ id: string; joined?: string }[]>([]);
@@ -240,14 +248,18 @@ export class DashboardComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    const [orders, products, customers] = await Promise.all([
-      this.ordersApi.list().then(r => r.orders).catch(() => []),
-      this.productsApi.list().catch(() => []),
-      this.customersApi.list().catch(() => []),
-    ]);
-    this.orders.set(orders);
-    this.products.set(products);
-    this.customers.set(customers);
+    try {
+      const [orders, products, customers] = await Promise.all([
+        this.ordersApi.list().then(r => r.orders).catch(() => []),
+        this.productsApi.list().catch(() => []),
+        this.customersApi.list().catch(() => []),
+      ]);
+      this.orders.set(orders);
+      this.products.set(products);
+      this.customers.set(customers);
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   // ── KPI computeds ────────────────────────────────────────────────────────

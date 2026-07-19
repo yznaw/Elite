@@ -283,6 +283,10 @@ export class PosService {
     return firstValueFrom(this.api.post<PosManagerOverride>('/pos/manager/verify-pin', { pin, action }));
   }
 
+  setManagerPin(pin: string, managerId?: string): Promise<{ managerId: string; configured: boolean }> {
+    return firstValueFrom(this.api.put('/pos/manager-pin', managerId ? { pin, managerId } : { pin }));
+  }
+
   findTransaction(lookup: string): Promise<PosSaleResult> {
     return firstValueFrom(this.api.get<PosSaleResult>(`/pos/transactions/lookup/${encodeURIComponent(lookup)}`));
   }

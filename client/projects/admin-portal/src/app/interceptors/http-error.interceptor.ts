@@ -31,6 +31,12 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const isAuthProbe = /\/api\/auth\/(me|login)$/.test(req.url);
   const isPosRequest = /\/api\/pos\//.test(req.url);
   const isRegisterProbe = /\/api\/pos\/registers\/current$/.test(req.url);
+  // A wrong manager PIN returns 401 PIN_INVALID — this is a normal, expected
+  // rejection (a cashier mistyping a manager's PIN), not a real session
+  // expiry. Without this exception, every failed PIN attempt force-redirected
+  // to /login and showed "Session expired," even though the session was
+  // completely intact — confirmed during 2026-07-19 remote QA.
+  const isManagerPinVerify = /\/api\/pos\/manager\/verify-pin$/.test(req.url);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
@@ -45,7 +51,11 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
         }
       } else if (err.status === 401) {
         const onLogin = router.url.startsWith('/login');
-        if (!isAuthProbe && !onLogin) {
+        if (isManagerPinVerify) {
+          // Let pos.component.ts's own catch block show the specific
+          // "Manager PIN is incorrect" / "temporarily locked" message instead
+          // of the generic session-expired toast, and do not redirect.
+        } else if (!isAuthProbe && !onLogin) {
           // Use error (not warning) so the banner is clearly visible.
           // The redirect to login carries the returnUrl so the admin
           // lands back on the same page after re-authenticating.

@@ -170,6 +170,34 @@ type Tab = 'general' | 'team' | 'integrations';
           }
         </div>
 
+        @if (canSetOwnManagerPin()) {
+          <div class="card card-pad mt-24" style="max-width:680px;">
+            <div class="card-header mb-16">
+              <div>
+                <div class="card-title">{{ t('settings.managerPin.title') }}</div>
+                <div class="card-sub">{{ t('settings.managerPin.sub') }}</div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div>
+                <label class="lbl">{{ t('settings.managerPin.newPin') }}</label>
+                <input class="inp" type="password" inputmode="numeric" maxlength="8"
+                       [ngModel]="myManagerPin()" (ngModelChange)="myManagerPin.set($event)"
+                       placeholder="4-8 digits"/>
+              </div>
+            </div>
+
+            <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+              <button class="btn btn-gold" [disabled]="savingMyManagerPin() || !isValidPinFormat(myManagerPin())" (click)="saveMyManagerPin()">
+                @if (savingMyManagerPin()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+                @else { {{ t('settings.managerPin.save') }} }
+              </button>
+            </div>
+            <div class="muted small mt-16">{{ t('settings.managerPin.hint') }}</div>
+          </div>
+        }
+
         @if (canManageRegisters()) {
           <div class="card card-pad mt-24" style="max-width:680px;">
             <div class="card-header mb-16">
@@ -405,6 +433,13 @@ export class SettingsComponent implements OnInit {
     footerStampAr: '', footerStampEn: '',
   });
 
+  // ── Manager PIN ──────────────────────────────────────────────────────────
+  // Only owner/admin/manager roles are ever asked for a manager PIN (cashiers
+  // can't approve anything), so only those roles need a way to set one.
+  readonly canSetOwnManagerPin = computed(() => this.auth.hasRole('owner', 'admin', 'manager'));
+  readonly myManagerPin = signal('');
+  readonly savingMyManagerPin = signal(false);
+
   // ── POS registers ────────────────────────────────────────────────────────
   readonly canManageRegisters = computed(() => this.auth.hasRole('owner', 'admin'));
   readonly newRegisterName = signal('');
@@ -528,6 +563,24 @@ export class SettingsComponent implements OnInit {
     navigator.clipboard.writeText(token).then(() => {
       this.toast.success(this.t('settings.toast.codeCopied'));
     }).catch(() => {});
+  }
+
+  isValidPinFormat(pin: string): boolean {
+    return /^\d{4,8}$/.test(pin);
+  }
+
+  async saveMyManagerPin(): Promise<void> {
+    if (this.savingMyManagerPin() || !this.isValidPinFormat(this.myManagerPin())) return;
+    this.savingMyManagerPin.set(true);
+    try {
+      await this.posApi.setManagerPin(this.myManagerPin());
+      this.myManagerPin.set('');
+      this.toast.success(this.t('settings.toast.managerPinSaved'), this.t('settings.toast.managerPinSaved.sub'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.savingMyManagerPin.set(false);
+    }
   }
 
   private async loadTeam(): Promise<void> {
