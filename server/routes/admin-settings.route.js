@@ -202,7 +202,15 @@ router.post('/invitations', asyncHandler(async (req, res) => {
            created_at = NOW()`,
       [tenant.id, email.toLowerCase().trim(), role, tokenHash, invitedBy],
     );
-    const inviteLink = `${process.env.ADMIN_ORIGIN || 'http://localhost:4300'}/accept-invite?token=${token}`;
+    // Prefer the actual origin this request came from over a hardcoded
+    // fallback — a request from the real admin portal always carries its own
+    // origin, so this needs no separate env var to stay in sync with
+    // wherever the admin portal is actually deployed. ADMIN_ORIGIN remains a
+    // manual override for the rare case of no Origin header (e.g. a
+    // server-to-server call); localhost:4300 is a dev-only last resort and
+    // must never be reached in production once CORS_ORIGINS is set.
+    const inviteBase = req.get('origin') || process.env.ADMIN_ORIGIN || 'http://localhost:4300';
+    const inviteLink = `${inviteBase}/accept-invite?token=${token}`;
     created(res, { email, inviteLink }, 'Invitation sent.');
   } finally {
     client.release();

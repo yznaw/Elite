@@ -1335,7 +1335,7 @@ label input:focus {
   border-bottom: 1px solid var(--pos-line);
   font-size: 12px;
 }
-.cash-movement-kind { text-transform: capitalize; color: #747d79; }
+.cash-movement-kind { color: #747d79; }
 .cash-movement-reason { color: var(--pos-ink); }
 .z-history-list { display: grid; gap: 6px; margin-top: 14px; }
 .z-history-row {

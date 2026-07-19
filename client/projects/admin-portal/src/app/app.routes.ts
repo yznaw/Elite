@@ -110,6 +110,16 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/settings/settings.component').then((m) => m.SettingsComponent),
       },
+      {
+        // Manager-role accounts can't reach the rest of Settings (store
+        // config/team management are owner/admin-only) but still need a way
+        // to set the manager PIN that approver-separation requires them to
+        // have — see docs/17-pos-remote-verification, 2026-07-20 retest.
+        path: 'my-pin',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/my-pin/my-pin.component').then((m) => m.MyPinComponent),
+      },
     ],
   },
   { path: '**', redirectTo: 'dashboard' },

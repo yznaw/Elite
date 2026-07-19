@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -58,7 +58,7 @@ interface NavLink {
 
       <!-- Scrollable nav container -->
       <div class="nav-scroll">
-        @for (n of links; track n.path) {
+        @for (n of visibleLinks(); track n.path) {
           <a
             [routerLink]="n.path"
             routerLinkActive="active"
@@ -341,7 +341,7 @@ export class SidebarComponent {
     }
   }
 
-  readonly links: NavLink[] = [
+  private readonly allLinks: NavLink[] = [
     { path: '/dashboard',   labelKey: 'nav.dashboard',   subKey: 'nav.dashboard.sub',   icon: 'dash' },
     { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
     { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
@@ -357,6 +357,19 @@ export class SidebarComponent {
     { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
     { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
   ];
+
+  // Manager-role accounts can't reach /settings (owner/admin-only — store
+  // config and team management live there) but still need a way to set
+  // their own manager PIN. Owner/admin already reach that same PIN card
+  // inside Settings, so this link only needs to appear for managers —
+  // showing it to everyone would just be a confusing near-duplicate of
+  // the Settings link for the roles that don't need it.
+  private readonly myPinLink: NavLink = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'settings' };
+
+  readonly visibleLinks = computed<NavLink[]>(() => {
+    const role = this.user()?.role;
+    return role === 'manager' ? [...this.allLinks, this.myPinLink] : this.allLinks;
+  });
 
   constructor() {
     this.router.events

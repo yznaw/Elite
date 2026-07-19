@@ -797,6 +797,18 @@ export class PosComponent implements OnInit, OnDestroy {
     return kind === 'paid_out' || kind === 'safe_drop' || kind === 'no_sale_drawer_open';
   }
 
+  private static readonly CASH_MOVEMENT_LABELS: Record<PosCashMovementKind, string> = {
+    paid_in: 'Paid In',
+    paid_out: 'Paid Out',
+    safe_drop: 'Safe Drop',
+    float_adjust: 'Float Adjust',
+    no_sale_drawer_open: 'No-Sale Drawer Open',
+  };
+
+  cashMovementKindLabel(kind: PosCashMovementKind): string {
+    return PosComponent.CASH_MOVEMENT_LABELS[kind] || kind;
+  }
+
   async openCashMovementDialog(): Promise<void> {
     const summary = this.shiftSummary();
     if (!summary) return;

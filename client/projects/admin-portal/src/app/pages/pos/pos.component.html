@@ -580,7 +580,7 @@
           <div class="cash-movement-list">
             @for (movement of cashMovements(); track movement.movementId) {
               <div class="cash-movement-row">
-                <span class="cash-movement-kind">{{ movement.kind.replace('_', ' ') }}</span>
+                <span class="cash-movement-kind">{{ cashMovementKindLabel(movement.kind) }}</span>
                 <span class="cash-movement-reason">{{ movement.reason }}</span>
                 <b>{{ formatMoney(movement.amountCents) }}</b>
               </div>

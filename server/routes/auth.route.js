@@ -154,7 +154,9 @@ router.post(
 
         // Real deployments would send this via email/SMS. For local dev we
         // log it so the URL is recoverable from the server console.
-        const adminBase = process.env.ADMIN_BASE_URL || 'http://localhost:4300';
+        // Prefer the actual request origin over a hardcoded fallback — see
+        // the matching fix in admin-settings.route.js's invite-link builder.
+        const adminBase = req.get('origin') || process.env.ADMIN_BASE_URL || 'http://localhost:4300';
         const resetUrl = `${adminBase}/reset-password?token=${rawToken}`;
         console.log(`\n[auth] Password reset requested for ${email}`);
         console.log(`[auth] Reset URL (valid 30m): ${resetUrl}\n`);
