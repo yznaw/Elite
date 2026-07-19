@@ -4,9 +4,9 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: receipt print-quality fixes (QR clipping, garbled text) + reprint/remote-enrollment UI, inventory ledger, cash movements/Z-report history, card settlement reconciliation, Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: cash movements/Z-report history, card settlement reconciliation, Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
 
-**In progress** (committed, not yet deployed to VPS): Phase 1 inventory ledger (baseline capture + drift-detection job, all 18 server tests passing).
+**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (baseline capture + drift-detection job, commit `10ba2be`). All 18 server tests passing, client build green.
 
 ---
 
@@ -34,9 +34,11 @@
 
 ---
 
-## Phase 0.5 — Receipt print-quality fixes + reprint + remote enrollment
+## Phase 0.5 — Receipt print-quality fixes + reprint + remote enrollment ✅ Built, needs hardware verification
 
 **Why here:** found during real hardware testing on 2026-07-19 (see printed receipt review). Small, independent, no DB migration required for the print fixes — should land before Phase 8's legal sign-off since that phase requires a legible real receipt, and this phase is what makes it legible.
+
+**Status:** all four fixes below are implemented and pushed (commit `d4c9b62`), client build + full server test suite green. **Not yet confirmed on the real printer** — every item in the test gate still needs a hands-on check on the actual SRP-QE300.
 
 ### What to build
 
