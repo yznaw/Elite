@@ -254,6 +254,49 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
     assert.equal(summary.transactionCount, 4);
     assert.equal(summary.voidCount, 1);
     assert.equal(summary.refundCount, 1);
+    assert.equal(summary.cashInCents, 0);
+    assert.equal(summary.cashOutCents, 0);
+
+    // Paid-in (petty cash returned, say) needs no manager override.
+    const paidIn = await api('/pos/cash-movements', {
+      method: 'POST',
+      body: JSON.stringify({
+        shiftId: shift.shiftId,
+        kind: 'paid_in',
+        amountCents: 500,
+        reason: 'Change fund top-up',
+        idempotencyKey: `cash-in-${runId}`,
+      }),
+    });
+    assert.equal(paidIn.managerId, null);
+
+    // Paid-out (petty cash for supplies) requires the same drawer-open
+    // manager-override flow as void/refund — a distinct approving manager,
+    // not the cashier's own PIN.
+    const paidOutOverride = await api('/pos/manager/verify-pin', {
+      method: 'POST', body: JSON.stringify({ pin: approverPin, action: 'drawer-open' }),
+    });
+    const paidOut = await api('/pos/cash-movements', {
+      method: 'POST',
+      body: JSON.stringify({
+        shiftId: shift.shiftId,
+        kind: 'paid_out',
+        amountCents: 300,
+        reason: 'Petty cash for supplies',
+        idempotencyKey: `cash-out-${runId}`,
+        managerOverrideId: paidOutOverride.overrideId,
+        managerOverrideToken: paidOutOverride.token,
+      }),
+    });
+    assert.ok(paidOut.managerId);
+
+    const movements = await api(`/pos/cash-movements?shiftId=${shift.shiftId}`);
+    assert.equal(movements.length, 2);
+
+    const summaryAfterCash = await api('/pos/shifts/current');
+    assert.equal(summaryAfterCash.cashInCents, 500);
+    assert.equal(summaryAfterCash.cashOutCents, 300);
+    assert.equal(summaryAfterCash.expectedCashCents, summary.expectedCashCents + 500 - 300);
 
     const zOverride = await api('/pos/manager/verify-pin', {
       method: 'POST', body: JSON.stringify({ pin: approverPin, action: 'z-report' }),
@@ -262,13 +305,20 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
       method: 'POST',
       body: JSON.stringify({
         shiftId: shift.shiftId,
-        physicalCashCents: summary.expectedCashCents,
+        physicalCashCents: summaryAfterCash.expectedCashCents,
         idempotencyKey: `z-${runId}`,
         managerOverrideId: zOverride.overrideId,
         managerOverrideToken: zOverride.token,
       }),
     });
     assert.equal(zReport.varianceCents, 0);
+    assert.equal(zReport.cashInCents, 500);
+    assert.equal(zReport.cashOutCents, 300);
+
+    const zHistory = await api('/pos/shifts/z-reports');
+    assert.ok(zHistory.some((r) => r.zReportId === zReport.zReportId));
+    const zDetail = await api(`/pos/shifts/z-reports/${zReport.zReportId}`);
+    assert.equal(zDetail.zReportId, zReport.zReportId);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

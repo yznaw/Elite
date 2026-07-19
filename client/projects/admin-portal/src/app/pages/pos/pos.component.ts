@@ -10,6 +10,8 @@ import {
   PosReceiptBlock,
 } from '../../services/pos-local-store.service';
 import {
+  PosCashMovement,
+  PosCashMovementKind,
   PosCatalogItem,
   PosCurrentRegister,
   PosParkedCart,
@@ -18,6 +20,7 @@ import {
   PosShiftSummary,
   PosSyncConflict,
   PosTransactionItem,
+  PosZReport,
 } from '../../services/pos.service';
 import { PosHardwareService } from '../../services/pos-hardware.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
@@ -41,7 +44,7 @@ interface VariantColorGroup {
   stock: number;
   items: PosCatalogItem[];
 }
-type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift';
+type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift' | 'cash-movement' | 'z-history';
 
 @Component({
   selector: 'ap-pos',
@@ -86,6 +89,9 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly operationTransaction = signal<PosSaleResult | null>(null);
   readonly shiftSummary = signal<PosShiftSummary | null>(null);
   readonly syncConflicts = signal<PosSyncConflict[]>([]);
+  readonly cashMovements = signal<PosCashMovement[]>([]);
+  readonly zReportHistory = signal<PosZReport[]>([]);
+  readonly loadingZHistory = signal(false);
   readonly refColors = signal<RefColor[]>([]);
   readonly totalCents = computed(() => this.cart().reduce(
     (total, line) => total + line.item.priceCents * line.quantity,
@@ -175,6 +181,10 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly discoveredPrinters = signal<string[]>([]);
   readonly discoveringPrinters = signal(false);
   conflictResolution = '';
+  cashMovementKind: PosCashMovementKind = 'paid_out';
+  cashMovementAmount = '';
+  cashMovementReason = '';
+  cashMovementManagerPin = '';
 
   private pendingIdempotencyKey: string | null = null;
   private searchSequence = 0;
@@ -778,6 +788,118 @@ export class PosComponent implements OnInit, OnDestroy {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** paid_out, safe_drop, and no_sale_drawer_open remove cash or open the
+   *  drawer without a sale — same accountability bar as void/refund, so they
+   *  need a manager PIN. paid_in and float_adjust (topping the till up) don't. */
+  cashMovementNeedsOverride(kind: PosCashMovementKind = this.cashMovementKind): boolean {
+    return kind === 'paid_out' || kind === 'safe_drop' || kind === 'no_sale_drawer_open';
+  }
+
+  async openCashMovementDialog(): Promise<void> {
+    const summary = this.shiftSummary();
+    if (!summary) return;
+    this.cashMovementKind = 'paid_out';
+    this.cashMovementAmount = '';
+    this.cashMovementReason = '';
+    this.cashMovementManagerPin = '';
+    this.dialog.set('cash-movement');
+    try {
+      this.cashMovements.set(await this.pos.listCashMovements(summary.shiftId));
+    } catch (error) {
+      this.toast.warning("Couldn't load cash movements", this.errorMessage(error));
+    }
+  }
+
+  async recordCashMovement(): Promise<void> {
+    const summary = this.shiftSummary();
+    if (!summary || !this.cashMovementReason.trim()) return;
+    const needsOverride = this.cashMovementNeedsOverride();
+    if (needsOverride && !this.cashMovementManagerPin) return;
+    const amountCents = this.cashMovementKind === 'no_sale_drawer_open'
+      ? 0
+      : this.moneyInputToCents(this.cashMovementAmount);
+    if (amountCents === null || (this.cashMovementKind !== 'no_sale_drawer_open' && amountCents <= 0)) return;
+
+    this.busy.set(true);
+    try {
+      let override: { overrideId: string; token: string } | null = null;
+      if (needsOverride) {
+        override = await this.pos.verifyManagerPin(this.cashMovementManagerPin, 'drawer-open');
+      }
+      await this.pos.recordCashMovement({
+        shiftId: summary.shiftId,
+        kind: this.cashMovementKind,
+        amountCents,
+        reason: this.cashMovementReason.trim(),
+        idempotencyKey: crypto.randomUUID(),
+        ...(override ? { managerOverrideId: override.overrideId, managerOverrideToken: override.token } : {}),
+      });
+      if (this.cashMovementKind === 'no_sale_drawer_open' && this.hardware.configured()) {
+        await this.hardware.openDrawer().catch(() => undefined);
+      }
+      this.cashMovements.set(await this.pos.listCashMovements(summary.shiftId));
+      this.shiftSummary.set(await this.pos.shiftSummary());
+      this.cashMovementAmount = '';
+      this.cashMovementReason = '';
+      this.cashMovementManagerPin = '';
+      this.toast.success('Cash movement recorded');
+    } catch (error) {
+      this.toast.error("Couldn't record cash movement", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async openZHistoryDialog(): Promise<void> {
+    this.dialog.set('z-history');
+    this.loadingZHistory.set(true);
+    try {
+      this.zReportHistory.set(await this.pos.listZReports());
+    } catch (error) {
+      this.toast.warning("Couldn't load Z-report history", this.errorMessage(error));
+    } finally {
+      this.loadingZHistory.set(false);
+    }
+  }
+
+  async reprintZReport(report: PosZReport): Promise<void> {
+    try {
+      await this.hardware.printZReport(report);
+      this.toast.success('Z-report reprinted');
+    } catch (error) {
+      this.toast.warning("Couldn't print Z-report", this.errorMessage(error));
+    }
+  }
+
+  exportZHistoryCsv(): void {
+    const rows = this.zReportHistory();
+    if (!rows.length) return;
+    const header = [
+      'Z Report ID', 'Created At', 'Opening Float', 'Gross Sales', 'Cash Sales', 'Card Sales',
+      'Refunds', 'Voids', 'Net Sales', 'Cash In', 'Cash Out', 'Expected Cash', 'Physical Cash',
+      'Variance', 'Transactions', 'Refund Count', 'Void Count',
+    ];
+    const csvRows = rows.map((r) => [
+      r.zReportId, r.createdAt,
+      this.formatMoney(r.openingFloatCents), this.formatMoney(r.grossSalesCents),
+      this.formatMoney(r.cashSalesCents), this.formatMoney(r.cardSalesCents),
+      this.formatMoney(r.refundTotalCents), this.formatMoney(r.voidTotalCents),
+      this.formatMoney(r.netSalesCents), this.formatMoney(r.cashInCents), this.formatMoney(r.cashOutCents),
+      this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents),
+      String(r.transactionCount), String(r.refundCount), String(r.voidCount),
+    ]);
+    const csv = [header, ...csvRows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `z-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async resolveSyncConflict(conflict: PosSyncConflict): Promise<void> {

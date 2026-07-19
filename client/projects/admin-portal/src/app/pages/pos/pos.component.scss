@@ -1312,6 +1312,49 @@ label input:focus {
 }
 .report-grid b { color: var(--pos-ink); font-family: Georgia, serif; font-size: 17px; font-weight: 500; }
 .shift-report-sheet h3 { margin: 22px 0 8px; font-family: Georgia, serif; font-weight: 500; }
+.shift-tool-row {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.shift-tool-row button {
+  padding: 10px 14px;
+  border: 1px solid var(--pos-line);
+  background: #fff;
+  cursor: pointer;
+}
+.muted-note { color: #79817e; font-size: 12px; padding: 20px 0; text-align: center; }
+.cash-movement-list { display: grid; gap: 6px; margin-top: 8px; }
+.cash-movement-row {
+  padding: 10px 0;
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--pos-line);
+  font-size: 12px;
+}
+.cash-movement-kind { text-transform: capitalize; color: #747d79; }
+.cash-movement-reason { color: var(--pos-ink); }
+.z-history-list { display: grid; gap: 6px; margin-top: 14px; }
+.z-history-row {
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--pos-line);
+}
+.z-history-row span { display: grid; gap: 3px; }
+.z-history-row small { color: #79817e; font-size: 10px; }
+.z-history-row button {
+  padding: 8px 14px;
+  border: 1px solid var(--pos-line);
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
 .conflict-row {
   padding: 10px 0;
   display: flex;

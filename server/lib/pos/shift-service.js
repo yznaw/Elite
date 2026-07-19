@@ -1,6 +1,7 @@
 const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, cents, nonEmpty, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
+const { cashMovementTotals } = require('./cash-movement-service');
 
 function numeric(row, key) {
   return Number(row?.[key] || 0);
@@ -29,30 +30,36 @@ async function loadShiftSummary(client, tenantId, shiftId) {
      )
      SELECT s.id, s.register_id, s.cashier_id, s.state, s.opening_float_cents, s.opened_at,
        tx.*, refunds.*,
-       (tx.gross_sales_cents - tx.void_total_cents - refunds.refund_total_cents)::bigint AS net_sales_cents,
-       (s.opening_float_cents + tx.cash_sales_cents - tx.voided_cash_cents - refunds.cash_refund_cents)::bigint AS expected_cash_cents
+       (tx.gross_sales_cents - tx.void_total_cents - refunds.refund_total_cents)::bigint AS net_sales_cents
      FROM pos_shifts s CROSS JOIN tx CROSS JOIN refunds
      WHERE s.tenant_id = $1 AND s.id = $2`,
     [tenantId, shiftId],
   );
   assertPos(result.rowCount === 1, 404, 'SHIFT_NOT_FOUND', 'POS shift not found.');
   const row = result.rows[0];
+  const { cashInCents, cashOutCents } = await cashMovementTotals(client, tenantId, shiftId);
+  const openingFloatCents = numeric(row, 'opening_float_cents');
+  const cashSalesCents = numeric(row, 'cash_sales_cents');
+  const voidedCashCents = numeric(row, 'voided_cash_cents');
+  const cashRefundCents = numeric(row, 'cash_refund_cents');
   return {
     shiftId: row.id,
     registerId: row.register_id,
     cashierId: row.cashier_id,
     state: row.state,
     openedAt: row.opened_at,
-    openingFloatCents: numeric(row, 'opening_float_cents'),
+    openingFloatCents,
     grossSalesCents: numeric(row, 'gross_sales_cents'),
-    cashSalesCents: numeric(row, 'cash_sales_cents'),
+    cashSalesCents,
     cardSalesCents: numeric(row, 'card_sales_cents'),
     refundTotalCents: numeric(row, 'refund_total_cents'),
-    cashRefundCents: numeric(row, 'cash_refund_cents'),
+    cashRefundCents,
     voidTotalCents: numeric(row, 'void_total_cents'),
-    voidedCashCents: numeric(row, 'voided_cash_cents'),
+    voidedCashCents,
     netSalesCents: numeric(row, 'net_sales_cents'),
-    expectedCashCents: numeric(row, 'expected_cash_cents'),
+    cashInCents,
+    cashOutCents,
+    expectedCashCents: openingFloatCents + cashSalesCents - voidedCashCents - cashRefundCents + cashInCents - cashOutCents,
     transactionCount: numeric(row, 'transaction_count'),
     refundCount: numeric(row, 'refund_count'),
     voidCount: numeric(row, 'void_count'),
@@ -170,9 +177,10 @@ async function closeShift(context, body) {
          opening_float_cents, gross_sales_cents, cash_sales_cents, card_sales_cents,
          refund_total_cents, cash_refund_cents, void_total_cents, voided_cash_cents,
          net_sales_cents, expected_cash_cents, physical_cash_cents,
-         transaction_count, refund_count, void_count, report_data
+         transaction_count, refund_count, void_count, report_data,
+         cash_in_cents, cash_out_cents
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22
        ) RETURNING *`,
       [
         context.tenantId,
@@ -195,6 +203,8 @@ async function closeShift(context, body) {
         summary.refundCount,
         summary.voidCount,
         JSON.stringify(reportData),
+        summary.cashInCents,
+        summary.cashOutCents,
       ],
     );
     await client.query(
@@ -225,6 +235,8 @@ function mapZReport(row) {
     refundTotalCents: Number(row.refund_total_cents),
     voidTotalCents: Number(row.void_total_cents),
     netSalesCents: Number(row.net_sales_cents),
+    cashInCents: Number(row.cash_in_cents),
+    cashOutCents: Number(row.cash_out_cents),
     expectedCashCents: Number(row.expected_cash_cents),
     physicalCashCents: Number(row.physical_cash_cents),
     varianceCents: Number(row.variance_cents),
@@ -235,4 +247,34 @@ function mapZReport(row) {
   };
 }
 
-module.exports = { closeShift, currentSummary, loadShiftSummary, openShift };
+async function listZReports(context, { limit = 30 } = {}) {
+  const boundedLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
+  return inTransaction(async (client) => {
+    const register = await requireRegister(client, context);
+    const result = await client.query(
+      `SELECT * FROM pos_z_reports
+       WHERE tenant_id = $1 AND register_id = $2
+       ORDER BY created_at DESC
+       LIMIT $3`,
+      [context.tenantId, register.id, boundedLimit],
+    );
+    return result.rows.map(mapZReport);
+  });
+}
+
+async function getZReport(context, zReportId) {
+  uuid(zReportId, 'zReportId');
+  return inTransaction(async (client) => {
+    const register = await requireRegister(client, context);
+    const result = await client.query(
+      `SELECT * FROM pos_z_reports WHERE tenant_id = $1 AND id = $2`,
+      [context.tenantId, zReportId],
+    );
+    const row = result.rows[0];
+    assertPos(row, 404, 'Z_REPORT_NOT_FOUND', 'Z-report not found.');
+    assertPos(row.register_id === register.id, 403, 'Z_REPORT_REGISTER_MISMATCH', 'Z-report belongs to another register.');
+    return mapZReport(row);
+  });
+}
+
+module.exports = { closeShift, currentSummary, getZReport, listZReports, loadShiftSummary, openShift };

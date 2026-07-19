@@ -510,8 +510,14 @@
             <span>Refunds <b>{{ formatMoney(summary.refundTotalCents) }}</b></span>
             <span>Voids <b>{{ formatMoney(summary.voidTotalCents) }}</b></span>
             <span>Net <b>{{ formatMoney(summary.netSalesCents) }}</b></span>
+            <span>Cash in <b>{{ formatMoney(summary.cashInCents) }}</b></span>
+            <span>Cash out <b>{{ formatMoney(summary.cashOutCents) }}</b></span>
             <span>Expected cash <b>{{ formatMoney(summary.expectedCashCents) }}</b></span>
             <span>Transactions <b>{{ summary.transactionCount }}</b></span>
+          </div>
+          <div class="shift-tool-row">
+            <button type="button" (click)="openCashMovementDialog()">Cash movement</button>
+            <button type="button" (click)="openZHistoryDialog()">Z-report history</button>
           </div>
           @if (syncConflicts().length) {
             <h3>Offline conflicts</h3>
@@ -537,6 +543,77 @@
           <label class="money-field"><span>Physical cash</span><div><b>QAR</b><input [(ngModel)]="physicalCash" inputmode="decimal" /></div></label>
           <label>Manager PIN<input [(ngModel)]="managerPin" type="password" inputmode="numeric" maxlength="8" /></label>
           <button class="primary-action" type="button" [disabled]="busy() || pendingSales() > 0 || rejectedSales() > 0" (click)="closeCurrentShift()">Create Z report and close</button>
+        }
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'cash-movement') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <span class="eyebrow">CASH DRAWER</span>
+        <h2>Cash movement</h2>
+
+        <label>Type
+          <select [(ngModel)]="cashMovementKind">
+            <option value="paid_in">Paid in</option>
+            <option value="paid_out">Paid out</option>
+            <option value="safe_drop">Safe drop</option>
+            <option value="float_adjust">Float adjust</option>
+            <option value="no_sale_drawer_open">No-sale drawer open</option>
+          </select>
+        </label>
+        @if (cashMovementKind !== 'no_sale_drawer_open') {
+          <label class="money-field"><span>Amount</span><div><b>QAR</b><input [(ngModel)]="cashMovementAmount" inputmode="decimal" /></div></label>
+        }
+        <label>Reason<input [(ngModel)]="cashMovementReason" placeholder="Required" /></label>
+        @if (cashMovementNeedsOverride()) {
+          <label>Manager PIN<input [(ngModel)]="cashMovementManagerPin" type="password" inputmode="numeric" maxlength="8" /></label>
+        }
+        <button class="primary-action" type="button"
+          [disabled]="busy() || !cashMovementReason.trim() || (cashMovementNeedsOverride() && !cashMovementManagerPin)"
+          (click)="recordCashMovement()">Record movement</button>
+
+        @if (cashMovements().length) {
+          <h3>This shift</h3>
+          <div class="cash-movement-list">
+            @for (movement of cashMovements(); track movement.movementId) {
+              <div class="cash-movement-row">
+                <span class="cash-movement-kind">{{ movement.kind.replace('_', ' ') }}</span>
+                <span class="cash-movement-reason">{{ movement.reason }}</span>
+                <b>{{ formatMoney(movement.amountCents) }}</b>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'z-history') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet shift-report-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <span class="eyebrow">HISTORY</span>
+        <h2>Z-reports</h2>
+        @if (loadingZHistory()) {
+          <p class="muted-note">Loading…</p>
+        } @else if (!zReportHistory().length) {
+          <p class="muted-note">No closed shifts yet.</p>
+        } @else {
+          <button type="button" (click)="exportZHistoryCsv()">Export CSV</button>
+          <div class="z-history-list">
+            @for (report of zReportHistory(); track report.zReportId) {
+              <div class="z-history-row">
+                <span>
+                  <b>{{ report.createdAt | date:'MMM d, y · HH:mm' }}</b>
+                  <small>Net {{ formatMoney(report.netSalesCents) }} · Variance {{ formatMoney(report.varianceCents) }}</small>
+                </span>
+                <button type="button" (click)="reprintZReport(report)">Reprint</button>
+              </div>
+            }
+          </div>
         }
       </section>
     </div>

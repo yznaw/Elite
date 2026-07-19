@@ -41,6 +41,29 @@ export interface PosRenderedReceipt {
   footerCommands: string;
 }
 
+/** Z-report print data — a cash/sales summary, not a per-item receipt. */
+export interface PosZReportPrintData {
+  zReportId: string;
+  registerName?: string;
+  cashierName?: string;
+  createdAt: string;
+  openingFloatCents: number;
+  grossSalesCents: number;
+  cashSalesCents: number;
+  cardSalesCents: number;
+  refundTotalCents: number;
+  voidTotalCents: number;
+  netSalesCents: number;
+  cashInCents: number;
+  cashOutCents: number;
+  expectedCashCents: number;
+  physicalCashCents: number;
+  varianceCents: number;
+  transactionCount: number;
+  refundCount: number;
+  voidCount: number;
+}
+
 const QATAR_TIME_ZONE = 'Asia/Qatar';
 const LOGO_URL = '/assets/brand/elite-logo-green.png';
 
@@ -121,6 +144,121 @@ export class PosReceiptRenderer {
       imageDataUrl: finalCanvas.toDataURL('image/png'),
       footerCommands: this.footerCommands(receipt),
     };
+  }
+
+  /**
+   * Z-report: a cash/sales summary for a closed shift, not a per-item
+   * receipt — no line items, no customer-facing QR lookup. Reuses the same
+   * canvas two-pass sizing and column/rule helpers as `render()`.
+   */
+  async renderZReport(report: PosZReportPrintData, profile: PosBusinessProfile | null): Promise<PosRenderedReceipt> {
+    const logo = await this.loadLogo();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+
+    canvas.width = this.widthPx;
+    canvas.height = 4000;
+    let y = this.paintZReport(ctx, report, profile, logo);
+
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = this.widthPx;
+    finalCanvas.height = Math.ceil(y) + this.marginPx;
+    const finalCtx = finalCanvas.getContext('2d');
+    if (!finalCtx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+    this.paintZReport(finalCtx, report, profile, logo);
+
+    return {
+      imageDataUrl: finalCanvas.toDataURL('image/png'),
+      footerCommands: '\x1d' + 'V' + '\x01', // plain cut, no QR — a Z-report has nothing to look up
+    };
+  }
+
+  private paintZReport(
+    ctx: CanvasRenderingContext2D,
+    report: PosZReportPrintData,
+    profile: PosBusinessProfile | null,
+    logo: HTMLImageElement | null,
+  ): number {
+    const width = this.widthPx;
+    const centerX = width / 2;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, ctx.canvas.height);
+    ctx.fillStyle = '#000';
+    ctx.textBaseline = 'top';
+
+    let y = this.marginPx + 8;
+    if (logo) {
+      const logoWidth = Math.min(230, width * 0.46);
+      const logoHeight = logoWidth * (logo.naturalHeight / logo.naturalWidth);
+      this.drawThresholdedImage(ctx, logo, centerX - logoWidth / 2, y, logoWidth, logoHeight);
+      y += logoHeight + 16;
+    } else {
+      ctx.font = `italic 34px ${this.displayFont}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(profile?.tradeNameEn || 'Elite Collection', centerX, y);
+      y += 44;
+    }
+    y += 10;
+
+    ctx.font = `600 16px ${this.bodyFont}`;
+    ctx.textAlign = 'center';
+    this.fillTextTracked(ctx, 'Z REPORT', centerX, y, 3);
+    y += 26;
+    ctx.font = `13px ${this.bodyFont}`;
+    ctx.fillStyle = '#555';
+    ctx.fillText(this.formatQatarDateTime(report.createdAt), centerX, y);
+    ctx.fillStyle = '#000';
+    y += 22;
+    if (report.registerName || report.cashierName) {
+      ctx.font = `13px ${this.bodyFont}`;
+      ctx.fillStyle = '#555';
+      ctx.fillText([report.cashierName, report.registerName].filter(Boolean).join('  ·  '), centerX, y);
+      ctx.fillStyle = '#000';
+      y += 22;
+    }
+    y += 8;
+    y = this.rule(ctx, y);
+    y += 16;
+
+    ctx.font = `14px ${this.bodyFont}`;
+    y = this.columns(ctx, 'Opening float', this.money(report.openingFloatCents), y);
+    y = this.columns(ctx, 'Gross sales', this.money(report.grossSalesCents), y);
+    y = this.columns(ctx, 'Cash sales', this.money(report.cashSalesCents), y);
+    y = this.columns(ctx, 'Card sales', this.money(report.cardSalesCents), y);
+    y = this.columns(ctx, 'Refunds', this.money(-report.refundTotalCents), y);
+    y = this.columns(ctx, 'Voids', this.money(-report.voidTotalCents), y);
+    y += 4;
+    y = this.rule(ctx, y);
+    y += 14;
+    ctx.font = `600 18px ${this.displayFont}`;
+    y = this.columns(ctx, 'Net sales', this.money(report.netSalesCents), y);
+    y += 8;
+    ctx.font = `14px ${this.bodyFont}`;
+    y = this.columns(ctx, 'Cash paid in', this.money(report.cashInCents), y);
+    y = this.columns(ctx, 'Cash paid out', this.money(-report.cashOutCents), y);
+    y += 4;
+    y = this.rule(ctx, y);
+    y += 14;
+    y = this.columns(ctx, 'Expected cash', this.money(report.expectedCashCents), y);
+    y = this.columns(ctx, 'Physical cash', this.money(report.physicalCashCents), y);
+    ctx.font = `600 16px ${this.bodyFont}`;
+    if (report.varianceCents !== 0) ctx.fillStyle = report.varianceCents < 0 ? '#9e3e24' : '#1c6b3f';
+    y = this.columns(ctx, 'Variance', this.money(report.varianceCents), y);
+    ctx.fillStyle = '#000';
+    y += 10;
+    y = this.rule(ctx, y);
+    y += 16;
+
+    ctx.font = `13px ${this.bodyFont}`;
+    ctx.fillStyle = '#555';
+    y = this.columns(ctx, 'Transactions', String(report.transactionCount), y);
+    y = this.columns(ctx, 'Refunds', String(report.refundCount), y);
+    y = this.columns(ctx, 'Voids', String(report.voidCount), y);
+    ctx.fillStyle = '#000';
+    y += 20;
+
+    return y;
   }
 
   /**

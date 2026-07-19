@@ -127,16 +127,35 @@ export class PosHardwareService {
       openDrawer,
       receiptNumber: (receiptData as PosReceiptData)?.receiptNumber,
     });
+    const profile = await this.getBusinessProfile();
+    logStage('printReceipt — business profile', { loaded: Boolean(profile) });
+    const rendered = await this.renderer.render(receiptData as PosReceiptData, profile);
+    await this.printRendered('printReceipt', rendered, openDrawer);
+  }
+
+  /** Z-report reprint/first-print — a cash/sales summary, never opens the drawer. */
+  async printZReport(report: unknown): Promise<void> {
+    logStage('printZReport — start', {
+      printerName: this.settings?.printerName || null,
+      zReportId: (report as { zReportId?: string })?.zReportId,
+    });
+    const profile = await this.getBusinessProfile();
+    const rendered = await this.renderer.renderZReport(report as Parameters<PosReceiptRenderer['renderZReport']>[0], profile);
+    await this.printRendered('printZReport', rendered, false);
+  }
+
+  private async printRendered(
+    stage: string,
+    rendered: { imageDataUrl: string; footerCommands: string },
+    openDrawer: boolean,
+  ): Promise<void> {
     if (!this.settings?.printerName) {
       const error = new Error('No receipt printer is configured.');
-      logError('printReceipt', error);
+      logError(stage, error);
       throw error;
     }
     this.configureSecurity();
     await this.connectWebsocket(2, 1);
-    const profile = await this.getBusinessProfile();
-    logStage('printReceipt — business profile', { loaded: Boolean(profile) });
-    const rendered = await this.renderer.render(receiptData as PosReceiptData, profile);
     // The receipt body is a rasterized image (Arabic needs real text shaping,
     // which raw ESC/POS text mode cannot do — see pos-receipt-renderer.service.ts)
     // printed through QZ's escpos image path; the QR/cut footer is still sent
@@ -163,10 +182,10 @@ export class PosHardwareService {
     try {
       await this.withTimeout(qz.print(config, data), this.PRINT_TIMEOUT_MS, 'Receipt printing');
       this.connected.set(true);
-      logStage('printReceipt — done', { printerName: this.settings.printerName });
+      logStage(`${stage} — done`, { printerName: this.settings.printerName });
     } catch (error) {
       this.connected.set(false);
-      logError('printReceipt', error, { printerName: this.settings.printerName });
+      logError(stage, error, { printerName: this.settings.printerName });
       throw error;
     }
   }

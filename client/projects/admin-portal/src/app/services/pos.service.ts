@@ -121,10 +121,48 @@ export interface PosShiftSummary {
   refundTotalCents: number;
   voidTotalCents: number;
   netSalesCents: number;
+  cashInCents: number;
+  cashOutCents: number;
   expectedCashCents: number;
   transactionCount: number;
   refundCount: number;
   voidCount: number;
+}
+
+export type PosCashMovementKind = 'paid_in' | 'paid_out' | 'safe_drop' | 'float_adjust' | 'no_sale_drawer_open';
+
+export interface PosCashMovement {
+  movementId: string;
+  shiftId: string;
+  registerId: string;
+  cashierId: string;
+  managerId: string | null;
+  kind: PosCashMovementKind;
+  amountCents: number;
+  reason: string;
+  createdAt: string;
+}
+
+export interface PosZReport {
+  zReportId: string;
+  shiftId: string;
+  registerId: string;
+  openingFloatCents: number;
+  grossSalesCents: number;
+  cashSalesCents: number;
+  cardSalesCents: number;
+  refundTotalCents: number;
+  voidTotalCents: number;
+  netSalesCents: number;
+  cashInCents: number;
+  cashOutCents: number;
+  expectedCashCents: number;
+  physicalCashCents: number;
+  varianceCents: number;
+  transactionCount: number;
+  refundCount: number;
+  voidCount: number;
+  createdAt: string;
 }
 
 export interface PosSaleInput {
@@ -308,5 +346,29 @@ export class PosService {
     managerOverrideToken: string;
   }): Promise<PosShiftSummary & { zReportId: string; varianceCents: number }> {
     return firstValueFrom(this.api.post('/pos/shifts/z-report', input));
+  }
+
+  recordCashMovement(input: {
+    shiftId: string;
+    kind: PosCashMovementKind;
+    amountCents: number;
+    reason: string;
+    idempotencyKey: string;
+    managerOverrideId?: string;
+    managerOverrideToken?: string;
+  }): Promise<PosCashMovement> {
+    return firstValueFrom(this.api.post<PosCashMovement>('/pos/cash-movements', input));
+  }
+
+  listCashMovements(shiftId: string): Promise<PosCashMovement[]> {
+    return firstValueFrom(this.api.get<PosCashMovement[]>(`/pos/cash-movements?shiftId=${encodeURIComponent(shiftId)}`));
+  }
+
+  listZReports(limit = 30): Promise<PosZReport[]> {
+    return firstValueFrom(this.api.get<PosZReport[]>(`/pos/shifts/z-reports?limit=${limit}`));
+  }
+
+  getZReport(zReportId: string): Promise<PosZReport> {
+    return firstValueFrom(this.api.get<PosZReport>(`/pos/shifts/z-reports/${zReportId}`));
   }
 }

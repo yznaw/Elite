@@ -4,7 +4,10 @@ const { loadShiftSummary } = require('../lib/pos/shift-service');
 
 test('shift summary maps gross, voids, refunds, net sales, and expected cash separately', async () => {
   const client = {
-    async query() {
+    async query(sql) {
+      if (/pos_cash_movements/.test(sql)) {
+        return { rowCount: 1, rows: [{ cash_in_cents: '0', cash_out_cents: '0' }] };
+      }
       return {
         rowCount: 1,
         rows: [{
@@ -22,7 +25,6 @@ test('shift summary maps gross, voids, refunds, net sales, and expected cash sep
           void_total_cents: '6000',
           voided_cash_cents: '2500',
           net_sales_cents: '40000',
-          expected_cash_cents: '36000',
           transaction_count: 8,
           refund_count: 2,
           void_count: 1,
@@ -41,4 +43,46 @@ test('shift summary maps gross, voids, refunds, net sales, and expected cash sep
   assert.equal(summary.refundTotalCents, 4000);
   assert.equal(summary.netSalesCents, 40000);
   assert.equal(summary.expectedCashCents, 36000);
+});
+
+test('shift summary adds cash-in and subtracts cash-out from expected cash', async () => {
+  const client = {
+    async query(sql) {
+      if (/pos_cash_movements/.test(sql)) {
+        return { rowCount: 1, rows: [{ cash_in_cents: '2000', cash_out_cents: '500' }] };
+      }
+      return {
+        rowCount: 1,
+        rows: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          register_id: '22222222-2222-4222-8222-222222222222',
+          cashier_id: '33333333-3333-4333-8333-333333333333',
+          state: 'open',
+          opened_at: new Date('2026-06-22T08:00:00.000Z'),
+          opening_float_cents: '10000',
+          gross_sales_cents: '50000',
+          cash_sales_cents: '30000',
+          card_sales_cents: '20000',
+          refund_total_cents: '4000',
+          cash_refund_cents: '1500',
+          void_total_cents: '6000',
+          voided_cash_cents: '2500',
+          net_sales_cents: '40000',
+          transaction_count: 8,
+          refund_count: 2,
+          void_count: 1,
+        }],
+      };
+    },
+  };
+
+  const summary = await loadShiftSummary(
+    client,
+    '44444444-4444-4444-8444-444444444444',
+    '11111111-1111-4111-8111-111111111111',
+  );
+  assert.equal(summary.cashInCents, 2000);
+  assert.equal(summary.cashOutCents, 500);
+  // 10000 (float) + 30000 (cash sales) - 2500 (voided cash) - 1500 (cash refund) + 2000 (in) - 500 (out)
+  assert.equal(summary.expectedCashCents, 37500);
 });

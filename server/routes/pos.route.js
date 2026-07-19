@@ -12,7 +12,8 @@ const {
   enrollRegister,
 } = require('../lib/pos/register-service');
 const { setManagerPin, verifyManagerPin } = require('../lib/pos/manager-service');
-const { closeShift, currentSummary, openShift } = require('../lib/pos/shift-service');
+const { closeShift, currentSummary, getZReport, listZReports, openShift } = require('../lib/pos/shift-service');
+const { listCashMovements, recordCashMovement } = require('../lib/pos/cash-movement-service');
 const { createSale, findByBarcode, loadSale, searchProducts } = require('../lib/pos/sale-service');
 const { reportSyncState, syncTransactions } = require('../lib/pos/sync-service');
 const { deleteParkedCart, listParkedCarts, parkCart } = require('../lib/pos/parked-cart-service');
@@ -122,6 +123,22 @@ router.get('/shifts/current', asyncHandler(async (req, res) => {
 
 router.post('/shifts/z-report', asyncHandler(async (req, res) => {
   created(res, await closeShift(context(req), req.body));
+}));
+
+router.get('/shifts/z-reports', asyncHandler(async (req, res) => {
+  ok(res, await listZReports(context(req), { limit: req.query.limit }));
+}));
+
+router.get('/shifts/z-reports/:id', asyncHandler(async (req, res) => {
+  ok(res, await getZReport(context(req), req.params.id));
+}));
+
+router.post('/cash-movements', asyncHandler(async (req, res) => {
+  created(res, await recordCashMovement(context(req), req.body));
+}));
+
+router.get('/cash-movements', asyncHandler(async (req, res) => {
+  ok(res, await listCashMovements(context(req), req.query.shiftId));
 }));
 
 router.post('/transactions', asyncHandler(async (req, res) => {

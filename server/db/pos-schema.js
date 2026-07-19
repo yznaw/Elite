@@ -8,6 +8,7 @@ const migrationPaths = [
   path.join(__dirname, 'migrations', '018_pos_card_reference_and_reconciliation.sql'),
   path.join(__dirname, 'migrations', '019_cashier_role.sql'),
   path.join(__dirname, 'migrations', '020_pos_inventory_ledger.sql'),
+  path.join(__dirname, 'migrations', '021_pos_cash_movements.sql'),
 ];
 
 async function ensurePosSchema(client) {
