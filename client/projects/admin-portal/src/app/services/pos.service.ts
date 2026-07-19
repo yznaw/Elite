@@ -279,6 +279,14 @@ export class PosService {
     return firstValueFrom(this.api.put('/pos/sync-state', { shiftId, pendingCount, rejectedCount })).then(() => undefined);
   }
 
+  /** Polled independently of the browser's online/offline events — those
+   *  only reflect the network interface, not whether the API is actually
+   *  reachable (a flaky LAN/router/DNS issue can leave navigator.onLine true
+   *  while the API is unreachable). */
+  healthCheck(): Promise<{ ok: boolean; serverTime: string }> {
+    return firstValueFrom(this.api.get<{ ok: boolean; serverTime: string }>('/pos/health-check'));
+  }
+
   verifyManagerPin(pin: string, action: PosManagerOverride['action']): Promise<PosManagerOverride> {
     return firstValueFrom(this.api.post<PosManagerOverride>('/pos/manager/verify-pin', { pin, action }));
   }

@@ -155,6 +155,10 @@ test('card settlement reconciliation: matched, exception, resolve-requires-note'
 
     const list = await api(`/admin/pos-reconciliation?registerId=${registerId}`);
     assert.ok(list.some((r) => r.reconciliationId === exception.reconciliationId));
+
+    const health = await api('/pos/health-check');
+    assert.equal(health.ok, true);
+    assert.ok(!Number.isNaN(new Date(health.serverTime).getTime()));
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

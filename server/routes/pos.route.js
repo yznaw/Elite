@@ -81,6 +81,15 @@ router.post('/registers/check-in', asyncHandler(async (req, res) => {
   ok(res, register);
 }));
 
+// Independent of the browser's online/offline events — the client polls this
+// while offline or after a failed sale/sync, since a flaky LAN/Wi-Fi can drop
+// API reachability without ever firing a browser `offline` event (the browser
+// only reports its own network interface state, not whether the API is
+// actually reachable).
+router.get('/health-check', asyncHandler(async (req, res) => {
+  ok(res, { ok: true, serverTime: new Date().toISOString() });
+}));
+
 router.get('/registers/current', asyncHandler(async (req, res) => {
   ok(res, await currentRegister(context(req)));
 }));

@@ -121,11 +121,22 @@
         @if (!online()) {
           <div class="offline-notice">
             Offline mode: sales are receipted locally and queued for synchronization.
+            @if (!serverReachable()) { <span class="unreachable">Server unreachable — retrying automatically.</span> }
             @if (catalogCachedAt()) { <span>Catalog cached {{ catalogCachedAt() | date:'short' }}</span> }
           </div>
         }
         @if (rejectedSales() > 0) {
           <div class="offline-notice rejected">{{ rejectedSales() }} rejected offline sale(s) require manager review before shift close.</div>
+        }
+        @if (pendingSales() > 0) {
+          <div class="offline-notice" [class.rejected]="oldestPendingAgeMs() > 600000" [class.warn]="oldestPendingAgeMs() > 120000 && oldestPendingAgeMs() <= 600000">
+            {{ pendingSales() }} sale(s) waiting to sync — oldest queued {{ formatAge(oldestPendingAgeMs()) }} ago. Last synced {{ formatSyncTime(lastSyncAt()) }}.
+          </div>
+        }
+        @if (persistentStorage() === false) {
+          <div class="offline-notice rejected">
+            This browser could not guarantee persistent local storage — queued offline sales may be at risk if the browser clears site data. Avoid private/incognito mode on this register.
+          </div>
         }
         <section class="workspace">
           <div class="catalog-panel">

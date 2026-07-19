@@ -539,6 +539,12 @@ label input:focus {
   color: #8f2f13;
   border-color: #f4bda9;
 }
+.offline-notice.warn {
+  background: #fde9c8;
+  color: #7a4a0a;
+  border-color: #f0cf94;
+}
+.offline-notice .unreachable { color: #8f2f13; font-weight: 600; }
 
 .catalog-panel {
   min-width: 0;

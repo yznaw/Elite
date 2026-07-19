@@ -79,6 +79,9 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly rejectedSales = signal(0);
   readonly queuedSales = signal<PosQueuedSale[]>([]);
   readonly syncing = signal(false);
+  readonly lastSyncAt = signal<string | null>(null);
+  readonly serverReachable = signal(true);
+  readonly persistentStorage = signal<boolean | null>(null);
   readonly catalogCachedAt = signal<string | null>(null);
   readonly selectedProductId = signal<string | null>(null);
   readonly selectedVariantColorKey = signal<string | null>(null);
@@ -98,6 +101,12 @@ export class PosComponent implements OnInit, OnDestroy {
     0,
   ));
   readonly cartCount = computed(() => this.cart().reduce((total, line) => total + line.quantity, 0));
+  readonly oldestPendingAgeMs = computed(() => {
+    const pending = this.queuedSales().filter((sale) => sale.status === 'pending');
+    if (!pending.length) return 0;
+    const oldest = pending.reduce((min, sale) => Math.min(min, new Date(sale.queuedAt).getTime()), Date.now());
+    return Date.now() - oldest;
+  });
   readonly changeCents = computed(() => Math.max(0, this.tenderedCents() - this.totalCents()));
   readonly productGroups = computed<ProductGroup[]>(() => {
     const groups = new Map<string, ProductGroup>();
@@ -192,25 +201,100 @@ export class PosComponent implements OnInit, OnDestroy {
   private eventSource: EventSource | null = null;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private syncAttempt = 0;
+  private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private storageEstimateTimer: ReturnType<typeof setInterval> | null = null;
   private readonly onOnline = () => {
     this.online.set(true);
     void this.syncPendingSales();
   };
-  private readonly onOffline = () => this.online.set(false);
+  private readonly onOffline = () => {
+    this.online.set(false);
+    this.startHealthCheckPolling();
+  };
+  private readonly onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') void this.syncPendingSales();
+  };
+  private readonly onFocus = () => void this.syncPendingSales();
 
   async ngOnInit(): Promise<void> {
     window.addEventListener('online', this.onOnline);
     window.addEventListener('offline', this.onOffline);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    window.addEventListener('focus', this.onFocus);
     // Service worker is registered once at app bootstrap (main.ts), not here.
     await this.initialize();
+    await this.checkPersistentStorage();
+    this.storageEstimateTimer = setInterval(() => void this.updateStorageEstimate(), 5 * 60 * 1000);
+    void this.updateStorageEstimate();
   }
 
   ngOnDestroy(): void {
     window.removeEventListener('online', this.onOnline);
     window.removeEventListener('offline', this.onOffline);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    window.removeEventListener('focus', this.onFocus);
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
+    if (this.healthCheckTimer) clearTimeout(this.healthCheckTimer);
+    if (this.storageEstimateTimer) clearInterval(this.storageEstimateTimer);
     this.eventSource?.close();
+  }
+
+  /**
+   * Runs whenever the browser's own online() signal is false, or a sale/sync
+   * just failed — independent of the browser's online/offline events, which
+   * only reflect the network interface, not real API reachability. Jittered
+   * 15-30s so many idle registers don't all hit the API in lockstep.
+   */
+  private startHealthCheckPolling(): void {
+    if (this.healthCheckTimer) return;
+    const poll = async () => {
+      this.healthCheckTimer = null;
+      try {
+        await this.pos.healthCheck();
+        this.serverReachable.set(true);
+        this.online.set(true);
+        await this.syncPendingSales();
+        // Only keep polling if something is still pending/rejected after
+        // that sync attempt — otherwise there's nothing left to recover.
+        if (this.pendingSales() > 0 || this.rejectedSales() > 0 || !this.online()) {
+          this.healthCheckTimer = setTimeout(() => void poll(), 15000 + Math.random() * 15000);
+        }
+      } catch {
+        this.serverReachable.set(false);
+        this.healthCheckTimer = setTimeout(() => void poll(), 15000 + Math.random() * 15000);
+      }
+    };
+    void poll();
+  }
+
+  private async checkPersistentStorage(): Promise<void> {
+    if (!('storage' in navigator) || !navigator.storage.persist) {
+      this.persistentStorage.set(null);
+      return;
+    }
+    try {
+      const persisted = await navigator.storage.persisted();
+      const granted = persisted || await navigator.storage.persist();
+      this.persistentStorage.set(granted);
+      await this.local.setPersistentStorageStatus({ persisted: granted, checkedAt: new Date().toISOString() });
+    } catch {
+      this.persistentStorage.set(null);
+    }
+  }
+
+  private async updateStorageEstimate(): Promise<void> {
+    if (!('storage' in navigator) || !navigator.storage.estimate) return;
+    try {
+      const estimate = await navigator.storage.estimate();
+      await this.local.setStorageEstimate({
+        usage: estimate.usage || 0,
+        quota: estimate.quota || 0,
+        checkedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Best-effort — a failed estimate is not worth surfacing to the cashier.
+    }
   }
 
   async initialize(): Promise<void> {
@@ -330,6 +414,18 @@ export class PosComponent implements OnInit, OnDestroy {
       this.toast.warning('Opening cash must be a valid non-negative amount.');
       return;
     }
+    // persist() resolving false often means private/incognito mode, where an
+    // offline sale queued in IndexedDB can be silently wiped when the
+    // session ends. persist()/quota heuristics are known to be unreliable
+    // across browsers though, so this warns rather than hard-blocking — a
+    // false positive here would be worse than the risk it's guarding against
+    // on a live register mid-shift.
+    if (this.persistentStorage() === false) {
+      this.toast.warning(
+        'This browser could not guarantee persistent storage',
+        'Offline sales may be lost if this is a private/incognito window. Avoid using one on this register.',
+      );
+    }
     this.busy.set(true);
     try {
       const shift = await this.pos.openShift(openingFloatCents);
@@ -423,7 +519,7 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     const amountTenderedCents = tenderedCents ?? 0;
 
-    let completedSale: { receiptData: unknown; openDrawer: boolean } | null = null;
+    let completedSale: { receiptData: unknown; openDrawer: boolean; queuedIdempotencyKey: string | null } | null = null;
     this.busy.set(true);
     try {
       await this.ensureReceiptBlock();
@@ -464,6 +560,10 @@ export class PosComponent implements OnInit, OnDestroy {
         } catch (error) {
           if (!this.isNetworkError(error)) throw error;
           this.online.set(false);
+          // Start recovering immediately rather than waiting for a browser
+          // `online` event that may never fire (the network interface can
+          // stay "up" while the API itself is unreachable).
+          this.startHealthCheckPolling();
           result = await this.queueOfflineSale(payload, receiptData);
         }
       } else {
@@ -479,7 +579,11 @@ export class PosComponent implements OnInit, OnDestroy {
       // must not hold the `busy` flag — otherwise a slow/failed print would
       // keep "Take payment" disabled for the next customer. Print after the
       // finally releases busy; QZ calls are themselves timeout-guarded.
-      completedSale = { receiptData: result.receipt.receiptData, openDrawer: method === 'cash' };
+      completedSale = {
+        receiptData: result.receipt.receiptData,
+        openDrawer: method === 'cash',
+        queuedIdempotencyKey: result.status === 'pending-sync' ? result.transactionId : null,
+      };
     } catch (error) {
       this.toast.error("Couldn't complete sale", this.errorMessage(error));
     } finally {
@@ -489,6 +593,9 @@ export class PosComponent implements OnInit, OnDestroy {
     if (completedSale) {
       try {
         await this.hardware.printReceipt(completedSale.receiptData, completedSale.openDrawer);
+        if (completedSale.queuedIdempotencyKey) {
+          await this.local.appendJournal({ idempotencyKey: completedSale.queuedIdempotencyKey, event: 'printed', at: new Date().toISOString() });
+        }
       } catch (printError) {
         this.toast.warning('Sale saved, receipt not printed', this.errorMessage(printError));
       }
@@ -541,6 +648,9 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     this.syncing.set(true);
     try {
+      for (const sale of pending) {
+        await this.local.appendJournal({ idempotencyKey: sale.idempotencyKey, event: 'sync_attempted', at: new Date().toISOString() });
+      }
       const response = await this.pos.syncSales(pending.map((sale) => ({
         idempotencyKey: sale.idempotencyKey,
         receiptNumber: sale.receiptNumber,
@@ -548,15 +658,24 @@ export class PosComponent implements OnInit, OnDestroy {
         payload: sale.payload,
       })));
       for (const accepted of [...response.accepted, ...response.acceptedWithConflicts]) {
-        await this.local.deleteQueuedSale(accepted.idempotencyKey);
+        // Kept (not deleted) for the local audit window — see
+        // markQueuedSaleSynced's doc comment and AUDIT_WINDOW_MS.
+        await this.local.markQueuedSaleSynced(accepted.idempotencyKey);
+        await this.local.appendJournal({ idempotencyKey: accepted.idempotencyKey, event: 'accepted', at: new Date().toISOString() });
       }
       for (const rejected of response.rejected) {
         await this.local.markQueuedSaleRejected(rejected.idempotencyKey, rejected.message);
+        await this.local.appendJournal({
+          idempotencyKey: rejected.idempotencyKey, event: 'rejected', at: new Date().toISOString(),
+          detail: { reason: rejected.reason, code: rejected.code },
+        });
       }
       this.syncAttempt = 0;
+      this.lastSyncAt.set(new Date().toISOString());
       await this.refreshQueueState();
       await this.reportSyncState();
       await this.loadProducts(this.searchQuery);
+      await this.local.cleanupSyncedSales();
       if (response.acceptedWithConflicts.length) {
         this.toast.warning(
           `${response.acceptedWithConflicts.length} offline sale conflict(s) need manager reconciliation.`,
@@ -564,6 +683,7 @@ export class PosComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       this.scheduleSyncRetry();
+      this.startHealthCheckPolling();
       this.toast.warning('Offline sync paused', this.errorMessage(error));
     } finally {
       this.syncing.set(false);
@@ -937,6 +1057,21 @@ export class PosComponent implements OnInit, OnDestroy {
     return new Intl.NumberFormat('en-QA', { style: 'currency', currency: 'QAR' }).format(cents / 100);
   }
 
+  formatAge(ms: number): string {
+    if (ms <= 0) return '';
+    const minutes = Math.floor(ms / 60000);
+    if (minutes < 1) return '<1m';
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  }
+
+  formatSyncTime(iso: string | null): string {
+    if (!iso) return 'never';
+    const diffMs = Date.now() - new Date(iso).getTime();
+    if (diffMs < 60000) return 'just now';
+    return `${this.formatAge(diffMs)} ago`;
+  }
+
   productImage(item: PosCatalogItem): string {
     return this.pos.mediaUrl(item.imageUrl);
   }
@@ -1265,6 +1400,7 @@ export class PosComponent implements OnInit, OnDestroy {
       queuedAt: new Date().toISOString(),
     };
     await this.local.queueOfflineSale(queued);
+    await this.local.appendJournal({ idempotencyKey: queued.idempotencyKey, event: 'created', at: new Date().toISOString() });
     const stockUpdates = this.cart().map((line) => ({
       variantId: line.item.variantId,
       stock: Math.max(0, line.item.stock - line.quantity),

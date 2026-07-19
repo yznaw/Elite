@@ -15,14 +15,18 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
+  // This worker now registers app-wide (scope: '/', see main.ts — needed for
+  // PWA installability on any page, not only /pos), but the offline shell
+  // fallback below must stay POS-only: falling back to the /pos shell for a
+  // network-down navigation to /dashboard or /catalog would silently serve
+  // the wrong page instead of a normal browser offline error.
   if (request.mode === 'navigate') {
+    if (!url.pathname.startsWith('/pos')) return;
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (url.pathname.startsWith('/pos')) {
-            const copy = response.clone();
-            void caches.open(CACHE).then((cache) => cache.put('/pos-shell', copy));
-          }
+          const copy = response.clone();
+          void caches.open(CACHE).then((cache) => cache.put('/pos-shell', copy));
           return response;
         })
         .catch(async () => (await caches.open(CACHE)).match('/pos-shell') || Response.error()),
