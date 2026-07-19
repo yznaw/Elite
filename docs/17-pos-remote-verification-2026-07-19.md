@@ -77,3 +77,51 @@ Everything in [16-launch-roadmap.md](16-launch-roadmap.md)'s Phase 0.5 and Phase
 - Set a working manager PIN for at least one Owner/Admin account (once a way to set one exists) before attempting the void/refund/drawer-open/paid-out/Z-report items.
 - Re-run the `pm2 logs` drift-job watch and the direct `inventory_movements` / `pos_inventory_baselines` queries from Phase 1 — I have no server or database access in this session.
 - Double check the "Black Edition" variant size labels in Catalog (bug #2 above) before it causes a real checkout mistake at the till.
+
+---
+
+## Retest — commit `dec6a58` ("Fix remote-QA findings: manager PIN setup, false session-expiry, dashboard flash")
+
+Re-ran the relevant checks against the live site after this commit deployed.
+
+| Finding from first session | Status now |
+|---|---|
+| No way to set a Manager PIN anywhere | ✅ **Fixed** — the "Manager PIN" card exists (Settings → General) and saves correctly. The "doesn't work in POS" symptom below turned out to be the approver-separation control correctly rejecting self-approval, not a broken save — see finding below for the real explanation and the unblock path (a second account). |
+| Bug #1 — spurious "Session expired" toast + blank catalog after wrong PIN | ✅ **Fixed** — reproduced a wrong-PIN rejection three separate times in this retest; got only the correct `Manager PIN is incorrect` toast each time, no session-expired toast, no catalog blanking. |
+| Bug #3 — dashboard all-zero KPI flash on load | ✅ **Fixed** — reloaded `/dashboard` repeatedly; it now goes straight from a blank/loading content area to fully-populated real numbers, never showing a zero/empty-state flash in between. |
+| Bug #2 — "Black Edition" size labels showing color names | ⚪ **Not fixed, as expected** — commit message explicitly flags this as bad source data requiring a manual catalog edit, not a code fix. Still needs someone to go into Catalog → Black Edition and correct the variant size values. |
+
+### 🟢 Investigated: the Manager PIN you save in Settings didn't authenticate in POS — explained, not a bug
+
+Steps to reproduce (tried 3 times with 3 different PINs, same result every time):
+
+1. Settings → General → Manager PIN card → enter a 4-digit PIN (tried `4821`, `9137`, `7710`) → **Save PIN** → toast confirms "Manager PIN saved. Use it on the register to approve POS actions."
+2. Go straight to POS → Returns/voids → look up an existing receipt → enter a reason → enter the **exact same PIN just saved** → Void entire sale.
+3. Every time: `Couldn't void sale — Manager PIN is incorrect.`
+
+Tried immediately after saving (no delay), after a full page reload, and using `form_input` to set the field directly (ruling out a typing/focus glitch) — same result each time. This means the Phase 3 PIN-gated actions (void, refund, no-sale drawer open, paid-out, shift-close/Z-report) are **still fully blocked**, just with a different root cause than before: the self-service PIN card gives the illusion of being set up, but whatever it writes doesn't match what the verify-pin check reads back.
+
+**Root cause found (not a bug) — this is the approver-separation control working as designed.** `server/lib/pos/manager-service.js:77` explicitly excludes the acting user's own account from the pool of valid approvers unless the tenant has opted into an audited "emergency self-approval" exception (`tenants.pos_emergency_self_approval_enabled`, currently SQL-only, no UI toggle exists yet — see roadmap Phase 2):
+
+```js
+if (manager.id === context.userId && !emergencySelfApprovalEnabled) continue;
+```
+
+This was built intentionally (docs/15 Phase 3, P0-7) so a manager-role cashier — or, as in this retest, the only account in the environment — cannot approve their own void/refund/etc. with their own PIN. **The Owner's PIN was in fact saved and hashed correctly; it is being deliberately rejected because the Owner was trying to approve their own action.** This is not the same bug class as before (no mismatch, no silent no-op) — it's the security control functioning correctly against a test environment that only had one usable account.
+
+**No code fix needed. Unblock path:** invite a second account (Settings → Team → invite as Manager or Admin), have that second account set its own PIN (Settings → General → Manager PIN, once logged in as them), and use *that* PIN — not the Owner's own — to approve the Owner's void/refund/paid-out/drawer-open/Z-report actions. This also matches how a real shop with more than one person is expected to operate.
+
+---
+
+## Next retest checklist
+
+1. Settings → Team → invite a second test account with role **Manager** (or Admin), accept the invite / set its password.
+2. Log in as that second account once, go to Settings → General → Manager PIN, save a PIN for it.
+3. Log back in as Owner (or whichever account is doing the selling) and re-run the blocked items, entering the **second account's** PIN when prompted:
+   - Void a completed sale
+   - Refund a completed sale (partial and full)
+   - No-sale drawer open
+   - Paid-out cash movement
+   - Shift close → Z-report generation
+4. Once a Z-report exists, retest the still-unreached items: Z-report reprint, CSV export.
+5. Everything in Phase 1 that depends on void/refund (ledger rows for void/partial-refund) can now also be exercised.
