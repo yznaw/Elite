@@ -201,9 +201,7 @@ export class PosComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     window.addEventListener('online', this.onOnline);
     window.addEventListener('offline', this.onOffline);
-    if ('serviceWorker' in navigator) {
-      void navigator.serviceWorker.register('/pos-sw.js', { scope: '/' }).catch(() => undefined);
-    }
+    // Service worker is registered once at app bootstrap (main.ts), not here.
     await this.initialize();
   }
 

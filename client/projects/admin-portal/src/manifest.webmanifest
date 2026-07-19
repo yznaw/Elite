@@ -1,0 +1,25 @@
+{
+  "name": "Elite Collection Admin Portal",
+  "short_name": "Elite Admin",
+  "description": "Elite Collection admin portal — catalog, orders, POS, and analytics.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#024638",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
