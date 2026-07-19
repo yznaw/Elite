@@ -4,9 +4,9 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: cash movements/Z-report history, card settlement reconciliation, Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: card settlement reconciliation, Angular security upgrade, PWA/offline hardening, legal receipt sign-off, backups/DR, multi-branch data model.
 
-**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (baseline capture + drift-detection job, commit `10ba2be`). All 18 server tests passing, client build green.
+**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`). All 19 server tests passing, client build green.
 
 ---
 
@@ -107,21 +107,25 @@
 
 ---
 
-## Phase 3 — Cash movements & Z-report history
+## Phase 3 — Cash movements & Z-report history ✅ Built, needs hardware verification
 
 **Why now:** depends on nothing from Phase 1 structurally, but sequenced here because it's the other half of "can we trust the numbers at end of day" — inventory ledger for stock, cash movements for cash. Doing them back-to-back means one hardware/UI testing session covers both money trails.
 
-### What to build
-- `pos_cash_movements` table (migration) — paid-in, paid-out, safe-drop, float-adjust, no-sale-drawer-open, each requiring a reason and (for drawer-open) a manager override.
-- UI in the POS shift screen for cashiers/managers to log these.
-- Z-report history list + reprint/export (the underlying `pos_z_reports` table already exists from earlier work — this is just the UI + reprint route).
-- Wire cash movements into the shift-close variance calculation (`shift-service.js`'s `loadShiftSummary`).
+**Status:** built and pushed (commit `f13b295`). All 19 server tests pass, client builds clean. **Not yet confirmed on the real register** — every item in the test gate below still needs a hands-on check.
+
+### What was built
+- `pos_cash_movements` table (migration 021) — paid-in, paid-out, safe-drop, float-adjust, no-sale-drawer-open, each requiring a reason. Cash-out kinds (paid-out, safe-drop, no-sale-drawer-open) require a manager override (reuses the existing `drawer-open` override action); paid-in and float-adjust don't.
+- UI in the POS shift screen (`pos.component.ts`/`.html`) for cashiers/managers to log these, with a running list for the current shift.
+- Z-report printing, built for the first time — previously a Z-report was generated on shift close but never printed at all. New `renderZReport()` layout in `pos-receipt-renderer.service.ts`, printed via a new `printZReport()` on the hardware service.
+- Z-report history list (`GET /pos/shifts/z-reports`, `/pos/shifts/z-reports/:id`) with reprint and CSV export in the shift dialog.
+- Cash movements wired into the shift-close variance calculation (`shift-service.js`'s `loadShiftSummary`): `expectedCashCents` now nets cash-in against cash-out. `pos_z_reports` gained `cash_in_cents`/`cash_out_cents` columns so this is queryable directly, not just buried in `report_data` jsonb.
 
 ### Test gate
-- [ ] Unit test: shift-close expected-cash calculation correctly includes/nets out paid-in and paid-out amounts.
-- [ ] Unit test: a no-sale drawer-open without a manager override is rejected; with one, it's recorded and audited.
-- [ ] Manual: open a shift, do a real cash paid-out (e.g. "petty cash for supplies"), close the shift, and confirm the variance report on the printed/on-screen Z-report reflects it correctly — verify by hand-counting the actual drawer against the expected total.
+- [ ] Manual: open a shift, do a real cash paid-out (e.g. "petty cash for supplies") with a real manager PIN approval, close the shift, and confirm the variance report reflects it correctly — verify by hand-counting the actual drawer against the expected total.
+- [ ] Manual: do a no-sale drawer-open from the POS and confirm the physical drawer actually pulses open (not just recorded in the DB).
+- [ ] Manual: print a Z-report for the first time on the real printer and visually confirm the layout is legible and complete (never printed on real hardware before this phase).
 - [ ] Manual: reprint an old Z-report from history and confirm it matches what was originally printed (no silent data drift on reprint).
+- [ ] Manual: export Z-report history to CSV and open it in Excel/Google Sheets, confirm all columns are present and readable.
 
 ---
 
@@ -267,11 +271,11 @@ Confirmed as real future work, not started, since a second physical branch is pl
 
 ```
 Phase 0    "Go to POS" admin link         ✅ done, needs a manual click-through
-Phase 0.5  Receipt print fixes + reprint/remote-enrollment UI  ← do before Phase 8 (legal sign-off needs a legible receipt)
-Phase 1  Inventory ledger              ─┐
+Phase 0.5  Receipt print fixes + reprint/remote-enrollment UI  ✅ built, needs hardware verification
+Phase 1  Inventory ledger              ─┐ ✅ built, needs hardware verification
 Phase 2  Cashier follow-ups             │  can run in parallel with 1
-Phase 3  Cash movements + Z-history     │  (independent of 1, but grouped
-Phase 4  Card settlement reconciliation ┘  for one hardware-test session)
+Phase 3  Cash movements + Z-history     │  ✅ built, needs hardware verification
+Phase 4  Card settlement reconciliation ┘  (independent of 1, but grouped for one hardware-test session)
 Phase 5  Core reporting                    ← depends on 1, 3, 4
 Phase 6  Angular upgrade                   ← independent, do anytime before 10
 Phase 7  PWA/offline hardening              ← independent, do anytime before 10
