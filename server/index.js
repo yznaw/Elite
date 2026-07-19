@@ -18,6 +18,7 @@ const { ensurePosSchema } = require('./db/pos-schema');
 const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
+const { startInventoryConsistencyJob } = require('./lib/pos/inventory-consistency-job');
 const { assertProductionEnv, DEV_SESSION_SECRET } = require('./config/assert-env');
 const { csrfProtection } = require('./middleware/csrf');
 
@@ -224,6 +225,7 @@ async function prepareDatabase() {
 
 async function startServer(port = PORT) {
   await prepareDatabase();
+  const stopInventoryConsistencyJob = startInventoryConsistencyJob();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, () => {
       const address = server.address();
@@ -232,6 +234,7 @@ async function startServer(port = PORT) {
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
       resolve(server);
     });
+    server.once('close', stopInventoryConsistencyJob);
     server.once('error', reject);
   });
 }

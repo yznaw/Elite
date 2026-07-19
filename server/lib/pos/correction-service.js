@@ -2,6 +2,7 @@ const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
 const { claimReceipt, loadSale } = require('./sale-service');
+const { recordMovement } = require('./inventory-ledger');
 
 async function updateProductTotals(client, tenantId, productIds) {
   if (!productIds.size) return;
@@ -133,6 +134,15 @@ async function voidTransaction(context, transactionIdValue, body) {
         stockRestored.push({ variantId: item.variant_id, stock: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
+        await recordMovement(client, context, {
+          productId: item.product_id,
+          variantId: item.variant_id,
+          delta: item.quantity,
+          reason: 'pos_void',
+          referenceType: 'pos_void',
+          referenceId: voidResult.rows[0].id,
+          metadata: { originalTransactionId: transaction.id },
+        });
       }
     }
     await updateProductTotals(client, context.tenantId, products);
@@ -389,6 +399,15 @@ async function createRefund(context, body) {
         stockUpdates.push({ variantId: item.variant_id, stock: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
+        await recordMovement(client, context, {
+          productId: item.product_id,
+          variantId: item.variant_id,
+          delta: line.quantity,
+          reason: 'pos_refund',
+          referenceType: 'pos_refund',
+          referenceId: refund.id,
+          metadata: { originalTransactionId: transaction.id },
+        });
       }
     }
     await updateProductTotals(client, context.tenantId, products);

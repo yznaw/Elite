@@ -1,5 +1,6 @@
 const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, cents, nonEmpty, positiveInt, uuid } = require('./errors');
+const { recordMovement } = require('./inventory-ledger');
 
 const MAX_ORDER_CENTS = 2_147_483_647;
 
@@ -486,6 +487,15 @@ async function createSale(context, body, options = {}) {
       const stock = Number(stockResult.rows[0].stock_quantity);
       stockUpdates.push({ variantId: v.id, stock });
       affectedProducts.add(v.product_id);
+      await recordMovement(client, context, {
+        productId: v.product_id,
+        variantId: v.id,
+        delta: -line.quantity,
+        reason: 'pos_sale',
+        referenceType: 'pos_transaction',
+        referenceId: transactionId,
+        metadata: { offline, sku: v.sku },
+      });
       await client.query(
         `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
          VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,

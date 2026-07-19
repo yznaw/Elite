@@ -137,6 +137,34 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
     });
     assert.equal(voidResult.transactionId, firstSale.transactionId);
 
+    // Inventory ledger: the sale must have written a -1 movement referencing
+    // the transaction, and the void must have written a matching +1
+    // movement referencing the void itself — two rows, not an update to one.
+    const saleMovement = await db.query(
+      `SELECT * FROM inventory_movements WHERE tenant_id = $1 AND variant_id = $2 AND reference_type = 'pos_transaction' AND reference_id = $3`,
+      [tenantId, variantId, firstSale.transactionId],
+    );
+    assert.equal(saleMovement.rowCount, 1);
+    assert.equal(saleMovement.rows[0].delta, -1);
+    assert.equal(saleMovement.rows[0].reason, 'pos_sale');
+    const voidMovement = await db.query(
+      `SELECT * FROM inventory_movements WHERE tenant_id = $1 AND variant_id = $2 AND reference_type = 'pos_void' AND reference_id = $3`,
+      [tenantId, variantId, voidResult.voidId],
+    );
+    assert.equal(voidMovement.rowCount, 1);
+    assert.equal(voidMovement.rows[0].delta, 1);
+    assert.equal(voidMovement.rows[0].reason, 'pos_void');
+
+    // Baseline should have been captured exactly once, at the sale's -1
+    // movement (the variant's first-ever ledger entry): stock was 5 before
+    // the sale decremented it, so baseline = current(4) - delta(-1) = 5.
+    const baseline = await db.query(
+      `SELECT baseline_stock FROM pos_inventory_baselines WHERE tenant_id = $1 AND variant_id = $2`,
+      [tenantId, variantId],
+    );
+    assert.equal(baseline.rowCount, 1);
+    assert.equal(baseline.rows[0].baseline_stock, 5);
+
     const secondPayload = salePayload(block.start + 1, `sale-${runId}-2`);
     const secondSale = await api('/pos/transactions', { method: 'POST', body: JSON.stringify(secondPayload) });
     const refundOverride = await api('/pos/manager/verify-pin', {
@@ -158,6 +186,33 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
       }),
     });
     assert.equal(refund.amountCents, 1000);
+
+    // Refund restock must write a scaled ledger row (quantity refunded, not
+    // the full original sale quantity) referencing the refund itself.
+    const refundMovement = await db.query(
+      `SELECT * FROM inventory_movements WHERE tenant_id = $1 AND variant_id = $2 AND reference_type = 'pos_refund' AND reference_id = $3`,
+      [tenantId, variantId, refund.refundId],
+    );
+    assert.equal(refundMovement.rowCount, 1);
+    assert.equal(refundMovement.rows[0].delta, 1);
+    assert.equal(refundMovement.rows[0].reason, 'pos_refund');
+
+    // End-to-end consistency: current stock must equal baseline + sum of
+    // every ledger delta so far (sale -1, void +1, sale -1, refund +1 = net
+    // 0 against the baseline of 5) — this is exactly what the hourly
+    // inventory-consistency job checks in production.
+    const consistency = await db.query(
+      `SELECT pv.stock_quantity AS current_stock, b.baseline_stock,
+              COALESCE(SUM(im.delta), 0)::integer AS ledger_delta_total
+       FROM product_variants pv
+       JOIN pos_inventory_baselines b ON b.variant_id = pv.id AND b.tenant_id = pv.tenant_id
+       LEFT JOIN inventory_movements im ON im.variant_id = pv.id AND im.tenant_id = pv.tenant_id
+       WHERE pv.tenant_id = $1 AND pv.id = $2
+       GROUP BY pv.stock_quantity, b.baseline_stock`,
+      [tenantId, variantId],
+    );
+    const row = consistency.rows[0];
+    assert.equal(row.current_stock, row.baseline_stock + row.ledger_delta_total);
 
     const cardPayload = {
       ...salePayload(block.start + 4, `sale-${runId}-card`),
