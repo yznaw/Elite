@@ -188,8 +188,19 @@ export class PosHardwareService {
     if (this.securityConfigured) return;
     logStage('configureSecurity — installing QZ signature handlers');
     qz.security.setSignatureAlgorithm('SHA512');
-    qz.security.setCertificatePromise(() => this.fetchCertificate(), { rejectOnFailure: true });
-    qz.security.setSignaturePromise((request) => this.fetchSignature(request));
+    // QZ Tray's internal callCert/callSign helpers branch on
+    // `handler.constructor.name === "AsyncFunction"` to decide whether to
+    // call the handler directly or wrap it in `new Promise(handler)`. An
+    // arrow function like `() => this.fetchCertificate()` is a plain
+    // `Function` even though it returns a promise, so QZ takes the wrong
+    // branch and passes an already-settled Promise as if it were a Promise
+    // *executor* — `new Promise(aPromiseInstance)` throws "TypeError: ...
+    // is not a function" since a Promise instance isn't callable. Binding
+    // the real `async` class methods directly (instead of wrapping them in
+    // arrow functions) preserves their `AsyncFunction` constructor so QZ
+    // detects and calls them correctly.
+    qz.security.setCertificatePromise(this.fetchCertificate.bind(this), { rejectOnFailure: true });
+    qz.security.setSignaturePromise(this.fetchSignature.bind(this));
     this.securityConfigured = true;
   }
 
