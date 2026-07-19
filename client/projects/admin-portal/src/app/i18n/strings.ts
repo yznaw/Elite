@@ -65,6 +65,7 @@ const EN = {
   'topbar.search.placeholder': 'Quick search…',
   'topbar.notifications': 'Notifications',
   'topbar.openMenu': 'Open menu',
+  'topbar.goToPos': 'Go to POS',
   'topbar.closeMenu': 'Close menu',
   'topbar.language': 'Language',
   'topbar.lang.en': 'English',
@@ -1692,6 +1693,7 @@ const AR: Record<keyof typeof EN, string> = {
 
   'topbar.search.placeholder': 'بحث سريع…',
   'topbar.notifications': 'الإشعارات',
+  'topbar.goToPos': 'الانتقال إلى نقطة البيع',
   'topbar.openMenu': 'فتح القائمة',
   'topbar.closeMenu': 'إغلاق القائمة',
   'topbar.language': 'لغة العرض',

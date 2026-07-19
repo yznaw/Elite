@@ -73,6 +73,13 @@ const META: Record<string, PageMeta> = {
           <ap-icon name="search" [size]="14"/>
         </button>
 
+        @if (canOpenPos()) {
+          <a class="topbar-pos-link" href="/pos" target="_blank" rel="noopener" [attr.aria-label]="t('topbar.goToPos')">
+            <ap-icon name="store" [size]="14"/>
+            <span class="topbar-pos-link-label">{{ t('topbar.goToPos') }}</span>
+          </a>
+        }
+
         <ap-language-switcher/>
 
         <ap-notification-dropdown/>
@@ -176,6 +183,33 @@ const META: Record<string, PageMeta> = {
     }
     html[dir='rtl'] .topbar .crumb { letter-spacing: 0; }
     .topbar-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+
+    /* ── Go to POS link ── */
+    .topbar-pos-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      text-decoration: none;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    .topbar-pos-link:hover {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+    @media (max-width: 900px) {
+      .topbar-pos-link-label { display: none; }
+      .topbar-pos-link { padding: 0; width: 36px; justify-content: center; }
+    }
 
     /* ── Search pane — desktop (below topbar, simple bar) ── */
     .topbar-search-pane {
@@ -348,6 +382,10 @@ export class TopbarComponent {
 
   readonly t    = (k: string): string => this.i18n.t(k);
   readonly user = this.auth.user;
+  // Matches server/routes/pos.route.js's POS_ROLES minus cashier (cashiers
+  // never see the admin shell at all — this button only needs to cover
+  // roles that land in the admin portal first and want a way into /pos).
+  readonly canOpenPos = computed(() => this.auth.hasRole('owner', 'admin', 'manager'));
 
   // Primary tab pages — no back button needed (bottom nav handles them)
   private readonly PRIMARY_PATHS = new Set(['/dashboard', '/catalog', '/orders', '/customers']);
