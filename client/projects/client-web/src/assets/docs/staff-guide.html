@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Elite Collection — Admin Portal Staff Guide</title>
+<style>
+  :root{
+    --green:#024638;
+    --green-2:#036350;
+    --green-3:#012b23;
+    --gold:#c5a572;
+    --gold-2:#d6bc91;
+    --bg:#f5f6fa;
+    --surface:#ffffff;
+    --ink:#1a1f36;
+    --ink-2:#3d4159;
+    --muted:#6b7088;
+    --success:#0f7a5c;
+    --warning:#b3720a;
+    --danger:#b3261e;
+    --border:#e2e4ec;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:"Georgia","Iowan Old Style","Times New Roman",serif;
+    color:var(--ink);
+    background:var(--bg);
+    line-height:1.55;
+    font-size:15px;
+  }
+  h1,h2,h3,h4{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    color:var(--green-3);
+    margin:0 0 10px;
+    letter-spacing:.2px;
+  }
+  .doc{max-width:880px;margin:0 auto;background:var(--surface);}
+  .page{padding:48px 56px;position:relative;}
+  .page + .page{page-break-before:always; border-top:1px solid var(--border);}
+
+  /* ---------- COVER ---------- */
+  .cover{
+    background:linear-gradient(160deg,var(--green) 0%, var(--green-3) 100%);
+    color:#fff;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:flex-start;
+    padding:80px 64px;
+    page-break-after:always;
+  }
+  .cover .eyebrow{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    text-transform:uppercase;
+    letter-spacing:3px;
+    font-size:12px;
+    color:var(--gold-2);
+    margin-bottom:22px;
+  }
+  .cover h1{
+    color:#fff;
+    font-family:Georgia,serif;
+    font-size:44px;
+    line-height:1.15;
+    margin-bottom:18px;
+    max-width:560px;
+  }
+  .cover .sub{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    color:#dfe6e2;
+    font-size:16px;
+    max-width:480px;
+    margin-bottom:40px;
+  }
+  .cover .meta{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:13px;
+    color:#cfe3da;
+    border-top:1px solid rgba(255,255,255,.25);
+    padding-top:20px;
+    width:100%;
+    max-width:520px;
+  }
+  .cover .meta div{margin-bottom:6px;}
+  .cover .meta b{color:var(--gold-2); font-weight:600;}
+  .cover .link-box{
+    margin-top:28px;
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.3);
+    border-radius:8px;
+    padding:14px 18px;
+    font-family:"SF Mono",Menlo,monospace;
+    font-size:13px;
+    color:#fff;
+  }
+
+  /* ---------- TOC ---------- */
+  .toc h1{border-bottom:3px solid var(--gold); padding-bottom:10px;}
+  .toc ol{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    list-style:none;
+    counter-reset:toc;
+    padding:0;
+    margin-top:24px;
+  }
+  .toc li{
+    counter-increment:toc;
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    padding:9px 0;
+    border-bottom:1px dotted var(--border);
+    font-size:14px;
+  }
+  .toc li::before{
+    content:counter(toc);
+    color:var(--gold);
+    font-weight:700;
+    font-family:Georgia,serif;
+    min-width:20px;
+  }
+  .toc a{color:var(--ink-2); text-decoration:none; flex:1;}
+  .toc .sec{font-weight:700; color:var(--green-3);}
+
+  /* ---------- SECTION CHROME ---------- */
+  .kicker{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-size:11px;
+    color:var(--gold);
+    font-weight:700;
+    margin-bottom:6px;
+  }
+  h1.title{font-size:28px; border-bottom:3px solid var(--gold); padding-bottom:14px; margin-bottom:22px;}
+  h2{font-size:19px; margin-top:34px; color:var(--green); border-left:4px solid var(--gold); padding-left:12px;}
+  h3{font-size:15.5px; margin-top:22px; color:var(--green-3);}
+  p{margin:0 0 12px;}
+  strong{color:var(--ink);}
+  code{
+    font-family:"SF Mono",Menlo,monospace;
+    background:#eef1f6;
+    padding:1px 6px;
+    border-radius:4px;
+    font-size:.88em;
+    color:var(--green-3);
+  }
+  a{color:var(--green-2);}
+
+  ol.steps{margin:14px 0 20px; padding-left:0; list-style:none; counter-reset:step;}
+  ol.steps > li{
+    counter-increment:step;
+    position:relative;
+    padding:6px 0 6px 38px;
+    margin-bottom:4px;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:14px;
+  }
+  ol.steps > li::before{
+    content:counter(step);
+    position:absolute;
+    left:0; top:5px;
+    width:24px; height:24px;
+    background:var(--green);
+    color:#fff;
+    border-radius:50%;
+    font-size:12px;
+    font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+  ul.plain{font-family:"Helvetica Neue",Arial,sans-serif; font-size:14px; margin:10px 0 18px; padding-left:20px;}
+  ul.plain li{margin-bottom:5px;}
+
+  .shot{
+    border:1.5px dashed #b9c0d4;
+    background:#f8f9fc;
+    color:var(--muted);
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:12.5px;
+    text-align:center;
+    padding:30px 14px;
+    border-radius:8px;
+    margin:14px 0 22px;
+  }
+  .shot b{display:block; color:var(--ink-2); font-size:13px; margin-bottom:3px;}
+
+  .callout{
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:13.5px;
+    border-radius:8px;
+    padding:14px 16px;
+    margin:16px 0;
+    border-left:4px solid;
+  }
+  .callout.note{background:#eef4fb; border-color:#3b7dd8; color:#1c3a5e;}
+  .callout.warn{background:#fdf3e2; border-color:var(--warning); color:#6b4b06;}
+  .callout.danger{background:#fbe9e7; border-color:var(--danger); color:#7a1a13;}
+  .callout b{display:block; margin-bottom:3px;}
+
+  table.grid{
+    width:100%;
+    border-collapse:collapse;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:13px;
+    margin:14px 0 22px;
+  }
+  table.grid th{
+    background:var(--green);
+    color:#fff;
+    text-align:left;
+    padding:9px 12px;
+    font-weight:600;
+  }
+  table.grid td{
+    padding:9px 12px;
+    border-bottom:1px solid var(--border);
+    vertical-align:top;
+  }
+  table.grid tr:nth-child(even) td{background:#fafbfd;}
+  .yes{color:var(--success); font-weight:700;}
+  .no{color:var(--danger); font-weight:700;}
+  .partial{color:var(--warning); font-weight:700;}
+
+  .badge{
+    display:inline-block;
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:10.5px;
+    font-weight:700;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    padding:3px 9px;
+    border-radius:20px;
+    color:#fff;
+  }
+  .badge.add{background:var(--success);}
+  .badge.edit{background:#3b7dd8;}
+  .badge.del{background:var(--danger);}
+
+  .path{
+    font-family:"SF Mono",Menlo,monospace;
+    font-size:12.5px;
+    background:var(--green-3);
+    color:var(--gold-2);
+    padding:6px 10px;
+    border-radius:6px;
+    display:inline-block;
+    margin-bottom:10px;
+  }
+
+  .foot-note{
+    margin-top:40px;
+    padding-top:14px;
+    border-top:1px solid var(--border);
+    font-family:"Helvetica Neue",Arial,sans-serif;
+    font-size:11px;
+    color:var(--muted);
+  }
+
+  @media print{
+    body{background:#fff;}
+    .doc{max-width:none;}
+    .page{padding:26px 34px;}
+    .cover{min-height:269mm; padding:60px 50px;}
+    a{color:var(--green-3); text-decoration:none;}
+  }
+  @page{ size:A4; margin:14mm; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <!-- ================= COVER ================= -->
+  <div class="cover">
+    <div class="eyebrow">Internal Staff Documentation</div>
+    <h1>Elite Collection<br>Admin Portal — Staff Guide</h1>
+    <div class="sub">A complete, step-by-step walkthrough of every section of the admin portal — adding, editing, and removing products, orders, customers, content, and staff accounts.</div>
+    <div class="link-box">
+      Live portal: https://admin.elitecollections.qa/
+    </div>
+    <div class="meta">
+      <div><b>Prepared for:</b> Elite Collection staff &amp; new hires</div>
+      <div><b>Covers:</b> Dashboard, Catalog, Collections, Media, Storefront, Point of Sale (rules, roles, PIN approvals, cash movements, Z-reports), Card Settlement Reconciliation, Orders, Customers, Feedback, Policies, Analytics, Reference Lists, Settings, Reports &amp; Exports, Troubleshooting</div>
+      <div><b>Document type:</b> HTML — open in any browser, edit the text directly, then print to PDF (Cmd/Ctrl + P → Save as PDF)</div>
+      <div><b>Last updated:</b> 20 July 2026 — verified directly against the live portal, including the 2026-07-20 fixes (Manager PIN self-service, invite-link domain, cash-movement labels) and the new Reconciliation feature</div>
+    </div>
+  </div>
+
+  <!-- ================= TABLE OF CONTENTS ================= -->
+  <div class="page toc">
+    <div class="kicker">Contents</div>
+    <h1 class="title">Table of Contents</h1>
+    <ol>
+      <li><span class="sec">1.</span> <a href="#sec-start">Getting Started &amp; Logging In</a></li>
+      <li><span class="sec">2.</span> <a href="#sec-roles">Staff Roles &amp; Permissions — What Each Role Can Actually Do</a></li>
+      <li><span class="sec">3.</span> <a href="#sec-dashboard">Dashboard</a></li>
+      <li><span class="sec">4.</span> <a href="#sec-catalog">Product Catalog — Add / Edit / Remove Products</a></li>
+      <li><span class="sec">5.</span> <a href="#sec-collections">Collections — Grouping Products</a></li>
+      <li><span class="sec">6.</span> <a href="#sec-media">Media Library</a></li>
+      <li><span class="sec">7.</span> <a href="#sec-storefront">Storefront Editor</a></li>
+      <li><span class="sec">8.</span> <a href="#sec-pos">Point of Sale (POS) — Sales, Approvals, Shifts &amp; Cash Rules</a></li>
+      <li><span class="sec">9.</span> <a href="#sec-reconciliation">Card Settlement Reconciliation</a></li>
+      <li><span class="sec">10.</span> <a href="#sec-orders">Orders &amp; Fulfillment</a></li>
+      <li><span class="sec">11.</span> <a href="#sec-customers">Customers (CRM)</a></li>
+      <li><span class="sec">12.</span> <a href="#sec-feedback">Feedback &amp; Reviews</a></li>
+      <li><span class="sec">13.</span> <a href="#sec-policies">Policies (Legal Pages)</a></li>
+      <li><span class="sec">14.</span> <a href="#sec-analytics">Analytics</a></li>
+      <li><span class="sec">15.</span> <a href="#sec-reference">Reference Lists — Colors, Materials, Sizes</a></li>
+      <li><span class="sec">16.</span> <a href="#sec-settings">Settings — Store Info, Team &amp; Integrations</a></li>
+      <li><span class="sec">17.</span> <a href="#sec-reports">Reports &amp; Exports — Where to Find Everything</a></li>
+      <li><span class="sec">18.</span> <a href="#sec-cheatsheet">Quick-Reference Cheat Sheet</a></li>
+      <li><span class="sec">19.</span> <a href="#sec-troubleshoot">Troubleshooting &amp; FAQ</a></li>
+      <li><span class="sec">20.</span> <a href="#sec-glossary">Glossary</a></li>
+    </ol>
+    <div class="callout note" style="margin-top:30px;">
+      <b>How to use this document</b>
+      This file is plain HTML — double-click it to open in your browser, or open it in a text/code editor to change wording, add screenshots, or update steps as the portal changes. Screenshot placeholders (dashed boxes) show exactly where to drop in your own images later.
+    </div>
+  </div>
+
+  <!-- ================= 1. GETTING STARTED ================= -->
+  <div class="page" id="sec-start">
+    <div class="kicker">Section 1</div>
+    <h1 class="title">Getting Started &amp; Logging In</h1>
+
+    <p>The admin portal is the back-office control panel for the Elite Collection online store and point-of-sale system. It is separate from the public website — staff use it to manage products, orders, customers, and site content.</p>
+
+    <h2>1.1 — Web address</h2>
+    <p>Open your browser and go to:</p>
+    <div class="path">https://admin.elitecollections.qa/</div>
+    <p>Bookmark this page. There is no app to download — the portal works in any modern browser (Chrome, Safari, Edge, Firefox) on desktop, tablet, or phone.</p>
+
+    <h2>1.2 — Logging in</h2>
+    <div class="shot"><b>Screenshot placeholder: login.png</b>Sign-in screen — email + password fields on a dark green background with the Elite logo</div>
+    <ol class="steps">
+      <li>Go to the web address above. You'll land on <strong>Sign in to your workspace</strong>.</li>
+      <li>Enter your <strong>work email</strong> (the one your manager invited you with).</li>
+      <li>Enter your <strong>password</strong>.</li>
+      <li>Click <strong>Sign in</strong>. You'll be taken straight to the Dashboard.</li>
+    </ol>
+
+    <h3>Forgot your password?</h3>
+    <ol class="steps">
+      <li>On the sign-in screen, click <strong>Forgot password?</strong></li>
+      <li>Enter your email address and submit.</li>
+      <li>For security, the portal always shows a generic "check your inbox" message — this does not confirm whether the email is registered.</li>
+      <li>Open the reset link from your email, choose a new password (at least 8 characters), confirm it, and submit. You'll be sent back to the sign-in screen to log in with the new password.</li>
+    </ol>
+
+    <h3>Accepting a staff invitation (first-time login)</h3>
+    <p>If you're a new hire, you won't create your own account — an Owner or Admin invites you (see <a href="#sec-settings">Section 16.2, Team Members</a>). You'll receive a one-time invite link that:</p>
+    <ul class="plain">
+      <li>Is valid for <strong>48 hours</strong> — ask to be re-invited if it expires.</li>
+      <li>Can only be used <strong>once</strong>.</li>
+      <li>Opens a short form where you set your name and choose your own password, then signs you straight in.</li>
+    </ul>
+
+    <div class="callout note">
+      <b>Session security</b>
+      If your session expires or you're signed out, the portal automatically returns you to the sign-in screen and brings you back to the exact page you were on afterward — you won't lose your place.
+    </div>
+
+    <h2>1.3 — Finding your way around</h2>
+    <p>Every page shares the same layout:</p>
+    <ul class="plain">
+      <li><strong>Left sidebar</strong> — the main menu (Dashboard, Catalog, Collections, Media, Storefront, Point of Sale, Orders, Customers, Feedback, Policies, Analytics, Reconciliation, Reference Lists, Settings). Every role sees the same full menu — see <a href="#sec-roles">Section 2</a> for what each link actually does once clicked. Click the arrow icon at the top of the sidebar to collapse it to icons-only.</li>
+      <li><strong>Top bar</strong> — quick search, language switch (EN/AR), notification bell, and your account avatar (top right) for signing out.</li>
+      <li><strong>On a phone</strong>, the sidebar becomes a bottom tab bar (Dashboard · Catalog · Orders · Customers · More) — tap <strong>More</strong> for the rest of the menu.</li>
+    </ul>
+  </div>
+
+  <!-- ================= 2. ROLES ================= -->
+  <div class="page" id="sec-roles">
+    <div class="kicker">Section 2</div>
+    <h1 class="title">Staff Roles &amp; Permissions — What Each Role Can Actually Do</h1>
+    <p>Every staff account is assigned one of five roles when they're invited: <strong>Owner</strong>, <strong>Admin</strong>, <strong>Manager</strong>, <strong>Cashier</strong>, or <strong>Viewer</strong>. Roles are set and changed under <strong>Settings → Team Members</strong> (Owners and Admins only — see <a href="#sec-settings">Section 16.2</a>).</p>
+
+    <div class="callout warn">
+      <b>Read this before assigning roles — the sidebar menu is the same for everyone</b>
+      Every role sees the <em>same full sidebar</em> — Dashboard, Catalog, Collections, Media, Storefront, Point of Sale, Orders, Customers, Feedback, Policies, Analytics, Reconciliation, Reference Lists, Settings. The menu does not hide items based on role (only Managers get one extra link, "My Manager PIN"). What actually happens when a role clicks a link they're not allowed into is a <strong>silent redirect back to the Dashboard</strong> — no "access denied" message, the page just doesn't open. This is normal, not a bug — but it also means <strong>Cashier and Viewer accounts can open, add, edit, and delete in Catalog, Collections, Media, Storefront, Orders, Customers, Feedback, Policies, and Analytics today</strong> — those pages are only gated by "are you logged in," not by role. Only four areas are actually role-restricted: <strong>Settings</strong>, <strong>Reference Lists</strong>, <strong>Reconciliation</strong>, and <strong>Point of Sale</strong>. If your business needs Cashiers or Viewers locked out of the catalog/orders/customer data, that isn't enforced yet — brief staff on what they should and shouldn't touch, and flag this to whoever maintains the portal if it needs tightening.
+    </div>
+
+    <h2>2.1 — Role access matrix (verified against the live portal)</h2>
+    <table class="grid" style="font-size:11.5px;">
+      <tr><th>Role</th><th>General admin pages*</th><th>POS</th><th>Reconcil-<br>iation</th><th>Settings</th><th>Reference Lists</th><th>Own manager PIN</th></tr>
+      <tr>
+        <td><strong>Owner</strong></td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td>Settings → General</td>
+      </tr>
+      <tr>
+        <td><strong>Admin</strong></td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td>Settings → General</td>
+      </tr>
+      <tr>
+        <td><strong>Manager</strong></td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td>Own "My Manager PIN" page</td>
+      </tr>
+      <tr>
+        <td><strong>Cashier</strong></td>
+        <td class="partial">Yes*</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="no">Cannot set one</td>
+      </tr>
+      <tr>
+        <td><strong>Viewer</strong></td>
+        <td class="partial">Yes*</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+      </tr>
+    </table>
+    <p style="font-family:'Helvetica Neue',Arial,sans-serif; font-size:12px; color:var(--muted); margin-top:-10px;">*General admin pages = Dashboard, Catalog, Collections, Media, Storefront, Orders, Customers, Feedback, Policies, Analytics. *Cashier/Viewer access here is <strong>not actually restricted</strong> — see the warning above.</p>
+    <p style="font-family:'Helvetica Neue',Arial,sans-serif; font-size:13px;"><strong>Best for:</strong> Owner — business owner/founder · Admin — store manager/operations lead · Manager — shift lead/senior floor staff · Cashier — front-of-house/till staff · Viewer — stakeholders, intended read-only observers.</p>
+
+    <div class="callout note">
+      <b>Manager PIN — who can hold one and why it matters</b>
+      Only <strong>Owner</strong>, <strong>Admin</strong>, and <strong>Manager</strong> accounts can have a manager PIN at all — Cashiers and Viewers are excluded at the database level, not just the UI. This PIN is what approves refunds, voids, drawer opens, paid-outs, and shift closes in POS (see <a href="#sec-pos">Section 8.4</a>). A shop with only one Owner/Admin/Manager account will find that account's own PIN doesn't work for its own approvals — this is deliberate (self-approval is blocked by design), not a bug. You need at least <strong>two</strong> people who can hold a manager PIN for POS approvals to work day-to-day.
+    </div>
+
+    <div class="callout warn">
+      <b>Cashier and Viewer "read-only" note</b>
+      Beyond the four gated areas above, there is currently no enforced read-only mode anywhere in the portal — a Viewer who opens Catalog, for example, sees the exact same New Product / Import / Export / Edit / Delete controls an Owner would. Treat role assignment as a trust boundary based on training and instructions, not a hard technical guarantee, until this is tightened.
+    </div>
+
+    <h2>2.2 — Changing someone's role or removing access</h2>
+    <p>Covered in full in <a href="#sec-settings">Section 16.2</a>. In short: go to <strong>Settings → Team Members</strong>, use the role dropdown next to their name to change it, or click <strong>Remove</strong> to revoke their access entirely.</p>
+  </div>
+
+  <!-- ================= 3. DASHBOARD ================= -->
+  <div class="page" id="sec-dashboard">
+    <div class="kicker">Section 3</div>
+    <h1 class="title">Dashboard</h1>
+    <div class="path">Sidebar → Dashboard</div>
+    <p>The Dashboard is your home screen — a live snapshot of the business. There is nothing to add, edit, or delete here; it's for viewing only.</p>
+
+    <div class="shot"><b>Screenshot placeholder: dashboard.png</b>KPI cards (Revenue, Active Orders, New Customers, Low Stock) with the revenue chart and Top Products by Price list</div>
+
+    <h2>3.1 — What you'll see</h2>
+    <ul class="plain">
+      <li><strong>Date range pills</strong> (Today / 7D / 30D / 90D / Custom) — change the time window for every number on the page.</li>
+      <li><strong>Revenue</strong> — total sales in the selected range.</li>
+      <li><strong>Active Orders</strong> — orders still awaiting fulfillment.</li>
+      <li><strong>New Customers</strong> — first-time buyers in range.</li>
+      <li><strong>Low Stock</strong> — count of products below the low-stock threshold (set in Settings → General). Click this card to jump straight to the Catalog filtered to low-stock items.</li>
+      <li><strong>Revenue chart</strong> — daily revenue trend for the selected range.</li>
+      <li><strong>Top Products by Price</strong> — your highest-priced catalog items at a glance.</li>
+    </ul>
+  </div>
+
+  <!-- ================= 4. CATALOG ================= -->
+  <div class="page" id="sec-catalog">
+    <div class="kicker">Section 4</div>
+    <h1 class="title">Product Catalog</h1>
+    <div class="path">Sidebar → Catalog</div>
+    <p>This is where every product for sale lives — its photos, price, stock, sizes/colors (variants), description, and where it appears on the website.</p>
+
+    <div class="shot"><b>Screenshot placeholder: catalog-list.png</b>Product grid with search bar, status filter pills (All/Active/Hidden/Out of Stock/Low Stock), sort dropdown, grid/list toggle, Filters, Export, Import, and New Product button</div>
+
+    <h2>4.1 — Finding a product</h2>
+    <ul class="plain">
+      <li>Type a name, SKU, or brand into the search bar at the top.</li>
+      <li>Use the filter pills — <strong>All / Active / Hidden / Out of Stock / Low Stock</strong> — to narrow the list.</li>
+      <li>Click <strong>Filters</strong> for advanced options: collection, brand, color (with swatch picker), price range, and how many results per page (25/50/100/All).</li>
+      <li>Use the <strong>sort</strong> dropdown (top left) to sort by Name, Price, Stock, or Newest.</li>
+      <li>Toggle between <strong>grid view</strong> (photo cards) and <strong>list view</strong> (compact rows) using the two icons next to the sort dropdown.</li>
+    </ul>
+
+    <h2><span class="badge add">Add</span>&nbsp; 4.2 — Adding a new product</h2>
+    <ol class="steps">
+      <li>Click <strong>+ New Product</strong> (top right of the Catalog page). A panel slides in from the right.</li>
+      <li><strong>Image Gallery</strong> — click <strong>Upload images</strong>, <strong>Pick from Media</strong> (choose from files already in the Media Library), or <strong>Add image URL</strong>. Drag thumbnails to reorder; the first image becomes the primary photo shown in the catalog and storefront.</li>
+      <li><strong>Product Info</strong> — fill in the <strong>Product Name (English)</strong>, <strong>Arabic Name</strong>, <strong>Brand</strong>, and <strong>SKU</strong> (your internal product code).</li>
+      <li><strong>Pricing &amp; Stock</strong> — enter the <strong>Price (QAR)</strong>. If the product has no size/color variants, also enter <strong>Stock (units)</strong> directly here. (If you add variants in the next step, total stock is calculated automatically from the variants instead.)</li>
+      <li><strong>Variants</strong> (optional but recommended for shoes/clothing) — click <strong>Add variant</strong> to create a size/color combination, each with its own SKU, price, stock, and photo. See <a href="#catalog-variants">4.5 — Working with variants</a> below.</li>
+      <li><strong>Description</strong> — write the English and Arabic descriptions using the rich-text editor (bold, italic, underline, lists, links).</li>
+      <li><strong>Organization</strong> — tick the <strong>Collections</strong> this product belongs to (e.g. Men, Kids, Sunglasses), and optionally pick related products to show under "You May Also Like" on the product page.</li>
+      <li><strong>SEO</strong> — set the <strong>Meta Title</strong>, <strong>Meta Description</strong> (160-character limit shown live), and <strong>URL Slug</strong> (the web address for this product's page).</li>
+      <li>By default a new product is marked <strong>Hidden</strong> (the red "Hidden from storefront" banner and toggle at the top). Flip the toggle to make it visible to shoppers once you're happy with it.</li>
+      <li>A green save bar appears at the bottom once you've made changes — click <strong>Save</strong> to publish your edits, or <strong>Discard</strong> to cancel.</li>
+    </ol>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 4.3 — Editing an existing product</h2>
+    <ol class="steps">
+      <li>Click any product card (or row, in list view) to open the same slide-in panel pre-filled with its details.</li>
+      <li>Change whatever you need — photos, name, price, stock, variants, description, collections, or SEO fields.</li>
+      <li>Use the <strong>‹ ›</strong> arrows at the top of the panel to jump to the previous/next product without closing the panel.</li>
+      <li>Click <strong>Save</strong> on the green save bar when done.</li>
+      <li>To hide a product from the storefront without deleting it (e.g. temporarily out of stock, discontinuing soon), toggle <strong>Hidden</strong> at the top of the panel and save. Existing orders and shared links keep working even when hidden.</li>
+    </ol>
+
+    <h2><span class="badge del">Remove</span>&nbsp; 4.4 — Deleting a product</h2>
+    <ol class="steps">
+      <li>Open the product's panel and scroll all the way to the bottom to <strong>Danger Zone</strong>.</li>
+      <li>Click <strong>Delete product</strong>. This removes the product from the storefront and every collection.</li>
+      <li>Past orders that included this product are preserved — deleting a product never affects historical order records.</li>
+    </ol>
+    <div class="callout warn">
+      <b>Deleting is permanent</b>
+      There is no undo for product deletion. If you just want to stop selling something temporarily, use the <strong>Hidden</strong> toggle instead (Section 4.3) rather than deleting it.
+    </div>
+
+    <h3>Removing several products at once</h3>
+    <ol class="steps">
+      <li>Click <strong>Select</strong> in the Catalog toolbar.</li>
+      <li>Tick the products you want to act on, or click <strong>Select All</strong>.</li>
+      <li>Use <strong>Set Status</strong> to hide/show many products together, or <strong>Delete</strong> to remove them all at once (with a confirmation prompt).</li>
+    </ol>
+
+    <h3>Duplicating a product</h3>
+    <p>To create a near-identical new product (e.g. same shoe in a new colorway), open the product and use <strong>Duplicate</strong>. The copy is created hidden, with an auto-generated SKU, so you can edit it safely before publishing.</p>
+
+    <h2 id="catalog-variants">4.5 — Working with variants (sizes, colors, materials)</h2>
+    <p>Variants let one product ("Croco Sandal") have multiple sellable versions ("Croco Sandal, size 42, Black"), each tracked separately for stock and price.</p>
+    <ol class="steps">
+      <li>Inside a product's panel, go to the <strong>Variants</strong> section and click <strong>Add variant</strong>, or use the <strong>Generate sizes</strong> wizard to create a full size run at once from one of your saved Size Charts.</li>
+      <li>For each variant row, set: <strong>Color</strong>, <strong>Size</strong>, <strong>Stock</strong>, <strong>Price</strong>, and <strong>SKU</strong> — these five columns are always visible.</li>
+      <li>Click the small <strong>⌄</strong> arrow on a row to expand extra fields: <strong>Material</strong>, <strong>Barcode</strong> (defaults to the SKU if left blank), <strong>Cost price</strong>, and an auto-calculated <strong>Margin</strong> (colour-coded: green ≥40%, amber 20–40%, red &lt;20%).</li>
+      <li>To control which photo shows for each color, click the small photo icon in a variant's row — an image picker pops up so you can link that color to a specific gallery image.</li>
+      <li>Stock turns <strong>red</strong> when a variant hits 0, and <strong>amber</strong> when below 5 — a quick visual cue to reorder stock.</li>
+      <li>Use <strong>Print barcode label</strong> on a single row, or <strong>Print Labels</strong> at the bottom of the Variants section to print labels for every variant at once.</li>
+    </ol>
+
+    <h2>4.6 — Import, export &amp; bulk stock updates</h2>
+    <ul class="plain">
+      <li><strong>Export</strong> — downloads a CSV of the current filtered list (SKU, Name, Brand, Price, Stock, Status, Variants) — handy for stock counts or sharing with suppliers.</li>
+      <li><strong>Import</strong> — upload a spreadsheet to create or update many products at once. Includes a <strong>Dry-Run</strong> preview mode (checks the file without saving), a way to <strong>Retry Failed</strong> rows, and an <strong>Import History</strong> log of past imports.</li>
+    </ul>
+  </div>
+
+  <!-- ================= 5. COLLECTIONS ================= -->
+  <div class="page" id="sec-collections">
+    <div class="kicker">Section 5</div>
+    <h1 class="title">Collections</h1>
+    <div class="path">Sidebar → Collections</div>
+    <p>Collections group products together for the storefront — e.g. "Men", "Kids", "Sunglasses". Collections can have <strong>sub-collections</strong> nested underneath them (e.g. "Men" → "Black Edition", "Exotic", "classic").</p>
+
+    <div class="shot"><b>Screenshot placeholder: collections-list.png</b>Collections with sub-collection chips (Men → Mixed Leather, Black Edition, Exotic…) and standalone collection cards (Kids, Sunglasses, All Products)</div>
+
+    <h2><span class="badge add">Add</span>&nbsp; 5.1 — Creating a collection</h2>
+    <ol class="steps">
+      <li>Click <strong>+ New Collection</strong> (top right).</li>
+      <li>Toggle <strong>Visible</strong> on or off — visible collections appear on the live storefront immediately.</li>
+      <li>Enter the <strong>Collection Name</strong> and an optional <strong>Description</strong> (shown on the storefront collection page).</li>
+      <li>Upload or paste a URL for the <strong>Cover Image</strong>.</li>
+      <li>Under <strong>Organization</strong>, optionally choose a <strong>Parent Collection</strong> to nest this one underneath as a sub-collection.</li>
+      <li>Check the <strong>URL Handle</strong> field — this becomes the web address, shown as a live preview (<code>/collection/your-handle</code>).</li>
+      <li>Save your changes from the green save bar.</li>
+    </ol>
+
+    <h3>Adding a sub-collection quickly</h3>
+    <p>From the main Collections list, click <strong>+ Add sub-collection</strong> directly under any parent collection's chip row — this pre-fills the parent for you.</p>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 5.2 — Editing a collection &amp; managing its products</h2>
+    <ol class="steps">
+      <li>Click a collection card (or its chip, for a sub-collection) to open its panel.</li>
+      <li>Update name, description, cover image, visibility, or parent as needed.</li>
+      <li>In <strong>Manage Products</strong>, switch between grid and list view. In grid view, drag product cards to reorder them; in list view, use the drag handles or the <strong>↑ / ↓</strong> buttons — this order controls how products appear on the storefront collection page.</li>
+      <li>Save when done.</li>
+    </ol>
+
+    <h2><span class="badge del">Remove</span>&nbsp; 5.3 — Deleting a collection</h2>
+    <p>Open the collection's panel and use the delete option in its Danger Zone / options menu. Deleting a collection does <strong>not</strong> delete the products inside it — it only removes the grouping.</p>
+  </div>
+
+  <!-- ================= 6. MEDIA ================= -->
+  <div class="page" id="sec-media">
+    <div class="kicker">Section 6</div>
+    <h1 class="title">Media Library</h1>
+    <div class="path">Sidebar → Media</div>
+    <p>A central library of every image (and 3D model) used across the catalog and storefront, with counters for total files, how many are linked to a product, how many are unlinked, and total storage used.</p>
+
+    <div class="shot"><b>Screenshot placeholder: media-library.png</b>Upload drop-zone, filter tabs (All/Images/3D Models/Unlinked), and a grid of thumbnails each tagged Linked/Unlinked</div>
+
+    <h2><span class="badge add">Add</span>&nbsp; 6.1 — Uploading images</h2>
+    <ol class="steps">
+      <li>Drag files directly onto the <strong>Drop files to upload</strong> area, or click <strong>Browse Files</strong> to pick from your computer. Accepted: JPG, PNG, WebP, and 3D models (.glb/.gltf), up to 50MB each.</li>
+      <li>To pull files straight from a shared drive, click <strong>Google Drive</strong> and paste a file or folder link.</li>
+      <li>Click <strong>Auto-Link by SKU</strong> to automatically connect uploaded images to matching products, using the filename or folder name as the SKU.</li>
+    </ol>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 6.2 — Linking &amp; organizing files</h2>
+    <ul class="plain">
+      <li>Use the <strong>All / Images / 3D Models / Unlinked</strong> tabs to filter the library.</li>
+      <li>Click any file to open its detail panel, where you can see which product it's linked to, or set it as the <strong>Default Fallback</strong> image used when a product has no photo of its own.</li>
+    </ul>
+
+    <h2><span class="badge del">Remove</span>&nbsp; 6.3 — Deleting a file</h2>
+    <p>Open the file's detail panel and choose <strong>Delete</strong>. This removes it from the library entirely (and from storage) — if it was linked to a product, unlink or replace it there first so the product isn't left without a photo.</p>
+  </div>
+
+  <!-- ================= 7. STOREFRONT ================= -->
+  <div class="page" id="sec-storefront">
+    <div class="kicker">Section 7</div>
+    <h1 class="title">Storefront Editor</h1>
+    <div class="path">Sidebar → Storefront</div>
+    <p>This controls the content shoppers see on the public website's Home Page, Our Story, and Contact Us pages. It works on a <strong>draft → publish</strong> system: your edits are saved as a draft first and only go live once you click Publish.</p>
+
+    <div class="shot"><b>Screenshot placeholder: storefront-section-order.png</b>Three tabs (Home Page / Our Story / Contact Us), sub-tabs for each section, and Preview / Publish Layout buttons top right</div>
+
+    <h2>7.1 — The three tabs</h2>
+    <table class="grid">
+      <tr><th>Tab</th><th>Sub-sections</th></tr>
+      <tr><td><strong>Home Page</strong></td><td>Section Order, Landing Hero, Collections, Promotion Section, Craft Promise, Stats Reel</td></tr>
+      <tr><td><strong>Our Story</strong></td><td>Hero, Intro, Chapters (4), Quote, Atelier</td></tr>
+      <tr><td><strong>Contact Us</strong></td><td>Page Header, Info Blocks (3), Phone &amp; Promise</td></tr>
+    </table>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 7.2 — Reordering and showing/hiding home page sections</h2>
+    <ol class="steps">
+      <li>Open <strong>Home Page → Section Order</strong>.</li>
+      <li>Drag any section (Landing Hero, Featured Collections, Promotion Section, Craft Promise) up or down using the handle on the left to change its order on the page.</li>
+      <li>Use the green toggle on the right of each row to show or hide that section on the live site.</li>
+      <li>Click <strong>Reset</strong> to undo unsaved reordering back to the last saved layout.</li>
+    </ol>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 7.3 — Editing the homepage hero slider</h2>
+    <div class="shot"><b>Screenshot placeholder: storefront-landing-hero.png</b>Landing Hero editor — CTA text fields and a "Slide 1" card with Product Name, Subtitle (bilingual), Slide Image upload, and Alt Text</div>
+    <ol class="steps">
+      <li>Open <strong>Home Page → Landing Hero</strong>.</li>
+      <li>Set the <strong>CTA (English)</strong> and <strong>CTA (Arabic)</strong> button text shown on every slide.</li>
+      <li>For each slide, fill in <strong>Product Name</strong>, the bilingual <strong>Subtitle</strong>, upload or pick a <strong>Slide Image</strong>, and write <strong>Alt Text</strong> (a short description read by screen readers and used if the image fails to load).</li>
+      <li>Click <strong>Remove</strong> on a slide's card to delete that slide.</li>
+    </ol>
+
+    <h2><span class="badge add">Add / Edit</span>&nbsp; 7.4 — Other homepage sections</h2>
+    <ul class="plain">
+      <li><strong>Collections</strong> — choose which 3 collection tiles are featured on the homepage.</li>
+      <li><strong>Promotion Section</strong> — set the promotional banner's image, title, body text, and call-to-action link.</li>
+      <li><strong>Craft Promise</strong> — edit the 3 trust/value cards (English + Arabic).</li>
+      <li><strong>Stats Reel</strong> — edit the 4 statistic callouts (e.g. years of craftsmanship, orders shipped), bilingual.</li>
+    </ul>
+
+    <h2>7.5 — Publishing your changes</h2>
+    <ol class="steps">
+      <li>Every edit auto-saves as a <strong>draft</strong> — you'll see a <strong>Layout Unpublished</strong> badge while changes haven't gone live yet.</li>
+      <li>Click <strong>Preview</strong> to open the storefront exactly as your draft will look, without affecting the live site.</li>
+      <li>When you're happy, click <strong>Publish Layout</strong> — this makes your draft the new live version shoppers see.</li>
+    </ol>
+    <div class="callout note">
+      <b>Nothing goes live by accident</b>
+      Because edits save as a draft first, you can safely experiment with the Storefront Editor — the public site only changes the moment you click <strong>Publish Layout</strong>.
+    </div>
+  </div>
+
+  <!-- ================= 8. POS ================= -->
+  <div class="page" id="sec-pos">
+    <div class="kicker">Section 8</div>
+    <h1 class="title">Point of Sale (POS) — Sales, Approvals, Shifts &amp; Cash Rules</h1>
+    <div class="path">Sidebar → Point of Sale &nbsp;·&nbsp; Owner/Admin/Manager/Cashier — Viewers cannot open it</div>
+    <p>A full-screen till/cashier interface for in-person sales, opened in its own layout (no sidebar) once you're on the register screen. This section covers day-to-day selling <em>and</em> the manager-PIN approval rules that govern every money-sensitive action.</p>
+
+    <div class="shot"><b>Screenshot placeholder: pos.png</b>POS screen — search/barcode bar, available products grid on the left, live Cart with Subtotal/Tax/Total and Take Payment button on the right</div>
+
+    <h2>8.1 — Making a sale</h2>
+    <ol class="steps">
+      <li>Open <strong>Point of Sale</strong> — you'll need an open shift (see 8.6) before you can take payments.</li>
+      <li>Find items by typing into <strong>Search</strong> (name, SKU) or scanning a barcode into the <strong>Barcode</strong> field.</li>
+      <li>Tap a product to add it to the <strong>Cart</strong> on the right; for products with variants, choose the size/color first.</li>
+      <li>Review <strong>Subtotal</strong>, <strong>Tax</strong>, and <strong>Total</strong>, then click <strong>Take payment</strong> and follow the prompts for cash or card.</li>
+      <li>A receipt prints automatically if a printer is configured (see <strong>Hardware</strong> below); if not, you'll see a clear "no printer configured" message rather than a silent failure, and can print again later.</li>
+    </ol>
+
+    <h2>8.2 — Parking a sale</h2>
+    <p><strong>Park sale</strong> sets the current cart aside (e.g. a customer needs to grab their wallet) so you can serve someone else; retrieve it later from <strong>Parked</strong>.</p>
+
+    <h2 id="pos-pin">8.3 — Manager-PIN approvals: what needs one, and why</h2>
+    <p>A set of "cash-out" or reversal actions in POS can't be completed by a Cashier alone — they need a second person with a manager PIN to approve, entered right there on the register screen. This is a deliberate separation-of-duties control, not a glitch.</p>
+    <table class="grid">
+      <tr><th>Action</th><th>Needs manager PIN?</th></tr>
+      <tr><td>Ringing up a sale</td><td class="no">No</td></tr>
+      <tr><td>Cash movement — Paid In</td><td class="no">No</td></tr>
+      <tr><td>Cash movement — Float Adjust</td><td class="no">No</td></tr>
+      <tr><td>Cash movement — Paid Out</td><td class="yes">Yes</td></tr>
+      <tr><td>Cash movement — Safe Drop</td><td class="yes">Yes</td></tr>
+      <tr><td>Cash movement — No-Sale Drawer Open</td><td class="yes">Yes</td></tr>
+      <tr><td>Void a completed sale</td><td class="yes">Yes</td></tr>
+      <tr><td>Refund a completed sale (partial or full)</td><td class="yes">Yes</td></tr>
+      <tr><td>Close a shift / generate a Z-report</td><td class="yes">Yes</td></tr>
+    </table>
+
+    <h3>Who can approve, and the self-approval rule</h3>
+    <ul class="plain">
+      <li>Only <strong>Owner</strong>, <strong>Admin</strong>, and <strong>Manager</strong> accounts can hold a working manager PIN. Cashiers cannot set one and can never be the approver — only the person whose action needs approval.</li>
+      <li><strong>You cannot approve your own action with your own PIN</strong> — if the person ringing up the till and the person entering the PIN are the same account, it's rejected as "Manager PIN is incorrect" even if the PIN is correct. This is intentional (approver-separation), and it means <strong>at least two</strong> Owner/Admin/Manager-capable people need working PINs for a shop to actually use void/refund/paid-out/drawer-open/Z-report day to day.</li>
+      <li>Enter the PIN wrong <strong>5 times in a row</strong> and PIN verification locks for <strong>5 minutes</strong> on that register for that cashier — this protects against PIN guessing, but means a genuine mistake pile-up (e.g. two people fumbling a handoff) can lock things out for a few minutes. Wait it out; there's no override.</li>
+      <li>Once a PIN is accepted, the approval is valid for <strong>5 minutes</strong> and tied to that specific action — if you take too long between entering the PIN and finishing the action, you may need to re-approve.</li>
+    </ul>
+
+    <h3>Setting your own manager PIN</h3>
+    <ul class="plain">
+      <li><strong>Owner / Admin</strong> — Settings → General → <strong>Manager PIN</strong> card (see <a href="#sec-settings">Section 16.1</a>). Enter a 4-8 digit PIN and click Save PIN.</li>
+      <li><strong>Manager</strong> — use the <strong>My Manager PIN</strong> link in the sidebar (Managers can't reach the rest of Settings, so this is a dedicated page just for the PIN). Same 4-8 digit rule.</li>
+      <li>A cashier will simply be prompted for "Manager PIN" on the register screen when their action needs approval — they don't need to know whose PIN it is, just hand the screen to any available Owner/Admin/Manager to type it in.</li>
+    </ul>
+
+    <div class="callout note">
+      <b>Emergency self-approval exists, but only via direct database access</b>
+      There's a tenant-level flag that would let a single Owner/Admin/Manager approve their own actions in a genuine one-person-shop emergency. As of this writing it has no on/off switch in the portal UI — it can only be turned on by someone with direct database access. If your shop only ever has one PIN-capable person on site, raise this with whoever manages the system rather than trying to work around it in the UI.
+    </div>
+
+    <h2>8.4 — Returns &amp; voids</h2>
+    <ol class="steps">
+      <li>Click <strong>Returns / voids</strong> in the POS toolbar.</li>
+      <li>Search for the receipt by number.</li>
+      <li>To <strong>void</strong> the entire sale: enter a reason, enter a manager PIN (not your own), and click <strong>Void entire sale</strong>. Stock is automatically restocked.</li>
+      <li>To <strong>refund</strong> some or all of the items: adjust the <strong>Qty</strong> field for the line(s) being returned (leave the "Restock" box checked unless the item is damaged/not sellable), enter a reason and manager PIN, then click <strong>Refund selected</strong>. You can refund a sale in more than one pass — the receipt shows how many units are still refundable each time you look it up.</li>
+      <li>Use <strong>Reprint receipt</strong> in the same lookup panel to reprint any past sale's receipt (needs a configured printer).</li>
+    </ol>
+
+    <h2>8.5 — Cash movements</h2>
+    <p>Click <strong>Shift report</strong> → <strong>Cash movement</strong> to log money going in or out of the drawer outside of a sale.</p>
+    <ol class="steps">
+      <li>Choose the <strong>Type</strong>: Paid in, Paid out, Safe drop, Float adjust, or No-sale drawer open.</li>
+      <li>For Paid in / Paid out / Safe drop / Float adjust, enter the <strong>Amount</strong>.</li>
+      <li>Always enter a <strong>Reason</strong> — it's required and shows up in the shift's cash-movement log and the Z-report.</li>
+      <li>For Paid out, Safe drop, and No-sale drawer open, enter a <strong>Manager PIN</strong> (see 8.3) before clicking <strong>Record movement</strong>.</li>
+    </ol>
+
+    <h2 id="pos-shifts">8.6 — Shifts &amp; the Z-report</h2>
+    <ol class="steps">
+      <li>At the start of your shift, open it from the <strong>Point of Sale</strong> landing screen — count and enter the <strong>Opening Cash</strong> already in the drawer, then click <strong>Open shift</strong>. The top bar shows <strong>Shift open</strong> once active; no sales can be rung up without an open shift.</li>
+      <li>During the shift, click <strong>Shift report</strong> at any time to see a live snapshot: Gross, Refunds, Voids, Net, Cash In, Cash Out, Expected Cash, and the Transactions count.</li>
+      <li>At the end of the shift, count the actual cash in the drawer, enter it under <strong>Physical Cash</strong>, enter a manager PIN, and click <strong>Create Z report and close</strong>. This is the one action even an Owner/Admin cannot self-approve — a second person's PIN is always required to close a shift.</li>
+      <li>Closing a shift is final for that shift — a new one starts fresh from <strong>Open a cashier shift</strong> next time someone rings anything up.</li>
+    </ol>
+    <p>Every closed Z-report is kept in <strong>Z-report history</strong> (from the same Shift report panel), where you can <strong>Reprint</strong> it (needs a configured printer) or <strong>Export CSV</strong> for the whole history — see <a href="#sec-reports">Section 17</a> for a full map of every export/report location in the portal.</p>
+
+    <h2>8.7 — Hardware</h2>
+    <p>Click <strong>Hardware</strong> in the POS top bar to configure the receipt printer (QZ Tray) and cash drawer connection for the current device. This is a per-device/per-browser setting, not a per-account one — each physical register needs it configured once.</p>
+  </div>
+
+  <!-- ================= 9. RECONCILIATION ================= -->
+  <div class="page" id="sec-reconciliation">
+    <div class="kicker">Section 9</div>
+    <h1 class="title">Card Settlement Reconciliation</h1>
+    <div class="path">Sidebar → Reconciliation &nbsp;·&nbsp; Owner/Admin/Manager only</div>
+    <p>A back-office tool for closing the books on card payments each day: you enter what the bank's settlement export says landed for a register/day, the system compares it against what the POS itself recorded for card sales that day, and flags anything that doesn't line up.</p>
+
+    <div class="shot"><b>Screenshot placeholder: reconciliation.png</b>Enter Settlement card (Register, Business Date, Bank Settlement Total, Check POS total, Submit settlement) above a Reconciliation History table with a status filter</div>
+
+    <h2>9.1 — Entering a daily settlement</h2>
+    <ol class="steps">
+      <li>Choose the <strong>Register</strong> and <strong>Business Date</strong> you're reconciling.</li>
+      <li>Click <strong>Check POS total</strong> to pull the live total the POS recorded for card sales on that register/day — do this first so you have both numbers in front of you.</li>
+      <li>Enter the <strong>Bank Settlement Total</strong> exactly as shown on the bank's export for that day.</li>
+      <li>Click <strong>Submit settlement</strong>.</li>
+    </ol>
+
+    <h2>9.2 — Matched vs. exception</h2>
+    <ul class="plain">
+      <li>If the bank total and the POS total are within <strong>QAR 1.00</strong> of each other, the entry is automatically marked <strong>Matched</strong> — no further action needed.</li>
+      <li>If they differ by more than QAR 1.00, it's flagged an <strong>Exception</strong>. Exceptions stay visible in Reconciliation History until resolved.</li>
+      <li>To resolve an exception, you must add a <strong>manager note</strong> explaining the discrepancy (e.g. "terminal double-charged, refunded next day") — the system will not let you mark it Resolved without one, and this is enforced on the server, not just the form.</li>
+    </ul>
+
+    <h2>9.3 — Reconciliation History</h2>
+    <p>One row per register per business day, filterable by status (<strong>All / Pending / Matched / Exception / Resolved</strong>). This is your audit trail for "does our card money actually match what the bank paid us" over time.</p>
+
+    <div class="callout note">
+      <b>Bulk CSV import isn't available yet</b>
+      Entries are added one register/day at a time by hand. If your bank's export covers many days at once, you'll need to enter each day separately for now.
+    </div>
+  </div>
+
+  <!-- ================= 10. ORDERS ================= -->
+  <div class="page" id="sec-orders">
+    <div class="kicker">Section 10</div>
+    <h1 class="title">Orders &amp; Fulfillment</h1>
+    <div class="path">Sidebar → Orders</div>
+    <p>Every online and in-store (POS) order lands here. You don't "create" orders manually on this page — they're generated by checkout or POS sales — but you fully manage their status, tracking, notes, and refunds.</p>
+
+    <div class="shot"><b>Screenshot placeholder: orders-list.png</b>Orders table — Order ID, Date, Customer, Items, Total, Payment, Fulfillment columns, with search, payment/fulfillment filters, and date-range tabs</div>
+
+    <h2>9.1 — Finding an order</h2>
+    <ul class="plain">
+      <li>Search by <strong>order ID</strong> or <strong>customer name</strong>.</li>
+      <li>Filter by <strong>Payment</strong> status or <strong>Fulfillment</strong> status using the two dropdowns.</li>
+      <li>Use the date tabs — <strong>All time / Today / This Week / This Month / Custom</strong> — to narrow by date; a Custom range shows From/To date pickers.</li>
+      <li>Click <strong>Export CSV</strong> to download the currently filtered list.</li>
+    </ul>
+
+    <h2><span class="badge edit">Update</span>&nbsp; 9.2 — Updating an order's status</h2>
+    <div class="shot"><b>Screenshot placeholder: order-detail.png</b>Order drawer — Status Workflow stepper (Awaiting → Processing → Shipped → Delivered), Tracking Number field, Line Items, Customer info, and Internal Notes</div>
+    <ol class="steps">
+      <li>Click <strong>View</strong> on any order row to open its detail panel.</li>
+      <li>Move it through the <strong>Status Workflow</strong> stepper: <strong>Awaiting → Processing → Shipped → Delivered</strong>, clicking the next stage as the order progresses.</li>
+      <li>Before marking an order <strong>Shipped</strong>, enter the <strong>Tracking Number</strong> and click <strong>Save Tracking</strong> — this is shared with the customer's shipping notification.</li>
+      <li>Add internal context in <strong>Internal Notes</strong> — these are visible to your team only and are never sent to the customer.</li>
+      <li>Click <strong>Print Invoice</strong> (top of the panel) to open a ready-to-print invoice in a new tab.</li>
+    </ol>
+
+    <h2>9.3 — Issuing a refund</h2>
+    <p>Inside the order panel, click <strong>Issue Refund</strong> near the top of the Status Workflow area and follow the prompts. Refunded orders are clearly marked so you can track them from the main list.</p>
+
+    <div class="callout note">
+      <b>Nothing here is ever truly "deleted"</b>
+      Orders are permanent business records — there's no delete button. If something's wrong with an order, fix its status, add a note, or issue a refund; the history is always preserved for accounting.
+    </div>
+  </div>
+
+  <!-- ================= 10. CUSTOMERS ================= -->
+  <div class="page" id="sec-customers">
+    <div class="kicker">Section 11</div>
+    <h1 class="title">Customers (CRM)</h1>
+    <div class="path">Sidebar → Customers</div>
+    <p>Your customer database — contact details, order history, and lifetime value for every shopper (guest checkouts and registered customers alike).</p>
+
+    <div class="shot"><b>Screenshot placeholder: customers-list.png</b>Customer table — Customer, Email, Orders, Lifetime Value, Size, Last Order columns, with Table/Cards toggle and Add Customer button</div>
+
+    <h2><span class="badge add">Add</span>&nbsp; 10.1 — Adding a customer manually</h2>
+    <ol class="steps">
+      <li>Click <strong>+ Add Customer</strong> (top right).</li>
+      <li>Fill in their details (name, email, phone, city, size preference, notes).</li>
+      <li>Save — or close the panel without saving to discard the draft entirely.</li>
+    </ol>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 10.2 — Editing a customer &amp; viewing their orders</h2>
+    <ol class="steps">
+      <li>Click <strong>View</strong> next to any customer, or click their row.</li>
+      <li>Update any field directly in the drawer — changes only show "Saved" once the server confirms, so you always know the edit actually went through.</li>
+      <li>Their <strong>linked orders</strong> are listed in the same panel — click one to jump straight to that order in the Orders section.</li>
+      <li>Switch between <strong>Table</strong> and <strong>Cards</strong> view from the toolbar, and use <strong>Export CSV</strong> to download the full list.</li>
+    </ol>
+
+    <h2><span class="badge del">Remove</span>&nbsp; 10.3 — Removing a customer</h2>
+    <p>Deleting a customer is a <strong>soft delete</strong> — their record is hidden from the active list but their order history is preserved (needed for accounting/legal record-keeping) and can be restored later if needed.</p>
+  </div>
+
+  <!-- ================= 11. FEEDBACK ================= -->
+  <div class="page" id="sec-feedback">
+    <div class="kicker">Section 12</div>
+    <h1 class="title">Feedback &amp; Reviews</h1>
+    <div class="path">Sidebar → Feedback</div>
+    <p>Private product reviews collected from storefront visitors and in-store experience — these are <strong>never shown publicly</strong> and are for your team's eyes only.</p>
+
+    <div class="shot"><b>Screenshot placeholder: feedback.png</b>Total Reviews / Average Rating / Products with Feedback stat cards, with a list of products and their star ratings</div>
+
+    <ul class="plain">
+      <li>The top row shows <strong>Total Reviews</strong>, <strong>Average Rating</strong>, and how many <strong>Products with Feedback</strong> exist.</li>
+      <li>Click any product in the list to expand and read its individual review(s).</li>
+      <li><strong>Open Experience</strong> (top right) opens the customer-facing feedback flow so you can see exactly what shoppers are asked.</li>
+    </ul>
+    <p>This page is for viewing only — there's nothing to add or delete; reviews arrive automatically as customers submit them.</p>
+  </div>
+
+  <!-- ================= 12. POLICIES ================= -->
+  <div class="page" id="sec-policies">
+    <div class="kicker">Section 13</div>
+    <h1 class="title">Policies (Legal Pages)</h1>
+    <div class="path">Sidebar → Policies</div>
+    <p>Legal and informational pages that automatically appear in the storefront footer once created — Privacy Policy, Terms of Service, Refund Policy, Shipping Policy, Cookie Policy, and Contact Information.</p>
+
+    <div class="shot"><b>Screenshot placeholder: policies.png</b>Empty state with quick-add buttons for each standard policy type, plus a New Policy button</div>
+
+    <h2><span class="badge add">Add</span>&nbsp; 12.1 — Creating a policy page</h2>
+    <ol class="steps">
+      <li>Click one of the quick-add buttons (<strong>Privacy Policy</strong>, <strong>Terms of Service</strong>, <strong>Refund Policy</strong>, <strong>Shipping Policy</strong>, <strong>Cookie Policy</strong>, <strong>Contact Information</strong>) to start from a template, or click <strong>+ New Policy</strong> for a custom page.</li>
+      <li>Write or paste your legal text into the editor.</li>
+      <li>Save — the page is automatically linked in the storefront footer.</li>
+    </ol>
+    <h2><span class="badge edit">Edit / Remove</span>&nbsp; 12.2 — Updating or removing a policy</h2>
+    <p>Open any existing policy from the list to edit its text, or delete it to remove that link from the storefront footer.</p>
+    <div class="callout warn">
+      <b>Legal content</b>
+      This guide only covers where to click — the actual wording of your Privacy Policy, Terms of Service, etc. should be reviewed by a qualified legal professional for your jurisdiction (Qatar).
+    </div>
+  </div>
+
+  <!-- ================= 13. ANALYTICS ================= -->
+  <div class="page" id="sec-analytics">
+    <div class="kicker">Section 14</div>
+    <h1 class="title">Analytics</h1>
+    <div class="path">Sidebar → Analytics</div>
+    <p>A deeper look at store performance — this page is view-only, nothing to add, edit, or delete.</p>
+
+    <div class="shot"><b>Screenshot placeholder: analytics.png</b>Range tabs (7/30/90 days, Last year), Financial stat cards, Revenue chart, and Behavior stats (Visitors, Sessions, Page Views, Clicks)</div>
+
+    <ul class="plain">
+      <li>Choose a time range: <strong>Last 7 days / Last 30 days / Last 90 days / Last year</strong>.</li>
+      <li><strong>Financial</strong> — Revenue, Paid Orders, Average Order Value, Conversion Rate.</li>
+      <li><strong>Behavior</strong> — Visitors, Sessions, Page Views, Clicks, plus traffic sources and a conversion funnel further down the page.</li>
+    </ul>
+  </div>
+
+  <!-- ================= 14. REFERENCE LISTS ================= -->
+  <div class="page" id="sec-reference">
+    <div class="kicker">Section 15</div>
+    <h1 class="title">Reference Lists</h1>
+    <div class="path">Sidebar → Reference Lists &nbsp;·&nbsp; Owner/Admin only</div>
+    <p>The shared building blocks used everywhere else in the catalog — <strong>Colors</strong>, <strong>Materials</strong>, and <strong>Size Charts</strong>. Anything you add here instantly becomes available as a dropdown option in every product's Variants section.</p>
+
+    <div class="shot"><b>Screenshot placeholder: reference-lists.png</b>Colors tab — swatch cards with name (EN/AR), hex code, a variant-usage count, and edit/delete icons; Add Color button top right</div>
+
+    <h2><span class="badge add">Add</span>&nbsp; 14.1 — Adding a color, material, or size chart</h2>
+    <ol class="steps">
+      <li>Choose the <strong>Colors</strong>, <strong>Materials</strong>, or <strong>Size Charts</strong> tab.</li>
+      <li>Click <strong>+ Add Color</strong> (or the equivalent Add button on the other tabs).</li>
+      <li>For a color: enter the <strong>Name (English)</strong>, <strong>Name (Arabic)</strong>, and pick the exact <strong>hex</strong> shade using the swatch/color picker.</li>
+      <li>For a size chart: name the set (e.g. "EU Shoe Sizes") and enter the list of sizes, comma-separated.</li>
+      <li>Save — it's now selectable immediately in every product's Variants section and as a catalog filter.</li>
+    </ol>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 14.2 — Editing an entry</h2>
+    <p>Click the pencil (✎) icon on any color, material, or size chart card to update its name, hex code, or values.</p>
+
+    <h2><span class="badge del">Remove</span>&nbsp; 14.3 — Deleting an entry</h2>
+    <p>Click the trash-can icon on the card. Each card shows how many product variants currently use that entry (e.g. "304 variants") or <strong>unused</strong> if none do — check this count first, since removing a color/material/size still in use will affect those existing variants.</p>
+  </div>
+
+  <!-- ================= 15. SETTINGS ================= -->
+  <div class="page" id="sec-settings">
+    <div class="kicker">Section 16</div>
+    <h1 class="title">Settings — Store Info, Team &amp; Integrations</h1>
+    <div class="path">Sidebar → Settings &nbsp;·&nbsp; Owner/Admin only (Managers use the separate "My Manager PIN" page instead — see <a href="#sec-pos">Section 8.3</a>)</div>
+    <p>Three tabs: <strong>General</strong>, <strong>Team Members</strong>, and <strong>Integrations</strong>.</p>
+
+    <h2>16.1 — General</h2>
+    <div class="shot"><b>Screenshot placeholder: settings-general.png</b>Store Information card, Receipt & Legal Profile card, Manager PIN card, and POS Registers card, stacked top to bottom</div>
+    <ul class="plain">
+      <li><strong>Store Information</strong> — Store Name, Currency (QAR — Qatari Riyal), Timezone (Asia/Qatar), Default Language, and the <strong>Low Stock Threshold</strong> — the stock number below which products are flagged "Low Stock" across the Catalog and Dashboard.</li>
+      <li><strong>Logo</strong> — click <strong>Edit</strong> to replace the store logo shown in the sidebar and on printed receipts.</li>
+      <li><strong>Receipt &amp; Legal Profile</strong> — bilingual Trade Name, Address, Phone, CR/License Number, and Return Policy, printed on every POS receipt (required for compliance in Qatar). Confirm the exact wording with your accountant before relying on it.</li>
+      <li><strong>Manager PIN</strong> — where Owner and Admin accounts set the 4-8 digit PIN used to approve POS actions (void, refund, drawer-open, paid-out, shift close). Enter a new PIN and click <strong>Save PIN</strong>. See <a href="#sec-pos">Section 8.3</a> for the full approval rules, including the self-approval block.</li>
+      <li><strong>POS Registers</strong> — generate a one-time setup code for a register being connected remotely (e.g. a new physical till at a different location), without needing to be physically at that register. Enter a <strong>Register Name</strong> and click <strong>Generate setup code</strong> — the code is single-use and expires in 15 minutes.</li>
+      <li>Changes to Store Information and the Receipt/Legal Profile use the green save-bar pattern (edit, then Save); Manager PIN and POS Registers each have their own dedicated Save/Generate button.</li>
+    </ul>
+
+    <h2>16.2 — Team Members</h2>
+    <div class="shot"><b>Screenshot placeholder: settings-team-members.png</b>Invite Team Member form (Email + Role, with a live description of what that role can do) and the Team Members table with role dropdowns and Remove buttons</div>
+
+    <h3><span class="badge add">Add</span>&nbsp; Inviting a new staff member</h3>
+    <ol class="steps">
+      <li>Under <strong>Invite Team Member</strong>, enter their work <strong>email</strong>.</li>
+      <li>Choose their <strong>Role</strong> from the dropdown: <strong>Admin</strong>, <strong>Manager</strong>, <strong>Cashier</strong>, or <strong>Viewer</strong>. A short description appears under the dropdown for some roles — treat it as a rough guide, not a guarantee (see the access-matrix warning in <a href="#sec-roles">Section 2</a>, since actual access is broader than that description for Cashier/Viewer today).</li>
+      <li>Click <strong>Send Invitation</strong>. A one-time invite link is generated in a box on this page — <strong>copy and share it directly</strong> with the new hire (click <strong>Copy link</strong>); it expires after 48 hours and can only be used once. The invite is also listed under <strong>Pending Invitations</strong> until accepted, where you can <strong>Revoke</strong> it if sent by mistake.</li>
+    </ol>
+
+    <h3><span class="badge edit">Update</span>&nbsp; Changing someone's role</h3>
+    <p>In the <strong>Team Members</strong> list, use the role dropdown directly on their row to change it — the new permissions apply immediately on their next page load.</p>
+
+    <h3><span class="badge del">Remove</span>&nbsp; Removing a team member</h3>
+    <p>Click <strong>Remove</strong> on their row to revoke access immediately. This does not delete anything they created (orders, edits, notes) — only their ability to sign in.</p>
+
+    <div class="callout danger">
+      <b>Be careful with Owner accounts</b>
+      Only ever remove a team member you're certain should lose access — there is no confirmation step shown here beyond the click itself, and it takes effect right away.
+    </div>
+
+    <h2>16.3 — Integrations</h2>
+    <div class="shot"><b>Screenshot placeholder: settings-integrations.png</b>Google Shopping and Mailgun · Transactional cards, both showing Connected with a Manage button</div>
+    <ul class="plain">
+      <li><strong>Google Shopping</strong> — pushes your catalog feed to Google Merchant so products can appear in Google Shopping results. Click <strong>Manage</strong> to view sync status (SKUs live) or reconnect.</li>
+      <li><strong>Mailgun · Transactional</strong> — sends order confirmation and shipping emails to customers automatically. Click <strong>Manage</strong> to view sending activity or reconnect.</li>
+    </ul>
+  </div>
+
+  <!-- ================= 17. REPORTS & EXPORTS ================= -->
+  <div class="page" id="sec-reports">
+    <div class="kicker">Section 17</div>
+    <h1 class="title">Reports &amp; Exports — Where to Find Everything</h1>
+    <p>There's no single "Reports" page in the portal — exports and reporting views are spread across the sections they belong to. This is a map of all of them in one place.</p>
+
+    <table class="grid">
+      <tr><th>What you need</th><th>Where to get it</th><th>Format</th><th>Who can access it</th></tr>
+      <tr><td>Store performance overview (revenue, orders, customers, top products)</td><td>Dashboard</td><td>On-screen only</td><td>Any logged-in role (see <a href="#sec-roles">Section 2</a> caveat)</td></tr>
+      <tr><td>Deeper financial &amp; behavior analytics (traffic, conversion funnel, AOV)</td><td>Analytics</td><td>On-screen only</td><td>Any logged-in role</td></tr>
+      <tr><td>Product/catalog list export</td><td>Catalog → Export</td><td>CSV</td><td>Any logged-in role</td></tr>
+      <tr><td>Orders list export (filtered)</td><td>Orders → Export CSV</td><td>CSV</td><td>Any logged-in role</td></tr>
+      <tr><td>Customer list export</td><td>Customers → Export CSV</td><td>CSV</td><td>Any logged-in role</td></tr>
+      <tr><td>Current shift snapshot (Gross, Refunds, Voids, Net, Cash In/Out, Expected Cash)</td><td>POS → Shift report</td><td>On-screen only</td><td>Owner/Admin/Manager/Cashier</td></tr>
+      <tr><td>Past Z-reports (end-of-shift cash reconciliation)</td><td>POS → Shift report → Z-report history</td><td>On-screen, plus Reprint (needs printer) and Export CSV</td><td>Owner/Admin/Manager/Cashier</td></tr>
+      <tr><td>Card settlement matching &amp; exceptions</td><td>Reconciliation</td><td>On-screen history, one register/day at a time</td><td>Owner/Admin/Manager only</td></tr>
+      <tr><td>Product import history / audit log</td><td>Catalog → Import → Import History</td><td>On-screen</td><td>Any logged-in role</td></tr>
+    </table>
+
+    <div class="callout note">
+      <b>No consolidated financial report yet</b>
+      There is currently no single page that combines sales, inventory movement, cash, and card reconciliation into one report — you assemble the full picture from the Dashboard, Analytics, Z-report history, and Reconciliation history separately. If your business needs a combined daily/weekly report, that would need to be built as a new feature rather than assembled from an existing screen.
+    </div>
+  </div>
+
+  <!-- ================= 18. CHEAT SHEET ================= -->
+  <div class="page" id="sec-cheatsheet">
+    <div class="kicker">Section 18</div>
+    <h1 class="title">Quick-Reference Cheat Sheet</h1>
+    <p>Where to go for the most common tasks:</p>
+    <table class="grid">
+      <tr><th>I need to…</th><th>Go to</th><th>Button / action</th></tr>
+      <tr><td>Add a new product</td><td>Catalog</td><td>+ New Product</td></tr>
+      <tr><td>Hide a product without deleting it</td><td>Catalog → open product</td><td>Toggle "Hidden" at top of panel</td></tr>
+      <tr><td>Delete a product</td><td>Catalog → open product</td><td>Danger Zone → Delete product</td></tr>
+      <tr><td>Add sizes/colors to a product</td><td>Catalog → open product</td><td>Variants → Add variant / Generate sizes</td></tr>
+      <tr><td>Create a new collection / category</td><td>Collections</td><td>+ New Collection</td></tr>
+      <tr><td>Upload product photos</td><td>Media</td><td>Browse Files / drag &amp; drop</td></tr>
+      <tr><td>Change the homepage banner</td><td>Storefront → Home Page → Landing Hero</td><td>Edit slide, then Publish Layout</td></tr>
+      <tr><td>Reorder homepage sections</td><td>Storefront → Home Page → Section Order</td><td>Drag to reorder, then Publish Layout</td></tr>
+      <tr><td>Ring up an in-store sale</td><td>Point of Sale</td><td>Search/scan → Take payment</td></tr>
+      <tr><td>Mark an order as shipped</td><td>Orders → open order</td><td>Add tracking number → move stepper to Shipped</td></tr>
+      <tr><td>Refund an order</td><td>Orders → open order</td><td>Issue Refund</td></tr>
+      <tr><td>Add a walk-in customer's details</td><td>Customers</td><td>+ Add Customer</td></tr>
+      <tr><td>Add a new color/material/size option</td><td>Reference Lists</td><td>+ Add Color / Material / Size Chart</td></tr>
+      <tr><td>Invite a new staff member</td><td>Settings → Team Members</td><td>Invite Team Member → Send Invitation</td></tr>
+      <tr><td>Change a staff member's role</td><td>Settings → Team Members</td><td>Role dropdown on their row</td></tr>
+      <tr><td>Remove a staff member</td><td>Settings → Team Members</td><td>Remove</td></tr>
+      <tr><td>Add a Privacy Policy / Terms page</td><td>Policies</td><td>Quick-add button or + New Policy</td></tr>
+      <tr><td>Change the low-stock alert threshold</td><td>Settings → General</td><td>Low Stock Threshold field</td></tr>
+      <tr><td>Void or refund a POS sale</td><td>Point of Sale → Returns / voids</td><td>Look up receipt → enter reason + manager PIN (not your own)</td></tr>
+      <tr><td>Log a paid-out / safe drop / drawer open</td><td>Point of Sale → Shift report → Cash movement</td><td>Choose type → reason → manager PIN if required</td></tr>
+      <tr><td>Close a shift / generate a Z-report</td><td>Point of Sale → Shift report</td><td>Enter physical cash + manager PIN → Create Z report and close</td></tr>
+      <tr><td>Set your own manager PIN</td><td>Owner/Admin: Settings → General · Manager: sidebar "My Manager PIN"</td><td>Enter 4-8 digit PIN → Save PIN</td></tr>
+      <tr><td>Generate a remote POS setup code</td><td>Settings → General → POS Registers</td><td>Name the register → Generate setup code</td></tr>
+      <tr><td>Reconcile card settlement for a day</td><td>Reconciliation</td><td>Check POS total → enter Bank Settlement Total → Submit settlement</td></tr>
+    </table>
+  </div>
+
+  <!-- ================= 19. TROUBLESHOOTING ================= -->
+  <div class="page" id="sec-troubleshoot">
+    <div class="kicker">Section 19</div>
+    <h1 class="title">Troubleshooting &amp; FAQ</h1>
+
+    <h2>19.1 — Access &amp; sign-in</h2>
+
+    <h3>I can't see Settings, Reference Lists, or Reconciliation — or they redirect me back to Dashboard.</h3>
+    <p>Settings and Reference Lists are Owner/Admin only. Reconciliation is Owner/Admin/Manager only. The link still shows in your sidebar even if you can't use it — clicking it silently bounces you back to Dashboard rather than showing an error (see <a href="#sec-roles">Section 2</a>). If you need something changed there, ask an Owner, Admin, or (for Reconciliation) a Manager.</p>
+
+    <h3>I can't open Point of Sale.</h3>
+    <p>POS is available to Owner, Admin, Manager, and Cashier roles. Viewers cannot access it and are redirected to Dashboard — ask an Admin to check your assigned role under Settings → Team Members.</p>
+
+    <h3>My invite link says it's expired, or takes me to a broken "localhost" address.</h3>
+    <p>Invite links expire after 48 hours and can only be used once — ask an Owner or Admin to send a fresh invitation from Settings → Team Members. If the link itself looks broken (points to <code>localhost:4300</code> instead of the real portal address), that was a known issue fixed on 2026-07-20 — if you still see it, the portal may need redeploying; flag it to whoever maintains the system.</p>
+
+    <h3>I forgot my password.</h3>
+    <p>Use <strong>Forgot password?</strong> on the sign-in screen (see Section 1.2).</p>
+
+    <h2>19.2 — Point of Sale &amp; manager PIN</h2>
+
+    <h3>"Manager PIN is incorrect" even though I just saved that exact PIN.</h3>
+    <p>This is almost always the <strong>self-approval rule</strong>, not a wrong PIN — you cannot approve your own action with your own PIN (see <a href="#sec-pos">Section 8.3</a>). Hand the screen to a <em>different</em> Owner/Admin/Manager to enter theirs. If a second person's correct PIN is also rejected, double-check it was actually saved (Settings → General or My Manager PIN shows a "PIN saved" confirmation toast when it works) and that you're both on the same register/tenant.</p>
+
+    <h3>PIN entry is locked / "Manager PIN verification is temporarily locked."</h3>
+    <p>Five wrong PIN attempts in a row locks verification for that cashier on that register for <strong>5 minutes</strong>. There's no override — wait it out, then try again with the correct PIN.</p>
+
+    <h3>Only one person on shift, and they can't approve their own void/refund/Z-report.</h3>
+    <p>Expected behavior — see the self-approval rule above. You need at least two Owner/Admin/Manager-capable people with working PINs for these actions. There is a tenant-level "emergency self-approval" flag that can bypass this, but it currently requires direct database access to turn on — ask whoever manages the system if your shop genuinely needs this.</p>
+
+    <h3>A cashier says they can't set a manager PIN.</h3>
+    <p>That's correct and expected — only Owner, Admin, and Manager accounts can hold a manager PIN. A Cashier can be the one <em>requesting</em> approval but can never be the one <em>granting</em> it.</p>
+
+    <h3>I got a "Session expired" message right after a wrong PIN attempt, and the product list briefly went blank.</h3>
+    <p>This was a real bug (a false session-expiry toast plus a momentary empty catalog after a rejected PIN) that was fixed on 2026-07-20 and confirmed resolved in repeated testing. If you still see it, you were not actually signed out — reload the page and continue; but please flag it, since it means the fix may have regressed.</p>
+
+    <h3>"No receipt printer is configured" when I try to print or reprint.</h3>
+    <p>This is a graceful, expected message on any device without a connected receipt printer — not a crash or data-loss. Configure the printer via the <strong>Hardware</strong> button in the POS top bar (see Section 8.7) on the physical register, or simply note that the sale/Z-report is safely saved and can be printed later once a printer is set up.</p>
+
+    <h3>Stock counts look wrong after a void or refund.</h3>
+    <p>Voids and refunds restock automatically as long as the <strong>Restock</strong> checkbox was ticked when the refund was processed (it's ticked by default — untick it only for damaged/non-sellable returns). If a number still looks off, check the product's Catalog page directly rather than relying on memory of the pre-sale count.</p>
+
+    <h2>19.3 — Data &amp; content</h2>
+
+    <h3>My changes don't show on the live website.</h3>
+    <p>For the Storefront Editor specifically, edits save as a <strong>draft</strong> first. Check for the <strong>"Layout Unpublished"</strong> badge — you need to click <strong>Publish Layout</strong> for shoppers to see your changes. Other sections (Catalog, Collections, Orders, etc.) save and go live immediately once you click Save.</p>
+
+    <h3>I deleted a product by mistake.</h3>
+    <p>Product deletion is permanent and cannot be undone from the portal. Recreate the product manually, or contact whoever manages your data backups if this was a serious mistake.</p>
+
+    <h3>A customer's order history disappeared after I deleted their profile.</h3>
+    <p>It shouldn't — customer deletion is a soft delete, meaning the record is hidden but not destroyed, and their order history remains intact for accounting. Ask an Admin to check whether the customer can be restored.</p>
+
+    <h3>A product's size/color options look wrong or mixed up (e.g. "Black Edition" showing color names where sizes should be).</h3>
+    <p>This is a known data-entry issue on specific products, not a system bug — it needs a manual correction in Catalog → that product → Variants, not a code fix. Flag it to whoever manages the catalog data if you spot it.</p>
+
+    <h2>19.4 — Known issues log</h2>
+    <p>For transparency, here's what's been found and fixed (or is still open) as of the last verification pass against the live portal:</p>
+    <table class="grid">
+      <tr><th>Issue</th><th>Status</th></tr>
+      <tr><td>No way to set a manager PIN anywhere in the UI</td><td class="yes">Fixed — Owner/Admin via Settings, Manager via "My Manager PIN"</td></tr>
+      <tr><td>False "Session expired" toast + blank catalog after a wrong PIN</td><td class="yes">Fixed, confirmed via repeated retesting</td></tr>
+      <tr><td>Dashboard briefly shows all-zero numbers on first load</td><td class="yes">Fixed, confirmed via repeated retesting</td></tr>
+      <tr><td>Invite/reset links pointing to a broken <code>localhost:4300</code> address</td><td class="yes">Fixed — links now use the real portal address</td></tr>
+      <tr><td>Cash-movement history showing a raw label ("No Sale_drawer_open")</td><td class="yes">Fixed — now shows "No-Sale Drawer Open"</td></tr>
+      <tr><td>Manager role had no path to set a PIN (blocked from Settings entirely)</td><td class="yes">Fixed — new dedicated "My Manager PIN" page</td></tr>
+      <tr><td>The Settings link still shows in a Manager's sidebar even though clicking it does nothing</td><td class="partial">Open — cosmetic; use "My Manager PIN" instead, ignore the Settings link</td></tr>
+      <tr><td>Cashier and Viewer roles can fully open and edit Catalog, Orders, Customers, and other admin pages, despite role descriptions suggesting otherwise</td><td class="partial">Open — see the warning in Section 2; not enforced today</td></tr>
+      <tr><td>"Black Edition" product showing color names in place of size options</td><td class="partial">Open — needs a manual catalog data fix, not a code fix</td></tr>
+    </table>
+  </div>
+
+  <!-- ================= 20. GLOSSARY ================= -->
+  <div class="page" id="sec-glossary">
+    <div class="kicker">Section 20</div>
+    <h1 class="title">Glossary</h1>
+    <table class="grid">
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td>SKU</td><td>Stock Keeping Unit — your internal product code, unique to each product or variant.</td></tr>
+      <tr><td>Variant</td><td>A specific sellable version of a product (a size + color combination), each with its own stock and price.</td></tr>
+      <tr><td>Hidden</td><td>A product or collection that exists in the system but isn't shown to shoppers on the storefront.</td></tr>
+      <tr><td>Draft / Publish</td><td>The Storefront Editor's safety system — changes save as a draft and only go live once published.</td></tr>
+      <tr><td>Fulfillment</td><td>The shipping/delivery stage of an order (Awaiting, Processing, Shipped, Delivered).</td></tr>
+      <tr><td>Soft delete</td><td>Hiding a record (like a customer) from view without permanently destroying its data.</td></tr>
+      <tr><td>Low Stock Threshold</td><td>The stock number below which a product is flagged as "Low Stock" (set in Settings → General).</td></tr>
+      <tr><td>POS</td><td>Point of Sale — the in-store cashier/checkout screen.</td></tr>
+      <tr><td>Z-report</td><td>An end-of-shift cash reconciliation summary in POS, generated when a shift is closed and kept in Z-report history afterward.</td></tr>
+      <tr><td>Manager PIN</td><td>A 4-8 digit code held by Owner/Admin/Manager accounts, entered in POS to approve void, refund, drawer-open, paid-out, and shift-close actions.</td></tr>
+      <tr><td>Approver-separation / self-approval block</td><td>The rule that a manager PIN cannot approve an action performed by that same account — a second, different Owner/Admin/Manager must enter theirs.</td></tr>
+      <tr><td>Reconciliation (card settlement)</td><td>Matching the bank's daily card settlement total against the POS's own recorded card total for a register/day; a mismatch beyond QAR 1.00 becomes an Exception.</td></tr>
+      <tr><td>Exception (Reconciliation)</td><td>A settlement entry where the bank total and POS total differ by more than QAR 1.00 — requires a manager note to mark Resolved.</td></tr>
+      <tr><td>Cash movement</td><td>Any recorded cash-in/cash-out in POS outside of a sale — Paid In, Paid Out, Safe Drop, Float Adjust, or No-Sale Drawer Open.</td></tr>
+      <tr><td>QAR</td><td>Qatari Riyal — the store's currency.</td></tr>
+    </table>
+
+    <div class="foot-note">
+      Elite Collection — Admin Portal Staff Guide · Internal use only · Keep this document up to date as the portal changes.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
