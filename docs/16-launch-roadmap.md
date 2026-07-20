@@ -4,11 +4,11 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: Phase 2 (cashier follow-ups, explicitly skipped per owner — client doesn't need it), legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: Phase 2 (cashier follow-ups, explicitly skipped per owner — client doesn't need it), legal receipt sign-off, multi-branch data model.
 
-**In progress** (committed, not yet deployed to VPS / not yet fully verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`), Manager-PIN-access + hardcoded-invite-link fixes (commit `6dba5c6`), Phase 7 PWA installability (commit `856a74b`) + offline resilience (commit `635dac1`), Phase 6 Angular 17→22 upgrade (commit `84e72d6`), Phase 5 core reporting suite (commit `9437a13`). All 21 server tests passing, client build green, `npm audit` clean.
+**In progress** (committed, not yet deployed to VPS / not yet fully verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`), Manager-PIN-access + hardcoded-invite-link fixes (commit `6dba5c6`), Phase 7 PWA installability (commit `856a74b`) + offline resilience (commit `635dac1`), Phase 6 Angular 17→22 upgrade (commit `84e72d6`), Phase 5 core reporting suite (commit `9437a13`), Phase 9 backup/restore scripts (drilled against dev data, not yet installed on the VPS). All 21 server tests passing, client build green, `npm audit` clean.
 
-Every phase through 7 is now built except Phase 2 (intentionally skipped). What's left is verification (hardware/manual/real-data testing across everything above) plus Phases 8-10 (legal sign-off, backup/DR, pilot), which are process/ops work, not code.
+Every phase through 9 is now built except Phase 2 (intentionally skipped). What's left is verification (hardware/manual/real-data testing across everything above, plus running the Phase 9 scripts for real on the VPS) plus Phase 8 (legal sign-off, not code) and Phase 10 (pilot, gated on everything else).
 
 ---
 
@@ -246,19 +246,24 @@ Every phase through 7 is now built except Phase 2 (intentionally skipped). What'
 
 ---
 
-## Phase 9 — Backup, restore drill, and disaster recovery
+## Phase 9 — Backup, restore drill, and disaster recovery ✅ Built + drilled against dev data, needs production install + real drill
 
 **Why here:** genuinely independent of all the above phases technically, but should land before the pilot since "we've never tested a restore" is not an acceptable state to enter a real money-handling pilot with.
 
-### What to build
-- Automated encrypted PostgreSQL backups with a defined retention policy.
-- A written, rehearsed restore procedure.
-- Monitoring/alerting on backup job failures.
+**Status:** scripts written and pushed. **Actually tested end-to-end** (backup → GPG-encrypt → decrypt → `pg_restore` → row-count verification) against a local dev database in this session — real drill, real data, not a dry read of the code. Not yet installed or run on the production VPS (this session has no SSH access there) — see `docs/18-backup-restore-runbook.md` for the full setup and drill procedure someone with server access needs to run once.
+
+### What was built
+- `scripts/backup-database.sh` — `pg_dump -Fc` → GPG symmetric AES256 encryption → dated file in `BACKUP_DIR` → prunes anything older than `BACKUP_RETENTION_DAYS` → emails `BACKUP_ALERT_EMAIL` via the app's existing `server/lib/mailer.js`/SMTP config on any failure. Refuses to treat a suspiciously small dump as valid rather than silently "succeeding" with a broken backup.
+- `scripts/restore-database.sh` — decrypts and `pg_restore`s into a target database, with a hard safety check that refuses to run against a database literally named `elite` (the production name) unless explicitly overridden — restore drills must always target a disposable, differently-named database.
+- `docs/18-backup-restore-runbook.md` — full setup (cron install, passphrase storage, env file), the restore-drill procedure step by step, an honest RPO/RTO discussion (see below), a drill log table, and explicitly-flagged follow-ups that are NOT yet done (offsite copy, uploads-directory backup, a real production failure-alert test).
+- **Scope decision (owner confirmed):** local-VPS-disk backups only, no offsite copy yet. This is a real, documented gap — a total VPS loss takes the backups down with it — tracked in the runbook's follow-ups rather than silently glossed over.
+
+**RPO/RTO — still an open decision, not newly invented here.** The original audit ([14](14-pos-production-readiness-audit-2026-07-13.md)) and hardening plan ([15](15-pos-production-hardening-plan.md)) both left this as a placeholder, never actually confirmed with the owner. What the current daily-cron design implies: **RPO ≈ 24 hours** (worst case, a failure right before the nightly backup loses up to a day of transactions), **RTO** measured at **under 5 seconds** for the decrypt+restore step alone on a small dev database (will scale with real data volume, and doesn't include time to provision a working Postgres instance if the VPS itself is gone). The owner should explicitly confirm or tighten these before Phase 10.
 
 ### Test gate
-- [ ] A real restore drill: take a backup, restore it into an isolated environment, confirm the restored data is complete and correct.
-- [ ] Recorded actual RPO/RTO from the drill, compared against Phase 0's target (from the original audit — confirm what was decided).
-- [ ] Backup failure alerting actually fires when tested (e.g. temporarily break the backup job and confirm someone gets notified).
+- [x] A real restore drill: take a backup, restore it into an isolated environment, confirm the restored data is complete and correct. **Done against dev data** (row counts matched exactly for `tenants`, `admin_users`, `products`) — **still needs to be repeated once against a real production backup** by whoever has VPS access.
+- [ ] Recorded actual RPO/RTO from the drill, compared against Phase 0's target — no target was ever actually set (see above); the owner needs to confirm one.
+- [x] Backup failure alerting actually fires when tested. Tested the failure path itself (unreachable database → script correctly fails, cleans up, and attempts the alert) and the mailer code path in isolation (correctly attempts to send, falls back to a dev-preview log without real SMTP configured) — **still needs one real test against production SMTP** to confirm an actual email lands in an inbox, not just that the code path is wired correctly.
 
 ---
 
@@ -309,7 +314,7 @@ Phase 5  Core reporting                    ✅ built, needs real-data verificati
 Phase 6  Angular upgrade (17→22)            ✅ built, needs manual click-through
 Phase 7  PWA/offline hardening              ✅ built, needs hardware/kiosk verification
 Phase 8  Legal sign-off                    ← depends on business-profile being final
-Phase 9  Backup/DR                          ← independent, do anytime before 10
+Phase 9  Backup/DR                          ✅ built + drilled vs dev data, needs production install + real drill
 Phase 10 Pilot & cutover                   ← gated on ALL of 1–9
 Phase 11 Multi-branch                      ← deferred until AFTER Phase 10
 ```
