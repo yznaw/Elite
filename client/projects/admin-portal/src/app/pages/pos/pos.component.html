@@ -164,6 +164,33 @@
               <span>{{ productGroups().length }} items &middot; {{ products().length }} variants</span>
             </div>
 
+            @if (availableSizes().length || availableColors().length) {
+              <div class="catalog-filters">
+                @if (availableSizes().length) {
+                  <label class="filter-select">
+                    <span>SIZE</span>
+                    <select [ngModel]="filterSize() || ''" (ngModelChange)="setSizeFilter($event)">
+                      <option value="">All sizes</option>
+                      @for (size of availableSizes(); track size) {
+                        <option [value]="size">{{ size }}</option>
+                      }
+                    </select>
+                  </label>
+                }
+                @if (availableColors().length) {
+                  <label class="filter-select">
+                    <span>COLOR</span>
+                    <select [ngModel]="filterColor() || ''" (ngModelChange)="setColorFilter($event)">
+                      <option value="">All colors</option>
+                      @for (color of availableColors(); track color) {
+                        <option [value]="color">{{ color }}</option>
+                      }
+                    </select>
+                  </label>
+                }
+              </div>
+            }
+
             <div class="product-grid product-grid--items">
               @for (group of productGroups(); track group.id) {
                 <button
@@ -199,6 +226,15 @@
                 </div>
               }
             </div>
+
+            <ap-pagination
+              [page]="productPage()"
+              [pageSize]="40"
+              [total]="productTotal()"
+              [totalPages]="productTotalPages()"
+              [showSizeSelector]="false"
+              (pageChange)="onProductPageChange($event)"
+            />
           </div>
         </section>
       </div>

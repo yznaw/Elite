@@ -19,6 +19,19 @@ export interface PosCatalogItem {
   isActive: boolean;
 }
 
+export interface PosProductSearchResult {
+  products: PosCatalogItem[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface PosProductFilters {
+  sizes: string[];
+  colors: string[];
+}
+
 export interface PosCurrentRegister {
   registerId: string;
   displayName: string;
@@ -247,17 +260,32 @@ export class PosService {
     return firstValueFrom(this.api.post<PosShift>('/pos/shifts/open', { openingFloatCents }));
   }
 
-  searchProducts(query = ''): Promise<PosCatalogItem[]> {
-    // Include out-of-stock variants — the cashier UI already renders a
-    // "Sold out" badge and blocks adding them to cart (pos.component.ts),
-    // so hiding them here just makes products silently vanish from search
-    // instead of showing as unavailable. limit is a product count, not a
-    // variant-row count — the server expands each matched product to all
-    // of its variants (see sale-service.js searchProducts).
-    const params = new URLSearchParams({ q: query, limit: '80', includeOutOfStock: 'true' });
+  searchProducts(
+    query = '',
+    opts: { page?: number; size?: string | null; color?: string | null; includeOutOfStock?: boolean } = {},
+  ): Promise<PosProductSearchResult> {
+    // Default browse (no search text) hides sold-out variants so the
+    // cashier isn't scrolling past dozens of unsellable sizes/colors; a real
+    // search or barcode scan should still surface a sold-out item so it
+    // doesn't look like it silently vanished from the catalog. limit is a
+    // product count, not a variant-row count — the server expands each
+    // matched product to all of its (filtered) variants.
+    const includeOutOfStock = opts.includeOutOfStock ?? !!query.trim();
+    const params = new URLSearchParams({
+      q: query,
+      limit: '40',
+      page: String(opts.page ?? 0),
+      includeOutOfStock: String(includeOutOfStock),
+    });
+    if (opts.size) params.set('size', opts.size);
+    if (opts.color) params.set('color', opts.color);
     return firstValueFrom(
-      this.api.get<{ products: PosCatalogItem[] }>(`/pos/products/search?${params.toString()}`),
-    ).then((result) => result.products);
+      this.api.get<PosProductSearchResult>(`/pos/products/search?${params.toString()}`),
+    );
+  }
+
+  listProductFilters(): Promise<PosProductFilters> {
+    return firstValueFrom(this.api.get<PosProductFilters>('/pos/products/filters'));
   }
 
   findBarcode(barcode: string): Promise<PosCatalogItem> {

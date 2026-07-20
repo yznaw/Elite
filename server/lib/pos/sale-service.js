@@ -28,12 +28,44 @@ function mapCatalogRow(row) {
 
 async function searchProducts(context, query) {
   const q = String(query?.q || '').trim();
-  // This limit caps distinct PRODUCTS, not variant rows — a product with 60
-  // size/color variants (e.g. shoes) was previously eating the entire row
-  // limit by itself and starving every other product out of the results.
-  const productLimit = Math.min(200, Math.max(1, Number.parseInt(query?.limit, 10) || 50));
+  // This limit caps distinct PRODUCTS per page, not variant rows — a product
+  // with 60 size/color variants (e.g. shoes) previously ate the entire row
+  // limit by itself and starved every other product out of the results.
+  const limit = Math.min(200, Math.max(1, Number.parseInt(query?.limit, 10) || 50));
+  const page = Math.max(0, Number.parseInt(query?.page, 10) || 0);
+  const offset = page * limit;
   const includeOutOfStock = String(query?.includeOutOfStock || 'false') === 'true';
+  const size = String(query?.size || '').trim();
+  const color = String(query?.color || '').trim();
+
+  // Shared filter + param list, applied identically to the product-matching
+  // subquery and the count query — only the outer LIMIT/OFFSET differ.
+  // pv2.size/color use plain equality with an empty-string sentinel meaning
+  // "no filter", matching the existing $2 = '%%' convention for q. Both
+  // queries bind the same 7 params (even though the count query's text never
+  // references $6/$7) so Postgres never has to infer a param's type from a
+  // query where it doesn't appear.
+  const matchClause = `
+    p2.tenant_id = $1
+    AND p2.status = 'active'
+    AND pv2.is_active = true
+    AND ($2 = '%%' OR p2.name ILIKE $2 OR pv2.sku ILIKE $2 OR pv2.barcode ILIKE $2)
+    AND ($3::boolean OR pv2.stock_quantity > 0)
+    AND ($4 = '' OR pv2.size = $4)
+    AND ($5 = '' OR pv2.color = $5)
+  `;
+  const params = [context.tenantId, `%${q}%`, includeOutOfStock, size, color, limit, offset];
+
   return inTransaction(async (client) => {
+    const countResult = await client.query(
+      `SELECT COUNT(DISTINCT p2.id)::integer AS total
+       FROM products p2
+       JOIN product_variants pv2 ON pv2.product_id = p2.id AND pv2.tenant_id = p2.tenant_id
+       WHERE ${matchClause} AND ($6::integer IS NOT NULL) AND ($7::integer IS NOT NULL)`,
+      params,
+    );
+    const total = countResult.rows[0].total;
+
     const result = await client.query(
       `SELECT
          p.id AS product_id, p.name AS product_name, p.status AS product_status,
@@ -48,24 +80,49 @@ async function searchProducts(context, query) {
          AND pv.is_active = true
          AND ($2 = '%%' OR p.name ILIKE $2 OR pv.sku ILIKE $2 OR pv.barcode ILIKE $2)
          AND ($3::boolean OR pv.stock_quantity > 0)
+         AND ($4 = '' OR pv.size = $4)
+         AND ($5 = '' OR pv.color = $5)
          AND p.id IN (
            SELECT id FROM (
              SELECT DISTINCT p2.id, p2.name
              FROM products p2
              JOIN product_variants pv2 ON pv2.product_id = p2.id AND pv2.tenant_id = p2.tenant_id
-             WHERE p2.tenant_id = $1
-               AND p2.status = 'active'
-               AND pv2.is_active = true
-               AND ($2 = '%%' OR p2.name ILIKE $2 OR pv2.sku ILIKE $2 OR pv2.barcode ILIKE $2)
-               AND ($3::boolean OR pv2.stock_quantity > 0)
+             WHERE ${matchClause}
              ORDER BY p2.name, p2.id
-             LIMIT $4
+             LIMIT $6 OFFSET $7
            ) matched_products
          )
        ORDER BY p.name, pv.sort_order, pv.sku`,
-      [context.tenantId, `%${q}%`, includeOutOfStock, productLimit],
+      params,
     );
-    return { products: result.rows.map(mapCatalogRow), serverTimestamp: new Date().toISOString() };
+
+    return {
+      products: result.rows.map(mapCatalogRow),
+      total,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      serverTimestamp: new Date().toISOString(),
+    };
+  });
+}
+
+async function listProductFilters(context) {
+  return inTransaction(async (client) => {
+    const result = await client.query(
+      `SELECT
+         COALESCE(array_agg(DISTINCT pv.size)  FILTER (WHERE pv.size IS NOT NULL AND pv.size <> ''),  ARRAY[]::text[]) AS sizes,
+         COALESCE(array_agg(DISTINCT pv.color) FILTER (WHERE pv.color IS NOT NULL AND pv.color <> ''), ARRAY[]::text[]) AS colors
+       FROM product_variants pv
+       JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
+       WHERE pv.tenant_id = $1 AND p.status = 'active' AND pv.is_active = true`,
+      [context.tenantId],
+    );
+    const row = result.rows[0];
+    return {
+      sizes: [...row.sizes].sort(),
+      colors: [...row.colors].sort(),
+    };
   });
 }
 
@@ -604,4 +661,4 @@ function validatePayment(payment, totalCents) {
   assertPos(payment.cashAmountCents === 0 && payment.amountTenderedCents === 0 && payment.changeGivenCents === 0, 422, 'PAYMENT_TOTAL_MISMATCH', 'Cash fields must be zero for a card sale.');
 }
 
-module.exports = { claimReceipt, createSale, findByBarcode, loadSale, normalizeSale, searchProducts, validatePayment };
+module.exports = { claimReceipt, createSale, findByBarcode, listProductFilters, loadSale, normalizeSale, searchProducts, validatePayment };

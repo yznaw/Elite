@@ -25,6 +25,7 @@ import {
 import { PosHardwareService } from '../../services/pos-hardware.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
 import { ToastService } from '../../services/toast.service';
+import { PaginationComponent } from '../../shared/pagination/pagination.component';
 
 type PosPhase = 'loading' | 'enrollment' | 'shift' | 'selling';
 type PaymentMethod = 'cash' | 'card';
@@ -48,7 +49,7 @@ type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift
 
 @Component({
     selector: 'ap-pos',
-    imports: [CommonModule, FormsModule],
+    imports: [CommonModule, FormsModule, PaginationComponent],
     templateUrl: './pos.component.html',
     changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './pos.component.scss'
@@ -194,6 +195,14 @@ export class PosComponent implements OnInit, OnDestroy {
   cashMovementAmount = '';
   cashMovementReason = '';
   cashMovementManagerPin = '';
+
+  readonly productPage = signal(0);
+  readonly productTotal = signal(0);
+  readonly productTotalPages = computed(() => Math.max(1, Math.ceil(this.productTotal() / 40)));
+  readonly filterSize = signal<string | null>(null);
+  readonly filterColor = signal<string | null>(null);
+  readonly availableSizes = signal<string[]>([]);
+  readonly availableColors = signal<string[]>([]);
 
   private pendingIdempotencyKey: string | null = null;
   private searchSequence = 0;
@@ -442,7 +451,7 @@ export class PosComponent implements OnInit, OnDestroy {
 
   queueSearch(): void {
     if (this.searchTimer) clearTimeout(this.searchTimer);
-    this.searchTimer = setTimeout(() => void this.loadProducts(this.searchQuery), 180);
+    this.searchTimer = setTimeout(() => void this.loadProducts(this.searchQuery, 0), 180);
   }
 
   async scanBarcode(): Promise<void> {
@@ -1214,8 +1223,20 @@ export class PosComponent implements OnInit, OnDestroy {
     this.phase.set('selling');
     await this.loadProducts();
     if (this.online()) this.connectEvents();
-    await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.loadReferenceColors(), this.hardware.initialize()]);
+    await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.loadReferenceColors(), this.loadProductFilters(), this.hardware.initialize()]);
     await this.syncPendingSales();
+  }
+
+  private async loadProductFilters(): Promise<void> {
+    if (!this.online()) return;
+    try {
+      const filters = await this.pos.listProductFilters();
+      this.availableSizes.set(filters.sizes);
+      this.availableColors.set(filters.colors);
+    } catch {
+      this.availableSizes.set([]);
+      this.availableColors.set([]);
+    }
   }
 
   private async loadReferenceColors(): Promise<void> {
@@ -1270,7 +1291,7 @@ export class PosComponent implements OnInit, OnDestroy {
     yellow: '#e4bd35',
   };
 
-  private async loadProducts(query = ''): Promise<void> {
+  private async loadProducts(query = '', page = this.productPage()): Promise<void> {
     const sequence = ++this.searchSequence;
     if (!this.online()) {
       const cached = await this.local.getCatalog();
@@ -1283,13 +1304,19 @@ export class PosComponent implements OnInit, OnDestroy {
       return;
     }
     try {
-      const products = await this.pos.searchProducts(query);
+      const result = await this.pos.searchProducts(query, {
+        page,
+        size: this.filterSize(),
+        color: this.filterColor(),
+      });
       if (sequence === this.searchSequence) {
-        this.products.set(products);
-        if (!query) {
+        this.products.set(result.products);
+        this.productPage.set(result.page);
+        this.productTotal.set(result.total);
+        if (!query && page === 0 && !this.filterSize() && !this.filterColor()) {
           const cachedAt = new Date().toISOString();
           this.catalogCachedAt.set(cachedAt);
-          await this.local.setCatalog({ products, cachedAt });
+          await this.local.setCatalog({ products: result.products, cachedAt });
         }
       }
     } catch (error) {
@@ -1301,6 +1328,20 @@ export class PosComponent implements OnInit, OnDestroy {
         this.toast.warning("Couldn't load products", this.errorMessage(error));
       }
     }
+  }
+
+  onProductPageChange(page: number): void {
+    void this.loadProducts(this.searchQuery, page);
+  }
+
+  setSizeFilter(size: string): void {
+    this.filterSize.set(size || null);
+    void this.loadProducts(this.searchQuery, 0);
+  }
+
+  setColorFilter(color: string): void {
+    this.filterColor.set(color || null);
+    void this.loadProducts(this.searchQuery, 0);
   }
 
   private async ensureReceiptBlock(): Promise<void> {

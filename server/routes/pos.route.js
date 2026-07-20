@@ -14,7 +14,7 @@ const {
 const { setManagerPin, verifyManagerPin } = require('../lib/pos/manager-service');
 const { closeShift, currentSummary, getZReport, listZReports, openShift } = require('../lib/pos/shift-service');
 const { listCashMovements, recordCashMovement } = require('../lib/pos/cash-movement-service');
-const { createSale, findByBarcode, loadSale, searchProducts } = require('../lib/pos/sale-service');
+const { createSale, findByBarcode, listProductFilters, loadSale, searchProducts } = require('../lib/pos/sale-service');
 const { reportSyncState, syncTransactions } = require('../lib/pos/sync-service');
 const { deleteParkedCart, listParkedCarts, parkCart } = require('../lib/pos/parked-cart-service');
 const { createRefund, findTransaction, voidTransaction } = require('../lib/pos/correction-service');
@@ -116,6 +116,10 @@ router.post('/manager/verify-pin', posPinLimiter, asyncHandler(async (req, res) 
 
 router.get('/products/search', asyncHandler(async (req, res) => {
   ok(res, await searchProducts(context(req), req.query));
+}));
+
+router.get('/products/filters', asyncHandler(async (req, res) => {
+  ok(res, await listProductFilters(context(req)));
 }));
 
 router.get('/products/barcode/:barcode', asyncHandler(async (req, res) => {
