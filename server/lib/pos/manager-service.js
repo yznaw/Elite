@@ -156,13 +156,13 @@ async function listManagerPins(context) {
     const lastUpdated = new Map();
     if (ids.length) {
       const events = await client.query(
-        `SELECT DISTINCT ON (entity_id) entity_id, created_at
+        `SELECT DISTINCT ON (entity_id) entity_id, occurred_at
          FROM audit_events
          WHERE tenant_id = $1 AND action = 'pos.manager-pin.updated' AND entity_id = ANY($2::uuid[])
-         ORDER BY entity_id, created_at DESC`,
+         ORDER BY entity_id, occurred_at DESC`,
         [context.tenantId, ids],
       );
-      for (const row of events.rows) lastUpdated.set(row.entity_id, row.created_at);
+      for (const row of events.rows) lastUpdated.set(row.entity_id, row.occurred_at);
     }
     return users.rows.map((row) => ({
       userId: row.id,
