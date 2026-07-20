@@ -4,9 +4,11 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: Phase 2 (cashier follow-ups, explicitly skipped per owner — client doesn't need it), legal receipt sign-off, backups/DR, multi-branch data model.
 
-**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`), Manager-PIN-access + hardcoded-invite-link fixes (commit `6dba5c6`), Phase 7 PWA installability (commit `856a74b`) + offline resilience (commit `635dac1`), Phase 6 Angular 17→22 upgrade (commit `84e72d6`). All 20 server tests passing, client build green, `npm audit` clean.
+**In progress** (committed, not yet deployed to VPS / not yet fully verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`), Manager-PIN-access + hardcoded-invite-link fixes (commit `6dba5c6`), Phase 7 PWA installability (commit `856a74b`) + offline resilience (commit `635dac1`), Phase 6 Angular 17→22 upgrade (commit `84e72d6`), Phase 5 core reporting suite (commit `9437a13`). All 21 server tests passing, client build green, `npm audit` clean.
+
+Every phase through 7 is now built except Phase 2 (intentionally skipped). What's left is verification (hardware/manual/real-data testing across everything above) plus Phases 8-10 (legal sign-off, backup/DR, pilot), which are process/ops work, not code.
 
 ---
 
@@ -93,9 +95,11 @@
 
 ---
 
-## Phase 2 — Cashier role hardening follow-ups (small, already mostly done)
+## Phase 2 — Cashier role hardening follow-ups ⛔ Skipped (owner decision, 2026-07-20)
 
 **Why here:** this session already shipped the cashier role and approver-separation fix. This phase is just closing the two small gaps that were explicitly deferred.
+
+**Status:** explicitly skipped — owner doesn't expect the client to need this. `pos_emergency_self_approval_enabled` remains SQL-only (no UI toggle); if a genuinely one-person-shop scenario comes up later where self-approval is needed, this can be picked back up then.
 
 ### What to build
 - Admin UI toggle for `pos_emergency_self_approval_enabled` (currently SQL-only).
@@ -154,25 +158,30 @@
 
 ---
 
-## Phase 5 — Core reporting
+## Phase 5 — Core reporting ✅ Built, needs real-data verification
 
 **Why now, not earlier:** this is explicitly gated on Phases 1, 3, and 4 — reports read from `inventory_movements`, `pos_cash_movements`, and `pos_card_reconciliation`, so building reports before those ledgers exist would mean reporting on incomplete/wrong data.
 
-**Important — read before starting:** Phase 4 discovered that this project's Postgres session already runs with `TimeZone = Asia/Qatar` set (not UTC). Any business-date bucketing in this phase's reports MUST normalize through UTC first — `(col AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Qatar'` — not a single `AT TIME ZONE 'Asia/Qatar'`, which double-converts and silently lands on the wrong day. See `server/lib/pos/card-reconciliation-service.js`'s `posCardTotal()` for the working pattern.
+**Status:** built and pushed (commit `9437a13`). All 21 server tests pass (including a new dedicated E2E test that seeds a full sale/void/refund/cash-movement/settlement/Z-close sequence and checks all six report endpoints' numbers directly against it), client builds clean.
 
-### What to build
-(As already scoped in docs/15 Phase 5 — unchanged, just confirming its real dependency here)
-- Daily sales by payment/cashier/register/item/hour.
-- Cash drawer movement + variance report.
-- Card settlement exception report.
-- Inventory movement/shrinkage report.
-- Refund/void/discount exception dashboard.
-- Z-report history list with export.
+### What was built
+- Single "Reports" admin page (`/reports`, owner/admin/manager — same access scope as `/reconciliation`) with a tab per report and a shared date-range + register filter bar, rather than six separate pages/routes.
+- All six reports are **read-only queries over existing ledger tables** — no new tables, per the original architecture decision in docs/15:
+  - Daily sales — by day, payment method, cashier, register, hour, and item.
+  - Cash drawer movements + shift-close variance (`pos_cash_movements` + `pos_z_reports`).
+  - Card settlement exceptions (`pos_card_reconciliation`).
+  - Inventory movement/shrinkage, grouped by reason (`pos_sale`/`pos_void`/`pos_refund`), plus a live drift-alert query reusing the same baseline-vs-ledger comparison as Phase 1's hourly consistency job.
+  - Refund/void exception dashboard (`pos_voids` + `pos_refunds`, with manager-approval names joined in).
+  - Z-report history, filterable by date range/register.
+- CSV export per report, BOM-prefixed for Excel compatibility with Arabic cashier/product names (matches the pattern already used in `customers`/`catalog`/`orders` CSV exports, not `pos.component.ts`'s non-BOM variant).
+- Every business-date computation uses the double-UTC-conversion pattern from Phase 4 (`(col AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Qatar'`) — verified correct end-to-end by the new E2E test, not just by inspection.
+
+**Bug found and fixed while building this:** three of the six report functions (`dailySales`, `inventoryMovements`, `refundVoidExceptions`) originally ran their multiple queries via `Promise.all()` against one shared `pg` client. A single database connection cannot run concurrent queries — `pg` only tolerates it today via deprecated internal queueing, and a real deprecation warning appeared in the test output the first time this ran. Fixed by converting to sequential `await`s in all three functions. Worth checking any future multi-query report/service code in this codebase for the same mistake.
 
 ### Test gate
-- [ ] Each report's numbers cross-checked by hand against raw ledger queries for one real business day.
-- [ ] Business-day boundary in every report uses `Asia/Qatar`, not UTC midnight — verified with a sale made between midnight UTC and 3am Qatar time landing on the correct day.
-- [ ] CSV export opens cleanly in Excel/Google Sheets with correct encoding (no mangled Arabic text in exported CR/business-name fields, if included).
+- [ ] Each report's numbers cross-checked by hand against raw ledger queries for one real business day. (Automated equivalent done — the E2E test seeds known data and checks exact numbers — but a human hasn't yet checked it against one real day's actual data.)
+- [x] Business-day boundary in every report uses `Asia/Qatar`, not UTC midnight — verified by the E2E test using the same double-UTC-conversion pattern as Phase 4.
+- [ ] CSV export opens cleanly in Excel/Google Sheets with correct encoding (no mangled Arabic text in exported CR/business-name fields, if included) — needs a human to actually open an exported file.
 - [ ] Manual: owner reviews one full real day's data across all six reports and confirms it "looks right" against their own memory of that day's sales.
 
 ---
@@ -293,10 +302,10 @@ Confirmed as real future work, not started, since a second physical branch is pl
 Phase 0    "Go to POS" admin link         ✅ done, needs a manual click-through
 Phase 0.5  Receipt print fixes + reprint/remote-enrollment UI  ✅ built, needs hardware verification
 Phase 1  Inventory ledger              ─┐ ✅ built, needs hardware verification
-Phase 2  Cashier follow-ups             │  can run in parallel with 1
+Phase 2  Cashier follow-ups             │  ⛔ skipped (owner decision, 2026-07-20)
 Phase 3  Cash movements + Z-history     │  ✅ built, needs hardware verification
 Phase 4  Card settlement reconciliation ┘  ✅ built, needs real-data verification (independent of 1, but grouped for one hardware-test session)
-Phase 5  Core reporting                    ← depends on 1, 3, 4
+Phase 5  Core reporting                    ✅ built, needs real-data verification
 Phase 6  Angular upgrade (17→22)            ✅ built, needs manual click-through
 Phase 7  PWA/offline hardening              ✅ built, needs hardware/kiosk verification
 Phase 8  Legal sign-off                    ← depends on business-profile being final
