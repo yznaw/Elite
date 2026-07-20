@@ -4,9 +4,9 @@
 
 **Confirmed working today** (hardware-tested on the real POSIFLEX/Bixolon SRP-QE300 register): security baseline, cashier role + approver separation, card terminal-reference capture, bilingual canvas receipt renderer (redesigned with the real Elite logo and premium typography), QZ Tray signing end-to-end, business-profile editing UI, "Go to POS" link in the admin topbar.
 
-**Not yet started**: Angular security upgrade, legal receipt sign-off, backups/DR, multi-branch data model.
+**Not yet started**: legal receipt sign-off, backups/DR, multi-branch data model.
 
-**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`), Manager-PIN-access + hardcoded-invite-link fixes (commit `6dba5c6`), Phase 7 PWA installability (commit `856a74b`) + offline resilience (commit `635dac1`). All 20 server tests passing, client build green.
+**In progress** (committed, not yet deployed to VPS / not yet hardware-verified): Phase 0.5 receipt print fixes + reprint/remote-enrollment UI (commit `d4c9b62`), Phase 1 inventory ledger (commit `10ba2be`), printer auto-discovery + site-data-wipe fix (commit `6ce8fc8`), Phase 3 cash movements + Z-report history (commit `f13b295`), manager-PIN self-service + false-session-expiry + dashboard-flash fixes (commit `dec6a58`), Phase 4 card settlement reconciliation (commit `23d46ad`), Manager-PIN-access + hardcoded-invite-link fixes (commit `6dba5c6`), Phase 7 PWA installability (commit `856a74b`) + offline resilience (commit `635dac1`), Phase 6 Angular 17→22 upgrade (commit `84e72d6`). All 20 server tests passing, client build green, `npm audit` clean.
 
 ---
 
@@ -177,17 +177,22 @@
 
 ---
 
-## Phase 6 — Angular 17→19 security upgrade
+## Phase 6 — Angular 17→22 security upgrade ✅ Built, needs manual click-through verification
 
 **Why here, not first:** this is pure dependency hygiene with no user-facing behavior change — sequencing it after the money-critical phases means it doesn't block real progress, but it must land before Phase 10 (pilot) since it closes real CVEs in the framework the whole app runs on.
 
-### What to build
-- Incremental `ng update` 17→18→19, one hop at a time, with a full regression pass after each hop (storefront + admin + POS).
-- Re-run `npm audit` after each hop to confirm advisories actually close.
+**Status:** built and pushed (commit `84e72d6`). Went further than the original 17→19 target — Angular had moved on to v22 by the time this phase started, and npm's own advisory data showed the XSS CVEs this phase exists to close are only actually fixed at ≥19.3/21.x, not 19.2. Stopping at 19 as originally scoped would have finished the phase with the vulnerabilities still present, so this went 17→18→19→20→21→22, one hop at a time, with a type-check + production build of both projects + full server test-suite run after each hop.
+
+### What was built
+- `npm audit --production` on `client/`: 8 high-severity Angular XSS/sanitization CVEs → **0 vulnerabilities**.
+- All file changes are from Angular's own `ng update` migration schematics (standalone-component flag cleanup at v19, `ChangeDetectionStrategy.Eager` + `$safeNavigationMigration()` at v22, tsconfig lib/diagnostics updates) plus five components' genuinely-dead imports that Angular 19's stricter unused-import diagnostic caught (removed, not suppressed).
+- TypeScript 5.4 → 6.0, zone.js 0.14 → 0.15.
+- Confirmed both dev servers (`admin-portal`, `client-web`) boot and serve HTTP 200 on Angular 22.
+- One optional v21 migration failed with a path-resolution error specific to this workspace's multi-project layout — confirmed inconsequential (both `main.ts` files already use the modern form the migration targets, so it had nothing to change).
 
 ### Test gate
-- [ ] `npm audit` on `client/` shows zero unresolved high/critical after reaching 19.
-- [ ] Full manual click-through of storefront (browse, cart, checkout), admin portal (catalog, orders, settings, the new receipt-profile page), and POS (sale, void, refund, cashier login) — nothing visually or functionally regressed.
+- [x] `npm audit` on `client/` shows zero unresolved high/critical after reaching 22 (went further than the original v19 target since v19 alone didn't close the CVEs).
+- [ ] Full manual click-through of storefront (browse, cart, checkout), admin portal (catalog, orders, settings, the new receipt-profile page), and POS (sale, void, refund, cashier login) — nothing visually or functionally regressed. **Not yet done by a human** — only automated build/test/audit checks and a basic dev-server boot check have been run.
 - [ ] Automated Playwright suite (once fixed — see Phase 7) passes on the upgraded build.
 
 ---
@@ -292,7 +297,7 @@ Phase 2  Cashier follow-ups             │  can run in parallel with 1
 Phase 3  Cash movements + Z-history     │  ✅ built, needs hardware verification
 Phase 4  Card settlement reconciliation ┘  ✅ built, needs real-data verification (independent of 1, but grouped for one hardware-test session)
 Phase 5  Core reporting                    ← depends on 1, 3, 4
-Phase 6  Angular upgrade                   ← independent, do anytime before 10
+Phase 6  Angular upgrade (17→22)            ✅ built, needs manual click-through
 Phase 7  PWA/offline hardening              ✅ built, needs hardware/kiosk verification
 Phase 8  Legal sign-off                    ← depends on business-profile being final
 Phase 9  Backup/DR                          ← independent, do anytime before 10
