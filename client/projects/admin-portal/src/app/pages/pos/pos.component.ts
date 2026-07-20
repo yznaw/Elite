@@ -1012,7 +1012,7 @@ export class PosComponent implements OnInit, OnDestroy {
       'Variance', 'Transactions', 'Refund Count', 'Void Count',
     ];
     const csvRows = rows.map((r) => [
-      r.zReportId, r.createdAt,
+      r.zReportId, this.formatDateTime(r.createdAt),
       this.formatMoney(r.openingFloatCents), this.formatMoney(r.grossSalesCents),
       this.formatMoney(r.cashSalesCents), this.formatMoney(r.cardSalesCents),
       this.formatMoney(r.refundTotalCents), this.formatMoney(r.voidTotalCents),
@@ -1023,7 +1023,8 @@ export class PosComponent implements OnInit, OnDestroy {
     const csv = [header, ...csvRows]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // BOM-prefixed for Excel compatibility with non-ASCII (Arabic) content.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -1055,6 +1056,16 @@ export class PosComponent implements OnInit, OnDestroy {
 
   formatMoney(cents: number): string {
     return new Intl.NumberFormat('en-QA', { style: 'currency', currency: 'QAR' }).format(cents / 100);
+  }
+
+  /** CSV cells write the raw ISO timestamp otherwise (e.g.
+   *  "2026-07-19T21:51:35.973Z") — normalizes to a readable local format. */
+  formatDateTime(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    const datePart = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timePart = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return `${datePart} ${timePart}`;
   }
 
   formatAge(ms: number): string {

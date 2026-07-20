@@ -422,6 +422,21 @@ export class ReportsComponent implements OnInit {
     return `${sign}QAR ${(Math.abs(cents) / 100).toFixed(2)}`;
   }
 
+  /** CSV cells write the raw ISO timestamp otherwise (e.g.
+   *  "2026-07-19T21:51:35.973Z") — this matches the on-screen tables'
+   *  `date` pipe formatting so exported files read the same way. */
+  formatDateTime(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return `${this.formatDate(iso)} ${date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  formatDate(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
   varianceColor(varianceCents: number): string {
     if (varianceCents === 0) return 'inherit';
     return varianceCents < 0 ? 'var(--danger, #b3261e)' : 'var(--green, #1c6b3f)';
@@ -464,31 +479,31 @@ export class ReportsComponent implements OnInit {
   exportDailySales(r: PosDailySalesReport): void {
     this.downloadCsv(`daily-sales-${this.from()}-${this.to()}.csv`,
       ['Date', 'Total', 'Transactions'],
-      r.byDay.map((row) => [row.businessDate, this.formatMoney(row.totalCents), row.transactionCount]));
+      r.byDay.map((row) => [this.formatDate(row.businessDate), this.formatMoney(row.totalCents), row.transactionCount]));
   }
 
   exportCashMovements(r: PosCashMovementsReport): void {
     this.downloadCsv(`cash-movements-${this.from()}-${this.to()}.csv`,
       ['When', 'Type', 'Amount', 'Reason', 'Cashier', 'Manager', 'Register'],
-      r.movements.map((m) => [m.createdAt, this.cashMovementKindLabel(m.kind), this.formatMoney(m.amountCents), m.reason, m.cashierName, m.managerName || '', m.registerName]));
+      r.movements.map((m) => [this.formatDateTime(m.createdAt), this.cashMovementKindLabel(m.kind), this.formatMoney(m.amountCents), m.reason, m.cashierName, m.managerName || '', m.registerName]));
   }
 
   exportCardExceptions(rows: PosCardExceptionRow[]): void {
     this.downloadCsv(`card-settlement-exceptions-${this.from()}-${this.to()}.csv`,
       ['Date', 'Register', 'POS Total', 'Settlement', 'Variance', 'Status'],
-      rows.map((r) => [r.businessDate, r.registerName, this.formatMoney(r.posTotalCents), r.settlementTotalCents === null ? '' : this.formatMoney(r.settlementTotalCents), r.varianceCents === null ? '' : this.formatMoney(r.varianceCents), r.status]));
+      rows.map((r) => [this.formatDate(r.businessDate), r.registerName, this.formatMoney(r.posTotalCents), r.settlementTotalCents === null ? '' : this.formatMoney(r.settlementTotalCents), r.varianceCents === null ? '' : this.formatMoney(r.varianceCents), r.status]));
   }
 
   exportInventory(r: PosInventoryReport): void {
     this.downloadCsv(`inventory-movements-${this.from()}-${this.to()}.csv`,
       ['When', 'Product', 'SKU', 'Reason', 'Delta'],
-      r.movements.map((m) => [m.occurredAt, m.productName, m.sku || '', m.reason, m.delta]));
+      r.movements.map((m) => [this.formatDateTime(m.occurredAt), m.productName, m.sku || '', m.reason, m.delta]));
   }
 
   exportRefundVoid(r: PosRefundVoidReport): void {
     const rows: (string | number)[][] = [
-      ...r.voids.map((v) => ['Void', v.createdAt, this.formatMoney(v.amountCents), v.reason, v.cashierName, v.managerName, v.registerName]),
-      ...r.refunds.map((rf) => ['Refund', rf.createdAt, this.formatMoney(rf.amountCents), rf.reason, rf.cashierName, rf.managerName, rf.registerName]),
+      ...r.voids.map((v) => ['Void', this.formatDateTime(v.createdAt), this.formatMoney(v.amountCents), v.reason, v.cashierName, v.managerName, v.registerName]),
+      ...r.refunds.map((rf) => ['Refund', this.formatDateTime(rf.createdAt), this.formatMoney(rf.amountCents), rf.reason, rf.cashierName, rf.managerName, rf.registerName]),
     ];
     this.downloadCsv(`refund-void-exceptions-${this.from()}-${this.to()}.csv`,
       ['Type', 'When', 'Amount', 'Reason', 'Cashier', 'Manager', 'Register'], rows);
@@ -497,7 +512,7 @@ export class ReportsComponent implements OnInit {
   exportZHistory(rows: PosZReportRow[]): void {
     this.downloadCsv(`z-report-history-${this.from()}-${this.to()}.csv`,
       ['Closed', 'Register', 'Net Sales', 'Expected Cash', 'Physical Cash', 'Variance'],
-      rows.map((r) => [r.createdAt, r.registerName, this.formatMoney(r.netSalesCents), this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents)]));
+      rows.map((r) => [this.formatDateTime(r.createdAt), r.registerName, this.formatMoney(r.netSalesCents), this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents)]));
   }
 
   private errorMessage(error: unknown): string {
