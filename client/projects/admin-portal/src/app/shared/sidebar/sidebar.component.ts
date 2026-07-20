@@ -14,6 +14,8 @@ interface NavLink {
   subKey: string;
   icon: IconName;
   exact?: boolean;
+  /** Plain <a href target="_blank"> instead of an Angular routerLink — for links that leave the app's own routes, e.g. the static staff guide. */
+  external?: boolean;
 }
 
 @Component({
@@ -58,20 +60,37 @@ interface NavLink {
       <!-- Scrollable nav container -->
       <div class="nav-scroll">
         @for (n of visibleLinks(); track n.path) {
-          <a
-            [routerLink]="n.path"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: !!n.exact }"
-            class="nav-item"
-            (click)="toggle.close()"
-            [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
-          >
-            <ap-icon [name]="n.icon" [size]="18"/>
-            <div class="nav-label">
-              <span>{{ t(n.labelKey) }}</span>
-              <div class="label-sub">{{ t(n.subKey) }}</div>
-            </div>
-          </a>
+          @if (n.external) {
+            <a
+              [href]="n.path"
+              target="_blank"
+              rel="noopener"
+              class="nav-item"
+              (click)="toggle.close()"
+              [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
+            >
+              <ap-icon [name]="n.icon" [size]="18"/>
+              <div class="nav-label">
+                <span>{{ t(n.labelKey) }}</span>
+                <div class="label-sub">{{ t(n.subKey) }}</div>
+              </div>
+            </a>
+          } @else {
+            <a
+              [routerLink]="n.path"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: !!n.exact }"
+              class="nav-item"
+              (click)="toggle.close()"
+              [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
+            >
+              <ap-icon [name]="n.icon" [size]="18"/>
+              <div class="nav-label">
+                <span>{{ t(n.labelKey) }}</span>
+                <div class="label-sub">{{ t(n.subKey) }}</div>
+              </div>
+            </a>
+          }
         }
       </div>
 
@@ -354,8 +373,10 @@ export class SidebarComponent {
     { path: '/policies',    labelKey: 'nav.policies',    subKey: 'nav.policies.sub',    icon: 'docs'  },
     { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart' },
     { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'chart' },
+    { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'docs' },
     { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
     { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
+    { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
   ];
 
   // Manager-role accounts can't reach /settings (owner/admin-only — store

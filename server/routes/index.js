@@ -11,6 +11,7 @@ const adminStorefrontRouter = require('./admin-storefront.route');
 const adminSettingsRouter = require('./admin-settings.route');
 const adminAnalyticsRouter = require('./admin-analytics.route');
 const adminPosReconciliationRouter = require('./admin-pos-reconciliation.route');
+const adminPosReportsRouter = require('./admin-pos-reports.route');
 const adminBulkImportRouter = require('./admin-bulk-import.route');
 const adminRefRouter = require('./admin-ref.route');
 const productsRouter = require('./products.route');
@@ -73,6 +74,9 @@ admin.use('/policies', adminPoliciesRouter);
 // cashier access (cashiers don't reach the admin portal at all, but a
 // viewer account shouldn't submit settlement figures either).
 admin.use('/pos-reconciliation', requireAuth({ roles: ['owner', 'admin', 'manager'] }), adminPosReconciliationRouter);
+// Core reporting (Phase 5) — reads sales/cash/card/inventory/refund-void
+// ledgers written in earlier phases; same access scope as reconciliation.
+admin.use('/pos-reports', requireAuth({ roles: ['owner', 'admin', 'manager'] }), adminPosReportsRouter);
 admin.use('/', reviewsAdminRouter);
 
 router.use('/admin', admin);

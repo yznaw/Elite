@@ -104,6 +104,13 @@ export const routes: Routes = [
           import('./pages/pos-reconciliation/pos-reconciliation.component').then((m) => m.PosReconciliationComponent),
       },
       {
+        // Core reporting (Phase 5) — same access scope as reconciliation.
+        path: 'reports',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/reports/reports.component').then((m) => m.ReportsComponent),
+      },
+      {
         // Only owners and admins can manage workspace settings & team members.
         path: 'settings',
         canMatch: [roleGuard(['owner', 'admin'])],
