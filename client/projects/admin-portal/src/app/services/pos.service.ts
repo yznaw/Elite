@@ -248,7 +248,11 @@ export class PosService {
   }
 
   searchProducts(query = ''): Promise<PosCatalogItem[]> {
-    const params = new URLSearchParams({ q: query, limit: '80' });
+    // Include out-of-stock variants — the cashier UI already renders a
+    // "Sold out" badge and blocks adding them to cart (pos.component.ts),
+    // so hiding them here just makes products silently vanish from search
+    // instead of showing as unavailable.
+    const params = new URLSearchParams({ q: query, limit: '80', includeOutOfStock: 'true' });
     return firstValueFrom(
       this.api.get<{ products: PosCatalogItem[] }>(`/pos/products/search?${params.toString()}`),
     ).then((result) => result.products);
