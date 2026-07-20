@@ -253,9 +253,13 @@ export class PosService {
     // so hiding them here just makes products silently vanish from search
     // instead of showing as unavailable.
     const params = new URLSearchParams({ q: query, limit: '80', includeOutOfStock: 'true' });
+    console.log('[pos.service] searchProducts request:', params.toString());
     return firstValueFrom(
       this.api.get<{ products: PosCatalogItem[] }>(`/pos/products/search?${params.toString()}`),
-    ).then((result) => result.products);
+    ).then((result) => {
+      console.log('[pos.service] searchProducts response:', result.products.length, 'items', result.products);
+      return result.products;
+    });
   }
 
   findBarcode(barcode: string): Promise<PosCatalogItem> {

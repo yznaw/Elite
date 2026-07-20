@@ -30,6 +30,7 @@ async function searchProducts(context, query) {
   const q = String(query?.q || '').trim();
   const limit = Math.min(100, Math.max(1, Number.parseInt(query?.limit, 10) || 50));
   const includeOutOfStock = String(query?.includeOutOfStock || 'false') === 'true';
+  console.log('[sale-service] searchProducts called with raw query=', JSON.stringify(query), 'parsed: q=', JSON.stringify(q), 'limit=', limit, 'includeOutOfStock=', includeOutOfStock, 'tenantId=', context.tenantId);
   return inTransaction(async (client) => {
     const params = [context.tenantId, `%${q}%`, limit];
     const result = await client.query(
@@ -50,6 +51,7 @@ async function searchProducts(context, query) {
        LIMIT $3`,
       [...params, includeOutOfStock],
     );
+    console.log('[sale-service] searchProducts SQL returned', result.rowCount, 'rows');
     return { products: result.rows.map(mapCatalogRow), serverTimestamp: new Date().toISOString() };
   });
 }
