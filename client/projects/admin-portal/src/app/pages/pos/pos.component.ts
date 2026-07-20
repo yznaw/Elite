@@ -1272,10 +1272,8 @@ export class PosComponent implements OnInit, OnDestroy {
 
   private async loadProducts(query = ''): Promise<void> {
     const sequence = ++this.searchSequence;
-    console.log('[pos.component] loadProducts start, query=', JSON.stringify(query), 'online=', this.online());
     if (!this.online()) {
       const cached = await this.local.getCatalog();
-      console.log('[pos.component] OFFLINE branch, cached catalog size=', cached?.products?.length ?? 'null');
       if (!cached) return;
       const normalized = query.trim().toLowerCase();
       this.products.set(normalized
@@ -1286,20 +1284,16 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     try {
       const products = await this.pos.searchProducts(query);
-      console.log('[pos.component] ONLINE branch fetched', products.length, 'products, sequence match=', sequence === this.searchSequence);
       if (sequence === this.searchSequence) {
         this.products.set(products);
         if (!query) {
           const cachedAt = new Date().toISOString();
           this.catalogCachedAt.set(cachedAt);
           await this.local.setCatalog({ products, cachedAt });
-          console.log('[pos.component] wrote', products.length, 'products to local cache');
         }
       }
     } catch (error) {
-      console.error('[pos.component] ONLINE branch FAILED, falling back to cache:', error);
       const cached = await this.local.getCatalog();
-      console.log('[pos.component] fallback cached catalog size=', cached?.products?.length ?? 'null');
       if (sequence === this.searchSequence && cached) {
         this.products.set(cached.products);
         this.catalogCachedAt.set(cached.cachedAt);

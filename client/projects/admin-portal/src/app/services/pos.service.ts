@@ -251,15 +251,13 @@ export class PosService {
     // Include out-of-stock variants — the cashier UI already renders a
     // "Sold out" badge and blocks adding them to cart (pos.component.ts),
     // so hiding them here just makes products silently vanish from search
-    // instead of showing as unavailable.
+    // instead of showing as unavailable. limit is a product count, not a
+    // variant-row count — the server expands each matched product to all
+    // of its variants (see sale-service.js searchProducts).
     const params = new URLSearchParams({ q: query, limit: '80', includeOutOfStock: 'true' });
-    console.log('[pos.service] searchProducts request:', params.toString());
     return firstValueFrom(
       this.api.get<{ products: PosCatalogItem[] }>(`/pos/products/search?${params.toString()}`),
-    ).then((result) => {
-      console.log('[pos.service] searchProducts response:', result.products.length, 'items', result.products);
-      return result.products;
-    });
+    ).then((result) => result.products);
   }
 
   findBarcode(barcode: string): Promise<PosCatalogItem> {

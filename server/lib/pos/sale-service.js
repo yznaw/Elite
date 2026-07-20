@@ -28,11 +28,12 @@ function mapCatalogRow(row) {
 
 async function searchProducts(context, query) {
   const q = String(query?.q || '').trim();
-  const limit = Math.min(100, Math.max(1, Number.parseInt(query?.limit, 10) || 50));
+  // This limit caps distinct PRODUCTS, not variant rows — a product with 60
+  // size/color variants (e.g. shoes) was previously eating the entire row
+  // limit by itself and starving every other product out of the results.
+  const productLimit = Math.min(200, Math.max(1, Number.parseInt(query?.limit, 10) || 50));
   const includeOutOfStock = String(query?.includeOutOfStock || 'false') === 'true';
-  console.log('[sale-service] searchProducts called with raw query=', JSON.stringify(query), 'parsed: q=', JSON.stringify(q), 'limit=', limit, 'includeOutOfStock=', includeOutOfStock, 'tenantId=', context.tenantId);
   return inTransaction(async (client) => {
-    const params = [context.tenantId, `%${q}%`, limit];
     const result = await client.query(
       `SELECT
          p.id AS product_id, p.name AS product_name, p.status AS product_status,
@@ -46,12 +47,24 @@ async function searchProducts(context, query) {
          AND p.status = 'active'
          AND pv.is_active = true
          AND ($2 = '%%' OR p.name ILIKE $2 OR pv.sku ILIKE $2 OR pv.barcode ILIKE $2)
-         AND ($4::boolean OR pv.stock_quantity > 0)
-       ORDER BY p.name, pv.sort_order, pv.sku
-       LIMIT $3`,
-      [...params, includeOutOfStock],
+         AND ($3::boolean OR pv.stock_quantity > 0)
+         AND p.id IN (
+           SELECT id FROM (
+             SELECT DISTINCT p2.id, p2.name
+             FROM products p2
+             JOIN product_variants pv2 ON pv2.product_id = p2.id AND pv2.tenant_id = p2.tenant_id
+             WHERE p2.tenant_id = $1
+               AND p2.status = 'active'
+               AND pv2.is_active = true
+               AND ($2 = '%%' OR p2.name ILIKE $2 OR pv2.sku ILIKE $2 OR pv2.barcode ILIKE $2)
+               AND ($3::boolean OR pv2.stock_quantity > 0)
+             ORDER BY p2.name, p2.id
+             LIMIT $4
+           ) matched_products
+         )
+       ORDER BY p.name, pv.sort_order, pv.sku`,
+      [context.tenantId, `%${q}%`, includeOutOfStock, productLimit],
     );
-    console.log('[sale-service] searchProducts SQL returned', result.rowCount, 'rows');
     return { products: result.rows.map(mapCatalogRow), serverTimestamp: new Date().toISOString() };
   });
 }
