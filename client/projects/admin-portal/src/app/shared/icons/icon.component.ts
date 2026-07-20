@@ -10,7 +10,7 @@ export type IconName =
   | 'eyeOff'
   | 'docs' | 'bold' | 'italic' | 'underline' | 'h2' | 'h3'
   | 'listBullet' | 'listOrdered' | 'quote' | 'undo' | 'redo' | 'externalLink'
-  | 'lock' | 'scale';
+  | 'lock' | 'scale' | 'device';
 
 @Component({
     selector: 'ap-icon',
@@ -329,6 +329,11 @@ export type IconName =
       @case ('scale') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
           <path d="M12 3v18"/><path d="M5 21h14"/><path d="M7 7l-4 8a4 4 0 008 0z"/><path d="M17 7l-4 8a4 4 0 008 0z"/><path d="M5 7h14"/>
+        </svg>
+      }
+      @case ('device') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="19" x2="15" y2="19"/>
         </svg>
       }
     }

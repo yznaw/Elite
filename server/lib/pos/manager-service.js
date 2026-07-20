@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
+const db = require('../../db/client');
 const { audit, inTransaction, requireRegister } = require('./db');
 const { PosError, assertPos, nonEmpty, uuid } = require('./errors');
 const { hash } = require('./register-service');
@@ -140,6 +141,60 @@ async function verifyManagerPin(context, body) {
   return outcome.value;
 }
 
+async function listManagerPins(context) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can view manager PIN status.');
+  const client = await db.pool.connect();
+  try {
+    const users = await client.query(
+      `SELECT id, full_name AS name, email, role, (pos_pin_hash IS NOT NULL) AS configured
+       FROM admin_users
+       WHERE tenant_id = $1 AND role IN ('owner', 'admin', 'manager') AND status = 'active'
+       ORDER BY role, full_name`,
+      [context.tenantId],
+    );
+    const ids = users.rows.map((row) => row.id);
+    const lastUpdated = new Map();
+    if (ids.length) {
+      const events = await client.query(
+        `SELECT DISTINCT ON (entity_id) entity_id, created_at
+         FROM audit_events
+         WHERE tenant_id = $1 AND action = 'pos.manager-pin.updated' AND entity_id = ANY($2::uuid[])
+         ORDER BY entity_id, created_at DESC`,
+        [context.tenantId, ids],
+      );
+      for (const row of events.rows) lastUpdated.set(row.entity_id, row.created_at);
+    }
+    return users.rows.map((row) => ({
+      userId: row.id,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      configured: row.configured,
+      lastUpdatedAt: lastUpdated.get(row.id) || null,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+async function clearManagerPin(context, managerId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can clear another user\'s manager PIN.');
+  uuid(managerId, 'managerId');
+
+  return inTransaction(async (client) => {
+    const result = await client.query(
+      `UPDATE admin_users
+       SET pos_pin_hash = NULL
+       WHERE tenant_id = $1 AND id = $2 AND role IN ('owner', 'admin', 'manager')
+       RETURNING id`,
+      [context.tenantId, managerId],
+    );
+    assertPos(result.rowCount === 1, 404, 'MANAGER_NOT_FOUND', 'Active manager account not found.');
+    await audit(client, context, 'pos.manager-pin.cleared', 'admin_user', managerId);
+    return { managerId, configured: false };
+  });
+}
+
 async function consumeOverride(client, context, action, body) {
   const overrideId = uuid(body?.managerOverrideId, 'managerOverrideId');
   const token = nonEmpty(body?.managerOverrideToken, 'managerOverrideToken', 200);
@@ -161,4 +216,4 @@ async function consumeOverride(client, context, action, body) {
   return override;
 }
 
-module.exports = { consumeOverride, setManagerPin, verifyManagerPin };
+module.exports = { clearManagerPin, consumeOverride, listManagerPins, setManagerPin, verifyManagerPin };

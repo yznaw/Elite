@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
+const db = require('../../db/client');
 const { audit, inTransaction, requireRegister } = require('./db');
-const { assertPos, nonEmpty } = require('./errors');
+const { assertPos, nonEmpty, uuid } = require('./errors');
 
 const ENROLLMENT_TTL_MS = 15 * 60 * 1000;
 const RECEIPT_BLOCK_SIZE = 100;
@@ -151,6 +152,98 @@ async function currentRegister(context) {
   });
 }
 
+async function listAllRegisters(context) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can view registered devices.');
+  const client = await db.pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id, display_name, status, last_seen_at, created_at
+       FROM pos_registers
+       WHERE tenant_id = $1
+       ORDER BY display_name ASC`,
+      [context.tenantId],
+    );
+    return result.rows.map((row) => ({
+      registerId: row.id,
+      displayName: row.display_name,
+      status: row.status,
+      lastSeenAt: row.last_seen_at,
+      createdAt: row.created_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+async function revokeRegister(context, registerId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can revoke registers.');
+  uuid(registerId, 'registerId');
+
+  return inTransaction(async (client) => {
+    const result = await client.query(
+      `UPDATE pos_registers
+       SET status = 'revoked'
+       WHERE tenant_id = $1 AND id = $2 AND status != 'revoked'
+       RETURNING id, display_name`,
+      [context.tenantId, registerId],
+    );
+    assertPos(result.rowCount === 1, 404, 'REGISTER_NOT_FOUND', 'Register not found or already revoked.');
+    await audit(client, context, 'pos.register.revoked', 'pos_register', registerId, { displayName: result.rows[0].display_name });
+    return { registerId, status: 'revoked' };
+  });
+}
+
+async function listEnrollmentTokens(context) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can view enrollment tokens.');
+  const client = await db.pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT t.id, t.display_name, t.created_by_user_id, t.expires_at, t.consumed_at, t.register_id, t.created_at,
+              u.full_name AS created_by_name
+       FROM pos_register_enrollment_tokens t
+       LEFT JOIN admin_users u ON u.id = t.created_by_user_id
+       WHERE t.tenant_id = $1
+       ORDER BY t.created_at DESC`,
+      [context.tenantId],
+    );
+    return result.rows.map((row) => ({
+      tokenId: row.id,
+      displayName: row.display_name,
+      createdByName: row.created_by_name || null,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+      status: tokenStatus(row),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+function tokenStatus(row) {
+  if (row.register_id) return 'used';
+  if (row.consumed_at) return 'revoked';
+  if (new Date(row.expires_at).getTime() <= Date.now()) return 'expired';
+  return 'active';
+}
+
+async function revokeEnrollmentToken(context, tokenId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can revoke enrollment tokens.');
+  uuid(tokenId, 'tokenId');
+
+  return inTransaction(async (client) => {
+    const result = await client.query(
+      `UPDATE pos_register_enrollment_tokens
+       SET consumed_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND consumed_at IS NULL
+       RETURNING id, display_name`,
+      [context.tenantId, tokenId],
+    );
+    assertPos(result.rowCount === 1, 404, 'ENROLLMENT_TOKEN_NOT_FOUND', 'Token not found, already used, or already revoked.');
+    await audit(client, context, 'pos.register.enrollment-revoked', 'pos_register_enrollment_token', tokenId, { displayName: result.rows[0].display_name });
+    return { tokenId, status: 'revoked' };
+  });
+}
+
 async function allocateReceiptBlock(context) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context, { lock: true });
@@ -196,4 +289,8 @@ module.exports = {
   currentRegister,
   enrollRegister,
   hash,
+  listAllRegisters,
+  listEnrollmentTokens,
+  revokeEnrollmentToken,
+  revokeRegister,
 };

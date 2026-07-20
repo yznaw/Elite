@@ -35,6 +35,25 @@ export function fulfillmentPillKind(s: string): PillInfo {
   }
 }
 
+export function registerStatusPillKind(status: string): PillInfo {
+  switch (status) {
+    case 'active':   return { kind: 'green', labelKey: 'settings.security.status.active',   label: 'Active' };
+    case 'disabled': return { kind: 'grey',  labelKey: 'settings.security.status.disabled', label: 'Disabled' };
+    case 'revoked':  return { kind: 'red',   labelKey: 'settings.security.status.revoked',  label: 'Revoked' };
+    default:         return { kind: 'grey',  labelKey: 'settings.security.status.' + status, label: status };
+  }
+}
+
+export function tokenStatusPillKind(status: string): PillInfo {
+  switch (status) {
+    case 'active':  return { kind: 'green', labelKey: 'settings.security.status.active',  label: 'Active' };
+    case 'used':    return { kind: 'blue',  labelKey: 'settings.security.status.used',    label: 'Used' };
+    case 'expired': return { kind: 'grey',  labelKey: 'settings.security.status.expired', label: 'Expired' };
+    case 'revoked': return { kind: 'red',   labelKey: 'settings.security.status.revoked', label: 'Revoked' };
+    default:        return { kind: 'grey',  labelKey: 'settings.security.status.' + status, label: status };
+  }
+}
+
 /** Role badges: highest-privilege roles read as the "strongest" colors, cashier as a distinct till-only tier. */
 export function rolePillKind(role: string): PillInfo {
   switch (String(role || '').toLowerCase()) {

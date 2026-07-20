@@ -10,15 +10,15 @@ import { SortableTableComponent, CellTplDirective, TableColumn } from '../../sha
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminSettingsService, Invitation } from '../../services/admin-settings.service';
+import { AdminSettingsService, Invitation, PosRegisterRow, PosEnrollmentTokenRow, ManagerPinRow } from '../../services/admin-settings.service';
 import { AuthService } from '../../services/auth.service';
 import { StoreConfigService } from '../../services/store-config.service';
 import { PosService, PosBusinessProfile } from '../../services/pos.service';
 import { INTEGRATIONS } from '../../data/mock';
 import { TeamMember, TeamMemberRole } from '../../models';
-import { rolePillKind, PillInfo } from '../../shared/pill/status-pill';
+import { rolePillKind, registerStatusPillKind, tokenStatusPillKind, PillInfo } from '../../shared/pill/status-pill';
 
-type Tab = 'general' | 'team' | 'integrations';
+type Tab = 'general' | 'team' | 'security' | 'integrations';
 
 @Component({
     selector: 'ap-settings',
@@ -33,7 +33,7 @@ type Tab = 'general' | 'team' | 'integrations';
           (discarded)="discardGeneral()"/>
       }
       <div class="tabs">
-        @for (tt of tabs; track tt.key) {
+        @for (tt of visibleTabs(); track tt.key) {
           <button class="tab" [class.active]="tab() === tt.key" (click)="tab.set(tt.key)">{{ t(tt.labelKey) }}</button>
         }
       </div>
@@ -196,13 +196,57 @@ type Tab = 'general' | 'team' | 'integrations';
             <div class="muted small mt-16">{{ t('settings.managerPin.hint') }}</div>
           </div>
         }
+      }
 
-        @if (canManageRegisters()) {
-          <div class="card card-pad mt-24" style="max-width:680px;">
+      @if (tab() === 'security') {
+        <div class="col gap-lg">
+          <!-- ── Registered Devices ── -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.devices.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.devices.sub') }}</div>
+              </div>
+            </div>
+
+            @if (loadingRegisters()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else if (registers().length === 0) {
+              <div class="muted small" style="padding:16px 20px;">{{ t('settings.security.devices.empty.sub') }}</div>
+            } @else {
+              <ap-sortable-table [columns]="registerColumns" [rows]="registers()">
+                <ng-template apCellTpl="displayName" let-r>
+                  <div class="row gap-sm" style="align-items:center;">
+                    <ap-icon name="device" [size]="15" style="opacity:.5"/>
+                    <span class="strong">{{ r.displayName }}</span>
+                  </div>
+                </ng-template>
+                <ng-template apCellTpl="status" let-r>
+                  <ap-pill [kind]="registerPill(r.status).kind">{{ t(registerPill(r.status).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="lastSeenAt" let-r>
+                  <span class="muted small">{{ r.lastSeenAt ? (r.lastSeenAt | date:'MMM d, HH:mm') : t('common.never') }}</span>
+                </ng-template>
+                <ng-template apCellTpl="createdAt" let-r>
+                  <span class="muted small">{{ r.createdAt | date:'MMM d, y' }}</span>
+                </ng-template>
+                <ng-template apCellTpl="actions" let-r>
+                  @if (r.status !== 'revoked') {
+                    <button class="btn btn-danger btn-sm" (click)="revokeRegister(r)"><ap-icon name="trash" [size]="12"/> {{ t('settings.security.devices.revoke') }}</button>
+                  }
+                </ng-template>
+              </ap-sortable-table>
+            }
+          </div>
+
+          <!-- ── Enrollment Tokens ── -->
+          <div class="card card-pad">
             <div class="card-header mb-16">
               <div>
-                <div class="card-title">{{ t('settings.registers.title') }}</div>
-                <div class="card-sub">{{ t('settings.registers.sub') }}</div>
+                <div class="card-title">{{ t('settings.security.tokens.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.tokens.sub') }}</div>
               </div>
             </div>
 
@@ -230,7 +274,90 @@ type Tab = 'general' | 'team' | 'integrations';
               <div class="muted small" style="margin-top:4px;">{{ t('settings.registers.expiry') }}</div>
             }
           </div>
-        }
+
+          <div class="card">
+            @if (loadingTokens()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else if (tokens().length === 0) {
+              <div class="muted small" style="padding:16px 20px;">{{ t('settings.security.tokens.empty.sub') }}</div>
+            } @else {
+              <ap-sortable-table [columns]="tokenColumns" [rows]="tokens()">
+                <ng-template apCellTpl="status" let-r>
+                  <ap-pill [kind]="tokenPill(r.status).kind">{{ t(tokenPill(r.status).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="expiresAt" let-r>
+                  <span class="muted small">{{ r.expiresAt | date:'MMM d, HH:mm' }}</span>
+                </ng-template>
+                <ng-template apCellTpl="createdByName" let-r>
+                  <span class="muted small">{{ r.createdByName || '—' }}</span>
+                </ng-template>
+                <ng-template apCellTpl="actions" let-r>
+                  @if (r.status === 'active') {
+                    <button class="btn btn-danger btn-sm" (click)="revokeToken(r)"><ap-icon name="trash" [size]="12"/> {{ t('settings.security.tokens.revoke') }}</button>
+                  }
+                </ng-template>
+              </ap-sortable-table>
+            }
+          </div>
+
+          <!-- ── Manager PINs ── -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.managerPins.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.managerPins.sub') }}</div>
+              </div>
+            </div>
+
+            @if (loadingManagerPins()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else {
+              <ap-sortable-table [columns]="managerPinColumns" [rows]="managerPins()">
+                <ng-template apCellTpl="name" let-r>
+                  <div class="row gap-sm">
+                    <ap-avatar [initials]="initialsOf(r.name)"/>
+                    <div>
+                      <div class="strong">{{ r.name }}</div>
+                      <div class="muted small">{{ r.email }}</div>
+                    </div>
+                  </div>
+                </ng-template>
+                <ng-template apCellTpl="role" let-r>
+                  <ap-pill [kind]="rolePill(r.role).kind">{{ t(rolePill(r.role).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="configured" let-r>
+                  @if (r.configured) {
+                    <ap-pill kind="green">{{ t('settings.security.managerPins.configured') }}</ap-pill>
+                    <div class="muted small" style="margin-top:2px;">{{ r.lastUpdatedAt ? (r.lastUpdatedAt | date:'MMM d, y') : '' }}</div>
+                  } @else {
+                    <ap-pill kind="grey">{{ t('settings.security.managerPins.notConfigured') }}</ap-pill>
+                  }
+                </ng-template>
+                <ng-template apCellTpl="actions" let-r>
+                  @if (resettingPinFor() === r.userId) {
+                    <div class="row gap-sm" style="align-items:center;">
+                      <input class="inp" type="password" inputmode="numeric" maxlength="8" style="width:100px;padding:4px 8px;font-size:12px;"
+                             [ngModel]="resetPinValue()" (ngModelChange)="resetPinValue.set($event)" placeholder="4-8 digits"/>
+                      <button class="btn btn-gold btn-sm" [disabled]="!isValidPinFormat(resetPinValue())" (click)="confirmResetManagerPin(r)">{{ t('common.save') }}</button>
+                      <button class="btn btn-outline btn-sm" (click)="cancelResetManagerPin()">{{ t('common.cancel') }}</button>
+                    </div>
+                  } @else {
+                    <div class="row gap-sm">
+                      <button class="btn btn-outline btn-sm" (click)="startResetManagerPin(r)">{{ t('settings.security.managerPins.reset') }}</button>
+                      @if (r.configured) {
+                        <button class="btn btn-danger btn-sm" (click)="clearManagerPin(r)">{{ t('settings.security.managerPins.clear') }}</button>
+                      }
+                    </div>
+                  }
+                </ng-template>
+              </ap-sortable-table>
+            }
+          </div>
+        </div>
       }
 
       @if (tab() === 'team') {
@@ -396,10 +523,15 @@ export class SettingsComponent implements OnInit {
   readonly tabs: { key: Tab; labelKey: string }[] = [
     { key: 'general',      labelKey: 'settings.tab.general' },
     { key: 'team',         labelKey: 'settings.tab.team' },
+    { key: 'security',     labelKey: 'settings.tab.security' },
     { key: 'integrations', labelKey: 'settings.tab.integrations' },
   ];
 
   readonly tab = signal<Tab>('general');
+
+  // Security tab is owner/admin only — same gate the underlying registers/
+  // enrollment-token/manager-PIN-for-others services already enforce.
+  readonly visibleTabs = computed(() => this.tabs.filter((tt) => tt.key !== 'security' || this.canManageRegisters()));
 
   // ── Store settings ────────────────────────────────────────────────────────
   readonly loadingStore = signal(true);
@@ -446,6 +578,39 @@ export class SettingsComponent implements OnInit {
   readonly generatingRegisterToken = signal(false);
   readonly registerToken = signal<string | null>(null);
 
+  // ── Devices & Security tab ──────────────────────────────────────────────
+  readonly loadingRegisters = signal(true);
+  readonly registers = signal<PosRegisterRow[]>([]);
+  readonly loadingTokens = signal(true);
+  readonly tokens = signal<PosEnrollmentTokenRow[]>([]);
+  readonly loadingManagerPins = signal(true);
+  readonly managerPins = signal<ManagerPinRow[]>([]);
+  readonly resettingPinFor = signal<string | null>(null);
+  readonly resetPinValue = signal('');
+
+  readonly registerColumns: TableColumn<PosRegisterRow>[] = [
+    { key: 'displayName', label: 'Device',    labelKey: 'settings.col.name' },
+    { key: 'status',      label: 'Status',    labelKey: 'settings.col.status', noSort: true },
+    { key: 'lastSeenAt',  label: 'Last seen', labelKey: 'settings.security.devices.col.lastSeen' },
+    { key: 'createdAt',   label: 'Created',   labelKey: 'settings.security.devices.col.created' },
+    { key: 'actions',     label: '',                                          noSort: true, align: 'right' },
+  ];
+
+  readonly tokenColumns: TableColumn<PosEnrollmentTokenRow>[] = [
+    { key: 'displayName',   label: 'Device',     labelKey: 'settings.col.name' },
+    { key: 'status',        label: 'Status',     labelKey: 'settings.col.status', noSort: true },
+    { key: 'expiresAt',     label: 'Expires',    labelKey: 'settings.security.tokens.col.expiresAt' },
+    { key: 'createdByName', label: 'Issued by',  labelKey: 'settings.security.tokens.col.issuedBy' },
+    { key: 'actions',       label: '',                                          noSort: true, align: 'right' },
+  ];
+
+  readonly managerPinColumns: TableColumn<ManagerPinRow>[] = [
+    { key: 'name',       label: 'Name',      labelKey: 'settings.col.name' },
+    { key: 'role',       label: 'Role',      labelKey: 'settings.col.role',  noSort: true },
+    { key: 'configured', label: 'PIN',       labelKey: 'settings.security.managerPins.col.configured', noSort: true },
+    { key: 'actions',    label: '',                                          noSort: true, align: 'right' },
+  ];
+
   // ── Team ──────────────────────────────────────────────────────────────────
   readonly loadingTeam = signal(true);
   readonly team = signal<TeamMember[]>([]);
@@ -470,7 +635,11 @@ export class SettingsComponent implements OnInit {
   ];
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadStore(), this.loadTeam(), this.loadReceiptProfile()]);
+    const tasks = [this.loadStore(), this.loadTeam(), this.loadReceiptProfile()];
+    if (this.canManageRegisters()) {
+      tasks.push(this.loadRegisters(), this.loadTokens(), this.loadManagerPins());
+    }
+    await Promise.all(tasks);
   }
 
   private async loadStore(): Promise<void> {
@@ -563,6 +732,130 @@ export class SettingsComponent implements OnInit {
     navigator.clipboard.writeText(token).then(() => {
       this.toast.success(this.t('settings.toast.codeCopied'));
     }).catch(() => {});
+  }
+
+  // ── Devices & Security tab ──────────────────────────────────────────────
+
+  private async loadRegisters(): Promise<void> {
+    try {
+      this.registers.set(await this.settingsApi.listRegisters());
+    } catch {
+      this.registers.set([]);
+    } finally {
+      this.loadingRegisters.set(false);
+    }
+  }
+
+  private async loadTokens(): Promise<void> {
+    try {
+      this.tokens.set(await this.settingsApi.listEnrollmentTokens());
+    } catch {
+      this.tokens.set([]);
+    } finally {
+      this.loadingTokens.set(false);
+    }
+  }
+
+  private async loadManagerPins(): Promise<void> {
+    try {
+      this.managerPins.set(await this.settingsApi.listManagerPins());
+    } catch {
+      this.managerPins.set([]);
+    } finally {
+      this.loadingManagerPins.set(false);
+    }
+  }
+
+  registerPill(status: string): PillInfo {
+    return registerStatusPillKind(status);
+  }
+
+  tokenPill(status: string): PillInfo {
+    return tokenStatusPillKind(status);
+  }
+
+  initialsOf(name: string): string {
+    return String(name || 'User').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || 'U';
+  }
+
+  async revokeRegister(r: PosRegisterRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.revokeRegister.title').replace('{name}', r.displayName),
+      message: this.t('settings.confirm.revokeRegister.message'),
+      confirmLabel: this.t('settings.confirm.revokeRegister.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.revokeRegister.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const previous = this.registers();
+    this.registers.update((list) => list.map((x) => (x.registerId === r.registerId ? { ...x, status: 'revoked' } : x)));
+    try {
+      await this.settingsApi.revokeRegister(r.registerId);
+      this.toast.success(this.t('settings.toast.registerRevoked'));
+    } catch {
+      this.registers.set(previous);
+    }
+  }
+
+  async revokeToken(r: PosEnrollmentTokenRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.revokeToken.title').replace('{name}', r.displayName),
+      message: this.t('settings.confirm.revokeToken.message'),
+      confirmLabel: this.t('settings.confirm.revokeToken.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.revokeToken.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const previous = this.tokens();
+    this.tokens.update((list) => list.map((x) => (x.tokenId === r.tokenId ? { ...x, status: 'revoked' } : x)));
+    try {
+      await this.settingsApi.revokeEnrollmentToken(r.tokenId);
+      this.toast.success(this.t('settings.toast.tokenRevoked'));
+    } catch {
+      this.tokens.set(previous);
+    }
+  }
+
+  startResetManagerPin(r: ManagerPinRow): void {
+    this.resettingPinFor.set(r.userId);
+    this.resetPinValue.set('');
+  }
+
+  cancelResetManagerPin(): void {
+    this.resettingPinFor.set(null);
+    this.resetPinValue.set('');
+  }
+
+  async confirmResetManagerPin(r: ManagerPinRow): Promise<void> {
+    if (!this.isValidPinFormat(this.resetPinValue())) return;
+    try {
+      await this.posApi.setManagerPin(this.resetPinValue(), r.userId);
+      this.managerPins.update((list) => list.map((x) => (x.userId === r.userId ? { ...x, configured: true, lastUpdatedAt: new Date().toISOString() } : x)));
+      this.toast.success(this.t('settings.toast.pinReset'), `${r.name} ${this.t('settings.toast.pinReset.sub')}`);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.cancelResetManagerPin();
+    }
+  }
+
+  async clearManagerPin(r: ManagerPinRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.clearPin.title').replace('{name}', r.name),
+      message: this.t('settings.confirm.clearPin.message'),
+      confirmLabel: this.t('settings.confirm.clearPin.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.clearPin.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const previous = this.managerPins();
+    this.managerPins.update((list) => list.map((x) => (x.userId === r.userId ? { ...x, configured: false, lastUpdatedAt: null } : x)));
+    try {
+      await this.settingsApi.clearManagerPin(r.userId);
+      this.toast.success(this.t('settings.toast.pinCleared'));
+    } catch {
+      this.managerPins.set(previous);
+    }
   }
 
   isValidPinFormat(pin: string): boolean {

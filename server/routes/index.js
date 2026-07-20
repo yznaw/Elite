@@ -12,6 +12,7 @@ const adminSettingsRouter = require('./admin-settings.route');
 const adminAnalyticsRouter = require('./admin-analytics.route');
 const adminPosReconciliationRouter = require('./admin-pos-reconciliation.route');
 const adminPosReportsRouter = require('./admin-pos-reports.route');
+const adminPosSecurityRouter = require('./admin-pos-security.route');
 const adminBulkImportRouter = require('./admin-bulk-import.route');
 const adminRefRouter = require('./admin-ref.route');
 const productsRouter = require('./products.route');
@@ -77,6 +78,10 @@ admin.use('/pos-reconciliation', requireAuth({ roles: ['owner', 'admin', 'manage
 // Core reporting (Phase 5) — reads sales/cash/card/inventory/refund-void
 // ledgers written in earlier phases; same access scope as reconciliation.
 admin.use('/pos-reports', requireAuth({ roles: ['owner', 'admin', 'manager'] }), adminPosReportsRouter);
+// Registered devices, enrollment tokens, and manager-PIN administration —
+// owner/admin only, since these are the exact same permission checks the
+// underlying services already enforce (createEnrollmentToken, setManagerPin).
+admin.use('/pos-security', requireAuth({ roles: ['owner', 'admin'] }), adminPosSecurityRouter);
 admin.use('/', reviewsAdminRouter);
 
 router.use('/admin', admin);
