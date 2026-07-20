@@ -13,7 +13,11 @@ const EN = {
   'brand.tagline': 'Admin Portal',
 
   // ── Sidebar / Nav ──
-  'nav.section.workspace': 'Workspace',
+  'nav.section.overview': 'Overview',
+  'nav.section.storefront': 'Storefront',
+  'nav.section.sales': 'Sales & POS',
+  'nav.section.engagement': 'Engagement',
+  'nav.section.system': 'System',
   'nav.dashboard': 'Dashboard',
   'nav.dashboard.sub': 'Overview',
   'nav.catalog': 'Catalog',
@@ -1728,7 +1732,11 @@ const AR: Record<keyof typeof EN, string> = {
   'brand.name': 'إيليت',
   'brand.tagline': 'بوابة الإدارة المركزية',
 
-  'nav.section.workspace': 'بيئة العمل',
+  'nav.section.overview': 'نظرة عامة',
+  'nav.section.storefront': 'واجهة المتجر',
+  'nav.section.sales': 'المبيعات ونقطة البيع',
+  'nav.section.engagement': 'التفاعل',
+  'nav.section.system': 'النظام',
   'nav.dashboard': 'لوحة القيادة',
   'nav.dashboard.sub': 'نظرة شاملة',
   'nav.catalog': 'المعروضات',

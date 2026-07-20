@@ -9,7 +9,8 @@ export type IconName =
   | 'reference' | 'hierarchy' | 'star' | 'phone' | 'whatsapp'
   | 'eyeOff'
   | 'docs' | 'bold' | 'italic' | 'underline' | 'h2' | 'h3'
-  | 'listBullet' | 'listOrdered' | 'quote' | 'undo' | 'redo' | 'externalLink';
+  | 'listBullet' | 'listOrdered' | 'quote' | 'undo' | 'redo' | 'externalLink'
+  | 'lock' | 'scale';
 
 @Component({
     selector: 'ap-icon',
@@ -318,6 +319,16 @@ export type IconName =
       @case ('externalLink') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+      }
+      @case ('lock') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+      }
+      @case ('scale') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <path d="M12 3v18"/><path d="M5 21h14"/><path d="M7 7l-4 8a4 4 0 008 0z"/><path d="M17 7l-4 8a4 4 0 008 0z"/><path d="M5 7h14"/>
         </svg>
       }
     }

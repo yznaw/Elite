@@ -22,6 +22,13 @@ interface SecondaryItem {
   labelKey: string;
   subKey: string;
   icon: IconName;
+  /** Plain <a href target="_blank"> instead of a routerLink — leaves the app's own routes, e.g. the static staff guide. */
+  external?: boolean;
+}
+
+interface SecondaryGroup {
+  labelKey: string;
+  items: SecondaryItem[];
 }
 
 @Component({
@@ -78,21 +85,42 @@ interface SecondaryItem {
       <div class="sheet-handle" (click)="closeMore()"></div>
 
       <div class="sheet-items">
-        @for (item of secondaryItems; track item.path) {
-          <a
-            [routerLink]="item.path"
-            routerLinkActive="active"
-            class="sheet-item"
-            (click)="closeMore()"
-          >
-            <span class="sheet-item-icon">
-              <ap-icon [name]="item.icon" [size]="18"/>
-            </span>
-            <span class="sheet-item-body">
-              <span class="sheet-item-label">{{ t(item.labelKey) }}</span>
-              <span class="sheet-item-sub">{{ t(item.subKey) }}</span>
-            </span>
-          </a>
+        @for (group of visibleGroups(); track group.labelKey) {
+          <div class="sheet-section-label">{{ t(group.labelKey) }}</div>
+          @for (item of group.items; track item.path) {
+            @if (item.external) {
+              <a
+                [href]="item.path"
+                target="_blank"
+                rel="noopener"
+                class="sheet-item"
+                (click)="closeMore()"
+              >
+                <span class="sheet-item-icon">
+                  <ap-icon [name]="item.icon" [size]="18"/>
+                </span>
+                <span class="sheet-item-body">
+                  <span class="sheet-item-label">{{ t(item.labelKey) }}</span>
+                  <span class="sheet-item-sub">{{ t(item.subKey) }}</span>
+                </span>
+              </a>
+            } @else {
+              <a
+                [routerLink]="item.path"
+                routerLinkActive="active"
+                class="sheet-item"
+                (click)="closeMore()"
+              >
+                <span class="sheet-item-icon">
+                  <ap-icon [name]="item.icon" [size]="18"/>
+                </span>
+                <span class="sheet-item-body">
+                  <span class="sheet-item-label">{{ t(item.labelKey) }}</span>
+                  <span class="sheet-item-sub">{{ t(item.subKey) }}</span>
+                </span>
+              </a>
+            }
+          }
         }
       </div>
 
@@ -245,6 +273,16 @@ interface SecondaryItem {
         min-height: 0;
       }
 
+      .sheet-section-label {
+        padding: 14px 20px 4px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .sheet-section-label:first-child { padding-top: 4px; }
+
       .sheet-item {
         display: flex;
         align-items: center;
@@ -336,16 +374,55 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
     { path: '/customers',  labelKey: 'nav.customers',  icon: 'users'   },
   ];
 
-  readonly secondaryItems: SecondaryItem[] = [
-    { path: '/pos',         labelKey: 'nav.pos',         subKey: 'nav.pos.sub',         icon: 'store'    },
-    { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media'    },
-    { path: '/feedback',    labelKey: 'nav.feedback',    subKey: 'nav.feedback.sub',    icon: 'star'     },
-    { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store'    },
-    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections'  },
-    { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart'    },
-    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference'     },
-    { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
+  // Mirrors the sidebar's grouping (minus Dashboard/Catalog/Orders/Customers,
+  // already covered by the always-visible primaryTabs above) so the "More"
+  // sheet and the desktop sidebar read as the same nav, not two different apps.
+  private readonly secondaryGroups: SecondaryGroup[] = [
+    {
+      labelKey: 'nav.section.storefront',
+      items: [
+        { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
+        { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
+        { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.sales',
+      items: [
+        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode' },
+        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale' },
+        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.engagement',
+      items: [
+        { path: '/feedback',  labelKey: 'nav.feedback',  subKey: 'nav.feedback.sub',  icon: 'star' },
+        { path: '/policies',  labelKey: 'nav.policies',  subKey: 'nav.policies.sub',  icon: 'docs' },
+        { path: '/analytics', labelKey: 'nav.analytics', subKey: 'nav.analytics.sub', icon: 'chart' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.system',
+      items: [
+        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference' },
+        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings' },
+        { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
+      ],
+    },
   ];
+
+  private readonly myPinItem: SecondaryItem = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'lock' };
+
+  readonly visibleGroups = computed<SecondaryGroup[]>(() => {
+    const role = this.auth.user()?.role;
+    if (role !== 'manager') return this.secondaryGroups;
+    return this.secondaryGroups.map((group) =>
+      group.labelKey === 'nav.section.system'
+        ? { ...group, items: [...group.items, this.myPinItem] }
+        : group,
+    );
+  });
 
   ngAfterViewInit(): void {
     this.scrollEl = document.querySelector('.scroll-area');

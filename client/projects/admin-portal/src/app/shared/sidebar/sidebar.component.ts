@@ -18,6 +18,11 @@ interface NavLink {
   external?: boolean;
 }
 
+interface NavGroup {
+  labelKey: string;
+  links: NavLink[];
+}
+
 @Component({
     selector: 'ap-sidebar',
     imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent],
@@ -55,41 +60,42 @@ interface NavLink {
         </button>
       </div>
 
-      <div class="nav-section-label"><span class="label-text">{{ t('nav.section.workspace') }}</span></div>
-
       <!-- Scrollable nav container -->
       <div class="nav-scroll">
-        @for (n of visibleLinks(); track n.path) {
-          @if (n.external) {
-            <a
-              [href]="n.path"
-              target="_blank"
-              rel="noopener"
-              class="nav-item"
-              (click)="toggle.close()"
-              [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
-            >
-              <ap-icon [name]="n.icon" [size]="18"/>
-              <div class="nav-label">
-                <span>{{ t(n.labelKey) }}</span>
-                <div class="label-sub">{{ t(n.subKey) }}</div>
-              </div>
-            </a>
-          } @else {
-            <a
-              [routerLink]="n.path"
-              routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: !!n.exact }"
-              class="nav-item"
-              (click)="toggle.close()"
-              [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
-            >
-              <ap-icon [name]="n.icon" [size]="18"/>
-              <div class="nav-label">
-                <span>{{ t(n.labelKey) }}</span>
-                <div class="label-sub">{{ t(n.subKey) }}</div>
-              </div>
-            </a>
+        @for (group of visibleGroups(); track group.labelKey) {
+          <div class="nav-section-label"><span class="label-text">{{ t(group.labelKey) }}</span></div>
+          @for (n of group.links; track n.path) {
+            @if (n.external) {
+              <a
+                [href]="n.path"
+                target="_blank"
+                rel="noopener"
+                class="nav-item"
+                (click)="toggle.close()"
+                [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
+              >
+                <ap-icon [name]="n.icon" [size]="18"/>
+                <div class="nav-label">
+                  <span>{{ t(n.labelKey) }}</span>
+                  <div class="label-sub">{{ t(n.subKey) }}</div>
+                </div>
+              </a>
+            } @else {
+              <a
+                [routerLink]="n.path"
+                routerLinkActive="active"
+                [routerLinkActiveOptions]="{ exact: !!n.exact }"
+                class="nav-item"
+                (click)="toggle.close()"
+                [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
+              >
+                <ap-icon [name]="n.icon" [size]="18"/>
+                <div class="nav-label">
+                  <span>{{ t(n.labelKey) }}</span>
+                  <div class="label-sub">{{ t(n.subKey) }}</div>
+                </div>
+              </a>
+            }
           }
         }
       </div>
@@ -189,6 +195,10 @@ interface NavLink {
       position: relative; z-index: 1;
       flex-shrink: 0;
     }
+    /* Extra breathing room before every group after the first one, so a
+       long grouped list still reads as distinct sections, not one run-on
+       list with small labels sprinkled in. */
+    .nav-section-label:not(:first-child) { margin-top: 18px; }
     html[dir='rtl'] .nav-section-label { letter-spacing: 0; }
 
     /* ── Scrollable nav ────────────────── */
@@ -360,23 +370,57 @@ export class SidebarComponent {
     }
   }
 
-  private readonly allLinks: NavLink[] = [
-    { path: '/dashboard',   labelKey: 'nav.dashboard',   subKey: 'nav.dashboard.sub',   icon: 'dash' },
-    { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
-    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
-    { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
-    { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store' },
-    { path: '/pos',         labelKey: 'nav.pos',         subKey: 'nav.pos.sub',         icon: 'store' },
-    { path: '/orders',      labelKey: 'nav.orders',      subKey: 'nav.orders.sub',      icon: 'orders' },
-    { path: '/customers',   labelKey: 'nav.customers',   subKey: 'nav.customers.sub',   icon: 'users' },
-    { path: '/feedback',    labelKey: 'nav.feedback',    subKey: 'nav.feedback.sub',    icon: 'star'  },
-    { path: '/policies',    labelKey: 'nav.policies',    subKey: 'nav.policies.sub',    icon: 'docs'  },
-    { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart' },
-    { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'chart' },
-    { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'docs' },
-    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
-    { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
-    { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
+  // Grouped by what the section is actually for, not left as one flat run-on
+  // list — the nav grew to 15+ items across all the POS/reporting phases,
+  // past the point a single "Workspace" label stays scannable.
+  private readonly groups: NavGroup[] = [
+    {
+      labelKey: 'nav.section.overview',
+      links: [
+        { path: '/dashboard', labelKey: 'nav.dashboard', subKey: 'nav.dashboard.sub', icon: 'dash' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.storefront',
+      links: [
+        { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
+        { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
+        { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
+        { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.sales',
+      links: [
+        // 'barcode' distinguishes POS from Storefront's 'store' icon — both
+        // used to share 'store', with nothing to tell them apart at a glance.
+        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode' },
+        { path: '/orders',         labelKey: 'nav.orders',         subKey: 'nav.orders.sub',         icon: 'orders' },
+        { path: '/customers',      labelKey: 'nav.customers',      subKey: 'nav.customers.sub',      icon: 'users' },
+        // 'scale' (a balance) for reconciling two totals against each other —
+        // previously reused 'chart', identical to Analytics' icon.
+        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale' },
+        // 'csv' for exportable ledger reports — previously reused 'docs',
+        // identical to Policies' icon.
+        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.engagement',
+      links: [
+        { path: '/feedback',  labelKey: 'nav.feedback',  subKey: 'nav.feedback.sub',  icon: 'star' },
+        { path: '/policies',  labelKey: 'nav.policies',  subKey: 'nav.policies.sub',  icon: 'docs' },
+        { path: '/analytics', labelKey: 'nav.analytics', subKey: 'nav.analytics.sub', icon: 'chart' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.system',
+      links: [
+        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference' },
+        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings' },
+        { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
+      ],
+    },
   ];
 
   // Manager-role accounts can't reach /settings (owner/admin-only — store
@@ -384,12 +428,18 @@ export class SidebarComponent {
   // their own manager PIN. Owner/admin already reach that same PIN card
   // inside Settings, so this link only needs to appear for managers —
   // showing it to everyone would just be a confusing near-duplicate of
-  // the Settings link for the roles that don't need it.
-  private readonly myPinLink: NavLink = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'settings' };
+  // the Settings link for the roles that don't need it. 'lock' distinguishes
+  // it from Settings' own icon since they're different destinations.
+  private readonly myPinLink: NavLink = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'lock' };
 
-  readonly visibleLinks = computed<NavLink[]>(() => {
+  readonly visibleGroups = computed<NavGroup[]>(() => {
     const role = this.user()?.role;
-    return role === 'manager' ? [...this.allLinks, this.myPinLink] : this.allLinks;
+    if (role !== 'manager') return this.groups;
+    return this.groups.map((group) =>
+      group.labelKey === 'nav.section.system'
+        ? { ...group, links: [...group.links, this.myPinLink] }
+        : group,
+    );
   });
 
   constructor() {
