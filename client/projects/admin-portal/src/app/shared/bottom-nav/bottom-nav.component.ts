@@ -243,6 +243,10 @@ interface SecondaryGroup {
         position: fixed;
         inset-inline: 0;
         bottom: 0;
+        /* Cap the sheet below the top of the viewport so a long grouped list
+           scrolls inside .sheet-items instead of the whole sheet growing
+           past the screen edge with nothing to scroll. */
+        max-height: min(80dvh, calc(100dvh - 64px - env(safe-area-inset-top, 0px)));
         z-index: 170;
         background: var(--surface);
         border-radius: 20px 20px 0 0;
