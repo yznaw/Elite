@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
+const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -250,6 +251,9 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
             message: err.message,
           });
         });
+      await sendReceiptForPaidOrder(client, updatedOrder.tenant_id, orderId).catch((err) => {
+        console.warn('[sadad-callback] Receipt email failed:', err.message);
+      });
     }
   } catch (err) {
     console.error('[sadad-callback] Critical order payment update failed', {

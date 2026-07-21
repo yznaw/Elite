@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
+const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -340,6 +341,9 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
           ],
         );
       }
+      await sendReceiptForPaidOrder(client, tenantId, updatedOrderId).catch((err) => {
+        console.warn('[admin-orders] Receipt email failed:', err.message);
+      });
     }
     ok(res, await loadAdminOrder(client, tenant.id, req.params.id), 'Order status updated.');
   } catch (err) {

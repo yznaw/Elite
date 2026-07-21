@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
+const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -177,6 +178,9 @@ router.post('/', async (req, res) => {
             message: err.message,
           });
         });
+      await sendReceiptForPaidOrder(client, orderResult.rows[0].tenant_id, websiteRefNo).catch((err) => {
+        console.warn('[sadad-webhook] Receipt email failed:', err.message);
+      });
     }
 
     console.log('[sadad-webhook] Order updated', { websiteRefNo, paymentStatus, transactionNumber });

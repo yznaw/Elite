@@ -1,6 +1,8 @@
 const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, cents, nonEmpty, positiveInt, uuid } = require('./errors');
 const { recordMovement } = require('./inventory-ledger');
+const db = require('../../db/client');
+const { sendReceiptForPaidOrder } = require('../order-receipt');
 
 const MAX_ORDER_CENTS = 2_147_483_647;
 
@@ -321,7 +323,7 @@ async function createSale(context, body, options = {}) {
   if (offline) {
     assertPos(sale.clientCreatedAt, 422, 'INVALID_TIMESTAMP', 'Offline sales require clientCreatedAt.');
   }
-  return inTransaction(async (client) => {
+  const result = await inTransaction(async (client) => {
     const existing = await client.query(
       `SELECT id, register_id, cashier_id
        FROM pos_transactions WHERE tenant_id = $1 AND idempotency_key = $2`,
@@ -642,6 +644,15 @@ async function createSale(context, body, options = {}) {
     result.syncConflicts = syncConflicts;
     return result;
   });
+  const client = await db.pool.connect();
+  try {
+    await sendReceiptForPaidOrder(client, context.tenantId, result.orderId).catch((err) => {
+      console.warn('[pos] Receipt email failed:', err.message);
+    });
+  } finally {
+    client.release();
+  }
+  return result;
 }
 
 function validatePayment(payment, totalCents) {

@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const nbox = require('../lib/nbox');
 const { bookNboxForPaidOrder, nboxQuoteMetadata } = require('../lib/order-delivery');
+const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -511,6 +512,9 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     if (paymentStatus === 'paid') {
       const deliveryResult = await bookNboxForPaidOrder(client, tenantId, createdOrder.id);
       nboxShipment = deliveryResult.created ? deliveryResult.shipment : null;
+      await sendReceiptForPaidOrder(client, tenantId, createdOrder.id).catch((err) => {
+        console.warn('[checkout] Receipt email failed:', err.message);
+      });
     }
 
     created(res, {
