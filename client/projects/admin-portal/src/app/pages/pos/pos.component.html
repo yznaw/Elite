@@ -325,7 +325,9 @@
         </div>
 
         <div class="variant-size-pane">
-          @if (selectedVariantColorGroup(); as selectedColor) {
+          @if (selectedColorHasNoSizes()) {
+            <!-- This color has a single no-size variant (bags/accessories that don't vary by size) — already auto-selected, nothing to pick here. -->
+          } @else if (selectedVariantColorGroup(); as selectedColor) {
             <div class="variant-size-heading">
               <span class="variant-pane-label">Sizes</span>
             </div>
@@ -362,7 +364,7 @@
         <div class="variant-add-bar">
           @if (selectedVariant(); as selected) {
             <div style="display:grid;gap:4px">
-              <strong style="font-family:Georgia,serif;font-size:24px;font-weight:500">{{ sizeLabel(selected) }}</strong>
+              <strong style="font-family:Georgia,serif;font-size:24px;font-weight:500">{{ selectedColorHasNoSizes() ? group.title : sizeLabel(selected) }}</strong>
               <span style="color:#737c78;font-size:10px">{{ formatMoney(selected.priceCents) }} each · {{ formatMoney(selectedVariantTotalCents()) }} total</span>
             </div>
             <div class="variant-summary-actions">

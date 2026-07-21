@@ -153,6 +153,15 @@ export class PosComponent implements OnInit, OnDestroy {
     const colorGroups = this.selectedVariantColorGroups();
     return colorGroups.find((group) => group.key === selectedKey) || colorGroups[0] || null;
   });
+  // Some catalog items (bags/accessories) only vary by color, not size — a
+  // handful of legacy rows even have an empty `size` field, which without
+  // this check would render the color name a second time as a fake "size"
+  // option. If the color group is just that one no-size row, skip the size
+  // step entirely (it's already auto-selected) instead of showing it.
+  readonly selectedColorHasNoSizes = computed(() => {
+    const group = this.selectedVariantColorGroup();
+    return !!group && group.items.length === 1 && !group.items[0].size;
+  });
   readonly selectedVariant = computed(() => {
     const variantId = this.selectedVariantId();
     const colorGroup = this.selectedVariantColorGroup();
