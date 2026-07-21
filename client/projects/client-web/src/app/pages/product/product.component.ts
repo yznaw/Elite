@@ -87,6 +87,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productLoading = signal(true);
   readonly productError = signal('');
   readonly galleryIdx = signal(0);
+  readonly loadedGalleryImages = signal<Record<string, boolean>>({});
   readonly thumbStripCanScrollStart = signal(false);
   readonly thumbStripCanScrollEnd = signal(false);
   readonly selectedSize = signal<number | null>(null);
@@ -460,6 +461,14 @@ export class ProductComponent implements OnInit, OnDestroy {
       return;
     }
     img.style.display = 'none';
+  }
+
+  isGalleryImageLoaded(src: string): boolean {
+    return !!this.loadedGalleryImages()[src];
+  }
+
+  markGalleryImageLoaded(src: string): void {
+    this.loadedGalleryImages.update((loaded) => loaded[src] ? loaded : { ...loaded, [src]: true });
   }
 
   productColorNames(product: Product): string[] {

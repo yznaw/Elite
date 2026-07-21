@@ -146,6 +146,18 @@
     0 8px 22px -16px rgba(28, 26, 21, 0.22);
 }
 
+.gallery-frame::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  background:
+    linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.68) 48%, transparent 66%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(239, 235, 226, 0.9));
+  background-size: 220% 100%, 100% 100%;
+  animation: productGalleryShimmer 1.45s ease-in-out infinite;
+}
+
 .gallery-frame::after {
   content: "";
   position: absolute;
@@ -159,6 +171,7 @@
 .gallery-frame img {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: block;
   width: 100%;
   height: 100%;
@@ -170,8 +183,21 @@
 }
 
 .gallery-frame img.is-active {
-  opacity: 1;
+  opacity: 0;
   transform: scale(1);
+}
+
+.gallery-frame img.is-active.is-loaded {
+  opacity: 1;
+}
+
+@keyframes productGalleryShimmer {
+  from { background-position: 180% 0, 0 0; }
+  to { background-position: -40% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-frame::before { animation: none; }
 }
 
 .gallery-frame:hover img.is-active {

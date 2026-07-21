@@ -25,8 +25,11 @@
                 sizes="(min-width: 980px) 58vw, 100vw"
                 [alt]="productName(p)"
                 [class.is-active]="galleryIdx() === i"
+                [class.is-loaded]="isGalleryImageLoaded(src)"
                 [attr.fetchpriority]="galleryIdx() === i ? 'high' : null"
+                [attr.loading]="galleryIdx() === i ? 'eager' : 'lazy'"
                 decoding="async"
+                (load)="markGalleryImageLoaded(src)"
                 (error)="onImgError($event)"
               />
             }
@@ -85,12 +88,14 @@
                   >
                     <img
                       [src]="src"
-                      [attr.srcset]="imageSrcset(src, p)"
-                      sizes="96px"
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      (error)="onImgError($event)"
+                    [attr.srcset]="imageSrcset(src, p)"
+                    sizes="96px"
+                    alt=""
+                    [class.is-loaded]="isGalleryImageLoaded(src)"
+                    loading="lazy"
+                    decoding="async"
+                    (load)="markGalleryImageLoaded(src)"
+                    (error)="onImgError($event)"
                     />
                   </button>
                 }

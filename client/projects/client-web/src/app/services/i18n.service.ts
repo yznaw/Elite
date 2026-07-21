@@ -3,6 +3,11 @@ import { LocaleService } from './locale.service';
 import { STRINGS } from '../i18n/strings';
 import { Product } from '../models/product.model';
 
+const CATALOG_NAME_CORRECTIONS: Record<string, string> = {
+  'elegencecroco': 'Elegance Croco',
+  'luxe blassic': 'Luxe Classic',
+};
+
 @Injectable({ providedIn: 'root' })
 export class I18nService {
   private readonly locale = inject(LocaleService);
@@ -26,10 +31,11 @@ export class I18nService {
     return locale === 'ar' ? `${formatted} ${currency}` : `${currency} ${formatted}`;
   };
 
-  readonly productName = (product: Pick<Product, 'id' | 'name'>): string =>
-    this.t(`productData.${product.id}.name`) !== `productData.${product.id}.name`
-      ? this.t(`productData.${product.id}.name`)
-      : product.name;
+  readonly productName = (product: Pick<Product, 'id' | 'name'>): string => {
+    const translated = this.t(`productData.${product.id}.name`);
+    if (translated !== `productData.${product.id}.name`) return translated;
+    return CATALOG_NAME_CORRECTIONS[product.name.trim().toLowerCase()] || product.name;
+  };
 
   readonly productLeather = (value: string): string => this.lookup('leather', value);
   readonly productStyle = (value: string): string => this.lookup('style', value);

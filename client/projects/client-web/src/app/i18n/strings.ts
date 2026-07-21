@@ -118,6 +118,7 @@ const EN = {
   'home.featured.title': 'Icons of Craft',
 
   'home.promise.kicker': 'The Promise',
+  'home.promise.title': 'Crafted for a Lifetime',
   'home.promise.headline.line1': '"Every pair is numbered.',
   'home.promise.headline.line2': 'Every stitch, intentional."',
   'home.stats.heritage': 'Years of Heritage',
@@ -555,6 +556,7 @@ const AR: Record<keyof typeof EN, string> = {
   'home.featured.title': 'أيقونات الحرفة',
 
   'home.promise.kicker': 'الوعد',
+  'home.promise.title': 'صناعة تدوم مدى الحياة',
   'home.promise.headline.line1': '"كل زوج مرقّم.',
   'home.promise.headline.line2': 'وكل غرزة بنية مقصودة."',
   'home.stats.heritage': 'سنة من الإرث',

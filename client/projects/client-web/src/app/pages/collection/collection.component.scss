@@ -589,6 +589,7 @@
 }
 
 .product-image-wrap {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -604,13 +605,48 @@
   overflow: hidden;
 }
 
+.product-image-wrap::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  background:
+    linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.7) 48%, transparent 66%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(232, 227, 217, 0.86));
+  background-size: 220% 100%, 100% 100%;
+  animation: productImageShimmer 1.35s ease-in-out infinite;
+  transition: opacity 0.25s ease;
+}
+
+.product-image-wrap.is-loaded::before {
+  opacity: 0;
+  animation: none;
+}
+
 .product-image-wrap img {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
+  object-position: center;
+  opacity: 0;
   filter: saturate(0.94) contrast(1.02);
-  transition: transform 0.32s ease, filter 0.32s ease;
+  transition: opacity 0.35s ease, transform 0.32s ease, filter 0.32s ease;
+}
+
+.product-image-wrap img.is-loaded {
+  opacity: 1;
+}
+
+@keyframes productImageShimmer {
+  from { background-position: 180% 0, 0 0; }
+  to { background-position: -40% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-image-wrap::before { animation: none; }
 }
 
 .product-link:hover img,

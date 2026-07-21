@@ -247,21 +247,28 @@
                   [style.animation-delay]="i * 0.035 + 's'"
                 >
                   <button type="button" class="product-link" (click)="goToProduct(p)" data-track="product-card" [attr.data-track-product]="p.id">
-                    <span class="product-image-wrap">
+                    <span
+                      class="product-image-wrap"
+                      [class.is-loaded]="isProductImageLoaded(p)"
+                      [attr.aria-busy]="!isProductImageLoaded(p)"
+                    >
                       <img
                         [src]="selectedProductImage(p)"
                         [attr.srcset]="productImageSrcset(p)"
                         sizes="(min-width: 960px) 25vw, (min-width: 560px) 50vw, 100vw"
                         [alt]="productName(p)"
-                        loading="lazy"
+                        [attr.loading]="i < 4 ? 'eager' : 'lazy'"
+                        [attr.fetchpriority]="i < 2 ? 'high' : 'auto'"
+                        [class.is-loaded]="isProductImageLoaded(p)"
                         decoding="async"
+                        (load)="markProductImageLoaded(p)"
                         (error)="onImgError($event)"
                       />
                     </span>
                     <span class="product-copy">
                       <span class="product-name">{{ productName(p) }}</span>
                       <span class="product-meta"
-                        >{{ productStyle(p.style) }} Shoe</span
+                        >{{ productType(p) }}</span
                       >
                       <span class="product-price">{{ price(p.price) }}</span>
                     </span>
@@ -276,15 +283,15 @@
                           [class.is-selected]="colorSelected(p, color)"
                           [class.has-image]="colorSwatchImage(color)"
                           [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
-                          [attr.title]="color"
-                          [attr.aria-label]="color"
+                          [attr.title]="colorLabel(color)"
+                          [attr.aria-label]="colorLabel(color)"
                           [attr.aria-pressed]="colorSelected(p, color)"
                           (mouseenter)="previewProductColor(p, color, $event)"
                           (focus)="previewProductColor(p, color, $event)"
                           (click)="selectProductColor(p, color, $event)"
                         >
                           @if (colorSwatchImage(color); as swatchImage) {
-                            <img [src]="swatchImage" [alt]="color" loading="lazy" decoding="async" />
+                            <img [src]="swatchImage" [alt]="colorLabel(color)" loading="lazy" decoding="async" />
                           }
                         </button>
                       }

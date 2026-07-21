@@ -23,6 +23,21 @@ const FILTER_TITLES = {
   tag: 'Best For',
 } as const;
 
+const COLOR_LABELS: Record<string, string> = {
+  '170': 'Shade 170',
+  '36/8': 'Shade 36/8',
+  '390': 'Shade 390',
+  n10: 'Shade N10',
+  brwon: 'Brown',
+  cezzane: 'Cezanne',
+  greyserp: 'Grey Serpentine',
+  'irish blue - chocolate': 'Irish Blue / Chocolate',
+  'irish blue -navy': 'Irish Blue / Navy',
+  'milk -wod': 'Milk / Wood',
+  'milk-offwhite': 'Milk / Off-white',
+  serpertine: 'Serpentine',
+};
+
 type SortOption = (typeof SORT_OPTIONS)[number];
 type FilterGroupId = keyof typeof FILTER_TITLES;
 type CollapsibleFilterGroupId = FilterGroupId | 'sort';
@@ -91,6 +106,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly sort = signal<SortOption>('Featured');
   readonly hovered = signal<string | null>(null);
   readonly addedProductId = signal<string | null>(null);
+  readonly loadedProductImages = signal<Record<string, boolean>>({});
   readonly collections = signal<StorefrontCollection[]>([]);
   readonly collectionsLoaded = signal(false);
   readonly productsLoading = this.products.loading;
@@ -162,7 +178,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
       {
         id: 'category',
         title: FILTER_TITLES.category,
-        options: this.optionsFromProducts(products, (p) => this.productCategories(p), (value) => this.productStyle(value)),
+        options: this.optionsFromProducts(products, (p) => this.productCategories(p), (value) => this.categoryLabel(value)),
       },
       {
         id: 'price',
@@ -172,7 +188,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
       {
         id: 'color',
         title: FILTER_TITLES.color,
-        options: this.optionsFromProducts(products, (p) => this.productColors(p)),
+        options: this.optionsFromProducts(products, (p) => this.filterProductColors(p), (value) => this.colorLabel(value)),
       },
       {
         id: 'leather',
@@ -297,7 +313,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   isFilterGroupExpanded(groupId: CollapsibleFilterGroupId): boolean {
-    return this.expandedFilterGroups()[groupId] ?? true;
+    return this.expandedFilterGroups()[groupId] ?? (groupId === 'price' || groupId === 'sort');
   }
 
   filterGroupPanelId(groupId: CollapsibleFilterGroupId): string {
@@ -412,6 +428,19 @@ export class CollectionComponent implements OnInit, OnDestroy {
     if (!selectedColor) return product.image;
 
     return this.productImageForColor(product, selectedColor) || product.image;
+  }
+
+  isProductImageLoaded(product: Product): boolean {
+    return !!this.loadedProductImages()[this.productImageKey(product)];
+  }
+
+  markProductImageLoaded(product: Product): void {
+    const key = this.productImageKey(product);
+    this.loadedProductImages.update((loaded) => loaded[key] ? loaded : { ...loaded, [key]: true });
+  }
+
+  private productImageKey(product: Product): string {
+    return `${product.id}:${this.selectedProductImage(product)}`;
   }
 
   productImageSrcset(product: Product): string | null {
@@ -553,7 +582,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   private matchesFilters(product: Product, selected: SelectedFilters): boolean {
     return this.matchesTextFilter(selected.category, this.productCategories(product))
-      && this.matchesTextFilter(selected.color, this.productColors(product))
+      && this.matchesTextFilter(selected.color, this.filterProductColors(product))
       && this.matchesTextFilter(selected.leather, this.productLeathers(product))
       && this.matchesTextFilter(selected.material, this.productMaterials(product))
       && this.matchesTextFilter(selected.size, product.sizes.map(String))
@@ -714,11 +743,55 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   private productCategories(product: Product): string[] {
-    return this.compact([product.category, ...(product.categories || []), product.style]);
+    return [this.productType(product)];
   }
 
   private productColors(product: Product): string[] {
     return this.compact([product.color, ...(product.colors || [])]);
+  }
+
+  colorLabel(value: string): string {
+    const trimmed = String(value || '').trim();
+    const known = COLOR_LABELS[trimmed.toLowerCase()];
+    if (known) return known;
+    return trimmed.replace(/[A-Za-z]+/g, (word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`);
+  }
+
+  private filterProductColors(product: Product): string[] {
+    return [...new Set(this.productColors(product).map((color) => this.canonicalColor(color)))];
+  }
+
+  private canonicalColor(value: string): string {
+    const normalized = this.colorKey(value);
+    const aliases: Record<string, string> = {
+      brwon: 'brown',
+      cezzane: 'cezanne',
+      greyserp: 'grey serpentine',
+      serpertine: 'serpentine',
+    };
+    return aliases[normalized] || normalized;
+  }
+
+  private categoryLabel(value: string): string {
+    const normalized = this.colorKey(value);
+    if (normalized === 'shoe' || normalized === 'shoes' || normalized === 'footwear') return 'Shoes';
+    if (normalized === 'sunglasses' || normalized === 'eyewear') return 'Sunglasses';
+    if (normalized === 'kids' || normalized === 'children') return 'Kids';
+    if (normalized === 'sandal' || normalized === 'sandals') return 'Sandals';
+    return value;
+  }
+
+  productType(product: Product): string {
+    const source = this.colorKey([
+      product.name,
+      product.category,
+      ...(product.categories || []),
+      product.style,
+    ].filter(Boolean).join(' '));
+    if (source.includes('sunglass') || source.includes('eyewear')) return 'Sunglasses';
+    if (source.includes('kid') || source.includes('children')) return 'Kids';
+    if (source.includes('sandal') || source.includes('slide')) return 'Sandals';
+    return 'Shoes';
   }
 
   private productImageForColor(product: Product, color: string): string | null {
