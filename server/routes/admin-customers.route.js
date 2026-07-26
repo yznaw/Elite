@@ -136,22 +136,11 @@ router.get('/:id/orders', asyncHandler(async (req, res) => {
       `
         SELECT
           o.*,
-          COUNT(oi.id)::int AS items_count,
+          (SELECT COUNT(*)::int FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
           s.tracking_number,
-          COALESCE(
-            jsonb_agg(
-              DISTINCT jsonb_build_object(
-                'n', oi.product_name,
-                's', COALESCE(oi.size, ''),
-                'q', oi.quantity,
-                'p', round(oi.unit_price_cents / 100.0)
-              )
-            ) FILTER (WHERE oi.id IS NOT NULL),
-            '[]'::jsonb
-          ) AS items
+          COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0)) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items
         FROM orders o
-        LEFT JOIN order_items oi ON oi.order_id = o.id
-        LEFT JOIN shipments s   ON s.order_id  = o.id
+        LEFT JOIN shipments s ON s.order_id = o.id
         WHERE o.tenant_id = $1
           AND (o.customer_id = $2 OR o.customer_email = $3)
         GROUP BY o.id, s.tracking_number

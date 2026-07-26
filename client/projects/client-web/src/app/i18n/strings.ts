@@ -184,7 +184,7 @@ const EN = {
 
   'product.color.label': 'Select Color',
   'product.color.choose': 'Choose {color}',
-  'product.size.label': 'Select Size (EU)',
+  'product.size.label': 'Select Size (UK)',
   'product.size.guide': 'Size Guide',
   'product.size.guideLoading': 'Loading size guide...',
   'product.size.guideEmpty': 'No size guide is available yet.',
@@ -617,7 +617,7 @@ const AR: Record<keyof typeof EN, string> = {
 
   'product.color.label': 'اختر اللون',
   'product.color.choose': 'اختر {color}',
-  'product.size.label': 'اختر المقاس (EU)',
+  'product.size.label': 'اختر المقاس (UK)',
   'product.size.guide': 'دليل المقاسات',
   'product.size.guideLoading': 'جارٍ تحميل دليل المقاسات...',
   'product.size.guideEmpty': 'دليل المقاسات غير متوفر حالياً.',

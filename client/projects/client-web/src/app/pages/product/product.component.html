@@ -192,7 +192,7 @@
                 [attr.aria-expanded]="sizePickerOpen()"
               >
                 <span>{{ t("product.size.choose") }}</span>
-                <strong>EU {{ selectedSize() ?? "—" }}</strong>
+                <strong>UK {{ selectedSize() ?? "—" }}</strong>
               </button>
 
               <div class="size-options">
@@ -446,16 +446,16 @@
                         <table class="sg-table">
                           <thead>
                             <tr>
-                              <th>UK</th>
-                              <th class="sg-th-highlight">EU</th>
+                              <th class="sg-th-highlight">UK</th>
+                              <th>EU</th>
                               <th>US</th>
                             </tr>
                           </thead>
                           <tbody>
                             @for (row of set.size_chart; track row) {
                               <tr>
-                                <td>{{ row.uk }}</td>
-                                <td class="sg-td-highlight">{{ row.eu }}</td>
+                                <td class="sg-td-highlight">{{ row.uk }}</td>
+                                <td>{{ row.eu }}</td>
                                 <td>{{ row.us }}</td>
                               </tr>
                             }
@@ -469,7 +469,7 @@
                       <!-- Fallback chips for sets without a chart -->
                       <div class="size-guide-chips">
                         @for (size of set.sizes; track size) {
-                          <span>EU {{ size }}</span>
+                          <span>{{ size }}</span>
                         }
                       </div>
                     }

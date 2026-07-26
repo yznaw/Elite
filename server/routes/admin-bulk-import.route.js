@@ -87,7 +87,7 @@ function csvToObjects(text) {
     collection:   headers.findIndex(h => h === 'collections' || h === 'collection'),
   };
   const objects = [];
-  let lastDesc = '', lastName = '', lastNameAr = '', lastCollection = '', lastImage = '';
+  let lastDesc = '', lastName = '', lastNameAr = '', lastCollection = '', lastImage = '', lastColor = '';
   for (const row of rows.slice(1)) {
     const sku = (row[idx.sku] || '').trim();
     if (!sku || SECTION_HEADERS.has(sku.toLowerCase())) continue;
@@ -101,10 +101,17 @@ function csvToObjects(text) {
     if (rawCollection) lastCollection = rawCollection;
     const rawImage = idx.image >= 0 ? (row[idx.image] || '').trim() : '';
     if (rawImage) lastImage = rawImage;
+    // Color carries forward within a color group: CSV only sets it on the first
+    // row of each group, leaving it blank for subsequent sizes in that group.
+    // Reset lastColor when a new product name starts so colors don't bleed
+    // across products.
+    if (rawName) lastColor = '';
+    const rawColor = idx.color >= 0 ? (row[idx.color] || '').trim() : '';
+    if (rawColor) lastColor = rawColor;
     objects.push({
       sku,
       name:         rawName || lastName,
-      color:        idx.color >= 0 ? (row[idx.color] || '').trim() : '',
+      color:        lastColor,
       desc:         rawDesc || lastDesc,
       nameAr:       rawNameAr || lastNameAr,
       priceRaw:     idx.price >= 0 ? (row[idx.price] || '').trim() : '',
@@ -292,11 +299,11 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
     return res.status(422).json({ success: false, message: 'CSV is empty or header row is missing.' });
   }
 
-  // Group rows by base product name — each group becomes one product
+  // Group rows by normalized product name (collapse internal whitespace too)
   const groupMap = new Map();
   for (const row of allRows) {
     if (!row.name) continue;
-    const key = row.name.toLowerCase().trim();
+    const key = row.name.toLowerCase().trim().replace(/\s+/g, ' ');
     if (!groupMap.has(key)) groupMap.set(key, []);
     groupMap.get(key).push(row);
   }
@@ -336,28 +343,32 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
       try {
         await client.query('BEGIN');
 
-        const description = { en: firstRow.desc.trim(), ar: '' };
         const nameAr = (firstRow.nameAr || '').trim();
 
         // Find or create product by slug — slug is the grouping key across imports
         const existing = await client.query(
-          'SELECT id FROM products WHERE tenant_id=$1 AND slug=$2',
+          'SELECT id, description FROM products WHERE tenant_id=$1 AND slug=$2',
           [tenant.id, baseSlug]
         );
 
+        const brand = (tenant.name || 'Elite');
         let productId, wasInserted;
         if (existing.rows.length > 0) {
           productId   = existing.rows[0].id;
           wasInserted = false;
+          // Preserve existing Arabic description — only update English from CSV
+          const existingDesc = existing.rows[0].description || {};
+          const description = { en: firstRow.desc.trim(), ar: existingDesc.ar || '' };
           await client.query(
-            `UPDATE products SET name=$2, description=$3::jsonb, base_price_cents=$4, updated_at=NOW() WHERE id=$1`,
-            [productId, baseName, JSON.stringify(description), toCents(parsePrice(firstRow.priceRaw))]
+            `UPDATE products SET name=$2, sku=$3, description=$4::jsonb, base_price_cents=$5, updated_at=NOW() WHERE id=$1`,
+            [productId, baseName, firstRow.sku, JSON.stringify(description), toCents(parsePrice(firstRow.priceRaw))]
           );
         } else {
+          const description = { en: firstRow.desc.trim(), ar: '' };
           const ins = await client.query(
             `INSERT INTO products (tenant_id, sku, brand, name, slug, status, description, base_price_cents, currency, stock_quantity)
-             VALUES ($1,$2,'Elite',$3,$4,'active',$5::jsonb,$6,$7,0) RETURNING id`,
-            [tenant.id, firstRow.sku, baseName, baseSlug, JSON.stringify(description),
+             VALUES ($1,$2,$3,$4,$5,'active',$6::jsonb,$7,$8,0) RETURNING id`,
+            [tenant.id, firstRow.sku, brand, baseName, baseSlug, JSON.stringify(description),
              toCents(parsePrice(firstRow.priceRaw)), tenant.currency || 'QAR']
           );
           productId   = ins.rows[0].id;
@@ -422,12 +433,15 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
 
           const varResult = await client.query(
             `INSERT INTO product_variants
-               (tenant_id, product_id, sku, color, size, price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+               (tenant_id, product_id, sku, color, size, price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order, color_ref_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+               (SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($4)) LIMIT 1))
              ON CONFLICT (tenant_id, sku) DO UPDATE SET
                product_id=$2, color=$4, size=$5, price_cents=$6,
-               cost_price_cents=$7, shipping_cost_cents=$8, stock_quantity=$9,
-               sort_order=$10, updated_at=NOW()
+               cost_price_cents=$7, shipping_cost_cents=$8,
+               stock_quantity=CASE WHEN $9::int > 0 THEN $9::int ELSE product_variants.stock_quantity END,
+               sort_order=$10, updated_at=NOW(),
+               color_ref_id=(SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($4)) LIMIT 1)
              RETURNING id, (xmax=0) AS inserted`,
             [tenant.id, productId, row.sku, colorVal, sizeVal,
              priceCents, costCents, shippingCents, stockQty, varIdx]
