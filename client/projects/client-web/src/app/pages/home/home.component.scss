@@ -1201,17 +1201,16 @@
     display: block;
     opacity: 0;
     pointer-events: none;
-    transform: translate(100%, -50%) scale(0.92);
+    transform: translate(calc(100% * var(--peek-dir)), -50%) scale(0.92);
     transform-origin: center right;
     /* Softens the clipped edge as the layer crosses the frame boundary. */
     mask-image: linear-gradient(to left, transparent 0, #000 22%);
     -webkit-mask-image: linear-gradient(to left, transparent 0, #000 22%);
   }
 
-  /* In RTL the carousel advances the other way, so the preview enters from the
-     opposite edge and its mask and origin flip with it. */
+  /* In RTL the carousel advances the other way, so the mask and origin flip.
+     The transform itself already follows `--peek-dir`. */
   :host-context(html[dir='rtl']) .hero-next-peek {
-    transform: translate(-100%, -50%) scale(0.92);
     transform-origin: center left;
     mask-image: linear-gradient(to right, transparent 0, #000 22%);
     -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22%);
@@ -1242,6 +1241,17 @@
     /* How much of the incoming product shows at the peak. Kept below
        `--peek-shift` so it occupies vacated space rather than overlapping. */
     --peek-reveal: clamp(62px, 18vw, 92px);
+    /* Travel direction. One set of keyframes serves both writing directions by
+       multiplying through this sign, rather than a second RTL set selected with
+       an `animation-name` override. That override silently broke in production:
+       Angular scopes `@keyframes` names, and the optimizer did not rewrite the
+       standalone longhand to match, so `animation-name` pointed at a name that
+       no longer existed and nothing ran at all. */
+    --peek-dir: 1;
+  }
+
+  :host-context(html[dir='rtl']) .hero-stage {
+    --peek-dir: -1;
   }
 
   /* Two short passes rather than one long one. A brief gesture repeated reads as
@@ -1249,19 +1259,19 @@
      iterations run back to back, and the pause between them is the keyframes'
      own rest position, held from 58% through 100% and across into the next 0%. */
   .hero-stage.is-leather-peeking .hero-product__image.is-active {
-    animation: leatherPeekCurrent 1500ms cubic-bezier(0.33, 1, 0.68, 1) 2 both;
+    animation-name: leatherPeekCurrent;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-iteration-count: 2;
+    animation-fill-mode: both;
   }
 
   .hero-stage.is-leather-peeking .hero-next-peek {
-    animation: leatherPeekNext 1500ms cubic-bezier(0.33, 1, 0.68, 1) 2 both;
-  }
-
-  :host-context(html[dir='rtl']) .hero-stage.is-leather-peeking .hero-product__image.is-active {
-    animation-name: leatherPeekCurrentRtl;
-  }
-
-  :host-context(html[dir='rtl']) .hero-stage.is-leather-peeking .hero-next-peek {
-    animation-name: leatherPeekNextRtl;
+    animation-name: leatherPeekNext;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-iteration-count: 2;
+    animation-fill-mode: both;
   }
 
   /* Interrupted by a real swipe: ease the layers home over ~180ms rather than
@@ -1318,17 +1328,19 @@
   /* Single iteration against the layers' two: once the motion has been seen the
      words are redundant, so the pill retires after the first pass. */
   .hero-stage.is-leather-peeking .hero-swipe-hint {
-    animation: leatherSwipeTag 1500ms cubic-bezier(0.33, 1, 0.68, 1) both;
+    animation-name: leatherSwipeTag;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-fill-mode: both;
   }
 
   .hero-stage.is-leather-peeking .hero-swipe-hint__arrow {
-    animation: leatherHintArrow 1500ms cubic-bezier(0.33, 1, 0.68, 1) both;
+    animation-name: leatherHintArrow;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-fill-mode: both;
   }
 
-  /* The glyph is flipped for RTL in the template, so its travel flips too. */
-  :host-context(html[dir='rtl']) .hero-stage.is-leather-peeking .hero-swipe-hint__arrow {
-    animation-name: leatherHintArrowRtl;
-  }
 
   .hero-arrow {
     top: calc(var(--mobile-product-size) / 2);
@@ -1658,101 +1670,7 @@
   }
 }
 
-/* One track, one displacement. The incoming layer advances by the same
-   `--peek-shift` as the outgoing one, revealing more of itself without ever
-   reaching parity: it stays dimmer and smaller so it always reads as "next",
-   never as a peer competing with the active product.
 
-   The peak is held for roughly 240ms (42% to 58%) rather than the ~940ms the
-   earlier 2600ms version froze for. A long hold is what made the state read as
-   a broken layout instead of a demonstration. */
-@keyframes leatherPeekNext {
-  0%,
-  100% {
-    opacity: 0;
-    transform: translate(100%, -50%) scale(0.92);
-  }
-  42%,
-  58% {
-    opacity: 0.92;
-    /* Comes to rest just inside the frame: the layer travels its own width less
-       the reveal, so `--peek-reveal` of it ends up visible at the peak. */
-    transform: translate(calc(100% - var(--peek-reveal)), -50%) scale(0.97);
-  }
-}
-
-@keyframes leatherPeekCurrent {
-  0%,
-  100% {
-    transform: translateX(0) scale(1);
-  }
-  42%,
-  58% {
-    transform: translateX(calc(-1 * var(--peek-shift))) scale(0.985);
-  }
-}
-
-/* RTL advances the opposite way, so both layers travel in reverse. */
-@keyframes leatherPeekNextRtl {
-  0%,
-  100% {
-    opacity: 0;
-    transform: translate(-100%, -50%) scale(0.92);
-  }
-  42%,
-  58% {
-    opacity: 0.92;
-    transform: translate(calc(var(--peek-reveal) - 100%), -50%) scale(0.97);
-  }
-}
-
-@keyframes leatherPeekCurrentRtl {
-  0%,
-  100% {
-    transform: translateX(0) scale(1);
-  }
-  42%,
-  58% {
-    transform: translateX(var(--peek-shift)) scale(0.985);
-  }
-}
-
-/* The glyph travels with the track instead of pulsing in place, so arrow and
-   motion agree on a single direction. */
-@keyframes leatherHintArrow {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  42%,
-  58% {
-    transform: translateX(4px);
-  }
-}
-
-@keyframes leatherHintArrowRtl {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  42%,
-  58% {
-    transform: translateX(-4px);
-  }
-}
-
-@keyframes leatherSwipeTag {
-  0%,
-  100% {
-    opacity: 0;
-    transform: translate(-50%, 6px) scale(0.96);
-  }
-  42%,
-  58% {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-}
 
 @keyframes heroColorFadeOut {
   from {

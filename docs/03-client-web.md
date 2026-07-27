@@ -200,6 +200,17 @@ The two dials live on `.hero-stage`:
 |---|---|---|
 | `--peek-shift` | `clamp(88px, 26vw, 128px)` | How far the active product yields. Must **exceed the product's own right overflow** (~81px) or the preview lands on top of the current shoe rather than beside it. |
 | `--peek-reveal` | `clamp(62px, 18vw, 92px)` | How much of the incoming product shows at the peak. Kept below `--peek-shift` so it occupies vacated space. |
+| `--peek-dir` | `1`, or `-1` under `html[dir='rtl']` | Travel direction. One keyframe set serves both writing directions by multiplying offsets through this sign, instead of a second RTL set selected with an `animation-name` override. |
+
+> [!WARNING]
+> **The four `leatherPeek*` / `leatherHint*` / `leatherSwipeTag` keyframes live in `styles.scss`, not in the component.** Keep them there. Angular scopes component `@keyframes` names (`_ngcontent-xxx_leatherPeekNext`), and the component's reduced-motion block sets `animation: none` on the same selectors. In optimized builds the CSS optimizer treated that `none` as the resolved value for those rules and stopped rewriting the animation names, so `animation-name: leatherPeekNext` pointed at a scoped name that did not exist and **nothing ran**. Global keyframes are never renamed, so the names always match.
+>
+> This failed **only in production**: `ng serve` does not optimize, so the names stayed in sync and the animation worked locally. Verifying with `ng build --configuration development` will not catch it. Test the real production bundle:
+> ```bash
+> cd client && npx ng build client-web
+> cd dist/client-web/browser && python3 -m http.server 4300
+> ```
+> The symptom is a hero preview stuck at `opacity: 0` with `getAnimations()` returning an empty array while `.is-leather-peeking` is present on the stage.
 
 Other treatment: the stage carries `overflow: hidden` on mobile so the preview enters from a hard edge instead of appearing in mid-air; a `mask-image` gradient softens that boundary; `object-position: center 44%` matches the active product so both shoes sit at the same optical height; and the incoming layer peaks at `opacity: 0.92` / `scale(0.97)`, never reaching parity, so it always reads as "next". RTL flips the entry edge, mask, transform origin, and both keyframe sets via `:host-context(html[dir='rtl'])`, with the pill arrow flipping to `←` in the template.
 
@@ -264,6 +275,7 @@ Manual QA:
 - Reload and confirm the demo does not replay in the same session.
 - Switch to Arabic and confirm the preview enters from the leading edge and the pill arrow points `←`.
 - With `prefers-reduced-motion: reduce`, confirm nothing animates and the swipe pill still appears.
+- **Verify the hero preview against a production bundle, not just `ng serve`.** See the warning above: this animation has already broken once in production while working locally.
 
 ---
 

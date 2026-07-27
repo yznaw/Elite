@@ -436,3 +436,83 @@ body::before {
 
 /* Mobile preview is handled by the admin's iframe approach —
    no CSS phone-frame rules needed in the storefront stylesheet. */
+
+
+/* ── Home hero swipe-demo keyframes ────────────────────────────────────────
+   Defined globally rather than in home.component.scss on purpose. That
+   component's reduced-motion block sets `animation: none` on the same
+   selectors, and in optimized builds the CSS optimizer treated `none` as the
+   resolved value for those rules and stopped rewriting the animation names to
+   match Angular's scoped `@keyframes`. The result was `animation-name:
+   leatherPeekNext` pointing at `_ngcontent-xxx_leatherPeekNext`, so nothing
+   ran: the hero side preview was invisible in production while working in
+   `ng serve`. Global keyframes are never renamed, so the names always match.
+   Keep these here; moving them back into the component reintroduces the bug. */
+/* Both writing directions share these keyframes: `--peek-dir` is 1 for LTR and
+   -1 for RTL, so every offset flips sign with it. See the note on `--peek-dir`
+   for why a second RTL keyframe set is deliberately not used. */
+@keyframes leatherPeekNext {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(calc(100% * var(--peek-dir)), -50%) scale(0.92);
+  }
+  42%,
+  58% {
+    opacity: 0.92;
+    /* Comes to rest just inside the frame: the layer travels its own width less
+       the reveal, so `--peek-reveal` of it ends up visible at the peak. */
+    transform:
+      translate(calc((100% - var(--peek-reveal)) * var(--peek-dir)), -50%)
+      scale(0.97);
+  }
+}
+
+/* One track, one displacement. The incoming layer advances by the same
+   `--peek-shift` as the outgoing one, revealing more of itself without ever
+   reaching parity: it stays dimmer and smaller so it always reads as "next",
+   never as a peer competing with the active product.
+
+   The peak is held for roughly 240ms (42% to 58%) rather than the ~940ms the
+   earlier 2600ms version froze for. A long hold is what made the state read as
+   a broken layout instead of a demonstration. */
+
+@keyframes leatherPeekCurrent {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+  42%,
+  58% {
+    transform: translateX(calc(-1 * var(--peek-shift) * var(--peek-dir))) scale(0.985);
+  }
+}
+
+/* The glyph is flipped to a left arrow for RTL in the template, so its travel
+   follows `--peek-dir` rather than a separate RTL keyframe set. */
+@keyframes leatherHintArrow {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  42%,
+  58% {
+    transform: translateX(calc(4px * var(--peek-dir)));
+  }
+}
+
+/* The glyph travels with the track instead of pulsing in place, so arrow and
+   motion agree on a single direction. */
+
+@keyframes leatherSwipeTag {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.96);
+  }
+  42%,
+  58% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
