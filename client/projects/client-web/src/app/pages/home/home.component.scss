@@ -221,6 +221,13 @@
   transform: translateY(0) scale(1);
 }
 
+.hero-product__image--color-outgoing {
+  z-index: 3;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  animation: heroColorFadeOut 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
 .hero-next-peek,
 .hero-swipe-hint {
   display: none;
@@ -1360,6 +1367,7 @@
   }
 
   .hero-swatch__dot {
+    position: relative;
     width: 32px;
     height: 32px;
     display: flex;
@@ -1393,6 +1401,16 @@
 
   .hero-swatch:active .hero-swatch__dot {
     transform: scale(0.92);
+  }
+
+  .hero-swatch.is-loading .hero-swatch__dot::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border: 1.5px solid transparent;
+    border-top-color: var(--green-2);
+    border-radius: 50%;
+    animation: heroSwatchLoading 680ms linear infinite;
   }
 
   /* Selected colour: an offset ring so it reads on dark and light swatches
@@ -1595,6 +1613,21 @@
   }
 }
 
+@keyframes heroColorFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes heroSwatchLoading {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 /* Entry animations collapse to an instant swap for reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   .hero-brand,
@@ -1618,7 +1651,9 @@
 
   .hero-stage.is-leather-peeking .hero-product__image.is-active,
   .hero-stage.is-leather-peeking .hero-next-peek,
-  .hero-swipe-hint {
+  .hero-swipe-hint,
+  .hero-product__image--color-outgoing,
+  .hero-swatch.is-loading .hero-swatch__dot::after {
     animation: none;
   }
 

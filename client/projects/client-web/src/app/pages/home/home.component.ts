@@ -61,6 +61,10 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private heroSwipeHintTimer: number | undefined;
   private heroSwipeHintDismissTimer: number | undefined;
   private heroPeekTimer: number | undefined;
+  private heroColorSwapTimer: number | undefined;
+  private heroColorRequestId = 0;
+  private heroSlideRequestId = 0;
+  private readonly heroImageLoads = new Map<string, Promise<void>>();
   private heroSwipeStart: { x: number; y: number; pointerId: number } | null = null;
   private heroGeometryObserver: ResizeObserver | undefined;
   private heroGeometryFrame: number | undefined;
@@ -115,6 +119,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   // ── Hero colour swatches ────────────────────────────────────────────────
   /** Colour the visitor tapped on the active slide, or '' for the slide default. */
   readonly activeHeroColorKey = signal('');
+  readonly outgoingHeroImage = signal('');
+  readonly heroColorLoadingKey = signal('');
 
   /**
    * Featured swatches for the active slide. A colour with no hex and no swatch
@@ -249,6 +255,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.heroSwipeHintTimer) clearTimeout(this.heroSwipeHintTimer);
     if (this.heroSwipeHintDismissTimer) clearTimeout(this.heroSwipeHintDismissTimer);
     if (this.heroPeekTimer) clearTimeout(this.heroPeekTimer);
+    if (this.heroColorSwapTimer) clearTimeout(this.heroColorSwapTimer);
     if (this.heroGeometryFrame) cancelAnimationFrame(this.heroGeometryFrame);
     this.heroGeometryObserver?.disconnect();
     this.heroCalloutChanges?.unsubscribe();
@@ -265,8 +272,39 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
    * colour is a no-op, since every slide always shows some colour.
    */
   selectHeroColor(key: string): void {
-    if (key === this.activeHeroSelectedColorKey()) return;
-    this.activeHeroColorKey.set(key);
+    if (key === this.activeHeroSelectedColorKey()) {
+      // A second tap on the current colour cancels any pending slow request.
+      if (this.heroColorLoadingKey()) {
+        this.heroColorRequestId += 1;
+        this.heroColorLoadingKey.set('');
+      }
+      return;
+    }
+
+    const swatch = this.activeHeroSwatches().find((color) => color.key === key);
+    const nextUrl = swatch?.imageUrl || this.activeHeroItem()?.imageUrl || '';
+    const currentUrl = this.activeHeroImage();
+    if (!nextUrl || nextUrl === currentUrl) {
+      this.activeHeroColorKey.set(key);
+      return;
+    }
+
+    const requestId = ++this.heroColorRequestId;
+    this.heroColorLoadingKey.set(key);
+
+    void this.ensureHeroImageReady(nextUrl).then(() => {
+      if (requestId !== this.heroColorRequestId) return;
+
+      this.outgoingHeroImage.set(currentUrl);
+      this.activeHeroColorKey.set(key);
+      this.heroColorLoadingKey.set('');
+
+      if (this.heroColorSwapTimer) clearTimeout(this.heroColorSwapTimer);
+      this.heroColorSwapTimer = window.setTimeout(() => {
+        this.heroColorSwapTimer = undefined;
+        this.outgoingHeroImage.set('');
+      }, 280);
+    });
   }
 
   /** Open the slide's product with no colour preselected, showing the full picker. */
@@ -281,8 +319,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dismissHeroSwipeHint();
     const total = this.heroItems().length;
     if (total < 2) return;
-    this.activeHeroColorKey.set('');
-    this.activeHeroItemIndex.update((i) => (i + direction + total) % total);
+    const targetIndex = (this.activeHeroItemIndex() + direction + total) % total;
+    this.prepareHeroItem(targetIndex);
   }
 
   /** Jump straight to a slide from the mobile pagination control. */
@@ -290,8 +328,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dismissHeroSwipeHint();
     const total = this.heroItems().length;
     if (index < 0 || index >= total || index === this.activeHeroItemIndex()) return;
-    this.activeHeroColorKey.set('');
-    this.activeHeroItemIndex.set(index);
+    this.prepareHeroItem(index);
   }
 
   onHeroPointerDown(event: PointerEvent): void {
@@ -376,6 +413,35 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.heroPeekActive.set(false);
   }
 
+  /**
+   * Keep the current slide visible until the destination image is decoded.
+   * Once ready, the existing picture layers perform a short opacity crossfade.
+   */
+  private prepareHeroItem(index: number): void {
+    const item = this.heroItems()[index];
+    if (!item) return;
+    const requestId = ++this.heroSlideRequestId;
+
+    void this.ensureHeroImageReady(item.imageUrl).then(() => {
+      if (requestId !== this.heroSlideRequestId) return;
+      this.cancelHeroColorSwap();
+      this.activeHeroColorKey.set('');
+      this.activeHeroItemIndex.set(index);
+      this.preloadHeroItemImages(index);
+      this.preloadAdjacentHeroImages(index);
+    });
+  }
+
+  private cancelHeroColorSwap(): void {
+    this.heroColorRequestId += 1;
+    this.heroColorLoadingKey.set('');
+    this.outgoingHeroImage.set('');
+    if (this.heroColorSwapTimer) {
+      clearTimeout(this.heroColorSwapTimer);
+      this.heroColorSwapTimer = undefined;
+    }
+  }
+
   goToContentLink(link: string): void {
     const target = link?.trim() || '/collection';
     if (/^https?:\/\//i.test(target)) { window.location.href = target; return; }
@@ -443,19 +509,79 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  /** Warm the colour shots so tapping a swatch swaps instantly. */
+  /**
+   * Warm the active colour shots plus the neighbouring slide artwork. This is
+   * enough for immediate interaction without downloading every colour for all
+   * five (or more) hero products on first load.
+   */
   private preloadHeroColorImages(): void {
-    const seen = new Set<string>();
-    for (const item of this.heroItems()) {
-      for (const color of item.colors ?? []) {
-        const url = color.imageUrl;
-        if (!url || seen.has(url)) continue;
-        seen.add(url);
-        const image = new Image();
-        image.decoding = 'async';
-        image.src = url;
-      }
+    const index = this.activeHeroItemIndex();
+    this.preloadHeroItemImages(index);
+    this.preloadAdjacentHeroImages(index);
+  }
+
+  private preloadHeroItemImages(index: number): void {
+    const item = this.heroItems()[index];
+    if (!item) return;
+    const urls = new Set([
+      item.imageUrl,
+      ...(item.colors ?? []).map((color) => color.imageUrl),
+    ]);
+    for (const url of urls) {
+      if (url) void this.ensureHeroImageReady(url);
     }
+  }
+
+  private preloadAdjacentHeroImages(index: number): void {
+    const items = this.heroItems();
+    if (items.length < 2) return;
+    const adjacent = new Set([
+      (index + 1) % items.length,
+      (index - 1 + items.length) % items.length,
+    ]);
+    for (const adjacentIndex of adjacent) {
+      const url = items[adjacentIndex]?.imageUrl;
+      if (url) void this.ensureHeroImageReady(url);
+    }
+  }
+
+  /**
+   * Load the same responsive candidate that <picture> will render, then decode
+   * it before changing signals. The old image therefore never disappears while
+   * a `-grid.webp` or `-pdp.webp` request is still in flight.
+   */
+  private ensureHeroImageReady(url: string): Promise<void> {
+    if (!url) return Promise.resolve();
+    const layout = window.matchMedia('(max-width: 760px)').matches ? 'mobile' : 'desktop';
+    const cacheKey = `${layout}:${url}`;
+    const existing = this.heroImageLoads.get(cacheKey);
+    if (existing) return existing;
+
+    const load = new Promise<void>((resolve) => {
+      const image = new Image();
+      image.decoding = 'async';
+      const srcset = this.heroSrcset(url);
+      if (srcset) {
+        image.sizes = this.heroSizes;
+        image.srcset = srcset;
+      }
+
+      const finish = (): void => {
+        if (typeof image.decode !== 'function') {
+          resolve();
+          return;
+        }
+        void image.decode().catch(() => undefined).then(() => resolve());
+      };
+
+      image.onload = finish;
+      image.onerror = () => resolve();
+      // Match the <source> fallback rather than warming an unused original.
+      image.src = srcset ? url : this.toWebp(url);
+    });
+
+    this.heroImageLoads.set(cacheKey, load);
+    return load;
   }
 
   private isHeroControl(target: EventTarget | null): boolean {

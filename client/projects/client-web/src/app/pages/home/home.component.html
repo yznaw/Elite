@@ -99,6 +99,32 @@
                         }
                       </picture>
                     }
+
+                    @if (outgoingHeroImage()) {
+                      <picture
+                        class="hero-product__image hero-product__image--color-outgoing"
+                        [class.hero-product__image--photo]="
+                          activeHeroItem().id === 'white-leather'
+                        "
+                        aria-hidden="true"
+                      >
+                        <source
+                          [srcset]="
+                            heroSrcset(outgoingHeroImage()) ||
+                            toWebp(outgoingHeroImage())
+                          "
+                          [attr.sizes]="
+                            heroSrcset(outgoingHeroImage()) ? heroSizes : null
+                          "
+                          type="image/webp"
+                        />
+                        <img
+                          [src]="outgoingHeroImage()"
+                          alt=""
+                          decoding="async"
+                        />
+                      </picture>
+                    }
                   </figure>
 
                   @if (nextHeroItem()) {
@@ -212,7 +238,11 @@
                         type="button"
                         class="hero-swatch"
                         [class.is-selected]="activeHeroSelectedColorKey() === color.key"
+                        [class.is-loading]="heroColorLoadingKey() === color.key"
                         [attr.aria-pressed]="activeHeroSelectedColorKey() === color.key"
+                        [attr.aria-busy]="
+                          heroColorLoadingKey() === color.key ? 'true' : null
+                        "
                         [attr.aria-label]="activeHeroItem().name + ' in ' + color.label"
                         [title]="color.label"
                         (click)="selectHeroColor(color.key)"
