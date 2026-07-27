@@ -240,6 +240,61 @@ See `server/routes/invitations.route.js`. Mounted in the **public** routes secti
 | `GET` | `/api/invitations/validate?token=` | Validate an invite token — returns `{ email, role }`. Returns 404 if expired/invalid. |
 | `POST` | `/api/invitations/accept` | Accept invite — body: `{ token, password, name? }`. Creates `admin_users` row (bcrypt password), deletes invitation row. Returns `{ id, email, role }`. |
 
+### Storefront Content (`/api/storefront-content`, `/api/admin/storefront-content`)
+
+See `server/routes/storefront-content.route.js`. Exports a `publicRouter` and an `adminRouter`; the admin side requires an active admin session. Every write runs through `normalizeContent`, which fills missing keys from `DEFAULT_HOME_CONTENT` so a partial payload can never blank out a section.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/storefront-content` | Published home content for the storefront. `Cache-Control: no-store`. |
+| `GET` | `/api/storefront-content/draft?token=` | Draft preview. 401 on an invalid or expired preview token. |
+| `PATCH` | `/api/admin/storefront-content` | Save published content. Normalizes, validates, then persists. |
+| `POST` | `/api/admin/storefront-content/reset` | Restore `DEFAULT_HOME_CONTENT`. |
+| `POST` | `/api/admin/storefront-content/draft` | Save a draft without publishing. |
+| `DELETE` | `/api/admin/storefront-content/draft` | Discard the current draft. |
+
+**`heroSlider.items[]` shape** (normalized by `normalizeHeroSlider`):
+
+| Field | Notes |
+|---|---|
+| `id` | Required. Items without an id are dropped. |
+| `name` | Product name, shown at the top of the hero. |
+| `subtitle` | Bilingual, `"العربية / English"`, split on `/` by the client. |
+| `descriptionEn` / `descriptionAr` | Short selling copy under the mobile slider. Keep to ~18 words. |
+| `imageUrl` | **Derived, not edited.** The default colourway's hero shot. |
+| `alt` | Alt text for the slide image. |
+| `productId` | Product the colour swatches link to. Empty means no swatch row. |
+| `colors[]` | Featured colourways, `{ label, slug, imageUrl }`, capped at 4 by `normalizeHeroColors`. |
+| `defaultColorSlug` | Colourway the slide opens on. Normalised to a real colour, or the first one. |
+| `callouts[]` | Per-slide craft callouts used by the desktop pills. |
+
+When `descriptionEn` / `descriptionAr` are absent, `calloutSentence()` derives a fallback by joining the first three callout titles, so slides saved before these fields existed still render a description.
+
+`normalizeHeroColors()` accepts either `{ label, imageUrl }` objects or bare strings, drops blanks, collapses case-duplicates (keeping the first), and caps the list at `HERO_MAX_COLORS` (4). Each entry gets a `slug` from the server-side mirror of `colorSlug()`; the storefront product page resolves `?color=` with the same rule.
+
+`imageUrl` is the hero shot for that colourway, owned by the slide and distinct from the product's gallery images.
+
+`resolveHeroSlideImage()` then sets the slide's own `imageUrl` from the default colourway, so the hero always opens on a real colour. Resolution order:
+
+1. The colour matching `defaultColorSlug`, else the first colour in the list.
+2. That colour's `imageUrl`; if it has none, the previously stored slide image.
+3. With no colours at all, the stored slide image is kept unchanged and `defaultColorSlug` is `''`.
+
+Step 3 is what keeps slides saved before this change rendering — the admin no longer exposes a slide-image field, but legacy values are never discarded.
+
+**No colour value is stored** — hex and swatch dots resolve from `ref_colors` at render time, so `GET /api/ref/colors` remains the single source of truth for how a swatch looks.
+
+### Product Descriptions
+
+`products.description` is a JSONB column holding four bilingual fields. There is no separate table or migration for these.
+
+| JSONB key | Admin field | Public API field | Used by |
+|---|---|---|---|
+| `en` / `ar` | `enDesc` / `arDesc` | `descriptionEn` / `descriptionAr` | Product detail page. Rich text. |
+| `shortEn` / `shortAr` | `shortEn` / `shortAr` | `shortDescriptionEn` / `shortDescriptionAr` | Home hero and other compact surfaces. Plain text, ~90 chars. |
+
+Adding a fifth key needs no schema change: extend `mapAdminProduct()` (read), the `description` object in `upsertProduct()` (write), and the PATCH payload so a partial update does not blank it.
+
 ### Admin — Bulk Import (`/api/admin/bulk-import`)
 
 See `server/routes/admin-bulk-import.route.js`. CSV upload → NDJSON streaming progress. See [Bulk Import endpoint](#bulk-import-endpoint-post-apiadminbulk-import) below.

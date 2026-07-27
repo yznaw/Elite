@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
@@ -13,7 +14,9 @@ import { AdminCollectionsService } from '../../services/admin-collections.servic
 import { ApiClient } from '../../services/api-client.service';
 import { MediaUploadService } from '../../services/media-upload.service';
 import { AdminMediaService } from '../../services/admin-media.service';
-import { Collection, MediaFile, StorefrontBlock } from '../../models';
+import { AdminProductsService } from '../../services/admin-products.service';
+import { AdminRefService, RefColor } from '../../services/admin-ref.service';
+import { Collection, MediaFile, Product, StorefrontBlock } from '../../models';
 
 // ── Page-tab types ────────────────────────────────────────────────────
 type PageTab = 'home' | 'story' | 'contact';
@@ -21,9 +24,18 @@ type HomeSubTab = 'order' | 'hero-slider' | 'collections' | 'discount' | 'promis
 type StorySubTab = 'hero' | 'hero-facts' | 'intro' | 'chapters' | 'quote' | 'atelier';
 type ContactSubTab = 'header' | 'info' | 'phone';
 
+/** Featured swatches per hero slide. Mirrors HERO_MAX_COLORS on the server. */
+const HERO_MAX_COLORS = 4;
+
+/** Mirrors colorSlug() in client-web utils/color-slug.ts, used for `?color=` links. */
+function heroColorSlug(value: string): string {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
 // ── Content data shapes (mirrors server defaults) ─────────────────────
+interface HeroColor     { label: string; slug: string; imageUrl: string; }
 interface HeroCallout   { id: string; titleEn: string; titleAr: string; subtitleEn: string; subtitleAr: string; thumbnail: string; alt: string; }
-interface HeroSliderItem { id: string; name: string; subtitle: string; imageUrl: string; alt: string; callouts: HeroCallout[]; }
+interface HeroSliderItem { id: string; name: string; subtitle: string; descriptionEn: string; descriptionAr: string; imageUrl: string; alt: string; productId: string; colors: HeroColor[]; defaultColorSlug: string; callouts: HeroCallout[]; }
 interface PromiseCard   { id: string; icon: string; labelEn: string; labelAr: string; subEn: string; subAr: string; }
 interface StatItem      { id: string; value: string; labelEn: string; labelAr: string; }
 interface ContactBlock  { id: string; icon: string; titleEn: string; titleAr: string; lines: string[]; }
@@ -219,11 +231,22 @@ interface StorefrontContent {
           </div>
 
           @for (item of content().heroSlider.items; track item.id; let i = $index) {
-            <div class="card mb-16">
+            <div class="card mb-16 slide-card">
               <div class="card-header">
-                <div>
-                  <div class="card-title">{{ t('storefront.editor.slider.slide') }} {{ i + 1 }}</div>
-                  <div class="card-sub mono small">{{ item.id }}</div>
+                <div class="slide-card__title">
+                  <span class="slide-card__num">{{ i + 1 }}</span>
+                  <div style="min-width:0;">
+                    <div class="card-title">
+                      {{ item.name || t('storefront.editor.slider.untitled') }}
+                    </div>
+                    <div class="card-sub small">
+                      @if (item.productId && productById(item.productId); as linked) {
+                        {{ linked.name }} · {{ item.colors.length }}/4 {{ t('storefront.editor.slider.colours') }}
+                      } @else {
+                        {{ t('storefront.editor.slider.noProductYet') }}
+                      }
+                    </div>
+                  </div>
                 </div>
                 @if (content().heroSlider.items.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeSliderItem(i)">
@@ -232,35 +255,254 @@ interface StorefrontContent {
                 }
               </div>
               <div class="card-pad field-stack">
-                <div class="two-col">
-                  <label><span class="lbl">{{ t('storefront.editor.slider.productName') }}</span><input class="inp" [ngModel]="item.name" (ngModelChange)="patchSliderItem(i,'name',$event)"/></label>
-                  <label><span class="lbl">{{ t('storefront.editor.slider.subtitle') }}</span><input class="inp" [ngModel]="item.subtitle" (ngModelChange)="patchSliderItem(i,'subtitle',$event)"/></label>
-                </div>
-                <label>
-                  <span class="lbl">{{ t('storefront.editor.slider.image') }}</span>
-                  <div class="image-picker-row">
-                    @if (item.imageUrl) { <img class="img-thumb" [src]="item.imageUrl" [alt]="item.name"/> }
-                    <div class="ip-info">
-                      <span class="small mono">{{ imageName(item.imageUrl) }}</span>
-                      <div class="row gap-sm">
-                        <input #slFile type="file" accept="image/*" (change)="uploadSliderImage(i, $event)" hidden/>
-                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="slFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
-                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('slider-item-'+i)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
-                      </div>
-                      <input class="inp mt-8" placeholder="or paste URL…" [ngModel]="item.imageUrl" (ngModelChange)="patchSliderItem(i,'imageUrl',$event)"/>
-                    </div>
-                  </div>
-                </label>
-                <label><span class="lbl">{{ t('storefront.editor.slider.altText') }}</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
 
-                <!-- Per-slide collapsible callouts — clear accordion UI -->
+                <!-- Step 1 — Linked product + colour swatches -->
+                <div class="hero-link-section">
+                  <div class="hero-link-head">
+                    <span class="lbl">
+                      <span class="step-badge">1</span>
+                      {{ t('storefront.editor.slider.linkedProduct') }}
+                    </span>
+                    <span class="small">{{ t('storefront.editor.slider.linkedProductHint') }}</span>
+                  </div>
+
+                  @if (item.productId && productById(item.productId); as linked) {
+                    <div class="hero-linked-row">
+                      @if (linked.image) { <img class="img-thumb" [src]="linked.image" [alt]="linked.name"/> }
+                      <div class="hero-linked-info">
+                        <strong>{{ linked.name }}</strong>
+                        <span class="small mono">{{ productColorNames(item.productId).length }} {{ t('storefront.editor.slider.coloursAvailable') }}</span>
+                      </div>
+                      <button class="btn btn-outline btn-sm" type="button"
+                              [title]="t('storefront.editor.slider.refillHint')"
+                              (click)="refillSlideFromProduct(i)">
+                        <ap-icon name="wand" [size]="11"/> {{ t('storefront.editor.slider.refill') }}
+                      </button>
+                      <button class="btn btn-outline btn-sm" type="button" (click)="productPickerSlide.set(productPickerSlide() === i ? null : i)">
+                        {{ t('storefront.editor.slider.change') }}
+                      </button>
+                      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="clearSlideProduct(i)">
+                        <ap-icon name="trash" [size]="11"/>
+                      </button>
+                    </div>
+                  } @else if (item.productId) {
+                    <div class="hero-warn">
+                      <ap-icon name="warning" [size]="12"/>
+                      <span>{{ t('storefront.editor.slider.productMissing') }}</span>
+                      <button class="btn btn-outline btn-sm" type="button" (click)="clearSlideProduct(i)">{{ t('storefront.editor.slider.clear') }}</button>
+                    </div>
+                  } @else {
+                    <button class="btn btn-outline btn-sm" type="button" (click)="productPickerSlide.set(productPickerSlide() === i ? null : i)">
+                      <ap-icon name="plus" [size]="12"/> {{ t('storefront.editor.slider.pickProduct') }}
+                    </button>
+                  }
+
+                  @if (productPickerSlide() === i) {
+                    <div class="hero-picker">
+                      <input class="inp inp-sm" [placeholder]="t('storefront.editor.slider.searchProducts')"
+                             [ngModel]="productPickerSearch()" (ngModelChange)="productPickerSearch.set($event)"/>
+                      @if (productsLoading()) {
+                        <div class="small hero-picker__empty"><ap-spinner [size]="12"/></div>
+                      } @else if (filteredPickerProducts().length === 0) {
+                        <div class="small hero-picker__empty">{{ t('storefront.editor.slider.noProducts') }}</div>
+                      } @else {
+                        <div class="hero-picker__list">
+                          @for (p of filteredPickerProducts(); track p.id) {
+                            <button class="hero-picker__row" type="button" (click)="selectSlideProduct(i, p.id)">
+                              @if (p.image) { <img [src]="p.image" [alt]="p.name"/> }
+                              <span class="hero-picker__name">{{ p.name }}</span>
+                              <span class="small mono">{{ productColorNames(p.id).length }}</span>
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+
+                  @if (item.productId && productById(item.productId)) {
+                    <div class="hero-colors">
+                      <div class="hero-link-head">
+                        <span class="lbl">{{ t('storefront.editor.slider.featuredColours') }}</span>
+                        <span class="small">
+                          {{ item.colors.length }}/4 {{ t('storefront.editor.slider.selected') }}
+                          · {{ t('storefront.editor.slider.coloursHint') }}
+                        </span>
+                      </div>
+
+                      @if (selectableColors(item.productId).length === 0) {
+                        <div class="hero-warn">
+                          <ap-icon name="warning" [size]="12"/>
+                          <span>{{ t('storefront.editor.slider.noColours') }}</span>
+                        </div>
+                      } @else {
+                        <div class="hero-color-grid">
+                          @for (opt of selectableColors(item.productId); track opt.name) {
+                            <button
+                              class="hero-color-chip"
+                              type="button"
+                              [class.is-on]="slideColorSelected(i, opt.name)"
+                              [class.is-broken]="colorMissingHex(opt.name)"
+                              [class.is-offproduct]="!opt.onProduct"
+                              [disabled]="!slideColorSelected(i, opt.name) && item.colors.length >= 4"
+                              [title]="opt.onProduct ? opt.name : opt.name + ' — ' + t('storefront.editor.slider.notOnProduct')"
+                              (click)="toggleSlideColor(i, opt.name)">
+                              @if (colorSwatchImage(opt.name)) {
+                                <span class="hero-color-dot" [style.background-image]="'url(' + colorSwatchImage(opt.name) + ')'"></span>
+                              } @else if (colorHex(opt.name)) {
+                                <span class="hero-color-dot" [style.background]="colorHex(opt.name)"></span>
+                              } @else {
+                                <span class="hero-color-dot hero-color-dot--none"><ap-icon name="warning" [size]="10"/></span>
+                              }
+                              <span class="hero-color-name">{{ opt.name }}</span>
+                            </button>
+                          }
+                        </div>
+
+                        @if (slideOffProductWarnings(i).length > 0) {
+                          <div class="hero-warn">
+                            <ap-icon name="warning" [size]="12"/>
+                            <span>
+                              <strong>{{ slideOffProductWarnings(i).join(', ') }}</strong>
+                              {{ t('storefront.editor.slider.offProductWarn') }}
+                            </span>
+                          </div>
+                        }
+                      }
+
+                      @if (slideColorWarnings(i).length > 0) {
+                        <div class="hero-warn">
+                          <ap-icon name="warning" [size]="12"/>
+                          <span>
+                            {{ t('storefront.editor.slider.missingHex') }}
+                            <strong>{{ slideColorWarnings(i).join(', ') }}</strong>
+                            {{ t('storefront.editor.slider.missingHexFix') }}
+                          </span>
+                        </div>
+                      }
+
+                      @if (item.colors.length > 0) {
+                        <div class="hero-colorshots">
+                          <div class="hero-link-head">
+                            <span class="lbl">{{ t('storefront.editor.slider.heroShots') }}</span>
+                            <span class="small">{{ t('storefront.editor.slider.heroShotsHint') }}</span>
+                          </div>
+
+                          @for (c of item.colors; track c.slug; let ci = $index) {
+                            <div class="hero-colorshot"
+                                 draggable="true"
+                                 [class.is-dragging]="draggingColor() === i + ':' + ci"
+                                 [class.is-drop-target]="dropTargetColor() === i + ':' + ci"
+                                 (dragstart)="onColorDragStart(i, ci)"
+                                 (dragover)="onColorDragOver($event, i, ci)"
+                                 (drop)="onColorDrop($event, i, ci)"
+                                 (dragend)="onColorDragEnd()">
+                              <span class="hero-colorshot__grip" [title]="t('storefront.editor.slider.dragToReorder')">
+                                <ap-icon name="drag" [size]="12"/>
+                              </span>
+
+                              <div class="hero-colorshot__id">
+                                @if (colorSwatchImage(c.label)) {
+                                  <span class="hero-color-dot" [style.background-image]="'url(' + colorSwatchImage(c.label) + ')'"></span>
+                                } @else if (colorHex(c.label)) {
+                                  <span class="hero-color-dot" [style.background]="colorHex(c.label)"></span>
+                                } @else {
+                                  <span class="hero-color-dot hero-color-dot--none"><ap-icon name="warning" [size]="10"/></span>
+                                }
+                                <span class="hero-colorshot__name">{{ c.label }}</span>
+                              </div>
+
+                              <label class="hero-colorshot__default"
+                                     [class.is-on]="slideDefaultColorSlug(i) === c.slug"
+                                     [title]="t('storefront.editor.slider.defaultHint')">
+                                <input type="radio"
+                                       [name]="'default-color-' + i"
+                                       [checked]="slideDefaultColorSlug(i) === c.slug"
+                                       (change)="setSlideDefaultColor(i, c.slug)"/>
+                                <span>{{ t('storefront.editor.slider.default') }}</span>
+                              </label>
+
+                              <div class="hero-colorshot__media">
+                                @if (c.imageUrl) {
+                                  <img class="hero-colorshot__thumb" [src]="c.imageUrl" [alt]="c.label"/>
+                                } @else {
+                                  <span class="hero-colorshot__thumb hero-colorshot__thumb--none" [title]="t('storefront.editor.slider.usesDefault')">
+                                    <ap-icon name="media" [size]="14"/>
+                                  </span>
+                                }
+                                <div class="hero-colorshot__actions">
+                                  <input #shotFile type="file" accept="image/*" (change)="uploadSlideColorImage(i, ci, $event)" hidden/>
+                                  <button class="btn btn-outline btn-sm" type="button" [disabled]="uploading()" (click)="shotFile.click()">
+                                    @if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="11"/>} {{ t('storefront.editor.btn.upload') }}
+                                  </button>
+                                  <button class="btn btn-outline btn-sm" type="button" (click)="openMediaPicker('slide-color-' + i + '-' + ci)">
+                                    <ap-icon name="media" [size]="11"/> {{ t('storefront.editor.btn.media') }}
+                                  </button>
+                                  @if (c.imageUrl) {
+                                    <button class="btn btn-outline btn-sm" type="button" style="color:var(--danger);border-color:var(--danger);"
+                                            (click)="patchSlideColorImage(i, ci, '')" [title]="t('storefront.editor.slider.clearImage')">
+                                      <ap-icon name="trash" [size]="11"/>
+                                    </button>
+                                  }
+                                </div>
+                              </div>
+                            </div>
+                          }
+
+                          @if (slideImageWarnings(i).length > 0) {
+                            <div class="hero-warn">
+                              <ap-icon name="warning" [size]="12"/>
+                              <span>
+                                {{ t('storefront.editor.slider.noImageFor') }}
+                                <strong>{{ slideImageWarnings(i).join(', ') }}</strong>
+                                {{ t('storefront.editor.slider.noImageFix') }}
+                              </span>
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+
+                <!-- Step 2 — Hero copy, prefilled from the product -->
+                <div class="hero-copy-section">
+                  <div class="hero-link-head">
+                    <span class="lbl">
+                      <span class="step-badge">2</span>
+                      {{ t('storefront.editor.slider.heroCopy') }}
+                    </span>
+                    <span class="small">{{ t('storefront.editor.slider.heroCopyHint') }}</span>
+                  </div>
+
+                  <div class="two-col">
+                    <label><span class="lbl">{{ t('storefront.editor.slider.productName') }}</span><input class="inp" [ngModel]="item.name" (ngModelChange)="patchSliderItem(i,'name',$event)"/></label>
+                    <label><span class="lbl">{{ t('storefront.editor.slider.subtitle') }}</span><input class="inp" [ngModel]="item.subtitle" (ngModelChange)="patchSliderItem(i,'subtitle',$event)"/></label>
+                  </div>
+                  <div class="two-col">
+                    <label>
+                      <span class="lbl">{{ t('storefront.editor.slider.descriptionEn') }}</span>
+                      <textarea class="inp" rows="2" [ngModel]="item.descriptionEn" (ngModelChange)="patchSliderItem(i,'descriptionEn',$event)"></textarea>
+                      <span class="small">{{ t('storefront.editor.slider.descriptionHint') }}</span>
+                    </label>
+                    <label>
+                      <span class="lbl">{{ t('storefront.editor.slider.descriptionAr') }}</span>
+                      <textarea class="inp" dir="rtl" rows="2" [ngModel]="item.descriptionAr" (ngModelChange)="patchSliderItem(i,'descriptionAr',$event)"></textarea>
+                    </label>
+                  </div>
+                  <label><span class="lbl">{{ t('storefront.editor.slider.altText') }}</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
+                </div>
+
+                <!-- Step 3 — Per-slide collapsible callouts (desktop only) -->
                 <div class="callouts-section" [class.callouts-open]="expandedSlide() === i">
                   <button class="callouts-toggle" type="button" (click)="toggleSlideCallouts(i)"
                           [attr.aria-expanded]="expandedSlide() === i">
                     <span class="callouts-toggle__icon">
                       <ap-icon name="list" [size]="12"/>
                     </span>
-                    <span class="callouts-toggle__label">{{ t('storefront.editor.slider.callouts') }}</span>
+                    <span class="callouts-toggle__label">
+                      <span class="step-badge">3</span>
+                      {{ t('storefront.editor.slider.callouts') }}
+                    </span>
                     <span class="callouts-toggle__count">{{ item.callouts.length }}</span>
                     <span class="callouts-toggle__hint">{{ expandedSlide() === i ? t('storefront.editor.slider.collapse') : t('storefront.editor.slider.expand') }}</span>
                     <span class="callouts-toggle__arrow" [class.open]="expandedSlide() === i">
@@ -901,7 +1143,7 @@ interface StorefrontContent {
         } @else {
           <div class="media-picker-grid">
             @for (m of filteredMediaFiles(); track m.id) {
-              <button class="mp-item" type="button" (click)="applyMediaPick(m.preview || '')">
+              <button class="mp-item" type="button" (click)="applyMediaPick(m.storageUrl || m.preview || '')">
                 <div class="mp-item__img-wrap">
                   <img [src]="m.preview" [alt]="m.name" (error)="onMediaImgError($event)"/>
                   <div class="mp-item__overlay">
@@ -1425,6 +1667,139 @@ interface StorefrontContent {
     }
     @media (max-width: 640px) { .callout-row__fields { grid-template-columns: 1fr; } }
 
+    /* ── Hero slide card ─────────────────────────────────────────────── */
+    .slide-card__title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .slide-card__num {
+      width: 26px; height: 26px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; background: var(--card); color: var(--muted);
+      font-size: 12px; font-weight: 700;
+    }
+    .step-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; margin-inline-end: 6px;
+      border-radius: 50%;
+      background: var(--accent, #004538); color: #fff;
+      font-size: 10px; font-weight: 700; line-height: 1;
+    }
+    .hero-copy-section {
+      display: grid; gap: 10px;
+      padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg);
+    }
+
+    /* ── Hero slide: linked product + colour swatches ────────────────── */
+    .hero-link-section {
+      display: grid; gap: 10px;
+      padding: 12px; margin-top: 4px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg);
+    }
+    .hero-link-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .hero-link-head .small { color: var(--muted); }
+    .hero-linked-row { display: flex; align-items: center; gap: 10px; }
+    .hero-linked-row .img-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+    .hero-linked-info { flex: 1; min-width: 0; display: grid; gap: 2px; }
+    .hero-linked-info strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .hero-warn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 8px;
+      background: color-mix(in srgb, var(--warning, #b8860b) 10%, transparent);
+      color: var(--warning, #b8860b);
+      font-size: 12px; line-height: 1.4;
+    }
+    .hero-warn strong { font-weight: 700; }
+
+    .hero-picker { display: grid; gap: 8px; }
+    .hero-picker__empty { color: var(--muted); padding: 8px 0; }
+    .hero-picker__list { max-height: 240px; overflow-y: auto; display: grid; gap: 2px; }
+    .hero-picker__row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border: 0; border-radius: 6px;
+      background: none; cursor: pointer; text-align: left; width: 100%;
+    }
+    .hero-picker__row:hover { background: var(--card); }
+    .hero-picker__row img { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; }
+    .hero-picker__name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .hero-colors { display: grid; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .hero-color-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .hero-color-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px 5px 5px;
+      border: 1px solid var(--border); border-radius: 999px;
+      background: var(--surface); cursor: pointer;
+      font-size: 12px; color: var(--text);
+    }
+    .hero-color-chip:hover:not(:disabled) { border-color: var(--muted); }
+    .hero-color-chip.is-on { border-color: var(--accent, #004538); background: color-mix(in srgb, var(--accent, #004538) 8%, transparent); font-weight: 600; }
+    .hero-color-chip.is-broken { border-style: dashed; }
+    /* Colours the linked product does not carry: selectable, but visually
+       de-emphasised so the product's own colours read first. */
+    .hero-color-chip.is-offproduct { opacity: 0.72; }
+    .hero-color-chip.is-offproduct.is-on { opacity: 1; }
+    .hero-color-chip.is-offproduct .hero-color-name { font-style: italic; }
+    .hero-color-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+    .hero-color-dot {
+      width: 18px; height: 18px; border-radius: 50%;
+      background-size: cover; background-position: center;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+      flex-shrink: 0;
+    }
+    .hero-color-dot--none {
+      display: flex; align-items: center; justify-content: center;
+      background: repeating-linear-gradient(45deg, var(--card) 0 3px, transparent 3px 6px);
+      color: var(--warning, #b8860b);
+    }
+    .hero-color-name { white-space: nowrap; }
+
+    /* Per-colour hero shots. These are hero-stage art owned by the slide, not
+       the product gallery images used on the product detail page. */
+    .hero-colorshots { display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .hero-colorshot {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface);
+      transition: border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+    }
+    .hero-colorshot.is-dragging { opacity: 0.45; }
+    .hero-colorshot.is-drop-target { border-color: var(--accent, #004538); transform: translateY(-1px); }
+    .hero-colorshot__grip {
+      display: flex; align-items: center; color: var(--muted);
+      cursor: grab; flex-shrink: 0;
+    }
+    .hero-colorshot__grip:active { cursor: grabbing; }
+    .hero-colorshot__id { display: flex; align-items: center; gap: 8px; min-width: 130px; flex: 1; }
+
+    .hero-colorshot__default {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px;
+      font-size: 11px; color: var(--muted); cursor: pointer; user-select: none;
+      flex-shrink: 0;
+    }
+    .hero-colorshot__default input { margin: 0; accent-color: var(--accent, #004538); }
+    .hero-colorshot__default.is-on {
+      border-color: var(--accent, #004538);
+      background: color-mix(in srgb, var(--accent, #004538) 8%, transparent);
+      color: var(--text); font-weight: 600;
+    }
+    .hero-colorshot__name {
+      flex: 1; min-width: 0; font-size: 12px; font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .hero-colorshot__media { display: flex; align-items: center; gap: 8px; }
+    .hero-colorshot__thumb {
+      width: 48px; height: 48px; border-radius: 6px; object-fit: cover; display: block;
+      border: 1px solid var(--border); background: var(--card); flex-shrink: 0;
+    }
+    .hero-colorshot__thumb--none {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted);
+      background: repeating-linear-gradient(45deg, var(--bg) 0 5px, transparent 5px 10px);
+    }
+    .hero-colorshot__actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
     /* ── Social links editor ────────────────────── */
     .social-editor-row {
       display: flex; align-items: center; gap: 10px;
@@ -1828,8 +2203,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly api            = inject(ApiClient);
   private readonly mediaApi       = inject(AdminMediaService);
+  private readonly productsApi    = inject(AdminProductsService);
+  private readonly refApi         = inject(AdminRefService);
   private readonly uploadApi      = inject(MediaUploadService);
   private readonly sanitizer      = inject(DomSanitizer);
+  private readonly router         = inject(Router);
   readonly storefront             = inject(StorefrontService);
 
   readonly t = (key: string): string => this.i18n.t(key);
@@ -1896,6 +2274,126 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     return this.allCollections().find((c) => c.id === ref || c.handle === ref);
   }
 
+  // ── Hero slide product + colour swatches ──────────────────────────────
+  readonly allProducts        = signal<Product[]>([]);
+  readonly productsLoading    = signal(true);
+  readonly refColors          = signal<RefColor[]>([]);
+  /** Index of the slide whose product picker is open, or null. */
+  readonly productPickerSlide = signal<number | null>(null);
+  readonly productPickerSearch = signal('');
+
+  readonly filteredPickerProducts = computed(() => {
+    const s = this.productPickerSearch().trim().toLowerCase();
+    const rows = this.allProducts();
+    if (!s) return rows.slice(0, 40);
+    return rows
+      .filter((p) => p.name.toLowerCase().includes(s) || (p.sku || '').toLowerCase().includes(s))
+      .slice(0, 40);
+  });
+
+  productById(id: string): Product | undefined {
+    return id ? this.allProducts().find((p) => p.id === id) : undefined;
+  }
+
+  /**
+   * Every colour offerable for a slide: the linked product's own colours first,
+   * then the rest of the Reference Data library. Colours the product does not
+   * carry are still selectable, but flagged in the UI since the "+" link opens
+   * that product and a customer will not find the colourway there.
+   */
+  selectableColors(productId: string): Array<{ name: string; onProduct: boolean }> {
+    const own = this.productColorNames(productId);
+    const seen = new Set(own.map((n) => n.trim().toLowerCase()));
+    const rest = this.refColors()
+      .map((c) => c.name_en.trim())
+      .filter((name) => name && !seen.has(name.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b));
+
+    return [
+      ...own.map((name) => ({ name, onProduct: true })),
+      ...rest.map((name) => ({ name, onProduct: false })),
+    ];
+  }
+
+  /** True when a featured colour is not one the linked product actually sells. */
+  colorNotOnProduct(productId: string, label: string): boolean {
+    if (!productId) return false;
+    const key = label.trim().toLowerCase();
+    return !this.productColorNames(productId).some((n) => n.trim().toLowerCase() === key);
+  }
+
+  slideOffProductWarnings(i: number): string[] {
+    const item = this.content().heroSlider?.items?.[i];
+    if (!item?.productId) return [];
+    return (item.colors ?? [])
+      .map((c) => c.label)
+      .filter((label) => this.colorNotOnProduct(item.productId, label));
+  }
+
+  /** Distinct colour names on a product, taken from its variants. */
+  productColorNames(id: string): string[] {
+    const product = this.productById(id);
+    if (!product) return [];
+    const seen = new Map<string, string>();
+    for (const variant of product.variants ?? []) {
+      const label = String(variant.color || '').trim();
+      if (!label) continue;
+      const key = label.toLowerCase();
+      if (!seen.has(key)) seen.set(key, label);
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }
+
+  /** Hex for a colour name from ref_colors, or '' when it is not defined there. */
+  colorHex(label: string): string {
+    const key = String(label || '').trim().toLowerCase();
+    const match = this.refColors().find((c) => c.name_en.trim().toLowerCase() === key);
+    return match?.hex || '';
+  }
+
+  colorSwatchImage(label: string): string {
+    const key = String(label || '').trim().toLowerCase();
+    const match = this.refColors().find((c) => c.name_en.trim().toLowerCase() === key);
+    return match?.swatch_image_url || '';
+  }
+
+  /** A colour with neither hex nor swatch image cannot render, so warn in the editor. */
+  colorMissingHex(label: string): boolean {
+    return !this.colorHex(label) && !this.colorSwatchImage(label);
+  }
+
+  slideColorWarnings(i: number): string[] {
+    const item = this.content().heroSlider?.items?.[i];
+    return (item?.colors ?? []).map((c) => c.label).filter((label) => this.colorMissingHex(label));
+  }
+
+  /** Featured colours on a slide with no hero shot of their own. */
+  slideImageWarnings(i: number): string[] {
+    const item = this.content().heroSlider?.items?.[i];
+    if (!item?.productId) return [];
+    return (item.colors ?? []).filter((c) => !c.imageUrl).map((c) => c.label);
+  }
+
+  /** Set the hero shot for one colourway on one slide. */
+  patchSlideColorImage(slideIdx: number, colorIdx: number, url: string): void {
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== slideIdx) return item;
+        const colors = (item.colors ?? []).map((color, ci) =>
+          ci === colorIdx ? { ...color, imageUrl: url } : color);
+        return { ...item, colors };
+      });
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  /** Upload a hero shot for one colourway straight from the slide editor. */
+  async uploadSlideColorImage(slideIdx: number, colorIdx: number, event: Event): Promise<void> {
+    const url = await this.uploadFile(event);
+    if (url) this.patchSlideColorImage(slideIdx, colorIdx, url);
+  }
+
   // ── Storefront content (home page + story + contact) ──────────────────
   readonly content           = signal<StorefrontContent>({} as StorefrontContent);
   readonly contentDirty      = signal(false);
@@ -1932,6 +2430,19 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       .then((list) => { this.allCollections.set(list); this.collectionsLoading.set(false); })
       .catch(() => this.collectionsLoading.set(false));
 
+    // Products and ref colours back the hero slide product picker and swatches.
+    void this.productsApi.list()
+      .then((list) => {
+        this.allProducts.set(list);
+        this.productsLoading.set(false);
+        this.backfillLinkedSlides();
+      })
+      .catch(() => this.productsLoading.set(false));
+
+    void this.refApi.getColors()
+      .then((list) => this.refColors.set(list))
+      .catch(() => this.refColors.set([]));
+
     // Load storefront layout draft
     try {
       const draft = await this.storefront.loadDraft();
@@ -1952,6 +2463,9 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         this.content.set(live);
       }
       this.contentLoaded = true;
+      // Products may have finished first, in which case their load already ran
+      // this and found no content. Whichever lands last does the work.
+      this.backfillLinkedSlides();
     } catch {
       this.toast.warning(this.t('storefront.editor.toast.loadWarning'), this.t('storefront.editor.toast.loadWarning.sub'));
     }
@@ -2095,9 +2609,244 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
+  /**
+   * Link a slide to a product and pull everything the slide can derive from it:
+   * copy, alt text, featured colours, and each colour's hero shot taken from the
+   * product's own gallery tagging.
+   *
+   * Fields the editor has already filled in are left alone, so re-linking a
+   * product never destroys hand-written copy. `refillSlideFromProduct()` is the
+   * explicit opt-in for overwriting.
+   */
+  selectSlideProduct(i: number, productId: string): void {
+    this.applyProductToSlide(i, productId, false);
+    this.productPickerSlide.set(null);
+    this.productPickerSearch.set('');
+  }
+
+  /** Re-pull every derivable field from the linked product, overwriting edits. */
+  refillSlideFromProduct(i: number): void {
+    const productId = this.content().heroSlider?.items?.[i]?.productId;
+    if (productId) this.applyProductToSlide(i, productId, true);
+  }
+
+  /**
+   * Fill blank fields on slides that were linked to a product before auto-fill
+   * existed. Runs once products finish loading. Only empty fields are touched,
+   * and the content is not marked dirty: this is a display-time completion, not
+   * an edit the user made, so it is persisted on their next real save.
+   */
+  private backfillLinkedSlides(): void {
+    const items = this.content().heroSlider?.items;
+    if (!items?.length) return;
+
+    let changed = false;
+    const next = items.map((item) => {
+      const product = item.productId ? this.productById(item.productId) : undefined;
+      if (!product) return item;
+
+      const fill = (current: string, derived: string) => {
+        if (current.trim() || !derived) return current;
+        changed = true;
+        return derived;
+      };
+
+      return {
+        ...item,
+        name:          fill(item.name, product.name),
+        subtitle:      fill(item.subtitle, this.productSubtitle(product)),
+        descriptionEn: fill(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
+        descriptionAr: fill(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
+        alt:           fill(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
+      };
+    });
+
+    if (changed) {
+      this.content.update((c) => ({ ...c, heroSlider: { ...c.heroSlider, items: next } }));
+    }
+  }
+
+  private applyProductToSlide(i: number, productId: string, overwrite: boolean): void {
+    const product = this.productById(productId);
+    if (!product) return;
+
+    // Prefer colours that can actually render a swatch, so a freshly linked
+    // product does not come back with an empty-looking row.
+    const names = this.productColorNames(productId);
+    const renderable = names.filter((name) => !this.colorMissingHex(name));
+    const prefill = (renderable.length ? renderable : names).slice(0, HERO_MAX_COLORS);
+
+    const colors = prefill.map((label) => ({
+      label,
+      slug: heroColorSlug(label),
+      // Seed the hero shot from the product's gallery tagging. It is only a
+      // starting point: the editor can replace it with proper hero art.
+      imageUrl: this.productImageForColor(product, label),
+    }));
+
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== i) return item;
+        const keep = (current: string, next: string) =>
+          (!overwrite && current.trim()) ? current : (next || current);
+
+        return {
+          ...item,
+          productId,
+          name:          keep(item.name, product.name),
+          subtitle:      keep(item.subtitle, this.productSubtitle(product)),
+          descriptionEn: keep(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
+          descriptionAr: keep(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
+          alt:           keep(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
+          colors: (!overwrite && (item.colors ?? []).length) ? item.colors : colors,
+          defaultColorSlug: (!overwrite && item.defaultColorSlug) ? item.defaultColorSlug : (colors[0]?.slug ?? ''),
+        };
+      });
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  /** Gallery image the product tagged with this colour, if any. */
+  private productImageForColor(product: Product, label: string): string {
+    const key = label.trim().toLowerCase();
+    const entry = Object.entries(product.imageColors ?? {})
+      .find(([, color]) => String(color || '').trim().toLowerCase() === key);
+    return entry?.[0] || '';
+  }
+
+  /** Bilingual subtitle in the "العربية / English" shape the hero splits on. */
+  private productSubtitle(product: Product): string {
+    const ar = (product.nameAr || '').trim();
+    const en = (product.brand || '').trim();
+    if (ar && en) return `${ar} / ${en}`;
+    return ar || en;
+  }
+
+  /**
+   * Hero copy for a product: its short description when set, otherwise the
+   * first sentence of the long one as a stopgap. Rich-text markup is stripped
+   * because the hero renders plain text.
+   */
+  private heroCopy(short?: string, long?: string): string {
+    const direct = String(short || '').trim();
+    if (direct) return direct;
+    return this.trimCopy(String(long || '').replace(/<[^>]*>/g, ' '));
+  }
+
+  /** First sentence of a product description, kept near the hero's 18-word cap. */
+  private trimCopy(value?: string): string {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const sentence = text.split(/(?<=[.!؟?])\s/)[0] || text;
+    const words = sentence.split(' ');
+    return words.length <= 18 ? sentence : `${words.slice(0, 18).join(' ')}...`;
+  }
+
+  clearSlideProduct(i: number): void {
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => idx === i
+        ? { ...item, productId: '', colors: [] }
+        : item);
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  slideColorSelected(i: number, label: string): boolean {
+    const key = label.trim().toLowerCase();
+    return (this.content().heroSlider?.items?.[i]?.colors ?? [])
+      .some((c) => c.label.trim().toLowerCase() === key);
+  }
+
+  /** Toggle a colour on a slide, capped at 4 featured swatches. */
+  toggleSlideColor(i: number, label: string): void {
+    const key = label.trim().toLowerCase();
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== i) return item;
+        const current = item.colors ?? [];
+        const exists = current.some((x) => x.label.trim().toLowerCase() === key);
+        if (exists) {
+          return { ...item, colors: current.filter((x) => x.label.trim().toLowerCase() !== key) };
+        }
+        if (current.length >= HERO_MAX_COLORS) return item;
+        return { ...item, colors: [...current, { label, slug: heroColorSlug(label), imageUrl: '' }] };
+      });
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  moveSlideColor(i: number, from: number, to: number): void {
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== i) return item;
+        const colors = [...(item.colors ?? [])];
+        if (from === to || to < 0 || to >= colors.length) return item;
+        const [moved] = colors.splice(from, 1);
+        colors.splice(to, 0, moved);
+        return { ...item, colors };
+      });
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  /** The colourway the hero opens on. Its image becomes the slide image. */
+  setSlideDefaultColor(i: number, slug: string): void {
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) =>
+        idx === i ? { ...item, defaultColorSlug: slug } : item);
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  /** Effective default: the stored slug, or the first colour when unset. */
+  slideDefaultColorSlug(i: number): string {
+    const item = this.content().heroSlider?.items?.[i];
+    const colors = item?.colors ?? [];
+    if (!colors.length) return '';
+    return colors.some((c) => c.slug === item.defaultColorSlug)
+      ? item.defaultColorSlug
+      : colors[0].slug;
+  }
+
+  // ── Colour row drag/drop ──────────────────────────────────────────────
+  /** "{slideIdx}:{colorIdx}" of the row being dragged. */
+  readonly draggingColor = signal<string | null>(null);
+  readonly dropTargetColor = signal<string | null>(null);
+
+  onColorDragStart(slideIdx: number, colorIdx: number): void {
+    this.draggingColor.set(`${slideIdx}:${colorIdx}`);
+  }
+
+  onColorDragOver(event: DragEvent, slideIdx: number, colorIdx: number): void {
+    // Only react to a drag that started in this slide's colour list.
+    if (!this.draggingColor()?.startsWith(`${slideIdx}:`)) return;
+    event.preventDefault();
+    this.dropTargetColor.set(`${slideIdx}:${colorIdx}`);
+  }
+
+  onColorDrop(event: DragEvent, slideIdx: number, colorIdx: number): void {
+    event.preventDefault();
+    const dragging = this.draggingColor();
+    this.onColorDragEnd();
+    if (!dragging) return;
+    const [fromSlide, fromIdx] = dragging.split(':').map(Number);
+    if (fromSlide !== slideIdx || fromIdx === colorIdx) return;
+    this.moveSlideColor(slideIdx, fromIdx, colorIdx);
+  }
+
+  onColorDragEnd(): void {
+    this.draggingColor.set(null);
+    this.dropTargetColor.set(null);
+  }
+
   addSliderItem(): void {
     const newId = `slide-${Date.now()}`;
-    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', imageUrl: '', alt: '', callouts: [] };
+    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', descriptionEn: '', descriptionAr: '', imageUrl: '', alt: '', productId: '', colors: [], defaultColorSlug: '', callouts: [] };
     this.content.update((c) => ({
       ...c,
       heroSlider: { ...c.heroSlider, items: [...c.heroSlider.items, newItem] },
@@ -2490,10 +3239,14 @@ export class StorefrontComponent implements OnInit, OnDestroy {
 
     if (target === 'hero') { this.patchHero('imageUrl', url); }
     else if (target === 'story-hero') { this.patchStoryHero('imageUrl', url); }
-    else if (target.startsWith('slider-item-')) {
-      const i = parseInt(target.split('-').pop()!, 10);
-      this.patchSliderItem(i, 'imageUrl', url);
-    } else if (target.startsWith('tile-')) {
+    else if (target.startsWith('slide-color-')) {
+      // slide-color-{slideIdx}-{colorIdx}
+      const [slideIdx, colorIdx] = target.replace('slide-color-', '').split('-').map(Number);
+      if (Number.isInteger(slideIdx) && Number.isInteger(colorIdx)) {
+        this.patchSlideColorImage(slideIdx, colorIdx, url);
+      }
+    }
+    else if (target.startsWith('tile-')) {
       const i = parseInt(target.split('-').pop()!, 10);
       this.patchTile(i, 'imageUrl', url);
     } else if (target.startsWith('chapter-')) {
@@ -2513,11 +3266,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   async uploadHeroImage(event: Event): Promise<void> {
     const url = await this.uploadFile(event);
     if (url) this.patchHero('imageUrl', url);
-  }
-
-  async uploadSliderImage(i: number, event: Event): Promise<void> {
-    const url = await this.uploadFile(event);
-    if (url) this.patchSliderItem(i, 'imageUrl', url);
   }
 
   async uploadCalloutImage(slideIdx: number, calloutIdx: number, event: Event): Promise<void> {
@@ -2562,7 +3310,9 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           // Server returns MediaFile[] via mapMedia() — fields are camelCase
           const list = progress.result as import('../../models').MediaFile[] | import('../../models').MediaFile | null | undefined;
           const item = Array.isArray(list) ? list[0] : list;
-          const rawUrl = item?.preview || (item as { storageUrl?: string })?.storageUrl || '';
+          // Prefer the full-resolution original: `preview` is a ~640px card
+          // variant, too small for hero art rendered at up to 940px @2x.
+          const rawUrl = item?.storageUrl || item?.preview || '';
           if (rawUrl) {
             resolve(this.api.mediaUrl(rawUrl));
           } else {

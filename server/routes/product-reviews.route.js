@@ -2,6 +2,9 @@ const { Router } = require('express');
 const { asyncHandler, ok, created, notFound, validationError } = require('./lib');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
+const { reviewSubmissionLimiter } = require('../middleware/rate-limit');
+
+const REVIEW_LIMITS = { body: 1200, title: 160, name: 100, email: 254, phone: 40 };
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 function validateRating(rating, res) {
@@ -15,6 +18,27 @@ function validateRating(rating, res) {
   return true;
 }
 
+function normalizedOptionalText(value) {
+  return typeof value === 'string' ? value.trim() || null : null;
+}
+
+function validateTextLength(value, limit, field, res) {
+  if (value && value.length > limit) {
+    validationError(res, { [field]: `${field} must be ${limit} characters or fewer.` });
+    return false;
+  }
+  return true;
+}
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function validPhone(value) {
+  const digits = value.replace(/\D/g, '');
+  return /^[+\d\s().-]+$/.test(value) && digits.length >= 7 && digits.length <= 15;
+}
+
 function mapReview(r) {
   return {
     id:          r.id,
@@ -24,6 +48,7 @@ function mapReview(r) {
     authorName:  r.author_name,
     authorEmail: r.author_email,
     authorPhone: r.author_phone,
+    contactConsent: Boolean(r.contact_consent),
     source:      r.source || 'storefront',
     createdAt:   r.created_at,
   };
@@ -32,15 +57,44 @@ function mapReview(r) {
 // ── Public: POST /api/products/:id/reviews  (product-linked) ─────────────────
 const router = Router();
 
-router.post('/:id/reviews', asyncHandler(async (req, res) => {
-  const { body, rating, title, authorName, authorEmail, authorPhone, source } = req.body;
+router.post('/:id/reviews', reviewSubmissionLimiter, asyncHandler(async (req, res) => {
+  const {
+    body,
+    rating,
+    title,
+    authorName,
+    authorEmail,
+    authorPhone,
+    contactConsent,
+    source,
+  } = req.body;
 
-  const bodyText = typeof body === 'string' ? body.trim() : null;
+  const bodyText = normalizedOptionalText(body);
+  const titleText = normalizedOptionalText(title);
+  const nameText = normalizedOptionalText(authorName);
+  const consent = contactConsent === true;
+  const emailText = consent ? normalizedOptionalText(authorEmail) : null;
+  const phoneText = consent ? normalizedOptionalText(authorPhone) : null;
+
   if (!validateRating(rating, res)) return;
-
-  // A visitor can leave a quick star rating or a written note (or both).
-  if (!bodyText && (rating === undefined || rating === null)) {
-    return validationError(res, { base: 'Please provide a rating or a message.' });
+  if (rating === undefined || rating === null) {
+    return validationError(res, { rating: 'A star rating is required.' });
+  }
+  if (!validateTextLength(bodyText, REVIEW_LIMITS.body, 'body', res)) return;
+  if (!validateTextLength(titleText, REVIEW_LIMITS.title, 'title', res)) return;
+  if (!validateTextLength(nameText, REVIEW_LIMITS.name, 'authorName', res)) return;
+  if (!validateTextLength(emailText, REVIEW_LIMITS.email, 'authorEmail', res)) return;
+  if (!validateTextLength(phoneText, REVIEW_LIMITS.phone, 'authorPhone', res)) return;
+  if (consent && !emailText && !phoneText) {
+    return validationError(res, {
+      contact: 'Provide a mobile number or email when contact consent is enabled.',
+    });
+  }
+  if (emailText && !validEmail(emailText)) {
+    return validationError(res, { authorEmail: 'Enter a valid email address.' });
+  }
+  if (phoneText && !validPhone(phoneText)) {
+    return validationError(res, { authorPhone: 'Enter a valid mobile number.' });
   }
 
   const client = await db.pool.connect();
@@ -53,20 +107,44 @@ router.post('/:id/reviews', asyncHandler(async (req, res) => {
     );
     if (prod.rowCount === 0) return notFound(res, 'Product not found.');
 
+    const duplicate = await client.query(
+      `SELECT id, created_at
+       FROM product_reviews
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND rating = $3
+         AND body IS NOT DISTINCT FROM $4
+         AND author_name IS NOT DISTINCT FROM $5
+         AND author_email IS NOT DISTINCT FROM $6
+         AND author_phone IS NOT DISTINCT FROM $7
+         AND created_at >= now() - interval '10 minutes'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [tenant.id, req.params.id, Number(rating), bodyText, nameText, emailText, phoneText],
+    );
+    if (duplicate.rowCount > 0) {
+      return ok(res, {
+        id: duplicate.rows[0].id,
+        createdAt: duplicate.rows[0].created_at,
+        duplicate: true,
+      }, 'Review already received.');
+    }
+
     const result = await client.query(
       `INSERT INTO product_reviews
-         (tenant_id, product_id, rating, title, body, author_name, author_email, author_phone, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         (tenant_id, product_id, rating, title, body, author_name, author_email, author_phone, contact_consent, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING id, created_at`,
       [
         tenant.id,
         req.params.id,
         rating ?? null,
-        title?.trim() || null,
+        titleText,
         bodyText || null,
-        authorName?.trim()  || null,
-        authorEmail?.trim() || null,
-        authorPhone?.trim() || null,
+        nameText,
+        emailText,
+        phoneText,
+        consent,
         source === 'experience' || source === 'kiosk' ? 'experience' : 'storefront',
       ],
     );
@@ -200,7 +278,7 @@ adminRouter.get('/reviews/general', asyncHandler(async (req, res) => {
 
     const reviews = await client.query(
       `SELECT id, rating, title, body,
-              author_name, author_email, author_phone,
+              author_name, author_email, author_phone, contact_consent,
               source, created_at
        FROM product_reviews
        WHERE tenant_id = $1 AND product_id IS NULL
@@ -248,7 +326,7 @@ adminRouter.get('/reviews/:productId', asyncHandler(async (req, res) => {
 
     const reviews = await client.query(
       `SELECT id, rating, title, body,
-              author_name, author_email, author_phone,
+              author_name, author_email, author_phone, contact_consent,
               source, created_at
        FROM product_reviews
        WHERE tenant_id=$1 AND product_id=$2

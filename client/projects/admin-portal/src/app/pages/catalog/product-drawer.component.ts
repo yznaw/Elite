@@ -27,6 +27,7 @@ interface FormShape {
   relatedProductIds: string[];
   price: number; stock: number; hidden: boolean;
   enDesc: string; arDesc: string;
+  shortEn: string; shortAr: string;
   metaTitle: string; metaDesc: string; slug: string;
   variants: ProductVariant[];
   images: string[];
@@ -630,6 +631,36 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <div [style.display]="isMobile() && !openSections().has('desc') ? 'none' : ''">
+          <!-- Short copy: single line, used on the home hero and other compact
+               surfaces. Plain text on purpose — no rich formatting fits there. -->
+          <div class="short-desc-grid mb-24">
+            <div>
+              <label class="lbl">
+                {{ t('product.field.shortEn') }}
+                <span class="short-desc-count" [class.over]="(form().shortEn || '').length > 90">
+                  {{ (form().shortEn || '').length }}/90
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="ltr"
+                        [placeholder]="t('product.field.shortEn.ph')"
+                        [ngModel]="form().shortEn"
+                        (ngModelChange)="set('shortEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">
+                {{ t('product.field.shortAr') }}
+                <span class="short-desc-count" [class.over]="(form().shortAr || '').length > 90">
+                  {{ (form().shortAr || '').length }}/90
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="rtl"
+                        [placeholder]="t('product.field.shortAr.ph')"
+                        [ngModel]="form().shortAr"
+                        (ngModelChange)="set('shortAr', $event)"></textarea>
+            </div>
+          </div>
+          <p class="short-desc-hint">{{ t('product.field.shortHint') }}</p>
+
           <div class="mb-24">
             <label class="lbl">{{ t('product.field.descEn') }}</label>
             <ap-rich-text
@@ -868,6 +899,15 @@ function readPreview(file: File): Promise<string> {
   `,
     changeDetection: ChangeDetectionStrategy.Eager,
     styles: [`
+    /* Short description: plain text, two columns, with a soft length guide.
+       The counter turns amber past 90 chars because longer copy wraps past
+       two lines in the home hero rather than being truncated. */
+    .short-desc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) { .short-desc-grid { grid-template-columns: 1fr; } }
+    .short-desc-count { float: inline-end; font-size: 11px; color: var(--muted); font-weight: 400; }
+    .short-desc-count.over { color: var(--warning, #b8860b); font-weight: 600; }
+    .short-desc-hint { margin: -16px 0 24px; font-size: 12px; color: var(--muted); }
+
     /* Wider drawer for the editor — full screen on phones */
     .drawer-wide { width: min(800px, 100vw); }
     @media (max-width: 800px) { .drawer-wide { width: 100vw; } }
@@ -1994,6 +2034,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       name: '', nameAr: '', sku: '', brand: '', collectionIds: [],
       price: 0, stock: 0, hidden: false,
       enDesc: '', arDesc: '',
+      shortEn: '', shortAr: '',
       metaTitle: '', metaDesc: '', slug: '',
       variants: [],
       images: [],
@@ -2014,6 +2055,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       hidden: p.hidden,
       enDesc: p.enDesc ?? '',
       arDesc: p.arDesc ?? '',
+      shortEn: p.shortEn ?? '',
+      shortAr: p.shortAr ?? '',
       metaTitle: p.metaTitle || `${p.name} · ${p.brand} · Elite Collection`,
       metaDesc: p.metaDesc || `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
       slug: p.slug || p.name.toLowerCase().replace(/\s+/g, '-'),
@@ -2701,6 +2744,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.hidden = saved.hidden;
       this.product.enDesc = saved.enDesc ?? f.enDesc;
       this.product.arDesc = saved.arDesc ?? f.arDesc;
+      this.product.shortEn = saved.shortEn ?? f.shortEn;
+      this.product.shortAr = saved.shortAr ?? f.shortAr;
       this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
       this.product.images = [...(saved.images ?? f.images)];
       this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };

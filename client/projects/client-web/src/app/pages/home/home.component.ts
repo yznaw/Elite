@@ -19,7 +19,10 @@ import { Subscription, firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
-import { HomeCollectionTileContent } from '../../models/home-content.model';
+import { ReferenceDataService } from '../../services/reference-data.service';
+import { HomeCollectionTileContent, HeroColorContent } from '../../models/home-content.model';
+import { colorKey } from '../../utils/color-slug';
+import { resolveClientMediaUrl } from '../../utils/media-url';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -51,9 +54,13 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly i18n         = inject(I18nService);
   readonly locale               = inject(LocaleService);
   readonly homeContent          = inject(HomeContentService);
+  private readonly referenceData = inject(ReferenceDataService);
   private readonly apiBase      = this.resolveApiBase();
 
   private metaTimer: number | undefined;
+  private heroSwipeHintTimer: number | undefined;
+  private heroSwipeHintDismissTimer: number | undefined;
+  private heroPeekTimer: number | undefined;
   private heroSwipeStart: { x: number; y: number; pointerId: number } | null = null;
   private heroGeometryObserver: ResizeObserver | undefined;
   private heroGeometryFrame: number | undefined;
@@ -79,8 +86,99 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       : (this.contentData().heroSlider.ctaEn  || 'Shop the Collection')
   );
   readonly activeHeroItem    = computed(() => this.heroItems()[this.activeHeroItemIndex()] ?? this.heroItems()[0]);
+  readonly nextHeroItem      = computed(() => {
+    const items = this.heroItems();
+    if (items.length < 2) return items[0];
+    return items[(this.activeHeroItemIndex() + 1) % items.length];
+  });
   // Each slide has its own callouts array
   readonly activeHeroCallouts = computed(() => this.activeHeroItem()?.callouts ?? []);
+
+  // Short selling copy shown under the mobile slider. Falls back to the slide's
+  // callout titles so a slide saved before this field existed still reads well.
+  readonly activeHeroDescription = computed(() => {
+    const item = this.activeHeroItem();
+    if (!item) return '';
+    const direct = (this.isArabic() ? item.descriptionAr : item.descriptionEn)?.trim();
+    if (direct) return direct;
+    const titles = (item.callouts ?? [])
+      .map((c) => this.calloutTitle(c).trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    if (!titles.length) return '';
+    return `${titles.join(this.isArabic() ? '، ' : ', ')}.`;
+  });
+
+  readonly heroSwipeHintVisible = signal(false);
+  readonly heroPeekActive = signal(false);
+
+  // ── Hero colour swatches ────────────────────────────────────────────────
+  /** Colour the visitor tapped on the active slide, or '' for the slide default. */
+  readonly activeHeroColorKey = signal('');
+
+  /**
+   * Featured swatches for the active slide. A colour with no hex and no swatch
+   * image in ref_colors is dropped rather than rendered as a blank circle; the
+   * admin editor warns about this so it is visible before publish.
+   */
+  readonly activeHeroSwatches = computed(() => {
+    const item = this.activeHeroItem();
+    if (!item?.productId) return [];
+    const hexByName = this.referenceData.colorHexByName();
+    const imageByName = this.referenceData.colorSwatchImageByName();
+
+    return (item.colors ?? []).reduce<
+      Array<HeroColorContent & { key: string; hex: string; image: string }>
+    >((acc, color) => {
+      const key = colorKey(color.label);
+      const image = imageByName[key] || '';
+      const hex = hexByName[key] || '';
+      // A colour with no hex and no swatch image cannot be drawn as a dot, so it
+      // is skipped. The admin editor warns about this before publish.
+      if (!hex && !image) return acc;
+      acc.push({ ...color, key, hex, image });
+      return acc;
+    }, []);
+  });
+
+  /**
+   * Colour the slide opens on. The server derives the slide image from this, so
+   * the matching swatch reads as selected before the visitor taps anything.
+   */
+  readonly activeHeroDefaultColorKey = computed(() => {
+    const item = this.activeHeroItem();
+    if (!item) return '';
+    const swatches = this.activeHeroSwatches();
+    const match = swatches.find((swatch) => swatch.slug === item.defaultColorSlug);
+    return (match ?? swatches[0])?.key ?? '';
+  });
+
+  /** Colour currently shown, whether tapped by the visitor or the slide default. */
+  readonly activeHeroSelectedColorKey = computed(
+    () => this.activeHeroColorKey() || this.activeHeroDefaultColorKey(),
+  );
+
+  /**
+   * Hero image for the active slide, swapped when a colour swatch is tapped.
+   * The photo comes from the slide's own colour entry, not the product gallery:
+   * hero art is styled for this stage, product photos are for the detail page.
+   */
+  readonly activeHeroImage = computed(() => {
+    const item = this.activeHeroItem();
+    if (!item) return '';
+    const selected = this.activeHeroColorKey();
+    if (!selected) return item.imageUrl;
+    const match = this.activeHeroSwatches().find((swatch) => swatch.key === selected);
+    // Colours without their own hero shot keep the slide's default image.
+    return match?.imageUrl || item.imageUrl;
+  });
+
+  /**
+   * The trailing control is always rendered when a product is linked: it is the
+   * only route from the hero into the product page now that swatches preview in
+   * place instead of navigating.
+   */
+  readonly showHeroProductLink = computed(() => !!this.activeHeroItem()?.productId);
 
   // ── Promise cards & stats — read from API ───────────────────────────────
   readonly promiseCards = computed(() => this.contentData().promise.cards);
@@ -129,8 +227,15 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    void this.loadCollectionTiles();
-    void this.homeContent.refresh(true).then(() => this.preloadHeroAssets());
+    void this.referenceData.ensureColors();
+    void Promise.all([
+      this.loadCollectionTiles(),
+      this.homeContent.refresh(true),
+    ]).then(() => {
+      this.preloadHeroAssets();
+      this.preloadHeroColorImages();
+      this.scheduleHeroSwipeHint();
+    });
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
   }
 
@@ -141,6 +246,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.metaTimer) clearTimeout(this.metaTimer);
+    if (this.heroSwipeHintTimer) clearTimeout(this.heroSwipeHintTimer);
+    if (this.heroSwipeHintDismissTimer) clearTimeout(this.heroSwipeHintDismissTimer);
+    if (this.heroPeekTimer) clearTimeout(this.heroPeekTimer);
     if (this.heroGeometryFrame) cancelAnimationFrame(this.heroGeometryFrame);
     this.heroGeometryObserver?.disconnect();
     this.heroCalloutChanges?.unsubscribe();
@@ -151,12 +259,44 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     window.scrollTo(0, 0);
   }
 
+  /**
+   * Preview a colourway in place. Navigation is deliberately not triggered here:
+   * only the trailing control opens the product page. Re-tapping the current
+   * colour is a no-op, since every slide always shows some colour.
+   */
+  selectHeroColor(key: string): void {
+    if (key === this.activeHeroSelectedColorKey()) return;
+    this.activeHeroColorKey.set(key);
+  }
+
+  /** Open the slide's product with no colour preselected, showing the full picker. */
+  goToHeroProduct(): void {
+    const productId = this.activeHeroItem()?.productId;
+    if (!productId) return;
+    void this.router.navigate(['/product', productId]);
+    window.scrollTo(0, 0);
+  }
+
   selectAdjacentHeroItem(direction: -1 | 1): void {
-    this.activeHeroItemIndex.update((i) => (i + direction + this.heroItems().length) % this.heroItems().length);
+    this.dismissHeroSwipeHint();
+    const total = this.heroItems().length;
+    if (total < 2) return;
+    this.activeHeroColorKey.set('');
+    this.activeHeroItemIndex.update((i) => (i + direction + total) % total);
+  }
+
+  /** Jump straight to a slide from the mobile pagination control. */
+  selectHeroItem(index: number): void {
+    this.dismissHeroSwipeHint();
+    const total = this.heroItems().length;
+    if (index < 0 || index >= total || index === this.activeHeroItemIndex()) return;
+    this.activeHeroColorKey.set('');
+    this.activeHeroItemIndex.set(index);
   }
 
   onHeroPointerDown(event: PointerEvent): void {
-    if (this.isHeroControl(event.target)) return;
+    if (this.isHeroControl(event.target) || this.heroItems().length < 2) return;
+    this.stopHeroPeek();
     this.heroSwipeStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
   }
 
@@ -171,7 +311,69 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onHeroPointerCancel(event: PointerEvent): void {
-    if (this.heroSwipeStart?.pointerId === event.pointerId) this.heroSwipeStart = null;
+    if (this.heroSwipeStart?.pointerId !== event.pointerId) return;
+    this.heroSwipeStart = null;
+  }
+
+  private prefersReducedMotion(): boolean {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  /**
+   * A once-per-page teaching moment for touch layouts. It starts only after the
+   * loading shell has gone, so a slower phone cannot miss the entire preview.
+   * It never changes the selected slide.
+   */
+  private scheduleHeroSwipeHint(): void {
+    if (
+      this.heroSwipeHintTimer ||
+      this.heroSwipeHintVisible() ||
+      this.heroItems().length < 2 ||
+      !window.matchMedia('(max-width: 760px)').matches
+    ) {
+      return;
+    }
+
+    this.heroSwipeHintTimer = window.setTimeout(() => {
+      this.heroSwipeHintTimer = undefined;
+      if (this.heroItems().length < 2 || !window.matchMedia('(max-width: 760px)').matches) return;
+
+      this.heroSwipeHintVisible.set(true);
+
+      if (!this.prefersReducedMotion()) {
+        this.heroPeekActive.set(true);
+        this.heroPeekTimer = window.setTimeout(() => {
+          this.heroPeekTimer = undefined;
+          this.heroPeekActive.set(false);
+        }, 1500);
+      }
+
+      this.heroSwipeHintDismissTimer = window.setTimeout(() => {
+        this.heroSwipeHintDismissTimer = undefined;
+        this.dismissHeroSwipeHint();
+      }, 5000);
+    }, 900);
+  }
+
+  private dismissHeroSwipeHint(): void {
+    if (this.heroSwipeHintTimer) {
+      clearTimeout(this.heroSwipeHintTimer);
+      this.heroSwipeHintTimer = undefined;
+    }
+    if (this.heroSwipeHintDismissTimer) {
+      clearTimeout(this.heroSwipeHintDismissTimer);
+      this.heroSwipeHintDismissTimer = undefined;
+    }
+    this.stopHeroPeek();
+    this.heroSwipeHintVisible.set(false);
+  }
+
+  private stopHeroPeek(): void {
+    if (this.heroPeekTimer) {
+      clearTimeout(this.heroPeekTimer);
+      this.heroPeekTimer = undefined;
+    }
+    this.heroPeekActive.set(false);
   }
 
   goToContentLink(link: string): void {
@@ -241,6 +443,21 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  /** Warm the colour shots so tapping a swatch swaps instantly. */
+  private preloadHeroColorImages(): void {
+    const seen = new Set<string>();
+    for (const item of this.heroItems()) {
+      for (const color of item.colors ?? []) {
+        const url = color.imageUrl;
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        const image = new Image();
+        image.decoding = 'async';
+        image.src = url;
+      }
+    }
+  }
+
   private isHeroControl(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && target.closest('button') !== null;
   }
@@ -296,12 +513,58 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     return url.replace(/\.(png|jpe?g)$/i, '.webp');
   }
 
+  /**
+   * Responsive srcset for an uploaded hero image.
+   *
+   * Uploads are stored alongside resized variants (`-card` 640, `-grid` 900,
+   * `-pdp` 1400, `-zoom` 1800) next to the full-size original. The hero renders
+   * up to 940px wide, so a phone needs roughly the grid variant and a retina
+   * desktop the zoom variant. Without this the browser downloads the 3480px
+   * original on every device.
+   *
+   * Returns '' for static assets and any URL that carries no variant siblings,
+   * in which case the template falls back to a plain `src`.
+   */
+  heroSrcset(url: string): string {
+    const webp = this.toWebp(url);
+    // Only uploads carry variants; bundled /assets art does not.
+    if (!/\/uploads\//.test(webp) || !/\.webp$/i.test(webp)) return '';
+
+    // Strip any variant suffix so a stored `-card` URL still yields the full set.
+    const base = webp.replace(/-(thumb|card|grid|pdp|zoom)\.webp$/i, '.webp');
+    const stem = base.replace(/\.webp$/i, '');
+    return [
+      `${stem}-card.webp 640w`,
+      `${stem}-grid.webp 900w`,
+      `${stem}-pdp.webp 1400w`,
+      `${stem}-zoom.webp 1800w`,
+    ].join(', ');
+  }
+
+  /**
+   * Widths the hero image actually renders at, mirroring `--mobile-product-size`
+   * and `.hero-product` in the SCSS. Keep the two in step or the browser picks a
+   * variant that is too small and the image renders soft.
+   *
+   * Deliberately free of viewport-height units: `sizes` is evaluated once at
+   * parse time, so an svh term here would bake in whatever height the viewport
+   * happened to have then.
+   */
+  readonly heroSizes = '(max-width: 760px) min(124vw, 620px), min(1120px, 82vw)';
+
   private preloadHeroAssets(): void {
     const firstUrl = this.heroItems()[0]?.imageUrl;
     if (!firstUrl) return;
     const link = document.createElement('link');
     link.rel = 'preload'; link.as = 'image'; link.type = 'image/webp';
     link.href = this.toWebp(firstUrl);
+    // Mirror the <source> so the preload and the render pick the same variant;
+    // otherwise the browser fetches one image twice.
+    const srcset = this.heroSrcset(firstUrl);
+    if (srcset) {
+      link.setAttribute('imagesrcset', srcset);
+      link.setAttribute('imagesizes', this.heroSizes);
+    }
     document.head.appendChild(link);
   }
 
@@ -319,10 +582,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private resolveMediaUrl(url: string | null): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.apiBase}${value}`;
+    return resolveClientMediaUrl(url, this.apiBase);
   }
 }

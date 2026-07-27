@@ -12,6 +12,12 @@ export interface Product {
   id: string;
   name: string;
   brand?: string;
+  /** Long copy for the product detail page. May contain rich-text markup. */
+  descriptionEn?: string;
+  descriptionAr?: string;
+  /** One-line copy for compact surfaces such as the home hero. */
+  shortDescriptionEn?: string;
+  shortDescriptionAr?: string;
   price: number;
   tag: string;
   leather: string;

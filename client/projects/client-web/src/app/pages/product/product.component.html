@@ -17,7 +17,12 @@
 
       <section class="pdp-grid">
         <div class="gallery-panel">
-          <div class="gallery-frame">
+          <div
+            class="gallery-frame"
+            (pointerdown)="onGalleryPointerDown($event)"
+            (pointerup)="onGalleryPointerUp($event)"
+            (pointercancel)="onGalleryPointerCancel($event)"
+          >
             @for (src of gallery(); track src; let i = $index) {
               <img
                 [src]="src"
@@ -27,7 +32,7 @@
                 [class.is-active]="galleryIdx() === i"
                 [class.is-loaded]="isGalleryImageLoaded(src)"
                 [attr.fetchpriority]="galleryIdx() === i ? 'high' : null"
-                [attr.loading]="galleryIdx() === i ? 'eager' : 'lazy'"
+                [attr.loading]="galleryImageLoading(i)"
                 decoding="async"
                 (load)="markGalleryImageLoaded(src)"
                 (error)="onImgError($event)"
@@ -49,6 +54,9 @@
             </button> -->
 
             @if (gallery().length > 1) {
+              <span class="gallery-count" aria-live="polite">
+                {{ galleryIdx() + 1 }} / {{ gallery().length }}
+              </span>
               <button
                 type="button"
                 class="gallery-nav gallery-nav-prev"
@@ -106,7 +114,7 @@
                   type="button"
                   class="thumb-scroll-cue thumb-scroll-cue--start"
                   (click)="scrollThumbnails('start')"
-                  [attr.aria-label]="t('product.aria.scrollPreviousImages')"
+                [attr.aria-label]="t('product.aria.previousImage')"
                 >
                   <span aria-hidden="true">‹</span>
                 </button>
@@ -117,7 +125,7 @@
                   type="button"
                   class="thumb-scroll-cue thumb-scroll-cue--end"
                   (click)="scrollThumbnails('end')"
-                  [attr.aria-label]="t('product.aria.scrollImages')"
+                  [attr.aria-label]="t('product.aria.nextImage')"
                 >
                   <span aria-hidden="true">›</span>
                 </button>
@@ -134,9 +142,14 @@
             <span>{{ price(p.price) }}</span>
           </div>
 
-          <p class="description">
-            {{ t("product.descriptionTemplate", { name: productName(p) }) }}
-          </p>
+          @if (productDescription(p); as description) {
+            <!-- Rich text from the admin editor. Angular sanitizes innerHTML. -->
+            <div class="description" [innerHTML]="description"></div>
+          } @else {
+            <p class="description">
+              {{ t("product.descriptionTemplate", { name: productName(p) }) }}
+            </p>
+          }
 
           <!-- <dl class="attribute-grid">
             @for (a of attributes(); track a.key) {
@@ -324,6 +337,7 @@
 
           @if (!selectedSizeInStock()) {
             <div
+              id="restock-panel"
               class="restock-panel"
               [class.is-open]="restockFormOpen() || restockSubmitted()"
             >
@@ -538,11 +552,16 @@
                 <fieldset class="review-rating">
                   <legend>
                     {{ t("product.review.rating") }}
-                    <span>{{ t("product.review.optional") }}</span>
+                    <span>{{ t("product.review.required") }}</span>
                   </legend>
-                  <div class="review-stars">
+                  <div
+                    class="review-stars"
+                    [attr.aria-invalid]="reviewFieldErrors().rating ? true : null"
+                    [attr.aria-describedby]="reviewFieldErrors().rating ? 'review-rating-error' : null"
+                  >
                     @for (star of [1, 2, 3, 4, 5]; track star) {
                       <button
+                        [id]="'review-star-' + star"
                         type="button"
                         [class.is-selected]="star <= (reviewRating() || 0)"
                         [attr.aria-pressed]="reviewRating() === star"
@@ -553,12 +572,22 @@
                       </button>
                     }
                   </div>
+                  @if (reviewFieldErrors().rating) {
+                    <p id="review-rating-error" class="review-field-error">
+                      {{ reviewFieldErrors().rating }}
+                    </p>
+                  }
                 </fieldset>
 
                 <label class="review-field review-field--message" for="review-description">
                   <span>
                     {{ t("product.review.description") }}
                     <small>{{ t("product.review.optional") }}</small>
+                    <small class="review-character-count">
+                      {{ t("product.review.charactersRemaining", {
+                        count: 1200 - reviewDescription().length
+                      }) }}
+                    </small>
                   </span>
                   <textarea
                     id="review-description"
@@ -571,57 +600,91 @@
                   ></textarea>
                 </label>
 
-                <div class="review-contact-grid">
-                  <label class="review-field" for="review-name">
-                    <span>
-                      {{ t("product.review.name") }}
-                      <small>{{ t("product.review.optional") }}</small>
-                    </span>
-                    <input
-                      id="review-name"
-                      type="text"
-                      autocomplete="name"
-                      maxlength="100"
-                      [value]="reviewName()"
-                      (input)="onReviewNameInput($event)"
-                      [placeholder]="t('product.review.namePlaceholder')"
-                    />
-                  </label>
+                <label class="review-field" for="review-name">
+                  <span>
+                    {{ t("product.review.name") }}
+                    <small>{{ t("product.review.optional") }}</small>
+                  </span>
+                  <input
+                    id="review-name"
+                    type="text"
+                    autocomplete="name"
+                    maxlength="100"
+                    [value]="reviewName()"
+                    (input)="onReviewNameInput($event)"
+                    [placeholder]="t('product.review.namePlaceholder')"
+                  />
+                </label>
 
-                  <label class="review-field" for="review-mobile">
-                    <span>
-                      {{ t("product.review.mobile") }}
-                      <small>{{ t("product.review.optional") }}</small>
-                    </span>
+                <div class="review-contact-consent">
+                  <label for="review-contact-consent">
                     <input
-                      id="review-mobile"
-                      type="tel"
-                      inputmode="tel"
-                      autocomplete="tel"
-                      maxlength="40"
-                      [value]="reviewPhone()"
-                      (input)="onReviewPhoneInput($event)"
-                      [placeholder]="t('product.review.mobilePlaceholder')"
+                      id="review-contact-consent"
+                      type="checkbox"
+                      [checked]="reviewContactConsent()"
+                      (change)="onReviewContactConsentChange($event)"
+                      [attr.aria-describedby]="reviewFieldErrors().contact ? 'review-contact-error' : 'review-contact-help'"
                     />
-                  </label>
-
-                  <label class="review-field review-field--email" for="review-email">
                     <span>
-                      {{ t("product.review.email") }}
-                      <small>{{ t("product.review.optional") }}</small>
+                      <strong>{{ t("product.review.contactConsent") }}</strong>
+                      <small id="review-contact-help">{{ t("product.review.contactHelp") }}</small>
                     </span>
-                    <input
-                      id="review-email"
-                      type="email"
-                      inputmode="email"
-                      autocomplete="email"
-                      maxlength="254"
-                      [value]="reviewEmail()"
-                      (input)="onReviewEmailInput($event)"
-                      [placeholder]="t('product.review.emailPlaceholder')"
-                    />
                   </label>
+                  @if (reviewFieldErrors().contact) {
+                    <p id="review-contact-error" class="review-field-error">
+                      {{ reviewFieldErrors().contact }}
+                    </p>
+                  }
                 </div>
+
+                @if (reviewContactConsent()) {
+                  <div class="review-contact-fields">
+                    <p>{{ t("product.review.contactDetails") }}</p>
+                    <div class="review-contact-grid">
+                      <label class="review-field" for="review-mobile">
+                        <span>{{ t("product.review.mobile") }}</span>
+                        <input
+                          id="review-mobile"
+                          type="tel"
+                          inputmode="tel"
+                          autocomplete="tel"
+                          maxlength="40"
+                          [value]="reviewPhone()"
+                          (input)="onReviewPhoneInput($event)"
+                          [placeholder]="t('product.review.mobilePlaceholder')"
+                          [attr.aria-invalid]="reviewFieldErrors().phone ? true : null"
+                          [attr.aria-describedby]="reviewFieldErrors().phone ? 'review-phone-error' : null"
+                        />
+                        @if (reviewFieldErrors().phone) {
+                          <p id="review-phone-error" class="review-field-error">
+                            {{ reviewFieldErrors().phone }}
+                          </p>
+                        }
+                      </label>
+
+                      <label class="review-field" for="review-email">
+                        <span>{{ t("product.review.email") }}</span>
+                        <input
+                          id="review-email"
+                          type="email"
+                          inputmode="email"
+                          autocomplete="email"
+                          maxlength="254"
+                          [value]="reviewEmail()"
+                          (input)="onReviewEmailInput($event)"
+                          [placeholder]="t('product.review.emailPlaceholder')"
+                          [attr.aria-invalid]="reviewFieldErrors().email ? true : null"
+                          [attr.aria-describedby]="reviewFieldErrors().email ? 'review-email-error' : null"
+                        />
+                        @if (reviewFieldErrors().email) {
+                          <p id="review-email-error" class="review-field-error">
+                            {{ reviewFieldErrors().email }}
+                          </p>
+                        }
+                      </label>
+                    </div>
+                  </div>
+                }
 
                 <p class="review-privacy">{{ t("product.review.privacy") }}</p>
 

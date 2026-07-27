@@ -376,6 +376,10 @@ function mapAdminProduct(row) {
     variants: row.variants || [],
     enDesc: desc.en || '',
     arDesc: desc.ar || '',
+    // Short marketing copy for compact surfaces (home hero, cards). The long
+    // description stays for the product detail page.
+    shortEn: desc.shortEn || '',
+    shortAr: desc.shortAr || '',
     metaTitle: row.meta_title || '',
     metaDesc: row.meta_desc || '',
     slug: row.slug || '',
@@ -448,6 +452,8 @@ async function upsertProduct(client, tenant, product) {
   const description = {
     en: String(product.enDesc || '').trim(),
     ar: String(product.arDesc || '').trim(),
+    shortEn: String(product.shortEn || '').trim(),
+    shortAr: String(product.shortAr || '').trim(),
   };
 
   const metaTitle = String(product.metaTitle || '').trim() || null;
@@ -786,6 +792,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       hidden: req.body.hidden ?? existing.status === 'hidden',
       enDesc: req.body.enDesc ?? existing.description?.en,
       arDesc: req.body.arDesc ?? existing.description?.ar,
+      shortEn: req.body.shortEn ?? existing.description?.shortEn,
+      shortAr: req.body.shortAr ?? existing.description?.shortAr,
       slug: req.body.slug ?? existing.slug,
       metaTitle: req.body.metaTitle ?? existing.meta_title,
       metaDesc: req.body.metaDesc ?? existing.meta_desc,

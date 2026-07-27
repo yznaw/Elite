@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Product } from '../models/product.model';
+import { resolveClientMediaUrl } from '../utils/media-url';
 
 const LOGO_FALLBACK = '/assets/brand/elite-logo-green.png';
 
@@ -175,10 +176,6 @@ export class ProductsService {
   }
 
   private resolveMediaUrl(url: string | undefined): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.apiBase}${value}`; // /api/uploads/… routes through the existing proxy
+    return resolveClientMediaUrl(url, this.apiBase);
   }
 }

@@ -1,14 +1,16 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { CartService } from '../../services/cart.service';
 import { ProductsService } from '../../services/products.service';
 import { Product, ProductVariant } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
 import { AnalyticsService } from '../../services/analytics.service';
+import { colorKey, colorSlug } from '../../utils/color-slug';
 
 interface Accordion {
   id: string;
@@ -35,6 +37,13 @@ interface StorefrontCollectionLink {
   children?: StorefrontCollectionLink[];
 }
 
+interface ReviewFieldErrors {
+  rating?: string;
+  phone?: string;
+  email?: string;
+  contact?: string;
+}
+
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 
 @Component({
@@ -51,6 +60,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly cart = inject(CartService);
   private readonly productsSvc = inject(ProductsService);
   private readonly i18n = inject(I18nService);
+  private readonly locale = inject(LocaleService);
   private readonly referenceData = inject(ReferenceDataService);
   private readonly analytics = inject(AnalyticsService);
   private readonly apiBase = this.resolveApiBase();
@@ -60,10 +70,18 @@ export class ProductComponent implements OnInit, OnDestroy {
   private querySub?: Subscription;
   private loadToken = 0;
   private previousBodyOverflow = '';
+  private previousBodyPosition = '';
+  private previousBodyTop = '';
+  private previousBodyWidth = '';
+  private previousHtmlOverflow = '';
+  private lockedScrollY = 0;
   private bodyScrollLocked = false;
   private thumbStrip?: HTMLElement;
   private thumbStripResizeObserver?: ResizeObserver;
   private thumbStripMutationObserver?: MutationObserver;
+  private gallerySyncFrame: number | undefined;
+  private gallerySwipeStart: { x: number; y: number; pointerId: number } | null = null;
+  private reviewTrigger?: HTMLElement;
 
   readonly accordions: Accordion[] = [
     {
@@ -114,6 +132,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly reviewName = signal('');
   readonly reviewPhone = signal('');
   readonly reviewEmail = signal('');
+  readonly reviewContactConsent = signal(false);
+  readonly reviewFieldErrors = signal<ReviewFieldErrors>({});
   readonly reviewSubmitting = signal(false);
   readonly reviewSubmitted = signal(false);
   readonly reviewError = signal('');
@@ -200,6 +220,17 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
   readonly productName = (product: Product): string => this.i18n.productName(product);
+
+  /**
+   * Long description in the active locale, falling back to the other language
+   * so a product with copy in only one still shows it. Empty means the template
+   * renders the generic house description instead.
+   */
+  productDescription(product: Product): string {
+    const ar = (product.descriptionAr || '').trim();
+    const en = (product.descriptionEn || '').trim();
+    return (this.locale.locale() === 'ar' ? (ar || en) : (en || ar));
+  }
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
   readonly productTag = (value: string): string => this.i18n.productTag(value);
 
@@ -251,6 +282,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.querySub?.unsubscribe();
     this.thumbStripResizeObserver?.disconnect();
     this.thumbStripMutationObserver?.disconnect();
+    if (this.gallerySyncFrame) cancelAnimationFrame(this.gallerySyncFrame);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     this.unlockBodyScroll();
   }
@@ -311,6 +343,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.sizePickerOpen.set(false);
     this.sizeGuideOpen.set(false);
     this.resetRestockForm();
+    this.resetReviewForm();
     void this.referenceData.ensureColors();
     this.productLoading.set(false);
   }
@@ -324,6 +357,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.sizePickerOpen.set(false);
     this.sizeGuideOpen.set(false);
     this.resetRestockForm();
+    this.resetReviewForm();
     void this.router.navigate(['/product', nextProduct.id], {
       queryParamsHandling: 'preserve',
     });
@@ -331,23 +365,73 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   setGalleryIdx(i: number): void {
-    this.galleryIdx.set(i);
+    this.selectGalleryIndex(i);
   }
 
   scrollThumbnails(toward: 'start' | 'end'): void {
-    if (!this.thumbStrip) return;
-    const inlineDirection = getComputedStyle(this.thumbStrip).direction === 'rtl' ? -1 : 1;
-    const scrollDirection = toward === 'end' ? inlineDirection : -inlineDirection;
-    this.thumbStrip.scrollBy({
-      left: scrollDirection * Math.max(this.thumbStrip.clientWidth * 0.7, 160),
-      behavior: 'smooth',
-    });
+    this.navGallery(toward === 'end' ? 1 : -1);
   }
 
   navGallery(dir: number): void {
-    this.galleryIdx.update(
-      (i) => (i + dir + this.gallery().length) % this.gallery().length,
-    );
+    this.selectGalleryIndex(this.galleryIdx() + dir);
+  }
+
+  onGalleryPointerDown(event: PointerEvent): void {
+    if (
+      this.gallery().length < 2 ||
+      (event.target instanceof HTMLElement && event.target.closest('button'))
+    ) {
+      return;
+    }
+    this.gallerySwipeStart = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+    };
+  }
+
+  onGalleryPointerUp(event: PointerEvent): void {
+    const start = this.gallerySwipeStart;
+    this.gallerySwipeStart = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < 42 || Math.abs(dx) <= Math.abs(dy)) return;
+    this.navGallery(dx < 0 ? 1 : -1);
+  }
+
+  onGalleryPointerCancel(event: PointerEvent): void {
+    if (this.gallerySwipeStart?.pointerId === event.pointerId) {
+      this.gallerySwipeStart = null;
+    }
+  }
+
+  galleryImageLoading(index: number): 'eager' | 'lazy' {
+    const count = this.gallery().length;
+    if (count <= 3) return 'eager';
+    const distance = Math.abs(index - this.galleryIdx());
+    return distance <= 1 || distance >= count - 1 ? 'eager' : 'lazy';
+  }
+
+  private selectGalleryIndex(index: number): void {
+    const count = this.gallery().length;
+    if (!count) return;
+
+    const normalizedIndex = (index + count) % count;
+    this.galleryIdx.set(normalizedIndex);
+
+    if (this.gallerySyncFrame) cancelAnimationFrame(this.gallerySyncFrame);
+    this.gallerySyncFrame = requestAnimationFrame(() => {
+      this.gallerySyncFrame = undefined;
+      const activeThumbnail = this.thumbStrip?.querySelector<HTMLElement>('.thumb.is-active');
+      activeThumbnail?.scrollIntoView({
+        behavior: this.prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+      this.updateThumbStripState();
+    });
   }
 
   updateThumbStripState(): void {
@@ -372,7 +456,7 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   selectProductColor(color: string): void {
     this.selectedColor.set(color);
-    this.galleryIdx.set(0);
+    this.selectGalleryIndex(0);
     this.selectedSize.set(this.defaultSizeForProduct(this.product()));
     this.resetRestockForm();
     void this.router.navigate([], {
@@ -507,6 +591,18 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.restockFormOpen.set(true);
     this.restockSubmitted.set(false);
     this.restockError.set('');
+    requestAnimationFrame(() => {
+      const panel = document.getElementById('restock-panel');
+      panel?.scrollIntoView({
+        behavior: this.prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+      });
+      document.getElementById('restock-email')?.focus({ preventScroll: true });
+    });
+  }
+
+  private prefersReducedMotion(): boolean {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
   onRestockEmailInput(event: Event): void {
@@ -545,22 +641,23 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   openReview(): void {
-    this.resetReviewForm();
+    if (this.reviewSubmitted()) this.resetReviewForm();
+    this.reviewTrigger = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : undefined;
     this.reviewOpen.set(true);
-    if (!this.bodyScrollLocked) {
-      this.previousBodyOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      this.bodyScrollLocked = true;
-    }
+    this.lockBodyScroll();
   }
 
   closeReview(): void {
     this.reviewOpen.set(false);
     this.unlockBodyScroll();
+    requestAnimationFrame(() => this.reviewTrigger?.focus());
   }
 
   selectReviewRating(rating: number): void {
     this.reviewRating.set(this.reviewRating() === rating ? null : rating);
+    this.reviewFieldErrors.update(({ rating: _rating, ...errors }) => errors);
     this.reviewError.set('');
   }
 
@@ -575,10 +672,22 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   onReviewPhoneInput(event: Event): void {
     this.reviewPhone.set((event.target as HTMLInputElement).value);
+    this.reviewFieldErrors.update(({ phone: _phone, contact: _contact, ...errors }) => errors);
   }
 
   onReviewEmailInput(event: Event): void {
     this.reviewEmail.set((event.target as HTMLInputElement).value);
+    this.reviewFieldErrors.update(({ email: _email, contact: _contact, ...errors }) => errors);
+  }
+
+  onReviewContactConsentChange(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.reviewContactConsent.set(checked);
+    this.reviewFieldErrors.update(({ phone: _phone, email: _email, contact: _contact, ...errors }) => errors);
+    if (!checked) {
+      this.reviewPhone.set('');
+      this.reviewEmail.set('');
+    }
   }
 
   async submitReview(event?: Event): Promise<void> {
@@ -586,15 +695,28 @@ export class ProductComponent implements OnInit, OnDestroy {
     const product = this.product();
     const body = this.reviewDescription().trim();
     const rating = this.reviewRating();
+    const phone = this.reviewPhone().trim();
     const email = this.reviewEmail().trim();
+    const contactConsent = this.reviewContactConsent();
     if (!product || this.reviewSubmitting()) return;
 
-    if (!rating && !body) {
-      this.reviewError.set(this.t('product.review.validation'));
-      return;
+    const fieldErrors: ReviewFieldErrors = {};
+    if (!rating) {
+      fieldErrors.rating = this.t('product.review.ratingError');
     }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      this.reviewError.set(this.t('product.review.emailError'));
+    if (contactConsent && !phone && !email) {
+      fieldErrors.contact = this.t('product.review.contactValidation');
+    }
+    if (contactConsent && phone && !this.validReviewPhone(phone)) {
+      fieldErrors.phone = this.t('product.review.phoneError');
+    }
+    if (contactConsent && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      fieldErrors.email = this.t('product.review.emailError');
+    }
+    this.reviewFieldErrors.set(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) {
+      this.reviewError.set('');
+      this.focusFirstReviewError(fieldErrors);
       return;
     }
 
@@ -608,15 +730,20 @@ export class ProductComponent implements OnInit, OnDestroy {
             rating,
             body: body || null,
             authorName: this.reviewName().trim() || null,
-            authorPhone: this.reviewPhone().trim() || null,
-            authorEmail: email || null,
+            authorPhone: contactConsent ? phone || null : null,
+            authorEmail: contactConsent ? email || null : null,
+            contactConsent,
             source: 'storefront',
           },
         ),
       );
       this.reviewSubmitted.set(true);
-    } catch {
-      this.reviewError.set(this.t('product.review.error'));
+    } catch (error) {
+      this.reviewError.set(
+        error instanceof HttpErrorResponse && error.status === 429
+          ? this.t('product.review.rateLimitError')
+          : this.t('product.review.error'),
+      );
     } finally {
       this.reviewSubmitting.set(false);
     }
@@ -653,7 +780,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     if (!match || this.colorSelected(match)) return;
 
     this.selectedColor.set(match);
-    this.galleryIdx.set(0);
+    this.selectGalleryIndex(0);
     this.resetRestockForm();
   }
 
@@ -725,12 +852,14 @@ export class ProductComponent implements OnInit, OnDestroy {
     return this.colorSlug(decodeURIComponent(String(url || ''))).includes(color);
   }
 
+  // Delegate to the shared helpers so the home hero generates `?color=` slugs
+  // that match what this page resolves. See utils/color-slug.ts.
   private colorKey(value: string): string {
-    return String(value || '').trim().toLowerCase();
+    return colorKey(value);
   }
 
   private colorSlug(value: string): string {
-    return this.colorKey(value).replace(/[^a-z0-9]+/g, '');
+    return colorSlug(value);
   }
 
   private mediaIdentity(url: string): string {
@@ -756,15 +885,61 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.reviewName.set('');
     this.reviewPhone.set('');
     this.reviewEmail.set('');
+    this.reviewContactConsent.set(false);
+    this.reviewFieldErrors.set({});
     this.reviewSubmitting.set(false);
     this.reviewSubmitted.set(false);
     this.reviewError.set('');
   }
 
+  private validReviewPhone(phone: string): boolean {
+    const digits = phone.replace(/\D/g, '');
+    return /^[+\d\s().-]+$/.test(phone) && digits.length >= 7 && digits.length <= 15;
+  }
+
+  private focusFirstReviewError(errors: ReviewFieldErrors): void {
+    const id = errors.rating
+      ? 'review-star-1'
+      : errors.phone
+        ? 'review-mobile'
+        : errors.email
+          ? 'review-email'
+          : 'review-contact-consent';
+    requestAnimationFrame(() => document.getElementById(id)?.focus());
+  }
+
   private unlockBodyScroll(): void {
     if (!this.bodyScrollLocked) return;
+    const scrollY = this.lockedScrollY;
     document.body.style.overflow = this.previousBodyOverflow;
+    document.body.style.position = this.previousBodyPosition;
+    document.body.style.top = this.previousBodyTop;
+    document.body.style.width = this.previousBodyWidth;
+    document.documentElement.style.overflow = this.previousHtmlOverflow;
     this.bodyScrollLocked = false;
+    window.scrollTo(0, scrollY);
+  }
+
+  private lockBodyScroll(): void {
+    if (this.bodyScrollLocked) return;
+
+    this.lockedScrollY = window.scrollY;
+    this.previousBodyOverflow = document.body.style.overflow;
+    this.previousBodyPosition = document.body.style.position;
+    this.previousBodyTop = document.body.style.top;
+    this.previousBodyWidth = document.body.style.width;
+    this.previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+
+    if (window.matchMedia('(max-width: 759px)').matches) {
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${this.lockedScrollY}px`;
+      document.body.style.width = '100%';
+    }
+
+    this.bodyScrollLocked = true;
   }
 
   private async resolveLegacyCollectionParent(childKey: string): Promise<void> {

@@ -24,4 +24,12 @@ const posPinLimiter = rateLimit({
   handler: jsonRateLimitHandler,
 });
 
-module.exports = { authAttemptLimiter, posPinLimiter };
+const reviewSubmissionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler,
+});
+
+module.exports = { authAttemptLimiter, posPinLimiter, reviewSubmissionLimiter };

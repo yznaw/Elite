@@ -9,6 +9,7 @@ import { Product, ProductVariant } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
 import { CartService } from '../../services/cart.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
+import { resolveClientMediaUrl } from '../../utils/media-url';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
@@ -934,11 +935,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   private resolveMediaUrl(url: string | null): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.apiBase}${value}`;
+    return resolveClientMediaUrl(url, this.apiBase);
   }
 
   private setupMobilePagination(): void {
