@@ -27,6 +27,7 @@
                   #heroStage
                   class="hero-stage"
                   [class.is-leather-peeking]="heroPeekActive()"
+                  [class.is-peek-releasing]="heroPeekReleasing()"
                   (pointerdown)="onHeroPointerDown($event)"
                   (pointerup)="onHeroPointerUp($event)"
                   (pointercancel)="onHeroPointerCancel($event)"
@@ -198,7 +199,9 @@
                       aria-live="polite"
                     >
                       <span>{{ t("home.hero.swipeHint") }}</span>
-                      <span class="hero-swipe-hint__arrow" aria-hidden="true">↔</span>
+                      <span class="hero-swipe-hint__arrow" aria-hidden="true">{{
+                        isArabic() ? "←" : "→"
+                      }}</span>
                     </div>
                   }
                 </div>

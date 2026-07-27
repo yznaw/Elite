@@ -41,6 +41,14 @@ interface StorefrontCollection {
 
 const FEATURED_COLLECTION_HANDLES = ['men', 'sunglasses', 'kids'];
 
+/** Mirrors the 1500ms hint keyframes and their two iterations in the SCSS. */
+const HERO_PEEK_DURATION_MS = 1500;
+const HERO_PEEK_ITERATIONS = 2;
+/** Matches the release transition on `.is-peek-releasing`. */
+const HERO_PEEK_RELEASE_MS = 180;
+/** Teach the swipe once per visit rather than on every return to the home page. */
+const HERO_HINT_SESSION_KEY = 'elite:hero-swipe-hint-shown';
+
 @Component({
     selector: 'cw-home',
     imports: [CommonModule],
@@ -60,9 +68,12 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private metaTimer: number | undefined;
   private heroSwipeHintTimer: number | undefined;
   private heroSwipeHintDismissTimer: number | undefined;
-  private heroPeekTimer: number | undefined;
   private heroSwipeHintPreparing = false;
   private heroSwipeHintShown = false;
+  private heroPeekReleaseTimer: number | undefined;
+  private heroPeekReleaseFrame: number | undefined;
+  /** Set once the visitor swipes or uses the pagination: the hint has no job then. */
+  private heroInteracted = false;
   private componentDestroyed = false;
   private heroMobileMedia: MediaQueryList | undefined;
   private heroColorSwapTimer: number | undefined;
@@ -126,6 +137,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly heroSwipeHintVisible = signal(false);
   readonly heroPeekActive = signal(false);
+  /** Eases the peek layers home after an interrupt instead of snapping them. */
+  readonly heroPeekReleasing = signal(false);
 
   // ── Hero colour swatches ────────────────────────────────────────────────
   /** Colour the visitor tapped on the active slide, or '' for the slide default. */
@@ -269,7 +282,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.metaTimer) clearTimeout(this.metaTimer);
     if (this.heroSwipeHintTimer) clearTimeout(this.heroSwipeHintTimer);
     if (this.heroSwipeHintDismissTimer) clearTimeout(this.heroSwipeHintDismissTimer);
-    if (this.heroPeekTimer) clearTimeout(this.heroPeekTimer);
+    if (this.heroPeekReleaseTimer) clearTimeout(this.heroPeekReleaseTimer);
+    if (this.heroPeekReleaseFrame) cancelAnimationFrame(this.heroPeekReleaseFrame);
     if (this.heroColorSwapTimer) clearTimeout(this.heroColorSwapTimer);
     if (this.heroGeometryFrame) cancelAnimationFrame(this.heroGeometryFrame);
     this.heroGeometryObserver?.disconnect();
@@ -331,6 +345,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   selectAdjacentHeroItem(direction: -1 | 1): void {
+    this.heroInteracted = true;
     this.dismissHeroSwipeHint();
     const total = this.heroItems().length;
     if (total < 2) return;
@@ -340,6 +355,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Jump straight to a slide from the mobile pagination control. */
   selectHeroItem(index: number): void {
+    this.heroInteracted = true;
     this.dismissHeroSwipeHint();
     const total = this.heroItems().length;
     if (index < 0 || index >= total || index === this.activeHeroItemIndex()) return;
@@ -348,6 +364,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onHeroPointerDown(event: PointerEvent): void {
     if (this.isHeroControl(event.target) || this.heroItems().length < 2) return;
+    this.heroInteracted = true;
     this.stopHeroPeek();
     this.heroSwipeStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
   }
@@ -382,6 +399,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       this.heroSwipeHintPreparing ||
       this.heroSwipeHintShown ||
       this.heroSwipeHintVisible() ||
+      // Someone who has already swiped does not need to be taught the gesture.
+      this.heroInteracted ||
+      this.heroHintSeenThisSession() ||
       this.heroItems().length < 2 ||
       !window.matchMedia('(max-width: 760px)').matches
     ) {
@@ -394,6 +414,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       this.heroSwipeHintPreparing = false;
       if (
         this.componentDestroyed ||
+        this.heroInteracted ||
         this.heroItems().length < 2 ||
         !window.matchMedia('(max-width: 760px)').matches
       ) {
@@ -403,23 +424,26 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       // Let the finished hero settle before demonstrating its gesture.
       this.heroSwipeHintTimer = window.setTimeout(() => {
         this.heroSwipeHintTimer = undefined;
-        if (this.componentDestroyed) return;
+        // The visitor may have swiped during this 1400ms wait.
+        if (this.componentDestroyed || this.heroInteracted) return;
 
         this.heroSwipeHintShown = true;
+        this.markHeroHintSeen();
         this.heroSwipeHintVisible.set(true);
 
-        if (!this.prefersReducedMotion()) {
+        const reducedMotion = this.prefersReducedMotion();
+        if (!reducedMotion) {
           this.heroPeekActive.set(true);
-          this.heroPeekTimer = window.setTimeout(() => {
-            this.heroPeekTimer = undefined;
-            this.heroPeekActive.set(false);
-          }, 2400);
         }
 
+        // A buffer past the final keyframe: dismissing exactly on the animation
+        // duration could pull the class on its last frame and snap the layers.
         this.heroSwipeHintDismissTimer = window.setTimeout(() => {
           this.heroSwipeHintDismissTimer = undefined;
           this.dismissHeroSwipeHint();
-        }, 7000);
+        }, reducedMotion
+          ? 5000
+          : (HERO_PEEK_DURATION_MS * HERO_PEEK_ITERATIONS) + 200);
       }, 1400);
     });
   }
@@ -437,12 +461,76 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.heroSwipeHintVisible.set(false);
   }
 
+  /**
+   * Dropping the animation class alone would leave the layers wherever the
+   * current frame put them and snap them to rest, which reads as a glitch when
+   * the visitor swipes mid-demo. `.is-peek-releasing` transitions them home
+   * instead, and is cleared once that transition has run.
+   */
   private stopHeroPeek(): void {
-    if (this.heroPeekTimer) {
-      clearTimeout(this.heroPeekTimer);
-      this.heroPeekTimer = undefined;
+    const wasPeeking = this.heroPeekActive();
+    if (!wasPeeking) {
+      this.heroPeekActive.set(false);
+      return;
     }
+
+    // Simply dropping the animation class would jump the layers to their resting
+    // transform on the current frame, and a CSS transition cannot interpolate
+    // away from a keyframed value that has just been removed. So the live
+    // transform is pinned inline first, the animation is dropped, and only then
+    // is the inline value cleared so the transition has a real starting point.
+    const layers = this.heroPeekLayers();
+    for (const layer of layers) {
+      layer.style.transform = getComputedStyle(layer).transform;
+      layer.style.opacity = getComputedStyle(layer).opacity;
+    }
+
     this.heroPeekActive.set(false);
+    this.heroPeekReleasing.set(true);
+
+    if (this.heroPeekReleaseTimer) clearTimeout(this.heroPeekReleaseTimer);
+    // Next frame: the pinned values are now the committed style, so removing
+    // them animates under the `.is-peek-releasing` transition.
+    if (this.heroPeekReleaseFrame) cancelAnimationFrame(this.heroPeekReleaseFrame);
+    this.heroPeekReleaseFrame = requestAnimationFrame(() => {
+      this.heroPeekReleaseFrame = undefined;
+      for (const layer of layers) {
+        layer.style.transform = '';
+        layer.style.opacity = '';
+      }
+    });
+
+    this.heroPeekReleaseTimer = window.setTimeout(() => {
+      this.heroPeekReleaseTimer = undefined;
+      this.heroPeekReleasing.set(false);
+    }, HERO_PEEK_RELEASE_MS);
+  }
+
+  /** The two layers the gesture demo moves: the active product and the edge sliver. */
+  private heroPeekLayers(): HTMLElement[] {
+    const stage = this.heroStageElement?.nativeElement;
+    if (!stage) return [];
+    return [
+      stage.querySelector<HTMLElement>('.hero-product__image.is-active'),
+      stage.querySelector<HTMLElement>('.hero-next-peek'),
+    ].filter((el): el is HTMLElement => el !== null);
+  }
+
+  /** sessionStorage is unavailable in private-mode Safari, so it never throws here. */
+  private heroHintSeenThisSession(): boolean {
+    try {
+      return sessionStorage.getItem(HERO_HINT_SESSION_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  private markHeroHintSeen(): void {
+    try {
+      sessionStorage.setItem(HERO_HINT_SESSION_KEY, '1');
+    } catch {
+      /* Storage blocked: the in-memory guard still prevents a repeat this view. */
+    }
   }
 
   /**

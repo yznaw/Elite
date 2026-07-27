@@ -1133,6 +1133,9 @@
     place-items: center;
     flex: 1 1 auto;
     width: 100%;
+    /* Clips the edge sliver. Scoped to mobile: the desktop callout lines are
+       measured against this same box and would be cut off by a clip there. */
+    overflow: hidden;
     /* Matches .hero-product's 1.4:1 box so no dead space sits under the art.
        The svh cap only limits height here; it never feeds back into the width,
        so a chrome-driven svh change cannot resize the art. */
@@ -1173,29 +1176,45 @@
     object-position: center 44%;
   }
 
-  /* First-load gesture teaching: the active product yields just enough for
-     the next leather piece to appear at the edge. The preview is derived from
-     the live slide array, so the behaviour scales to any number of products. */
+  /* Continuation affordance. The next product lives permanently at the trailing
+     edge with most of its body outside the frame, so the stage clips it into a
+     sliver. A preview only reads as "there is more this way" when the frame cuts
+     it off; a fully visible floating image reads as a stray asset instead.
+     Unlike the swipe pill this is shown for the whole mobile session, not only
+     while the hint animation runs. `--peek-hidden` is the share pushed past the
+     edge, so the visible sliver is the remaining ~24% of `--peek-width`. */
   .hero-next-peek {
+    --peek-width: min(30vw, 124px);
+    --peek-hidden: 76%;
+
     position: absolute;
     top: 50%;
-    right: -32vw;
+    inset-inline-end: 0;
     z-index: 4;
-    width: min(58vw, 290px);
-    height: min(70%, 330px);
+    width: var(--peek-width);
+    height: min(56%, 244px);
     display: block;
-    opacity: 0;
+    /* Periphery, never a second subject: it must not compete with the centred
+       product for attention while sitting there at rest. */
+    opacity: 0.42;
     pointer-events: none;
-    transform: translate(18px, -50%) scale(0.94);
-    filter: drop-shadow(-12px 18px 24px rgba(68, 42, 22, 0.12));
-    background: radial-gradient(
-      circle at 72% 50%,
-      rgba(221, 198, 157, 0.62),
-      rgba(248, 241, 226, 0.34) 58%,
-      transparent 76%
-    );
-    mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.62) 38%, #000 72%);
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.62) 38%, #000 72%);
+    transform: translate(var(--peek-hidden), -50%) scale(0.92);
+    transform-origin: center right;
+    transition:
+      opacity 220ms cubic-bezier(0.33, 1, 0.68, 1),
+      transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+    /* Dissolve toward the outer edge instead of ending on a hard vertical cut. */
+    mask-image: linear-gradient(to left, transparent 0, #000 45%);
+    -webkit-mask-image: linear-gradient(to left, transparent 0, #000 45%);
+  }
+
+  /* In RTL the carousel advances the other way, so the sliver belongs on the
+     leading edge and its mask and origin flip with it. */
+  :host-context(html[dir='rtl']) .hero-next-peek {
+    transform: translate(calc(-1 * var(--peek-hidden)), -50%) scale(0.92);
+    transform-origin: center left;
+    mask-image: linear-gradient(to right, transparent 0, #000 45%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 45%);
   }
 
   .hero-next-peek img {
@@ -1203,16 +1222,51 @@
     height: 100%;
     display: block;
     object-fit: contain;
+    /* Mirrors the active product so both shoes sit at the same optical height
+       rather than reading as two unrelated crops. */
+    object-position: center 44%;
     transform: none;
-    mix-blend-mode: multiply;
   }
 
+  /* ── Gesture demonstration ─────────────────────────────────────────
+     Both layers travel the same `--peek-shift` in the same direction, which is
+     the physical model of a real swipe: a single track moving under the finger.
+     Animating them by different distances (the earlier approach) gave the eye
+     no causal link, so the motion taught nothing. */
+  .hero-stage {
+    --peek-shift: clamp(28px, 8vw, 44px);
+  }
+
+  /* Two short passes rather than one long one. A brief gesture repeated reads as
+     a deliberate demonstration; a single slow pass reads as a stuck layout. The
+     iterations run back to back, and the pause between them is the keyframes'
+     own rest position, held from 58% through 100% and across into the next 0%. */
   .hero-stage.is-leather-peeking .hero-product__image.is-active {
-    animation: leatherPeekCurrent 2400ms cubic-bezier(0.77, 0, 0.175, 1) both;
+    animation: leatherPeekCurrent 1500ms cubic-bezier(0.33, 1, 0.68, 1) 2 both;
   }
 
   .hero-stage.is-leather-peeking .hero-next-peek {
-    animation: leatherPeekNext 2400ms cubic-bezier(0.77, 0, 0.175, 1) both;
+    /* The resting transition would fight the keyframes mid-flight. */
+    transition: none;
+    animation: leatherPeekNext 1500ms cubic-bezier(0.33, 1, 0.68, 1) 2 both;
+  }
+
+  :host-context(html[dir='rtl']) .hero-stage.is-leather-peeking .hero-product__image.is-active {
+    animation-name: leatherPeekCurrentRtl;
+  }
+
+  :host-context(html[dir='rtl']) .hero-stage.is-leather-peeking .hero-next-peek {
+    animation-name: leatherPeekNextRtl;
+  }
+
+  /* Interrupted by a real swipe: ease the layers home over ~180ms rather than
+     dropping the animation class and snapping to rest on the current frame. */
+  .hero-stage.is-peek-releasing .hero-product__image.is-active,
+  .hero-stage.is-peek-releasing .hero-next-peek {
+    animation: none;
+    transition:
+      opacity 180ms cubic-bezier(0.33, 1, 0.68, 1),
+      transform 180ms cubic-bezier(0.33, 1, 0.68, 1);
   }
 
   /* The cue borrows the warm leather colour and a stitched border. It overlays
@@ -1228,20 +1282,24 @@
     align-items: center;
     gap: 7px;
     padding: 4px 11px;
-    border: 1px dashed rgba(184, 150, 90, 0.78);
+    /* A hairline rather than a dashed rule: dashes read as a coupon badge, not
+       as a luxury storefront. */
+    border: 1px solid rgba(184, 150, 90, 0.34);
     border-radius: 999px;
-    background: rgba(250, 245, 235, 0.9);
-    color: #8f6d32;
+    background: rgba(250, 245, 235, 0.82);
+    /* 5.48:1 on the composited pill background. The previous #8f6d32 measured
+       4.36:1 and missed the WCAG AA 4.5:1 floor. */
+    color: #7d5e28;
     box-shadow: 0 8px 22px rgba(87, 58, 31, 0.09);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     line-height: 1;
     white-space: nowrap;
-    transform: translateX(-50%);
-    animation: leatherHintIn 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.96);
     pointer-events: none;
   }
 
@@ -1250,8 +1308,19 @@
     letter-spacing: 0;
   }
 
+  /* Single iteration against the layers' two: once the motion has been seen the
+     words are redundant, so the pill retires after the first pass. */
+  .hero-stage.is-leather-peeking .hero-swipe-hint {
+    animation: leatherSwipeTag 1500ms cubic-bezier(0.33, 1, 0.68, 1) both;
+  }
+
   .hero-stage.is-leather-peeking .hero-swipe-hint__arrow {
-    animation: leatherHintArrow 2400ms cubic-bezier(0.77, 0, 0.175, 1) both;
+    animation: leatherHintArrow 1500ms cubic-bezier(0.33, 1, 0.68, 1) both;
+  }
+
+  /* The glyph is flipped for RTL in the template, so its travel flips too. */
+  :host-context(html[dir='rtl']) .hero-stage.is-leather-peeking .hero-swipe-hint__arrow {
+    animation-name: leatherHintArrowRtl;
   }
 
   .hero-arrow {
@@ -1582,50 +1651,99 @@
   }
 }
 
+/* One track, one displacement. The incoming layer advances by the same
+   `--peek-shift` as the outgoing one, revealing more of itself without ever
+   reaching parity: it stays dimmer and smaller so it always reads as "next",
+   never as a peer competing with the active product.
+
+   The peak is held for roughly 240ms (42% to 58%) rather than the ~940ms the
+   earlier 2600ms version froze for. A long hold is what made the state read as
+   a broken layout instead of a demonstration. */
+@keyframes leatherPeekNext {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translate(var(--peek-hidden), -50%) scale(0.92);
+  }
+  42%,
+  58% {
+    opacity: 0.82;
+    transform:
+      translate(calc(var(--peek-hidden) - var(--peek-shift)), -50%)
+      scale(0.97);
+  }
+}
+
 @keyframes leatherPeekCurrent {
   0%,
-  12%,
   100% {
     transform: translateX(0) scale(1);
   }
-  48%,
-  70% {
-    transform: translateX(-46px) scale(0.985);
+  42%,
+  58% {
+    transform: translateX(calc(-1 * var(--peek-shift))) scale(0.985);
   }
 }
 
-@keyframes leatherPeekNext {
+/* RTL advances the opposite way, so both layers travel in reverse. */
+@keyframes leatherPeekNextRtl {
   0%,
-  12%,
   100% {
-    opacity: 0;
-    transform: translate(18px, -50%) scale(0.94);
+    opacity: 0.42;
+    transform: translate(calc(-1 * var(--peek-hidden)), -50%) scale(0.92);
   }
-  48%,
-  70% {
-    opacity: 0.96;
-    transform: translate(-15vw, -50%) scale(0.99);
+  42%,
+  58% {
+    opacity: 0.82;
+    transform:
+      translate(calc(var(--peek-shift) - var(--peek-hidden)), -50%)
+      scale(0.97);
   }
 }
 
+@keyframes leatherPeekCurrentRtl {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+  42%,
+  58% {
+    transform: translateX(var(--peek-shift)) scale(0.985);
+  }
+}
+
+/* The glyph travels with the track instead of pulsing in place, so arrow and
+   motion agree on a single direction. */
 @keyframes leatherHintArrow {
   0%,
-  12%,
   100% {
-    transform: scaleX(1);
+    transform: translateX(0);
   }
-  48%,
-  70% {
-    transform: scaleX(1.28);
+  42%,
+  58% {
+    transform: translateX(4px);
   }
 }
 
-@keyframes leatherHintIn {
-  from {
+@keyframes leatherHintArrowRtl {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  42%,
+  58% {
+    transform: translateX(-4px);
+  }
+}
+
+@keyframes leatherSwipeTag {
+  0%,
+  100% {
     opacity: 0;
     transform: translate(-50%, 6px) scale(0.96);
   }
-  to {
+  42%,
+  58% {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
   }
@@ -1676,7 +1794,15 @@
     animation: none;
   }
 
-  .hero-stage.is-leather-peeking .hero-next-peek {
-    opacity: 0;
+  /* The sliver stays. Reduced motion should remove movement, not information:
+     hiding it here would strip the continuation affordance from exactly the
+     users who never get the gesture demonstrated to them. */
+  .hero-next-peek {
+    transition: none;
+  }
+
+  .hero-swipe-hint {
+    opacity: 1;
+    transform: translateX(-50%);
   }
 }
