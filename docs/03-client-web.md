@@ -99,6 +99,7 @@ The home page hero is a luxury bilingual brand landing moment for élite. It use
 - Each pill includes a matching thumbnail crop and highlights its line/dot on hover.
 - Slides advance by horizontal swipe on touch, by the desktop arrows, or by the mobile pagination segments.
 - Mobile hides floating callouts and the arrows, and stacks: product name, product, pagination, short description, CTA.
+- On first visit, mobile plays a one-time swipe demonstration that slides the next slide's product in from the trailing edge.
 
 ### Mobile Hero Layout
 
@@ -107,7 +108,8 @@ Mobile (`max-width: 760px`) is a centered flex column driven by two custom prope
 | Block | Element | Notes |
 |---|---|---|
 | Name + subtitle | `.hero-brand` | `aria-live="polite"` so slide changes are announced |
-| Product | `.hero-stage` / `.hero-product` | `touch-action: pan-y` keeps vertical page scroll working |
+| Product | `.hero-stage` / `.hero-product` | `touch-action: pan-y` keeps vertical page scroll working; `overflow: hidden` clips the entering preview |
+| Side preview | `.hero-next-peek` | Next slide's product, offscreen at rest, slid in only during the one-time swipe demo |
 | Pagination | `.hero-pagination` | One segment per slide, `role="tablist"`, rendered only when there are 2+ slides |
 | Description | `.hero-description` | Per-slide selling copy, capped near two lines |
 | Swatches | `.hero-swatches` | Up to 4 colourways plus a "+" link to the product |
@@ -179,13 +181,43 @@ Two things must stay in step or the image renders soft:
 > The admin media picker must save the **full-size** URL (`storageUrl`), not `preview`. `preview` is the 640px card variant, intended for picker thumbnails.
 - Every swatch carries an inset ring so white, cream, and milk stay visible against the cream canvas, and sits in a 44px tap target.
 
-Swipe feedback lives in `home.component.ts`:
-
-- `onHeroPointerMove` nudges the active image by `dx * 0.35` (clamped to 72px) by writing `style.transform` directly on the element, so dragging never triggers Angular change detection per frame. `resetHeroDragTransform` hands the element back to the stylesheet on pointerup or pointercancel.
-- `heroSlideDirection` is mirrored onto `.hero-stage[data-slide-direction]`, so the incoming slide enters from the side the user swiped toward.
-- Both effects are disabled under `prefers-reduced-motion: reduce` (in the component for the drag, in SCSS for the entry animations).
+Swipe handling lives in `home.component.ts`. `onHeroPointerDown` / `onHeroPointerUp` / `onHeroPointerCancel` record a start point and commit a slide change on release past a 44px horizontal threshold, requiring the gesture to be more horizontal than vertical (`|dx| > |dy| * 1.4`) so vertical page scroll still works. There is deliberately **no per-frame drag transform**: directional movement combined with a finger release made the product appear to shake, so ordinary slide changes are a plain opacity crossfade.
 
 CTA contrast: `#004538` on `#ffffff` is 12.4:1, clearing WCAG AA and AAA. Pagination segments carry a 44px tall hit area for WCAG 2.5.5.
+
+### Hero Side Preview and Swipe Hint
+
+On mobile a one-time animation demonstrates the swipe gesture by sliding the next slide's product (`.hero-next-peek`) in from the trailing edge while the active product yields.
+
+> [!IMPORTANT]
+> The preview rests **fully outside the frame** and exists only mid-gesture. It is deliberately not a persistent edge sliver. `--mobile-product-size` is `min(124vw, 620px)` by design (see *Hero Image Geometry*), so the active product overflows roughly **81px past each edge** at 390px wide. A resting sliver was measured overlapping the active shoe by 101px and read as a cream smudge on top of it rather than as a second product. There is no free edge lane on a phone unless the hero art is shrunk, which would reverse a deliberate sizing decision.
+
+**The demo moves both layers by the same `--peek-shift`.** That shared displacement is the physical model of a real swipe: one track moving under the finger. An earlier version moved the active product 14px and the incoming one ~150px, which gave the eye no causal link and taught nothing.
+
+The two dials live on `.hero-stage`:
+
+| Variable | Value | Role |
+|---|---|---|
+| `--peek-shift` | `clamp(88px, 26vw, 128px)` | How far the active product yields. Must **exceed the product's own right overflow** (~81px) or the preview lands on top of the current shoe rather than beside it. |
+| `--peek-reveal` | `clamp(62px, 18vw, 92px)` | How much of the incoming product shows at the peak. Kept below `--peek-shift` so it occupies vacated space. |
+
+Other treatment: the stage carries `overflow: hidden` on mobile so the preview enters from a hard edge instead of appearing in mid-air; a `mask-image` gradient softens that boundary; `object-position: center 44%` matches the active product so both shoes sit at the same optical height; and the incoming layer peaks at `opacity: 0.92` / `scale(0.97)`, never reaching parity, so it always reads as "next". RTL flips the entry edge, mask, transform origin, and both keyframe sets via `:host-context(html[dir='rtl'])`, with the pill arrow flipping to `←` in the template.
+
+Timing is **1500ms run twice** rather than one long pass, with the peak held only from 42% to 58% (~240ms). A long frozen peak is what makes such a state read as a broken layout instead of a demonstration.
+
+Guards in `home.component.ts`:
+
+- The hint is skipped entirely if the visitor has already swiped or used the pagination (`heroInteracted`), checked both before scheduling and again when the 1400ms settle timer fires.
+- `sessionStorage` (`elite:hero-swipe-hint-shown`) scopes it to once per visit rather than once per navigation to `/`. Access is wrapped in `try/catch` for private-mode Safari.
+- The dismiss timer is `duration × iterations + 200ms`. Dismissing exactly on the animation duration could pull the class on its final frame.
+- Swiping mid-demo eases the layers home over 180ms via `.is-peek-releasing` rather than snapping. `stopHeroPeek` pins the live computed transform inline, drops the animation, then releases the pin. Two details are load-bearing and were both verified against a real touch event, since each fails silently:
+  - The pin must use `setProperty(..., 'important')`. The keyframes are still running when it is written, and a running animation outranks a plain inline style, so without `!important` the pinned value is ignored and the snap happens anyway.
+  - The release must wait **two** animation frames. One frame is not enough for Angular to flush the class change, so the inline value gets cleared before it has been committed as the transition's starting style.
+
+> [!NOTE]
+> Under `prefers-reduced-motion: reduce` the preview stays hidden: it only ever exists mid-gesture, so there is nothing to show statically. Those users are served by the swipe pill, which stays legible for 5s, and by the pagination segments, which show the slide count directly.
+
+Swipe-hint pill text is `#7d5e28`, measured at 5.48:1 against its composited background. The previous `#8f6d32` measured 4.36:1 and missed the WCAG AA 4.5:1 floor.
 
 ### Hero Assets
 
@@ -227,6 +259,11 @@ Manual QA:
 - Hover each desktop callout and confirm the connector line/dot highlight.
 - Confirm the CTA is visible in the first desktop viewport.
 - Check mobile widths to ensure the feature cards stack cleanly and the floating desktop callouts are hidden.
+- On a mobile viewport, wait ~1.4s after load and confirm the swipe demo plays: the active product slides left and the next product enters from the trailing edge, recognisably a shoe rather than a cream smudge. `--peek-shift` and `--peek-reveal` are the two dials if it needs tuning.
+- Swipe **during** the demo and confirm the layers ease home over ~180ms rather than snapping.
+- Reload and confirm the demo does not replay in the same session.
+- Switch to Arabic and confirm the preview enters from the leading edge and the pill arrow points `←`.
+- With `prefers-reduced-motion: reduce`, confirm nothing animates and the swipe pill still appears.
 
 ---
 

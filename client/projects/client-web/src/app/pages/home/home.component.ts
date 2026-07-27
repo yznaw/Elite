@@ -474,36 +474,45 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    // Simply dropping the animation class would jump the layers to their resting
-    // transform on the current frame, and a CSS transition cannot interpolate
-    // away from a keyframed value that has just been removed. So the live
-    // transform is pinned inline first, the animation is dropped, and only then
-    // is the inline value cleared so the transition has a real starting point.
+    // Dropping the animation class alone snaps the layers to their resting
+    // transform, because a CSS transition cannot interpolate away from a
+    // keyframed value that has just been removed. So the live transform is
+    // pinned inline first and only released once the class change has actually
+    // reached the DOM.
+    //
+    // The pin needs `!important`: the keyframes are still running at this point
+    // and a running animation outranks a plain inline style, so without it the
+    // pinned value is ignored and the snap happens anyway.
     const layers = this.heroPeekLayers();
     for (const layer of layers) {
-      layer.style.transform = getComputedStyle(layer).transform;
-      layer.style.opacity = getComputedStyle(layer).opacity;
+      const { transform, opacity } = getComputedStyle(layer);
+      layer.style.setProperty('transform', transform, 'important');
+      layer.style.setProperty('opacity', opacity, 'important');
     }
 
     this.heroPeekActive.set(false);
     this.heroPeekReleasing.set(true);
 
     if (this.heroPeekReleaseTimer) clearTimeout(this.heroPeekReleaseTimer);
-    // Next frame: the pinned values are now the committed style, so removing
-    // them animates under the `.is-peek-releasing` transition.
     if (this.heroPeekReleaseFrame) cancelAnimationFrame(this.heroPeekReleaseFrame);
+    // Two frames: the first lets Angular flush the class change and the browser
+    // commit the pinned value as the starting style, the second releases it so
+    // the `.is-peek-releasing` transition has something to interpolate from.
     this.heroPeekReleaseFrame = requestAnimationFrame(() => {
-      this.heroPeekReleaseFrame = undefined;
-      for (const layer of layers) {
-        layer.style.transform = '';
-        layer.style.opacity = '';
-      }
+      this.heroPeekReleaseFrame = requestAnimationFrame(() => {
+        this.heroPeekReleaseFrame = undefined;
+        for (const layer of layers) {
+          layer.style.removeProperty('transform');
+          layer.style.removeProperty('opacity');
+        }
+        // Started here, not above: the transition only begins on this frame, so
+        // timing it from the tap would drop the class before it finished.
+        this.heroPeekReleaseTimer = window.setTimeout(() => {
+          this.heroPeekReleaseTimer = undefined;
+          this.heroPeekReleasing.set(false);
+        }, HERO_PEEK_RELEASE_MS);
+      });
     });
-
-    this.heroPeekReleaseTimer = window.setTimeout(() => {
-      this.heroPeekReleaseTimer = undefined;
-      this.heroPeekReleasing.set(false);
-    }, HERO_PEEK_RELEASE_MS);
   }
 
   /** The two layers the gesture demo moves: the active product and the edge sliver. */

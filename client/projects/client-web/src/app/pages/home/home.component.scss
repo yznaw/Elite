@@ -1133,8 +1133,10 @@
     place-items: center;
     flex: 1 1 auto;
     width: 100%;
-    /* Clips the edge sliver. Scoped to mobile: the desktop callout lines are
-       measured against this same box and would be cut off by a clip there. */
+    /* Keeps the incoming preview clipped to the frame while it slides in, so it
+       enters from a hard edge rather than appearing in mid-air. Scoped to
+       mobile: the desktop callout lines are measured against this same box and
+       would be cut off by a clip there. */
     overflow: hidden;
     /* Matches .hero-product's 1.4:1 box so no dead space sits under the art.
        The svh cap only limits height here; it never feeds back into the width,
@@ -1176,16 +1178,19 @@
     object-position: center 44%;
   }
 
-  /* Continuation affordance. The next product lives permanently at the trailing
-     edge with most of its body outside the frame, so the stage clips it into a
-     sliver. A preview only reads as "there is more this way" when the frame cuts
-     it off; a fully visible floating image reads as a stray asset instead.
-     Unlike the swipe pill this is shown for the whole mobile session, not only
-     while the hint animation runs. `--peek-hidden` is the share pushed past the
-     edge, so the visible sliver is the remaining ~24% of `--peek-width`. */
+  /* Gesture preview for the swipe demonstration.
+   *
+   * The layer rests fully outside the frame and is only ever seen while the
+   * hint animation runs. It is deliberately NOT a persistent edge sliver: the
+   * hero product is sized past the viewport on purpose (see `--mobile-product-size`
+   * and 03-client-web.md), overflowing roughly 81px each side at 390px wide, so
+   * there is no free edge lane for a resting preview to occupy. A persistent
+   * sliver measured a 101px overlap with the active shoe and read as a smudge
+   * on top of it rather than as a second product. During the demo the active
+   * product shifts left first, which is what opens the space this layer enters.
+   */
   .hero-next-peek {
-    --peek-width: min(30vw, 124px);
-    --peek-hidden: 76%;
+    --peek-width: min(38vw, 152px);
 
     position: absolute;
     top: 50%;
@@ -1194,27 +1199,22 @@
     width: var(--peek-width);
     height: min(56%, 244px);
     display: block;
-    /* Periphery, never a second subject: it must not compete with the centred
-       product for attention while sitting there at rest. */
-    opacity: 0.42;
+    opacity: 0;
     pointer-events: none;
-    transform: translate(var(--peek-hidden), -50%) scale(0.92);
+    transform: translate(100%, -50%) scale(0.92);
     transform-origin: center right;
-    transition:
-      opacity 220ms cubic-bezier(0.33, 1, 0.68, 1),
-      transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
-    /* Dissolve toward the outer edge instead of ending on a hard vertical cut. */
-    mask-image: linear-gradient(to left, transparent 0, #000 45%);
-    -webkit-mask-image: linear-gradient(to left, transparent 0, #000 45%);
+    /* Softens the clipped edge as the layer crosses the frame boundary. */
+    mask-image: linear-gradient(to left, transparent 0, #000 22%);
+    -webkit-mask-image: linear-gradient(to left, transparent 0, #000 22%);
   }
 
-  /* In RTL the carousel advances the other way, so the sliver belongs on the
-     leading edge and its mask and origin flip with it. */
+  /* In RTL the carousel advances the other way, so the preview enters from the
+     opposite edge and its mask and origin flip with it. */
   :host-context(html[dir='rtl']) .hero-next-peek {
-    transform: translate(calc(-1 * var(--peek-hidden)), -50%) scale(0.92);
+    transform: translate(-100%, -50%) scale(0.92);
     transform-origin: center left;
-    mask-image: linear-gradient(to right, transparent 0, #000 45%);
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 45%);
+    mask-image: linear-gradient(to right, transparent 0, #000 22%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22%);
   }
 
   .hero-next-peek img {
@@ -1234,7 +1234,14 @@
      Animating them by different distances (the earlier approach) gave the eye
      no causal link, so the motion taught nothing. */
   .hero-stage {
-    --peek-shift: clamp(28px, 8vw, 44px);
+    /* How far the active product yields. This is what opens the lane the
+       preview enters. It has to exceed the product's own right overflow
+       (~81px at 390px wide, since `--mobile-product-size` is 124vw by design)
+       or the preview lands on top of the current shoe instead of beside it. */
+    --peek-shift: clamp(88px, 26vw, 128px);
+    /* How much of the incoming product shows at the peak. Kept below
+       `--peek-shift` so it occupies vacated space rather than overlapping. */
+    --peek-reveal: clamp(62px, 18vw, 92px);
   }
 
   /* Two short passes rather than one long one. A brief gesture repeated reads as
@@ -1246,8 +1253,6 @@
   }
 
   .hero-stage.is-leather-peeking .hero-next-peek {
-    /* The resting transition would fight the keyframes mid-flight. */
-    transition: none;
     animation: leatherPeekNext 1500ms cubic-bezier(0.33, 1, 0.68, 1) 2 both;
   }
 
@@ -1263,10 +1268,12 @@
      dropping the animation class and snapping to rest on the current frame. */
   .hero-stage.is-peek-releasing .hero-product__image.is-active,
   .hero-stage.is-peek-releasing .hero-next-peek {
-    animation: none;
+    /* `!important` so this wins over the mobile crossfade transition declared
+       earlier for `.hero-stage .hero-product__image`, which is more specific. */
+    animation: none !important;
     transition:
       opacity 180ms cubic-bezier(0.33, 1, 0.68, 1),
-      transform 180ms cubic-bezier(0.33, 1, 0.68, 1);
+      transform 180ms cubic-bezier(0.33, 1, 0.68, 1) !important;
   }
 
   /* The cue borrows the warm leather colour and a stitched border. It overlays
@@ -1662,15 +1669,15 @@
 @keyframes leatherPeekNext {
   0%,
   100% {
-    opacity: 0.42;
-    transform: translate(var(--peek-hidden), -50%) scale(0.92);
+    opacity: 0;
+    transform: translate(100%, -50%) scale(0.92);
   }
   42%,
   58% {
-    opacity: 0.82;
-    transform:
-      translate(calc(var(--peek-hidden) - var(--peek-shift)), -50%)
-      scale(0.97);
+    opacity: 0.92;
+    /* Comes to rest just inside the frame: the layer travels its own width less
+       the reveal, so `--peek-reveal` of it ends up visible at the peak. */
+    transform: translate(calc(100% - var(--peek-reveal)), -50%) scale(0.97);
   }
 }
 
@@ -1689,15 +1696,13 @@
 @keyframes leatherPeekNextRtl {
   0%,
   100% {
-    opacity: 0.42;
-    transform: translate(calc(-1 * var(--peek-hidden)), -50%) scale(0.92);
+    opacity: 0;
+    transform: translate(-100%, -50%) scale(0.92);
   }
   42%,
   58% {
-    opacity: 0.82;
-    transform:
-      translate(calc(var(--peek-shift) - var(--peek-hidden)), -50%)
-      scale(0.97);
+    opacity: 0.92;
+    transform: translate(calc(var(--peek-reveal) - 100%), -50%) scale(0.97);
   }
 }
 
@@ -1794,11 +1799,12 @@
     animation: none;
   }
 
-  /* The sliver stays. Reduced motion should remove movement, not information:
-     hiding it here would strip the continuation affordance from exactly the
-     users who never get the gesture demonstrated to them. */
+  /* With no motion there is no preview to show: the layer only ever exists
+     mid-gesture. Reduced-motion users are instead served by the swipe pill,
+     which stays legible for 5s (see `scheduleHeroSwipeHint`), and by the
+     pagination segments, which show the slide count directly. */
   .hero-next-peek {
-    transition: none;
+    opacity: 0;
   }
 
   .hero-swipe-hint {
