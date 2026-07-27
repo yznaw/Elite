@@ -61,6 +61,10 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private heroSwipeHintTimer: number | undefined;
   private heroSwipeHintDismissTimer: number | undefined;
   private heroPeekTimer: number | undefined;
+  private heroSwipeHintPreparing = false;
+  private heroSwipeHintShown = false;
+  private componentDestroyed = false;
+  private heroMobileMedia: MediaQueryList | undefined;
   private heroColorSwapTimer: number | undefined;
   private heroColorRequestId = 0;
   private heroSlideRequestId = 0;
@@ -69,6 +73,13 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private heroGeometryObserver: ResizeObserver | undefined;
   private heroGeometryFrame: number | undefined;
   private heroCalloutChanges: Subscription | undefined;
+  private readonly onHeroMobileViewportChange = (event: MediaQueryListEvent): void => {
+    if (event.matches && this.pageReady()) {
+      this.scheduleHeroSwipeHint();
+    } else if (!event.matches) {
+      this.dismissHeroSwipeHint();
+    }
+  };
 
   @ViewChild('heroStage') private heroStageElement?: ElementRef<HTMLElement>;
   @ViewChild('heroProduct') private heroProductElement?: ElementRef<HTMLElement>;
@@ -233,6 +244,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.heroMobileMedia = window.matchMedia('(max-width: 760px)');
+    this.heroMobileMedia.addEventListener('change', this.onHeroMobileViewportChange);
     void this.referenceData.ensureColors();
     void Promise.all([
       this.loadCollectionTiles(),
@@ -251,6 +264,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.componentDestroyed = true;
+    this.heroMobileMedia?.removeEventListener('change', this.onHeroMobileViewportChange);
     if (this.metaTimer) clearTimeout(this.metaTimer);
     if (this.heroSwipeHintTimer) clearTimeout(this.heroSwipeHintTimer);
     if (this.heroSwipeHintDismissTimer) clearTimeout(this.heroSwipeHintDismissTimer);
@@ -364,6 +379,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private scheduleHeroSwipeHint(): void {
     if (
       this.heroSwipeHintTimer ||
+      this.heroSwipeHintPreparing ||
+      this.heroSwipeHintShown ||
       this.heroSwipeHintVisible() ||
       this.heroItems().length < 2 ||
       !window.matchMedia('(max-width: 760px)').matches
@@ -371,25 +388,40 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.heroSwipeHintTimer = window.setTimeout(() => {
-      this.heroSwipeHintTimer = undefined;
-      if (this.heroItems().length < 2 || !window.matchMedia('(max-width: 760px)').matches) return;
-
-      this.heroSwipeHintVisible.set(true);
-
-      if (!this.prefersReducedMotion()) {
-        this.heroPeekActive.set(true);
-        this.heroPeekTimer = window.setTimeout(() => {
-          this.heroPeekTimer = undefined;
-          this.heroPeekActive.set(false);
-        }, 1500);
+    this.heroSwipeHintPreparing = true;
+    const nextImageUrl = this.nextHeroItem()?.imageUrl || '';
+    void this.ensureHeroImageReady(nextImageUrl).then(() => {
+      this.heroSwipeHintPreparing = false;
+      if (
+        this.componentDestroyed ||
+        this.heroItems().length < 2 ||
+        !window.matchMedia('(max-width: 760px)').matches
+      ) {
+        return;
       }
 
-      this.heroSwipeHintDismissTimer = window.setTimeout(() => {
-        this.heroSwipeHintDismissTimer = undefined;
-        this.dismissHeroSwipeHint();
-      }, 5000);
-    }, 900);
+      // Let the finished hero settle before demonstrating its gesture.
+      this.heroSwipeHintTimer = window.setTimeout(() => {
+        this.heroSwipeHintTimer = undefined;
+        if (this.componentDestroyed) return;
+
+        this.heroSwipeHintShown = true;
+        this.heroSwipeHintVisible.set(true);
+
+        if (!this.prefersReducedMotion()) {
+          this.heroPeekActive.set(true);
+          this.heroPeekTimer = window.setTimeout(() => {
+            this.heroPeekTimer = undefined;
+            this.heroPeekActive.set(false);
+          }, 2400);
+        }
+
+        this.heroSwipeHintDismissTimer = window.setTimeout(() => {
+          this.heroSwipeHintDismissTimer = undefined;
+          this.dismissHeroSwipeHint();
+        }, 7000);
+      }, 1400);
+    });
   }
 
   private dismissHeroSwipeHint(): void {
