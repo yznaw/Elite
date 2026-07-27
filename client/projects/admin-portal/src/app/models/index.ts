@@ -30,8 +30,12 @@ export interface Product {
   imageColors?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
+  /** Long description shown on the product detail page. */
   enDesc?: string;
   arDesc?: string;
+  /** Short marketing line for compact surfaces such as the home hero. */
+  shortEn?: string;
+  shortAr?: string;
   metaTitle?: string;
   metaDesc?: string;
   slug?: string;
@@ -60,7 +64,10 @@ export interface MediaFile {
   linkedTo: string | null;
   uploader: string;
   initials: string;
+  /** Small card-sized variant (~640px). For thumbnails and grids only. */
   preview?: string;
+  /** Full-resolution original. Use this anywhere the image renders large. */
+  storageUrl?: string;
 }
 
 export interface OrderItem {

@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { resolveClientMediaUrl } from '../utils/media-url';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -156,10 +157,6 @@ export class ReferenceDataService {
   }
 
   private resolveMediaUrl(url: string | null | undefined): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.apiBase}${value}`;
+    return resolveClientMediaUrl(url, this.apiBase);
   }
 }

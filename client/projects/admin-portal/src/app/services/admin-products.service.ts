@@ -12,6 +12,8 @@ export interface SaveProductPayload {
   hidden: boolean;
   enDesc: string;
   arDesc: string;
+  shortEn: string;
+  shortAr: string;
   metaTitle: string;
   metaDesc: string;
   slug: string;

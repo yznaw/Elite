@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { EMPTY_HOME_CONTENT, HomeContentData, createEmptyHomeContent } from '../models/home-content.model';
+import { resolveClientMediaUrl } from '../utils/media-url';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -155,6 +156,13 @@ export class HomeContentService {
         items: Array.isArray(content.heroSlider?.items)
           ? content.heroSlider.items.map((item) => ({
               ...item,
+              descriptionEn: item.descriptionEn || '',
+              descriptionAr: item.descriptionAr || '',
+              productId: item.productId || '',
+              defaultColorSlug: item.defaultColorSlug || '',
+              colors: Array.isArray(item.colors)
+                ? item.colors.map((color) => ({ ...color, imageUrl: color.imageUrl || '' }))
+                : [],
               callouts: Array.isArray(item.callouts) ? item.callouts : [],
             }))
           : fallback.heroSlider.items,
@@ -199,6 +207,10 @@ export class HomeContentService {
     next.heroSlider.items = next.heroSlider.items.map((item) => ({
       ...item,
       imageUrl: this.resolveMediaUrl(item.imageUrl),
+      colors: (item.colors ?? []).map((color) => ({
+        ...color,
+        imageUrl: this.resolveMediaUrl(color.imageUrl),
+      })),
       callouts: (item.callouts ?? []).map((cl) => ({
         ...cl,
         titleEn: cl.titleEn || cl.subtitleEn || cl.titleAr || '',
@@ -211,9 +223,6 @@ export class HomeContentService {
   }
 
   private resolveMediaUrl(url: string): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:|\/assets\/)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-    return `${this.apiBase}${value}`;
+    return resolveClientMediaUrl(url, this.apiBase);
   }
 }

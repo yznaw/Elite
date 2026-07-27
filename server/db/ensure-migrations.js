@@ -152,6 +152,10 @@ async function ensureAllMigrations(client) {
   await client.query(`
     ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS source text DEFAULT 'storefront'
   `);
+  await client.query(`
+    ALTER TABLE product_reviews
+      ADD COLUMN IF NOT EXISTS contact_consent boolean NOT NULL DEFAULT false
+  `);
 
   // ── Migration 011: allow general (non-product) feedback ───────────────────
   await client.query(`ALTER TABLE product_reviews ALTER COLUMN product_id DROP NOT NULL`);

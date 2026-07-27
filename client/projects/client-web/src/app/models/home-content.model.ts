@@ -78,12 +78,44 @@ export interface HeroCalloutContent {
   alt: string;
 }
 
+/**
+ * One featured colorway on a hero slide. `hex` is deliberately absent: colour
+ * values are resolved from `ref_colors` at render time so a colour edited in
+ * Reference Data updates every swatch across the app.
+ */
+export interface HeroColorContent {
+  /** Colour name as stored on the product variant, e.g. "Copper Brown". */
+  label: string;
+  /** URL-safe form of `label`, matched against the product page `?color=` param. */
+  slug: string;
+  /**
+   * Hero shot for this colourway, chosen in the storefront editor. Deliberately
+   * separate from the product's own gallery images: hero art is a cutout styled
+   * for the hero stage, while gallery photos serve the product detail page.
+   * Empty means this colour keeps the slide's default image.
+   */
+  imageUrl: string;
+}
+
 export interface HeroSliderItem {
   id: string;
   name: string;
   subtitle: string;
+  descriptionEn: string;
+  descriptionAr: string;
+  /**
+   * Image the slide opens on. Derived from the default colourway rather than
+   * edited directly, so the hero always opens on a real colour a visitor can
+   * then switch away from and back to.
+   */
   imageUrl: string;
   alt: string;
+  /** Product this slide links to. Empty means the swatch row is not rendered. */
+  productId: string;
+  /** Featured colourways, max 4. */
+  colors: HeroColorContent[];
+  /** Slug of the colourway the slide opens on. Falls back to the first colour. */
+  defaultColorSlug: string;
   callouts: HeroCalloutContent[];
 }
 

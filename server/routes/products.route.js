@@ -112,10 +112,18 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   const image = row.image || media[0] || defaultImage;
   const images = [...new Set([image, ...media])];
 
+  // Long copy drives the product detail page; short copy drives compact
+  // surfaces such as the home hero. Both are bilingual.
+  const desc = (row.description && typeof row.description === 'object') ? row.description : {};
+
   return {
     id: row.id,
     name: row.name,
     brand: row.brand || '',
+    descriptionEn: desc.en || '',
+    descriptionAr: desc.ar || '',
+    shortDescriptionEn: desc.shortEn || '',
+    shortDescriptionAr: desc.shortAr || '',
     price: Math.round(Number(row.base_price_cents || 0) / 100),
     tag: row.tag || '',
     leather: row.leather || '',
@@ -179,6 +187,7 @@ router.get('/', async (_req, res, next) => {
           p.id,
           p.name,
           p.brand,
+          p.description,
           p.base_price_cents,
           p.tag,
           p.leather,
@@ -304,6 +313,7 @@ router.get('/:id', async (req, res, next) => {
           p.id,
           p.name,
           p.brand,
+          p.description,
           p.base_price_cents,
           p.tag,
           p.leather,

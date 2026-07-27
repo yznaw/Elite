@@ -173,7 +173,7 @@
 .hero-product {
   position: relative;
   z-index: 1;
-  width: min(940px, 74vw, 88svh);
+  width: min(1120px, 82vw, 92svh);
   aspect-ratio: 1330 / 1182;
   margin: 0;
   animation: productReveal 0.9s cubic-bezier(0.22, 1, 0.36, 1) both 0.12s;
@@ -219,6 +219,24 @@
   z-index: 2;
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+.hero-next-peek,
+.hero-swipe-hint {
+  display: none;
+}
+
+/* Normal mobile navigation is intentionally only a crossfade. Directional
+   transforms combined with a finger release made the product appear to shake. */
+@media (max-width: 760px) {
+  .hero-stage .hero-product__image {
+    transform: none;
+    transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .hero-stage .hero-product__image.is-active {
+    transform: none;
+  }
 }
 
 .hero-product__image--photo {
@@ -478,7 +496,10 @@
   left: -6px;
 }
 
-.hero-mobile-features {
+/* Mobile-only hero controls. Desktop keeps the arrows and callout pills. */
+.hero-pagination,
+.hero-description,
+.hero-swatches {
   display: none;
 }
 
@@ -1040,16 +1061,24 @@
   .hero {
     --hero-mobile-x: clamp(12px, 4vw, 16px);
     --hero-mobile-top: clamp(82px, 12svh, 96px);
-    --hero-mobile-gap: clamp(8px, 1.8svh, 16px);
-    --mobile-product-size: min(82vw, 342px, 38svh);
+    --hero-mobile-gap: clamp(10px, 2.2svh, 20px);
+    /* Width of the hero art; height is this divided by 1.4. Deliberately width
+       only, with no svh term: svh changes as browser chrome shows and hides,
+       and device emulation reports a stale height on resize, which made the
+       hero jump size between a viewport switch and a reload. Vertical fit is
+       handled by the max-height below instead. */
+    --mobile-product-size: min(124vw, 620px);
 
-    height: auto;
-    min-height: 100svh;
+    /* Use the smallest mobile viewport so Android's visible browser chrome is
+       included. The image stage below is the only part allowed to shrink. */
+    height: 100svh;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: var(--hero-mobile-gap);
-    padding: calc(var(--hero-mobile-top) + env(safe-area-inset-top, 0px)) var(--hero-mobile-x) calc(18px + env(safe-area-inset-bottom, 0px));
+    padding: calc(var(--hero-mobile-top) + env(safe-area-inset-top, 0px)) var(--hero-mobile-x) calc(24px + env(safe-area-inset-bottom, 0px));
   }
 
   .hero-brand {
@@ -1063,10 +1092,18 @@
     animation: mobileFadeUp 0.7s ease both;
   }
 
+  .hero-brand,
+  .hero-pagination,
+  .hero-description,
+  .hero-swatches,
+  .hero-cta {
+    flex-shrink: 0;
+  }
+
   .hero-brand p {
     max-width: min(100%, 34rem);
-    font-size: clamp(16px, 5vw, 20px);
-    letter-spacing: clamp(0.06em, 0.9vw, 0.12em);
+    font-size: clamp(20px, 6.2vw, 26px);
+    letter-spacing: clamp(0.04em, 0.7vw, 0.09em);
     line-height: 1.12;
     overflow-wrap: anywhere;
     text-wrap: balance;
@@ -1080,33 +1117,130 @@
     line-height: 1.4;
   }
 
+  /* Grid + place-items keeps the art centred even though it is deliberately
+     wider than the stage. A plain block with `margin: 0 auto` cannot centre an
+     overflowing child, which left the product sitting high and to one side. */
   .hero-stage {
-    display: block;
-    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+    flex: 1 1 auto;
     width: 100%;
-    min-height: calc(var(--mobile-product-size) + clamp(10px, 2svh, 28px));
-    height: calc(var(--mobile-product-size) + clamp(10px, 2svh, 28px));
-    margin-top: clamp(-30px, -4svh, -16px);
-    margin-bottom: 0;
+    /* Matches .hero-product's 1.4:1 box so no dead space sits under the art.
+       The svh cap only limits height here; it never feeds back into the width,
+       so a chrome-driven svh change cannot resize the art. */
+    height: min(calc(var(--mobile-product-size) / 1.4), 46svh);
+    min-height: 0;
+    margin: 0;
     transform: none;
   }
 
+  /* Sits behind the product, so it tracks the art rather than the viewport. */
   .hero-ring--lg {
-    top: 35%;
-    width: min(560px, 112vw);
+    top: 38%;
+    width: min(620px, 124vw);
   }
 
+  /* Slides stack absolutely, so the figure needs an explicit box. It is kept
+     close to the 3:2 shape of a typical product photo rather than square: in a
+     1:1 box `object-fit: contain` letterboxed landscape art to ~62% of the
+     height, which is why the product read as small. */
   .hero-product {
     width: var(--mobile-product-size);
-    height: var(--mobile-product-size);
-    aspect-ratio: 1;
-    margin: 0 auto;
+    height: 100%;
+    max-height: calc(var(--mobile-product-size) / 1.4);
+    aspect-ratio: auto;
+    justify-self: center;
+    margin: 0;
     transform: none;
   }
 
   .hero-product img {
-    aspect-ratio: 1;
+    aspect-ratio: auto;
     object-fit: contain;
+    transform: scale(1.14);
+    transform-origin: center;
+    /* Product photos usually carry more empty space below the subject than
+       above it, which reads as the shoe sitting high in its box. Anchoring
+       slightly above centre optically re-centres it. */
+    object-position: center 44%;
+  }
+
+  /* First-load gesture teaching: the active product yields just enough for
+     the next leather piece to appear at the edge. The preview is derived from
+     the live slide array, so the behaviour scales to any number of products. */
+  .hero-next-peek {
+    position: absolute;
+    top: 50%;
+    right: -36vw;
+    z-index: 4;
+    width: min(58vw, 290px);
+    height: min(70%, 330px);
+    display: block;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(18px, -50%) scale(0.94);
+    filter: drop-shadow(-12px 18px 24px rgba(68, 42, 22, 0.12));
+    background: radial-gradient(
+      circle at 72% 50%,
+      rgba(221, 198, 157, 0.62),
+      rgba(248, 241, 226, 0.34) 58%,
+      transparent 76%
+    );
+    mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.62) 38%, #000 72%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.62) 38%, #000 72%);
+  }
+
+  .hero-next-peek img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    transform: none;
+    mix-blend-mode: multiply;
+  }
+
+  .hero-stage.is-leather-peeking .hero-product__image.is-active {
+    animation: leatherPeekCurrent 1500ms cubic-bezier(0.77, 0, 0.175, 1) both;
+  }
+
+  .hero-stage.is-leather-peeking .hero-next-peek {
+    animation: leatherPeekNext 1500ms cubic-bezier(0.77, 0, 0.175, 1) both;
+  }
+
+  /* The cue borrows the warm leather colour and a stitched border. It overlays
+     the stage instead of entering the flex flow, preserving the full CTA on
+     Android viewports with visible browser chrome. */
+  .hero-swipe-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 2px;
+    z-index: 9;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 11px;
+    border: 1px dashed rgba(184, 150, 90, 0.78);
+    border-radius: 999px;
+    background: rgba(250, 245, 235, 0.9);
+    color: #8f6d32;
+    box-shadow: 0 8px 22px rgba(87, 58, 31, 0.09);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    animation: leatherHintIn 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    pointer-events: none;
+  }
+
+  .hero-swipe-hint__arrow {
+    font-size: 14px;
+    letter-spacing: 0;
   }
 
   .hero-arrow {
@@ -1131,168 +1265,202 @@
     display: none;
   }
 
-  .hero-mobile-features {
-    display: grid;
-    grid-template-rows: auto;
-    width: min(452px, calc(100vw - (var(--hero-mobile-x) * 2)));
-    max-width: 100%;
-    box-sizing: border-box;
-    position: relative;
-    z-index: 1;
-    margin-top: 40px;
-  }
-
-  .mobile-feature-sheet {
-    min-width: 0;
-    display: grid;
-    gap: 14px;
-    padding: 18px 18px 16px;
-    border: 1px solid rgba(184, 150, 90, 0.18);
-    border-radius: 26px;
-    // background:
-    //   linear-gradient(180deg, rgba(252, 248, 240, 0.98), rgba(244, 237, 225, 0.95)),
-    //   #faf7f2;
-    background: transparent;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.82),
-      0 24px 60px rgba(87, 58, 31, 0.12);
-    position: relative;
-    overflow: hidden;
-    // backdrop-filter: blur(16px) saturate(1.08);
-    -webkit-backdrop-filter: blur(16px) saturate(1.08);
-  }
-
-  .mobile-feature-sheet::before {
-    content: "";
-    width: 78px;
-    height: 5px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--claude-crystal-green), #0a5a4d);
-    opacity: 0.95;
-  }
-
-  .mobile-feature-sheet__header {
+  /* Arrows are a desktop idiom. On mobile they sit on top of the product and
+     eat a quarter of its width, so swipe + segmented pagination replace them. */
+  .hero-arrow {
     display: none;
-    gap: 6px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(184, 150, 90, 0.2);
   }
 
-  .mobile-feature-sheet__header p {
-    margin: 0;
-    color: var(--claude-text-gold);
-    font-family: var(--ff-serif);
-    font-size: clamp(27px, 7.2vw, 34px);
-    font-weight: 500;
-    line-height: 1.02;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
-
-  .mobile-feature-sheet__header span {
-    color: var(--claude-text-secondary);
-    font-size: clamp(9px, 2.4vw, 10px);
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .mobile-feature-sheet__rows {
-    display: grid;
-  }
-
-  .mobile-feature-row {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 12px;
-    align-items: center;
-    padding: 9px 2px;
-    border-bottom: 1px solid rgba(184, 150, 90, 0.18);
-  }
-
-  .mobile-feature-row:last-child {
-    border-bottom: 0;
-    padding-bottom: 6px;
-  }
-
-  .mobile-feature-icon {
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
+  /* ── Slide pagination ──────────────────────────────────────────────
+     Segmented bars rather than dots: they read as "N slides, you are on
+     this one" at a glance and give each segment a real tap target. */
+  .hero-pagination {
+    display: flex;
+    gap: 8px;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    background: transparent;
+    width: min(240px, 62vw);
+    margin: 0;
+    animation: mobileFadeUp 0.7s ease both 0.1s;
   }
 
-  .mobile-feature-icon img {
-    width: 28px;
-    height: 28px;
-    display: block;
-    object-fit: contain;
-  }
-
-  .mobile-feature-copy {
+  .hero-pagination__segment {
+    flex: 1 1 0;
     min-width: 0;
-    display: grid;
-    gap: 4px;
+    height: 44px; /* full-height hit area, WCAG 2.5.5 */
+    display: flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .mobile-feature-copy strong {
-    color: var(--claude-text-primary);
-    font-size: clamp(12px, 3.4vw, 15px);
-    font-weight: 700;
-    line-height: 1.15;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    overflow-wrap: anywhere;
+  .hero-pagination__segment span {
+    width: 100%;
+    height: 3px;
+    display: block;
+    border-radius: 999px;
+    background: rgba(184, 150, 90, 0.28);
+    transition: background-color 0.32s ease, transform 0.32s ease;
   }
 
-  .mobile-feature-copy span {
+  .hero-pagination__segment.is-active span {
+    background: var(--green-2);
+    transform: scaleY(1.66);
+  }
+
+  .hero-pagination__segment:focus-visible {
+    outline: 2px solid var(--green-2);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* ── Short description ─────────────────────────────────────────────
+     Replaces the four-row feature table. One sentence that sells, capped
+     at two lines so the hero never pushes the CTA below the fold. */
+  .hero-description {
+    display: block;
+    max-width: min(38ch, 100%);
+    margin: 0;
     color: var(--claude-text-secondary);
-    font-size: clamp(8px, 2.2vw, 9px);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    line-height: 1.2;
-    text-transform: uppercase;
-    overflow-wrap: anywhere;
+    font-size: clamp(13px, 3.6vw, 15px);
+    font-weight: 400;
+    line-height: 1.5;
+    text-align: center;
+    text-wrap: balance;
+    animation: mobileFadeUp 0.7s ease both 0.16s;
   }
 
+  /* ── Colour swatches ───────────────────────────────────────────────
+     Four featured colourways plus an optional "+N" pill. Each swatch opens
+     the product with that colour preselected; the pill opens it with none. */
+  .hero-swatches {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 0;
+    animation: mobileFadeUp 0.7s ease both 0.2s;
+  }
+
+  .hero-swatch {
+    width: 44px;  /* 32px dot inside a 44px tap target, WCAG 2.5.5 */
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .hero-swatch__dot {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    /* Every swatch carries a ring: white, cream and milk are otherwise
+       invisible against the cream canvas. */
+    box-shadow:
+      inset 0 0 0 1px rgba(28, 20, 12, 0.15),
+      0 2px 6px rgba(87, 58, 31, 0.12);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .hero-swatch__dot--image {
+    background-size: cover;
+    background-position: center;
+  }
+
+  .hero-swatch--more .hero-swatch__dot {
+    background: transparent;
+    color: var(--claude-text-gold);
+    font-family: var(--ff-sans);
+    font-size: 17px;
+    font-weight: 400;
+    line-height: 1;
+    /* Optical centring: the glyph sits high in its em box. */
+    padding-bottom: 2px;
+    box-shadow: inset 0 0 0 1px rgba(184, 150, 90, 0.5);
+  }
+
+  .hero-swatch:active .hero-swatch__dot {
+    transform: scale(0.92);
+  }
+
+  /* Selected colour: an offset ring so it reads on dark and light swatches
+     alike, rather than a border that would vanish on a matching colour. */
+  .hero-swatch.is-selected .hero-swatch__dot {
+    transform: scale(1.06);
+    box-shadow:
+      inset 0 0 0 1px rgba(28, 20, 12, 0.15),
+      0 0 0 2px var(--claude-bg-canvas),
+      0 0 0 3.5px var(--green-2);
+  }
+
+
+  .hero-swatch:focus-visible {
+    outline: none;
+  }
+
+  .hero-swatch:focus-visible .hero-swatch__dot {
+    box-shadow:
+      inset 0 0 0 1px rgba(28, 20, 12, 0.15),
+      0 0 0 2px var(--green-2);
+  }
+
+  /* ── CTA ───────────────────────────────────────────────────────────
+     Transparent fill with the header green as the border. #004538 on white
+     is 12.4:1, so the label clears AA and AAA. */
   .hero-cta {
     position: relative;
     left: auto;
     bottom: auto;
     flex-shrink: 0;
-    width: fit-content;
-    min-height: 0;
-    margin-top: 4px;
-    padding: 0;
-    border: 0;
-    border-bottom: 1px solid rgba(184, 150, 90, 0.68);
-    border-radius: 0;
+    width: min(320px, 100%);
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+    padding: 0 24px;
+    border: 1.5px solid var(--green-2);
+    border-radius: 999px;
     background: transparent;
     box-shadow: none;
-    color: var(--claude-text-gold);
-    justify-self: start;
+    color: var(--green-2);
     transform: none;
-    animation: mobileFadeUp 0.72s ease both 0.2s;
+    transition: background-color 0.22s ease, transform 0.16s ease;
+    animation: mobileFadeUp 0.72s ease both 0.24s;
   }
 
   .hero-cta span {
     font-family: var(--ff-serif);
-    font-size: clamp(16px, 4.8vw, 19px);
+    font-size: clamp(13px, 3.6vw, 15px);
     line-height: 1.1;
-    letter-spacing: 0.04em;
-    text-align: start;
+    letter-spacing: 0.08em;
+    text-align: center;
     text-transform: uppercase;
-    white-space: normal;
+    white-space: nowrap;
     font-weight: 600;
   }
 
   .hero-cta:hover,
   .hero-cta:focus-visible {
-    transform: translateY(-1px);
-    border-bottom-color: rgba(11, 111, 98, 0.9);
+    transform: none;
+    background: rgba(0, 69, 56, 0.05);
+  }
+
+  .hero-cta:active {
+    background: rgba(0, 69, 56, 0.09);
+    transform: scale(0.98);
   }
 
   .home-commerce {
@@ -1349,19 +1517,13 @@
   }
 }
 
+/* Short viewports: the flex column absorbs the difference on its own, so these
+   only need to retune the two size variables. */
 @media (max-width: 760px) and (max-height: 700px) {
   .hero {
     --hero-mobile-top: clamp(76px, 11.5svh, 86px);
-    --hero-mobile-gap: clamp(7px, 1.4svh, 11px);
-    --mobile-product-size: min(80vw, 318px, 37svh);
-  }
-
-  .hero-stage {
-    margin-top: clamp(-24px, -3svh, -12px);
-  }
-
-  .hero-mobile-features {
-    margin-top: clamp(-16px, -2svh, -8px);
+    --hero-mobile-gap: clamp(8px, 1.6svh, 14px);
+    --mobile-product-size: min(116vw, 540px);
   }
 }
 
@@ -1369,11 +1531,11 @@
   .hero {
     --hero-mobile-top: clamp(72px, 11svh, 86px);
     --hero-mobile-gap: clamp(6px, 1.2svh, 10px);
-    --mobile-product-size: min(76vw, 292px, 34svh);
+    --mobile-product-size: min(108vw, 460px);
   }
 
   .hero-brand p {
-    font-size: clamp(15px, 4.7vw, 18px);
+    font-size: clamp(17px, 5.2vw, 21px);
   }
 
   .hero-brand span {
@@ -1381,14 +1543,9 @@
     line-height: 1.25;
   }
 
-  .hero-stage {
-    min-height: calc(var(--mobile-product-size) + 8px);
-    height: calc(var(--mobile-product-size) + 8px);
-    margin-top: clamp(-22px, -3svh, -10px);
-  }
-
-  .hero-mobile-features {
-    margin-top: clamp(-14px, -1.8svh, -6px);
+  .hero-description {
+    font-size: clamp(12px, 3.3vw, 13px);
+    line-height: 1.4;
   }
 }
 
@@ -1400,5 +1557,72 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes leatherPeekCurrent {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+  42%,
+  68% {
+    transform: translateX(-38px) scale(0.985);
+  }
+}
+
+@keyframes leatherPeekNext {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(18px, -50%) scale(0.94);
+  }
+  42%,
+  68% {
+    opacity: 0.92;
+    transform: translate(-12vw, -50%) scale(0.98);
+  }
+}
+
+@keyframes leatherHintIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* Entry animations collapse to an instant swap for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-brand,
+  .hero-product,
+  .hero-callout,
+  .hero-pagination,
+  .hero-description,
+  .hero-swatches,
+  .hero-cta {
+    animation: none !important;
+  }
+
+  .hero-product__image {
+    transform: none;
+    transition: opacity 0.01ms linear;
+  }
+
+  .hero-pagination__segment span {
+    transition: none;
+  }
+
+  .hero-stage.is-leather-peeking .hero-product__image.is-active,
+  .hero-stage.is-leather-peeking .hero-next-peek,
+  .hero-swipe-hint {
+    animation: none;
+  }
+
+  .hero-stage.is-leather-peeking .hero-next-peek {
+    opacity: 0;
   }
 }

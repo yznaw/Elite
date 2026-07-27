@@ -48,7 +48,7 @@ All pages are lazy-loaded:
 | `/reference` | `ReferenceComponent` | Reference data management — **Colors** (name EN/AR + hex, inline color picker, swatch preview), **Materials** (name EN/AR), **Size Charts** (named size sets with comma-editable size arrays). Full CRUD for each, changes immediately available as dropdowns in the product drawer and filters in the catalog. Owner/admin only. |
 | `/collections` | `CollectionsComponent` | Grouping products into collections with **sub-collection hierarchy**. Top-level collections show sub-collections as chips below their card; clicking a chip opens it. **"Add sub-collection"** quick-add button per parent. Search mode switches to flat list. **Collection drawer:** editable **URL Handle** (`/collection/{handle}` preview), **Parent Collection** selector (dropdown, self + descendants excluded, cycle-protected on server), cover image (drag/drop + URL paste). **Manage Products section:** grid/list view toggle — grid cards are draggable; list view shows explicit drag handles + ↑/↓ buttons for precise reordering (touch-friendly). Order is persisted to `collection_products.sort_order`. **Product drawer Organization section** now groups collections by parent with indented sub-collection checkboxes. DB migration: `007_sub_collections.sql` adds `parent_id` to `collections`. |
 | `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, real multipart upload (drag/drop or browse, per-file progress), auto-link by SKU, detail drawer. **Google Drive import:** "Google Drive" button opens a modal — paste a file or folder URL (folder requires `GOOGLE_DRIVE_API_KEY` env var). Images are downloaded, saved to storage, and **auto-linked by SKU** via 4-tier matching: (1) folder name = SKU, (2) filename stem = SKU, (3) filename contains SKU, (4) two-segment prefix matches SKU start. Success toast reports how many were auto-linked. **Set as Default Fallback** button in the detail drawer saves the image URL to tenant config (`PATCH /api/admin/settings/store { config: { defaultImage } }`). Delete removes the DB row and the file from storage. |
-| `/storefront` | `StorefrontComponent` | **3-tab unified content editor** with sticky Publish/Preview bar. **Tab: Home Page** — sub-tabs: Section Order (drag/drop visibility), Landing Hero (heroSlider items + feature callouts, EN/AR CTA), Collections (3 tiles + featured collections picker), Promotion Section (image/title/body/CTA), Craft Promise (3 cards EN/AR), Stats Reel (4 values EN/AR). **Tab: Our Story** — sub-tabs: Hero, Intro, Chapters (4), Quote, Atelier. **Tab: Contact Us** — sub-tabs: Page Header (EN/AR headline), Info Blocks (3 blocks with lines), Phone & Promise. All image slots have Upload + Pick from Media. Save Content writes to `PATCH /api/admin/storefront-content`; Publish Layout writes to `POST /api/admin/storefront/publish`. |
+| `/storefront` | `StorefrontComponent` | **3-tab unified content editor** with sticky Publish/Preview bar. **Tab: Home Page** — sub-tabs: Section Order (drag/drop visibility), Landing Hero (heroSlider items with name, subtitle, EN/AR short description, image, alt, linked product + up to 4 colour swatches, feature callouts, EN/AR CTA), Collections (3 tiles + featured collections picker), Promotion Section (image/title/body/CTA), Craft Promise (3 cards EN/AR), Stats Reel (4 values EN/AR). **Tab: Our Story** — sub-tabs: Hero, Intro, Chapters (4), Quote, Atelier. **Tab: Contact Us** — sub-tabs: Page Header (EN/AR headline), Info Blocks (3 blocks with lines), Phone & Promise. All image slots have Upload + Pick from Media. Save Content writes to `PATCH /api/admin/storefront-content`; Publish Layout writes to `POST /api/admin/storefront/publish`. |
 | `/home-content` | — | **Redirects to `/storefront`** (deprecated — all editing moved into the Storefront tabs). |
 | `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, **Date Range filter** (All Time / Today / This Week / This Month / Custom — custom shows `date from/to` inputs). Active date range displayed as a dismissible chip. `clearFilters()` resets date range along with other filters. **CSV export** of the current filtered set (UTF-8 BOM). **Production hardening (2026-06):** skeleton table/card loaders while `loading()` is true; `loadError` signal shows a red error banner with Retry button on initial load failure (silent background refresh swallows errors); 300ms RxJS search debounce via `Subject` + `takeUntil` teardown; 15s background polling syncs the list while the drawer is open; `OrderDrawerComponent` now routes all `PATCH /status` calls through `safeUpdateStatus()` which re-fetches the order from the server on API error to resync local state. Full-height drawer with status workflow stepper, tracking number, internal notes & timeline, **Print Invoice** button that opens a new browser tab with a fully formatted printable invoice. |
 | `/customers` | `CustomersComponent` | Customer table/cards view (toggle persisted), **Add Customer** create flow (synthesises a draft, discards on close without save), fully editable detail drawer with real linked-orders history (rows navigate to `/orders?id=…`). **Production hardening (2026-06):** skeleton loaders while `loading()` is true; `loadError` banner with Retry; 300ms debounced search; **Export CSV** wired (was previously a no-op button); EU size pill hidden when `sizePref` is `0` or `null`. Customer drawer fetches orders from `GET /admin/customers/:id/orders` (matches by `customer_id` OR `customer_email`), 30s polling with silent refresh + "Updated HH:MM" timestamp, `phone` field, async save that only shows "Saved" after API response and reverts to dirty on error, soft-delete that preserves order history. |
@@ -215,6 +215,67 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
   - `storefrontUrl()` — Generates the storefront preview URL
   - `buildPreviewLink()` — Generates a one-time preview link with token
   - `reset()` — Clear both draft and published
+
+### Hero Slide: Linked Product & Colour Swatches
+
+In **Storefront → Home Page → Landing Hero**, each slide can be linked to a product and given up to 4 featured colourways. These render as tappable swatches under the mobile hero.
+
+**Editing flow**
+
+Each slide card is ordered as three steps, so the product is linked *before* the copy it fills in:
+
+| Step | Section | What it does |
+|---|---|---|
+| 1 | Linked Product | Pick the product; everything below fills in from it |
+| 2 | Hero Copy | Name, subtitle, EN/AR description, alt text |
+| 3 | Feature Callouts | Desktop-only annotation pills (collapsed by default) |
+
+**Linking a product fills the slide automatically.** From the product it derives:
+
+- **Name** from the product name
+- **Subtitle** as `Arabic name / Brand`, the bilingual shape the hero splits on
+- **Descriptions** from the product's **short description**. If that is empty it falls back to the first sentence of the long description with markup stripped, capped near 18 words
+- **Alt text** as `Name by Brand`
+- **Featured colours**, up to 4, preferring ones with a colour defined in Reference Data so the swatch row works immediately
+- **Each colour's hero shot**, seeded from the product's gallery colour tagging as a starting point
+
+**Your edits are never overwritten.** Fields you have already filled in are left alone when a product is linked or changed. **Refill** re-pulls everything from the product and does overwrite, for when the product has been updated and you want the slide to match.
+
+Slides that were linked to a product before auto-fill existed are backfilled when the editor loads: any blank derivable field is filled from the product. Only empty fields are touched and the content is not marked dirty, so it persists on the next real save. The backfill runs from whichever of the products or content request finishes last, since either order is possible.
+**Choosing the featured colours**
+
+The colour grid lists the product's own colours first, then the rest of the Reference Data library. Click to toggle; the cap is 4 and further chips disable once reached. Library colours the product does not carry are dimmed and italicised, and selecting one raises a warning, since the "+" link opens that product where the colourway will not be found.
+
+**Colour source and the missing-hex warning**
+
+Swatch colours come from `ref_colors` (**Reference Data → Colors**), never from the slide itself. One colour edited there updates every swatch across the app.
+
+A colour with no `ref_colors` entry **cannot render and is hidden on the storefront**. The editor surfaces this in two places: the chip shows a hatched dot with a warning icon, and a warning line lists the affected colour names. Fix it by adding the colour under Reference Data, where the existing editor provides a colour picker, hex field, and optional swatch image.
+
+This matters because the catalog uses far more colour names than `ref_colors` currently defines, so linking a product whose colours are undefined produces an empty swatch row until they are added.
+
+**Hero image per colour**
+
+Each featured colour gets its own hero shot, set under **Hero Image Per Colour**. Upload directly or pick from the media library (the same modal used elsewhere in this editor). Tapping that colour on the storefront swaps the hero image to this shot.
+
+Rows are reordered by **dragging the grip handle**; the order here is the swatch order on mobile.
+
+**There is no separate slide-image field.** Mark one colour as **Default** and its hero shot becomes the slide image, so the hero always opens on a real colourway that the visitor can switch away from and back to. If no colour is marked, the first one is used. A default colour with no image of its own falls back to whatever slide image was previously stored.
+
+These are **not** the product's gallery images. Two distinct datasets with different jobs:
+
+| | Hero image per colour | Product gallery colour images |
+|---|---|---|
+| Set in | Storefront → Landing Hero | Catalog → product → gallery |
+| Stored as | `colors[].imageUrl` on the slide | `product_color_images` |
+| Used by | The home hero only | The product detail page gallery |
+| Typical art | Cutout styled for the hero stage | Standard product photography |
+
+A colour with no hero shot keeps the slide's default image. That is legitimate, and the editor lists those colours in a warning so it stays a deliberate choice rather than an oversight.
+
+For visual consistency, hero shots should match the slide image's angle, crop, and background treatment, or the product appears to jump as a visitor taps between colours.
+
+**Data shape** — the slide stores `productId` and `colors: [{ label, slug, imageUrl }]`. `slug` is generated with the same rule the storefront product page uses to read its `?color=` param, so the "+" link always resolves correctly. Colour *values* (hex, swatch dot) are still never copied onto the slide; they resolve from `ref_colors` at render time.
 
 ### `ToastService`
 

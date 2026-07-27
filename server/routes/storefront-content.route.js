@@ -115,8 +115,14 @@ const DEFAULT_HOME_CONTENT = {
         id: 'brown-leather',
         name: 'Brown Leather Sandals',
         subtitle: 'صندل جلد طبيعي / Made in Italy',
+        descriptionEn: 'Full-grain leather, hand stitched in Italy over a comfort sole.',
+        descriptionAr: 'جلد طبيعي كامل الحبيبات، مخيط يدوياً في إيطاليا على نعل مريح.',
         imageUrl: '/assets/hero-scroll/elite-hero-sandals-cutout.png',
         alt: 'Brown full-grain leather elite sandals made in Italy',
+        // Set from the admin editor: links the swatch row to a real product.
+        productId: '',
+        colors: [],
+        defaultColorSlug: '',
         callouts: [
           { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد عجل طبيعي',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-angle-single.png',  alt: 'Leather strap detail' },
           { id: 'buckle',    titleEn: 'Premium Buckle',     titleAr: 'إبزيم معدني فاخر', subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-front-pair.png',   alt: 'Premium buckle detail' },
@@ -128,8 +134,13 @@ const DEFAULT_HOME_CONTENT = {
         id: 'white-leather',
         name: 'White Leather Sandals',
         subtitle: 'جلد أبيض فاخر / Italian Craft',
+        descriptionEn: 'White full-grain leather with a silver buckle, finished by hand.',
+        descriptionAr: 'جلد أبيض طبيعي مع إبزيم فضي، بلمسة نهائية يدوية.',
         imageUrl: '/assets/hero-scroll/elite-hero-white-sandals.png',
         alt: 'White leather elite sandals with silver buckle made in Italy',
+        productId: '',
+        colors: [],
+        defaultColorSlug: '',
         callouts: [
           { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد طبيعي أبيض',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-leather.png',   alt: 'White leather texture' },
           { id: 'buckle',    titleEn: 'Silver Buckle',      titleAr: 'إبزيم فضي فاخر',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-buckle.png',    alt: 'Silver buckle detail' },
@@ -530,6 +541,70 @@ function normalizeStory(story = {}) {
   };
 }
 
+const HERO_MAX_COLORS = 4;
+
+/** Mirrors colorSlug() in client-web utils/color-slug.ts. */
+function colorSlug(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * Featured colourways for one slide. Colours carry no hex: the storefront
+ * resolves that from ref_colors at render time. `imageUrl` is the hero shot for
+ * that colourway and is owned by the slide, separate from the product gallery
+ * images used on the product detail page. Entries without a usable label are
+ * dropped, duplicates collapse, and the list is capped at HERO_MAX_COLORS.
+ */
+function normalizeHeroColors(colors) {
+  if (!Array.isArray(colors)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of colors) {
+    const label = asText(typeof entry === 'string' ? entry : entry?.label, '');
+    if (!label) continue;
+    const slug = colorSlug(label);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push({
+      label,
+      slug,
+      imageUrl: asText(typeof entry === 'string' ? '' : entry?.imageUrl, ''),
+    });
+    if (out.length >= HERO_MAX_COLORS) break;
+  }
+  return out;
+}
+
+/**
+ * Work out which colourway a slide opens on and what image that means.
+ *
+ * The slide image is no longer edited directly: it is the default colour's hero
+ * shot, so the hero always opens on a real colourway. `storedImage` keeps slides
+ * saved before this change (and slides with no colours yet) rendering.
+ */
+function resolveHeroSlideImage(colors, requestedSlug, storedImage) {
+  if (!colors.length) {
+    return { imageUrl: storedImage, colors, defaultColorSlug: '' };
+  }
+
+  const match = colors.find((c) => c.slug === requestedSlug);
+  const chosen = match || colors[0];
+  return {
+    imageUrl: chosen.imageUrl || storedImage,
+    colors,
+    defaultColorSlug: chosen.slug,
+  };
+}
+
+function calloutSentence(callouts, key) {
+  const titles = (Array.isArray(callouts) ? callouts : [])
+    .map((c) => String(c?.[key] || '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  if (!titles.length) return '';
+  return `${titles.join(key.endsWith('Ar') ? '، ' : ', ')}.`;
+}
+
 function normalizeHeroSlider(heroSlider = {}) {
   const fb = DEFAULT_HOME_CONTENT.heroSlider;
   const inItems = Array.isArray(heroSlider.items) && heroSlider.items.length > 0
@@ -545,8 +620,23 @@ function normalizeHeroSlider(heroSlider = {}) {
         id:       item.id,
         name:     asText(item.name,     fallback.name     || ''),
         subtitle: asText(item.subtitle, fallback.subtitle || ''),
-        imageUrl: asText(item.imageUrl, fallback.imageUrl || ''),
+        // Slides saved before the description field existed fall back to their
+        // callout titles so the mobile hero never renders an empty line.
+        descriptionEn: asText(
+          item.descriptionEn,
+          fallback.descriptionEn || calloutSentence(inCallouts, 'titleEn'),
+        ),
+        descriptionAr: asText(
+          item.descriptionAr,
+          fallback.descriptionAr || calloutSentence(inCallouts, 'titleAr'),
+        ),
+        ...resolveHeroSlideImage(
+          normalizeHeroColors(item.colors ?? fallback.colors),
+          asText(item.defaultColorSlug, fallback.defaultColorSlug || ''),
+          asText(item.imageUrl, fallback.imageUrl || ''),
+        ),
         alt:      asText(item.alt,      fallback.alt      || ''),
+        productId: asText(item.productId, fallback.productId || ''),
         callouts: inCallouts
           .filter((c) => c && c.id)
           .map((c) => ({

@@ -195,6 +195,58 @@ feature-name/
    // in template: {{ t('your.new.key') }}
    ```
 
+### Add a Field to a Home Hero Slide
+
+Hero slide fields are defined in four places. Miss one and the value is silently dropped on save. Order matters:
+
+1. `server/routes/storefront-content.route.js` — add the field to the `DEFAULT_HOME_CONTENT.heroSlider.items[]` entries, then read it in `normalizeHeroSlider` via `asText(item.yourField, fallback.yourField || '')`. Anything absent here is stripped from every write.
+2. `client/projects/client-web/src/app/models/home-content.model.ts` — add it to `HeroSliderItem`.
+3. `client/projects/client-web/src/app/services/home-content.service.ts` — default it in the `heroSlider.items` map so it is never `undefined`.
+4. `client/projects/admin-portal/src/app/pages/storefront/storefront.component.ts` — add it to the local `HeroSliderItem` interface, to the `addSliderItem()` literal, and to the slide editor template with `patchSliderItem(i, 'yourField', $event)`. Add its label to both `EN` and `AR` in `admin-portal/src/app/i18n/strings.ts`.
+
+For a bilingual field, use the `fieldEn` / `fieldAr` suffix convention (as with `descriptionEn` / `descriptionAr`) rather than a single `/`-delimited string. The older `subtitle` field still uses the `"العربية / English"` split form; do not copy that pattern for new fields.
+
+When adding a field that existing saved rows will not have, give it a derived fallback in the normalizer so live content does not render an empty element. `calloutSentence()` is the example to follow.
+
+> [!NOTE]
+> The API server does not hot-reload route files in every setup. After editing `server/routes/*.js`, restart it or the storefront will keep serving the old shape and the new field will look like it is being dropped.
+
+### Pick the Right Image URL
+
+Uploads are stored with resized variants alongside the original (`-thumb` 240, `-card` 640, `-grid` 900, `-pdp` 1400, `-zoom` 1800; see `server/lib/storage.js`). The admin media API returns two URLs and they are not interchangeable:
+
+| Field | Points at | Use for |
+|---|---|---|
+| `preview` | The `-card` 640px variant | Picker thumbnails, grids, small previews |
+| `storageUrl` | The full-size original | Anything rendered large: hero art, PDP gallery, zoom |
+
+Saving `preview` into content is a silent quality bug — it renders fine in the editor thumbnail and soft on the storefront. Prefer `storageUrl` and let a `srcset` pick the variant per device, as `heroSrcset()` does on the home hero.
+
+### Work With Colour Slugs
+
+Colour names appear in three places that must agree, or a colour deep-link silently resolves to nothing:
+
+| Place | Rule |
+|---|---|
+| `client-web/src/app/utils/color-slug.ts` | Canonical `colorKey()` / `colorSlug()`. Import these; do not re-implement the regex. |
+| `server/routes/storefront-content.route.js` | `colorSlug()` mirrors the client helper for values normalized on save. |
+| `admin-portal/.../storefront.component.ts` | `heroColorSlug()` mirrors it again when the editor writes hero swatches. |
+
+`colorSlug()` lowercases, trims, and strips every non-alphanumeric character: `"Light Beige"` becomes `lightbeige`, `"T.Moro"` becomes `tmoro`. If you change the rule, change all three and re-check any stored `slug` values, since they are persisted rather than derived at read time.
+
+Colour **values** (hex, swatch image) live only in `ref_colors` and are resolved at render time through `ReferenceDataService`. Never copy a hex into content JSON: it will drift the moment someone edits the colour in Reference Data.
+
+Colour **photos** come from two unrelated datasets. Confusing them is the easiest mistake to make here:
+
+| Dataset | Owned by | Stored as | Used by |
+|---|---|---|---|
+| Hero shot per colour | Storefront → Landing Hero | `heroSlider.items[].colors[].imageUrl` in content JSON | Home hero swatches |
+| Product colour gallery | Catalog → product → gallery | `product_color_images` | Product detail page |
+
+They are intentionally separate: hero art is a cutout framed for the hero stage, gallery photos are standard product photography. The home hero does **not** read `product_color_images`, and the product page does not read slide content.
+
+If you do need the product gallery mapping, note the two APIs use opposite key directions: `GET /api/products` returns `colorImages` (colour -> URL, keys lowercased) while `GET /api/admin/products` returns `imageColors` (URL -> colour, original casing).
+
 ### Add a New CSS Design Token
 
 1. Open the relevant `styles.scss`
