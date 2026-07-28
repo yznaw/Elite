@@ -163,7 +163,6 @@ export class HomeContentService {
               colors: Array.isArray(item.colors)
                 ? item.colors.map((color) => ({ ...color, imageUrl: color.imageUrl || '' }))
                 : [],
-              callouts: Array.isArray(item.callouts) ? item.callouts : [],
             }))
           : fallback.heroSlider.items,
       },
@@ -210,12 +209,6 @@ export class HomeContentService {
       colors: (item.colors ?? []).map((color) => ({
         ...color,
         imageUrl: this.resolveMediaUrl(color.imageUrl),
-      })),
-      callouts: (item.callouts ?? []).map((cl) => ({
-        ...cl,
-        titleEn: cl.titleEn || cl.subtitleEn || cl.titleAr || '',
-        subtitleAr: cl.subtitleAr || '',
-        thumbnail: this.resolveMediaUrl(cl.thumbnail),
       })),
     }));
 

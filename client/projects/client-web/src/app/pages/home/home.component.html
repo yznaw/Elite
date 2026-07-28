@@ -13,281 +13,311 @@
           @case ("home-hero") {
             @if (heroItems().length > 0) {
               <section class="hero" aria-labelledby="home-hero-brand">
-                <div class="hero-grain"></div>
                 <div class="hero-ring hero-ring--lg"></div>
                 <div class="hero-aura hero-aura--left"></div>
                 <div class="hero-aura hero-aura--right"></div>
 
-                <div class="hero-brand" aria-live="polite">
-                  <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
-                  <span>{{ heroSubtitle(activeHeroItem()) }}</span>
-                </div>
+                <div class="hero-layout">
+                  <div class="hero-copy">
+                    <div class="hero-brand">
+                      <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
+                    </div>
 
-                <div
-                  #heroStage
-                  class="hero-stage"
-                  [class.is-leather-peeking]="heroPeekActive()"
-                  [class.is-peek-releasing]="heroPeekReleasing()"
-                  (pointerdown)="onHeroPointerDown($event)"
-                  (pointerup)="onHeroPointerUp($event)"
-                  (pointercancel)="onHeroPointerCancel($event)"
-                >
-                  <button
-                    type="button"
-                    class="hero-arrow hero-arrow--prev"
-                    aria-label="Previous hero item"
-                    title="Previous"
-                    (click)="selectAdjacentHeroItem(-1)"
-                  >
-                    <span aria-hidden="true">‹</span>
-                  </button>
-
-                  <figure
-                    #heroProduct
-                    class="hero-product"
-                    [attr.aria-label]="activeHeroItem().alt"
-                  >
-                    @for (
-                      item of heroItems();
-                      track item.id;
-                      let first = $first
-                    ) {
-                      <picture
-                        class="hero-product__image"
-                        [class.is-active]="item.id === activeHeroItem().id"
-                        [class.hero-product__image--photo]="
-                          item.id === 'white-leather'
-                        "
-                        [attr.aria-hidden]="
-                          item.id === activeHeroItem().id ? null : 'true'
-                        "
-                      >
-                        @if (item.id === activeHeroItem().id) {
-                          <source
-                            [srcset]="
-                              heroSrcset(activeHeroImage()) ||
-                              toWebp(activeHeroImage())
-                            "
-                            [attr.sizes]="
-                              heroSrcset(activeHeroImage()) ? heroSizes : null
-                            "
-                            type="image/webp"
-                          />
-                          <img
-                            [src]="activeHeroImage()"
-                            [alt]="activeHeroItem().alt"
-                            [attr.loading]="first ? 'eager' : 'lazy'"
-                            [attr.fetchpriority]="first ? 'high' : 'low'"
-                            decoding="async"
-                          />
-                        } @else {
-                          <source
-                            [srcset]="
-                              heroSrcset(item.imageUrl) || toWebp(item.imageUrl)
-                            "
-                            [attr.sizes]="
-                              heroSrcset(item.imageUrl) ? heroSizes : null
-                            "
-                            type="image/webp"
-                          />
-                          <img
-                            [src]="item.imageUrl"
-                            [alt]="item.alt"
-                            loading="lazy"
-                            fetchpriority="low"
-                            decoding="async"
-                          />
-                        }
-                      </picture>
+                    @if (activeHeroDescription()) {
+                      <p class="hero-description">
+                        {{ activeHeroDescription() }}
+                      </p>
                     }
 
-                    @if (outgoingHeroImage()) {
+                    @if (activeHeroSwatches().length > 0) {
+                      <div class="hero-colours">
+                        <div class="hero-colours__heading">
+                          <span>{{ t("home.hero.colours") }}</span>
+                          <strong>{{ activeHeroSelectedColorLabel() }}</strong>
+                        </div>
+                        <div
+                          class="hero-swatches"
+                          role="group"
+                          [attr.aria-label]="t('home.hero.colours')"
+                        >
+                          @for (color of visibleHeroSwatches(); track color.slug) {
+                            <button
+                              type="button"
+                              class="hero-swatch"
+                              [class.is-selected]="activeHeroSelectedColorKey() === color.key"
+                              [class.is-loading]="heroColorLoadingKey() === color.key"
+                              [attr.aria-pressed]="activeHeroSelectedColorKey() === color.key"
+                              [attr.aria-busy]="
+                                heroColorLoadingKey() === color.key ? 'true' : null
+                              "
+                              [attr.aria-label]="
+                                t('home.hero.colourOption', { colour: color.label })
+                              "
+                              [title]="color.label"
+                              (click)="selectHeroColor(color.key)"
+                            >
+                              @if (color.image) {
+                                <span
+                                  class="hero-swatch__dot hero-swatch__dot--image"
+                                  aria-hidden="true"
+                                  [style.background-image]="'url(' + color.image + ')'"
+                                ></span>
+                              } @else {
+                                <span
+                                  class="hero-swatch__dot"
+                                  aria-hidden="true"
+                                  [style.background]="color.hex"
+                                ></span>
+                              }
+                            </button>
+                          }
+
+                          @if (hiddenHeroSwatchCount() > 0) {
+                            <button
+                              type="button"
+                              class="hero-swatch hero-swatch--more"
+                              [attr.aria-label]="
+                                t('home.hero.moreColours', {
+                                  count: hiddenHeroSwatchCount()
+                                })
+                              "
+                              (click)="goToHeroProduct()"
+                            >
+                              <span class="hero-swatch__dot" aria-hidden="true"
+                                >+{{ hiddenHeroSwatchCount() }}</span
+                              >
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+
+                    <div class="hero-actions">
+                      @if (showHeroProductLink()) {
+                        <button
+                          type="button"
+                          class="hero-cta hero-cta--primary"
+                          (click)="goToHeroProduct()"
+                        >
+                          <span>{{ t("home.hero.shopStyle") }}</span>
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          class="hero-cta hero-cta--primary"
+                          (click)="goTo('/collection')"
+                        >
+                          <span>{{ heroCtaLabel() }}</span>
+                        </button>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="hero-media">
+                    <div
+                      #heroStage
+                      class="hero-stage"
+                      [class.is-leather-peeking]="heroPeekActive()"
+                      [class.is-peek-releasing]="heroPeekReleasing()"
+                      (pointerdown)="onHeroPointerDown($event)"
+                      (pointerup)="onHeroPointerUp($event)"
+                      (pointercancel)="onHeroPointerCancel($event)"
+                    >
+                    <figure
+                      #heroProduct
+                      class="hero-product"
+                      [attr.aria-label]="activeHeroItem().alt"
+                    >
+                      @for (
+                        item of heroItems();
+                        track item.id;
+                        let first = $first
+                      ) {
+                        <picture
+                          class="hero-product__image"
+                          [class.is-active]="item.id === activeHeroItem().id"
+                          [class.hero-product__image--photo]="
+                            item.id === 'white-leather'
+                          "
+                          [attr.aria-hidden]="
+                            item.id === activeHeroItem().id ? null : 'true'
+                          "
+                        >
+                          @if (item.id === activeHeroItem().id) {
+                            <source
+                              [srcset]="
+                                heroSrcset(activeHeroImage()) ||
+                                toWebp(activeHeroImage())
+                              "
+                              [attr.sizes]="
+                                heroSrcset(activeHeroImage()) ? heroSizes : null
+                              "
+                              type="image/webp"
+                            />
+                            <img
+                              [src]="activeHeroImage()"
+                              [alt]="activeHeroItem().alt"
+                              [attr.loading]="first ? 'eager' : 'lazy'"
+                              [attr.fetchpriority]="first ? 'high' : 'low'"
+                              decoding="async"
+                            />
+                          } @else {
+                            <source
+                              [srcset]="
+                                heroSrcset(item.imageUrl) || toWebp(item.imageUrl)
+                              "
+                              [attr.sizes]="
+                                heroSrcset(item.imageUrl) ? heroSizes : null
+                              "
+                              type="image/webp"
+                            />
+                            <img
+                              [src]="item.imageUrl"
+                              [alt]="item.alt"
+                              loading="lazy"
+                              fetchpriority="low"
+                              decoding="async"
+                            />
+                          }
+                        </picture>
+                      }
+
+                      @if (outgoingHeroImage()) {
+                        <picture
+                          class="hero-product__image hero-product__image--color-outgoing"
+                          [class.hero-product__image--photo]="
+                            activeHeroItem().id === 'white-leather'
+                          "
+                          aria-hidden="true"
+                        >
+                          <source
+                            [srcset]="
+                              heroSrcset(outgoingHeroImage()) ||
+                              toWebp(outgoingHeroImage())
+                            "
+                            [attr.sizes]="
+                              heroSrcset(outgoingHeroImage()) ? heroSizes : null
+                            "
+                            type="image/webp"
+                          />
+                          <img
+                            [src]="outgoingHeroImage()"
+                            alt=""
+                            decoding="async"
+                          />
+                        </picture>
+                      }
+                    </figure>
+
+                    @if (nextHeroItem()) {
                       <picture
-                        class="hero-product__image hero-product__image--color-outgoing"
-                        [class.hero-product__image--photo]="
-                          activeHeroItem().id === 'white-leather'
-                        "
-                        aria-hidden="true"
+                        class="hero-next-peek"
+                        [attr.aria-hidden]="true"
                       >
                         <source
                           [srcset]="
-                            heroSrcset(outgoingHeroImage()) ||
-                            toWebp(outgoingHeroImage())
+                            heroSrcset(nextHeroItem().imageUrl) ||
+                            toWebp(nextHeroItem().imageUrl)
                           "
                           [attr.sizes]="
-                            heroSrcset(outgoingHeroImage()) ? heroSizes : null
+                            heroSrcset(nextHeroItem().imageUrl)
+                              ? heroPeekSizes
+                              : null
                           "
                           type="image/webp"
                         />
                         <img
-                          [src]="outgoingHeroImage()"
+                          [src]="nextHeroItem().imageUrl"
                           alt=""
+                          loading="eager"
+                          fetchpriority="low"
                           decoding="async"
                         />
                       </picture>
                     }
-                  </figure>
 
-                  @if (nextHeroItem()) {
-                    <picture
-                      class="hero-next-peek"
-                      [attr.aria-hidden]="true"
-                    >
-                      <source
-                        [srcset]="
-                          heroSrcset(nextHeroItem().imageUrl) ||
-                          toWebp(nextHeroItem().imageUrl)
-                        "
-                        [attr.sizes]="
-                          heroSrcset(nextHeroItem().imageUrl)
-                            ? '(max-width: 760px) 24vw'
-                            : null
-                        "
-                        type="image/webp"
-                      />
-                      <img
-                        [src]="nextHeroItem().imageUrl"
-                        alt=""
-                        loading="eager"
-                        fetchpriority="low"
-                        decoding="async"
-                      />
-                    </picture>
-                  }
-
-                  <button
-                    type="button"
-                    class="hero-arrow hero-arrow--next"
-                    aria-label="Next hero item"
-                    title="Next"
-                    (click)="selectAdjacentHeroItem(1)"
-                  >
-                    <span aria-hidden="true">›</span>
-                  </button>
-
-                  @for (callout of activeHeroCallouts(); track callout.id) {
-                    <article
-                      #heroCallout
-                      class="hero-callout"
-                      [ngClass]="'hero-callout--' + callout.id"
-                      [attr.data-callout-id]="callout.id"
-                      [style.--delay]="calloutDelay(callout.id)"
-                    >
-                      <span class="callout-line" aria-hidden="true"
-                        ><span></span
-                      ></span>
-                      <div class="callout-pill">
-                        <span class="callout-pill__icon" aria-hidden="true">
-                          <img
-                            [src]="mobileFeatureIcon(callout.id)"
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        </span>
-                        <div>
-                          <strong>{{ calloutTitle(callout) }}</strong>
-                        </div>
+                    @if (heroSwipeHintVisible()) {
+                      <div
+                        class="hero-swipe-hint"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <span>{{ t("home.hero.swipeHint") }}</span>
+                        <span class="hero-swipe-hint__arrow" aria-hidden="true">{{
+                          isArabic() ? "←" : "→"
+                        }}</span>
                       </div>
-                    </article>
-                  }
-
-                  @if (heroSwipeHintVisible()) {
-                    <div
-                      class="hero-swipe-hint"
-                      role="status"
-                      aria-live="polite"
-                    >
-                      <span>{{ t("home.hero.swipeHint") }}</span>
-                      <span class="hero-swipe-hint__arrow" aria-hidden="true">{{
-                        isArabic() ? "←" : "→"
-                      }}</span>
+                    }
                     </div>
-                  }
-                </div>
 
-                @if (heroItems().length > 1) {
-                  <div
-                    class="hero-pagination"
-                    role="tablist"
-                    aria-label="Hero slides"
+                    @if (heroItems().length > 1) {
+                      <nav
+                        class="hero-pagination"
+                        [attr.aria-label]="t('home.hero.productNavigation')"
+                      >
+                        <button
+                          type="button"
+                          class="hero-arrow hero-arrow--prev"
+                          [attr.aria-label]="t('home.hero.previous')"
+                          [title]="t('home.hero.previous')"
+                          (click)="selectAdjacentHeroItem(-1)"
+                        >
+                          <span aria-hidden="true">‹</span>
+                        </button>
+
+                        <span class="hero-pagination__count" aria-hidden="true">
+                          {{ heroPositionLabel() }}
+                        </span>
+                        <div class="hero-pagination__segments">
+                          @for (item of heroItems(); track item.id; let i = $index) {
+                            <button
+                              type="button"
+                              class="hero-pagination__segment"
+                              [class.is-active]="i === activeHeroItemIndex()"
+                              [attr.aria-current]="
+                                i === activeHeroItemIndex() ? 'true' : null
+                              "
+                              [attr.aria-label]="
+                                t('home.hero.viewProduct', {
+                                  index: i + 1,
+                                  total: heroItems().length,
+                                  product: item.name
+                                })
+                              "
+                              (click)="selectHeroItem(i)"
+                            >
+                              <span aria-hidden="true"></span>
+                            </button>
+                          }
+                        </div>
+
+                        <button
+                          type="button"
+                          class="hero-arrow hero-arrow--next"
+                          [attr.aria-label]="t('home.hero.next')"
+                          [title]="t('home.hero.next')"
+                          (click)="selectAdjacentHeroItem(1)"
+                        >
+                          <span aria-hidden="true">›</span>
+                        </button>
+                      </nav>
+                    }
+                  </div>
+
+                  <p
+                    class="hero-live"
+                    aria-live="polite"
+                    aria-atomic="true"
                   >
-                    @for (item of heroItems(); track item.id; let i = $index) {
-                      <button
-                        type="button"
-                        class="hero-pagination__segment"
-                        role="tab"
-                        [class.is-active]="i === activeHeroItemIndex()"
-                        [attr.aria-selected]="i === activeHeroItemIndex()"
-                        [attr.aria-label]="item.name"
-                        (click)="selectHeroItem(i)"
-                      >
-                        <span aria-hidden="true"></span>
-                      </button>
-                    }
-                  </div>
-                }
-
-                @if (activeHeroDescription()) {
-                  <p class="hero-description" aria-live="polite">
-                    {{ activeHeroDescription() }}
+                    {{
+                      t("home.hero.activeProduct", {
+                        product: activeHeroItem().name,
+                        index: activeHeroItemIndex() + 1,
+                        total: heroItems().length
+                      })
+                    }}
                   </p>
-                }
-
-                @if (activeHeroSwatches().length > 0 || showHeroProductLink()) {
-                  <div class="hero-swatches">
-                    @for (color of activeHeroSwatches(); track color.slug) {
-                      <button
-                        type="button"
-                        class="hero-swatch"
-                        [class.is-selected]="activeHeroSelectedColorKey() === color.key"
-                        [class.is-loading]="heroColorLoadingKey() === color.key"
-                        [attr.aria-pressed]="activeHeroSelectedColorKey() === color.key"
-                        [attr.aria-busy]="
-                          heroColorLoadingKey() === color.key ? 'true' : null
-                        "
-                        [attr.aria-label]="activeHeroItem().name + ' in ' + color.label"
-                        [title]="color.label"
-                        (click)="selectHeroColor(color.key)"
-                      >
-                        @if (color.image) {
-                          <span
-                            class="hero-swatch__dot hero-swatch__dot--image"
-                            aria-hidden="true"
-                            [style.background-image]="'url(' + color.image + ')'"
-                          ></span>
-                        } @else {
-                          <span
-                            class="hero-swatch__dot"
-                            aria-hidden="true"
-                            [style.background]="color.hex"
-                          ></span>
-                        }
-                      </button>
-                    }
-
-                    @if (showHeroProductLink()) {
-                      <button
-                        type="button"
-                        class="hero-swatch hero-swatch--more"
-                        [attr.aria-label]="
-                          'View ' + activeHeroItem().name + ' product page'
-                        "
-                        (click)="goToHeroProduct()"
-                      >
-                        <span class="hero-swatch__dot" aria-hidden="true">+</span>
-                      </button>
-                    }
-                  </div>
-                }
-
-                <button
-                  type="button"
-                  class="hero-cta hero-cta--mobile"
-                  (click)="goTo('/collection')"
-                >
-                  <span>{{ heroCtaLabel() }}</span>
-                </button>
+                </div>
               </section>
             } @else {
               <section

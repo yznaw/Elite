@@ -1,12 +1,9 @@
 import {
-  AfterViewInit,
   Component,
   ElementRef,
   OnDestroy,
   OnInit,
-  QueryList,
   ViewChild,
-  ViewChildren,
   computed,
   inject,
   signal,
@@ -15,11 +12,12 @@ import {
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Subscription, firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
+import { ProductsService } from '../../services/products.service';
 import { HomeCollectionTileContent, HeroColorContent } from '../../models/home-content.model';
 import { colorKey } from '../../utils/color-slug';
 import { resolveClientMediaUrl } from '../../utils/media-url';
@@ -41,9 +39,16 @@ interface StorefrontCollection {
 
 const FEATURED_COLLECTION_HANDLES = ['men', 'sunglasses', 'kids'];
 
-/** Mirrors the 1500ms hint keyframes and their two iterations in the SCSS. */
+/** Swatches drawn in the hero before the rest collapse into a `+N` chip. */
+const HERO_MAX_SWATCHES = 4;
+
+/** Keep in sync with the stacked-layout media query in home.component.scss. */
+const HERO_STACKED_MAX_PX = 1023;
+const HERO_STACKED_QUERY = `(max-width: ${HERO_STACKED_MAX_PX}px)`;
+const HERO_COARSE_POINTER_QUERY = '(any-pointer: coarse)';
+/** Mirrors the 1500ms hint keyframes and their single iteration in the SCSS. */
 const HERO_PEEK_DURATION_MS = 1500;
-const HERO_PEEK_ITERATIONS = 2;
+const HERO_PEEK_ITERATIONS = 1;
 /** Matches the release transition on `.is-peek-releasing`. */
 const HERO_PEEK_RELEASE_MS = 180;
 /** Teach the swipe once per visit rather than on every return to the home page. */
@@ -56,13 +61,14 @@ const HERO_HINT_SESSION_KEY = 'elite:hero-swipe-hint-shown';
     changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './home.component.scss'
 })
-export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
+export class HomeComponent implements OnInit, OnDestroy {
   private readonly router       = inject(Router);
   private readonly http         = inject(HttpClient);
   private readonly i18n         = inject(I18nService);
   readonly locale               = inject(LocaleService);
   readonly homeContent          = inject(HomeContentService);
   private readonly referenceData = inject(ReferenceDataService);
+  private readonly productsService = inject(ProductsService);
   private readonly apiBase      = this.resolveApiBase();
 
   private metaTimer: number | undefined;
@@ -75,16 +81,13 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Set once the visitor swipes or uses the pagination: the hint has no job then. */
   private heroInteracted = false;
   private componentDestroyed = false;
-  private heroMobileMedia: MediaQueryList | undefined;
+  private heroStackedMedia: MediaQueryList | undefined;
   private heroColorSwapTimer: number | undefined;
   private heroColorRequestId = 0;
   private heroSlideRequestId = 0;
   private readonly heroImageLoads = new Map<string, Promise<void>>();
   private heroSwipeStart: { x: number; y: number; pointerId: number } | null = null;
-  private heroGeometryObserver: ResizeObserver | undefined;
-  private heroGeometryFrame: number | undefined;
-  private heroCalloutChanges: Subscription | undefined;
-  private readonly onHeroMobileViewportChange = (event: MediaQueryListEvent): void => {
+  private readonly onHeroStackedViewportChange = (event: MediaQueryListEvent): void => {
     if (event.matches && this.pageReady()) {
       this.scheduleHeroSwipeHint();
     } else if (!event.matches) {
@@ -93,8 +96,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   };
 
   @ViewChild('heroStage') private heroStageElement?: ElementRef<HTMLElement>;
-  @ViewChild('heroProduct') private heroProductElement?: ElementRef<HTMLElement>;
-  @ViewChildren('heroCallout') private heroCalloutElements!: QueryList<ElementRef<HTMLElement>>;
 
   readonly metaVisible         = signal(false);
   readonly activeHeroItemIndex = signal(0);
@@ -117,22 +118,16 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     if (items.length < 2) return items[0];
     return items[(this.activeHeroItemIndex() + 1) % items.length];
   });
-  // Each slide has its own callouts array
-  readonly activeHeroCallouts = computed(() => this.activeHeroItem()?.callouts ?? []);
 
-  // Short selling copy shown under the mobile slider. Falls back to the slide's
-  // callout titles so a slide saved before this field existed still reads well.
+  /**
+   * Short selling copy under the product. Empty renders nothing rather than a
+   * blank line: the admin seeds this from the product's short description when a
+   * slide is linked, so an empty value means the editor cleared it on purpose.
+   */
   readonly activeHeroDescription = computed(() => {
     const item = this.activeHeroItem();
     if (!item) return '';
-    const direct = (this.isArabic() ? item.descriptionAr : item.descriptionEn)?.trim();
-    if (direct) return direct;
-    const titles = (item.callouts ?? [])
-      .map((c) => this.calloutTitle(c).trim())
-      .filter(Boolean)
-      .slice(0, 3);
-    if (!titles.length) return '';
-    return `${titles.join(this.isArabic() ? '، ' : ', ')}.`;
+    return (this.isArabic() ? item.descriptionAr : item.descriptionEn)?.trim() ?? '';
   });
 
   readonly heroSwipeHintVisible = signal(false);
@@ -172,6 +167,48 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   /**
+   * The swatches actually drawn. Capped so the row never wraps: four 44px targets
+   * plus their gaps measure 212px against 337px of content width at 390px wide,
+   * which leaves room for the overflow chip beside them.
+   */
+  readonly visibleHeroSwatches = computed(() =>
+    this.activeHeroSwatches().slice(0, HERO_MAX_SWATCHES)
+  );
+
+  /**
+   * Every colourway the product actually sells, which is the number the chip has
+   * to count against.
+   *
+   * It cannot come from `item.colors`: that array is the admin's *featured*
+   * selection and the editor hard-caps it at four, so subtracting the cap from
+   * it always yields zero and the chip could never appear. The real total lives
+   * on the product record, read through `ProductsService` so a colour added in
+   * the admin is reflected on the next refresh without a template change.
+   */
+  readonly activeHeroProductColorCount = computed(() => {
+    const productId = this.activeHeroItem()?.productId;
+    if (!productId) return 0;
+    const product = this.productsService.products().find((p) => p.id === productId);
+    if (!product) return 0;
+    // Deduplicated on the same key the swatches use, so a casing or spacing
+    // difference between the product record and the featured list cannot
+    // inflate the remainder.
+    const unique = new Set(
+      (product.colors ?? []).map((label) => colorKey(String(label))).filter(Boolean)
+    );
+    return unique.size;
+  });
+
+  /**
+   * Colourways the visitor cannot see in the hero. Drives the `+N` chip, which
+   * is rendered only when this is above zero: a permanently visible control that
+   * sometimes means "nothing more" is the ambiguity the bare `+` had.
+   */
+  readonly hiddenHeroSwatchCount = computed(() =>
+    Math.max(0, this.activeHeroProductColorCount() - this.visibleHeroSwatches().length)
+  );
+
+  /**
    * Colour the slide opens on. The server derives the slide image from this, so
    * the matching swatch reads as selected before the visitor taps anything.
    */
@@ -187,6 +224,15 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly activeHeroSelectedColorKey = computed(
     () => this.activeHeroColorKey() || this.activeHeroDefaultColorKey(),
   );
+  readonly activeHeroSelectedColorLabel = computed(() => {
+    const selected = this.activeHeroSelectedColorKey();
+    return this.activeHeroSwatches().find((swatch) => swatch.key === selected)?.label ?? '';
+  });
+  readonly heroPositionLabel = computed(() => {
+    const total = this.heroItems().length;
+    const width = Math.max(2, String(total).length);
+    return `${String(this.activeHeroItemIndex() + 1).padStart(width, '0')} / ${String(total).padStart(width, '0')}`;
+  });
 
   /**
    * Hero image for the active slide, swapped when a colour swatch is tapped.
@@ -214,52 +260,20 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly promiseCards = computed(() => this.contentData().promise.cards);
   readonly statItems    = computed(() => this.contentData().stats);
 
-  readonly t = (key: string): string => this.i18n.t(key);
-
-  private readonly _calloutDelays: Record<string, string> = {
-    strap: '0.34s', buckle: '0.48s', sole: '0.76s', stitching: '0.62s',
-  };
+  readonly t = (
+    key: string,
+    params?: Record<string, string | number>,
+  ): string => this.i18n.t(key, params);
 
   readonly isArabic = computed(() => this.locale.locale() === 'ar');
-  private readonly mobileFeatureIcons: Record<string, string> = {
-    strap: 'assets/home-feature-icons/leather.svg',
-    buckle: 'assets/home-feature-icons/buckle.svg',
-    sole: 'assets/home-feature-icons/sole.svg',
-    stitching: 'assets/home-feature-icons/stitching.svg',
-  };
-  private readonly heroCalloutTargets: Record<string, { x: number; y: number; side: 'left' | 'right' }> = {
-    strap: { x: 0.28, y: 0.50, side: 'left' },
-    buckle: { x: 0.49, y: 0.63, side: 'right' },
-    stitching: { x: 0.27, y: 0.82, side: 'left' },
-    sole: { x: 0.84, y: 0.66, side: 'right' },
-  };
-
-  calloutDelay(id: string): string {
-    return this._calloutDelays[id] ?? '0.5s';
-  }
-
-  calloutTitle(callout: { titleEn?: string; titleAr?: string; subtitleEn?: string }): string {
-    return this.isArabic()
-      ? (callout.titleAr || callout.subtitleEn || '')
-      : (callout.titleEn || callout.subtitleEn || callout.titleAr || '');
-  }
-
-  mobileFeatureIcon(calloutId: string): string {
-    return this.mobileFeatureIcons[calloutId] || this.mobileFeatureIcons['strap'];
-  }
-
-  heroSubtitle(item: { subtitle?: string }): string {
-    const value = (item.subtitle || '').trim();
-    if (!value) return '';
-    const parts = value.split('/').map((part) => part.trim()).filter(Boolean);
-    if (parts.length < 2) return value;
-    return this.isArabic() ? parts[0] : parts[1];
-  }
 
   ngOnInit(): void {
-    this.heroMobileMedia = window.matchMedia('(max-width: 760px)');
-    this.heroMobileMedia.addEventListener('change', this.onHeroMobileViewportChange);
+    this.heroStackedMedia = window.matchMedia(HERO_STACKED_QUERY);
+    this.heroStackedMedia.addEventListener('change', this.onHeroStackedViewportChange);
     void this.referenceData.ensureColors();
+    // Feeds the `+N` colour chip. The service caches for 60s and revalidates on
+    // return, so an admin adding a colourway shows up without a hard reload.
+    void this.productsService.ensureLoaded();
     void Promise.all([
       this.loadCollectionTiles(),
       this.homeContent.refresh(true),
@@ -271,23 +285,15 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
   }
 
-  ngAfterViewInit(): void {
-    this.heroCalloutChanges = this.heroCalloutElements.changes.subscribe(() => this.observeHeroGeometry());
-    this.observeHeroGeometry();
-  }
-
   ngOnDestroy(): void {
     this.componentDestroyed = true;
-    this.heroMobileMedia?.removeEventListener('change', this.onHeroMobileViewportChange);
+    this.heroStackedMedia?.removeEventListener('change', this.onHeroStackedViewportChange);
     if (this.metaTimer) clearTimeout(this.metaTimer);
     if (this.heroSwipeHintTimer) clearTimeout(this.heroSwipeHintTimer);
     if (this.heroSwipeHintDismissTimer) clearTimeout(this.heroSwipeHintDismissTimer);
     if (this.heroPeekReleaseTimer) clearTimeout(this.heroPeekReleaseTimer);
     if (this.heroPeekReleaseFrame) cancelAnimationFrame(this.heroPeekReleaseFrame);
     if (this.heroColorSwapTimer) clearTimeout(this.heroColorSwapTimer);
-    if (this.heroGeometryFrame) cancelAnimationFrame(this.heroGeometryFrame);
-    this.heroGeometryObserver?.disconnect();
-    this.heroCalloutChanges?.unsubscribe();
   }
 
   goTo(path: string): void {
@@ -336,11 +342,15 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  /** Open the slide's product with no colour preselected, showing the full picker. */
+  /** Open the active product and carry the colour currently previewed in the hero. */
   goToHeroProduct(): void {
     const productId = this.activeHeroItem()?.productId;
     if (!productId) return;
-    void this.router.navigate(['/product', productId]);
+    const selectedKey = this.activeHeroSelectedColorKey();
+    const selected = this.activeHeroSwatches().find((color) => color.key === selectedKey);
+    void this.router.navigate(['/product', productId], {
+      queryParams: selected?.slug ? { color: selected.slug } : undefined,
+    });
     window.scrollTo(0, 0);
   }
 
@@ -403,7 +413,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       this.heroInteracted ||
       this.heroHintSeenThisSession() ||
       this.heroItems().length < 2 ||
-      !window.matchMedia('(max-width: 760px)').matches
+      !this.heroSwipeHintEligible()
     ) {
       return;
     }
@@ -416,7 +426,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
         this.componentDestroyed ||
         this.heroInteracted ||
         this.heroItems().length < 2 ||
-        !window.matchMedia('(max-width: 760px)').matches
+        !this.heroSwipeHintEligible()
       ) {
         return;
       }
@@ -459,6 +469,11 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     this.stopHeroPeek();
     this.heroSwipeHintVisible.set(false);
+  }
+
+  private heroSwipeHintEligible(): boolean {
+    return window.matchMedia(HERO_STACKED_QUERY).matches
+      && window.matchMedia(HERO_COARSE_POINTER_QUERY).matches;
   }
 
   /**
@@ -681,7 +696,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private ensureHeroImageReady(url: string): Promise<void> {
     if (!url) return Promise.resolve();
-    const layout = window.matchMedia('(max-width: 760px)').matches ? 'mobile' : 'desktop';
+    const layout = window.matchMedia(HERO_STACKED_QUERY).matches ? 'stacked' : 'wide';
     const cacheKey = `${layout}:${url}`;
     const existing = this.heroImageLoads.get(cacheKey);
     if (existing) return existing;
@@ -715,53 +730,6 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private isHeroControl(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && target.closest('button') !== null;
-  }
-
-  private observeHeroGeometry(): void {
-    this.heroGeometryObserver?.disconnect();
-    this.heroGeometryObserver = new ResizeObserver(() => this.scheduleHeroLineUpdate());
-
-    const stage = this.heroStageElement?.nativeElement;
-    const product = this.heroProductElement?.nativeElement;
-    if (stage) this.heroGeometryObserver.observe(stage);
-    if (product) this.heroGeometryObserver.observe(product);
-    this.heroCalloutElements?.forEach(({ nativeElement }) => this.heroGeometryObserver?.observe(nativeElement));
-    this.scheduleHeroLineUpdate();
-  }
-
-  private scheduleHeroLineUpdate(): void {
-    if (this.heroGeometryFrame) cancelAnimationFrame(this.heroGeometryFrame);
-    this.heroGeometryFrame = requestAnimationFrame(() => {
-      this.heroGeometryFrame = undefined;
-      this.updateHeroLines();
-    });
-  }
-
-  private updateHeroLines(): void {
-    const product = this.heroProductElement?.nativeElement;
-    if (!product || window.matchMedia('(max-width: 760px)').matches) return;
-
-    this.heroCalloutElements.forEach(({ nativeElement: callout }) => {
-      const id = callout.dataset['calloutId'] || '';
-      const target = this.heroCalloutTargets[id];
-      const pill = callout.querySelector<HTMLElement>('.callout-pill');
-      if (!target || !pill) return;
-
-      const startX = callout.offsetLeft + pill.offsetLeft
-        + (target.side === 'left' ? pill.offsetWidth - 9 : 9);
-      const startY = callout.offsetTop + pill.offsetTop + (pill.offsetHeight / 2);
-      const targetX = product.offsetLeft + (product.offsetWidth * target.x);
-      const targetY = product.offsetTop + (product.offsetHeight * target.y);
-      const deltaX = targetX - startX;
-      const deltaY = targetY - startY;
-      const angle = target.side === 'left'
-        ? Math.atan2(deltaY, deltaX)
-        : Math.atan2(-deltaY, -deltaX);
-
-      callout.style.setProperty('--callout-line-width', `${Math.hypot(deltaX, deltaY)}px`);
-      callout.style.setProperty('--callout-line-top', '50%');
-      callout.style.setProperty('--callout-line-rotate', `${angle * 180 / Math.PI}deg`);
-    });
   }
 
   toWebp(url: string): string {
@@ -805,7 +773,9 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
    * parse time, so an svh term here would bake in whatever height the viewport
    * happened to have then.
    */
-  readonly heroSizes = '(max-width: 760px) min(124vw, 620px), min(1120px, 82vw)';
+  readonly heroSizes =
+    `(max-width: ${HERO_STACKED_MAX_PX}px) min(132vw, 620px), min(1240px, 76vw)`;
+  readonly heroPeekSizes = `(max-width: ${HERO_STACKED_MAX_PX}px) min(38vw, 152px)`;
 
   private preloadHeroAssets(): void {
     const firstUrl = this.heroItems()[0]?.imageUrl;

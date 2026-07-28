@@ -34,8 +34,7 @@ function heroColorSlug(value: string): string {
 
 // ── Content data shapes (mirrors server defaults) ─────────────────────
 interface HeroColor     { label: string; slug: string; imageUrl: string; }
-interface HeroCallout   { id: string; titleEn: string; titleAr: string; subtitleEn: string; subtitleAr: string; thumbnail: string; alt: string; }
-interface HeroSliderItem { id: string; name: string; subtitle: string; descriptionEn: string; descriptionAr: string; imageUrl: string; alt: string; productId: string; colors: HeroColor[]; defaultColorSlug: string; callouts: HeroCallout[]; }
+interface HeroSliderItem { id: string; name: string; subtitle: string; descriptionEn: string; descriptionAr: string; imageUrl: string; alt: string; productId: string; colors: HeroColor[]; defaultColorSlug: string; }
 interface PromiseCard   { id: string; icon: string; labelEn: string; labelAr: string; subEn: string; subAr: string; }
 interface StatItem      { id: string; value: string; labelEn: string; labelAr: string; }
 interface ContactBlock  { id: string; icon: string; titleEn: string; titleAr: string; lines: string[]; }
@@ -329,14 +328,14 @@ interface StorefrontContent {
                         </span>
                       </div>
 
-                      @if (selectableColors(item.productId).length === 0) {
+                      @if (selectableColors(item).length === 0) {
                         <div class="hero-warn">
                           <ap-icon name="warning" [size]="12"/>
                           <span>{{ t('storefront.editor.slider.noColours') }}</span>
                         </div>
                       } @else {
                         <div class="hero-color-grid">
-                          @for (opt of selectableColors(item.productId); track opt.name) {
+                          @for (opt of selectableColors(item); track opt.name) {
                             <button
                               class="hero-color-chip"
                               type="button"
@@ -492,69 +491,6 @@ interface StorefrontContent {
                   <label><span class="lbl">{{ t('storefront.editor.slider.altText') }}</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
                 </div>
 
-                <!-- Step 3 — Per-slide collapsible callouts (desktop only) -->
-                <div class="callouts-section" [class.callouts-open]="expandedSlide() === i">
-                  <button class="callouts-toggle" type="button" (click)="toggleSlideCallouts(i)"
-                          [attr.aria-expanded]="expandedSlide() === i">
-                    <span class="callouts-toggle__icon">
-                      <ap-icon name="list" [size]="12"/>
-                    </span>
-                    <span class="callouts-toggle__label">
-                      <span class="step-badge">3</span>
-                      {{ t('storefront.editor.slider.callouts') }}
-                    </span>
-                    <span class="callouts-toggle__count">{{ item.callouts.length }}</span>
-                    <span class="callouts-toggle__hint">{{ expandedSlide() === i ? t('storefront.editor.slider.collapse') : t('storefront.editor.slider.expand') }}</span>
-                    <span class="callouts-toggle__arrow" [class.open]="expandedSlide() === i">
-                      <ap-icon name="arrowDn" [size]="13"/>
-                    </span>
-                  </button>
-                  @if (expandedSlide() === i) {
-                    <div class="callouts-body">
-                      @for (callout of item.callouts; track callout.id; let ci = $index) {
-                        <div class="callout-row">
-                          <div class="callout-row__head">
-                            <span class="callout-row__id">
-                              <ap-icon name="drag" [size]="11"/>
-                              {{ callout.id }}
-                            </span>
-                            <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeCallout(i,ci)">
-                              <ap-icon name="trash" [size]="11"/>
-                            </button>
-                          </div>
-                          <div class="callout-row__fields">
-                            <label><span class="lbl">{{ t('storefront.editor.slider.labelEn') }}</span><input class="inp inp-sm" [ngModel]="callout.titleEn" (ngModelChange)="patchCallout(i,ci,'titleEn',$event)"/></label>
-                            <label><span class="lbl">{{ t('storefront.editor.slider.labelAr') }}</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.titleAr" (ngModelChange)="patchCallout(i,ci,'titleAr',$event)"/></label>
-                            <label><span class="lbl">{{ t('storefront.editor.slider.subtitleEn') }}</span><input class="inp inp-sm" [ngModel]="callout.subtitleEn" (ngModelChange)="patchCallout(i,ci,'subtitleEn',$event)"/></label>
-                            <label><span class="lbl">{{ t('storefront.editor.slider.subtitleAr') }}</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.subtitleAr" (ngModelChange)="patchCallout(i,ci,'subtitleAr',$event)"/></label>
-                            <label>
-                              <span class="lbl">{{ t('storefront.editor.slider.thumbnail') }}</span>
-                              <div class="callout-thumb-row">
-                                @if (callout.thumbnail) {
-                                  <img class="callout-thumb" [src]="callout.thumbnail" [alt]="callout.alt"/>
-                                } @else {
-                                  <div class="callout-thumb callout-thumb--empty">
-                                    <ap-icon name="media" [size]="16"/>
-                                  </div>
-                                }
-                                <div style="flex:1;min-width:0;">
-                                  <input #ctFile type="file" accept="image/*" (change)="uploadCalloutImage(i,ci,$event)" hidden/>
-                                  <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="ctFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
-                                  <input class="inp mt-6" style="font-size:11px;" placeholder="or paste URL…" [ngModel]="callout.thumbnail" (ngModelChange)="patchCallout(i,ci,'thumbnail',$event)"/>
-                                </div>
-                              </div>
-                            </label>
-                            <label><span class="lbl">{{ t('storefront.editor.field.altText') }}</span><input class="inp inp-sm" [ngModel]="callout.alt" (ngModelChange)="patchCallout(i,ci,'alt',$event)"/></label>
-                          </div>
-                        </div>
-                        @if (ci < item.callouts.length - 1) { <hr class="callout-sep"/> }
-                      }
-                      <button class="btn btn-outline btn-sm mt-12" style="width:100%;" type="button" (click)="addCallout(i)">
-                        <ap-icon name="plus" [size]="12"/> {{ t('storefront.editor.slider.addCallout') }}
-                      </button>
-                    </div>
-                  }
-                </div>
               </div>
             </div>
           }
@@ -1569,103 +1505,7 @@ interface StorefrontContent {
     }
     .add-slide-btn:hover { color: var(--green); border-color: var(--green); }
 
-    /* ── Callout editor ─────────────────────────── */
-    .callout-editor { display: grid; grid-template-columns: 80px 1fr; gap: 16px; padding: 12px 0; }
-    .callout-id { font-family: monospace; color: var(--muted); }
-    .callout-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .callout-fields label { display: flex; flex-direction: column; gap: 4px; }
-    .callout-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; flex-shrink: 0; border: 1px solid var(--border); }
     .callout-sep { border: none; border-top: 1px dashed var(--border); margin: 4px 0; }
-
-    /* ── Per-slide collapsible callouts ─────────── */
-    .callouts-section { margin-top: 16px; }
-
-    /* Accordion trigger button */
-    .callouts-toggle {
-      display: flex; align-items: center; gap: 8px;
-      width: 100%; padding: 10px 14px;
-      background: var(--bg);
-      border: 1.5px solid var(--border-2);
-      border-radius: 8px;
-      font-size: 13px; font-weight: 600; color: var(--ink-2);
-      cursor: pointer; text-align: start;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-    }
-    .callouts-toggle:hover {
-      border-color: var(--gold);
-      color: var(--green);
-      background: var(--gold-3);
-    }
-    /* When open: connect visually to the body below */
-    .callouts-open .callouts-toggle {
-      border-color: var(--gold);
-      border-radius: 8px 8px 0 0;
-      border-bottom-color: transparent;
-      background: var(--gold-3);
-      color: var(--green);
-    }
-
-    .callouts-toggle__icon {
-      width: 22px; height: 22px;
-      display: flex; align-items: center; justify-content: center;
-      background: var(--green); color: #fff;
-      border-radius: 5px; flex-shrink: 0;
-    }
-    .callouts-open .callouts-toggle__icon { background: var(--gold); }
-
-    .callouts-toggle__label { flex: 1; }
-
-    .callouts-toggle__count {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-width: 20px; height: 20px;
-      background: var(--green); color: #fff;
-      font-size: 10px; font-weight: 700;
-      padding: 0 6px; border-radius: 99px;
-    }
-    .callouts-open .callouts-toggle__count { background: var(--gold); }
-
-    .callouts-toggle__hint {
-      font-size: 10px; font-weight: 400;
-      color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
-    }
-
-    .callouts-toggle__arrow {
-      display: flex; transition: transform 0.22s cubic-bezier(0.22,1,0.36,1);
-    }
-    .callouts-toggle__arrow.open { transform: rotate(180deg); }
-
-    /* Accordion body — connected border */
-    .callouts-body {
-      border: 1.5px solid var(--gold);
-      border-top: none;
-      border-radius: 0 0 8px 8px;
-      padding: 14px 14px 10px;
-      background: var(--surface);
-    }
-
-    /* Individual callout rows */
-    .callout-row { padding: 10px 0; }
-    .callout-row__head {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 10px;
-    }
-    .callout-row__id {
-      display: flex; align-items: center; gap: 6px;
-      font-family: monospace; font-size: 11px;
-      color: var(--muted); font-weight: 600;
-    }
-    .callout-row__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .callout-thumb-row { display: flex; align-items: flex-start; gap: 10px; }
-    .callout-thumb {
-      width: 52px; height: 52px;
-      object-fit: cover; border-radius: 7px; flex-shrink: 0;
-      border: 1px solid var(--border);
-    }
-    .callout-thumb--empty {
-      display: flex; align-items: center; justify-content: center;
-      background: var(--bg); color: var(--muted);
-    }
-    @media (max-width: 640px) { .callout-row__fields { grid-template-columns: 1fr; } }
 
     /* ── Hero slide card ─────────────────────────────────────────────── */
     .slide-card__title { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -2296,22 +2136,31 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Every colour offerable for a slide: the linked product's own colours first,
-   * then the rest of the Reference Data library. Colours the product does not
-   * carry are still selectable, but flagged in the UI since the "+" link opens
-   * that product and a customer will not find the colourway there.
+   * Colours offerable for a slide: only the ones the linked product actually
+   * sells.
+   *
+   * This used to append the whole Reference Data library, which let a slide
+   * advertise a colourway the product does not carry. The customer then tapped
+   * that swatch, landed on the product page and could not find it. Flagging
+   * those chips in the UI was not enough: it relied on the editor noticing every
+   * time, and in practice most featured colours drifted off-product.
+   *
+   * Legacy selections are the one exception. A colour already featured on this
+   * slide that the product no longer carries is still listed, flagged, so it
+   * stays visible and removable. Restricting the list without this would strand
+   * those rows with no way to deselect them.
    */
-  selectableColors(productId: string): Array<{ name: string; onProduct: boolean }> {
-    const own = this.productColorNames(productId);
+  selectableColors(item: HeroSliderItem): Array<{ name: string; onProduct: boolean }> {
+    const own = this.productColorNames(item.productId);
     const seen = new Set(own.map((n) => n.trim().toLowerCase()));
-    const rest = this.refColors()
-      .map((c) => c.name_en.trim())
-      .filter((name) => name && !seen.has(name.toLowerCase()))
+    const stale = (item.colors ?? [])
+      .map((color) => color.label.trim())
+      .filter((label) => label && !seen.has(label.toLowerCase()))
       .sort((a, b) => a.localeCompare(b));
 
     return [
       ...own.map((name) => ({ name, onProduct: true })),
-      ...rest.map((name) => ({ name, onProduct: false })),
+      ...stale.map((name) => ({ name, onProduct: false })),
     ];
   }
 
@@ -2676,13 +2525,23 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     const renderable = names.filter((name) => !this.colorMissingHex(name));
     const prefill = (renderable.length ? renderable : names).slice(0, HERO_MAX_COLORS);
 
-    const colors = prefill.map((label) => ({
-      label,
-      slug: heroColorSlug(label),
-      // Seed the hero shot from the product's gallery tagging. It is only a
-      // starting point: the editor can replace it with proper hero art.
-      imageUrl: this.productImageForColor(product, label),
-    }));
+    // Hero art is never taken from the product. Hero shots are always shot
+    // separately, so a product gallery image is wrong here rather than merely a
+    // rough starting point. Refill therefore syncs colour names and count only.
+    //
+    // Existing hero images are matched by slug and carried over, so refilling to
+    // pick up a renamed or newly added colourway cannot wipe art the editor has
+    // already uploaded for the colourways that survive.
+    const existingImageBySlug = new Map(
+      (this.content().heroSlider.items[i]?.colors ?? [])
+        .map((color) => [color.slug, color.imageUrl] as const)
+        .filter(([, imageUrl]) => !!imageUrl),
+    );
+
+    const colors = prefill.map((label) => {
+      const slug = heroColorSlug(label);
+      return { label, slug, imageUrl: existingImageBySlug.get(slug) ?? '' };
+    });
 
     this.content.update((c) => {
       const items = c.heroSlider.items.map((item, idx) => {
@@ -2705,14 +2564,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       return { ...c, heroSlider: { ...c.heroSlider, items } };
     });
     this.markDirty();
-  }
-
-  /** Gallery image the product tagged with this colour, if any. */
-  private productImageForColor(product: Product, label: string): string {
-    const key = label.trim().toLowerCase();
-    const entry = Object.entries(product.imageColors ?? {})
-      .find(([, color]) => String(color || '').trim().toLowerCase() === key);
-    return entry?.[0] || '';
   }
 
   /** Bilingual subtitle in the "العربية / English" shape the hero splits on. */
@@ -2846,7 +2697,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
 
   addSliderItem(): void {
     const newId = `slide-${Date.now()}`;
-    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', descriptionEn: '', descriptionAr: '', imageUrl: '', alt: '', productId: '', colors: [], defaultColorSlug: '', callouts: [] };
+    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', descriptionEn: '', descriptionAr: '', imageUrl: '', alt: '', productId: '', colors: [], defaultColorSlug: '' };
     this.content.update((c) => ({
       ...c,
       heroSlider: { ...c.heroSlider, items: [...c.heroSlider.items, newItem] },
@@ -2857,41 +2708,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   removeSliderItem(i: number): void {
     this.content.update((c) => {
       const items = c.heroSlider.items.filter((_, idx) => idx !== i);
-      return { ...c, heroSlider: { ...c.heroSlider, items } };
-    });
-    this.markDirty();
-  }
-
-  patchCallout(slideIdx: number, calloutIdx: number, key: string, value: string): void {
-    this.content.update((c) => {
-      const items = c.heroSlider.items.map((item, si) => {
-        if (si !== slideIdx) return item;
-        const callouts = item.callouts.map((cl, ci) => ci === calloutIdx ? { ...cl, [key]: value } : cl);
-        return { ...item, callouts };
-      });
-      return { ...c, heroSlider: { ...c.heroSlider, items } };
-    });
-    this.markDirty();
-  }
-
-  addCallout(slideIdx: number): void {
-    const newId = `callout-${Date.now()}`;
-    this.content.update((c) => {
-      const items = c.heroSlider.items.map((item, si) => {
-        if (si !== slideIdx) return item;
-        return { ...item, callouts: [...item.callouts, { id: newId, titleEn: '', titleAr: '', subtitleEn: '', subtitleAr: '', thumbnail: '', alt: '' }] };
-      });
-      return { ...c, heroSlider: { ...c.heroSlider, items } };
-    });
-    this.markDirty();
-  }
-
-  removeCallout(slideIdx: number, calloutIdx: number): void {
-    this.content.update((c) => {
-      const items = c.heroSlider.items.map((item, si) => {
-        if (si !== slideIdx) return item;
-        return { ...item, callouts: item.callouts.filter((_, ci) => ci !== calloutIdx) };
-      });
       return { ...c, heroSlider: { ...c.heroSlider, items } };
     });
     this.markDirty();
@@ -3101,12 +2917,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
-  // ── Slide callout expand/collapse ─────────────────────────────────────
-  readonly expandedSlide = signal<number | null>(null);
-  toggleSlideCallouts(i: number): void {
-    this.expandedSlide.update((v) => v === i ? null : i);
-  }
-
   patchStoryHero(key: string, value: string): void {
     this.content.update((c) => ({ ...c, story: { ...c.story, hero: { ...c.story.hero, [key]: value } } }));
     this.markDirty();
@@ -3266,11 +3076,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   async uploadHeroImage(event: Event): Promise<void> {
     const url = await this.uploadFile(event);
     if (url) this.patchHero('imageUrl', url);
-  }
-
-  async uploadCalloutImage(slideIdx: number, calloutIdx: number, event: Event): Promise<void> {
-    const url = await this.uploadFile(event);
-    if (url) this.patchCallout(slideIdx, calloutIdx, 'thumbnail', url);
   }
 
   async uploadTileImage(i: number, event: Event): Promise<void> {

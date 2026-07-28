@@ -68,16 +68,6 @@ export interface StoryContentData {
   };
 }
 
-export interface HeroCalloutContent {
-  id: string;
-  titleEn: string;
-  titleAr: string;
-  subtitleEn: string;
-  subtitleAr: string;
-  thumbnail: string;
-  alt: string;
-}
-
 /**
  * One featured colorway on a hero slide. `hex` is deliberately absent: colour
  * values are resolved from `ref_colors` at render time so a colour edited in
@@ -116,7 +106,6 @@ export interface HeroSliderItem {
   colors: HeroColorContent[];
   /** Slug of the colourway the slide opens on. Falls back to the first colour. */
   defaultColorSlug: string;
-  callouts: HeroCalloutContent[];
 }
 
 export interface HeroSliderContent {

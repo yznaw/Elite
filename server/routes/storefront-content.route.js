@@ -123,12 +123,6 @@ const DEFAULT_HOME_CONTENT = {
         productId: '',
         colors: [],
         defaultColorSlug: '',
-        callouts: [
-          { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد عجل طبيعي',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-angle-single.png',  alt: 'Leather strap detail' },
-          { id: 'buckle',    titleEn: 'Premium Buckle',     titleAr: 'إبزيم معدني فاخر', subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-front-pair.png',   alt: 'Premium buckle detail' },
-          { id: 'sole',      titleEn: 'Comfort Sole',       titleAr: 'نعل مريح',          subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-side-single.jpeg', alt: 'Comfort sole' },
-          { id: 'stitching', titleEn: 'Hand Stitched',      titleAr: 'خياطة يدوية',       subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-top-pair.png',     alt: 'Hand-stitched edge' },
-        ],
       },
       {
         id: 'white-leather',
@@ -141,12 +135,6 @@ const DEFAULT_HOME_CONTENT = {
         productId: '',
         colors: [],
         defaultColorSlug: '',
-        callouts: [
-          { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد طبيعي أبيض',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-leather.png',   alt: 'White leather texture' },
-          { id: 'buckle',    titleEn: 'Silver Buckle',      titleAr: 'إبزيم فضي فاخر',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-buckle.png',    alt: 'Silver buckle detail' },
-          { id: 'sole',      titleEn: 'Comfort Sole',       titleAr: 'نعل مريح',          subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-brand.png',     alt: 'Branded footbed' },
-          { id: 'stitching', titleEn: 'Hand Stitched',      titleAr: 'خياطة يدوية',       subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-stitching.png', alt: 'White stitching' },
-        ],
       },
     ],
   },
@@ -596,15 +584,6 @@ function resolveHeroSlideImage(colors, requestedSlug, storedImage) {
   };
 }
 
-function calloutSentence(callouts, key) {
-  const titles = (Array.isArray(callouts) ? callouts : [])
-    .map((c) => String(c?.[key] || '').trim())
-    .filter(Boolean)
-    .slice(0, 3);
-  if (!titles.length) return '';
-  return `${titles.join(key.endsWith('Ar') ? '، ' : ', ')}.`;
-}
-
 function normalizeHeroSlider(heroSlider = {}) {
   const fb = DEFAULT_HOME_CONTENT.heroSlider;
   const inItems = Array.isArray(heroSlider.items) && heroSlider.items.length > 0
@@ -615,21 +594,12 @@ function normalizeHeroSlider(heroSlider = {}) {
     .filter((item) => item && item.id)
     .map((item) => {
       const fallback = fb.items.find((f) => f.id === item.id) || {};
-      const inCallouts = Array.isArray(item.callouts) ? item.callouts : (fallback.callouts || []);
       return {
         id:       item.id,
         name:     asText(item.name,     fallback.name     || ''),
         subtitle: asText(item.subtitle, fallback.subtitle || ''),
-        // Slides saved before the description field existed fall back to their
-        // callout titles so the mobile hero never renders an empty line.
-        descriptionEn: asText(
-          item.descriptionEn,
-          fallback.descriptionEn || calloutSentence(inCallouts, 'titleEn'),
-        ),
-        descriptionAr: asText(
-          item.descriptionAr,
-          fallback.descriptionAr || calloutSentence(inCallouts, 'titleAr'),
-        ),
+        descriptionEn: asText(item.descriptionEn, fallback.descriptionEn || ''),
+        descriptionAr: asText(item.descriptionAr, fallback.descriptionAr || ''),
         ...resolveHeroSlideImage(
           normalizeHeroColors(item.colors ?? fallback.colors),
           asText(item.defaultColorSlug, fallback.defaultColorSlug || ''),
@@ -637,17 +607,6 @@ function normalizeHeroSlider(heroSlider = {}) {
         ),
         alt:      asText(item.alt,      fallback.alt      || ''),
         productId: asText(item.productId, fallback.productId || ''),
-        callouts: inCallouts
-          .filter((c) => c && c.id)
-          .map((c) => ({
-            id:         c.id,
-            titleEn:    asText(c.titleEn,    fallback.titleEn || asText(c.subtitleEn, '')),
-            titleAr:    asText(c.titleAr,    fallback.titleAr || ''),
-            subtitleEn: asText(c.subtitleEn, fallback.subtitleEn || ''),
-            subtitleAr: asText(c.subtitleAr, fallback.subtitleAr || ''),
-            thumbnail:  asText(c.thumbnail,  ''),
-            alt:        asText(c.alt,        ''),
-          })),
       };
     });
 
