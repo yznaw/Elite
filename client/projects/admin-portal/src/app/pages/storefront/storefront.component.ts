@@ -2368,8 +2368,40 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   }
 
   // ── Publish draft to live ─────────────────────────────────────────────
+  /**
+   * Featured colourways across every slide that carry no hero shot of their own.
+   *
+   * These are not a rendering fault: the storefront falls back to the slide image
+   * by design. The problem is what the customer sees. The swatch ring moves and
+   * the colour name changes while the photograph stays exactly the same, so the
+   * control reads as broken. Refill deliberately does not borrow product photos
+   * for these, so the only way one gets filled is an editor uploading it.
+   *
+   * Surfaced at publish time because the inline warning sits far down the colour
+   * section and was, in practice, published straight past.
+   */
+  private unshotColourWarnings(): string[] {
+    return (this.content().heroSlider?.items ?? []).reduce<string[]>((acc, item, i) => {
+      const labels = this.slideImageWarnings(i);
+      if (labels.length) acc.push(`${item.name || `#${i + 1}`}: ${labels.join(', ')}`);
+      return acc;
+    }, []);
+  }
+
   async publishContent(): Promise<void> {
     if (this.publishingContent()) return;
+
+    const unshot = this.unshotColourWarnings();
+    if (unshot.length) {
+      const proceed = await this.confirm.ask({
+        title: this.t('storefront.editor.confirm.unshotColours.title'),
+        message: `${this.t('storefront.editor.confirm.unshotColours.message')}\n\n${unshot.join('\n')}`,
+        confirmLabel: this.t('storefront.editor.confirm.unshotColours.confirm'),
+        cancelLabel: this.t('storefront.editor.confirm.unshotColours.cancel'),
+        variant: 'warning',
+      });
+      if (!proceed) return;
+    }
     const ok = await this.confirm.ask({
       title: this.t('storefront.editor.confirm.publish.title'),
       message: this.t('storefront.editor.confirm.publish.message'),

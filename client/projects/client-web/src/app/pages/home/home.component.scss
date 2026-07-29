@@ -1171,11 +1171,19 @@
     /* Keeps the incoming preview clipped to the frame while it slides in, so it
        enters from a hard edge rather than appearing in mid-air. */
     overflow: hidden;
-    /* Matches .hero-product's 1.4:1 box so no dead space sits under the art.
-       The svh cap only limits height here; it never feeds back into the width,
-       so a chrome-driven svh change cannot resize the art. */
-    height: min(calc(var(--mobile-product-size) / 1.4), 46svh);
-    min-height: 0;
+    /* `max-height`, not `height`. The grid declares this row as `minmax(0, 1fr)`
+       so it can absorb whatever the copy above it needs, but a fixed `height`
+       overrode that and made the row rigid. With a rigid row, a long name or
+       description had nowhere to go: it pushed the art down until the shoe
+       overlapped the indicator, and `overflow: clip` on `.hero` hid the damage
+       instead of surfacing it.
+
+       The ceiling is unchanged, so typical content renders exactly as before.
+       Only the overflow case now resolves by shrinking the art. */
+    max-height: min(calc(var(--mobile-product-size) / 1.4), 46svh);
+    /* The floor: below this the art stops giving way and the copy has to clamp
+       instead. Without it, hostile content could shrink the shoe to nothing. */
+    min-height: min(184px, 26svh);
     margin: 0;
     transform: none;
   }
