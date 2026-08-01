@@ -104,6 +104,15 @@ export class PosHardwareService {
     }
     logStage('QZ Tray connection — connecting', { retries, delay });
     await this.withTimeout(qz.websocket.connect({ retries, delay }), this.CONNECT_TIMEOUT_MS, 'QZ Tray connection');
+    // The qz-tray npm package reshapes the print payload depending on which
+    // desktop version answered (see its `compatible.data`), so a print that
+    // fails on the register but is valid per the current docs is impossible
+    // to reason about without this number in the same log.
+    try {
+      logStage('QZ Tray version', { version: await qz.api.getVersion() });
+    } catch {
+      // Diagnostics only. Never let this stop a register from printing.
+    }
   }
 
   async initialize(): Promise<void> {

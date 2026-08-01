@@ -21,6 +21,10 @@ declare module 'qz-tray' {
       connect(options?: { retries?: number; delay?: number }): Promise<void>;
       disconnect(): Promise<void>;
     };
+    api: {
+      /** Version of the QZ Tray *desktop app* that answered, not the npm package. */
+      getVersion(): Promise<string>;
+    };
     printers: {
       find(query?: string): Promise<string | string[]>;
     };
