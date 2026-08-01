@@ -577,8 +577,8 @@ SESSION_SECRET=<long-random-secret>
 SESSION_COOKIE_SECURE=true
 SESSION_COOKIE_SAMESITE=lax
 
-QZ_SIGNING_CERT_PATH=/run/secrets/qz/digital-certificate.txt
-QZ_SIGNING_KEY_PATH=/run/secrets/qz/private-key.pem
+QZ_SIGNING_CERT_PATH=/var/lib/elite-pos/qz/digital-certificate.txt
+QZ_SIGNING_KEY_PATH=/var/lib/elite-pos/qz/private-key.pem
 POS_PRINTER_ALLOWLIST=BIXOLON SRP-350plusIII
 ```
 

@@ -414,7 +414,7 @@ cp server/.env.example server/.env
 | `DEFAULT_ADMIN_PASSWORD` | `elite-admin` | No | Password for the auto-seeded admin — **change immediately in production** |
 | `DEFAULT_ADMIN_NAME` | `Yusuf Hamad` | No | Display name for the auto-seeded admin user |
 | `QZ_SIGNING_CERT_PATH` | — | Yes for online POS printing | Path to the public QZ signing certificate |
-| `QZ_SIGNING_KEY_PATH` | — | Yes for online POS printing | Path to the restricted PKCS#8 QZ private key |
+| `QZ_SIGNING_KEY_PATH` | — | Yes for online POS printing | Path to the restricted PKCS#8 QZ private key. **Must be persistent storage — never under `/run`, which is tmpfs and is wiped on reboot.** Losing this key means re-trusting QZ on every register; see the [hardware runbook](./pos-hardware-runbook.md) |
 | `POS_PRINTER_ALLOWLIST` | — | Yes for POS printing | Comma-separated exact QZ printer queue names |
 
 ---

@@ -74,9 +74,15 @@ Private keys must never be:
 
 Place the public certificate and private key in the deployment secret store or restricted filesystem. Configure `server/.env`:
 
+> **Do not put these under `/run`.** On most distributions `/run` is a tmpfs and is wiped on every reboot. These files were originally documented at `/run/secrets/qz/` with nothing recreating them at boot, so the first reboot would have deleted the signing key and stopped **all** receipt printing, not just offline printing — and because the private key cannot be regenerated, recovery would mean issuing a new certificate and repeating the QZ trust procedure (section 9) on every register. Use a persistent, root-owned directory. Check yours with `findmnt -no FSTYPE <dir>`; anything reporting `tmpfs` is wrong.
+>
+> Keep an offline backup of `private-key.pem` in a password manager or equivalent. Losing it costs a full re-trust of every register.
+>
+> **These are not the device signer's variables.** The API reads `QZ_SIGNING_CERT_PATH` / `QZ_SIGNING_KEY_PATH`; the loopback signer in `tools/pos-device-signer` reads `ELITE_POS_QZ_CERT_PATH` / `ELITE_POS_QZ_KEY_PATH` (section 10). Two names, two processes, same key pair.
+
 ```dotenv
-QZ_SIGNING_CERT_PATH=/run/secrets/qz/digital-certificate.txt
-QZ_SIGNING_KEY_PATH=/run/secrets/qz/private-key.pem
+QZ_SIGNING_CERT_PATH=/var/lib/elite-pos/qz/digital-certificate.txt
+QZ_SIGNING_KEY_PATH=/var/lib/elite-pos/qz/private-key.pem
 POS_PRINTER_ALLOWLIST=BIXOLON SRP-350plusIII
 ```
 
