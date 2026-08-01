@@ -44,8 +44,8 @@ async function requireRegister(client, context, { lock = false } = {}) {
 async function audit(client, context, action, entityType, entityId, afterState = undefined, beforeState = undefined) {
   await client.query(
     `INSERT INTO audit_events
-      (tenant_id, actor_user_id, action, entity_type, entity_id, before_state, after_state, ip_address, user_agent)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9)`,
+      (tenant_id, actor_user_id, action, entity_type, entity_id, before_state, after_state, ip_address, user_agent, request_id)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10)`,
     [
       context.tenantId,
       context.userId,
@@ -56,6 +56,9 @@ async function audit(client, context, action, entityType, entityId, afterState =
       afterState ? JSON.stringify(afterState) : null,
       context.ip || null,
       context.userAgent || null,
+      // Read off the context rather than added as a parameter, so all ~20
+      // existing audit() call sites stay untouched (docs/24, Phase A).
+      context.requestId || null,
     ],
   );
 }

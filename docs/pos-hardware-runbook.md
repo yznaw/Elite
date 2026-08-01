@@ -255,17 +255,23 @@ ok
 
 ### Windows startup
 
-Install the signer as a restricted automatic startup service using the organization's approved service wrapper or Windows service tooling:
+Open elevated PowerShell in `tools\pos-device-signer` and run the supplied installer once on each register:
 
-- Run as a dedicated, non-administrator local account.
-- Grant that account read access only to its certificate and private key.
-- Set the working directory to `tools/pos-device-signer` or the deployed signer directory.
-- Load environment values from a protected service configuration, not a shared user profile.
-- Configure automatic restart after failure.
-- Capture stdout/stderr in a protected rotating log.
-- Start after networking, but do not expose a LAN listener.
+```powershell
+.\install-windows-startup.ps1 `
+  -CertificatePath 'C:\ProgramData\ElitePOS\qz\digital-certificate.txt' `
+  -PrivateKeyPath 'C:\ProgramData\ElitePOS\qz\private-key.pem' `
+  -AllowedOrigins 'https://admin.elitecollections.qa'
+```
 
-After setup, restart Windows and confirm `/health` returns `ok` without anyone opening a terminal window.
+It copies the signer to `C:\ProgramData\ElitePOS\device-signer`, creates a limited current-user logon task, restarts it one minute after a failure, starts it immediately, and verifies `/health`. Restrict the private key to that POS Windows account and administrators. After setup, restart Windows and confirm `/health` returns `ok` without opening a terminal.
+
+For post-incident diagnosis, collect
+`C:\ProgramData\ElitePOS\device-signer\logs\signer.log` and its numbered rotated
+files. They contain structured operational events only, never keys or signing
+payloads. In Elite Diagnostics, filter the same time window by the register and
+the `QZ_*`, `HARDWARE_*`, `PRINTER_*` or `DRAWER_*` code to correlate the local
+signer timeline with the browser and server request IDs.
 
 ## 11. Enroll the Physical Register
 
@@ -295,6 +301,15 @@ These settings are local to the browser profile and stored in IndexedDB. Recheck
 ## 13. Required Acceptance Tests
 
 Do not release the register until every applicable test passes.
+
+### 0. Morning start and automatic recovery
+
+1. Restart Windows and sign in with the production POS account.
+2. Open the saved production browser profile and `/pos`; do not open QZ or the signer manually.
+3. Confirm the enrolled register and hardware settings restore and QZ reconnects automatically.
+4. Confirm the readiness card shows printer and offline signer status.
+5. Verify all three shift states: no shift opens normally; a previous-day shift requires review/close; another cashier's shift cannot be silently adopted.
+6. Temporarily make the API unreachable while leaving Wi-Fi connected and confirm the POS reports offline based on server reachability.
 
 ### A. Online cash sale
 
@@ -485,7 +500,7 @@ Use this as the single top-to-bottom sequence when standing up a brand-new physi
 - [ ] **Provision the offline device signer** per §10 if this register needs to support genuinely offline printing (not just online-with-occasional-network-blips) — set its own `ELITE_POS_ALLOWED_ORIGINS`, cert/key paths, and confirm `/health` responds after a fresh Windows restart.
 - [ ] **Enroll the physical register** in Elite per §11: sign in as owner/admin on this register's dedicated browser profile, generate a one-time enrollment token from Settings, and complete enrollment. Each register gets its own identity — do not reuse one register's enrollment token or credential on a second machine.
 - [ ] **Configure hardware in Elite** per §12: enter the *exact* printer queue name from step 6.2.2, select the correct drawer pulse pin, set the offline signer URL if applicable.
-- [ ] **If this is a NEW BRANCH (not just a new till in the existing shop)**: stop here and confirm with the team before proceeding. True multi-location support (separate per-branch stock, location-scoped reporting) is not yet built — see [16-launch-roadmap.md](./16-launch-roadmap.md)'s Phase 11. Today, all registers across all physical locations would share one tenant-wide stock count, which is incorrect for a genuinely separate branch with its own inventory. Do not enroll a second-branch register into production until that data-model work is scoped and built, or stock levels across both locations WILL be wrong.
+- [ ] **For each shop/register in this launch:** use a distinct register identity and confirm the shared-stock operating decision with the team. The two shops, stock room and website intentionally decrement one tenant-wide stock pool; physical replenishment between them is not recorded as a sale, transfer or adjustment because it does not change that shared total. Separate per-location availability/reporting is outside this release.
 - [ ] **Run the full acceptance test suite** per §13 (online cash sale, online card sale, refund receipt, printer failure safety, offline sale, restart recovery, scanner) before handing the register to staff.
 - [ ] **Confirm `pos_business_profile` is filled in** at Settings → General → Receipt & Legal Profile — this is tenant-wide, not per-register, so it only needs doing once, but confirm it's actually filled in for this tenant. A blank profile silently falls back to English-only defaults with no legal content.
 - [ ] **Complete the per-register acceptance record** per §16 and file it.

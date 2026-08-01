@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { ensurePaidOrderStock, reversePaidOrderStock } = require('../lib/order-stock');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -268,6 +269,15 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
     const tenant = await ensureDefaultTenant(client);
     tenantId = tenant.id;
     const trackingNumber = String(req.body.trackingNumber || '').trim();
+    // Read the prior state so the stock effect can be driven by the actual
+    // transition, not by the requested value. Marking an already-paid order
+    // paid again, or re-cancelling a cancelled order, must not move stock.
+    const previous = await client.query(
+      'SELECT id, payment_status, status FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2) FOR UPDATE',
+      [tenant.id, req.params.id],
+    );
+    const previousPaymentStatus = previous.rows[0]?.payment_status || null;
+    const previousStatus = previous.rows[0]?.status || null;
     const order = await client.query(
       `
         UPDATE orders
@@ -345,6 +355,31 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
         console.warn('[admin-orders] Receipt email failed:', err.message);
       });
     }
+
+    // Stock follows the transition, not the requested value (docs/25 Phase 1).
+    // Both helpers are idempotent and open their own transaction, so they are
+    // called after COMMIT and cannot poison this one.
+    const newPaymentStatus = order.rows[0].payment_status;
+    const newStatus = order.rows[0].status;
+    const becamePaid = previousPaymentStatus !== 'paid' && newPaymentStatus === 'paid';
+    const becameReversed =
+      (previousPaymentStatus !== 'refunded' && newPaymentStatus === 'refunded')
+      || (previousStatus !== 'cancelled' && newStatus === 'cancelled');
+
+    if (becamePaid) {
+      await ensurePaidOrderStock(tenantId, updatedOrderId, {
+        actorUserId: req.user?.id || null,
+        source: 'admin-mark-paid',
+      });
+    } else if (becameReversed) {
+      // Without this, every cancellation or refund is permanent phantom
+      // shrinkage: the units come back to the shelf but never to the system.
+      await reversePaidOrderStock(tenantId, updatedOrderId, {
+        actorUserId: req.user?.id || null,
+        reason: newStatus === 'cancelled' ? 'cancelled' : 'refunded',
+      });
+    }
+
     ok(res, await loadAdminOrder(client, tenant.id, req.params.id), 'Order status updated.');
   } catch (err) {
     await client.query('ROLLBACK');

@@ -111,6 +111,23 @@ export const routes: Routes = [
           import('./pages/reports/reports.component').then((m) => m.ReportsComponent),
       },
       {
+        // Counting the shelf and posting the difference. Owner/admin only —
+        // it writes stock (docs/25 Phase 8).
+        path: 'stocktake',
+        canMatch: [roleGuard(['owner', 'admin'])],
+        loadComponent: () =>
+          import('./pages/stocktake/stocktake.component').then((m) => m.StocktakeComponent),
+      },
+      {
+        // Application errors (server, register browsers, CSP) and the audit
+        // trail. Owner/admin only — stack traces and audit rows are not for
+        // every role. See docs/24-logging-observability-plan.md Phase H.
+        path: 'diagnostics',
+        canMatch: [roleGuard(['owner', 'admin'])],
+        loadComponent: () =>
+          import('./pages/diagnostics/diagnostics.component').then((m) => m.DiagnosticsComponent),
+      },
+      {
         // Only owners and admins can manage workspace settings & team members.
         path: 'settings',
         canMatch: [roleGuard(['owner', 'admin'])],

@@ -6,6 +6,10 @@ const { upload } = require('../middleware/upload');
 const { storage } = require('../lib/storage');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 const { processRestockNotifications } = require('../lib/restock-notifications');
+// Every stock_quantity write in this file posts a matching ledger row in the
+// same transaction — see server/lib/inventory-ledger.js for why that invariant
+// exists and what breaks when a write skips it (docs/25 Phase 1b).
+const { recordMovement } = require('../lib/inventory-ledger');
 
 const router = Router();
 
@@ -68,7 +72,7 @@ function validateProduct(body) {
   return errors;
 }
 
-async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true } = {}) {
+async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true, actorUserId = null } = {}) {
   // Resolve each variant's SKU up front. A variant saved without one (e.g. a
   // manually-added row the admin never typed a SKU for) falls back to a
   // generated-but-unique SKU instead of being silently dropped further down —
@@ -110,6 +114,39 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     }
   }
 
+  // Stock held by this product's variants before the save. Every change made
+  // below is posted to inventory_movements as a signed delta against these
+  // values (docs/25 Phase 1b) — including stock that disappears because a
+  // variant was deleted, which would otherwise vanish with no trace and show
+  // up later as unexplained drift.
+  const previousStockBySku = new Map();
+  const existingVariants = await client.query(
+    'SELECT id, sku, stock_quantity FROM product_variants WHERE tenant_id = $1 AND product_id = $2',
+    [tenantId, productId],
+  );
+  for (const row of existingVariants.rows) {
+    previousStockBySku.set(row.sku, { id: row.id, stock: Number(row.stock_quantity) || 0 });
+  }
+  const removedVariants = existingVariants.rows.filter((row) => !incomingSkus.includes(row.sku));
+
+  // Recorded BEFORE the delete, while the rows still exist — inventory_movements
+  // has ON DELETE SET NULL on variant_id, so a movement written afterwards
+  // would lose the link to what it described.
+  for (const removed of removedVariants) {
+    const stock = Number(removed.stock_quantity) || 0;
+    if (stock === 0) continue;
+    // eslint-disable-next-line no-await-in-loop
+    await recordMovement(client, { tenantId, userId: actorUserId }, {
+      productId,
+      variantId: removed.id,
+      delta: -stock,
+      reason: 'catalog_edit',
+      referenceType: 'product',
+      referenceId: productId,
+      metadata: { sku: removed.sku, action: 'variant_removed', previousStock: stock },
+    });
+  }
+
   // Null-out cart references for variants being removed (ON DELETE RESTRICT)
   if (incomingSkus.length > 0) {
     await client.query(
@@ -145,7 +182,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     const colorText = String(variant.color || '').trim() || null;
     const incomingStock = Math.max(0, Number.parseInt(variant.stock, 10) || 0);
 
-    await client.query(
+    const upserted = await client.query(
       `
         INSERT INTO product_variants (
           tenant_id, product_id, sku, barcode, size, color, material,
@@ -176,6 +213,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
             ELSE product_variants.stock_quantity
           END,
           updated_at = NOW()
+        RETURNING id, stock_quantity
       `,
       [
         tenantId,
@@ -192,6 +230,30 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
         index,
       ],
     );
+
+    // The upsert's CASE means the stored stock is not always what was sent, so
+    // the delta is computed from what the database actually ended up with.
+    const saved = upserted.rows[0];
+    if (saved) {
+      const previous = previousStockBySku.get(sku)?.stock ?? 0;
+      const delta = (Number(saved.stock_quantity) || 0) - previous;
+      if (delta !== 0) {
+        await recordMovement(client, { tenantId, userId: actorUserId }, {
+          productId,
+          variantId: saved.id,
+          delta,
+          reason: 'catalog_edit',
+          referenceType: 'product',
+          referenceId: productId,
+          metadata: {
+            sku,
+            action: previousStockBySku.has(sku) ? 'variant_updated' : 'variant_created',
+            previousStock: previous,
+            newStock: Number(saved.stock_quantity) || 0,
+          },
+        });
+      }
+    }
   }
 }
 
@@ -440,7 +502,7 @@ async function loadAdminProduct(client, tenantId, productId) {
   return result.rowCount === 0 ? null : mapAdminProduct(result.rows[0]);
 }
 
-async function upsertProduct(client, tenant, product) {
+async function upsertProduct(client, tenant, product, { actorUserId = null } = {}) {
   const name = String(product.name).trim();
   const sku = String(product.sku).trim();
   const brand = String(product.brand).trim();
@@ -531,7 +593,7 @@ async function upsertProduct(client, tenant, product) {
     );
 
   const saved = upserted.rows[0];
-  await replaceVariants(client, tenant.id, saved.id, variants);
+  await replaceVariants(client, tenant.id, saved.id, variants, { actorUserId });
   // Re-sum variant stock onto the product row so the catalog total is always
   // accurate even when the stock-preservation branch kept a different value.
   if (variants.length > 0) {
@@ -688,7 +750,7 @@ router.post('/', asyncHandler(async (req, res) => {
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
-    const saved = await upsertProduct(client, tenant, req.body);
+    const saved = await upsertProduct(client, tenant, req.body, { actorUserId: req.user?.id || null });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
     await processRestockNotifications(client, tenant.id, saved.id);
@@ -722,13 +784,37 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
       const stock = Math.max(0, Number.parseInt(item.stock, 10) || 0);
       if (!sku) continue;
 
-      // Update the variant row first (preferred — variant SKUs are unique)
+      // Update the variant row first (preferred — variant SKUs are unique).
+      // `stock_quantity` before the write is returned so the ledger records a
+      // signed delta rather than an absolute value: the ledger's whole purpose
+      // is that current stock must reconcile against baseline + sum(delta).
       const varResult = await client.query(
-        'UPDATE product_variants SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 RETURNING product_id',
+        `UPDATE product_variants pv
+            SET stock_quantity = $1, updated_at = now()
+           FROM (SELECT id, stock_quantity AS previous FROM product_variants
+                  WHERE tenant_id = $2 AND sku = $3 FOR UPDATE) prev
+          WHERE pv.id = prev.id
+        RETURNING pv.product_id, pv.id AS variant_id, prev.previous`,
         [stock, tenant.id, sku],
       );
 
       if (varResult.rowCount > 0) {
+        const row = varResult.rows[0];
+        const delta = stock - Number(row.previous);
+        if (delta !== 0) {
+          // Without this the hourly drift job reports every legitimate manual
+          // edit as drift, and an alert that fires on normal work is an alert
+          // that gets ignored (docs/25 Phase 1b).
+          await recordMovement(client, { tenantId: tenant.id, userId: req.user?.id || null }, {
+            productId: row.product_id,
+            variantId: row.variant_id,
+            delta,
+            reason: 'bulk_import',
+            referenceType: 'bulk_stock_update',
+            referenceId: null,
+            metadata: { sku, previousStock: Number(row.previous), newStock: stock },
+          });
+        }
         // Re-sum all variant stock onto the parent product so the catalog stock total stays accurate
         const productId = varResult.rows[0].product_id;
         changedProductIds.add(productId);
@@ -805,7 +891,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       relatedProductIds: req.body.relatedProductIds,
     };
 
-    const saved = await upsertProduct(client, tenant, payload);
+    const saved = await upsertProduct(client, tenant, payload, { actorUserId: req.user?.id || null });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
     await processRestockNotifications(client, tenant.id, saved.id);

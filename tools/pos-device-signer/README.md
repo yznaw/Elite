@@ -25,3 +25,41 @@ Run the signer as a restricted startup service on the POS device. Provision and
 revoke its certificate per register. Validate the exact Posiflex, Bixolon,
 Windows startup, Chrome local-network permission, drawer pin, and QZ trust chain
 before production rollout.
+
+## Windows automatic startup
+
+Open an elevated PowerShell in this directory and run:
+
+```powershell
+.\install-windows-startup.ps1 `
+  -CertificatePath 'C:\ProgramData\ElitePOS\qz\digital-certificate.txt' `
+  -PrivateKeyPath 'C:\ProgramData\ElitePOS\qz\private-key.pem' `
+  -AllowedOrigins 'https://admin.elitecollections.qa'
+```
+
+The installer copies the signer to `C:\ProgramData\ElitePOS\device-signer`,
+registers a limited, current-user logon task, configures one-minute restart on
+failure, starts it immediately, and verifies `http://127.0.0.1:8182/health`.
+Run it once on each physical register. Keep the private key readable only by
+that register's POS Windows account and administrators.
+
+### Diagnostics and retained logs
+
+The scheduled task writes newline-delimited JSON to:
+
+```text
+C:\ProgramData\ElitePOS\device-signer\logs\signer.log
+```
+
+At 5 MiB it rotates on the next task restart and retains `signer.log.1` through
+`signer.log.5`. Events include signer start/stop, certificate delivery,
+successful signature issuance, denied origins, invalid/oversized requests and
+server errors. Signature input, private keys and certificate contents are never
+logged.
+
+QZ/printer connection changes are also persisted by the POS browser and appear
+in Elite's Diagnostics page with codes such as `QZ_DISCONNECTED`,
+`QZ_RECONNECT_FAILED`, `QZ_RECONNECT_SCHEDULED`, `HARDWARE_RESTORED`,
+`PRINTER_DISCOVERY_FAILED` and `DRAWER_OPEN_FAILED`. Repeated identical events
+are fingerprint-grouped server-side, so a long outage increments a counter
+instead of creating an unbounded list of unrelated faults.

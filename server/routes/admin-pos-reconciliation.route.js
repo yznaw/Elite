@@ -16,6 +16,7 @@ function context(req) {
     tenantId: req.user.tenantId,
     userId: req.user.id,
     role: req.user.role,
+    requestId: req.requestId || null,
   };
 }
 
@@ -44,14 +45,8 @@ router.post('/:id/resolve', asyncHandler(async (req, res) => {
   ok(res, await resolveException(context(req), req.params.id, req.body));
 }));
 
-router.use((error, _req, res, next) => {
-  if (!(error instanceof PosError)) return next(error);
-  return res.status(error.status).json({
-    success: false,
-    code: error.code,
-    message: error.message,
-    ...(error.details ? { details: error.details } : {}),
-  });
-});
+// PosError shaping lives in the global error handler in index.js — see the
+// note in pos.route.js. A router-local responder here would bypass the
+// correlation id, the app_errors record and the structured log line.
 
 module.exports = router;

@@ -1,8 +1,8 @@
 {
-  "name": "Elite Collection Admin Portal",
-  "short_name": "Elite Admin",
-  "description": "Elite Collection admin portal — catalog, orders, POS, and analytics.",
-  "start_url": "/dashboard",
+  "name": "Elite Collection POS",
+  "short_name": "Elite POS",
+  "description": "Elite Collection point of sale.",
+  "start_url": "/pos",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",

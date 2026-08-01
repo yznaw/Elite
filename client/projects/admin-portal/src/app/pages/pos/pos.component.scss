@@ -432,6 +432,47 @@ label input:focus {
   margin-bottom: 30px;
 }
 
+.morning-readiness {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  padding: 12px;
+  border: 1px solid #e5b8b0;
+  background: #fff5f3;
+  color: #8a2d1f;
+  font-size: 12px;
+}
+
+.morning-readiness.ready {
+  border-color: #a9d3c7;
+  background: #f0faf6;
+  color: var(--pos-green);
+}
+
+.morning-readiness span { margin-right: auto; }
+.morning-readiness i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.morning-readiness button {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.recovery-card > small {
+  display: block;
+  margin: -15px 0 24px;
+  color: #737b78;
+}
+
 .money-field div {
   display: flex;
   align-items: center;
@@ -456,6 +497,117 @@ label input:focus {
   box-shadow: none !important;
   font-size: 20px;
   font-weight: 700;
+}
+
+/* ── Customer at checkout ──────────────────────────────────────────────
+   Sized for a 12" resistive touch panel at 1024×768: 44px minimum tap
+   targets, no hover-only affordances, and the whole block collapses to
+   nothing when a customer is already linked so the payment action stays
+   above the fold. */
+.customer-block {
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--pos-line);
+}
+
+.customer-search span,
+.customer-create label span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pos-green);
+}
+
+.customer-search input,
+.customer-create input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--pos-line);
+  background: #fff;
+  font-size: 15px;
+}
+
+.customer-results {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--pos-line);
+}
+
+.customer-results button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--pos-line);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.customer-results li:last-child button { border-bottom: 0; }
+.customer-results button:active { background: #f2f5f4; }
+.customer-results b { font-size: 14px; }
+.customer-results span,
+.customer-linked span {
+  font-size: 12px;
+  color: #6b7772;
+}
+
+.customer-history { color: var(--pos-green) !important; }
+
+.customer-linked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--pos-green);
+  background: rgba(6, 75, 61, 0.04);
+}
+
+.customer-linked b { display: block; font-size: 14px; }
+.customer-linked span { display: block; }
+
+.customer-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6b7772;
+}
+
+.customer-offline {
+  padding: 10px 12px;
+  border: 1px dashed var(--pos-line);
+  font-size: 12px;
+  color: #6b7772;
+}
+
+.customer-create { display: grid; gap: 10px; }
+
+.customer-create-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.link-button {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--pos-green);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .shift-note {

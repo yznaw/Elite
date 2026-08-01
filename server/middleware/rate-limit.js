@@ -18,7 +18,10 @@ const authAttemptLimiter = rateLimit({
 // manager-service.js; this is a second, IP-scoped layer in front of it.)
 const posPinLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
-  limit: 8,
+  // Browser E2E deliberately enrolls a fresh isolated register per test.
+  // Keep production brute-force protection strict while preventing the test
+  // runner's single loopback IP from rate-limiting its own independent cases.
+  limit: process.env.NODE_ENV === 'test' ? 1000 : 8,
   standardHeaders: true,
   legacyHeaders: false,
   handler: jsonRateLimitHandler,
@@ -32,4 +35,33 @@ const reviewSubmissionLimiter = rateLimit({
   handler: jsonRateLimitHandler,
 });
 
-module.exports = { authAttemptLimiter, posPinLimiter, reviewSubmissionLimiter };
+// Client-side log ingestion. Generous enough for a register flushing a backlog
+// after being offline (batches of up to 20 entries), tight enough that a
+// crash-looping browser cannot turn the log endpoint into a self-inflicted
+// denial of service against checkout.
+const clientLogLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler,
+});
+
+// CSP violation reports are unauthenticated by necessity (the browser sends
+// them, with no session and no CSRF header), so this one is stricter.
+const cspReportLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // A browser must not be encouraged to retry a rejected report.
+  handler: (_req, res) => res.status(204).end(),
+});
+
+module.exports = {
+  authAttemptLimiter,
+  posPinLimiter,
+  reviewSubmissionLimiter,
+  clientLogLimiter,
+  cspReportLimiter,
+};

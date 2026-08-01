@@ -13,6 +13,9 @@ function context(req) {
     role: req.user.role,
     ip: req.ip,
     userAgent: req.headers['user-agent'] || null,
+    // This router writes audit_events (enrollment tokens, manager PINs), so it
+    // carries the correlation id too — docs/24, Phase A.
+    requestId: req.requestId || null,
   };
 }
 
@@ -40,14 +43,8 @@ router.post('/manager-pins/:userId/clear', asyncHandler(async (req, res) => {
   ok(res, await clearManagerPin(context(req), req.params.userId));
 }));
 
-router.use((error, _req, res, next) => {
-  if (!(error instanceof PosError)) return next(error);
-  return res.status(error.status).json({
-    success: false,
-    code: error.code,
-    message: error.message,
-    ...(error.details ? { details: error.details } : {}),
-  });
-});
+// PosError shaping lives in the global error handler in index.js — see the
+// note in pos.route.js. A router-local responder here would bypass the
+// correlation id, the app_errors record and the structured log line.
 
 module.exports = router;

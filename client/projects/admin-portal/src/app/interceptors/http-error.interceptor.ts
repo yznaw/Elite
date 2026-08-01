@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../services/toast.service';
 import { I18nService } from '../services/i18n.service';
+import { ClientLoggerService } from '../services/client-logger.service';
 
 /**
  * Global HTTP error interceptor.
@@ -24,7 +25,13 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const i18n = inject(I18nService);
   const router = inject(Router);
+  const clientLogger = inject(ClientLoggerService);
   const t = (k: string) => i18n.t(k);
+
+  // The log endpoint's own traffic must never be reported through the log
+  // endpoint. Without this guard, one failing request becomes an endless
+  // retry storm on a register (docs/24, Phase D).
+  const isClientLogRequest = /\/api\/client-logs/.test(req.url);
 
   // The guard probes /auth/me on every navigation — a 401 there is the
   // normal "not logged in" signal, not an error worth toasting.
@@ -40,6 +47,27 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
+      // Ship the failure before any toast logic: this is the record that makes
+      // a phone call from the shop diagnosable. Skipped for expected rejections
+      // (a mistyped manager PIN, a "not logged in" probe, a register probe
+      // before enrollment) so the error list stays signal, not noise.
+      const isExpectedRejection = isAuthProbe || isManagerPinVerify
+        || (err.status === 428 && isRegisterProbe)
+        || err.status === 401 || err.status === 403 || err.status === 404;
+      if (!isClientLogRequest && !isExpectedRejection && !clientLogger.isSuspended()) {
+        clientLogger.log({
+          source: isPosRequest ? 'pos-client' : 'admin-client',
+          severity: err.status >= 500 || err.status === 0 ? 'error' : 'warn',
+          code: err.error?.code || (err.status === 0 ? 'NETWORK_UNREACHABLE' : `HTTP_${err.status}`),
+          message: err.error?.message || err.message || `Request failed with ${err.status}`,
+          route: `${req.method} ${req.url}`,
+          httpStatus: err.status,
+          // The server puts its correlation id in the error body; reusing it
+          // means the client entry and the server entry share one id.
+          requestId: err.error?.requestId ?? null,
+        });
+      }
+
       // status 0 covers network failures, CORS blocks, DNS errors, and timeouts
       if (err.status === 0) {
         if (!isPosRequest) {

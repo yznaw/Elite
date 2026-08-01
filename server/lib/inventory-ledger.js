@@ -1,10 +1,25 @@
 /**
  * Writes to `inventory_movements` (migration 001) — the audit trail for
- * every stock change. Sale/void/refund code paths already mutate
- * `product_variants.stock_quantity` directly inside their own DB
- * transactions; this must be called from inside that same transaction
- * (same `client`) so the ledger row and the stock change commit or roll
- * back together, never one without the other.
+ * every stock change, in every channel.
+ *
+ * **The invariant this file exists to enforce:** `product_variants.stock_quantity`
+ * is only ever written together with an `inventory_movements` row, in the same
+ * transaction. Any write that skips this helper reappears later as unexplained
+ * drift, and makes both the hourly consistency job and the inventory report
+ * untrustworthy — which is worse than having neither.
+ *
+ * Lives in `lib/` rather than `lib/pos/` because it is no longer POS-only:
+ * web orders (lib/order-stock.js), catalog edits and bulk imports write here
+ * too (docs/25 Phase 1).
+ *
+ * Reason vocabulary in use:
+ *   `pos_sale` · `pos_void` · `pos_refund`  — POS (sale-service, correction-service)
+ *   `web_order` · `web_order_reversed`      — storefront orders (order-stock.js)
+ *   `catalog_edit` · `bulk_import`          — admin catalog writes
+ *
+ * Must be called from inside the same transaction (same `client`) as the stock
+ * change, so the ledger row and the stock change commit or roll back together,
+ * never one without the other.
  *
  * On a variant's first-ever call, this also snapshots its pre-delta stock
  * into `pos_inventory_baselines` (migration 020). The ledger only records

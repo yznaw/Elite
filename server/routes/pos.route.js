@@ -21,6 +21,8 @@ const { createRefund, findTransaction, voidTransaction } = require('../lib/pos/c
 const { listConflicts, resolveConflict } = require('../lib/pos/conflict-service');
 const { getQzCertificate, signQzRequest } = require('../lib/pos/qz-service');
 const { getBusinessProfile, updateBusinessProfile } = require('../lib/pos/business-profile-service');
+const { resolveCustomer } = require('../lib/customer-identity');
+const { audit, inTransaction } = require('../lib/pos/db');
 
 const router = Router();
 // Cashier is POS-only and lowest privilege; manager-scoped actions (e.g.
@@ -56,6 +58,10 @@ function context(req) {
     registerId: req.session.posRegisterId || null,
     ip: req.ip,
     userAgent: req.headers['user-agent'] || null,
+    // Ties every audit_events row this request writes to the same id carried
+    // by the pino log line, any app_errors row, and the reference code shown
+    // to the cashier (docs/24, Phase A).
+    requestId: req.requestId || null,
   };
 }
 
@@ -198,23 +204,111 @@ router.post('/sync-conflicts/:id/resolve', asyncHandler(async (req, res) => {
   ok(res, await resolveConflict(context(req), req.params.id, req.body));
 }));
 
+/**
+ * Customer lookup at the till.
+ *
+ * Phone-first because that is what a cashier can ask for and type in a queue,
+ * but a name match is accepted too — a regular who is remembered by name and
+ * not by number is a normal case in a small shop. Digits are matched against
+ * the normalized `phone_key` (migration 023) so "+974 5551 2345" and
+ * "97455512345" find the same person.
+ */
 router.get('/customers/search', asyncHandler(async (req, res) => {
-  const query = String(req.query.q || '').replace(/[^\d+]/g, '').slice(0, 30);
-  if (query.length < 3) return ok(res, []);
+  const raw = String(req.query.q || '').trim().slice(0, 60);
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (raw.length < 3) return ok(res, []);
+
   const result = await db.query(
-    `SELECT id, full_name, email, COALESCE(phone_number, phone, '') AS phone
+    `SELECT id, full_name, email, COALESCE(phone_number, phone, '') AS phone,
+            orders_count, ltv_cents, last_order_at
      FROM customers
      WHERE tenant_id = $1 AND deleted_at IS NULL
-       AND regexp_replace(COALESCE(phone_number, phone, ''), '[^0-9+]', '', 'g') LIKE $2
-     ORDER BY last_order_at DESC NULLS LAST LIMIT 20`,
-    [req.user.tenantId, `%${query}%`],
+       AND (
+         ($2 <> '' AND phone_key LIKE $3)
+         OR full_name ILIKE $4
+         OR ($5 <> '' AND email IS NOT NULL AND email::text ILIKE $4)
+       )
+     ORDER BY last_order_at DESC NULLS LAST
+     LIMIT 20`,
+    [
+      req.user.tenantId,
+      digits,
+      `%${digits}%`,
+      `%${raw}%`,
+      raw.includes('@') ? raw : '',
+    ],
   );
   ok(res, result.rows.map((customer) => ({
     customerId: customer.id,
     name: customer.full_name,
     email: customer.email || '',
     phone: customer.phone,
+    ordersCount: Number(customer.orders_count || 0),
+    ltvCents: Number(customer.ltv_cents || 0),
+    lastOrderAt: customer.last_order_at,
   })));
+}));
+
+/**
+ * Quick-create a customer at the till.
+ *
+ * **Online only, deliberately.** A customer created offline could not get a
+ * server id, so the sale would have to carry a client-invented identity that
+ * later needs merging — the exact class of problem the receipt-number design
+ * exists to avoid. Offline, the POS keeps selling as walk-in.
+ *
+ * Routed through the same matcher the storefront uses, so entering a phone
+ * number that already belongs to an online customer **links to that person**
+ * rather than creating a second record of them.
+ */
+router.post('/customers', asyncHandler(async (req, res) => {
+  const fullName = String(req.body?.fullName || '').trim();
+  const phone = String(req.body?.phone || '').trim();
+  const email = String(req.body?.email || '').trim();
+
+  if (!fullName) throw new PosError(422, 'INVALID_FIELD', 'Customer name is required.');
+  if (!phone && !email) {
+    throw new PosError(422, 'INVALID_FIELD', 'A phone number or an email address is required.');
+  }
+  if (phone && !/^[0-9+\-\s()]{6,25}$/.test(phone)) {
+    throw new PosError(422, 'INVALID_FIELD', 'That phone number does not look valid.');
+  }
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new PosError(422, 'INVALID_FIELD', 'That email address does not look valid.');
+  }
+
+  const ctx = context(req);
+  const result = await inTransaction(async (client) => {
+    const resolved = await resolveCustomer(client, ctx.tenantId, { fullName, phone, email }, { source: 'pos' });
+    await audit(
+      client,
+      ctx,
+      resolved.created ? 'pos.customer.created' : 'pos.customer.linked',
+      'customer',
+      resolved.customerId,
+      { matchedOn: resolved.matchedOn, source: 'pos' },
+    );
+    return resolved;
+  });
+
+  const saved = await db.query(
+    `SELECT id, full_name, email, COALESCE(phone_number, phone, '') AS phone, orders_count, ltv_cents
+       FROM customers WHERE tenant_id = $1 AND id = $2`,
+    [ctx.tenantId, result.customerId],
+  );
+  const row = saved.rows[0];
+  created(res, {
+    customerId: row.id,
+    name: row.full_name,
+    email: row.email || '',
+    phone: row.phone,
+    ordersCount: Number(row.orders_count || 0),
+    ltvCents: Number(row.ltv_cents || 0),
+    // The cashier is told when an existing customer was matched instead of a
+    // new one being created, so "already a customer" is visible at the till.
+    linkedExisting: !result.created,
+    matchedOn: result.matchedOn,
+  }, result.created ? 'Customer created.' : 'Linked to an existing customer.');
 }));
 
 router.get('/print/certificate', asyncHandler(async (req, res) => {
@@ -328,14 +422,16 @@ router.get('/events', async (req, res, next) => {
   });
 });
 
-router.use((error, _req, res, next) => {
-  if (!(error instanceof PosError)) return next(error);
-  return res.status(error.status).json({
-    success: false,
-    code: error.code,
-    message: error.message,
-    ...(error.details ? { details: error.details } : {}),
-  });
-});
+// PosError shaping deliberately lives in the global error handler in
+// index.js, not here.
+//
+// This router used to answer PosErrors itself, which meant every POS failure
+// bypassed the global handler entirely: no correlation id in the response, no
+// `app_errors` row, and no structured log line — on the one surface where a
+// cashier is standing in front of a customer and support has to diagnose the
+// failure remotely. The global handler produces the identical body (status,
+// code, message, details) plus `requestId`, so forwarding loses nothing.
+//
+// Do not reintroduce a router-local error responder here.
 
 module.exports = router;

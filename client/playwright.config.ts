@@ -11,6 +11,7 @@ const e2eEnv = [
   'SESSION_COOKIE_SECURE=false',
   'CORS_ORIGINS=http://127.0.0.1:4300',
 ].join(' ');
+const reuseExistingServer = process.env['E2E_REUSE_EXISTING'] === '1';
 
 export default defineConfig({
   testDir: './e2e',
@@ -31,14 +32,14 @@ export default defineConfig({
       cwd: '../server',
       url: 'http://127.0.0.1:3000/api/health',
       timeout: 60000,
-      reuseExistingServer: false,
+      reuseExistingServer,
     },
     {
-      command: 'npm run start:admin -- --host 127.0.0.1',
+      command: 'npm run build:admin && node scripts/serve-pos-e2e.mjs',
       cwd: '.',
       url: 'http://127.0.0.1:4300/login',
       timeout: 60000,
-      reuseExistingServer: false,
+      reuseExistingServer,
     },
   ],
 });

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -14,6 +14,7 @@ import {
   PosCashMovementKind,
   PosCatalogItem,
   PosCurrentRegister,
+  PosCustomer,
   PosParkedCart,
   PosSaleResult,
   PosService,
@@ -25,9 +26,12 @@ import {
 import { PosHardwareService } from '../../services/pos-hardware.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
 import { ToastService } from '../../services/toast.service';
+import { ClientLoggerService } from '../../services/client-logger.service';
 import { PaginationComponent } from '../../shared/pagination/pagination.component';
+import { setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
+import { PosReceiptData } from '../../services/pos-receipt-renderer.service';
 
-type PosPhase = 'loading' | 'enrollment' | 'shift' | 'selling';
+type PosPhase = 'loading' | 'enrollment' | 'shift' | 'shift-recovery' | 'selling';
 type PaymentMethod = 'cash' | 'card';
 interface CartLine { item: PosCatalogItem; quantity: number }
 interface ProductGroup {
@@ -47,6 +51,9 @@ interface VariantColorGroup {
 }
 type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift' | 'cash-movement' | 'z-history';
 
+const OFFLINE_CATALOG_WARN_AFTER_MS = 8 * 60 * 60 * 1000;
+const OFFLINE_CATALOG_BLOCK_AFTER_MS = 12 * 60 * 60 * 1000;
+
 @Component({
     selector: 'ap-pos',
     imports: [CommonModule, FormsModule, PaginationComponent],
@@ -62,6 +69,22 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   private readonly refApi = inject(AdminRefService);
   private readonly toast = inject(ToastService);
+  private readonly clientLogger = inject(ClientLoggerService);
+
+  // ── Customer linking at checkout (docs/25 Phase 5) ────────────────────
+  // Until now every POS sale sent `customerId: null`, so a till sale never
+  // reached the customer's history, LTV, or receipt-by-email — the backend
+  // has accepted a customer id since the first release; only this was missing.
+  readonly selectedCustomer = signal<PosCustomer | null>(null);
+  readonly customerResults = signal<PosCustomer[]>([]);
+  readonly customerSearching = signal(false);
+  readonly customerCreateOpen = signal(false);
+  readonly customerSaving = signal(false);
+  customerQuery = '';
+  newCustomerName = '';
+  newCustomerPhone = '';
+  newCustomerEmail = '';
+  private customerSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly phase = signal<PosPhase>('loading');
   readonly busy = signal(false);
@@ -70,6 +93,11 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly justEnrolled = signal(false);
   readonly register = signal<PosCurrentRegister | null>(null);
   readonly shiftId = signal<string | null>(null);
+  readonly shiftRecovery = signal<{
+    reason: 'previous-day' | 'different-cashier' | 'closing';
+    cashierName: string | null;
+    openedAt: string;
+  } | null>(null);
   readonly products = signal<PosCatalogItem[]>([]);
   readonly cart = signal<CartLine[]>([]);
   readonly paymentOpen = signal(false);
@@ -84,6 +112,23 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly serverReachable = signal(true);
   readonly persistentStorage = signal<boolean | null>(null);
   readonly catalogCachedAt = signal<string | null>(null);
+  private readonly freshnessClock = signal(Date.now());
+  readonly offlineCatalogAgeMs = computed(() => {
+    const cachedAt = this.catalogCachedAt();
+    if (!cachedAt) return Number.POSITIVE_INFINITY;
+    const cachedAtMs = Date.parse(cachedAt);
+    return Number.isFinite(cachedAtMs)
+      ? Math.max(0, this.freshnessClock() - cachedAtMs)
+      : Number.POSITIVE_INFINITY;
+  });
+  readonly offlineCatalogWarning = computed(() => (
+    !this.online()
+    && this.offlineCatalogAgeMs() >= OFFLINE_CATALOG_WARN_AFTER_MS
+    && this.offlineCatalogAgeMs() < OFFLINE_CATALOG_BLOCK_AFTER_MS
+  ));
+  readonly offlineCatalogBlocked = computed(() => (
+    !this.online() && this.offlineCatalogAgeMs() >= OFFLINE_CATALOG_BLOCK_AFTER_MS
+  ));
   readonly selectedProductId = signal<string | null>(null);
   readonly selectedVariantColorKey = signal<string | null>(null);
   readonly selectedVariantId = signal<string | null>(null);
@@ -97,6 +142,18 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly zReportHistory = signal<PosZReport[]>([]);
   readonly loadingZHistory = signal(false);
   readonly refColors = signal<RefColor[]>([]);
+  private readonly posUpdateSafetyReady = signal(false);
+  private readonly posUpdateSafetyEffect = effect(() => {
+    setPosServiceWorkerUpdateSafe(
+      this.posUpdateSafetyReady()
+      && this.cart().length === 0
+      && this.pendingSales() === 0
+      && this.rejectedSales() === 0
+      && !this.paymentOpen()
+      && !this.busy()
+      && !this.syncing(),
+    );
+  });
   readonly totalCents = computed(() => this.cart().reduce(
     (total, line) => total + line.item.priceCents * line.quantity,
     0,
@@ -221,6 +278,7 @@ export class PosComponent implements OnInit, OnDestroy {
   private syncAttempt = 0;
   private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
   private storageEstimateTimer: ReturnType<typeof setInterval> | null = null;
+  private freshnessClockTimer: ReturnType<typeof setInterval> | null = null;
   private readonly onOnline = () => {
     this.online.set(true);
     void this.syncPendingSales();
@@ -241,12 +299,19 @@ export class PosComponent implements OnInit, OnDestroy {
     window.addEventListener('focus', this.onFocus);
     // Service worker is registered once at app bootstrap (main.ts), not here.
     await this.initialize();
+    // Do not allow a waiting build to activate from the signals' initial zero
+    // values. Read IndexedDB first; a queue found here must keep the old worker
+    // alive until every sale is accepted or explicitly resolved.
+    await this.refreshQueueState();
+    this.posUpdateSafetyReady.set(true);
     await this.checkPersistentStorage();
     this.storageEstimateTimer = setInterval(() => void this.updateStorageEstimate(), 5 * 60 * 1000);
+    this.freshnessClockTimer = setInterval(() => this.freshnessClock.set(Date.now()), 60 * 1000);
     void this.updateStorageEstimate();
   }
 
   ngOnDestroy(): void {
+    this.posUpdateSafetyReady.set(false);
     window.removeEventListener('online', this.onOnline);
     window.removeEventListener('offline', this.onOffline);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
@@ -254,7 +319,9 @@ export class PosComponent implements OnInit, OnDestroy {
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
     if (this.healthCheckTimer) clearTimeout(this.healthCheckTimer);
+    if (this.customerSearchTimer) clearTimeout(this.customerSearchTimer);
     if (this.storageEstimateTimer) clearInterval(this.storageEstimateTimer);
+    if (this.freshnessClockTimer) clearInterval(this.freshnessClockTimer);
     this.eventSource?.close();
   }
 
@@ -321,45 +388,50 @@ export class PosComponent implements OnInit, OnDestroy {
       let current: PosCurrentRegister;
       try {
         current = await this.pos.currentRegister();
-      } catch {
+      } catch (currentError) {
         const identity = await this.local.getRegister();
         if (!identity) {
           this.phase.set('enrollment');
           return;
         }
-        if (!this.online()) {
-          const storedShift = await this.local.getShift();
-          const cachedCatalog = await this.local.getCatalog();
-          if (!storedShift || !cachedCatalog) throw new Error('This register has no offline shift or catalog cache. Connect once before working offline.');
-          this.register.set({ registerId: identity.registerId, displayName: identity.displayName, status: 'offline', shift: {
-            id: storedShift.shiftId,
-            state: 'open',
-            openingFloatCents: storedShift.openingFloatCents,
-            openedAt: storedShift.openedAt,
-          } });
-          this.shiftId.set(storedShift.shiftId);
-          this.products.set(cachedCatalog.products);
-          this.catalogCachedAt.set(cachedCatalog.cachedAt);
-          this.receiptBlock.set(await this.local.getReceiptBlock());
-          this.phase.set('selling');
-          await this.refreshQueueState();
-          await this.hardware.initialize();
+        // navigator.onLine only says that Windows has a network interface. A
+        // shop can still have Wi-Fi while DNS, the VPN, or the API is down.
+        // Treat an actual status-0 API failure as offline instead of wrongly
+        // sending a previously enrolled register back to one-time setup.
+        if (!this.online() || this.isNetworkError(currentError)) {
+          await this.resumeOffline(identity);
           return;
         }
-        await this.pos.checkIn(identity);
+        try {
+          await this.pos.checkIn(identity);
+        } catch (checkInError) {
+          if (this.isNetworkError(checkInError)) {
+            await this.resumeOffline(identity);
+            return;
+          }
+          throw checkInError;
+        }
         current = await this.pos.currentRegister();
       }
 
       this.register.set(current);
+      await this.hardware.initialize();
       await this.ensureReceiptBlock();
-      if (current.shift?.state === 'open') {
+      if (current.shift) {
         this.shiftId.set(current.shift.id);
         await this.local.setShift({
           shiftId: current.shift.id,
           registerId: current.registerId,
+          cashierId: current.shift.cashierId,
           openingFloatCents: current.shift.openingFloatCents,
           openedAt: current.shift.openedAt,
         });
+        const recovery = this.shiftRecoveryFor(current.shift);
+        if (recovery) {
+          this.shiftRecovery.set(recovery);
+          this.phase.set('shift-recovery');
+          return;
+        }
         await this.enterSelling();
       } else {
         this.phase.set('shift');
@@ -370,6 +442,60 @@ export class PosComponent implements OnInit, OnDestroy {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  private async resumeOffline(identity: { registerId: string; displayName: string }): Promise<void> {
+    const storedShift = await this.local.getShift();
+    const cachedCatalog = await this.local.getCatalog();
+    if (!storedShift || !cachedCatalog) {
+      throw new Error('This register has no offline shift or catalog cache. Connect once before working offline.');
+    }
+    this.online.set(false);
+    this.serverReachable.set(false);
+    const shift = {
+      id: storedShift.shiftId,
+      state: 'open' as const,
+      cashierId: storedShift.cashierId || this.auth.user()?.id || '',
+      cashierName: null,
+      openingFloatCents: storedShift.openingFloatCents,
+      openedAt: storedShift.openedAt,
+    };
+    this.register.set({ registerId: identity.registerId, displayName: identity.displayName, status: 'offline', shift });
+    this.shiftId.set(storedShift.shiftId);
+    this.products.set(cachedCatalog.products);
+    this.catalogCachedAt.set(cachedCatalog.cachedAt);
+    this.receiptBlock.set(await this.local.getReceiptBlock());
+    await this.refreshQueueState();
+    await this.hardware.initialize();
+    const recovery = this.shiftRecoveryFor(shift);
+    if (recovery) {
+      this.shiftRecovery.set(recovery);
+      this.phase.set('shift-recovery');
+      return;
+    }
+    this.phase.set('selling');
+  }
+
+  private shiftRecoveryFor(shift: NonNullable<PosCurrentRegister['shift']>): {
+    reason: 'previous-day' | 'different-cashier' | 'closing';
+    cashierName: string | null;
+    openedAt: string;
+  } | null {
+    if (shift.state === 'closing') return { reason: 'closing', cashierName: shift.cashierName, openedAt: shift.openedAt };
+    if (this.qatarDate(shift.openedAt) !== this.qatarDate(new Date().toISOString())) {
+      return { reason: 'previous-day', cashierName: shift.cashierName, openedAt: shift.openedAt };
+    }
+    const userId = this.auth.user()?.id;
+    if (userId && shift.cashierId && shift.cashierId !== userId) {
+      return { reason: 'different-cashier', cashierName: shift.cashierName, openedAt: shift.openedAt };
+    }
+    return null;
+  }
+
+  private qatarDate(value: string): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Qatar', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(value));
   }
 
   setEnrollMode(mode: 'token' | 'create'): void {
@@ -393,6 +519,7 @@ export class PosComponent implements OnInit, OnDestroy {
       const identity = await this.pos.enroll(token);
       await this.local.setRegister(identity);
       this.register.set(await this.pos.currentRegister());
+      await this.hardware.initialize();
       await this.ensureReceiptBlock();
       this.toast.success('Register connected', identity.displayName);
       this.justEnrolled.set(true);
@@ -431,6 +558,12 @@ export class PosComponent implements OnInit, OnDestroy {
     if (openingFloatCents === null) {
       this.toast.warning('Opening cash must be a valid non-negative amount.');
       return;
+    }
+    if (!this.hardware.ready()) {
+      this.toast.warning(
+        'Hardware is not fully ready',
+        'The shift can open, but receipts or offline printing may be unavailable until the automatic reconnect succeeds.',
+      );
     }
     // persist() resolving false often means private/incognito mode, where an
     // offline sale queued in IndexedDB can be silently wiped when the
@@ -508,10 +641,96 @@ export class PosComponent implements OnInit, OnDestroy {
 
   beginPayment(): void {
     if (!this.cart().length) return;
+    if (!this.canSellFromOfflineCatalog()) return;
     this.paymentMethod.set('cash');
     this.tendered = (this.totalCents() / 100).toFixed(2);
     this.terminalReference = '';
+    this.customerQuery = '';
+    this.customerResults.set([]);
+    this.customerCreateOpen.set(false);
     this.paymentOpen.set(true);
+  }
+
+  // ── Customer at checkout ────────────────────────────────────────────────
+  // Walk-in stays the default and costs zero taps: a queue at the till must
+  // never wait on data entry. Linking is opt-in, one search away.
+
+  queueCustomerSearch(): void {
+    if (this.customerSearchTimer) clearTimeout(this.customerSearchTimer);
+    const query = this.customerQuery.trim();
+    if (query.length < 3) {
+      this.customerResults.set([]);
+      return;
+    }
+    this.customerSearchTimer = setTimeout(() => void this.searchCustomers(query), 250);
+  }
+
+  private async searchCustomers(query: string): Promise<void> {
+    if (!this.online()) return;
+    this.customerSearching.set(true);
+    try {
+      this.customerResults.set(await this.pos.searchCustomers(query));
+    } catch {
+      // The interceptor already reported it; an empty result is the right
+      // fallback at a till — never block a sale on a lookup.
+      this.customerResults.set([]);
+    } finally {
+      this.customerSearching.set(false);
+    }
+  }
+
+  linkCustomer(customer: PosCustomer): void {
+    this.selectedCustomer.set(customer);
+    this.customerResults.set([]);
+    this.customerQuery = '';
+    this.customerCreateOpen.set(false);
+  }
+
+  clearCustomer(): void {
+    this.selectedCustomer.set(null);
+    this.customerResults.set([]);
+    this.customerQuery = '';
+  }
+
+  openCustomerCreate(): void {
+    // Prefill from whatever the cashier already typed: digits look like a
+    // phone, anything else like a name.
+    const typed = this.customerQuery.trim();
+    const isPhone = /^[0-9+\-\s()]+$/.test(typed);
+    this.newCustomerName = isPhone ? '' : typed;
+    this.newCustomerPhone = isPhone ? typed : '';
+    this.newCustomerEmail = '';
+    this.customerCreateOpen.set(true);
+  }
+
+  async createCustomer(): Promise<void> {
+    const fullName = this.newCustomerName.trim();
+    if (!fullName || this.customerSaving()) return;
+    if (!this.newCustomerPhone.trim() && !this.newCustomerEmail.trim()) {
+      this.toast.warning('Enter a phone number or an email address.');
+      return;
+    }
+    this.customerSaving.set(true);
+    try {
+      const customer = await this.pos.createCustomer({
+        fullName,
+        phone: this.newCustomerPhone.trim() || undefined,
+        email: this.newCustomerEmail.trim() || undefined,
+      });
+      this.linkCustomer(customer);
+      // Worth saying out loud: the cashier typed a phone that turned out to
+      // belong to an existing website customer, and this sale now joins that
+      // person's history rather than starting a second one.
+      if (customer.linkedExisting) {
+        this.toast.success('Linked to an existing customer', `${customer.name} is already in the customer list.`);
+      } else {
+        this.toast.success('Customer created', customer.name);
+      }
+    } catch (error) {
+      this.toast.error("Couldn't save customer", this.errorMessage(error));
+    } finally {
+      this.customerSaving.set(false);
+    }
   }
 
   selectPayment(method: PaymentMethod): void {
@@ -523,6 +742,7 @@ export class PosComponent implements OnInit, OnDestroy {
   async completeSale(): Promise<void> {
     const shiftId = this.shiftId();
     if (!shiftId || !this.cart().length || this.busy()) return;
+    if (!this.canSellFromOfflineCatalog()) return;
 
     const method = this.paymentMethod();
     const tenderedCents = method === 'cash' ? this.moneyInputToCents(this.tendered) : 0;
@@ -553,7 +773,7 @@ export class PosComponent implements OnInit, OnDestroy {
         idempotencyKey: this.pendingIdempotencyKey,
         receiptNumber,
         shiftId,
-        customerId: null,
+        customerId: this.selectedCustomer()?.customerId ?? null,
         items: this.cart().map((line) => ({
           variantId: line.item.variantId,
           quantity: line.quantity,
@@ -582,6 +802,7 @@ export class PosComponent implements OnInit, OnDestroy {
           // `online` event that may never fire (the network interface can
           // stay "up" while the API itself is unreachable).
           this.startHealthCheckPolling();
+          if (!this.canSellFromOfflineCatalog()) return;
           result = await this.queueOfflineSale(payload, receiptData);
         }
       } else {
@@ -590,6 +811,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.receiptBlock.set(await this.local.getReceiptBlock());
       this.applyStockUpdates(result.stockUpdates);
       this.cart.set([]);
+      this.selectedCustomer.set(null);
       this.pendingIdempotencyKey = null;
       this.paymentOpen.set(false);
       this.lastSale.set(result);
@@ -616,8 +838,26 @@ export class PosComponent implements OnInit, OnDestroy {
         }
       } catch (printError) {
         this.toast.warning('Sale saved, receipt not printed', this.errorMessage(printError));
+        // PRINT_FAILED is the code the server counts per register: five in one
+        // shift raises an email, since a jammed printer at the counter is
+        // invisible to anyone outside the shop (docs/24, Phase E).
+        this.clientLogger.logError('pos-client', printError, {
+          code: 'PRINT_FAILED',
+          severity: 'warn',
+          context: { printerName: this.hardware.printerName(), openDrawer: completedSale.openDrawer },
+        });
       }
     }
+  }
+
+  private canSellFromOfflineCatalog(): boolean {
+    this.freshnessClock.set(Date.now());
+    if (!this.offlineCatalogBlocked()) return true;
+    this.toast.warning(
+      'Offline sales are blocked',
+      'The cached catalog is 12 hours old or unavailable. Reconnect this register to refresh prices and stock before taking payment.',
+    );
+    return false;
   }
 
   closeReceipt(): void {
@@ -776,6 +1016,12 @@ export class PosComponent implements OnInit, OnDestroy {
   async voidCurrentTransaction(): Promise<void> {
     const transaction = this.operationTransaction();
     if (!transaction || !this.managerPin || !this.correctionReason.trim()) return;
+    const originalReceipt = transaction.receipt?.receiptData as PosReceiptData | undefined;
+    if (!originalReceipt?.receiptNumber) {
+      this.toast.error("Couldn't void sale", 'The original receipt data is unavailable. Look up the sale again before retrying.');
+      return;
+    }
+    let completedVoid: { receiptData: PosReceiptData; openDrawer: boolean } | null = null;
     this.busy.set(true);
     try {
       const override = await this.pos.verifyManagerPin(this.managerPin, 'void');
@@ -790,10 +1036,36 @@ export class PosComponent implements OnInit, OnDestroy {
       this.managerPin = '';
       this.correctionReason = '';
       this.toast.success('Sale voided');
+      completedVoid = {
+        receiptData: {
+          ...originalReceipt,
+          kind: 'void',
+          transactionId: transaction.transactionId,
+          createdAt: result.voidedAt,
+          paymentMethod: transaction.paymentMethod,
+          totalCents: result.amountCents,
+          reason: result.reason,
+          lookupCode: `elite-pos:${transaction.transactionId}`,
+        },
+        openDrawer: transaction.paymentMethod === 'cash',
+      };
     } catch (error) {
       this.toast.error("Couldn't void sale", this.errorMessage(error));
     } finally {
       this.busy.set(false);
+    }
+
+    if (completedVoid) {
+      try {
+        await this.hardware.printReceipt(completedVoid.receiptData, completedVoid.openDrawer);
+      } catch (printError) {
+        this.toast.warning('Sale voided, receipt not printed', this.errorMessage(printError));
+        this.clientLogger.logError('pos-client', printError, {
+          code: 'PRINT_FAILED',
+          severity: 'warn',
+          context: { receiptKind: 'void', printerName: this.hardware.printerName(), openDrawer: completedVoid.openDrawer },
+        });
+      }
     }
   }
 
@@ -918,6 +1190,14 @@ export class PosComponent implements OnInit, OnDestroy {
       });
       this.dialog.set('none');
       this.toast.success('Shift closed', 'Z report generated.');
+      await this.local.clearShift();
+      this.shiftId.set(null);
+      if (this.phase() === 'shift-recovery') {
+        this.shiftRecovery.set(null);
+        this.register.update((register) => register ? { ...register, shift: null } : register);
+        this.phase.set('shift');
+        return;
+      }
       await this.router.navigate(['/dashboard']);
     } catch (error) {
       this.toast.error("Couldn't close shift", this.errorMessage(error));
@@ -1232,7 +1512,7 @@ export class PosComponent implements OnInit, OnDestroy {
     this.phase.set('selling');
     await this.loadProducts();
     if (this.online()) this.connectEvents();
-    await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.loadReferenceColors(), this.loadProductFilters(), this.hardware.initialize()]);
+    await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.loadReferenceColors(), this.loadProductFilters()]);
     await this.syncPendingSales();
   }
 
@@ -1429,6 +1709,7 @@ export class PosComponent implements OnInit, OnDestroy {
       terminalReference: payload.payment.terminalReference,
       items: this.cart().map((line) => ({
         name: line.item.name,
+        nameAr: line.item.nameAr || null,
         variant: line.item.variant,
         sku: line.item.sku,
         quantity: line.quantity,
@@ -1489,6 +1770,14 @@ export class PosComponent implements OnInit, OnDestroy {
     this.queuedSales.set(queued);
     this.pendingSales.set(queued.filter((sale) => sale.status === 'pending').length);
     this.rejectedSales.set(queued.filter((sale) => sale.status === 'rejected').length);
+    // Every shipped log entry carries which register, which shift, and how many
+    // sales were still unsynced at the moment it happened — the three facts
+    // that turn a stack trace into an explanation.
+    this.clientLogger.setContext({
+      registerId: this.register()?.registerId ?? null,
+      shiftId: this.shiftId(),
+      pendingSales: this.pendingSales(),
+    });
   }
 
   private async reportSyncState(): Promise<void> {
@@ -1520,12 +1809,30 @@ export class PosComponent implements OnInit, OnDestroy {
     return Number.isFinite(amount) ? Math.round(amount * 100) : null;
   }
 
+  /**
+   * Message shown to the cashier, with the server's correlation id appended as
+   * a short reference code.
+   *
+   * The reference is the point: a cashier reads six characters over the phone
+   * and support resolves it straight to the request, the register, the shift
+   * and the stack trace (`grep '"requestId":"…"'`, or the Diagnostics page).
+   * Before this, "it says something went wrong" was the entire bug report.
+   */
   private errorMessage(error: unknown): string {
+    let message = 'The POS request could not be completed.';
+    let reference: string | null = null;
+
     if (typeof error === 'object' && error !== null) {
-      const candidate = error as { message?: string; error?: { message?: string } };
-      return candidate.error?.message || candidate.message || 'The POS request could not be completed.';
+      const candidate = error as { message?: string; error?: { message?: string; requestId?: string } };
+      message = candidate.error?.message || candidate.message || message;
+      reference = candidate.error?.requestId ?? null;
     }
-    return 'The POS request could not be completed.';
+
+    if (!reference) return message;
+    // Plain string, not an i18n key: this component is deliberately
+    // English-only (it has no I18nService injected anywhere), and "Ref" reads
+    // the same to an Arabic-speaking cashier reading a code aloud.
+    return `${message} (Ref ${reference.slice(-6)})`;
   }
 
   private errorCode(error: unknown): string | null {

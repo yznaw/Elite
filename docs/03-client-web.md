@@ -81,39 +81,42 @@ Products carry two description pairs, for two different surfaces:
 
 ## Home Page Landing Hero
 
-The home page hero is a luxury bilingual brand landing moment for élite. It uses a dominant sandal cutout on a warm cream canvas, annotated craft callouts, detail thumbnails, and a dedicated stacked mobile layout.
+The home page hero is a luxury bilingual merchandising surface for élite. It uses
+a dominant product cutout on a warm canvas with the same product navigation,
+colour preview, short description and shopping action at every breakpoint.
 
 ### Files
 
 | File | Purpose |
 |---|---|
-| `projects/client-web/src/app/pages/home/home.component.ts` | Hero callout/detail data and ordinary home-page navigation |
-| `projects/client-web/src/app/pages/home/home.component.html` | Brand mark, main product cutout, feature callouts, mobile pagination and description, CTA |
-| `projects/client-web/src/app/pages/home/home.component.scss` | Cream landing canvas, Claude-style local design tokens, desktop connectors, staggered load motion, mobile stack |
+| `projects/client-web/src/app/pages/home/home.component.ts` | Slide loading, colour previews, swipe teaching and directional navigation |
+| `projects/client-web/src/app/pages/home/home.component.html` | Product copy, cutouts, swatches, pagination and CTA |
+| `projects/client-web/src/app/pages/home/home.component.scss` | Responsive composition, product scaling, motion and touch targets |
 | `projects/client-web/src/assets/hero-scroll/` | Source product photos plus the transparent hero cutout |
 
 ### Runtime Behavior
 
-- The main product uses `elite-angle-pair-cutout.png` so the sandal sits directly on the cream canvas.
-- Four desktop callout pills annotate strap, buckle, stitching edge, and sole with thin gold connector lines and dot endpoints.
-- Each pill includes a matching thumbnail crop and highlights its line/dot on hover.
-- Slides advance by horizontal swipe on touch, by the desktop arrows, or by the mobile pagination segments.
-- Mobile hides floating callouts and the arrows, and stacks: product name, product, pagination, short description, CTA.
-- On first visit, mobile plays a one-time swipe demonstration that slides the next slide's product in from the trailing edge.
+- Slides advance by horizontal swipe, previous/next arrows or pagination segments.
+- Adjacent swipe/arrow moves use a 16px directional crossfade; pagination and colour previews use a plain crossfade.
+- RTL reverses physical travel direction. Keyboard activation and `prefers-reduced-motion` skip directional drift.
+- The stacked layout groups product name and description before the art, then pagination, colours and CTA.
+- On first eligible touch visit, a one-time swipe demonstration plays only while at least 45% of the hero stage is visible.
 
 ### Mobile Hero Layout
 
-Mobile (`max-width: 760px`) is a centered flex column driven by two custom properties on `.hero`, `--hero-mobile-gap` and `--mobile-product-size`. The two short-viewport media queries (`max-height: 700px` and `620px`) retune only those variables; there are no negative-margin corrections.
+The stacked layout (`max-width: 1023px`) is a centered CSS grid driven by
+`--hero-mobile-gap` and `--mobile-product-size`. The short-viewport queries at
+700px and 620px keep the art flexible so copy and controls stay inside `100svh`.
 
 | Block | Element | Notes |
 |---|---|---|
-| Name + subtitle | `.hero-brand` | `aria-live="polite"` so slide changes are announced |
+| Name + description | `.hero-intro` | Keeps the two lines visually grouped with a small safety floor; longer copy grows naturally and short copy gives the freed space back to the art while lower controls stay stable |
 | Product | `.hero-stage` / `.hero-product` | `touch-action: pan-y` keeps vertical page scroll working; `overflow: hidden` clips the entering preview |
 | Side preview | `.hero-next-peek` | Next slide's product, offscreen at rest, slid in only during the one-time swipe demo |
-| Pagination | `.hero-pagination` | One segment per slide, `role="tablist"`, rendered only when there are 2+ slides |
-| Description | `.hero-description` | Per-slide selling copy, capped near two lines |
-| Swatches | `.hero-swatches` | Up to 4 colourways plus a "+" link to the product |
-| CTA | `.hero-cta--mobile` | Transparent fill, `1.5px` border on `--green-2` (`#004538`), full-pill radius |
+| Pagination | `.hero-pagination` | One 44px-high button per slide, rendered only when there are 2+ slides |
+| Description | `.hero-description` | Per-slide selling copy, clamped to three lines or two on very short screens |
+| Swatches | `.hero-swatches` | Up to 4 featured colourways plus an explicit `+N` overflow control |
+| CTA | `.hero-cta` | Primary filled shopping action linked to the active product |
 
 ### Hero Colour Swatches
 
@@ -121,11 +124,12 @@ Each slide can link to a product (`productId`) and feature up to 4 of its colour
 
 **Tapping a swatch previews that colour in place** by swapping the hero image to the product's photo for that colour. It does not navigate. Tapping the active swatch again clears back to the slide's default image, and changing slides resets the selection.
 
-**The trailing "+" control is the only link to the product page.** It always renders when a slide has a linked product. Without it, slides whose product has 4 or fewer colours would have no route into the product page at all.
+The primary CTA opens the active product and carries the selected colour. The
+trailing `+N` control appears only when the product has additional colourways.
 
 - **Slug matching.** Swatch slugs are generated by `utils/color-slug.ts`, the same helper the product page uses to resolve its `?color=` param. Both must stay in sync or a swatch deep-link silently resolves to nothing. `product.component.ts` delegates its private `colorKey` / `colorSlug` to this helper for exactly that reason.
 - **Colour values are never stored on the slide.** Hex and swatch images resolve at render time from `ref_colors` via `ReferenceDataService`, so editing a colour in Reference Data updates every swatch across the app.
-- **A colour with no `ref_colors` entry is dropped**, not rendered as a blank circle. The admin editor warns about this before publish (see [04 – Admin Portal](./04-admin-portal.md)).
+- **A colour with no `ref_colors` entry stays visible as a hatched neutral disc** so the row and label do not disappear. The admin editor still warns before publish (see [04 – Admin Portal](./04-admin-portal.md)).
 - **Each colour carries its own hero shot** (`colors[].imageUrl`), set in the storefront editor and stored on the slide. These are preloaded on init so tapping a swatch swaps instantly instead of flashing blank.
 - **The slide opens on its default colourway** (`defaultColorSlug`), and that colour's swatch reads as selected before the visitor taps anything. The slide's `imageUrl` is derived from it server-side, so there is no separate slide image to keep in sync. Re-tapping the current colour is a no-op: a slide always shows some colour.
 - **Hero shots are deliberately separate from product gallery images.** Hero art is a cutout styled for the hero stage; the product's own `imageColors` gallery serves the product detail page. The hero makes no per-product API call for images at all.
@@ -181,7 +185,12 @@ Two things must stay in step or the image renders soft:
 > The admin media picker must save the **full-size** URL (`storageUrl`), not `preview`. `preview` is the 640px card variant, intended for picker thumbnails.
 - Every swatch carries an inset ring so white, cream, and milk stay visible against the cream canvas, and sits in a 44px tap target.
 
-Swipe handling lives in `home.component.ts`. `onHeroPointerDown` / `onHeroPointerUp` / `onHeroPointerCancel` record a start point and commit a slide change on release past a 44px horizontal threshold, requiring the gesture to be more horizontal than vertical (`|dx| > |dy| * 1.4`) so vertical page scroll still works. There is deliberately **no per-frame drag transform**: directional movement combined with a finger release made the product appear to shake, so ordinary slide changes are a plain opacity crossfade.
+Swipe handling lives in `home.component.ts`. `onHeroPointerDown` /
+`onHeroPointerUp` / `onHeroPointerCancel` commit after a 44px horizontal
+threshold and require `|dx| > |dy| * 1.4`, preserving vertical page scroll.
+There is no per-frame drag transform. After release, adjacent navigation uses a
+bounded 16px/420ms directional crossfade; pagination and colour changes remain
+plain fades.
 
 CTA contrast: `#004538` on `#ffffff` is 12.4:1, clearing WCAG AA and AAA. Pagination segments carry a 44px tall hit area for WCAG 2.5.5.
 
@@ -219,6 +228,7 @@ Timing is **1500ms run twice** rather than one long pass, with the peak held onl
 Guards in `home.component.ts`:
 
 - The hint is skipped entirely if the visitor has already swiped or used the pagination (`heroInteracted`), checked both before scheduling and again when the 1400ms settle timer fires.
+- An `IntersectionObserver` requires 45% stage visibility. Scrolling away cancels the timer without spending the once-per-session flag; returning schedules it again.
 - `sessionStorage` (`elite:hero-swipe-hint-shown`) scopes it to once per visit rather than once per navigation to `/`. Access is wrapped in `try/catch` for private-mode Safari.
 - The dismiss timer is `duration × iterations + 200ms`. Dismissing exactly on the animation duration could pull the class on its final frame.
 - Swiping mid-demo eases the layers home over 180ms via `.is-peek-releasing` rather than snapping. `stopHeroPeek` pins the live computed transform inline, drops the animation, then releases the pin. Two details are load-bearing and were both verified against a real touch event, since each fails silently:

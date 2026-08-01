@@ -19,15 +19,20 @@
 
                 <div class="hero-layout">
                   <div class="hero-copy">
-                    <div class="hero-brand">
-                      <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
-                    </div>
+                    <div
+                      class="hero-intro"
+                      [class.has-description]="!!activeHeroDescription()"
+                    >
+                      <div class="hero-brand">
+                        <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
+                      </div>
 
-                    @if (activeHeroDescription()) {
-                      <p class="hero-description">
-                        {{ activeHeroDescription() }}
-                      </p>
-                    }
+                      @if (activeHeroDescription()) {
+                        <p class="hero-description">
+                          {{ activeHeroDescription() }}
+                        </p>
+                      }
+                    </div>
 
                     @if (activeHeroSwatches().length > 0) {
                       <div class="hero-colours">
@@ -61,6 +66,17 @@
                                   class="hero-swatch__dot hero-swatch__dot--image"
                                   aria-hidden="true"
                                   [style.background-image]="'url(' + color.image + ')'"
+                                ></span>
+                              } @else if (color.unmapped) {
+                                <!--
+                                  Colour absent from Reference Data, so there is
+                                  no hex to fill with. Drawn as a neutral disc
+                                  rather than dropped: the name still reads, and
+                                  the row keeps its shape instead of collapsing.
+                                -->
+                                <span
+                                  class="hero-swatch__dot hero-swatch__dot--unmapped"
+                                  aria-hidden="true"
                                 ></span>
                               } @else {
                                 <span
@@ -119,6 +135,9 @@
                       class="hero-stage"
                       [class.is-leather-peeking]="heroPeekActive()"
                       [class.is-peek-releasing]="heroPeekReleasing()"
+                      [class.is-hero-slide-transition]="heroSlideDirection() !== 0"
+                      [class.is-hero-slide-next]="heroSlideDirection() === 1"
+                      [class.is-hero-slide-previous]="heroSlideDirection() === -1"
                       (pointerdown)="onHeroPointerDown($event)"
                       (pointerup)="onHeroPointerUp($event)"
                       (pointercancel)="onHeroPointerCancel($event)"
@@ -133,9 +152,20 @@
                         track item.id;
                         let first = $first
                       ) {
+                        <!--
+                          `@if` on the URL so a slide with no image renders no
+                          <img> at all. An `<img src="">` resolves to the page
+                          itself and paints the browser's broken-image glyph,
+                          which is a worse empty state than nothing. The figure
+                          keeps its box either way, so the rows below hold still.
+                        -->
                         <picture
                           class="hero-product__image"
                           [class.is-active]="item.id === activeHeroItem().id"
+                          [class.is-slide-incoming]="
+                            heroSlideDirection() !== 0 && item.id === activeHeroItem().id
+                          "
+                          [class.is-slide-outgoing]="item.id === outgoingHeroItemId()"
                           [class.hero-product__image--photo]="
                             item.id === 'white-leather'
                           "
@@ -144,40 +174,44 @@
                           "
                         >
                           @if (item.id === activeHeroItem().id) {
-                            <source
-                              [srcset]="
-                                heroSrcset(activeHeroImage()) ||
-                                toWebp(activeHeroImage())
-                              "
-                              [attr.sizes]="
-                                heroSrcset(activeHeroImage()) ? heroSizes : null
-                              "
-                              type="image/webp"
-                            />
-                            <img
-                              [src]="activeHeroImage()"
-                              [alt]="activeHeroItem().alt"
-                              [attr.loading]="first ? 'eager' : 'lazy'"
-                              [attr.fetchpriority]="first ? 'high' : 'low'"
-                              decoding="async"
-                            />
+                            @if (activeHeroImage()) {
+                              <source
+                                [srcset]="
+                                  heroSrcset(activeHeroImage()) ||
+                                  toWebp(activeHeroImage())
+                                "
+                                [attr.sizes]="
+                                  heroSrcset(activeHeroImage()) ? heroSizes : null
+                                "
+                                type="image/webp"
+                              />
+                              <img
+                                [src]="activeHeroImage()"
+                                [alt]="activeHeroItem().alt"
+                                [attr.loading]="first ? 'eager' : 'lazy'"
+                                [attr.fetchpriority]="first ? 'high' : 'low'"
+                                decoding="async"
+                              />
+                            }
                           } @else {
-                            <source
-                              [srcset]="
-                                heroSrcset(item.imageUrl) || toWebp(item.imageUrl)
-                              "
-                              [attr.sizes]="
-                                heroSrcset(item.imageUrl) ? heroSizes : null
-                              "
-                              type="image/webp"
-                            />
-                            <img
-                              [src]="item.imageUrl"
-                              [alt]="item.alt"
-                              loading="lazy"
-                              fetchpriority="low"
-                              decoding="async"
-                            />
+                            @if (item.imageUrl) {
+                              <source
+                                [srcset]="
+                                  heroSrcset(item.imageUrl) || toWebp(item.imageUrl)
+                                "
+                                [attr.sizes]="
+                                  heroSrcset(item.imageUrl) ? heroSizes : null
+                                "
+                                type="image/webp"
+                              />
+                              <img
+                                [src]="item.imageUrl"
+                                [alt]="item.alt"
+                                loading="lazy"
+                                fetchpriority="low"
+                                decoding="async"
+                              />
+                            }
                           }
                         </picture>
                       }
@@ -260,7 +294,7 @@
                           class="hero-arrow hero-arrow--prev"
                           [attr.aria-label]="t('home.hero.previous')"
                           [title]="t('home.hero.previous')"
-                          (click)="selectAdjacentHeroItem(-1)"
+                          (click)="selectAdjacentHeroItem(-1, $event)"
                         >
                           <span aria-hidden="true">‹</span>
                         </button>
@@ -296,7 +330,7 @@
                           class="hero-arrow hero-arrow--next"
                           [attr.aria-label]="t('home.hero.next')"
                           [title]="t('home.hero.next')"
-                          (click)="selectAdjacentHeroItem(1)"
+                          (click)="selectAdjacentHeroItem(1, $event)"
                         >
                           <span aria-hidden="true">›</span>
                         </button>

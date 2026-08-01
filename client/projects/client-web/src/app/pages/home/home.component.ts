@@ -51,6 +51,8 @@ const HERO_PEEK_DURATION_MS = 1500;
 const HERO_PEEK_ITERATIONS = 1;
 /** Matches the release transition on `.is-peek-releasing`. */
 const HERO_PEEK_RELEASE_MS = 180;
+/** Matches the adjacent slide keyframes in home.component.scss. */
+const HERO_SLIDE_TRANSITION_MS = 420;
 /** Teach the swipe once per visit rather than on every return to the home page. */
 const HERO_HINT_SESSION_KEY = 'elite:hero-swipe-hint-shown';
 
@@ -78,6 +80,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   private heroSwipeHintShown = false;
   private heroPeekReleaseTimer: number | undefined;
   private heroPeekReleaseFrame: number | undefined;
+  private heroSlideTransitionTimer: number | undefined;
+  private heroStageObserver: IntersectionObserver | undefined;
+  private heroStageObserverFrame: number | undefined;
+  private heroStageVisible = false;
   /** Set once the visitor swipes or uses the pagination: the hint has no job then. */
   private heroInteracted = false;
   private componentDestroyed = false;
@@ -134,6 +140,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly heroPeekActive = signal(false);
   /** Eases the peek layers home after an interrupt instead of snapping them. */
   readonly heroPeekReleasing = signal(false);
+  /** Adjacent navigation only: pagination and colour changes stay a plain fade. */
+  readonly heroSlideDirection = signal<-1 | 0 | 1>(0);
+  readonly outgoingHeroItemId = signal('');
 
   // ── Hero colour swatches ────────────────────────────────────────────────
   /** Colour the visitor tapped on the active slide, or '' for the slide default. */
@@ -142,9 +151,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly heroColorLoadingKey = signal('');
 
   /**
-   * Featured swatches for the active slide. A colour with no hex and no swatch
-   * image in ref_colors is dropped rather than rendered as a blank circle; the
-   * admin editor warns about this so it is visible before publish.
+   * Featured swatches for the active slide.
+   *
+   * A colour missing from `ref_colors` has neither a hex nor a swatch image and
+   * so cannot be drawn as a coloured disc. It used to be dropped here. That was
+   * worse than it sounds: on a slide where *every* featured colour was unmapped
+   * the template's `@if` saw an empty array and removed the whole block, heading
+   * and all, so an entire row of the composition disappeared and the rows below
+   * it shifted up. One unmapped colour silently restructured the hero.
+   *
+   * It is now kept and flagged, and the template draws a neutral placeholder.
+   * The customer still learns the colourway exists, the layout keeps its shape,
+   * and the admin blocks publish on it rather than the storefront hiding it.
    */
   readonly activeHeroSwatches = computed(() => {
     const item = this.activeHeroItem();
@@ -152,18 +170,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     const hexByName = this.referenceData.colorHexByName();
     const imageByName = this.referenceData.colorSwatchImageByName();
 
-    return (item.colors ?? []).reduce<
-      Array<HeroColorContent & { key: string; hex: string; image: string }>
-    >((acc, color) => {
+    return (item.colors ?? []).map((color) => {
       const key = colorKey(color.label);
       const image = imageByName[key] || '';
       const hex = hexByName[key] || '';
-      // A colour with no hex and no swatch image cannot be drawn as a dot, so it
-      // is skipped. The admin editor warns about this before publish.
-      if (!hex && !image) return acc;
-      acc.push({ ...color, key, hex, image });
-      return acc;
-    }, []);
+      return { ...color, key, hex, image, unmapped: !hex && !image };
+    });
   });
 
   /**
@@ -287,6 +299,8 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.componentDestroyed = true;
+    this.heroStageObserver?.disconnect();
+    if (this.heroStageObserverFrame) cancelAnimationFrame(this.heroStageObserverFrame);
     this.heroStackedMedia?.removeEventListener('change', this.onHeroStackedViewportChange);
     if (this.metaTimer) clearTimeout(this.metaTimer);
     if (this.heroSwipeHintTimer) clearTimeout(this.heroSwipeHintTimer);
@@ -294,6 +308,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (this.heroPeekReleaseTimer) clearTimeout(this.heroPeekReleaseTimer);
     if (this.heroPeekReleaseFrame) cancelAnimationFrame(this.heroPeekReleaseFrame);
     if (this.heroColorSwapTimer) clearTimeout(this.heroColorSwapTimer);
+    if (this.heroSlideTransitionTimer) clearTimeout(this.heroSlideTransitionTimer);
   }
 
   goTo(path: string): void {
@@ -354,13 +369,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     window.scrollTo(0, 0);
   }
 
-  selectAdjacentHeroItem(direction: -1 | 1): void {
+  selectAdjacentHeroItem(direction: -1 | 1, event?: MouseEvent): void {
     this.heroInteracted = true;
     this.dismissHeroSwipeHint();
     const total = this.heroItems().length;
     if (total < 2) return;
     const targetIndex = (this.activeHeroItemIndex() + direction + total) % total;
-    this.prepareHeroItem(targetIndex);
+    // A keyboard-generated click has detail 0. Keep repeated keyboard actions
+    // immediate; pointer clicks and real swipes receive the spatial cue.
+    this.prepareHeroItem(targetIndex, !event || event.detail !== 0 ? direction : 0);
   }
 
   /** Jump straight to a slide from the mobile pagination control. */
@@ -404,6 +421,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    * It never changes the selected slide.
    */
   private scheduleHeroSwipeHint(): void {
+    this.ensureHeroStageObserver();
     if (
       this.heroSwipeHintTimer ||
       this.heroSwipeHintPreparing ||
@@ -413,6 +431,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.heroInteracted ||
       this.heroHintSeenThisSession() ||
       this.heroItems().length < 2 ||
+      !this.heroStageVisible ||
       !this.heroSwipeHintEligible()
     ) {
       return;
@@ -426,6 +445,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.componentDestroyed ||
         this.heroInteracted ||
         this.heroItems().length < 2 ||
+        !this.heroStageVisible ||
         !this.heroSwipeHintEligible()
       ) {
         return;
@@ -435,7 +455,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.heroSwipeHintTimer = window.setTimeout(() => {
         this.heroSwipeHintTimer = undefined;
         // The visitor may have swiped during this 1400ms wait.
-        if (this.componentDestroyed || this.heroInteracted) return;
+        if (this.componentDestroyed || this.heroInteracted || !this.heroStageVisible) return;
 
         this.heroSwipeHintShown = true;
         this.markHeroHintSeen();
@@ -474,6 +494,40 @@ export class HomeComponent implements OnInit, OnDestroy {
   private heroSwipeHintEligible(): boolean {
     return window.matchMedia(HERO_STACKED_QUERY).matches
       && window.matchMedia(HERO_COARSE_POINTER_QUERY).matches;
+  }
+
+  /**
+   * Do not spend the once-per-session gesture lesson off-screen. The observer
+   * cancels the pending timer while the stage is out of view and schedules a
+   * fresh attempt when the visitor returns.
+   */
+  private ensureHeroStageObserver(): void {
+    if (this.heroStageObserver) return;
+    const stage = this.heroStageElement?.nativeElement;
+    if (!stage) {
+      if (!this.heroStageObserverFrame && !this.componentDestroyed) {
+        this.heroStageObserverFrame = requestAnimationFrame(() => {
+          this.heroStageObserverFrame = undefined;
+          this.ensureHeroStageObserver();
+        });
+      }
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      this.heroStageVisible = true;
+      return;
+    }
+
+    this.heroStageObserver = new IntersectionObserver(([entry]) => {
+      const visible = !!entry?.isIntersecting && entry.intersectionRatio >= 0.45;
+      this.heroStageVisible = visible;
+      if (visible) {
+        this.scheduleHeroSwipeHint();
+      } else {
+        this.dismissHeroSwipeHint();
+      }
+    }, { threshold: [0, 0.45] });
+    this.heroStageObserver.observe(stage);
   }
 
   /**
@@ -561,7 +615,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    * Keep the current slide visible until the destination image is decoded.
    * Once ready, the existing picture layers perform a short opacity crossfade.
    */
-  private prepareHeroItem(index: number): void {
+  private prepareHeroItem(index: number, direction: -1 | 0 | 1 = 0): void {
     const item = this.heroItems()[index];
     if (!item) return;
     const requestId = ++this.heroSlideRequestId;
@@ -569,11 +623,29 @@ export class HomeComponent implements OnInit, OnDestroy {
     void this.ensureHeroImageReady(item.imageUrl).then(() => {
       if (requestId !== this.heroSlideRequestId) return;
       this.cancelHeroColorSwap();
+      this.beginHeroSlideTransition(direction);
       this.activeHeroColorKey.set('');
       this.activeHeroItemIndex.set(index);
       this.preloadHeroItemImages(index);
       this.preloadAdjacentHeroImages(index);
     });
+  }
+
+  private beginHeroSlideTransition(direction: -1 | 0 | 1): void {
+    if (this.heroSlideTransitionTimer) {
+      clearTimeout(this.heroSlideTransitionTimer);
+      this.heroSlideTransitionTimer = undefined;
+    }
+
+    this.heroSlideDirection.set(direction);
+    this.outgoingHeroItemId.set(direction ? (this.activeHeroItem()?.id ?? '') : '');
+    if (!direction) return;
+
+    this.heroSlideTransitionTimer = window.setTimeout(() => {
+      this.heroSlideTransitionTimer = undefined;
+      this.heroSlideDirection.set(0);
+      this.outgoingHeroItemId.set('');
+    }, HERO_SLIDE_TRANSITION_MS);
   }
 
   private cancelHeroColorSwap(): void {

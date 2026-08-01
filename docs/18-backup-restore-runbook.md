@@ -5,9 +5,15 @@ written, rehearsed restore procedure that phase's test gate requires — read
 it end to end once before the first real production restore drill, not just
 when something has already gone wrong.
 
-**Status as of 2026-07-20:** scripts written and tested end-to-end against a
+**Status as of 2026-08-01:** scripts written and tested end-to-end against a
 local dev database (verified: backup → encrypt → decrypt → restore → row
-counts match exactly across `tenants`, `admin_users`, `products`). **Not yet
+counts match exactly across `tenants`, `admin_users`, `products`). The backup
+format now also carries `uploads/` in the same encrypted bundle and verifies
+the extracted file count before restore. A 2026-08-01 smoke test created a real
+local `pg_dump`, encrypted/decrypted the bundle, verified its manifest and
+restored the upload file to an empty target. The local database user cannot
+create a disposable database, so the new bundle has not had a second real
+`pg_restore`; that remains part of the production drill below. **Not yet
 run against the production VPS** — this session has no SSH access to it.
 Everything below (cron install, first production backup, first production
 restore drill) still needs to be done once by whoever has server access.
@@ -16,15 +22,10 @@ restore drill) still needs to be done once by whoever has server access.
 
 ## 1. What this covers, and what it deliberately doesn't (yet)
 
-- **Covers:** the PostgreSQL database (all tenant data — orders, POS
-  transactions, inventory ledger, cash movements, everything). Encrypted at
-  rest, retained on a rolling window, with failure alerting.
-- **Does NOT cover (known gap):** the uploads directory (`/var/www/elite-uploads`,
-  ~135MB per `DEPLOYMENT.md` — product photos, media). Not part of this
-  phase's scope; if that directory were lost, product images would need
-  re-uploading even after a perfect database restore. Worth a follow-up
-  (e.g. a periodic `rsync`/`tar` of that directory alongside the DB backup)
-  before treating disaster recovery as fully complete.
+- **Covers:** the PostgreSQL database plus the persistent uploads directory
+  (`/var/www/elite-uploads`: product photos/media) in one AES256-encrypted
+  bundle. The bundle records dump size and uploads file count/bytes; restore
+  refuses a bundle whose extracted file count disagrees with its manifest.
 - **Does NOT cover (known gap):** offsite storage. Backups are written to
   local disk on the same VPS they back up (`BACKUP_DIR`, default
   `/var/backups/elite-postgres`). **A total VPS loss (disk failure, account
@@ -67,6 +68,7 @@ chmod 700 /var/backups/elite-postgres
 cat > /etc/elite-backup.env <<'EOF'
 DATABASE_URL=postgresql://elite:REPLACE_ME@localhost:5432/elite
 BACKUP_DIR=/var/backups/elite-postgres
+BACKUP_UPLOADS_DIR=/var/www/elite-uploads
 BACKUP_GPG_PASSPHRASE=REPLACE_WITH_THE_PASSPHRASE_FROM_2.2
 BACKUP_RETENTION_DAYS=14
 SMTP_HOST=REPLACE_WITH_SAME_VALUE_AS_SERVER_ENV
@@ -102,7 +104,7 @@ set -a && . /etc/elite-backup.env && set +a && /var/www/elite/scripts/backup-dat
 ls -la /var/backups/elite-postgres/
 ```
 
-You should see one `elite-<timestamp>.dump.gpg` file, and the script's log
+You should see one `elite-<timestamp>.backup.tar.gpg` file, and the script's log
 output should end with `Done.` and no `FAILED` lines.
 
 ---
@@ -132,8 +134,15 @@ ls -la /var/backups/elite-postgres/
 ```bash
 RESTORE_DATABASE_URL="postgresql://elite:REPLACE_ME@localhost:5432/elite_restore_drill" \
 BACKUP_GPG_PASSPHRASE="REPLACE_WITH_THE_PASSPHRASE_FROM_2.2" \
-/var/www/elite/scripts/restore-database.sh /var/backups/elite-postgres/elite-<timestamp>.dump.gpg
+RESTORE_UPLOADS_DIR="/var/tmp/elite-uploads-restore-drill" \
+/var/www/elite/scripts/restore-database.sh /var/backups/elite-postgres/elite-<timestamp>.backup.tar.gpg
 ```
+
+`RESTORE_UPLOADS_DIR` must be empty. The script verifies the restored file
+count. Omitting it verifies the bundled uploads but restores only PostgreSQL;
+that is useful for a database-only investigation, but it does not count as a
+full disaster-recovery drill. Legacy `.dump.gpg` database-only backups remain
+supported for the duration of their retention window.
 
 ### 3.4 Verify the restored data is complete and correct
 
@@ -155,6 +164,8 @@ done
 
 Also spot-check one real record end-to-end (e.g. pull up the most recent
 real order/transaction in both databases and confirm the details match).
+Compare `find /var/www/elite-uploads -type f | wc -l` with the restored uploads
+directory, then open at least one real product image from the restored copy.
 
 ### 3.5 Record the drill
 
@@ -166,6 +177,7 @@ drill log (§5) or wherever the team already tracks operational runbooks.
 
 ```bash
 sudo -u postgres psql -c "DROP DATABASE elite_restore_drill;"
+rm -rf /var/tmp/elite-uploads-restore-drill
 ```
 
 ---
@@ -207,6 +219,7 @@ signed-off target.
 | Date | Run by | Backup file | Result | Notes |
 |---|---|---|---|---|
 | 2026-07-20 | Claude (this session) | local dev DB, not production | ✅ Row counts matched exactly (`tenants`, `admin_users`, `products`) | End-to-end test of the scripts themselves against a local dev database — proves the scripts work, does NOT count as the production restore drill Phase 9's test gate requires. That still needs to be run once by someone with VPS access, against a real production backup. |
+| 2026-08-01 | Codex (local workspace) | temporary combined bundle, not production | ✅ Real pg_dump + GPG + tar manifest + upload restore passed | One upload file was bundled, verified and copied to an empty restore directory. `pg_restore` was safely stubbed because the local DB role cannot create a disposable database; the 2026-07-20 drill remains the proof of the database restore path. |
 
 Add a new row every time this drill is actually run against production.
 
@@ -219,9 +232,6 @@ Add a new row every time this drill is actually run against production.
   second server after each successful backup, so a total VPS loss doesn't
   also destroy the backups. Needs the owner to pick/provision a
   destination.
-- **Uploads directory backup.** `/var/www/elite-uploads` (product media) is
-  not covered by this phase at all — add a periodic `rsync`/`tar` alongside
-  the database backup.
 - **Backup-failure alert test.** The email-alert path
   (`scripts/backup-database.sh`'s `send_failure_alert`) has not yet been
   tested against a deliberately broken backup run on the production SMTP

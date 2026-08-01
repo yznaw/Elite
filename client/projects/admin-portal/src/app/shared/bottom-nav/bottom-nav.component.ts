@@ -418,12 +418,22 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
 
   private readonly myPinItem: SecondaryItem = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'lock' };
 
+  // Mirrors sidebar.component.ts. This list is parallel, not shared, so a page
+  // added to only one of them is unreachable on the other surface — and the
+  // register's touch screen uses this one.
+  private readonly stocktakeItem: SecondaryItem = { path: '/stocktake', labelKey: 'nav.stocktake', subKey: 'nav.stocktake.sub', icon: 'list' };
+
+  private readonly diagnosticsItem: SecondaryItem = { path: '/diagnostics', labelKey: 'nav.diagnostics', subKey: 'nav.diagnostics.sub', icon: 'warning' };
+
   readonly visibleGroups = computed<SecondaryGroup[]>(() => {
     const role = this.auth.user()?.role;
-    if (role !== 'manager') return this.secondaryGroups;
+    const extras: SecondaryItem[] = [];
+    if (role === 'manager') extras.push(this.myPinItem);
+    if (role === 'owner' || role === 'admin') extras.push(this.diagnosticsItem, this.stocktakeItem);
+    if (!extras.length) return this.secondaryGroups;
     return this.secondaryGroups.map((group) =>
       group.labelKey === 'nav.section.system'
-        ? { ...group, items: [...group.items, this.myPinItem] }
+        ? { ...group, items: [...group.items, ...extras] }
         : group,
     );
   });

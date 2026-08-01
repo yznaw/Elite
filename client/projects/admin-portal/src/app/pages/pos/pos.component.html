@@ -92,6 +92,12 @@
           <span>Opening cash</span>
           <div><b>QAR</b><input [(ngModel)]="openingFloat" inputmode="decimal" /></div>
         </label>
+        <div class="morning-readiness" [class.ready]="hardware.ready()">
+          <span><i></i>Printer: {{ hardware.connected() && hardware.printerAvailable() ? 'ready' : 'not ready' }}</span>
+          <span>Offline signer: {{ hardware.signerReachable() === true ? 'ready' : 'not ready' }}</span>
+          <button type="button" (click)="hardware.initialize()">Retry</button>
+          <button type="button" (click)="openHardwareDialog()">Configure</button>
+        </div>
         <button class="primary-action" type="button" [disabled]="busy()" (click)="openShift()">
           {{ busy() ? 'Opening...' : 'Open shift' }}
         </button>
@@ -100,6 +106,36 @@
         <span>REGISTER</span>
         <strong>{{ register()?.displayName }}</strong>
         <p>Sales cannot be posted without an open shift. Closing and Z reporting remain manager-controlled.</p>
+      </aside>
+    </section>
+  }
+
+  @if (phase() === 'shift-recovery') {
+    <section class="shift-stage">
+      <div class="shift-card recovery-card">
+        <span class="eyebrow">MANAGER CHECK REQUIRED</span>
+        <h1>Resolve the previous shift</h1>
+        @if (shiftRecovery(); as recovery) {
+          @if (recovery.reason === 'previous-day') {
+            <p>A shift from a previous business day is still open. Close and reconcile it before today's cashier starts selling.</p>
+          } @else if (recovery.reason === 'different-cashier') {
+            <p>This register still has a shift belonging to {{ recovery.cashierName || 'another cashier' }}. It cannot be used by the current cashier.</p>
+          } @else {
+            <p>The previous shift is still being closed. A manager must finish its Z report before selling resumes.</p>
+          }
+          <small>Opened {{ recovery.openedAt | date:'medium' }}</small>
+        }
+        <button class="primary-action" type="button" [disabled]="!online()" (click)="openShiftDialog()">
+          Review and close previous shift
+        </button>
+        @if (!online()) {
+          <small>Reconnect to the server to reconcile this shift. Offline selling stays blocked.</small>
+        }
+      </div>
+      <aside class="shift-note">
+        <span>REGISTER PROTECTION</span>
+        <strong>{{ register()?.displayName }}</strong>
+        <p>This prevents sales from being posted under yesterday's totals or another employee's cash drawer.</p>
       </aside>
     </section>
   }
@@ -114,15 +150,21 @@
             <button type="button" [disabled]="!online()" (click)="dialog.set('operations')">Returns / voids</button>
           </div>
           <div>
-            <button type="button" (click)="openHardwareDialog()">Hardware <i [class.ready]="hardware.connected()"></i></button>
+            <button type="button" (click)="openHardwareDialog()">Hardware <i [class.ready]="hardware.ready()"></i></button>
             <button type="button" [disabled]="!online()" (click)="openShiftDialog()">Shift report</button>
           </div>
         </nav>
         @if (!online()) {
-          <div class="offline-notice">
+          <div class="offline-notice" [class.warn]="offlineCatalogWarning()" [class.rejected]="offlineCatalogBlocked()">
             Offline mode: sales are receipted locally and queued for synchronization.
             @if (!serverReachable()) { <span class="unreachable">Server unreachable — retrying automatically.</span> }
             @if (catalogCachedAt()) { <span>Catalog cached {{ catalogCachedAt() | date:'short' }}</span> }
+            @if (offlineCatalogWarning()) {
+              <span>Reconnect soon: offline selling will stop when this catalog reaches 12 hours old.</span>
+            }
+            @if (offlineCatalogBlocked()) {
+              <span>Offline selling is blocked until prices and stock are refreshed online.</span>
+            }
           </div>
         }
         @if (rejectedSales() > 0) {
@@ -277,10 +319,16 @@
         </div>
 
         <div class="cart-totals">
-          <div><span>Subtotal</span><b>{{ formatMoney(totalCents()) }}</b></div>
-          <div><span>Tax</span><b>{{ formatMoney(0) }}</b></div>
+          <!--
+            No tax line, and no subtotal line while it equals the total.
+            Qatar has no sales tax (owner decision, 2026-08-01), so a permanent
+            "Tax QAR 0.00" row was telling the cashier nothing, and a subtotal
+            identical to the total is noise. Both come back on their own terms
+            if discounts land (docs/25 Phase 6), where subtotal and total
+            genuinely differ.
+          -->
           <div class="grand-total"><span>Total</span><b>{{ formatMoney(totalCents()) }}</b></div>
-          <button class="checkout-button" type="button" [disabled]="!cart().length || busy()" (click)="beginPayment()">
+          <button class="checkout-button" type="button" [disabled]="!cart().length || busy() || offlineCatalogBlocked()" (click)="beginPayment()">
             Take payment
             <span>{{ formatMoney(totalCents()) }}</span>
           </button>
@@ -390,6 +438,66 @@
         <button class="modal-close" type="button" (click)="paymentOpen.set(false)">Close</button>
         <span class="eyebrow">PAYMENT</span>
         <h2>{{ formatMoney(totalCents()) }}</h2>
+
+        <!--
+          Customer is optional and walk-in is the default: a queue at the till
+          must never wait on data entry. Linking is one search away, and the
+          customer found here is the same record the website uses.
+        -->
+        <div class="customer-block">
+          @if (selectedCustomer(); as customer) {
+            <div class="customer-linked">
+              <div>
+                <b>{{ customer.name }}</b>
+                <span>{{ customer.phone || customer.email }}</span>
+                @if (customer.ordersCount > 0) {
+                  <span class="customer-history">{{ customer.ordersCount }} previous order(s) · {{ formatMoney(customer.ltvCents) }} lifetime</span>
+                }
+              </div>
+              <button type="button" class="link-button" (click)="clearCustomer()">Remove</button>
+            </div>
+          } @else if (!online()) {
+            <div class="customer-offline">Sale will be recorded as walk-in. Customers can only be looked up online.</div>
+          } @else if (customerCreateOpen()) {
+            <div class="customer-create">
+              <label><span>Name</span><input [(ngModel)]="newCustomerName" placeholder="Customer name" /></label>
+              <label><span>Phone</span><input [(ngModel)]="newCustomerPhone" inputmode="tel" placeholder="+974 …" /></label>
+              <label><span>Email (optional)</span><input [(ngModel)]="newCustomerEmail" inputmode="email" placeholder="For emailed receipts" /></label>
+              <div class="customer-create-actions">
+                <button type="button" class="link-button" (click)="customerCreateOpen.set(false)">Cancel</button>
+                <button type="button" class="secondary-action" [disabled]="customerSaving() || !newCustomerName.trim()" (click)="createCustomer()">
+                  {{ customerSaving() ? 'Saving…' : 'Save customer' }}
+                </button>
+              </div>
+            </div>
+          } @else {
+            <label class="customer-search">
+              <span>Customer (optional)</span>
+              <input [(ngModel)]="customerQuery" (ngModelChange)="queueCustomerSearch()" placeholder="Phone, name, or email" />
+            </label>
+            @if (customerSearching()) {
+              <div class="customer-hint">Searching…</div>
+            } @else if (customerResults().length) {
+              <ul class="customer-results">
+                @for (customer of customerResults(); track customer.customerId) {
+                  <li>
+                    <button type="button" (click)="linkCustomer(customer)">
+                      <b>{{ customer.name }}</b>
+                      <span>{{ customer.phone || customer.email }}</span>
+                      @if (customer.ordersCount > 0) { <span class="customer-history">{{ customer.ordersCount }} order(s)</span> }
+                    </button>
+                  </li>
+                }
+              </ul>
+            } @else if (customerQuery.trim().length >= 3) {
+              <div class="customer-hint">
+                No match.
+                <button type="button" class="link-button" (click)="openCustomerCreate()">Add as a new customer</button>
+              </div>
+            }
+          }
+        </div>
+
         <div class="payment-methods">
           <button type="button" [class.active]="paymentMethod() === 'cash'" (click)="selectPayment('cash')">
             <b>Cash</b><span>Record drawer tender</span>
@@ -417,7 +525,7 @@
         <button
           class="primary-action"
           type="button"
-          [disabled]="busy() || (paymentMethod() === 'card' && !terminalReference.trim())"
+          [disabled]="busy() || offlineCatalogBlocked() || (paymentMethod() === 'card' && !terminalReference.trim())"
           (click)="completeSale()"
         >
           {{ busy() ? 'Posting sale...' : 'Complete sale' }}

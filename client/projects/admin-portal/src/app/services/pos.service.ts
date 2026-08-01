@@ -7,6 +7,9 @@ export interface PosCatalogItem {
   productId: string;
   variantId: string;
   name: string;
+  /** Arabic product name, cached with the catalogue so an offline sale can
+   *  still print the bilingual item line. Empty when untranslated. */
+  nameAr: string;
   variant: string;
   size: string;
   color: string;
@@ -39,6 +42,8 @@ export interface PosCurrentRegister {
   shift: {
     id: string;
     state: 'open' | 'closing';
+    cashierId: string;
+    cashierName: string | null;
     openingFloatCents: number;
     openedAt: string;
   } | null;
@@ -154,6 +159,24 @@ export interface PosCashMovement {
   amountCents: number;
   reason: string;
   createdAt: string;
+}
+
+/**
+ * A customer as the till sees them. The same row the website uses — matching
+ * is on normalized phone or email, so a person who bought online is found here
+ * and their history is one history (see server/lib/customer-identity.js).
+ */
+export interface PosCustomer {
+  customerId: string;
+  name: string;
+  email: string;
+  phone: string;
+  ordersCount: number;
+  ltvCents: number;
+  lastOrderAt?: string | null;
+  /** Set on create: true when an existing customer was matched, not created. */
+  linkedExisting?: boolean;
+  matchedOn?: 'email' | 'phone' | null;
 }
 
 export interface PosZReport {
@@ -338,7 +361,14 @@ export class PosService {
     voidReason: string;
     managerOverrideId: string;
     managerOverrideToken: string;
-  }): Promise<{ voidId: string; transactionId: string; stockRestored: Array<{ variantId: string; stock: number }> }> {
+  }): Promise<{
+    voidId: string;
+    transactionId: string;
+    amountCents: number;
+    reason: string;
+    voidedAt: string;
+    stockRestored: Array<{ variantId: string; stock: number }>;
+  }> {
     return firstValueFrom(this.api.post(`/pos/transactions/${transactionId}/void`, input));
   }
 
@@ -416,5 +446,19 @@ export class PosService {
 
   getZReport(zReportId: string): Promise<PosZReport> {
     return firstValueFrom(this.api.get<PosZReport>(`/pos/shifts/z-reports/${zReportId}`));
+  }
+
+  /** Phone-first lookup, but a name or an email also matches. */
+  searchCustomers(query: string): Promise<PosCustomer[]> {
+    return firstValueFrom(this.api.get<PosCustomer[]>(`/pos/customers/search?q=${encodeURIComponent(query)}`));
+  }
+
+  /**
+   * Online only — see the route's own note. Entering a phone that already
+   * belongs to a website customer links to that person instead of creating a
+   * second record of them, and the response says which happened.
+   */
+  createCustomer(input: { fullName: string; phone?: string; email?: string }): Promise<PosCustomer> {
+    return firstValueFrom(this.api.post<PosCustomer>('/pos/customers', input));
   }
 }

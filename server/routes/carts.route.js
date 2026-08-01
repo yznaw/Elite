@@ -4,6 +4,7 @@ const nbox = require('../lib/nbox');
 const { bookNboxForPaidOrder, nboxQuoteMetadata } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const { ensureDefaultTenant } = require('../db/tenant');
+const { resolveCustomer } = require('../lib/customer-identity');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
@@ -127,32 +128,29 @@ function isPaidPayment(payment) {
   return String(payment?.status || '').trim().toLowerCase() === 'paid';
 }
 
+/**
+ * Storefront checkout's customer resolution.
+ *
+ * Delegates to the shared matcher rather than upserting on email alone. The
+ * difference that matters: a customer created at the till (phone, no email)
+ * who then orders online is now **adopted** — their email is filled in on the
+ * existing row — instead of becoming a second customer with a separate order
+ * history and separate LTV. See server/lib/customer-identity.js.
+ */
 async function upsertCustomer(client, tenantId, customer, shippingAddress) {
-  if (!customer.email) return null;
-  const result = await client.query(
-    `
-      INSERT INTO customers (tenant_id, email, full_name, phone, city, country, last_order_at)
-      VALUES ($1, $2, $3, $4, $5, $6, now())
-      ON CONFLICT (tenant_id, email)
-      DO UPDATE SET
-        full_name = EXCLUDED.full_name,
-        phone = EXCLUDED.phone,
-        city = EXCLUDED.city,
-        country = EXCLUDED.country,
-        last_order_at = now(),
-        updated_at = now()
-      RETURNING id
-    `,
-    [
-      tenantId,
-      customer.email,
-      customer.name,
-      customer.phone || null,
-      shippingAddress.city || null,
-      shippingAddress.country || null,
-    ],
+  const { customerId } = await resolveCustomer(
+    client,
+    tenantId,
+    {
+      email: customer.email,
+      phone: customer.phone || shippingAddress.phone,
+      fullName: customer.name,
+      city: shippingAddress.city,
+      country: shippingAddress.country,
+    },
+    { source: 'web' },
   );
-  return result.rows[0].id;
+  return customerId;
 }
 
 router.post('/', asyncHandler(async (req, res) => {
@@ -364,6 +362,57 @@ router.post('/checkout', asyncHandler(async (req, res) => {
           nbox: { quote: nboxQuoteMetadata(checkout.shippingQuote) },
         }, 'Order already exists.');
       }
+    }
+
+    // Stock check BEFORE the order exists, so a customer who cannot be served
+    // is told now rather than after paying.
+    //
+    // This does not make overselling impossible — stock is only decremented at
+    // payment confirmation (docs/25 Phase 1), so two people can still pass this
+    // check seconds apart and both pay for the last unit. That residual case is
+    // handled where the money already changed hands: the sale is kept, stock
+    // floors at zero, and the order is flagged for the person fulfilling it.
+    // What this check removes is the far more common and far more annoying
+    // case — paying for something that was already out of stock when the
+    // checkout button was pressed.
+    const outOfStock = [];
+    for (const item of checkout.items) {
+      const variantId = isUuid(item.variantId) ? item.variantId : null;
+      if (!variantId) continue;
+      const wanted = Number(item.qty || item.quantity) || 1;
+      // eslint-disable-next-line no-await-in-loop -- one row per cart line, and
+      // the lock has to be taken per row anyway.
+      const variant = await client.query(
+        `SELECT pv.stock_quantity, pv.is_active, p.name
+           FROM product_variants pv
+           JOIN products p ON p.id = pv.product_id
+          WHERE pv.tenant_id = $1 AND pv.id = $2
+          FOR UPDATE OF pv`,
+        [tenant.id, variantId],
+      );
+      if (!variant.rowCount) continue; // unlinked line: nothing to check against
+      const available = Number(variant.rows[0].stock_quantity) || 0;
+      if (!variant.rows[0].is_active || available < wanted) {
+        outOfStock.push({
+          sku: item.sku || '',
+          name: variant.rows[0].name,
+          requested: wanted,
+          available: Math.max(0, available),
+        });
+      }
+    }
+    if (outOfStock.length > 0) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+      return res.status(409).json({
+        success: false,
+        code: 'INSUFFICIENT_STOCK',
+        message: outOfStock.length === 1
+          ? `${outOfStock[0].name} is no longer available in the quantity requested.`
+          : 'Some items in your bag are no longer available in the quantity requested.',
+        details: outOfStock,
+        requestId: req.requestId,
+      });
     }
 
     const customerId = await upsertCustomer(client, tenant.id, checkout.customer, checkout.shippingAddress);

@@ -3,6 +3,8 @@ import { PosBusinessProfile } from './pos.service';
 
 export interface PosReceiptLine {
   name: string;
+  /** Snapshotted Arabic product name, printed above the English one. */
+  nameAr?: string | null;
   variant?: string;
   sku?: string;
   quantity: number;
@@ -11,7 +13,7 @@ export interface PosReceiptLine {
 }
 
 export interface PosReceiptData {
-  kind?: 'sale' | 'refund';
+  kind?: 'sale' | 'refund' | 'void';
   receiptNumber: string;
   transactionId?: string;
   refundId?: string;
@@ -314,6 +316,7 @@ export class PosReceiptRenderer {
 
     let y = this.marginPx + 8;
     const amount = receipt.kind === 'refund' ? receipt.amountCents ?? 0 : receipt.totalCents ?? 0;
+    const correctionKind = receipt.kind === 'refund' || receipt.kind === 'void';
 
     // Wordmark: the real brand logo, thresholded to pure black so it stays
     // crisp on a thermal head instead of dithering into grey mush. Falls
@@ -331,25 +334,28 @@ export class PosReceiptRenderer {
     }
 
     ctx.textAlign = 'center';
-    if (profile?.tradeNameEn) {
+    // The brand name always prints under the logo, even on an unconfigured
+    // profile. Previously it was skipped when `tradeNameEn` was empty, so a
+    // receipt showed the logo and then jumped straight to the sale — which is
+    // what the last real test print looked like. The receipt has to name the
+    // shop (owner requirement, 2026-08-01: logo, brand name, branch, phone).
+    {
       ctx.font = `600 15px ${this.bodyFont}`;
       ctx.save();
       ctx.textAlign = 'center';
-      this.fillTextTracked(ctx, profile.tradeNameEn.toUpperCase(), centerX, y, 2.5);
+      this.fillTextTracked(ctx, (profile?.tradeNameEn || 'ELITE COLLECTION').toUpperCase(), centerX, y, 2.5);
       ctx.restore();
       y += 22;
     }
-    if (profile?.tradeNameAr) {
-      ctx.font = `20px ${this.displayFont}`;
-      ctx.fillText(this.shapeArabic(profile.tradeNameAr), centerX, y);
-      y += 28;
-    }
+    // The receipt is English-only (owner decision, 2026-08-01), so the profile's
+    // Arabic trade name, address, return policy and footer stamp are stored but
+    // never printed. Arabic shaping stays in this file because *product* names
+    // can still be Arabic and must render correctly on the item lines.
     y += 10;
 
     ctx.font = `13px ${this.bodyFont}`;
     ctx.fillStyle = '#333';
     if (profile?.addressEn) { ctx.fillText(profile.addressEn, centerX, y); y += 19; }
-    if (profile?.addressAr) { ctx.fillText(this.shapeArabic(profile.addressAr), centerX, y); y += 19; }
     if (profile?.phone) { ctx.fillText(profile.phone, centerX, y); y += 19; }
     ctx.fillStyle = '#000';
     y += 20;
@@ -361,7 +367,8 @@ export class PosReceiptRenderer {
 
     ctx.font = `600 16px ${this.bodyFont}`;
     ctx.textAlign = 'center';
-    this.fillTextTracked(ctx, (receipt.kind === 'refund' ? 'REFUND' : 'RECEIPT').toUpperCase(), centerX, y, 3);
+    const receiptTitle = receipt.kind === 'refund' ? 'REFUND' : receipt.kind === 'void' ? 'VOID' : 'RECEIPT';
+    this.fillTextTracked(ctx, receiptTitle, centerX, y, 3);
     y += 24;
     ctx.font = `22px ${this.displayFont}`;
     ctx.fillText(`No. ${receipt.receiptNumber}`, centerX, y);
@@ -387,6 +394,21 @@ export class PosReceiptRenderer {
 
     ctx.font = `15px ${this.bodyFont}`;
     for (const item of receipt.items ?? []) {
+      // Item lines are the one bilingual part of an otherwise English receipt
+      // (owner decision, 2026-08-01): the Arabic name sits above the English
+      // one so a customer reading either language recognises what they bought.
+      // It is right-aligned because Arabic reads right-to-left — left-aligning
+      // it would put the end of the phrase where the eye starts.
+      //
+      // `shapeArabic` is required here: the receipt is rasterised, but the
+      // canvas still needs the letters joined and reordered before drawing.
+      if (item.nameAr) {
+        ctx.font = `500 16px ${this.bodyFont}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(this.shapeArabic(item.nameAr), this.widthPx - this.marginPx, y);
+        ctx.textAlign = 'left';
+        y += this.smallLineHeightPx;
+      }
       ctx.font = `500 15px ${this.bodyFont}`;
       ctx.fillText(item.name, this.marginPx, y);
       y += this.smallLineHeightPx;
@@ -413,13 +435,23 @@ export class PosReceiptRenderer {
     y += 16;
 
     ctx.font = `14px ${this.bodyFont}`;
-    if (receipt.kind !== 'refund') {
-      y = this.columns(ctx, 'Subtotal', this.money(receipt.subtotalCents ?? 0), y);
-      y = this.columns(ctx, 'Tax', this.money(receipt.taxCents ?? 0), y);
-      y += 8;
+    // Qatar has no sales tax, so the receipt carries no tax line at all (owner
+    // decision, 2026-08-01) — printing "Tax QAR 0.00" on a customer's invoice
+    // invites the question of which tax, and the honest answer is none.
+    //
+    // Subtotal prints only when it actually differs from the total. Today it
+    // never does; once discounts exist (docs/25 Phase 6) the line reappears by
+    // itself and means something.
+    if (!correctionKind) {
+      const subtotal = receipt.subtotalCents ?? 0;
+      if (subtotal !== amount) {
+        y = this.columns(ctx, 'Subtotal', this.money(subtotal), y);
+        y += 8;
+      }
     }
     ctx.font = `600 20px ${this.displayFont}`;
-    y = this.columns(ctx, receipt.kind === 'refund' ? 'Refund total' : 'Total', this.money(amount), y);
+    const totalLabel = receipt.kind === 'refund' ? 'Refund total' : receipt.kind === 'void' ? 'Void total' : 'Total';
+    y = this.columns(ctx, totalLabel, this.money(amount), y);
     y += 12;
     ctx.font = `13px ${this.bodyFont}`;
     ctx.fillStyle = '#555';
@@ -427,7 +459,7 @@ export class PosReceiptRenderer {
     if (receipt.terminalReference) {
       y = this.columns(ctx, 'Terminal ref', receipt.terminalReference, y);
     }
-    if (receipt.kind !== 'refund' && (receipt.paymentMethod || receipt.method) === 'cash') {
+    if (!correctionKind && (receipt.paymentMethod || receipt.method) === 'cash') {
       y = this.columns(ctx, 'Tendered', this.money(receipt.amountTenderedCents ?? 0), y);
       y = this.columns(ctx, 'Change', this.money(receipt.changeGivenCents ?? 0), y);
     }
@@ -441,13 +473,12 @@ export class PosReceiptRenderer {
     y = this.rule(ctx, y);
     y += 18;
 
-    // Return policy, bilingual, if configured.
-    if (profile?.returnPolicyEn || profile?.returnPolicyAr) {
+    // Return policy, English, if configured.
+    if (profile?.returnPolicyEn) {
       ctx.font = `12px ${this.bodyFont}`;
       ctx.fillStyle = '#666';
       ctx.textAlign = 'center';
-      if (profile.returnPolicyEn) y = this.wrapText(ctx, profile.returnPolicyEn, this.marginPx, y, width - this.marginPx * 2, true);
-      if (profile.returnPolicyAr) y = this.wrapText(ctx, this.shapeArabic(profile.returnPolicyAr), this.marginPx, y, width - this.marginPx * 2, true);
+      y = this.wrapText(ctx, profile.returnPolicyEn, this.marginPx, y, width - this.marginPx * 2, true);
       ctx.fillStyle = '#000';
       y += 10;
     }
@@ -461,19 +492,19 @@ export class PosReceiptRenderer {
       y += 18;
     }
 
-    if (profile?.footerStampEn || profile?.footerStampAr) {
+    if (profile?.footerStampEn) {
       ctx.font = `italic 12px ${this.displayFont}`;
       ctx.fillStyle = '#666';
       ctx.textAlign = 'center';
-      if (profile.footerStampEn) { ctx.fillText(profile.footerStampEn, centerX, y); y += 18; }
-      if (profile.footerStampAr) { ctx.fillText(this.shapeArabic(profile.footerStampAr), centerX, y); y += 18; }
+      ctx.fillText(profile.footerStampEn, centerX, y);
+      y += 18;
       ctx.fillStyle = '#000';
     }
 
     y += 14;
     ctx.font = `italic 16px ${this.displayFont}`;
     ctx.textAlign = 'center';
-    ctx.fillText('Thank you', centerX, y);
+    ctx.fillText(receipt.kind === 'void' ? 'Transaction cancelled' : 'Thank you', centerX, y);
     y += 30;
 
     // QR lookup code: small, captioned, deliberately unobtrusive — a

@@ -18,6 +18,7 @@ export interface PosReceiptBlock {
 export interface PosStoredShift {
   shiftId: string;
   registerId: string;
+  cashierId?: string;
   openingFloatCents: number;
   openedAt: string;
 }
@@ -118,6 +119,10 @@ export class PosLocalStore {
 
   setShift(shift: PosStoredShift): Promise<void> {
     return this.put('shift', shift);
+  }
+
+  clearShift(): Promise<void> {
+    return this.remove('shift');
   }
 
   getCatalog(): Promise<PosCachedCatalog | null> {
@@ -368,6 +373,17 @@ export class PosLocalStore {
     return new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(this.settingsStore, 'readwrite');
       transaction.objectStore(this.settingsStore).put(value, key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    }).finally(() => db.close());
+  }
+
+  private async remove(key: string): Promise<void> {
+    const db = await this.open();
+    return new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(this.settingsStore, 'readwrite');
+      transaction.objectStore(this.settingsStore).delete(key);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);

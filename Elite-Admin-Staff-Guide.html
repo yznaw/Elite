@@ -281,9 +281,9 @@
     </div>
     <div class="meta">
       <div><b>Prepared for:</b> Elite Collection staff &amp; new hires</div>
-      <div><b>Covers:</b> Dashboard, Catalog, Collections, Media, Storefront, Point of Sale (rules, roles, PIN approvals, cash movements, Z-reports), Card Settlement Reconciliation, Orders, Customers, Feedback, Policies, Analytics, Reference Lists, Settings, Reports &amp; Exports, Troubleshooting</div>
+      <div><b>Covers:</b> Dashboard, Catalog, Collections, Media, Storefront, Point of Sale (daily opening, shared stock, offline operation, hardware, approvals, cash movements, Z-reports), Card Settlement Reconciliation, Orders, Customers, Feedback, Policies, Analytics, Reference Lists, Settings, Reports, Stocktake, Diagnostics &amp; Troubleshooting</div>
       <div><b>Document type:</b> HTML — open in any browser, edit the text directly, then print to PDF (Cmd/Ctrl + P → Save as PDF)</div>
-      <div><b>Last updated:</b> 20 July 2026 — verified directly against the live portal, including the 2026-07-20 fixes (Manager PIN self-service, invite-link domain, cash-movement labels) and the new Reconciliation feature</div>
+      <div><b>Last updated:</b> 1 August 2026 — updated for the production POS release, two-shop shared inventory, morning shift recovery, persistent hardware/reconnect, offline safety, Stocktake, and Diagnostics</div>
     </div>
   </div>
 
@@ -308,7 +308,7 @@
       <li><span class="sec">14.</span> <a href="#sec-analytics">Analytics</a></li>
       <li><span class="sec">15.</span> <a href="#sec-reference">Reference Lists — Colors, Materials, Sizes</a></li>
       <li><span class="sec">16.</span> <a href="#sec-settings">Settings — Store Info, Team &amp; Integrations</a></li>
-      <li><span class="sec">17.</span> <a href="#sec-reports">Reports &amp; Exports — Where to Find Everything</a></li>
+      <li><span class="sec">17.</span> <a href="#sec-reports">Reports, Stocktake &amp; Diagnostics</a></li>
       <li><span class="sec">18.</span> <a href="#sec-cheatsheet">Quick-Reference Cheat Sheet</a></li>
       <li><span class="sec">19.</span> <a href="#sec-troubleshoot">Troubleshooting &amp; FAQ</a></li>
       <li><span class="sec">20.</span> <a href="#sec-glossary">Glossary</a></li>
@@ -670,14 +670,15 @@
     <div class="path">Sidebar → Point of Sale &nbsp;·&nbsp; Owner/Admin/Manager/Cashier — Viewers cannot open it</div>
     <p>A full-screen till/cashier interface for in-person sales, opened in its own layout (no sidebar) once you're on the register screen. This section covers day-to-day selling <em>and</em> the manager-PIN approval rules that govern every money-sensitive action.</p>
 
-    <div class="shot"><b>Screenshot placeholder: pos.png</b>POS screen — search/barcode bar, available products grid on the left, live Cart with Subtotal/Tax/Total and Take Payment button on the right</div>
+    <div class="shot"><b>Screenshot placeholder: pos.png</b>POS screen — search/barcode bar, available products grid on the left, live Cart with Total and Take Payment button on the right</div>
 
     <h2>8.1 — Making a sale</h2>
     <ol class="steps">
-      <li>Open <strong>Point of Sale</strong> — you'll need an open shift (see 8.6) before you can take payments.</li>
+      <li>Open <strong>Point of Sale</strong>. The register, printer, drawer, and offline signer settings restore automatically on this dedicated browser profile.</li>
       <li>Find items by typing into <strong>Search</strong> (name, SKU) or scanning a barcode into the <strong>Barcode</strong> field.</li>
       <li>Tap a product to add it to the <strong>Cart</strong> on the right; for products with variants, choose the size/color first.</li>
-      <li>Review <strong>Subtotal</strong>, <strong>Tax</strong>, and <strong>Total</strong>, then click <strong>Take payment</strong> and follow the prompts for cash or card.</li>
+      <li>Review the <strong>Total</strong>, then click <strong>Take payment</strong>. Qatar sales tax is not added, so there is no tax line.</li>
+      <li>Leave the customer as <strong>Walk-in</strong>, or search/link/create a customer while online. For card, enter the external terminal reference after the terminal approves the payment.</li>
       <li>A receipt prints automatically if a printer is configured (see <strong>Hardware</strong> below); if not, you'll see a clear "no printer configured" message rather than a silent failure, and can print again later.</li>
     </ol>
 
@@ -725,7 +726,7 @@
       <li>Search for the receipt by number.</li>
       <li>To <strong>void</strong> the entire sale: enter a reason, enter a manager PIN (not your own), and click <strong>Void entire sale</strong>. Stock is automatically restocked.</li>
       <li>To <strong>refund</strong> some or all of the items: adjust the <strong>Qty</strong> field for the line(s) being returned (leave the "Restock" box checked unless the item is damaged/not sellable), enter a reason and manager PIN, then click <strong>Refund selected</strong>. You can refund a sale in more than one pass — the receipt shows how many units are still refundable each time you look it up.</li>
-      <li>Use <strong>Reprint receipt</strong> in the same lookup panel to reprint any past sale's receipt (needs a configured printer).</li>
+      <li>Use <strong>Reprint receipt</strong> in the same lookup panel to reprint any past sale's receipt. A completed void also prints a clearly marked VOID customer copy.</li>
     </ol>
 
     <h2>8.5 — Cash movements</h2>
@@ -739,7 +740,9 @@
 
     <h2 id="pos-shifts">8.6 — Shifts &amp; the Z-report</h2>
     <ol class="steps">
-      <li>At the start of your shift, open it from the <strong>Point of Sale</strong> landing screen — count and enter the <strong>Opening Cash</strong> already in the drawer, then click <strong>Open shift</strong>. The top bar shows <strong>Shift open</strong> once active; no sales can be rung up without an open shift.</li>
+      <li>At the start of the day, sign in and open POS. Confirm the readiness card shows the printer and offline signer as ready; use <strong>Retry</strong> if needed.</li>
+      <li>If there is no shift, count and enter the <strong>Opening Cash</strong>, then click <strong>Open shift</strong>. No sale can be posted without an open shift.</li>
+      <li>If POS shows <strong>Resolve the previous shift</strong>, do not bypass it. A previous-day shift, a shift owned by another cashier, or a shift still closing must be reviewed and closed with the manager/Z-report flow before today's cashier sells.</li>
       <li>During the shift, click <strong>Shift report</strong> at any time to see a live snapshot: Gross, Refunds, Voids, Net, Cash In, Cash Out, Expected Cash, and the Transactions count.</li>
       <li>At the end of the shift, count the actual cash in the drawer, enter it under <strong>Physical Cash</strong>, enter a manager PIN, and click <strong>Create Z report and close</strong>. This is the one action even an Owner/Admin cannot self-approve — a second person's PIN is always required to close a shift.</li>
       <li>Closing a shift is final for that shift — a new one starts fresh from <strong>Open a cashier shift</strong> next time someone rings anything up.</li>
@@ -747,7 +750,26 @@
     <p>Every closed Z-report is kept in <strong>Z-report history</strong> (from the same Shift report panel), where you can <strong>Reprint</strong> it (needs a configured printer) or <strong>Export CSV</strong> for the whole history — see <a href="#sec-reports">Section 17</a> for a full map of every export/report location in the portal.</p>
 
     <h2>8.7 — Hardware</h2>
-    <p>Click <strong>Hardware</strong> in the POS top bar to configure the receipt printer (QZ Tray) and cash drawer connection for the current device. This is a per-device/per-browser setting, not a per-account one — each physical register needs it configured once.</p>
+    <p>Click <strong>Hardware</strong> in the POS top bar to configure the QZ receipt printer, offline signer, and cash drawer for this device. Configure each physical register once; Elite saves these settings in that browser profile and reconnects QZ automatically after sign-in, reload, or Windows restart.</p>
+    <ul class="plain">
+      <li>QZ Tray and the Elite device signer must start with Windows. The signer health address is <code>http://127.0.0.1:8182/health</code>.</li>
+      <li>Never use private/incognito mode and never clear Elite's cookies/site data on a register. That removes register enrollment, hardware settings, catalog cache, and any unsynced offline queue.</li>
+      <li>A printer failure never reverses a saved sale. Find the transaction and reprint; do not ring the sale again.</li>
+    </ul>
+
+    <h2>8.8 — Offline operation</h2>
+    <ul class="plain">
+      <li>The POS can continue from its cached catalog and reserved receipt numbers when the API is unreachable, even if Windows still says Wi-Fi is connected.</li>
+      <li>At 8 hours without a fresh catalog, POS warns the cashier. At 12 hours it blocks offline payment until the register reconnects and refreshes.</li>
+      <li>Watch the queue strip. When connectivity returns, queued sales synchronize automatically and the count must return to zero exactly once.</li>
+      <li>Do not close a shift while sales are pending/rejected, and never clear browser data to remove a queue warning.</li>
+    </ul>
+
+    <h2>8.9 — Shared stock across both shops</h2>
+    <div class="callout note">
+      <b>One inventory pool</b>
+      Both shops, the stock room, and the website share the same quantity. A sale anywhere reduces that shared total. Bringing merchandise from the stock room to a shop, or moving it between shops, is a physical replenishment only — do not record it as a sale, transfer, or stock adjustment. The current system shows whether an item exists anywhere in the business; the team accepts that it does not show which building holds it.
+    </div>
   </div>
 
   <!-- ================= 9. RECONCILIATION ================= -->
@@ -936,7 +958,7 @@
     <p>Three tabs: <strong>General</strong>, <strong>Team Members</strong>, and <strong>Integrations</strong>.</p>
 
     <h2>16.1 — General</h2>
-    <div class="shot"><b>Screenshot placeholder: settings-general.png</b>Store Information card, Receipt & Legal Profile card, Manager PIN card, and POS Registers card, stacked top to bottom</div>
+    <div class="shot"><b>Screenshot placeholder: settings-general.png</b>Store Information card, Receipt &amp; Legal Profile card, Manager PIN card, and POS Registers card, stacked top to bottom</div>
     <ul class="plain">
       <li><strong>Store Information</strong> — Store Name, Currency (QAR — Qatari Riyal), Timezone (Asia/Qatar), Default Language, and the <strong>Low Stock Threshold</strong> — the stock number below which products are flagged "Low Stock" across the Catalog and Dashboard.</li>
       <li><strong>Logo</strong> — click <strong>Edit</strong> to replace the store logo shown in the sidebar and on printed receipts.</li>
@@ -975,16 +997,17 @@
     </ul>
   </div>
 
-  <!-- ================= 17. REPORTS & EXPORTS ================= -->
+  <!-- ================= 17. REPORTS, STOCKTAKE & DIAGNOSTICS ================= -->
   <div class="page" id="sec-reports">
     <div class="kicker">Section 17</div>
-    <h1 class="title">Reports &amp; Exports — Where to Find Everything</h1>
-    <p>There's no single "Reports" page in the portal — exports and reporting views are spread across the sections they belong to. This is a map of all of them in one place.</p>
+    <h1 class="title">Reports, Stocktake &amp; Diagnostics</h1>
+    <p>The Reports page covers operational reporting, while exports also remain available inside the sections they belong to. Stocktake and Diagnostics are separate Owner/Admin tools.</p>
 
     <table class="grid">
       <tr><th>What you need</th><th>Where to get it</th><th>Format</th><th>Who can access it</th></tr>
       <tr><td>Store performance overview (revenue, orders, customers, top products)</td><td>Dashboard</td><td>On-screen only</td><td>Any logged-in role (see <a href="#sec-roles">Section 2</a> caveat)</td></tr>
       <tr><td>Deeper financial &amp; behavior analytics (traffic, conversion funnel, AOV)</td><td>Analytics</td><td>On-screen only</td><td>Any logged-in role</td></tr>
+      <tr><td>POS daily sales, cash movements, card exceptions, inventory movement/drift, refund/void exceptions, and Z history</td><td>Reports</td><td>On-screen / available report exports</td><td>Owner/Admin/Manager only</td></tr>
       <tr><td>Product/catalog list export</td><td>Catalog → Export</td><td>CSV</td><td>Any logged-in role</td></tr>
       <tr><td>Orders list export (filtered)</td><td>Orders → Export CSV</td><td>CSV</td><td>Any logged-in role</td></tr>
       <tr><td>Customer list export</td><td>Customers → Export CSV</td><td>CSV</td><td>Any logged-in role</td></tr>
@@ -992,7 +1015,29 @@
       <tr><td>Past Z-reports (end-of-shift cash reconciliation)</td><td>POS → Shift report → Z-report history</td><td>On-screen, plus Reprint (needs printer) and Export CSV</td><td>Owner/Admin/Manager/Cashier</td></tr>
       <tr><td>Card settlement matching &amp; exceptions</td><td>Reconciliation</td><td>On-screen history, one register/day at a time</td><td>Owner/Admin/Manager only</td></tr>
       <tr><td>Product import history / audit log</td><td>Catalog → Import → Import History</td><td>On-screen</td><td>Any logged-in role</td></tr>
+      <tr><td>Inventory count and discrepancy posting</td><td>Stocktake</td><td>On-screen history</td><td>Owner/Admin only</td></tr>
+      <tr><td>Application/POS errors grouped by code and request</td><td>Diagnostics → Errors</td><td>On-screen</td><td>Owner/Admin only</td></tr>
+      <tr><td>Trace sensitive activity by request ID</td><td>Diagnostics → Audit</td><td>On-screen</td><td>Owner/Admin only</td></tr>
     </table>
+
+    <h2>17.1 — Stocktake</h2>
+    <ol class="steps">
+      <li>Owner/Admin opens <strong>Stocktake</strong>, enters a reference, and chooses blind count (expected quantity hidden while counting) or open count.</li>
+      <li>Count each variant and submit. If two counters disagree, recount and explicitly resolve the discrepancy before posting.</li>
+      <li>Posting applies only the counted discrepancy against current stock, so sales made during the count are preserved. A posted stocktake is immutable and remains in history.</li>
+    </ol>
+    <div class="callout note">
+      <b>Use adjustments only for a real quantity change</b>
+      Damage, correction, found stock, or another approved reason changes the shared inventory and must be recorded. Moving the same units between the stock room and either shop does not change the shared total and must not be entered as an adjustment.
+    </div>
+
+    <h2>17.2 — Diagnostics</h2>
+    <p>Owner/Admin can use <strong>Diagnostics</strong> to investigate without opening developer tools. Errors are grouped by source (server, POS client, admin client, or browser security policy), show occurrence count, status, register/request context, and can be marked resolved. The Audit tab searches actions by request ID and date.</p>
+    <ol class="steps">
+      <li>Ask the cashier for the short reference shown with the error and note the exact time/register.</li>
+      <li>Open <strong>Diagnostics → Errors</strong>, search the reference, and open the matching group for context/stack details.</li>
+      <li>Use the full <strong>Request ID</strong> in the Audit tab to reconstruct related server actions. Mark resolved only after the problem is understood or corrected.</li>
+    </ol>
 
     <div class="callout note">
       <b>No consolidated financial report yet</b>
@@ -1031,6 +1076,8 @@
       <tr><td>Set your own manager PIN</td><td>Owner/Admin: Settings → General · Manager: sidebar "My Manager PIN"</td><td>Enter 4-8 digit PIN → Save PIN</td></tr>
       <tr><td>Generate a remote POS setup code</td><td>Settings → General → POS Registers</td><td>Name the register → Generate setup code</td></tr>
       <tr><td>Reconcile card settlement for a day</td><td>Reconciliation</td><td>Check POS total → enter Bank Settlement Total → Submit settlement</td></tr>
+      <tr><td>Count stock and post discrepancies</td><td>Stocktake (Owner/Admin)</td><td>Start stocktake → Count/Recount → Post</td></tr>
+      <tr><td>Trace a POS or portal error</td><td>Diagnostics (Owner/Admin)</td><td>Search the cashier's reference / Request ID</td></tr>
     </table>
   </div>
 
@@ -1073,8 +1120,23 @@
     <h3>"No receipt printer is configured" when I try to print or reprint.</h3>
     <p>This is a graceful, expected message on any device without a connected receipt printer — not a crash or data-loss. Configure the printer via the <strong>Hardware</strong> button in the POS top bar (see Section 8.7) on the physical register, or simply note that the sale/Z-report is safely saved and can be printed later once a printer is set up.</p>
 
+    <h3>The hardware indicator is red after sign-in or restart.</h3>
+    <p>Wait briefly for automatic reconnect, then click <strong>Hardware</strong> or <strong>Retry</strong>. Confirm QZ Tray is running and open <code>http://127.0.0.1:8182/health</code> on the register; it should return <code>ok</code>. Do not reconnect/enroll the register again. If support needs the local timeline, collect <code>C:\ProgramData\ElitePOS\device-signer\logs\signer.log</code>.</p>
+
+    <h3>Wi-Fi says connected, but POS says offline.</h3>
+    <p>This can be correct: the browser may reach the Wi-Fi router but not the Elite API. POS tests server reachability and safely falls back to its offline queue. Continue only if the catalog is within the allowed age and the queue/storage warnings are healthy; otherwise reconnect the API before taking payment.</p>
+
+    <h3>POS says "Resolve the previous shift" in the morning.</h3>
+    <p>The register still has a previous-day shift, another cashier's shift, or a shift whose close is incomplete. Use <strong>Review and close previous shift</strong> and complete the manager-controlled Z report. Do not clear browser data or create another register to bypass it.</p>
+
+    <h3>I have an error reference and need to know what happened.</h3>
+    <p>Give the short reference, exact time, register, and action to an Owner/Admin. They can search <strong>Diagnostics → Errors</strong>, then use the full Request ID in <strong>Diagnostics → Audit</strong>. This correlates the cashier message with browser and server logs without exposing technical details to the cashier.</p>
+
     <h3>Stock counts look wrong after a void or refund.</h3>
     <p>Voids and refunds restock automatically as long as the <strong>Restock</strong> checkbox was ticked when the refund was processed (it's ticked by default — untick it only for damaged/non-sellable returns). If a number still looks off, check the product's Catalog page directly rather than relying on memory of the pre-sale count.</p>
+
+    <h3>Stock moved from the stock room to one of the shops. What should I enter?</h3>
+    <p>Nothing. Both shops, the stock room, and website use one shared inventory quantity, so moving the same unit physically does not change it. Use Stocktake or a reason-coded adjustment only when the business's total quantity is genuinely wrong, damaged, found, or otherwise changed.</p>
 
     <h2>19.3 — Data &amp; content</h2>
 
@@ -1126,6 +1188,11 @@
       <tr><td>Reconciliation (card settlement)</td><td>Matching the bank's daily card settlement total against the POS's own recorded card total for a register/day; a mismatch beyond QAR 1.00 becomes an Exception.</td></tr>
       <tr><td>Exception (Reconciliation)</td><td>A settlement entry where the bank total and POS total differ by more than QAR 1.00 — requires a manager note to mark Resolved.</td></tr>
       <tr><td>Cash movement</td><td>Any recorded cash-in/cash-out in POS outside of a sale — Paid In, Paid Out, Safe Drop, Float Adjust, or No-Sale Drawer Open.</td></tr>
+      <tr><td>Shared stock</td><td>One inventory quantity used by both shops, the stock room, and website. Internal physical movement is not a sale, transfer, or adjustment.</td></tr>
+      <tr><td>Offline queue</td><td>Sales safely saved on the register while the API is unreachable and synchronized automatically after reconnection.</td></tr>
+      <tr><td>Request ID / reference</td><td>The trace code that connects a cashier-visible error to Diagnostics, audit events, and server logs.</td></tr>
+      <tr><td>Stocktake</td><td>A controlled physical count whose posted discrepancy corrects shared inventory without undoing sales made during counting.</td></tr>
+      <tr><td>Device signer</td><td>The localhost Windows service that lets QZ verify and print receipts while the Elite API is offline.</td></tr>
       <tr><td>QAR</td><td>Qatari Riyal — the store's currency.</td></tr>
     </table>
 

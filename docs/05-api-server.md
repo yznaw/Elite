@@ -80,10 +80,43 @@ app.use(express.urlencoded({ extended: true }));
 ### 3. Request Logging
 
 ```javascript
-app.use(morgan('dev'));
+app.use(requestId());            // before everything else
+app.use(pinoHttp(httpLoggerOptions));
 ```
 
-Logs: `GET /api/health 200 3.421 ms`
+Structured logging via **pino** (`server/lib/logger.js`), replacing `morgan('dev')`, which carried no timestamp, request id, user or tenant and so could not be used to reconstruct an incident after the fact.
+
+- **Production:** one JSON line per request on stdout, captured by pm2 and rotated by `pm2-logrotate` (see [DEPLOYMENT.md](./DEPLOYMENT.md)).
+- **Development:** `pino-pretty`, human-readable.
+- **Test:** silent (`NODE_ENV=test`), so `node --test` output stays readable.
+- Level via `LOG_LEVEL`; secrets (cookies, CSRF/authorization headers, PIN, password, token) are redacted at both the bare key and nested paths.
+- `/api/health` is excluded from request logging so an uptime monitor does not dominate the log.
+
+Every line carries `requestId`, plus `userId`, `tenantId`, `role` and `registerId` when a session exists:
+
+```json
+{"level":30,"time":1785431188965,"requestId":"a3f9c1d40e12","userId":"…","route":"POST /api/pos/transactions","status":201,"msg":"request completed"}
+```
+
+**Correlation id (`server/middleware/request-id.js`).** One id per request, returned as `X-Request-Id` **and** in every JSON error body as `requestId`. The same value is written to the `audit_events` row and the `app_errors` row, and its last 6 characters are shown to the cashier in the POS error toast — so a phone call from the shop resolves to an exact request. A well-formed inbound `X-Request-Id` is honoured (proxy / client shipper), a malformed one is replaced.
+
+### 3b. Error Handling and Persistence
+
+All errors funnel through the single global handler in `server/index.js`. Router-local `PosError` responders were removed deliberately (`pos.route.js`, `admin-pos-security.route.js`, `admin-pos-reconciliation.route.js`) — they bypassed the correlation id, the error record and the log line. **Do not reintroduce them.**
+
+- **Response hygiene:** in production a `5xx` returns a generic message plus `code` and `requestId`; the real message and stack go to the log and `app_errors`. Modelled errors (`PosError`, any explicit `status < 500`) keep their message, since those are written for a cashier to read.
+- **Persistence:** `5xx` always, and `4xx` on `/api/pos/*` as `warn`, are recorded in `app_errors` (`server/lib/error-log.js`) — grouped by fingerprint, so a repeat increments `seen_count` instead of adding a row. Recording is fire-and-forget and can never delay or fail a response.
+
+### 3c. Alerting
+
+`server/lib/alerts.js` sends operational email through the existing mailer, deduplicated to one per key per hour, and no-ops entirely unless `ALERT_EMAIL` (or `BACKUP_ALERT_EMAIL`) is set:
+
+| Alert | Trigger |
+|---|---|
+| `inventory-drift` | the hourly consistency job finds stock that does not reconcile against baseline + ledger |
+| `server-error-surge` | more than 10 recorded 5xx in 5 minutes |
+| `offline-queue-stuck` | a register reports pending offline sales unchanged for 15+ minutes, or any rejected sale (`server/lib/pos/queue-watch-job.js`) |
+| `print-failures` | more than 5 receipt-print failures reported from one register within ~a shift |
 
 ### 4. Route Mounting
 
@@ -120,7 +153,9 @@ app.use((err, req, res, _next) => {
 
 | Method | Path | Description | Response |
 |---|---|---|---|
-| `GET` | `/api/health` | Server liveness check | `{ success, status, timestamp, uptime }` |
+| `GET` | `/api/health` | Liveness **and readiness** — performs a cached (5 s), timeout-bounded (3 s) `SELECT 1`. Returns **503** when the database is unreachable, so an uptime monitor stops going green during an outage. Original fields preserved for existing monitors. | `{ success, status, timestamp, uptime, database: { ok, latencyMs, error? } }` |
+| `POST` | `/api/client-logs` | Authenticated batch ingest of browser-side errors (up to 20 per request, rate limited). Entries land in `app_errors` with `source` `pos-client`/`admin-client`. Secrets are redacted server-side regardless of what the client posted. | `{ success, data: { accepted } }` |
+| `POST` | `/api/client-logs/csp` | CSP violation sink. Public and CSRF-exempt by necessity (the browser sends these with no session and no CSRF header), separately rate limited, always answers **204**. Wired to helmet's `report-uri`. | `204` |
 
 ### Public — Config (`/api/config`)
 
@@ -302,6 +337,16 @@ See `server/routes/admin-bulk-import.route.js`. CSV upload → NDJSON streaming 
 ### Admin — Reference Data (`/api/admin/ref/*`)
 
 See `server/routes/admin-ref.route.js`. Colors, materials, size sets. See [Reference data endpoints](#reference-data-endpoints-apiadminref) below.
+
+### Admin — Diagnostics (`/api/admin/diagnostics/*`)
+
+Owner/admin only. See `server/routes/admin-diagnostics.route.js` and `server/lib/diagnostics-service.js`. Backs the `/diagnostics` admin page.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/errors` | Grouped `app_errors` + a summary block. Filters: `status` (`open` default / `resolved` / `all`), `source`, `severity`, `search` (matches message, code, route, **or an exact reference code**), `limit`. |
+| `POST` | `/errors/:id/resolve` | Marks one group resolved. A later recurrence opens a **new** row rather than reviving the closed one, so a regression after a fix stays visible. |
+| `GET` | `/audit-events` | Reads `audit_events`, which had no UI before this. Filters: `action`, `entityType`, `requestId`, `from`, `to`, `limit`. Also returns the distinct action list for the filter dropdown. |
 
 ### POS (`/api/pos/*`)
 

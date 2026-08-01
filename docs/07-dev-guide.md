@@ -175,6 +175,50 @@ feature-name/
 
 ## How-To Recipes
 
+### Run the browser release gate
+
+The POS browser suite is the gate that proves checkout still works end to end — an online sale through the real variant picker, an offline sale that reconnects, and a network failure injected after the server commits.
+
+```bash
+cd client && npm run test:e2e
+```
+
+It starts its own API and admin dev server, seeds a disposable `pos-browser-e2e` tenant (two colours by two sizes, plus a second manager with a PIN for approvals), and tears it down afterwards.
+
+**It needs port 3000 free.** The admin portal resolves its API base to `http://localhost:3000/api` in development, so the suite cannot be pointed elsewhere without changing app code. Stop any running dev server first:
+
+```bash
+lsof -nP -iTCP:3000 -sTCP:LISTEN
+```
+
+Failures upload a Playwright trace and screenshots under `client/test-results`. In CI the same suite runs in `.github/workflows/ci.yml` after the server tests and the admin build.
+
+### Investigate an error a user reported
+
+Every request gets one correlation id, shared by the response, the log line, the error record and the audit row. The error toast shows its last 6 characters as a reference code.
+
+1. **Fastest path, no SSH:** admin portal → **Diagnostics** → Errors tab → paste the reference code into the search box. The row shows the message, code, route, stack, register, shift, and how many times it has happened. The Audit tab accepts the same code and shows what that request actually did.
+2. **On the server:** `grep '<full-request-id>' ~/.pm2/logs/elite-api-out.log | jq .`
+3. **In the browser during development:** logs print via `pino-pretty`; the register's own DevTools console still receives everything (the client logger adds a destination, it does not replace the console).
+
+Errors are grouped by fingerprint, so a fault that happened 300 times is one row with a count, not 300 rows.
+
+### Log something from new code
+
+**Server:**
+```javascript
+const { logger } = require('./lib/logger');   // or req.log inside a route, which carries requestId
+req.log.warn({ variantId }, 'stock fell below reorder point');
+```
+Never `console.log` in new server code — it loses the correlation id and the structure. Secrets are redacted by the logger, but do not rely on that: don't pass PINs, tokens or cookies in the first place.
+
+**Client (admin portal / POS):**
+```typescript
+private readonly clientLogger = inject(ClientLoggerService);
+this.clientLogger.logError('pos-client', error, { code: 'PRINT_FAILED' });
+```
+`log()`/`logError()` are fire-and-forget: never `await` them, and never call them in a way that can affect a sale. Entries buffer in IndexedDB (`elite-logs`, separate from the POS money database) and flush when connectivity returns, so errors that happen offline still arrive.
+
 ### Add a New i18n Key
 
 1. Open the appropriate `i18n/strings.ts` file

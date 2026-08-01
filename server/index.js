@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
+const pinoHttp = require('pino-http');
 const session = require('express-session');
 const PgSimple = require('connect-pg-simple')(session);
 
@@ -21,6 +21,11 @@ const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
 const { startInventoryConsistencyJob } = require('./lib/pos/inventory-consistency-job');
 const { assertProductionEnv, DEV_SESSION_SECRET } = require('./config/assert-env');
 const { csrfProtection } = require('./middleware/csrf');
+const { requestId } = require('./middleware/request-id');
+const { logger, httpLoggerOptions } = require('./lib/logger');
+const { recordError, serverErrorSurge, SURGE_THRESHOLD } = require('./lib/error-log');
+const { sendAlert } = require('./lib/alerts');
+const { startQueueWatchJob } = require('./lib/pos/queue-watch-job');
 
 assertProductionEnv();
 
@@ -81,6 +86,10 @@ function isAllowedOrigin(origin) {
 if (isProd) app.set('trust proxy', 1);
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
+// First in the chain: every log line, error row, audit row and cashier-facing
+// reference code downstream shares this one id (docs/24, Phase A).
+app.use(requestId());
+
 app.use(
   helmet({
     // Report-only for the first rollout window (docs/15 Phase 1) — flips to
@@ -97,6 +106,11 @@ app.use(
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         frameAncestors: ["'self'"],
+        // Report-only mode was previously emitting reports to nowhere, which
+        // made docs/15 Phase 1's "review violation reports before enforcing"
+        // gate impossible to satisfy. Reports now land in app_errors with
+        // source='csp' and are visible on the Diagnostics page.
+        reportUri: ['/api/client-logs/csp'],
       },
     },
     // The admin portal loads uploaded images/media cross-origin in dev.
@@ -115,6 +129,10 @@ app.use(
       }
     },
     credentials: true,
+    // The admin portal is cross-origin in dev (4300 → 3000). Without this the
+    // browser cannot read the correlation id off a response, so the client
+    // log shipper would have nothing to tie its entries to a server request.
+    exposedHeaders: ['X-Request-Id'],
   })
 );
 
@@ -124,7 +142,10 @@ function captureRawBody(req, _res, buf) {
 
 app.use(express.json({ limit: '10mb', verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(morgan('dev'));
+// Structured request logging. Replaces morgan('dev'), which carried no
+// timestamp, request id, user or tenant and so could not be used to
+// reconstruct an incident after the fact (docs/24, Phase B).
+app.use(pinoHttp(httpLoggerOptions));
 
 // ─── Sessions (cookie + Postgres-backed store) ───────────────────────────────
 app.use(
@@ -194,27 +215,119 @@ app.use((err, req, res, _next) => {
     return res.status(415).json({ success: false, message: err.message });
   }
 
-  console.error(err.stack);
-  res.status(err.status || 500).json({
+  const status = err.status || 500;
+  const isServerFault = status >= 500;
+
+  // Structured, correlated, and searchable. The raw message and stack always
+  // go here even when the client response hides them (see below).
+  (req.log || logger).error(
+    { err: { message: err.message, code: err.code, stack: err.stack }, status },
+    'request failed',
+  );
+
+  // Persist to app_errors: 5xx always; 4xx only for POS routes, where a
+  // cashier hitting INSUFFICIENT_STOCK or a rejected receipt number is
+  // exactly the forensic trail we want. Other 4xx are ordinary client
+  // validation noise and would drown the table.
+  const isPosRoute = String(req.originalUrl || '').startsWith('/api/pos');
+  if (isServerFault || isPosRoute) {
+    void recordError({
+      source: 'server',
+      severity: isServerFault ? 'error' : 'warn',
+      code: err.code || null,
+      message: err.message || 'Internal Server Error',
+      stack: err.stack || null,
+      route: `${req.method} ${req.originalUrl}`,
+      httpStatus: status,
+      requestId: req.requestId,
+      tenantId: req.user?.tenantId,
+      userId: req.user?.id,
+      registerId: req.session?.posRegisterId,
+      context: { role: req.user?.role, details: err.details ?? undefined },
+    }).then(() => {
+      if (!isServerFault) return;
+      const surge = serverErrorSurge();
+      if (!surge.surging) return;
+      void sendAlert(
+        'server-error-surge',
+        `${surge.count} server errors in ${surge.windowMinutes} minutes`,
+        `The API recorded ${surge.count} 5xx responses in the last ${surge.windowMinutes} minutes `
+        + `(threshold ${SURGE_THRESHOLD}).\nMost recent: ${req.method} ${req.originalUrl}\n`
+        + `Reference: ${req.requestId}\n\nCheck the Diagnostics page in the admin portal.`,
+      );
+    });
+  }
+
+  // Do not leak internal detail on a 500 in production: err.message can carry
+  // SQL text, file paths, or connection strings. Deliberately-modelled errors
+  // (PosError and anything with an explicit status < 500) keep their message,
+  // because those are written to be read by a cashier.
+  // NODE_ENV is read here rather than via the module-level `isProd` so this
+  // branch is testable without spawning a second process.
+  const message = isServerFault && process.env.NODE_ENV === 'production'
+    ? 'Something went wrong on our side. Please try again.'
+    : err.message || 'Internal Server Error';
+
+  res.status(status).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message,
     ...(err.code ? { code: err.code } : {}),
+    // Field-level validation detail carried by PosError. Preserved here
+    // because the POS/reconciliation routers used to shape their own error
+    // responses and no longer do — see the note on those routers.
+    ...(err.details ? { details: err.details } : {}),
+    // Shown to the cashier as a short reference code, and the key an
+    // investigator greps for in the logs / Diagnostics page.
+    requestId: req.requestId,
   });
 });
 
 // ─── Boot: seed default tenant + admin user, then start ──────────────────────
+
+// One arbitrary but fixed key, so every process doing boot-time schema work
+// queues on the same lock.
+const SCHEMA_LOCK_KEY = 8150025;
+
+/**
+ * Applies schema/bootstrap work, one process at a time.
+ *
+ * `CREATE TABLE IF NOT EXISTS` is not safe against *itself* running
+ * concurrently: two processes can both pass the existence check and then race
+ * on `pg_type`/`pg_class`, and the loser gets a duplicate-key error. The
+ * migration files wrap their statements in `BEGIN … COMMIT`, so that error
+ * aborts the rest of the file and the next query on that connection returns
+ * `25P02 current transaction is aborted` — leaving the schema half-applied,
+ * silently, because the catch below only warns.
+ *
+ * The lock has to cover **all** the ensure* calls, not just one of them. An
+ * earlier attempt that guarded only `ensurePosSchema` made things worse: that
+ * process held the advisory lock while waiting for a table lock held by a
+ * second process, which was itself waiting for the advisory lock — a textbook
+ * deadlock, and the suite started failing with `40P01`.
+ *
+ * This is not only a test concern, though that is where it surfaced. The same
+ * race exists whenever two API processes start together, or a deploy restarts
+ * one instance while another is still booting.
+ */
 async function prepareDatabase() {
   if (process.env.DATABASE_URL) {
     const client = await db.pool.connect();
     try {
-      const tenant = await ensureDefaultTenant(client);
-      await ensureAllMigrations(client);           // migrations 002 – 015
-      await ensureReferenceSchema(client, tenant.id);
-      await ensureProductRecommendationsSchema(client);
-      await ensureRestockNotificationsSchema(client);
-      await ensurePosSchema(client);
+      await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_LOCK_KEY]);
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        await ensureAllMigrations(client);           // migrations 002 – 015
+        await ensureReferenceSchema(client, tenant.id);
+        await ensureProductRecommendationsSchema(client);
+        await ensureRestockNotificationsSchema(client);
+        await ensurePosSchema(client);
+      } finally {
+        await client.query('SELECT pg_advisory_unlock($1)', [SCHEMA_LOCK_KEY]).catch(() => undefined);
+      }
     } catch (err) {
-      console.warn('Tenant bootstrap failed (the server will still start):', err.message);
+      // Never serve a new binary against a partially migrated schema.
+      console.error('Database preparation failed; refusing to start:', err);
+      throw err;
     } finally {
       client.release();
     }
@@ -226,6 +339,10 @@ async function prepareDatabase() {
 async function startServer(port = PORT) {
   await prepareDatabase();
   const stopInventoryConsistencyJob = startInventoryConsistencyJob();
+  // Watches pos_sync_states for a register whose offline queue has stopped
+  // draining — unsynced money sitting in a browser is the top offline risk
+  // (docs/24, Phase E).
+  const stopQueueWatchJob = startQueueWatchJob();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, () => {
       const address = server.address();
@@ -234,7 +351,10 @@ async function startServer(port = PORT) {
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
       resolve(server);
     });
-    server.once('close', stopInventoryConsistencyJob);
+    server.once('close', () => {
+      stopInventoryConsistencyJob();
+      stopQueueWatchJob();
+    });
     server.once('error', reject);
   });
 }

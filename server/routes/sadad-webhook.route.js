@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { ensurePaidOrderStock } = require('../lib/order-stock');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -181,6 +182,11 @@ router.post('/', async (req, res) => {
       await sendReceiptForPaidOrder(client, orderResult.rows[0].tenant_id, websiteRefNo).catch((err) => {
         console.warn('[sadad-webhook] Receipt email failed:', err.message);
       });
+
+      // See the matching call in payments.route.js. Sadad delivers webhooks
+      // more than once by design, which is exactly why this is keyed on an
+      // existing ledger row rather than on winning the paid-flag update.
+      await ensurePaidOrderStock(orderResult.rows[0].tenant_id, websiteRefNo, { source: 'sadad-webhook' });
     }
 
     console.log('[sadad-webhook] Order updated', { websiteRefNo, paymentStatus, transactionNumber });

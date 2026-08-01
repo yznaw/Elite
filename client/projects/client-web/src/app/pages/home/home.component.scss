@@ -46,10 +46,12 @@
   --claude-border-strong: #b8965a;
   --claude-text-primary: #1c140c;
   --claude-text-secondary: rgba(28, 20, 12, 0.62);
-  --claude-text-gold: #b8965a;
+  --claude-text-gold: #9f783c;
   --claude-crystal-green: #0b6f62;
   --claude-crystal-green-hover: #09584e;
   --claude-shadow-soft: 0 28px 80px rgba(87, 58, 31, 0.13);
+  --hero-font-display: var(--ff-serif);
+  --hero-font-body: var(--ff-sans);
 
   position: relative;
   box-sizing: border-box;
@@ -59,7 +61,16 @@
   padding: clamp(106px, 12svh, 132px) clamp(22px, 4vw, 72px) clamp(26px, 4svh, 44px);
   background: var(--claude-bg-canvas);
   color: var(--claude-text-primary);
+  font-family: var(--hero-font-body);
   isolation: isolate;
+}
+
+/* Montserrat and Inter have no Arabic glyphs, so leaving them on the hero lets
+   each operating system choose a different fallback. Use one deliberate Arabic
+   family for both display and body copy to preserve the hierarchy everywhere. */
+:host-context(html[lang='ar']) .hero {
+  --hero-font-display: var(--ff-arabic);
+  --hero-font-body: var(--ff-arabic);
 }
 
 .hero-layout {
@@ -80,11 +91,22 @@
 
 .hero-copy {
   width: min(500px, 100%);
+  /* A grid item defaults to `min-width: auto`, which refuses to shrink below its
+     longest word. A long product name therefore pushed the column wider than its
+     track and the page scrolled sideways: measured 1037px against a 1024px
+     viewport at the narrowest wide layout. */
+  min-width: 0;
   justify-self: end;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: clamp(18px, 2.5svh, 28px);
+}
+
+/* Keeps the wide layout's existing flex flow while allowing the stacked layout
+   to reserve the title and description as one visual unit. */
+.hero-intro {
+  display: contents;
 }
 
 .hero-media {
@@ -160,13 +182,27 @@
 
 .hero-brand p {
   margin: 0;
-  font-family: var(--ff-serif);
+  font-family: var(--hero-font-display);
   font-size: clamp(34px, 3.7vw, 66px);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.045em;
   line-height: 1;
   text-transform: uppercase;
   text-wrap: balance;
+  /* Long single words break rather than widen the column. Only the stacked
+     layout had this, so the wide layout scrolled sideways on a long name. */
+  overflow-wrap: anywhere;
+  /* Line clamp, not `overflow: hidden` alone: an ellipsis tells the reader the
+     sentence was cut, a hard crop looks like a rendering fault. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+}
+
+:host-context(html[lang='ar']) .hero-brand p {
+  line-height: 1.18;
+  text-transform: none;
 }
 
 .hero-stage {
@@ -272,6 +308,35 @@
   opacity: 1;
   transform: translateY(0) scale(1);
   animation: heroColorFadeOut 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* Adjacent navigation keeps the dissolve but adds a 16px spatial cue. The
+   logical direction flips in RTL; pagination and colour selection never add
+   these classes and therefore remain a plain crossfade. Shorthand animation is
+   intentional because Angular safely scopes keyframe names in production. */
+.hero-stage.is-hero-slide-next {
+  --hero-slide-offset: 16px;
+}
+
+.hero-stage.is-hero-slide-previous {
+  --hero-slide-offset: -16px;
+}
+
+:host-context(html[dir='rtl']) .hero-stage.is-hero-slide-next {
+  --hero-slide-offset: -16px;
+}
+
+:host-context(html[dir='rtl']) .hero-stage.is-hero-slide-previous {
+  --hero-slide-offset: 16px;
+}
+
+.hero-stage.is-hero-slide-transition .hero-product__image.is-slide-incoming {
+  animation: heroSlideIn 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.hero-stage.is-hero-slide-transition .hero-product__image.is-slide-outgoing {
+  z-index: 3;
+  animation: heroSlideOut 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 .hero-next-peek,
@@ -418,6 +483,19 @@
   box-shadow: inset 0 0 0 1px var(--claude-crystal-green);
 }
 
+/* Colour that has no entry in Reference Data. A hatched neutral disc rather
+   than a flat grey one: flat grey would read as an actual grey colourway and
+   mislead. The hatch reads as "unset" without shouting error at the customer,
+   while the admin blocks publish on the same condition. */
+.hero-swatch__dot--unmapped {
+  background-color: rgba(28, 20, 12, 0.05);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(28, 20, 12, 0.16) 0 2px,
+    transparent 2px 6px
+  );
+}
+
 .hero-swatch__dot--image {
   background-size: cover;
   background-position: center;
@@ -466,12 +544,19 @@
   margin: 0;
   /* Heavier and darker than the 62% secondary tone. Against a shoe rendered at
      roughly 35vw, 400 weight at 62% opacity read as an afterthought. */
-  color: rgba(28, 20, 12, 0.8);
-  font-size: clamp(15px, 1.2vw, 20px);
+  color: #3d3120;
+  font-family: var(--hero-font-body);
+  font-size: clamp(16px, 1.2vw, 20px);
   font-weight: 500;
   line-height: 1.6;
   text-align: start;
   text-wrap: pretty;
+  /* Line clamp, not `overflow: hidden` alone: an ellipsis tells the reader the
+     sentence was cut, a hard crop looks like a rendering fault. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
   animation: heroFadeIn 0.7s ease both 0.16s;
 }
 
@@ -484,7 +569,8 @@
   display: flex;
   align-items: baseline;
   gap: 10px;
-  font-size: 12px;
+  font-family: var(--hero-font-body);
+  font-size: 13px;
   line-height: 1.3;
 }
 
@@ -498,6 +584,12 @@
 .hero-colours__heading strong {
   color: var(--claude-text-primary);
   font-weight: 700;
+  /* One line. A long colourway name ("Dark Chocolate Brown") otherwise wrapped
+     the heading and shifted the swatch row down by a line. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-swatches {
@@ -538,8 +630,9 @@
   min-width: 54px;
   color: var(--claude-text-gold);
   direction: ltr;
-  font-family: var(--ff-serif);
+  font-family: var(--hero-font-display);
   font-size: 13px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.12em;
   unicode-bidi: isolate;
@@ -551,11 +644,27 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  /* Past the segment floor the row scrolls rather than shrinking further. The
+     scrollbar is hidden because it would add height to a 44px row and read as
+     page chrome inside a luxury hero; the segments are not the primary control
+     on any layout, so no affordance is lost. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hero-pagination__segments::-webkit-scrollbar {
+  display: none;
 }
 
 .hero-pagination__segment {
-  flex: 1 1 0;
-  min-width: 24px;
+  /* `1 0 <floor>`: grow to share the row, never shrink below the floor. With
+     `1 1 0` the segments divided whatever space existed, so each new slide made
+     every target narrower without limit. Measured at 353px: five slides give
+     30.3px each, eight would give 16px, under even the WCAG 2.5.8 AA minimum
+     of 24px. */
+  flex: 1 0 26px;
+  min-width: 26px;
   height: 44px;
   display: flex;
   align-items: center;
@@ -616,7 +725,7 @@
 }
 
 .hero-cta span {
-  font-family: var(--ff-serif);
+  font-family: var(--hero-font-display);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1099,8 +1208,7 @@
        rather than in the DOM so the wide layout keeps description-then-colours,
        where the copy column is beside the art and proximity does not apply. */
     grid-template:
-      "brand" auto
-      "description" auto
+      "intro" auto
       "stage" minmax(0, 1fr)
       "pagination" auto
       "colours" auto
@@ -1116,6 +1224,25 @@
     display: contents;
   }
 
+  /* Keep name and description packed as one block, with only a small safety
+     floor below short copy. The intro grows naturally for longer copy, while a
+     short slide gives its unused space back to the art instead of leaving a
+     conspicuous blank band above the product. */
+  .hero-intro {
+    grid-area: intro;
+    width: 100%;
+    min-width: 0;
+    min-height: clamp(96px, 25vw, 110px);
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: clamp(6px, 1.25svh, 10px);
+  }
+
+  .hero-intro:not(.has-description) {
+    min-height: clamp(54px, 16.4vw, 69px);
+  }
+
   /* `margin-bottom` pulls the name toward the art rather than shrinking the grid
      gap, which is shared with every other row and would tighten the whole
      column. The name belongs to the product directly under it, so only this one
@@ -1126,7 +1253,6 @@
      first sat hard against the left edge. The text needs centring in its own
      right, not just the block that holds it. */
   .hero-brand {
-    grid-area: brand;
     position: relative;
     top: auto;
     left: auto;
@@ -1156,6 +1282,7 @@
     overflow-wrap: anywhere;
     text-wrap: balance;
     white-space: normal;
+    -webkit-line-clamp: 2;
   }
 
   /* Grid + place-items keeps the art centred even though it is deliberately
@@ -1206,7 +1333,16 @@
   .hero-product {
     width: var(--mobile-product-size);
     height: 100%;
-    max-height: calc(var(--mobile-product-size) / 1.4);
+    /* `min(..., 100%)`, not the art ratio alone. The stage is the elastic row,
+       but the art inside it was not: with only the ratio cap the figure kept its
+       full height, so the stage was sized by its content and burst out of the
+       grid track the layout had already shrunk for it. Measured at 320x568 with
+       hostile copy: track 145.6px, stage element 221.5px, and the difference
+       landed on top of the indicator.
+
+       Capping at `100%` makes the art give way with its container, which is what
+       "the art is the only elastic element" was supposed to mean. */
+    max-height: min(calc(var(--mobile-product-size) / 1.4), 100%);
     aspect-ratio: auto;
     justify-self: center;
     margin: 0;
@@ -1432,13 +1568,22 @@
     display: none;
   }
 
+  /* `flex: 1 1 auto` rather than a fixed width: the nav already reserves room
+     for both arrows, so letting the row claim what is left gives the segments
+     ~204px instead of ~184px at 353px wide, which pushes the point where they
+     start scrolling from six slides to seven. */
   .hero-pagination__segments {
-    width: min(196px, 52vw);
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
   }
 
   .hero-pagination__segment {
-    flex: 1 1 0;
-    min-width: 0;
+    /* Mirrors the base rule's floor. This block previously reset it to
+       `1 1 0` / `min-width: 0`, which silently reinstated unlimited shrinking:
+       eight slides measured 18.4px wide, under the WCAG 2.5.8 AA minimum. */
+    flex: 1 0 26px;
+    min-width: 26px;
     width: auto;
     height: 44px; /* full-height hit area, WCAG 2.5.5 */
     display: flex;
@@ -1480,18 +1625,31 @@
      Replaces the four-row feature table. One sentence that sells, capped
      at two lines so the hero never pushes the CTA below the fold. */
   .hero-description {
-    grid-area: description;
     position: static;
-    display: block;
+    /* `-webkit-box`, not `block`. `block` here silently defeated the base rule's
+       line clamp, which needs this display type to count lines at all: the
+       hostile fixture rendered five lines through a three-line clamp. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     max-width: min(38ch, 100%);
     margin: 0;
     /* Darker and heavier than the wide layout's secondary tone: at phone size
        and 62% opacity this line read as disabled rather than as supporting copy. */
-    color: rgba(28, 20, 12, 0.82);
-    font-size: clamp(13px, 3.6vw, 15px);
+    color: #3d3120;
+    font-size: clamp(14px, 3.7vw, 16px);
     font-weight: 500;
     line-height: 1.5;
     text-align: center;
+    /* Three, not the two the plan first proposed. Measured: the current copy
+       already needs three lines at 353px, so a two-line clamp would truncate
+       live text rather than only hostile text. Three still caps the failure
+       case, which was five lines pushing the art into the indicator.
+
+       The surrounding `.hero-intro` keeps only a small shared floor instead of
+       reserving blank lines inside this element, so title and description stay
+       close and short copy lets the product rise toward it. */
+    -webkit-line-clamp: 3;
     text-wrap: balance;
     transform: none;
     animation: mobileFadeUp 0.7s ease both 0.16s;
@@ -1509,7 +1667,7 @@
     justify-content: center;
     /* 11px rather than 10px, and heavier. At 10px/600 with 62% opacity and wide
        tracking, uppercase text this small stops reading as a label. */
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .hero-colours__heading span {
@@ -1591,14 +1749,14 @@
   }
 
   .hero-cta span {
-    font-family: var(--ff-serif);
+    font-family: var(--hero-font-display);
     font-size: clamp(13px, 3.6vw, 15px);
     line-height: 1.1;
     letter-spacing: 0.08em;
     text-align: center;
     text-transform: uppercase;
     white-space: nowrap;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .hero-cta:focus-visible {
@@ -1675,7 +1833,7 @@
   }
 
   .hero-stage {
-    height: min(calc(var(--mobile-product-size) / 1.4), 39svh);
+    max-height: min(calc(var(--mobile-product-size) / 1.4), 39svh);
   }
 
   .hero-colours {
@@ -1698,9 +1856,27 @@
     font-size: clamp(17px, 5.2vw, 21px);
   }
 
+  .hero-intro {
+    min-height: clamp(78px, 22vw, 94px);
+  }
+
+  .hero-intro:not(.has-description) {
+    min-height: clamp(37px, 11.2vw, 46px);
+  }
+
+  /* Two lines, not three. At 320x568 the art reached its floor and the rows
+     still overflowed, so the shoe crossed into the indicator by 11px. Past the
+     floor the copy is what has to give, which is the order the plan sets out. */
   .hero-description {
-    font-size: clamp(12px, 3.3vw, 13px);
-    line-height: 1.4;
+    font-size: clamp(13px, 3.4vw, 14px);
+    line-height: 1.45;
+    -webkit-line-clamp: 2;
+  }
+
+  /* The floor scales down with the viewport too: `min(184px, 26svh)` still left
+     more art than these heights can spare once the copy has clamped. */
+  .hero-stage {
+    min-height: min(116px, 20svh);
   }
 }
 
@@ -1723,6 +1899,28 @@
   }
   to {
     opacity: 0;
+  }
+}
+
+@keyframes heroSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(var(--hero-slide-offset));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes heroSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(calc(0px - var(--hero-slide-offset)));
   }
 }
 
@@ -1758,6 +1956,11 @@
   .hero-swipe-hint,
   .hero-product__image--color-outgoing,
   .hero-swatch.is-loading .hero-swatch__dot::after {
+    animation: none;
+  }
+
+  .hero-stage.is-hero-slide-transition .hero-product__image.is-slide-incoming,
+  .hero-stage.is-hero-slide-transition .hero-product__image.is-slide-outgoing {
     animation: none;
   }
 

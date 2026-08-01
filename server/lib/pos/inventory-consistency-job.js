@@ -6,6 +6,8 @@
 // anything automatically, since only a human with the real sales history
 // can judge what the correct value should be.
 const db = require('../../db/client');
+const { logger } = require('../logger');
+const { sendAlert, isTestTenant } = require('../alerts');
 
 const INTERVAL_MS = 60 * 60 * 1000; // run hourly
 
@@ -39,10 +41,27 @@ async function runConsistencyCheck() {
   for (const tenant of tenants.rows) {
     const drifted = await findDrift(tenant.id);
     if (drifted.length > 0) {
-      console.warn(
-        `[inventory-consistency] tenant=${tenant.slug}: ${drifted.length} variant(s) with stock drift ` +
-        '(current stock does not match baseline + ledger history — likely a stock change that bypassed the ledger):',
-        drifted.map((r) => `${r.sku}: current=${r.current_stock} baseline=${r.baseline_stock} ledgerDelta=${r.ledger_delta_total} drift=${r.drift}`),
+      const lines = drifted.map(
+        (r) => `${r.sku}: current=${r.current_stock} baseline=${r.baseline_stock} ledgerDelta=${r.ledger_delta_total} drift=${r.drift}`,
+      );
+      logger.warn(
+        { tenant: tenant.slug, driftedCount: drifted.length, drifted: lines },
+        'stock drift detected (current stock does not match baseline + ledger history — likely a stock change that bypassed the ledger)',
+      );
+      // Until now this was a console.warn only, which meant "alerting on
+      // drift" was really "a line in pm2 logs nobody reads" (docs/24, Phase E).
+      // Disposable test tenants still get the log line, never the email.
+      if (isTestTenant(tenant.slug)) continue;
+      await sendAlert(
+        `inventory-drift:${tenant.slug}`,
+        `${drifted.length} product variant(s) with stock drift`,
+        `Tenant: ${tenant.slug}\n\n`
+        + 'These variants\' current stock does not match their recorded baseline plus the sum of ledger '
+        + 'movements, which means stock changed through a path that does not write to inventory_movements '
+        + '(a direct catalog edit, a bulk import, or a bug):\n\n'
+        + `${lines.join('\n')}\n\n`
+        + 'Nothing has been repaired automatically — only a human with the real sales history can decide '
+        + 'the correct value. Review under Reports → Inventory movement.',
       );
     }
   }

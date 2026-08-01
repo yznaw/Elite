@@ -1,6 +1,6 @@
 const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, cents, nonEmpty, positiveInt, uuid } = require('./errors');
-const { recordMovement } = require('./inventory-ledger');
+const { recordMovement } = require('../inventory-ledger');
 const db = require('../../db/client');
 const { sendReceiptForPaidOrder } = require('../order-receipt');
 
@@ -15,6 +15,9 @@ function mapCatalogRow(row) {
     productId: row.product_id,
     variantId: row.variant_id,
     name: row.product_name,
+    // Carried through the catalogue so an offline sale can still print the
+    // bilingual item line — the cached catalogue is all the register has.
+    nameAr: row.product_name_ar || '',
     variant: variantTitle(row),
     size: row.size || '',
     color: row.color || '',
@@ -71,11 +74,13 @@ async function searchProducts(context, query) {
     const result = await client.query(
       `SELECT
          p.id AS product_id, p.name AS product_name, p.status AS product_status,
+         pt.name AS product_name_ar,
          pv.id AS variant_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
          pv.price_cents, pv.stock_quantity, pv.is_active,
          COALESCE(pm.preview_url, pm.storage_url, '') AS image_url
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
+       LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.locale = 'ar'
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE pv.tenant_id = $1
          AND p.status = 'active'
@@ -134,11 +139,13 @@ async function findByBarcode(context, barcodeValue) {
     const result = await client.query(
       `SELECT
          p.id AS product_id, p.name AS product_name, p.status AS product_status,
+         pt.name AS product_name_ar,
          pv.id AS variant_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
          pv.price_cents, pv.stock_quantity, pv.is_active,
          COALESCE(pm.preview_url, pm.storage_url, '') AS image_url
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
+       LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.locale = 'ar'
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE pv.tenant_id = $1 AND lower(pv.barcode) = lower($2)
          AND p.status = 'active' AND pv.is_active = true`,
@@ -221,10 +228,16 @@ async function loadSale(client, tenantId, transactionId) {
   const transactionResult = await client.query(
     `SELECT t.*, r.receipt_number, o.public_number,
        au.full_name AS cashier_name, reg.display_name AS register_name,
+       -- Joined so a linked customer is visible on the sale result, the
+       -- sale-complete screen and the printed receipt. Left join: a walk-in
+       -- sale has no customer and must still load (docs/25 Phase 5).
+       cust.full_name AS customer_name,
+       COALESCE(cust.phone_number, cust.phone) AS customer_phone,
        COALESCE(jsonb_agg(jsonb_build_object(
          'id', i.id,
          'variantId', i.variant_id,
          'name', i.product_name,
+         'nameAr', i.product_name_ar,
          'variant', i.variant_title,
          'sku', i.sku,
          'barcode', i.barcode,
@@ -237,9 +250,11 @@ async function loadSale(client, tenantId, transactionId) {
      JOIN orders o ON o.id = t.order_id
      JOIN admin_users au ON au.id = t.cashier_id
      JOIN pos_registers reg ON reg.id = t.register_id
+     LEFT JOIN customers cust ON cust.id = t.customer_id
      LEFT JOIN pos_transaction_items i ON i.transaction_id = t.id
      WHERE t.tenant_id = $1 AND t.id = $2
-     GROUP BY t.id, r.receipt_number, o.public_number, au.full_name, reg.display_name`,
+     GROUP BY t.id, r.receipt_number, o.public_number, au.full_name, reg.display_name,
+              cust.full_name, cust.phone_number, cust.phone`,
     [tenantId, transactionId],
   );
   assertPos(transactionResult.rowCount === 1, 404, 'TRANSACTION_NOT_FOUND', 'POS transaction not found.');
@@ -274,6 +289,9 @@ async function loadSale(client, tenantId, transactionId) {
     transactionId: row.id,
     orderId: row.order_id,
     orderNumber: row.public_number,
+    customerId: row.customer_id || null,
+    customerName: row.customer_name || null,
+    customerPhone: row.customer_phone || null,
     receiptNumber: String(receiptNumber).padStart(8, '0'),
     status: row.status,
     paymentMethod: row.payment_method,
@@ -368,11 +386,22 @@ async function createSale(context, body, options = {}) {
       `SELECT pv.id, pv.product_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
          pv.price_cents, pv.stock_quantity, pv.is_active,
          p.name AS product_name, p.status AS product_status,
+         -- Snapshotted onto the sale below, not joined at print time: a receipt
+         -- reprinted later must show what was sold, not what the catalogue says
+         -- now (owner decision 2026-08-01 — item lines are bilingual, the rest
+         -- of the receipt stays English).
+         pt.name AS product_name_ar,
          COALESCE(pm.preview_url, pm.storage_url, '') AS image_url
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
+       LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.locale = 'ar'
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE pv.tenant_id = $1 AND pv.id = ANY($2::uuid[])
+       -- Locks are taken in a deterministic order. Without ORDER BY, two
+       -- concurrent multi-line sales touching the same variants could grab
+       -- them in opposite orders and deadlock; sorting by id means every
+       -- writer in the system queues in the same sequence.
+       ORDER BY pv.id
        FOR UPDATE OF pv`,
       [context.tenantId, variantIds],
     );
@@ -423,6 +452,10 @@ async function createSale(context, body, options = {}) {
     validatePayment(sale.payment, totalCents);
 
     let customer = null;
+    // Set when an offline sale referenced a customer that no longer exists;
+    // recorded on the audit event so the broken link is traceable instead of
+    // silently vanishing.
+    let droppedCustomerId = null;
     if (sale.customerId) {
       const customerResult = await client.query(
         `SELECT id, full_name, email, COALESCE(phone_number, phone) AS phone
@@ -430,8 +463,18 @@ async function createSale(context, body, options = {}) {
          WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
         [context.tenantId, sale.customerId],
       );
-      assertPos(customerResult.rowCount === 1, 404, 'CUSTOMER_NOT_FOUND', 'Customer not found.');
-      customer = customerResult.rows[0];
+      // Online, an unknown customer id is a real client error and is rejected.
+      // Offline it must not be: the sale was already tendered and printed, and
+      // the customer could have been deleted or merged in the hours since. A
+      // completed financial fact is never discarded over a broken link — the
+      // sale falls back to walk-in and the lost link is recorded, matching the
+      // policy already applied to stale offline prices and stock.
+      if (customerResult.rowCount === 1) {
+        customer = customerResult.rows[0];
+      } else {
+        assertPos(offline, 404, 'CUSTOMER_NOT_FOUND', 'Customer not found.');
+        droppedCustomerId = sale.customerId;
+      }
     }
 
     const receipt = await claimReceipt(client, context, sale.receiptNumber, 'sale');
@@ -532,9 +575,9 @@ async function createSale(context, body, options = {}) {
       await client.query(
         `INSERT INTO pos_transaction_items (
            tenant_id, transaction_id, order_item_id, product_id, variant_id,
-           sku, barcode, product_name, variant_title, quantity, unit_price_cents,
-           tax_rate, tax_amount_cents, line_total_cents
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,$12)`,
+           sku, barcode, product_name, product_name_ar, variant_title, quantity,
+           unit_price_cents, tax_rate, tax_amount_cents, line_total_cents
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,0,$13)`,
         [
           context.tenantId,
           transactionId,
@@ -544,6 +587,7 @@ async function createSale(context, body, options = {}) {
           v.sku,
           v.barcode,
           v.product_name,
+          v.product_name_ar || null,
           title || null,
           line.quantity,
           line.unitPriceCents,
@@ -637,6 +681,8 @@ async function createSale(context, body, options = {}) {
       receiptNumber: sale.receiptNumber,
       totalCents,
       conflicts: syncConflicts.length,
+      customerId: customer?.id || null,
+      ...(droppedCustomerId ? { droppedCustomerId } : {}),
     });
 
     const result = await loadSale(client, context.tenantId, transactionId);

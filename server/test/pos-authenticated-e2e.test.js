@@ -100,6 +100,10 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
     assert.ok(register.registerCredential);
     const block = await api('/pos/registers/receipt-number-blocks', { method: 'POST', body: '{}' });
     const shift = await api('/pos/shifts/open', { method: 'POST', body: JSON.stringify({ openingFloatCents: 5000 }) });
+    const currentRegister = await api('/pos/registers/current');
+    assert.equal(currentRegister.shift.id, shift.shiftId);
+    assert.equal(currentRegister.shift.cashierId, user.id);
+    assert.equal(currentRegister.shift.cashierName, user.name);
 
     const parked = await api('/pos/parked-carts', {
       method: 'POST',
@@ -247,13 +251,82 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
     assert.equal(sync.acceptedWithConflicts.length, 1);
     assert.equal(sync.acceptedWithConflicts[0].conflicts.length, 2);
 
+    // ── A sale linked to a customer (docs/25 Phase 5) ───────────────────────
+    // Every POS sale used to send `customerId: null`, so the backend's customer
+    // linkage and LTV code had never actually run for a till sale. This
+    // exercises it end to end, including the refund path that reverses LTV.
+    // The earlier sales in this test consumed the fixture's stock. Topped up
+    // through the real admin endpoint rather than raw SQL, so this restock
+    // posts an inventory_movements row like any other stock change and the
+    // ledger invariant holds inside the test too.
+    await api('/admin/products/bulk-stock', {
+      method: 'PATCH',
+      body: JSON.stringify({ updates: [{ sku: `POS-E2E-V-${runId}`, stock: 25 }] }),
+    });
+
+    const posCustomer = await api('/pos/customers', {
+      method: 'POST',
+      body: JSON.stringify({ fullName: 'Layla Haddad', phone: `+974 33${runId.slice(-6).replace(/\D/g, '').padEnd(6, '0')}` }),
+    });
+    assert.ok(posCustomer.customerId);
+
+    // 1200, not 1000: an earlier step in this test raised the catalog price to
+    // trigger the offline price-changed conflict, and an online sale at a stale
+    // price is correctly rejected with PRICE_CHANGED.
+    const linkedSale = await api('/pos/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...salePayload(block.start + 5, `sale-${runId}-customer`),
+        customerId: posCustomer.customerId,
+        items: [{ variantId, quantity: 1, unitPriceCents: 1200 }],
+        payment: { method: 'cash', cashAmountCents: 1200, cardAmountCents: 0, amountTenderedCents: 1200, changeGivenCents: 0 },
+      }),
+    });
+    assert.equal(linkedSale.customerId, posCustomer.customerId);
+
+    const linkedOrder = await db.query(
+      'SELECT customer_id, customer_name, customer_phone FROM orders WHERE id = $1',
+      [linkedSale.orderId],
+    );
+    assert.equal(linkedOrder.rows[0].customer_id, posCustomer.customerId);
+    assert.equal(linkedOrder.rows[0].customer_name, 'Layla Haddad', 'no longer "Walk-in customer"');
+
+    const afterSale = await db.query(
+      'SELECT ltv_cents, orders_count FROM customers WHERE id = $1',
+      [posCustomer.customerId],
+    );
+    assert.equal(Number(afterSale.rows[0].ltv_cents), 1200, 'the till sale reaches lifetime value');
+    assert.equal(Number(afterSale.rows[0].orders_count), 1);
+
+    // Refunding it must give the LTV back, or a customer's lifetime value
+    // silently inflates every time something is returned.
+    const linkedRefundOverride = await api('/pos/manager/verify-pin', {
+      method: 'POST', body: JSON.stringify({ pin: approverPin, action: 'refund' }),
+    });
+    await api('/pos/refunds', {
+      method: 'POST',
+      body: JSON.stringify({
+        idempotencyKey: `refund-${runId}-customer`,
+        originalTransactionId: linkedSale.transactionId,
+        shiftId: shift.shiftId,
+        receiptNumber: block.start + 6,
+        refundMethod: 'cash',
+        reason: 'E2E customer refund',
+        lines: linkedSale.items.map((item) => ({ transactionItemId: item.id, quantity: 1, restock: true })),
+        managerOverrideId: linkedRefundOverride.overrideId,
+        managerOverrideToken: linkedRefundOverride.token,
+      }),
+    });
+    const afterRefund = await db.query('SELECT ltv_cents FROM customers WHERE id = $1', [posCustomer.customerId]);
+    assert.equal(Number(afterRefund.rows[0].ltv_cents), 0, 'a refund reverses the lifetime value it added');
+
     await api('/pos/sync-state', {
       method: 'PUT', body: JSON.stringify({ shiftId: shift.shiftId, pendingCount: 0, rejectedCount: 0 }),
     });
     const summary = await api('/pos/shifts/current');
-    assert.equal(summary.transactionCount, 4);
+    assert.equal(summary.transactionCount, 5);
     assert.equal(summary.voidCount, 1);
-    assert.equal(summary.refundCount, 1);
+    assert.equal(summary.refundCount, 2, "the original refund plus the customer-linked one");
     assert.equal(summary.cashInCents, 0);
     assert.equal(summary.cashOutCents, 0);
 

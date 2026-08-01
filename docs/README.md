@@ -1,7 +1,7 @@
 # Elite — Documentation Hub
 
 > All documentation for the Elite full-stack monorepo.  
-> **Last updated:** June 2026
+> **Last updated:** 1 August 2026
 
 ---
 
@@ -22,6 +22,8 @@
 | 11 | [Storefront Analytics](./11-storefront-analytics.md) | Frontend/Backend Devs | First-party click/session/visitor tracking, ingestion, and the live admin analytics page |
 | 12 | [POS System and Integration](./12-pos-system.md) | Operations/Developers/DevOps | Implemented POS architecture, Elite data integration, offline sync, API, security, deployment, testing, and rollout |
 | 13 | [POS Review & Hardening Roadmap](./13-pos-review-roadmap.md) | Backend/Frontend Devs | Concurrency and offline-resilience audit of the POS core, with a prioritized fix list for locking and offline-queue durability |
+| 24 | [Logging & Observability](./24-logging-observability-plan.md) | Operations/Developers | Structured logs, request IDs, client diagnostics, alerting, retention, and incident workflow |
+| 25 | [POS Readiness Master Plan](./25-pos-readiness-master-plan.md) | Owner/Operations/Developers | Production launch scope, two-shop shared inventory decision, gates, accepted risks, and remaining cutover work |
 
 ---
 
@@ -30,6 +32,8 @@
 - **Root README** → [`../README.md`](../README.md) — Quick start & project structure
 - **Brand Config** → [`../brand.config.json`](../brand.config.json) — White-label configuration
 - **Server ENV** → [`../server/.env.example`](../server/.env.example) — Environment variables
+- **Staff Guide** → [`../Elite-Admin-Staff-Guide.html`](../Elite-Admin-Staff-Guide.html) — Daily admin/POS instructions for staff and new hires
+- **Production Deployment** → [`./DEPLOYMENT.md`](./DEPLOYMENT.md) — Coordinated code, database, build, smoke-test, and rollback sequence
 
 ## Planning & Tracking
 

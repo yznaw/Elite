@@ -1,6 +1,6 @@
 # Elite POS System and Integration Guide
 
-> **Status:** Implemented baseline, with production hardware validation still required.  
+> **Status:** Production-launch implementation for two shops with shared inventory; operational cutover checks still apply.
 > **Audience:** Developers, operators, administrators, deployment engineers, and support staff.  
 > **Canonical implementation guide:** This document describes the code currently in the repository. The historical [POS implementation plan](./pos-integration-implementation-plan.md) and [POS system plan](./pos-system-plan.html) remain useful for design decisions and acceptance criteria.
 
@@ -22,6 +22,7 @@ The result is one source of truth. Products, stock, customers, sales, refunds, a
 ### Implemented
 
 - Authenticated cashier UI at `/pos`.
+- Dedicated `cashier` role with POS access.
 - Register enrollment and persistent terminal credentials.
 - One active shift per register.
 - Server-reserved, tenant-wide receipt number blocks.
@@ -41,17 +42,18 @@ The result is one source of truth. Products, stock, customers, sales, refunds, a
 - Manager PIN approvals for refund, void, Z close, and conflict resolution.
 - X-style current shift summary and immutable Z report close.
 - Authenticated server-side QZ signing plus a loopback device signer for offline printing.
+- Automatic QZ reconnect, saved per-register hardware settings, and a Windows-startup installer with rotating signer logs.
+- Morning recovery for an existing shift, a prior-day shift, or a shift opened by another cashier.
+- Customer lookup/quick-create at checkout, with walk-in as the default.
+- POS/client/server diagnostics correlated by request ID.
+- Reason-coded inventory adjustments and blind/open stocktakes for owners/admins.
 - Server integration tests and authenticated browser checkout E2E coverage.
 
 ### Not yet complete or intentionally deferred
 
-- There is no dedicated low-privilege `cashier` role. POS access currently allows `owner`, `admin`, and `manager`.
 - Card payment is manually confirmed by the cashier. No payment terminal or gateway authorization is performed by POS.
-- Split tender, discounts, and POS tax calculation are not implemented.
-- The checkout UI currently creates walk-in sales (`customerId: null`), although the customer-search API and backend linkage exist.
+- Split tender and discounts are not implemented. **POS tax calculation was cut deliberately** — Qatar has no sales tax, so there is nothing to calculate (docs/25 Phase 6).
 - Camera barcode scanning and barcode label printing are not implemented.
-- Z reports are stored, but Z-report history UI and thermal printing are not implemented.
-- The receipt renderer currently places the register UUID after an eight-character label on a 42-column line, which truncates the 36-character UUID. Print the label and UUID on separate lines before hardware acceptance.
 - SSE replay detection currently needs an additional empty-buffer check: if retention removes every event for a tenant, a stale nonzero browser cursor is not classified as expired.
 - Physical hardware behavior cannot be certified in software tests. The exact terminal, printer, drawer, scanner, browser, and QZ installation must pass the [hardware runbook](./pos-hardware-runbook.md).
 
@@ -102,7 +104,9 @@ flowchart LR
 | Conflict handling | `server/lib/pos/conflict-service.js` |
 | QZ signing | `server/lib/pos/qz-service.js` |
 | Offline device signer | `tools/pos-device-signer/` |
-| Database schema | `server/db/migrations/015_pos_foundation.sql` and `016_pos_operations.sql` |
+| Database schema | `server/db/migrations/015_pos_foundation.sql` through `025_inventory_operations.sql` |
+| Diagnostics | `server/routes/admin-diagnostics.route.js`, `server/routes/client-logs.route.js`, and admin `/diagnostics` |
+| Inventory operations | `server/lib/inventory-ops-service.js` and admin `/stocktake` |
 | API integration test | `server/test/pos-authenticated-e2e.test.js` |
 | Browser E2E | `client/e2e/pos-checkout.spec.ts` |
 
@@ -120,6 +124,12 @@ The POS does not maintain a separate product catalog. It reads active Elite prod
 - Primary product image.
 
 Online sales lock the register and relevant variants, validate the current catalog price and stock, decrement variant stock, recompute parent product stock, and publish `stock.updated` events. Other connected registers receive those events through SSE and update their visible and cached stock.
+
+### Shared inventory operating model
+
+The two shops, stock room, and website deliberately share one tenant-wide inventory pool. A sale from either shop or the website decrements that same pool. Moving merchandise physically from the stock room to a shop, or between shops, does **not** change the shared total and is therefore not recorded as a sale, transfer, or stock adjustment. Registers and shifts remain separate for cashier and cash accountability.
+
+This release answers “is the unit available anywhere in the business?”, not “which location currently holds it?”. Location-level availability and transfers are a future scope decision.
 
 ### Orders and payments
 
@@ -149,7 +159,7 @@ Card payments require:
 
 ### Customers and CRM
 
-The backend accepts an optional Elite `customerId`. When present, the POS order appears in the same customer history and affects LTV. Refunds reduce LTV and voids remove the sale's LTV effect. The current cashier screen submits walk-in sales; wiring the existing customer search endpoint into checkout is a contained future UI change.
+The checkout can link an existing Elite customer or quick-create one while online; walk-in remains the default. Website and POS identity matching share normalized email/phone logic so the same person is not split by sales channel. Refunds reduce LTV and voids remove the sale's LTV effect. Offline quick-create is intentionally unavailable, while an already linked customer can travel with the queued sale.
 
 ### Refunds and voids
 
@@ -180,6 +190,7 @@ All `/api/pos/*` routes use Elite's authenticated session cookie. The permitted 
 - `owner`
 - `admin`
 - `manager`
+- `cashier`
 
 The route is also protected in the Angular router. Session-cookie and CORS settings must allow the admin origin to send credentials to the API.
 
@@ -205,7 +216,7 @@ Clearing the browser profile removes the local credential. Treat that as a termi
 - Five failed checks lock that cashier/register combination for five minutes.
 - Approval and failure events are audited.
 
-Because there is no dedicated cashier role, the PIN is currently a knowledge-based second factor rather than separation from a lower-privilege account.
+Cashiers cannot configure or provide a manager PIN. Protected actions require a different active owner/admin/manager; self-approval remains blocked.
 
 ## 7. Receipt Numbers and Idempotency
 
@@ -261,6 +272,8 @@ Offline checkout is allowed only after the terminal has:
 - Cached a catalog.
 - Reserved unused receipt numbers.
 - Loaded the POS app shell/assets at least once.
+
+The catalog cache warns at 8 hours old and blocks offline checkout at 12 hours. A browser that reports Wi-Fi as connected but cannot reach the Elite API follows the same offline fallback; browser network status alone is not proof that the server is reachable.
 
 ### Local persistence
 
@@ -340,7 +353,8 @@ All paths below are under `/api/pos` and require an authenticated allowed role. 
 | `DELETE` | `/parked-carts/:id` | Consume/delete a parked cart |
 | `GET` | `/sync-conflicts` | List open reconciliation conflicts |
 | `POST` | `/sync-conflicts/:id/resolve` | Resolve a conflict with manager approval |
-| `GET` | `/customers/search?q=` | Search minimal customer data by phone |
+| `GET` | `/customers/search?q=` | Find a customer by phone, name, or email. Digits match the normalized `phone_key` (migration 023), so "+974 5551 2345" and "97455512345" find the same person |
+| `POST` | `/customers` | Quick-create at the till. **Online only.** Routed through the shared matcher (`server/lib/customer-identity.js`), so a phone that already belongs to a website customer links to that person instead of duplicating them; the response reports `linkedExisting` and `matchedOn` |
 | `GET` | `/print/certificate` | Return public QZ signing certificate |
 | `POST` | `/print/sign` | Validate and sign an approved QZ request |
 | `GET` | `/events` | Open authenticated SSE stream |
@@ -403,7 +417,7 @@ Monetary fields are always integer cents. Do not send decimal currency values to
 - `pos_sync_conflicts`
 - `pos_events`
 
-POS schema is introduced by migrations `015_pos_foundation.sql` and `016_pos_operations.sql`. `server/db/pos-schema.js` applies both during API database preparation. Production deployments should still run and verify migrations deliberately before exposing traffic; startup application is not a substitute for a reviewed deployment procedure.
+POS and launch-readiness schema is introduced by migrations `015` through `025`. `server/db/pos-schema.js` applies them in order under a PostgreSQL advisory lock during API startup. They are additive/idempotent, and the API refuses to start if database preparation fails. Production must back up first and verify migrations `022`–`025`; `npm run db:migrate` is the legacy initial-schema command, not the incremental runner.
 
 ## 13. Receipt and Lookup Contract
 
@@ -412,9 +426,10 @@ The API returns canonical structured `receiptData`; the Angular renderer convert
 - Zero-padded receipt number.
 - Date/time.
 - Cashier name.
-- Register name and ID. The known renderer truncation listed in Section 2 must be corrected before production acceptance.
-- Product, variant, SKU, quantity, unit price, and line total.
-- Subtotal, tax, and grand total.
+- Register name and full ID.
+- Product name **in Arabic above English** on each item line (the receipt's only bilingual element — everything else is English, owner decision 2026-08-01). The Arabic name is snapshotted onto `pos_transaction_items.product_name_ar` at sale time, so a reprint shows what was sold rather than what the catalogue says today.
+- Variant, SKU, quantity, unit price, and line total.
+- Grand total. **No tax line:** Qatar has no sales tax (owner decision, 2026-08-01), so the receipt never prints one. Subtotal prints only when it differs from the total, which today it never does.
 - Payment method.
 - Tendered cash and change for cash sales.
 - QR and printed lookup value.
@@ -471,7 +486,7 @@ npm run server
 npm run admin
 ```
 
-Open `http://localhost:4300/pos` and sign in with an owner/admin/manager account. The API defaults to `http://localhost:3000/api`.
+Open `http://localhost:4300/pos` and sign in with an owner/admin/manager/cashier account. The API defaults to `http://localhost:3000/api`.
 
 For all applications together:
 
@@ -567,12 +582,11 @@ Those are mandatory hardware acceptance tests.
 
 ### Daily opening
 
-1. Start the terminal and confirm network status.
-2. Confirm QZ Tray and the local signer are running.
-3. Sign in and open `/pos`.
-4. Confirm the expected register name.
-5. Open the shift with counted drawer cash.
-6. Confirm printer status and run a test receipt when required by store policy.
+1. Start the terminal, sign in, and open `/pos`; do not clear this browser profile or its site data.
+2. The POS restores the saved register/hardware configuration and reconnects QZ automatically. Confirm the expected register and green hardware state; the Windows signer should already be running.
+3. If there is no shift, count the drawer and open one. If yesterday's shift is still open, or another cashier owns it, follow the on-screen recovery/manager flow instead of opening a competing shift.
+4. Confirm server reachability and queue count. Wi-Fi can be connected while the API is unreachable; in that case the POS uses its offline state and catalog-freshness rules.
+5. Run a test receipt only when required by store policy.
 
 ### Daily closing
 
@@ -593,6 +607,8 @@ Those are mandatory hardware acceptance tests.
 - **Rejected offline sale:** Preserve the queue item, inspect its error, and resolve the register/receipt/shift issue before retry.
 - **Stock conflict:** The financial sale remains accepted. A manager records the reconciliation outcome.
 - **Shift will not close:** Clear pending/rejected queue entries legitimately and resolve required approvals; never delete IndexedDB to bypass the close gate.
+- **Hardware is red:** Wait for automatic reconnect, verify QZ Tray and `http://127.0.0.1:8182/health`, then use Hardware to retry discovery. Do not re-enroll the register.
+- **Need to trace a problem:** Copy the request reference shown to the cashier. Owner/Admin can search it in `/diagnostics`; signer logs are at `C:\ProgramData\ElitePOS\device-signer\logs\signer.log`.
 
 ## 19. Monitoring and Audit
 
@@ -615,7 +631,7 @@ Audit-sensitive actions include enrollment, receipt allocation, shift open/close
 
 ### Staging
 
-- [ ] Migrations `015` and `016` apply without changing unrelated Elite data.
+- [ ] Migrations `015`–`025` apply without changing unrelated Elite data; verify observability, customer link, Arabic item snapshot, inventory ledger, and stocktake schema.
 - [ ] POS routes require authenticated allowed roles.
 - [ ] Register enrollment, check-in, disable/revoke behavior is tested.
 - [ ] Two-register receipt blocks do not overlap.
@@ -626,7 +642,7 @@ Audit-sensitive actions include enrollment, receipt allocation, shift open/close
 - [ ] SSE is not buffered by the proxy.
 - [ ] Database backup and restore includes all POS tables.
 
-### Hardware pilot
+### Hardware acceptance
 
 - [ ] Exact terminal/printer/drawer/scanner combination passes the hardware runbook.
 - [ ] Online and offline signed printing work without warning dialogs.
@@ -636,10 +652,11 @@ Audit-sensitive actions include enrollment, receipt allocation, shift open/close
 - [ ] Offline operation works after physically disconnecting Elite/network access.
 - [ ] Operator and manager training is complete.
 
-### Go-live
+### Go-live (two shops)
 
-- [ ] Start with one register and one trained team.
-- [ ] Monitor every shift, queue, conflict, and variance during the pilot.
+- [ ] Validate every production register and train both shop teams.
+- [ ] Confirm both shops and the website decrement the shared pool; physical replenishment is not entered as a sale, transfer, or adjustment.
+- [ ] Monitor every shift, queue, conflict, and variance during launch week.
 - [ ] Keep a documented manual receipt/outage procedure.
 - [ ] Add registers only after the first register completes stable online/offline shifts.
 - [ ] Schedule event-retention maintenance before larger multi-register deployment.

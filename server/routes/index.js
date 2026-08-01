@@ -29,6 +29,9 @@ const nboxWebhookRouter = require('./nbox-webhook.route');
 const paymentsRouter = require('./payments.route');
 const invitationsRouter = require('./invitations.route');
 const posRouter = require('./pos.route');
+const clientLogsRouter = require('./client-logs.route');
+const adminDiagnosticsRouter = require('./admin-diagnostics.route');
+const adminInventoryRouter = require('./admin-inventory.route');
 const { router: reviewsPublicRouter, generalRouter: reviewsGeneralRouter, adminRouter: reviewsAdminRouter } = require('./product-reviews.route');
 const { requireAuth } = require('../middleware/require-auth');
 
@@ -53,6 +56,9 @@ router.use('/payments', paymentsRouter);
 router.use('/storefront-content', storefrontContentRouter.publicRouter);
 router.use('/webhooks/nbox', nboxWebhookRouter);
 router.use('/pos', posRouter);
+// Mounted publicly because the CSP sub-route must accept browser-generated
+// reports with no session; the app-log route enforces requireAuth() itself.
+router.use('/client-logs', clientLogsRouter);
 
 // ─── Admin routes — require an authenticated session ────────────────────────
 const admin = Router();
@@ -82,6 +88,14 @@ admin.use('/pos-reports', requireAuth({ roles: ['owner', 'admin', 'manager'] }),
 // owner/admin only, since these are the exact same permission checks the
 // underlying services already enforce (createEnrollmentToken, setManagerPin).
 admin.use('/pos-security', requireAuth({ roles: ['owner', 'admin'] }), adminPosSecurityRouter);
+// Diagnostics: grouped application errors (server + register browsers + CSP)
+// and the audit trail, which had no UI at all before this. Owner/admin only —
+// stack traces and audit rows are not for every role.
+admin.use('/diagnostics', requireAuth({ roles: ['owner', 'admin'] }), adminDiagnosticsRouter);
+// Stock adjustments and stocktakes — the legitimate way to correct a stock
+// number, as opposed to editing it in the catalogue with no reason attached
+// (docs/25 Phase 8). Owner/admin only; the service enforces the same check.
+admin.use('/inventory', requireAuth({ roles: ['owner', 'admin'] }), adminInventoryRouter);
 admin.use('/', reviewsAdminRouter);
 
 router.use('/admin', admin);

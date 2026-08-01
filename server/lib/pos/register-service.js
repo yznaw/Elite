@@ -28,6 +28,21 @@ async function createEnrollmentToken(context, body) {
   const expiresAt = new Date(Date.now() + ENROLLMENT_TTL_MS);
 
   return inTransaction(async (client) => {
+    // `pos_registers` has UNIQUE (tenant_id, display_name), and the collision
+    // only surfaced later — at enrolment — as a bare 409 that told the operator
+    // nothing actionable ("Request failed 409 — Conflict"). Checked up front so
+    // the message names the real problem while the name is still on screen.
+    const nameTaken = await client.query(
+      'SELECT 1 FROM pos_registers WHERE tenant_id = $1 AND lower(display_name) = lower($2)',
+      [context.tenantId, displayName],
+    );
+    assertPos(
+      nameTaken.rowCount === 0,
+      409,
+      'REGISTER_NAME_TAKEN',
+      `A register named "${displayName}" already exists. Choose a different name, or revoke the old register first.`,
+    );
+
     const result = await client.query(
       `INSERT INTO pos_register_enrollment_tokens
         (tenant_id, token_hash, display_name, created_by_user_id, expires_at)
@@ -130,9 +145,11 @@ async function currentRegister(context) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context);
     const shiftResult = await client.query(
-      `SELECT id, state, opening_float_cents, opened_at
-       FROM pos_shifts
-       WHERE tenant_id = $1 AND register_id = $2 AND state IN ('open', 'closing')
+      `SELECT s.id, s.state, s.cashier_id, s.opening_float_cents, s.opened_at,
+              u.full_name AS cashier_name
+       FROM pos_shifts s
+       LEFT JOIN admin_users u ON u.id = s.cashier_id AND u.tenant_id = s.tenant_id
+       WHERE s.tenant_id = $1 AND s.register_id = $2 AND s.state IN ('open', 'closing')
        ORDER BY opened_at DESC LIMIT 1`,
       [context.tenantId, register.id],
     );
@@ -144,6 +161,8 @@ async function currentRegister(context) {
         ? {
             id: shiftResult.rows[0].id,
             state: shiftResult.rows[0].state,
+            cashierId: shiftResult.rows[0].cashier_id,
+            cashierName: shiftResult.rows[0].cashier_name || null,
             openingFloatCents: Number(shiftResult.rows[0].opening_float_cents),
             openedAt: shiftResult.rows[0].opened_at,
           }

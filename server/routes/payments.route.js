@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { ensurePaidOrderStock } = require('../lib/order-stock');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -156,6 +157,16 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
       }
       const alreadyPaid = existing.rows[0];
       console.log('[sadad-callback] Order already paid — redirecting to thank-you', { orderId });
+      // Also applied on the already-paid path, not only on the branch that
+      // won the paid-flag update. That is what repairs the window where the
+      // webhook set the flag but crashed before stock was applied: whichever
+      // delivery arrives next completes the job (the call is idempotent).
+      if (alreadyPaid.payment_status === 'paid') {
+        const tenant = await client.query('SELECT tenant_id FROM orders WHERE id = $1::uuid', [orderId]);
+        if (tenant.rowCount) {
+          await ensurePaidOrderStock(tenant.rows[0].tenant_id, orderId, { source: 'sadad-callback-repair' });
+        }
+      }
       return res.redirect(`${storefrontBase(req)}/thank-you?order=${encodeURIComponent(alreadyPaid.public_number)}`);
     }
 
@@ -254,6 +265,13 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
       await sendReceiptForPaidOrder(client, updatedOrder.tenant_id, orderId).catch((err) => {
         console.warn('[sadad-callback] Receipt email failed:', err.message);
       });
+
+      // Inventory. Until docs/25 Phase 1 a paid web order never touched stock
+      // at all, so the shop could sell the same unit online and again at the
+      // till. Idempotent and safe to re-run: it opens its own transaction,
+      // keys on an existing ledger row for this order, and never throws — a
+      // stock failure must not turn a successful payment into an error.
+      await ensurePaidOrderStock(updatedOrder.tenant_id, orderId, { source: 'sadad-callback' });
     }
   } catch (err) {
     console.error('[sadad-callback] Critical order payment update failed', {

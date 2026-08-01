@@ -5,11 +5,12 @@
     "start": "ng serve client-web",
     "start:admin": "ng serve admin-portal --port 4300",
     "build:web": "ng build client-web --configuration production",
-    "build:admin": "ng build admin-portal --configuration production",
+    "build:admin": "ng build admin-portal --configuration production && node scripts/generate-pos-precache.mjs",
     "build:all": "npm run build:web && npm run build:admin",
     "test:e2e": "playwright test",
     "lint": "ng lint",
-    "test": "ng test"
+    "test": "ng test",
+    "test:hero": "playwright test --config=playwright.hero.config.ts"
   },
   "private": true,
   "dependencies": {

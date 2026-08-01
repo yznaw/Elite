@@ -432,12 +432,23 @@ export class SidebarComponent {
   // it from Settings' own icon since they're different destinations.
   private readonly myPinLink: NavLink = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'lock' };
 
+  // Owner/admin only, matching the route guard on /diagnostics. Appended
+  // conditionally rather than added to `groups` because every non-manager role
+  // sees all groups — a viewer would otherwise get a visible link that only
+  // bounces them back to the dashboard.
+  private readonly stocktakeLink: NavLink = { path: '/stocktake', labelKey: 'nav.stocktake', subKey: 'nav.stocktake.sub', icon: 'list' };
+
+  private readonly diagnosticsLink: NavLink = { path: '/diagnostics', labelKey: 'nav.diagnostics', subKey: 'nav.diagnostics.sub', icon: 'warning' };
+
   readonly visibleGroups = computed<NavGroup[]>(() => {
     const role = this.user()?.role;
-    if (role !== 'manager') return this.groups;
+    const extras: NavLink[] = [];
+    if (role === 'manager') extras.push(this.myPinLink);
+    if (role === 'owner' || role === 'admin') extras.push(this.diagnosticsLink, this.stocktakeLink);
+    if (!extras.length) return this.groups;
     return this.groups.map((group) =>
       group.labelKey === 'nav.section.system'
-        ? { ...group, links: [...group.links, this.myPinLink] }
+        ? { ...group, links: [...group.links, ...extras] }
         : group,
     );
   });

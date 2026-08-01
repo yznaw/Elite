@@ -9,6 +9,13 @@ const allowedOrigins = new Set(String(process.env.ELITE_POS_ALLOWED_ORIGINS || '
   .split(',').map((value) => value.trim()).filter(Boolean));
 const maxBytes = 128 * 1024;
 
+function log(level, event, detail = {}) {
+  const line = JSON.stringify({ timestamp: new Date().toISOString(), level, event, ...detail });
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+}
+
 function requiredFile(filePath, label) {
   if (!filePath) throw new Error(`${label} environment variable is required.`);
   return fs.readFileSync(filePath, 'utf8');
@@ -47,29 +54,69 @@ function allowedRequest(request) {
 const server = http.createServer((req, res) => {
   cors(req, res);
   if (req.method === 'OPTIONS') return send(res, 204, '');
-  if (req.headers.origin && !allowedOrigins.has(req.headers.origin)) return send(res, 403, 'Origin denied.');
+  if (req.headers.origin && !allowedOrigins.has(req.headers.origin)) {
+    log('warn', 'origin_denied', { origin: req.headers.origin, method: req.method, path: req.url });
+    return send(res, 403, 'Origin denied.');
+  }
   if (req.method === 'GET' && req.url === '/health') return send(res, 200, 'ok');
-  if (req.method === 'GET' && req.url === '/qz/certificate') return send(res, 200, certificate);
+  if (req.method === 'GET' && req.url === '/qz/certificate') {
+    log('info', 'certificate_served', { origin: req.headers.origin || null });
+    return send(res, 200, certificate);
+  }
   if (req.method !== 'POST' || req.url !== '/qz/sign') return send(res, 404, 'Not found.');
 
   let body = '';
+  let requestTooLarge = false;
   req.setEncoding('utf8');
   req.on('data', (chunk) => {
     body += chunk;
-    if (Buffer.byteLength(body, 'utf8') > maxBytes * 2) req.destroy();
+    if (Buffer.byteLength(body, 'utf8') > maxBytes * 2) {
+      requestTooLarge = true;
+      log('warn', 'request_body_too_large', { origin: req.headers.origin || null });
+      req.destroy();
+    }
   });
   req.on('end', () => {
+    if (requestTooLarge) return;
     try {
       const request = JSON.parse(body).request;
-      if (typeof request !== 'string' || !allowedRequest(request)) return send(res, 403, 'QZ request denied.');
+      if (typeof request !== 'string' || !allowedRequest(request)) {
+        log('warn', 'sign_request_denied', {
+          origin: req.headers.origin || null,
+          requestBytes: typeof request === 'string' ? Buffer.byteLength(request, 'utf8') : null,
+        });
+        return send(res, 403, 'QZ request denied.');
+      }
       const signature = crypto.sign('RSA-SHA512', Buffer.from(request, 'utf8'), privateKey).toString('base64');
+      log('info', 'signature_issued', {
+        origin: req.headers.origin || null,
+        requestBytes: Buffer.byteLength(request, 'utf8'),
+      });
       return send(res, 200, signature);
-    } catch {
+    } catch (error) {
+      log('warn', 'invalid_sign_request', {
+        origin: req.headers.origin || null,
+        error: String(error?.message || error).slice(0, 300),
+      });
       return send(res, 422, 'Invalid signing request.');
     }
+  });
+  req.on('error', (error) => {
+    log('warn', 'request_stream_error', { error: String(error?.message || error).slice(0, 300) });
   });
 });
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`Elite POS device signer listening on http://127.0.0.1:${port}`);
+  log('info', 'signer_started', { address: `http://127.0.0.1:${port}`, allowedOrigins: [...allowedOrigins] });
 });
+
+server.on('error', (error) => {
+  log('error', 'signer_server_error', { error: String(error?.message || error).slice(0, 500) });
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    log('info', 'signer_stopping', { signal });
+    server.close(() => process.exit(0));
+  });
+}

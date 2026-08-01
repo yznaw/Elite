@@ -5,7 +5,7 @@ know how many products there are, move between them, and preview colourways.
 
 Owner: Elite Collection
 Created: 2026-07-27
-Status: Phases 1–5 implemented; Phase 6 next; full production verification pending
+Status: Phases 1–7 implemented; production build and automated Phase 8 matrix pass; final manual accessibility sweep pending
 
 ---
 
@@ -416,6 +416,11 @@ is handled by the existing mechanism.
 Verify: direction correct in both LTR and Arabic; no shake on release; reduced
 motion collapses to plain opacity.
 
+**Implemented 2026-08-01.** Adjacent arrow and swipe navigation uses a 420ms
+crossfade with 16px directional drift. RTL reverses the physical direction,
+pagination and colour changes remain plain fades, and keyboard-generated arrow
+clicks skip the drift. Reduced motion disables both slide keyframes.
+
 ---
 
 ### Phase 7 — Nudge and touch-target polish
@@ -427,6 +432,12 @@ motion collapses to plain opacity.
 - Gate the nudge by coarse/touch input rather than by the stacked layout query.
 - Pagination width `min(240px, 62vw)` → `min(268px, 68vw)`, lifting the segment
   tap target from 41.6px to 48px at five products.
+
+**Implemented 2026-08-01.** The existing coarse-pointer gate is retained and an
+`IntersectionObserver` now requires at least 45% of the hero stage to be visible.
+Leaving the hero cancels the pending lesson before the session flag is spent;
+returning schedules a fresh attempt. Pagination uses a 44px-high target with a
+26px minimum segment width and horizontal overflow instead of unlimited shrink.
 
 ---
 

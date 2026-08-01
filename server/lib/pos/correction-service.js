@@ -2,7 +2,7 @@ const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
 const { claimReceipt, loadSale } = require('./sale-service');
-const { recordMovement } = require('./inventory-ledger');
+const { recordMovement } = require('../inventory-ledger');
 
 async function updateProductTotals(client, tenantId, productIds) {
   if (!productIds.size) return;
@@ -116,8 +116,12 @@ async function voidTransaction(context, transactionIdValue, body) {
     );
 
     const items = await client.query(
+      // ORDER BY variant_id for the same reason as sale-service's variant
+      // lock: every path that locks stock rows must do it in one order.
       `SELECT variant_id, product_id, quantity FROM pos_transaction_items
-       WHERE tenant_id = $1 AND transaction_id = $2 FOR UPDATE`,
+       WHERE tenant_id = $1 AND transaction_id = $2
+       ORDER BY variant_id
+       FOR UPDATE`,
       [context.tenantId, transaction.id],
     );
     const stockRestored = [];

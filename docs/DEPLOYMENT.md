@@ -1,165 +1,157 @@
-# Deployment Guide - Elite Collection
+# Elite Production Deployment Guide
 
-## Server Information
-- **Host:** Contabo VPS
-- **IP:** vmi3327182
-- **Project Path:** `/var/www/elite`
-- **App Process:** `elite-api` (PM2)
-- **Port:** `3000` (API running at http://localhost:3000/api)
-- **Environment:** production
+> Production host: `vmi3327182` · repository: `/var/www/elite` · API: PM2 process `elite-api` on port `3000` · public traffic: Nginx over HTTPS.
 
----
+This release deploys the API, both Angular applications, migrations `022`–`025`, POS diagnostics, inventory operations, and the production POS offline package. Deploy them as one coordinated release; do not upload only selected files.
 
-## Quick Deploy Command
+## 1. Before pushing from the development machine
 
 ```bash
-cd /var/www/elite && git pull origin main && npm install && pm2 restart elite-api
+git status --short
+git diff --check
+cd server && npm ci && npm test
+cd ../client && npm ci && npm run build:all && npm run test:e2e
 ```
 
----
+Expected gate for the 1 August 2026 release: server tests `33/33`, POS browser tests `8/8`, and both production Angular builds successful. Generated directories (`client/dist`, `client/out-tsc`, `client/test-results`, `client/playwright-report`) must not be committed.
 
-## Step-by-Step Deployment
+Verify that no `.env`, certificate, private key, database dump, upload directory, or local signer log is staged. Push the complete commit and wait for GitHub CI to pass before touching production.
 
-### 1. SSH into Server
+## 2. Pre-deploy checks on the VPS
+
 ```bash
 ssh root@vmi3327182
-```
-
-### 2. Navigate to Project Directory
-```bash
 cd /var/www/elite
-```
-
-### 3. Pull Latest Code
-```bash
-git pull origin main
-```
-
-### 4. Install Dependencies (if needed)
-```bash
-npm install
-```
-
-### 5. Fix Vulnerabilities
-```bash
-npm audit fix
-```
-
-### 6. Restart Application
-```bash
-pm2 restart elite-api
-```
-
----
-
-## Verification Commands
-
-### Check App Status
-```bash
+git status --short
+git rev-parse HEAD
+node --version
 pm2 status
 ```
 
-### View Logs (last 30 lines)
-```bash
-pm2 logs elite-api --lines 30
-```
+- The worktree must be clean. Stop if it contains uncommitted server edits.
+- Node must satisfy the server requirement (`22.x`).
+- Record the current commit hash for rollback.
+- Take and verify an encrypted database + uploads backup using [the backup/restore runbook](./18-backup-restore-runbook.md). Do not deploy migrations without a usable backup.
 
-### View Error Logs Only
-```bash
-pm2 logs elite-api --err --lines 30
-```
-
-### Watch Logs in Real-Time
-```bash
-pm2 logs elite-api
-# Press Ctrl+C to exit
-```
-
-### Check Process Details
-```bash
-pm2 show elite-api
-```
-
----
-
-## Database & Known Issues
-
-### Current Known Errors
-- `Tenant bootstrap failed` - view schema mismatch (non-critical)
-- `column "size_chart" does not exist` - missing migration
-- `invalid input syntax for type uuid` - data type mismatch in carts
-
-### Run Pending Migrations (if applicable)
-```bash
-cd /var/www/elite/server
-npm run migrate
-```
-
----
-
-## Useful PM2 Commands
-
-### Restart App
-```bash
-pm2 restart elite-api
-```
-
-### Stop App
-```bash
-pm2 stop elite-api
-```
-
-### Start App
-```bash
-pm2 start elite-api
-```
-
-### View All Running Processes
-```bash
-pm2 list
-```
-
-### Save PM2 Process List
-```bash
-pm2 save
-pm2 startup
-```
-
----
-
-## Upload Storage
-- **Path:** `/var/www/elite-uploads`
-- **Size:** ~135MB
-
----
-
-## Deployment Checklist
-
-- [ ] SSH into server: `ssh root@vmi3327182`
-- [ ] Navigate to project: `cd /var/www/elite`
-- [ ] Pull latest code: `git pull origin main`
-- [ ] Install dependencies: `npm install`
-- [ ] Restart app: `pm2 restart elite-api`
-- [ ] Verify status: `pm2 status`
-- [ ] Check logs: `pm2 logs elite-api --lines 30`
-
----
-
-## Emergency Rollback
-
-If something breaks, you can rollback to previous commit:
+## 3. Pull, install, and build
 
 ```bash
 cd /var/www/elite
-git log --oneline -10  # View last 10 commits
-git reset --hard <commit-hash>
-pm2 restart elite-api
+git pull --ff-only origin main
+cd server
+npm ci --omit=dev
+cd ../client
+npm ci
+npm run build:all
 ```
 
----
+`build:admin` also generates and audits the POS-only precache manifest. A failure there is a release failure; do not serve a manually copied old `dist` directory.
 
-## Contact & Support
-- **Project:** Elite Collection Admin Portal
-- **Repository:** https://github.com/yznaw/Elite
-- **Main Branch:** main
-- **Local Dev:** `admin-bugs-fixes` (feature branch)
+Do not run `npm audit fix` during a deploy. Dependency remediation is a reviewed code change with its own tests. Do not run `npm run db:migrate` for this release: that legacy script applies only `001_initial_schema.sql`, not incremental POS migrations.
+
+## 4. Restart API and apply database migrations
+
+```bash
+cd /var/www/elite
+pm2 reload elite-api --update-env
+pm2 logs elite-api --lines 100
+```
+
+At startup the API applies migrations `015`–`025` in order under a PostgreSQL advisory lock. The API refuses to start if database preparation fails; PM2 logs must not contain `Database preparation failed`.
+
+Verify the new schema using the production `DATABASE_URL`:
+
+```bash
+cd /var/www/elite/server
+psql "$DATABASE_URL" -c "select to_regclass('public.app_errors'), to_regclass('public.inventory_movements'), to_regclass('public.stocktakes');"
+psql "$DATABASE_URL" -c "select column_name from information_schema.columns where table_name='pos_transaction_items' and column_name='product_name_ar';"
+psql "$DATABASE_URL" -c "select column_name from information_schema.columns where table_name='customers' and column_name='phone_key';"
+```
+
+Every value must be present. These migrations are additive and idempotent, but verification is mandatory.
+
+## 5. Health and smoke verification
+
+```bash
+pm2 status
+curl --fail --silent http://127.0.0.1:3000/api/health
+nginx -t
+```
+
+Then verify through the public HTTPS URLs:
+
+- Storefront loads and an existing product opens.
+- Admin sign-in works.
+- Owner/Admin can open `/diagnostics` and `/stocktake`.
+- `/pos` restores the enrolled register without re-enrollment.
+- Existing hardware settings remain, QZ reconnects, and a test receipt prints.
+- Open/current shift behavior is correct for the signed-in cashier.
+- Complete one low-value sale, find it by receipt number, and confirm shared stock decreased once.
+- If testing offline, confirm the queue returns to zero and only one server transaction exists after reconnection.
+
+Keep the old POS available until both production registers pass this smoke check.
+
+## 6. Logs and diagnostics
+
+Production API logs are structured JSON:
+
+```bash
+pm2 logs elite-api --lines 100
+pm2 logs elite-api --err --lines 100
+grep 'a3f9c1' ~/.pm2/logs/elite-api-out.log | jq .
+```
+
+The cashier-visible reference is the last six characters of the request ID. The same ID links `app_errors`, audit events, and the Owner/Admin Diagnostics page.
+
+Install PM2 rotation once:
+
+```bash
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 50M
+pm2 set pm2-logrotate:retain 14
+pm2 set pm2-logrotate:compress true
+pm2 save
+```
+
+Relevant environment variables:
+
+```dotenv
+LOG_LEVEL=info
+ALERT_EMAIL=owner@example.com
+```
+
+Leaving `ALERT_EMAIL` unset disables operational email alerts. Register-side signer logs rotate under `C:\ProgramData\ElitePOS\device-signer\logs\signer.log`.
+
+## 7. Rollback
+
+If the smoke test fails, preserve logs and the failing request ID first. Then return the server checkout to the previously recorded commit and rebuild from that code:
+
+```bash
+cd /var/www/elite
+git switch --detach <previous-commit-hash>
+cd server && npm ci --omit=dev
+cd ../client && npm ci && npm run build:all
+cd .. && pm2 reload elite-api --update-env
+```
+
+Migrations `022`–`025` are additive, so the prior application can normally run with the added tables/columns. Do not reverse database migrations or restore the production backup merely to remove unused additive schema. Restore data only for confirmed data corruption and follow the restore runbook.
+
+After recovery, return the checkout to `main` before the next deploy:
+
+```bash
+cd /var/www/elite
+git switch main
+```
+
+## 8. Release sign-off
+
+- [ ] Local diff clean of whitespace errors and secrets.
+- [ ] Server `33/33`, POS browser `8/8`, storefront/admin production builds pass.
+- [ ] GitHub CI green on the exact deployed commit.
+- [ ] Encrypted database + uploads backup verified.
+- [ ] VPS worktree clean; previous commit recorded.
+- [ ] `git pull --ff-only`, deterministic installs, and both web builds complete.
+- [ ] API starts without database-preparation errors; migrations `022`–`025` verified.
+- [ ] Health, public HTTPS, POS, Diagnostics, Stocktake, receipt, and shared-stock smoke checks pass.
+- [ ] Both shop registers retain enrollment/hardware and their queues are zero.
+- [ ] PM2/API, browser Diagnostics, and Windows signer logs are available.
