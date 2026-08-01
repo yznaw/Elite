@@ -59,14 +59,19 @@ pm2 logs elite-api --lines 100
 
 At startup the API applies migrations `015`–`026` in order under a PostgreSQL advisory lock. The API refuses to start if database preparation fails; PM2 logs must not contain `Database preparation failed`.
 
-Verify the new schema using the production `DATABASE_URL`:
+Verify the new schema. `DATABASE_URL` lives in `server/.env` and is **not** exported into the deploy shell, so a bare `psql "$DATABASE_URL"` connects as the OS user and fails with `role "root" does not exist`. Do not reach for `. ./.env` either: the file holds unquoted values containing spaces (the receipt printer name, for one), which `source` tries to execute as commands. `dotenv` parses them correctly, so go through node and reuse the API's own pool:
 
 ```bash
-cd /var/www/elite/server
-psql "$DATABASE_URL" -c "select to_regclass('public.app_errors'), to_regclass('public.inventory_movements'), to_regclass('public.stocktakes');"
-psql "$DATABASE_URL" -c "select column_name from information_schema.columns where table_name='pos_transaction_items' and column_name='product_name_ar';"
-psql "$DATABASE_URL" -c "select column_name from information_schema.columns where table_name='customers' and column_name='phone_key';"
+cd /var/www/elite/server && node -e 'require("dotenv").config();const db=require("./db/client");db.pool.query("select to_regclass($1) tbl",["public.app_errors"]).then(r=>console.log(r.rows)).finally(()=>process.exit(0))'
 ```
+
+To confirm one column exists (swap the table and column names as needed):
+
+```bash
+cd /var/www/elite/server && node -e 'require("dotenv").config();const db=require("./db/client");db.pool.query("select column_name from information_schema.columns where table_name=$1 and column_name=$2",["tenants","pos_self_close_shift_enabled"]).then(r=>{console.log(r.rowCount?"OK - column exists":"MISSING - migration has not run");process.exit(0)}).catch(e=>{console.error("ERROR:",e.message);process.exit(1)})'
+```
+
+Columns worth spot-checking after a release: `pos_transaction_items.product_name_ar`, `customers.phone_key`, `tenants.pos_self_close_shift_enabled`.
 
 Every value must be present. These migrations are additive and idempotent, but verification is mandatory.
 
