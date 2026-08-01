@@ -57,7 +57,7 @@ pm2 reload elite-api --update-env
 pm2 logs elite-api --lines 100
 ```
 
-At startup the API applies migrations `015`–`025` in order under a PostgreSQL advisory lock. The API refuses to start if database preparation fails; PM2 logs must not contain `Database preparation failed`.
+At startup the API applies migrations `015`–`026` in order under a PostgreSQL advisory lock. The API refuses to start if database preparation fails; PM2 logs must not contain `Database preparation failed`.
 
 Verify the new schema using the production `DATABASE_URL`:
 
