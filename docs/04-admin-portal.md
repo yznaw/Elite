@@ -188,6 +188,9 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
   - `getInvitations()` → `Invitation[]` — calls `GET /admin/settings/invitations`
   - `sendInvitation({ email, role })` → `{ email, inviteLink }` — generates token, returns shareable link
   - `revokeInvitation(id)` → `void` — calls `DELETE /admin/settings/invitations/:id`
+  - `getPosPolicy()` / `updatePosPolicy({ selfCloseShiftEnabled?, emergencySelfApprovalEnabled? })` → `PosPolicy` — calls `GET`/`PUT /admin/pos-security/policy`. Backs the two switches in the **Approvals** card on the Devices & Security tab: self-close of one's own shift, and letting a manager approve refunds/voids with their own PIN. Either field may be sent alone. Read is owner/admin, write is owner-only. See [12 – POS System › The Approvals card](./12-pos-system.md).
+
+> **Devices & Security lists show live rows only.** Revoked registers and used/expired/revoked setup codes are filtered out of both tables (`visibleRegisters` / `visibleTokens` computed signals) — nothing on the page can act on them and they buried the real devices. The rows are still stored server-side for the audit trail; this is a display filter, not a delete.
 
 ### `StorageService`
 

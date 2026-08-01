@@ -45,6 +45,13 @@ export class PosHardwareService {
   private connectionCallbacksConfigured = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
+  private signerWatchTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly SIGNER_POLL_MS = 60000;
+  // How many consecutive reconnect failures get shipped to the server before
+  // the durable log goes quiet. Console logging is unaffected. A register
+  // whose printer stays off overnight was otherwise posting two warn records
+  // every 30 seconds until someone noticed.
+  private readonly MAX_DURABLE_RECONNECT_LOGS = 3;
   private businessProfile: PosBusinessProfile | null = null;
   private businessProfileFetchedAt = 0;
   private readonly BUSINESS_PROFILE_TTL_MS = 5 * 60 * 1000;
@@ -157,11 +164,17 @@ export class PosHardwareService {
     const delays = [2000, 5000, 10000, 30000];
     const delayMs = delays[Math.min(this.reconnectAttempt, delays.length - 1)];
     this.reconnectAttempt += 1;
+    // Past the first few attempts the condition is steady (printer off, QZ not
+    // installed) and each further record says nothing new, so only the console
+    // keeps narrating. The recovery entry still reports the total attempt count.
+    const durable = this.reconnectAttempt <= this.MAX_DURABLE_RECONNECT_LOGS;
     logStage('QZ Tray reconnect scheduled', { delayMs, attempt: this.reconnectAttempt });
-    this.logDurable('QZ_RECONNECT_SCHEDULED', 'QZ Tray automatic reconnect scheduled.', 'warn', {
-      delayMs,
-      attempt: this.reconnectAttempt,
-    });
+    if (durable) {
+      this.logDurable('QZ_RECONNECT_SCHEDULED', 'QZ Tray automatic reconnect scheduled.', 'warn', {
+        delayMs,
+        attempt: this.reconnectAttempt,
+      });
+    }
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       try {
@@ -170,10 +183,12 @@ export class PosHardwareService {
         logError('QZ Tray automatic reconnect', error);
         this.connected.set(false);
         this.printerAvailable.set(false);
-        this.logDurable('QZ_RECONNECT_FAILED', 'QZ Tray automatic reconnect failed.', 'warn', {
-          attempt: this.reconnectAttempt,
-          error: this.errorText(error),
-        });
+        if (durable) {
+          this.logDurable('QZ_RECONNECT_FAILED', 'QZ Tray automatic reconnect failed.', 'warn', {
+            attempt: this.reconnectAttempt,
+            error: this.errorText(error),
+          });
+        }
         this.scheduleReconnect();
       }
     }, delayMs);
@@ -193,10 +208,14 @@ export class PosHardwareService {
       .some((name) => String(name).trim() === this.settings?.printerName.trim());
     this.printerAvailable.set(matches);
     if (!matches) throw new Error(`Configured printer "${this.settings.printerName}" is not available in Windows.`);
+    // The local signer is only a fallback for signing print requests when the
+    // API is unreachable (see fetchCertificate/fetchSignature), so a register
+    // whose printer answers can print perfectly well without it. Failing the
+    // connection here used to throw away a verified QZ websocket and re-run
+    // the whole connect cycle every 30s forever — a register was seen at
+    // attempt 45 with "printer check ok" logged on every pass. Record the
+    // signer state for `ready()` and the readiness strip, and stop there.
     await this.checkSignerHealth();
-    if (this.signerReachable() !== true) {
-      throw new Error('The local POS device signer is not running on this register.');
-    }
     if (recovering) {
       this.logDurable('HARDWARE_RESTORED', 'POS hardware connection restored automatically.', 'warn', {
         attempts: this.reconnectAttempt,
@@ -217,6 +236,25 @@ export class PosHardwareService {
     } catch {
       this.signerReachable.set(false);
     }
+    if (this.signerReachable() === true) this.stopSignerWatch();
+    else this.startSignerWatch();
+  }
+
+  /**
+   * The signer no longer drives the QZ reconnect loop, so something has to
+   * notice when someone starts it mid-shift. This polls only while it is down
+   * and stops the moment it answers, so a healthy register runs no timer. It
+   * is one request to localhost, and it never touches the durable log.
+   */
+  private startSignerWatch(): void {
+    if (this.signerWatchTimer) return;
+    this.signerWatchTimer = setInterval(() => { void this.checkSignerHealth(); }, this.SIGNER_POLL_MS);
+  }
+
+  private stopSignerWatch(): void {
+    if (!this.signerWatchTimer) return;
+    clearInterval(this.signerWatchTimer);
+    this.signerWatchTimer = null;
   }
 
   private logDurable(

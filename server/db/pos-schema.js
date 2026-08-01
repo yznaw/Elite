@@ -16,6 +16,7 @@ const migrationPaths = [
   path.join(__dirname, 'migrations', '023_pos_customer_link.sql'),
   path.join(__dirname, 'migrations', '024_pos_item_arabic_name.sql'),
   path.join(__dirname, 'migrations', '025_inventory_operations.sql'),
+  path.join(__dirname, 'migrations', '026_pos_self_close_shift.sql'),
 ];
 
 async function ensurePosSchema(client) {

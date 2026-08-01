@@ -81,6 +81,19 @@ export class AdminSettingsService {
   clearManagerPin(userId: string): Promise<{ managerId: string; configured: boolean }> {
     return firstValueFrom(this.api.post<{ managerId: string; configured: boolean }>(`/admin/pos-security/manager-pins/${userId}/clear`, {}));
   }
+
+  getPosPolicy(): Promise<PosPolicy> {
+    return firstValueFrom(this.api.get<PosPolicy>('/admin/pos-security/policy'));
+  }
+
+  updatePosPolicy(input: { selfCloseShiftEnabled?: boolean; emergencySelfApprovalEnabled?: boolean }): Promise<PosPolicy> {
+    return firstValueFrom(this.api.put<PosPolicy>('/admin/pos-security/policy', input));
+  }
+}
+
+export interface PosPolicy {
+  selfCloseShiftEnabled: boolean;
+  emergencySelfApprovalEnabled: boolean;
 }
 
 export interface PosRegisterRow {

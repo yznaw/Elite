@@ -91,10 +91,15 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
         }
       } else if (err.status === 403) {
-        toast.error(
-          t('error.403.title'),
-          t('error.403.sub'),
-        );
+        // SELF_APPROVAL_BLOCKED also lands here. Its message names the actual
+        // fix ("another manager has to approve this"), so the generic
+        // permission-denied toast would only bury it under a second banner.
+        if (!isManagerPinVerify) {
+          toast.error(
+            t('error.403.title'),
+            t('error.403.sub'),
+          );
+        }
       } else if (err.status === 404) {
         toast.warning(
           t('error.404.title'),

@@ -7,6 +7,21 @@ function numeric(row, key) {
   return Number(row?.[key] || 0);
 }
 
+/**
+ * True when this operator may close this shift without a second manager's PIN:
+ * the tenant allows self-close and they are the cashier who opened the shift.
+ * Shared by the summary (so the POS knows whether to show the PIN field) and
+ * closeShift (which never trusts that answer and re-checks it here).
+ */
+async function selfCloseAllowed(client, context, shift) {
+  if (!shift || shift.cashier_id !== context.userId) return false;
+  const tenant = await client.query(
+    'SELECT pos_self_close_shift_enabled FROM tenants WHERE id = $1',
+    [context.tenantId],
+  );
+  return Boolean(tenant.rows[0]?.pos_self_close_shift_enabled);
+}
+
 async function loadShiftSummary(client, tenantId, shiftId) {
   const result = await client.query(
     `WITH tx AS (
@@ -121,7 +136,12 @@ async function currentSummary(context, shiftId = undefined) {
     assertPos(resolvedShiftId, 409, 'SHIFT_NOT_OPEN', 'This register has no open shift.');
     const summary = await loadShiftSummary(client, context.tenantId, resolvedShiftId);
     assertPos(summary.registerId === register.id, 403, 'SHIFT_REGISTER_MISMATCH', 'Shift belongs to another register.');
-    return summary;
+    // Drives whether the close-shift sheet asks for a manager PIN. Advisory
+    // only — closeShift re-derives it server-side before skipping the override.
+    return {
+      ...summary,
+      selfCloseAllowed: await selfCloseAllowed(client, context, { cashier_id: summary.cashierId }),
+    };
   });
 }
 
@@ -164,7 +184,15 @@ async function closeShift(context, body) {
       { pendingCount, rejectedCount },
     );
 
-    const override = await consumeOverride(client, context, 'z-report', body);
+    // The operator who held the drawer closes their own shift when the tenant
+    // allows it (migration 026). Their count is the whole point of the Z
+    // report, and Elite's shops have one branch manager who is often off-site.
+    // Everyone else, and every shop that turned the toggle off, still needs a
+    // different manager's PIN.
+    const selfClose = await selfCloseAllowed(client, context, shift);
+    const approverId = selfClose
+      ? context.userId
+      : (await consumeOverride(client, context, 'z-report', body)).manager_id;
     await client.query(
       `UPDATE pos_shifts SET state = 'closing', closing_started_at = now() WHERE id = $1`,
       [shift.id],
@@ -186,7 +214,7 @@ async function closeShift(context, body) {
         context.tenantId,
         shift.id,
         register.id,
-        override.manager_id,
+        approverId,
         idempotencyKey,
         summary.openingFloatCents,
         summary.grossSalesCents,
@@ -213,7 +241,10 @@ async function closeShift(context, body) {
        WHERE id = $1`,
       [shift.id, report.rows[0].id],
     );
-    await audit(client, context, 'pos.shift.closed', 'pos_z_report', report.rows[0].id, reportData);
+    // selfClose is recorded on the audit entry so a Z report closed without a
+    // second approver is identifiable afterwards, not just inferable from
+    // manager_id matching the shift's cashier.
+    await audit(client, context, 'pos.shift.closed', 'pos_z_report', report.rows[0].id, { ...reportData, selfClose });
     await client.query(
       `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
        VALUES ($1, $2, 'shift.closed', $3::jsonb)`,

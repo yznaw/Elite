@@ -218,6 +218,29 @@ Clearing the browser profile removes the local credential. Treat that as a termi
 
 Cashiers cannot configure or provide a manager PIN. Protected actions require a different active owner/admin/manager; self-approval remains blocked.
 
+When the operator enters their own correct PIN and `tenants.pos_emergency_self_approval_enabled` is off, the endpoint answers `403 SELF_APPROVAL_BLOCKED`, not `401 PIN_INVALID`. The attempt is audited as `pos.manager-pin.self-approval-blocked` and does not count toward the five-attempt lockout, because the PIN was correct and the operator is already authenticated. A single-manager shop previously read this case as "Manager PIN is incorrect" and retyped a PIN that was right all along.
+
+### Closing a shift
+
+Closing a shift is the one protected action that does not need a second approver. `tenants.pos_self_close_shift_enabled` (migration 026, **on by default**) lets the cashier who opened the shift close it and print the Z report with no manager PIN. The Z report's `manager_id` is then that operator, and the audit entry carries `selfClose: true`.
+
+The reasoning: closing a shift moves no money. It records the physical cash count against totals the server already computed, and that count is only meaningful when made by the person who actually held the drawer. Elite's shops run one branch manager under one owner, so demanding a *different* manager made the shift uncloseable whenever that manager was off-site. Void, refund, paid-out, safe-drop and no-sale drawer-open are untouched and still require a different approver.
+
+`GET /pos/shifts/current` returns `selfCloseAllowed` so the close sheet knows whether to render the PIN field; `closeShift` re-derives the same answer server-side and never trusts the client's.
+
+### The Approvals card
+
+Settings → Devices & Security → Approvals holds both approval switches, backed by `GET`/`PUT /api/admin/pos-security/policy`. Reads are owner/admin; **writes are owner-only** and audited as `pos.policy.updated` with the changed fields. Either switch can be sent alone — the untouched column is `COALESCE`d to its stored value, so a partial request never resets the other setting.
+
+| Switch | Column | Default | Effect |
+|---|---|---|---|
+| Let the person who opened the shift close it | `pos_self_close_shift_enabled` | on | Z report closes with no manager PIN, for that operator's own shift only |
+| Let a manager approve with their own PIN | `pos_emergency_self_approval_enabled` | off | Lifts approver separation for refund, void, drawer-open and sync-conflict overrides, so the manager working the till approves with their own PIN |
+
+The second switch is the one that matters for a one-person shop: with it off, `verifyManagerPin` skips the requesting user's own account and the override is rejected as `SELF_APPROVAL_BLOCKED`. With it on, the match is allowed and the approval is audited with `selfApproval: true`. It is off by default because it removes the second pair of eyes from the two actions that move money out of the drawer.
+
+The PIN inputs in the POS carry `autocomplete="one-time-code"` and their Reason fields carry `autocomplete="off"`. Chrome ignores `autocomplete="off"` on password inputs, so without this the password manager filled the operator's account email into Reason and the saved login password into the PIN box, and every override failed with `PIN_INVALID`.
+
 ## 7. Receipt Numbers and Idempotency
 
 Elite allocates receipt numbers in tenant-wide blocks of 100. Blocks cannot overlap and are tied to one register. The browser persists the current block and next number in IndexedDB.
@@ -340,7 +363,7 @@ All paths below are under `/api/pos` and require an authenticated allowed role. 
 | `GET` | `/products/barcode/:barcode` | Resolve one active barcode |
 | `POST` | `/shifts/open` | Open the register's shift with an opening float |
 | `GET` | `/shifts/current` | Return the current/X-style shift summary |
-| `POST` | `/shifts/z-report` | Close shift and store immutable Z report |
+| `POST` | `/shifts/z-report` | Close shift and store immutable Z report; manager override omitted on a self-close |
 | `POST` | `/transactions` | Complete one online sale |
 | `POST` | `/transactions/sync` | Synchronize an offline transaction batch |
 | `PUT` | `/sync-state` | Report local pending/rejected counts for shift-close enforcement |
@@ -463,6 +486,12 @@ Hardware configuration is terminal-local and stored in IndexedDB:
 - Exact QZ printer name.
 - Local device signer URL.
 - Drawer pin 2, pin 5, or disabled.
+
+**An unreachable signer does not fail the hardware connection.** Because step 5 is a fallback for step 4, a register whose printer answers prints fine without the signer running; only offline printing is lost. `connectAndVerifyPrinter` therefore records the signer state and returns instead of throwing. It used to throw, which discarded a verified QZ websocket and re-ran the whole connect cycle every 30 seconds forever (a register was observed at attempt 45 with `printer check ok` logged on every pass, while `ERR_CONNECTION_REFUSED` on `127.0.0.1:8182` was the only real fault). While the signer is down, a 60-second poll watches for it to come back and stops as soon as it answers; a healthy register runs no timer.
+
+`ready()` still requires the signer, since it drives the start-of-day readiness strip, and the open-shift warning now distinguishes the two cases: a printer that cannot be reached stops receipts now, a stopped signer only costs printing if the register later loses internet.
+
+Reconnect failures are shipped to the durable client log for the first 3 consecutive attempts only (`MAX_DURABLE_RECONNECT_LOGS`). Console logging is unaffected, and the recovery record still carries the total attempt count. Before this cap, a printer left off overnight posted two `warn` records every 30 seconds.
 
 Follow [Elite POS Hardware Runbook](./pos-hardware-runbook.md) for provisioning, certificate handling, startup services, network ports, tests, and troubleshooting.
 

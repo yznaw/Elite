@@ -145,6 +145,12 @@ export interface PosShiftSummary {
   transactionCount: number;
   refundCount: number;
   voidCount: number;
+  /**
+   * True when this operator opened the shift and the shop allows self-close,
+   * so the close sheet can drop the manager PIN field. The server re-checks
+   * this when the Z report is actually written.
+   */
+  selfCloseAllowed?: boolean;
 }
 
 export type PosCashMovementKind = 'paid_in' | 'paid_out' | 'safe_drop' | 'float_adjust' | 'no_sale_drawer_open';
@@ -418,8 +424,10 @@ export class PosService {
     shiftId: string;
     physicalCashCents: number;
     idempotencyKey: string;
-    managerOverrideId: string;
-    managerOverrideToken: string;
+    // Omitted on a self-close: the operator who opened the shift closes it
+    // without a second manager's PIN when the shop allows that.
+    managerOverrideId?: string;
+    managerOverrideToken?: string;
   }): Promise<PosShiftSummary & { zReportId: string; varianceCents: number }> {
     return firstValueFrom(this.api.post('/pos/shifts/z-report', input));
   }

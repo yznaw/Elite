@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnInit, WritableSignal, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -10,7 +10,7 @@ import { SortableTableComponent, CellTplDirective, TableColumn } from '../../sha
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminSettingsService, Invitation, PosRegisterRow, PosEnrollmentTokenRow, ManagerPinRow } from '../../services/admin-settings.service';
+import { AdminSettingsService, Invitation, PosRegisterRow, PosEnrollmentTokenRow, ManagerPinRow, PosPolicy } from '../../services/admin-settings.service';
 import { AuthService } from '../../services/auth.service';
 import { StoreConfigService } from '../../services/store-config.service';
 import { PosService, PosBusinessProfile } from '../../services/pos.service';
@@ -213,10 +213,10 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
               <div class="row gap-sm" style="padding:24px;justify-content:center;">
                 <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
               </div>
-            } @else if (registers().length === 0) {
+            } @else if (visibleRegisters().length === 0) {
               <div class="muted small" style="padding:16px 20px;">{{ t('settings.security.devices.empty.sub') }}</div>
             } @else {
-              <ap-sortable-table [columns]="registerColumns" [rows]="registers()">
+              <ap-sortable-table [columns]="registerColumns" [rows]="visibleRegisters()">
                 <ng-template apCellTpl="displayName" let-r>
                   <div class="row gap-sm" style="align-items:center;">
                     <ap-icon name="device" [size]="15" style="opacity:.5"/>
@@ -280,10 +280,10 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
               <div class="row gap-sm" style="padding:24px;justify-content:center;">
                 <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
               </div>
-            } @else if (tokens().length === 0) {
+            } @else if (visibleTokens().length === 0) {
               <div class="muted small" style="padding:16px 20px;">{{ t('settings.security.tokens.empty.sub') }}</div>
             } @else {
-              <ap-sortable-table [columns]="tokenColumns" [rows]="tokens()">
+              <ap-sortable-table [columns]="tokenColumns" [rows]="visibleTokens()">
                 <ng-template apCellTpl="status" let-r>
                   <ap-pill [kind]="tokenPill(r.status).kind">{{ t(tokenPill(r.status).labelKey) }}</ap-pill>
                 </ng-template>
@@ -299,6 +299,53 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                   }
                 </ng-template>
               </ap-sortable-table>
+            }
+          </div>
+
+          <!-- ── Approvals (who can approve a protected POS action) ── -->
+          <div class="card card-pad">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.approvals.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.approvals.sub') }}</div>
+              </div>
+            </div>
+            @if (loadingPosPolicy()) {
+              <div class="row gap-sm" style="padding:16px 0;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else {
+              <label class="row gap-sm" style="align-items:flex-start;margin-top:8px;"
+                     [style.cursor]="canEditPosPolicy() ? 'pointer' : 'default'"
+                     [style.opacity]="canEditPosPolicy() ? 1 : 0.6">
+                <input type="checkbox" style="margin-top:3px;flex-shrink:0;"
+                       [checked]="selfCloseShiftEnabled()"
+                       [disabled]="!canEditPosPolicy() || savingPosPolicy()"
+                       (change)="toggleSelfCloseShift()"/>
+                <span>
+                  <span class="strong">{{ t('settings.security.shiftClose.toggle') }}</span>
+                  <span class="muted small" style="display:block;">{{ t('settings.security.shiftClose.hint') }}</span>
+                </span>
+              </label>
+
+              <label class="row gap-sm" style="align-items:flex-start;margin-top:16px;"
+                     [style.cursor]="canEditPosPolicy() ? 'pointer' : 'default'"
+                     [style.opacity]="canEditPosPolicy() ? 1 : 0.6">
+                <input type="checkbox" style="margin-top:3px;flex-shrink:0;"
+                       [checked]="selfApprovalEnabled()"
+                       [disabled]="!canEditPosPolicy() || savingPosPolicy()"
+                       (change)="toggleSelfApproval()"/>
+                <span>
+                  <span class="strong">{{ t('settings.security.selfApproval.toggle') }}</span>
+                  <span class="muted small" style="display:block;">{{ t('settings.security.selfApproval.hint') }}</span>
+                </span>
+              </label>
+              @if (selfApprovalEnabled()) {
+                <div class="muted small mt-16">{{ t('settings.security.selfApproval.warning') }}</div>
+              }
+              @if (!canEditPosPolicy()) {
+                <div class="muted small mt-16">{{ t('settings.security.approvals.ownerOnly') }}</div>
+              }
             }
           </div>
 
@@ -583,10 +630,26 @@ export class SettingsComponent implements OnInit {
   readonly registers = signal<PosRegisterRow[]>([]);
   readonly loadingTokens = signal(true);
   readonly tokens = signal<PosEnrollmentTokenRow[]>([]);
+
+  // A revoked register and a used or expired setup code are finished business:
+  // nothing on this page can act on them, so listing them only makes the real
+  // devices harder to find. The rows stay in the database for the audit trail;
+  // this hides them from the page.
+  readonly visibleRegisters = computed(() => this.registers().filter((r) => r.status !== 'revoked'));
+  readonly visibleTokens = computed(() => this.tokens().filter((tk) => tk.status === 'active'));
   readonly loadingManagerPins = signal(true);
   readonly managerPins = signal<ManagerPinRow[]>([]);
   readonly resettingPinFor = signal<string | null>(null);
   readonly resetPinValue = signal('');
+
+  // ── Shift close policy ──────────────────────────────────────────────────
+  // Loosening approver separation is the owner's call, so admins see the
+  // switch (they manage the rest of this tab) but cannot move it.
+  readonly canEditPosPolicy = computed(() => this.auth.hasRole('owner'));
+  readonly loadingPosPolicy = signal(true);
+  readonly savingPosPolicy = signal(false);
+  readonly selfCloseShiftEnabled = signal(true);
+  readonly selfApprovalEnabled = signal(false);
 
   readonly registerColumns: TableColumn<PosRegisterRow>[] = [
     { key: 'displayName', label: 'Device',    labelKey: 'settings.col.name' },
@@ -637,7 +700,7 @@ export class SettingsComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     const tasks = [this.loadStore(), this.loadTeam(), this.loadReceiptProfile()];
     if (this.canManageRegisters()) {
-      tasks.push(this.loadRegisters(), this.loadTokens(), this.loadManagerPins());
+      tasks.push(this.loadRegisters(), this.loadTokens(), this.loadManagerPins(), this.loadPosPolicy());
     }
     await Promise.all(tasks);
   }
@@ -763,6 +826,54 @@ export class SettingsComponent implements OnInit {
       this.managerPins.set([]);
     } finally {
       this.loadingManagerPins.set(false);
+    }
+  }
+
+  private async loadPosPolicy(): Promise<void> {
+    try {
+      const policy = await this.settingsApi.getPosPolicy();
+      this.selfCloseShiftEnabled.set(policy.selfCloseShiftEnabled);
+      this.selfApprovalEnabled.set(policy.emergencySelfApprovalEnabled);
+    } catch {
+      // Leave the switches where they are; the POS keeps working either way and
+      // the server is the only authority on what an action actually requires.
+    } finally {
+      this.loadingPosPolicy.set(false);
+    }
+  }
+
+  async toggleSelfCloseShift(): Promise<void> {
+    await this.savePosPolicy(this.selfCloseShiftEnabled, (value) => ({ selfCloseShiftEnabled: value }),
+      (policy) => policy.selfCloseShiftEnabled);
+  }
+
+  async toggleSelfApproval(): Promise<void> {
+    await this.savePosPolicy(this.selfApprovalEnabled, (value) => ({ emergencySelfApprovalEnabled: value }),
+      (policy) => policy.emergencySelfApprovalEnabled);
+  }
+
+  /**
+   * Flips one switch optimistically (a switch that lags behind the tap reads as
+   * broken), then reconciles with whatever the server actually stored. Reverts
+   * on failure so the page never claims a setting that did not save.
+   */
+  private async savePosPolicy(
+    state: WritableSignal<boolean>,
+    payload: (value: boolean) => { selfCloseShiftEnabled?: boolean; emergencySelfApprovalEnabled?: boolean },
+    read: (policy: PosPolicy) => boolean,
+  ): Promise<void> {
+    if (this.savingPosPolicy() || !this.canEditPosPolicy()) return;
+    const next = !state();
+    this.savingPosPolicy.set(true);
+    state.set(next);
+    try {
+      state.set(read(await this.settingsApi.updatePosPolicy(payload(next))));
+      this.toast.success(this.t('settings.security.approvals.saved'));
+    } catch {
+      state.set(!next);
+      this.toast.error(this.t('settings.security.approvals.failed'));
+    } finally {
+      this.savingPosPolicy.set(false);
     }
   }
 

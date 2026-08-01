@@ -67,6 +67,7 @@ async function verifyManagerPin(context, body) {
       [context.tenantId],
     );
     let managerId = null;
+    let selfPinMatched = false;
     for (const manager of managers.rows) {
       // A manager-role cashier could otherwise approve their own void/refund/
       // etc. by entering their own PIN — the cashier role is structurally
@@ -75,11 +76,31 @@ async function verifyManagerPin(context, body) {
       // not, so self-approval must be rejected explicitly here (docs/15
       // Phase 3, P0-7) unless the tenant has opted into the audited
       // emergency exception.
-      if (manager.id === context.userId && !emergencySelfApprovalEnabled) continue;
+      const isSelf = manager.id === context.userId;
+      if (isSelf && !emergencySelfApprovalEnabled) {
+        // Still compare, so a blocked self-approval can be reported as such
+        // instead of as a wrong PIN. A single-manager shop otherwise sees
+        // "Manager PIN is incorrect" for a PIN that is perfectly correct.
+        if (await bcrypt.compare(pin, manager.pos_pin_hash)) selfPinMatched = true;
+        continue;
+      }
       if (await bcrypt.compare(pin, manager.pos_pin_hash)) {
         managerId = manager.id;
         break;
       }
+    }
+
+    // Not a brute-force attempt: the operator typed their own correct PIN, so
+    // this must not count toward the lockout counter either.
+    if (!managerId && selfPinMatched) {
+      await audit(client, context, 'pos.manager-pin.self-approval-blocked', 'pos_register', register.id, { action });
+      return {
+        error: new PosError(
+          403,
+          'SELF_APPROVAL_BLOCKED',
+          'That is your own manager PIN. Another manager has to approve this, or the owner can allow approving with your own PIN under Settings, Devices and Security, Approvals.',
+        ),
+      };
     }
 
     if (!managerId) {

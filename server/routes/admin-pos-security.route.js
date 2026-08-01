@@ -3,6 +3,7 @@ const { asyncHandler, ok } = require('./lib');
 const { PosError } = require('../lib/pos/errors');
 const { listAllRegisters, revokeRegister, listEnrollmentTokens, revokeEnrollmentToken } = require('../lib/pos/register-service');
 const { listManagerPins, clearManagerPin } = require('../lib/pos/manager-service');
+const { getPosPolicy, updatePosPolicy } = require('../lib/pos/policy-service');
 
 const router = Router();
 
@@ -41,6 +42,14 @@ router.get('/manager-pins', asyncHandler(async (req, res) => {
 
 router.post('/manager-pins/:userId/clear', asyncHandler(async (req, res) => {
   ok(res, await clearManagerPin(context(req), req.params.userId));
+}));
+
+router.get('/policy', asyncHandler(async (req, res) => {
+  ok(res, await getPosPolicy(context(req)));
+}));
+
+router.put('/policy', asyncHandler(async (req, res) => {
+  ok(res, await updatePosPolicy(context(req), req.body));
 }));
 
 // PosError shaping lives in the global error handler in index.js — see the

@@ -46,6 +46,49 @@ test('failed manager PIN persists its failure counter before returning an error'
 
 test('a manager cannot approve their own action with their own PIN (P0-7 approver separation)', async () => {
   const selfPinHash = await bcrypt.hash('1357', 12);
+  const statements = [];
+  const originalConnect = db.pool.connect;
+  db.pool.connect = async () => ({
+    async query(text) {
+      const sql = String(text).replace(/\s+/g, ' ').trim();
+      statements.push(sql);
+      if (sql.startsWith('SELECT * FROM pos_registers')) {
+        return { rowCount: 1, rows: [{ id: context.registerId, status: 'active' }] };
+      }
+      if (sql.startsWith('SELECT pos_emergency_self_approval_enabled FROM tenants')) {
+        return { rowCount: 1, rows: [{ pos_emergency_self_approval_enabled: false }] };
+      }
+      if (sql.startsWith('SELECT * FROM pos_pin_failures')) return { rowCount: 0, rows: [] };
+      if (sql.startsWith('SELECT id, pos_pin_hash FROM admin_users')) {
+        // Only the requesting cashier's own PIN hash matches — no other
+        // manager exists in this fixture, so the override must be rejected
+        // rather than silently succeed.
+        return { rowCount: 1, rows: [{ id: context.userId, pos_pin_hash: selfPinHash }] };
+      }
+      return { rowCount: 1, rows: [] };
+    },
+    release() {},
+  });
+
+  try {
+    await assert.rejects(
+      verifyManagerPin(context, { pin: '1357', action: 'void' }),
+      // Distinct from PIN_INVALID: the PIN is correct, the approver is not
+      // eligible. A single-manager shop otherwise reads "PIN is incorrect"
+      // and retypes a PIN that was right all along.
+      (error) => error instanceof PosError && error.code === 'SELF_APPROVAL_BLOCKED' && error.status === 403,
+    );
+    // A correct own-PIN entry is not a brute-force attempt, so it must not
+    // burn one of the five attempts before the register locks out.
+    assert.ok(!statements.some((sql) => sql.startsWith('INSERT INTO pos_pin_failures')));
+    assert.ok(!statements.some((sql) => sql.startsWith('INSERT INTO pos_manager_overrides')));
+  } finally {
+    db.pool.connect = originalConnect;
+  }
+});
+
+test('a wrong PIN in a single-manager shop still reports PIN_INVALID', async () => {
+  const selfPinHash = await bcrypt.hash('1357', 12);
   const originalConnect = db.pool.connect;
   db.pool.connect = async () => ({
     async query(text) {
@@ -58,9 +101,6 @@ test('a manager cannot approve their own action with their own PIN (P0-7 approve
       }
       if (sql.startsWith('SELECT * FROM pos_pin_failures')) return { rowCount: 0, rows: [] };
       if (sql.startsWith('SELECT id, pos_pin_hash FROM admin_users')) {
-        // Only the requesting cashier's own PIN hash matches — no other
-        // manager exists in this fixture, so a correct self-approval
-        // rejection must produce PIN_INVALID, not silently succeed.
         return { rowCount: 1, rows: [{ id: context.userId, pos_pin_hash: selfPinHash }] };
       }
       return { rowCount: 1, rows: [] };
@@ -70,7 +110,7 @@ test('a manager cannot approve their own action with their own PIN (P0-7 approve
 
   try {
     await assert.rejects(
-      verifyManagerPin(context, { pin: '1357', action: 'void' }),
+      verifyManagerPin(context, { pin: '2468', action: 'void' }),
       (error) => error instanceof PosError && error.code === 'PIN_INVALID',
     );
   } finally {

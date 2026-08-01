@@ -609,8 +609,12 @@
               </div>
             }
           </div>
-          <label>Reason<input [(ngModel)]="correctionReason" placeholder="Required permanent reason" /></label>
-          <label>Manager PIN<input [(ngModel)]="managerPin" type="password" inputmode="numeric" maxlength="8" /></label>
+          <label>Reason<input [(ngModel)]="correctionReason" name="correctionReason" placeholder="Required permanent reason" autocomplete="off" /></label>
+          <!-- autocomplete="one-time-code" is the only value Chrome honours on a
+               password input: with plain autocomplete="off" the password manager
+               filled the account email into Reason and the saved login password
+               into the PIN box, so every override failed with PIN_INVALID. -->
+          <label>Manager PIN<input [(ngModel)]="managerPin" name="correctionManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
           <div class="correction-actions">
             <button type="button" [disabled]="busy() || transaction.status !== 'completed'" (click)="refundCurrentTransaction()">Refund selected</button>
             <button class="danger-action" type="button" [disabled]="busy() || transaction.status !== 'completed' || !!transaction.refunds?.length" (click)="voidCurrentTransaction()">Void entire sale</button>
@@ -698,7 +702,9 @@
             }
           }
           <label class="money-field"><span>Physical cash</span><div><b>QAR</b><input [(ngModel)]="physicalCash" inputmode="decimal" /></div></label>
-          <label>Manager PIN<input [(ngModel)]="managerPin" type="password" inputmode="numeric" maxlength="8" /></label>
+          @if (!shiftSelfCloseAllowed()) {
+            <label>Manager PIN<input [(ngModel)]="managerPin" name="zReportManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          }
           <button class="primary-action" type="button" [disabled]="busy() || pendingSales() > 0 || rejectedSales() > 0" (click)="closeCurrentShift()">Create Z report and close</button>
         }
       </section>
@@ -724,9 +730,9 @@
         @if (cashMovementKind !== 'no_sale_drawer_open') {
           <label class="money-field"><span>Amount</span><div><b>QAR</b><input [(ngModel)]="cashMovementAmount" inputmode="decimal" /></div></label>
         }
-        <label>Reason<input [(ngModel)]="cashMovementReason" placeholder="Required" /></label>
+        <label>Reason<input [(ngModel)]="cashMovementReason" name="cashMovementReason" placeholder="Required" autocomplete="off" /></label>
         @if (cashMovementNeedsOverride()) {
-          <label>Manager PIN<input [(ngModel)]="cashMovementManagerPin" type="password" inputmode="numeric" maxlength="8" /></label>
+          <label>Manager PIN<input [(ngModel)]="cashMovementManagerPin" name="cashMovementManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
         }
         <button class="primary-action" type="button"
           [disabled]="busy() || !cashMovementReason.trim() || (cashMovementNeedsOverride() && !cashMovementManagerPin)"

@@ -560,9 +560,16 @@ export class PosComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this.hardware.ready()) {
+      // Two different situations wear the same "not ready" badge, and telling
+      // them apart matters at 9am: a printer that cannot be reached stops
+      // receipts now, while a stopped signer only costs offline printing,
+      // which is invisible until the internet drops.
+      const printerReady = this.hardware.connected() && this.hardware.printerAvailable();
       this.toast.warning(
         'Hardware is not fully ready',
-        'The shift can open, but receipts or offline printing may be unavailable until the automatic reconnect succeeds.',
+        printerReady
+          ? 'Receipts will print normally. The local signer is not running, so printing will stop working if this register loses internet.'
+          : 'The shift can open, but receipts may not print until the automatic reconnect succeeds.',
       );
     }
     // persist() resolving false often means private/incognito mode, where an
@@ -1168,10 +1175,21 @@ export class PosComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * The shift's own operator closes it without a manager PIN when the shop
+   * allows self-close (docs/12, "Manager PIN"). The server decides; this only
+   * decides whether the PIN field is shown and required.
+   */
+  shiftSelfCloseAllowed(): boolean {
+    return this.shiftSummary()?.selfCloseAllowed === true;
+  }
+
   async closeCurrentShift(): Promise<void> {
     const summary = this.shiftSummary();
     const physicalCashCents = this.moneyInputToCents(this.physicalCash);
-    if (!summary || physicalCashCents === null || !this.managerPin) return;
+    if (!summary || physicalCashCents === null) return;
+    const selfClose = this.shiftSelfCloseAllowed();
+    if (!selfClose && !this.managerPin) return;
     await this.refreshQueueState();
     if (this.pendingSales() || this.rejectedSales()) {
       this.toast.warning('Resolve all pending and rejected offline sales before closing the shift.');
@@ -1180,13 +1198,12 @@ export class PosComponent implements OnInit, OnDestroy {
     this.busy.set(true);
     try {
       await this.reportSyncState();
-      const override = await this.pos.verifyManagerPin(this.managerPin, 'z-report');
+      const override = selfClose ? null : await this.pos.verifyManagerPin(this.managerPin, 'z-report');
       await this.pos.closeShift({
         shiftId: summary.shiftId,
         physicalCashCents,
         idempotencyKey: crypto.randomUUID(),
-        managerOverrideId: override.overrideId,
-        managerOverrideToken: override.token,
+        ...(override ? { managerOverrideId: override.overrideId, managerOverrideToken: override.token } : {}),
       });
       this.dialog.set('none');
       this.toast.success('Shift closed', 'Z report generated.');
