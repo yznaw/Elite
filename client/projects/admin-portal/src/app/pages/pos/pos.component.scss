@@ -184,6 +184,14 @@ button {
   text-align: center;
 }
 
+.resume-error {
+  max-width: 46ch;
+  font-family: var(--pos-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: #79817e;
+}
+.resume-actions { margin-top: 18px; }
+
 .center-stage h1,
 .setup-intro h1,
 .shift-card h1,

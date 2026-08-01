@@ -208,6 +208,10 @@ Owners and admins can enter a terminal name on the setup screen and create/consu
 
 Clearing the browser profile removes the local credential. Treat that as a terminal re-enrollment event; disable/revoke the abandoned register record before issuing a new identity.
 
+**Logging out does not un-enroll a register.** The identity lives in IndexedDB and survives logout; only the session's `posRegisterId` binding is lost, and `initialize()` re-binds it automatically by calling `/registers/check-in` with the stored credential after `/registers/current` answers `428`.
+
+That recovery existed but was masked: the outer `catch` in `initialize()` sent *any* failure to the enrollment phase, so a slow catalog load or a stumble in hardware setup showed "paste a one-time token" on a counter that was perfectly enrolled — a dead end for a cashier, since issuing a token is owner-only. The phase is now chosen by cause: `resume-failed` (a retry screen that leaves the identity alone) when a stored identity exists, and `enrollment` only when there is no identity or the server actively disowned this register (`REGISTER_CREDENTIAL_INVALID`, `REGISTER_NOT_FOUND`, `REGISTER_DISABLED`).
+
 ### Manager PIN
 
 - PINs are 4 to 8 digits and stored only as bcrypt hashes.

@@ -34,6 +34,19 @@
     </section>
   }
 
+  @if (phase() === 'resume-failed') {
+    <section class="center-stage">
+      <h1>Could not open this register</h1>
+      <p>This counter is still connected to Elite. Nothing was lost, and no setup is needed.</p>
+      @if (resumeError()) { <p class="resume-error">{{ resumeError() }}</p> }
+      <div class="resume-actions">
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="retryResume()">
+          {{ busy() ? 'Trying again...' : 'Try again' }}
+        </button>
+      </div>
+    </section>
+  }
+
   @if (phase() === 'enrollment') {
     <section class="setup-stage">
       <div class="setup-intro">

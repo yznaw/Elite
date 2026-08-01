@@ -31,7 +31,7 @@ import { PaginationComponent } from '../../shared/pagination/pagination.componen
 import { checkForPosUpdate, posBuildVersions, setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
 import { PosReceiptData } from '../../services/pos-receipt-renderer.service';
 
-type PosPhase = 'loading' | 'enrollment' | 'shift' | 'shift-recovery' | 'selling';
+type PosPhase = 'loading' | 'enrollment' | 'resume-failed' | 'shift' | 'shift-recovery' | 'selling';
 type PaymentMethod = 'cash' | 'card';
 interface CartLine { item: PosCatalogItem; quantity: number }
 interface ProductGroup {
@@ -87,6 +87,7 @@ export class PosComponent implements OnInit, OnDestroy {
   private customerSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly phase = signal<PosPhase>('loading');
+  readonly resumeError = signal<string | null>(null);
   readonly busy = signal(false);
   readonly online = signal(navigator.onLine);
   readonly enrollMode = signal<'token' | 'create'>('token');
@@ -452,11 +453,43 @@ export class PosComponent implements OnInit, OnDestroy {
         this.phase.set('shift');
       }
     } catch (error) {
+      // Enrollment is a one-time, owner-only ceremony: it needs a fresh token
+      // from Settings and a person who can generate one. Sending a register
+      // there is only correct when its identity is genuinely gone or the
+      // server has rejected it. Anything else — a slow catalog load, a
+      // hiccup fetching the receipt block, a stumble in hardware setup —
+      // used to land here too, so a cashier who logged out by accident was
+      // met with "paste a one-time token" on a counter that was fine.
+      const identity = await this.local.getRegister().catch(() => null);
+      if (identity && !this.isRegisterRejected(error)) {
+        this.resumeError.set(this.errorMessage(error));
+        this.phase.set('resume-failed');
+        return;
+      }
       this.toast.warning('Could not resume this register', this.errorMessage(error));
       this.phase.set('enrollment');
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /**
+   * True only when the server has actively disowned this register, which is
+   * the one case where re-enrolling is the real fix. A revoked or deleted
+   * register, or a credential that no longer matches.
+   */
+  private isRegisterRejected(error: unknown): boolean {
+    const code = (error as { error?: { code?: string } })?.error?.code;
+    return code === 'REGISTER_CREDENTIAL_INVALID'
+      || code === 'REGISTER_NOT_FOUND'
+      || code === 'REGISTER_DISABLED';
+  }
+
+  /** Retry after a failed resume, without touching the stored identity. */
+  async retryResume(): Promise<void> {
+    this.resumeError.set(null);
+    this.phase.set('loading');
+    await this.initialize();
   }
 
   private async resumeOffline(identity: { registerId: string; displayName: string }): Promise<void> {
