@@ -1420,6 +1420,17 @@ label input:focus {
 .printer-scan-row button:disabled { opacity: 0.5; cursor: not-allowed; }
 .printer-scan-hint { margin-top: 6px; color: #79817e; font-size: 11px; }
 
+// Sits on the Update button in the tools bar when a newer build is waiting.
+.update-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-inline-start: 5px;
+  border-radius: 50%;
+  background: #b8862b;
+  vertical-align: middle;
+}
+
 .pos-build {
   margin-top: 22px;
   padding-top: 18px;

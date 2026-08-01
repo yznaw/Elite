@@ -144,6 +144,11 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly posBuildRunning = signal<string | null>(null);
   readonly posBuildDeployed = signal<string | null>(null);
   readonly checkingPosUpdate = signal(false);
+  readonly posUpdateAvailable = computed(() => {
+    const running = this.posBuildRunning();
+    const deployed = this.posBuildDeployed();
+    return Boolean(running && deployed && running !== deployed);
+  });
   readonly refColors = signal<RefColor[]>([]);
   private readonly posUpdateSafetyReady = signal(false);
   private readonly posUpdateSafetyEffect = effect(() => {
@@ -282,6 +287,7 @@ export class PosComponent implements OnInit, OnDestroy {
   private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
   private storageEstimateTimer: ReturnType<typeof setInterval> | null = null;
   private freshnessClockTimer: ReturnType<typeof setInterval> | null = null;
+  private posBuildCheckTimer: ReturnType<typeof setInterval> | null = null;
   private readonly onOnline = () => {
     this.online.set(true);
     void this.syncPendingSales();
@@ -311,6 +317,11 @@ export class PosComponent implements OnInit, OnDestroy {
     this.storageEstimateTimer = setInterval(() => void this.updateStorageEstimate(), 5 * 60 * 1000);
     this.freshnessClockTimer = setInterval(() => this.freshnessClock.set(Date.now()), 60 * 1000);
     void this.updateStorageEstimate();
+    // A till stays open for days. Poll for a newer build so the Update button
+    // carries a dot on its own, instead of the cashier having to guess that
+    // one exists. Reading versions never reloads anything by itself.
+    void this.loadPosBuildVersions();
+    this.posBuildCheckTimer = setInterval(() => void this.loadPosBuildVersions(), 15 * 60 * 1000);
   }
 
   ngOnDestroy(): void {
@@ -325,6 +336,7 @@ export class PosComponent implements OnInit, OnDestroy {
     if (this.customerSearchTimer) clearTimeout(this.customerSearchTimer);
     if (this.storageEstimateTimer) clearInterval(this.storageEstimateTimer);
     if (this.freshnessClockTimer) clearInterval(this.freshnessClockTimer);
+    if (this.posBuildCheckTimer) clearInterval(this.posBuildCheckTimer);
     this.eventSource?.close();
   }
 

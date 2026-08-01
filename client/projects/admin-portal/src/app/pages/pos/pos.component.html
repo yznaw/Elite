@@ -150,6 +150,11 @@
             <button type="button" [disabled]="!online()" (click)="dialog.set('operations')">Returns / voids</button>
           </div>
           <div>
+            <button type="button" [disabled]="checkingPosUpdate()" (click)="checkPosUpdate()"
+              [title]="posUpdateAvailable() ? 'A newer version is available' : 'Check for a newer version'">
+              {{ checkingPosUpdate() ? 'Checking...' : 'Update' }}
+              @if (posUpdateAvailable()) { <i class="update-dot"></i> }
+            </button>
             <button type="button" (click)="openHardwareDialog()">Hardware <i [class.ready]="hardware.ready()"></i></button>
             <button type="button" [disabled]="!online()" (click)="openShiftDialog()">Shift report</button>
           </div>
