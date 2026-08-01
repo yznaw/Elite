@@ -495,6 +495,8 @@ POS tools → Hardware now ends with a **POS version** block showing the build t
 
 The button respects the same safety gate as an automatic update. With a cart, an open payment, or queued offline sales, it reports that the update is held back rather than reloading the page under the cashier's hands.
 
+**The receipt canvas width must be a multiple of 8.** ESC/POS raster packs 8 horizontal pixels into each byte, so a width that does not divide evenly cannot be converted and QZ rejects the entire job with `Cannot parse (BASE64)iVBOR...` — an error that names the encoding and says nothing about dimensions. The original 576px (72 × 8) printed correctly; the paper-cutoff fix narrowed it to the arithmetically correct 510px for the 72mm printable area and silently broke every receipt. It is now 504px (63 × 8), which stays inside the printable area. Do not "correct" this to a more precise non-multiple of 8.
+
 **The receipt image must be sent with `flavor: 'base64'`.** The body is a rasterized canvas (Arabic needs real text shaping, which ESC/POS text mode cannot do), and QZ's raw image path defaults `flavor` to a file path when it is omitted, so a canvas data URL fails with `Cannot parse (BASE64)iVBORw0KGgo...` and nothing prints. QZ wants the bare payload, so the `data:image/png;base64,` prefix `toDataURL()` produces is stripped at the QZ boundary; the renderer still returns a proper data URL.
 
 **A failed print does not tear down the connection.** Paper-out, a malformed payload, or a job the driver refuses all surface with the websocket still open, so `printRendered` consults `qz.websocket.isActive()` before marking the register disconnected. Previously any print rejection scheduled a reconnect on top of an unrelated fault.

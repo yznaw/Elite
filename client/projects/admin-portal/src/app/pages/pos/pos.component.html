@@ -155,7 +155,7 @@
               {{ checkingPosUpdate() ? 'Checking...' : 'Update' }}
               @if (posUpdateAvailable()) { <i class="update-dot"></i> }
             </button>
-            <button type="button" (click)="openHardwareDialog()">Hardware <i [class.ready]="hardware.ready()"></i></button>
+            <button type="button" (click)="openHardwareDialog()">Hardware <i [class.ready]="hardware.printerReady()"></i></button>
             <button type="button" [disabled]="!online()" (click)="openShiftDialog()">Shift report</button>
           </div>
         </nav>

@@ -34,12 +34,18 @@ export class PosHardwareService {
   readonly configured = signal(false);
   readonly printerAvailable = signal(false);
   readonly signerReachable = signal<boolean | null>(null);
-  readonly ready = computed(() => (
-    this.configured()
-    && this.connected()
-    && this.printerAvailable()
-    && this.signerReachable() === true
+  /**
+   * Everything needed to put a receipt on paper right now. Deliberately does
+   * not include the signer: that is only the offline signing fallback, so a
+   * till with a stopped signer prints perfectly well while it has internet.
+   * This is what the tools-bar indicator reflects, otherwise the light stays
+   * red on a register that is printing fine and cashiers learn to ignore it.
+   */
+  readonly printerReady = computed(() => (
+    this.configured() && this.connected() && this.printerAvailable()
   ));
+  /** Everything above plus offline printing. Drives the start-of-day strip. */
+  readonly ready = computed(() => this.printerReady() && this.signerReachable() === true);
   private settings: PosHardwareSettings | null = null;
   private securityConfigured = false;
   private connectionCallbacksConfigured = false;
