@@ -487,6 +487,10 @@ Hardware configuration is terminal-local and stored in IndexedDB:
 - Local device signer URL.
 - Drawer pin 2, pin 5, or disabled.
 
+**The receipt image must be sent with `flavor: 'base64'`.** The body is a rasterized canvas (Arabic needs real text shaping, which ESC/POS text mode cannot do), and QZ's raw image path defaults `flavor` to a file path when it is omitted, so a canvas data URL fails with `Cannot parse (BASE64)iVBORw0KGgo...` and nothing prints. QZ wants the bare payload, so the `data:image/png;base64,` prefix `toDataURL()` produces is stripped at the QZ boundary; the renderer still returns a proper data URL.
+
+**A failed print does not tear down the connection.** Paper-out, a malformed payload, or a job the driver refuses all surface with the websocket still open, so `printRendered` consults `qz.websocket.isActive()` before marking the register disconnected. Previously any print rejection scheduled a reconnect on top of an unrelated fault.
+
 **An unreachable signer does not fail the hardware connection.** Because step 5 is a fallback for step 4, a register whose printer answers prints fine without the signer running; only offline printing is lost. `connectAndVerifyPrinter` therefore records the signer state and returns instead of throwing. It used to throw, which discarded a verified QZ websocket and re-ran the whole connect cycle every 30 seconds forever (a register was observed at attempt 45 with `printer check ok` logged on every pass, while `ERR_CONNECTION_REFUSED` on `127.0.0.1:8182` was the only real fault). While the signer is down, a 60-second poll watches for it to come back and stops as soon as it answers; a healthy register runs no timer.
 
 `ready()` still requires the signer, since it drives the start-of-day readiness strip, and the open-shift warning now distinguishes the two cases: a printer that cannot be reached stops receipts now, a stopped signer only costs printing if the register later loses internet.

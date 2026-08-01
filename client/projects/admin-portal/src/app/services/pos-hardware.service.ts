@@ -360,11 +360,17 @@ export class PosHardwareService {
     // which raw ESC/POS text mode cannot do — see pos-receipt-renderer.service.ts)
     // printed through QZ's escpos image path; the QR/cut footer is still sent
     // as raw ESC/POS commands since it's not text.
-    const data: Array<{ type: string; format: string; data: string; options?: Record<string, unknown> } | string> = [
+    const data: Array<{ type: string; format: string; flavor?: string; data: string; options?: Record<string, unknown> } | string> = [
       {
         type: 'raw',
         format: 'image',
-        data: rendered.imageDataUrl,
+        // `flavor` is not optional here. Without it QZ treats `data` as a file
+        // path or URL, and a canvas data URL fails to parse — the register
+        // reported `Cannot parse (BASE64)iVBORw0KGgo...` and printed nothing.
+        // QZ wants the bare base64 payload, so the `data:image/png;base64,`
+        // prefix that toDataURL() adds has to come off.
+        flavor: 'base64',
+        data: rendered.imageDataUrl.replace(/^data:image\/[a-z+]+;base64,/i, ''),
         // QZ's default quantization ("alpha", threshold 127) applies a hard
         // black/white cutoff per pixel — a real test print showed this
         // dropping thin anti-aliased strokes out of small canvas-rendered
@@ -385,10 +391,17 @@ export class PosHardwareService {
       this.printerAvailable.set(true);
       logStage(`${stage} — done`, { printerName: this.settings.printerName });
     } catch (error) {
-      this.connected.set(false);
-      this.printerAvailable.set(false);
-      this.scheduleReconnect();
-      logError(stage, error, { printerName: this.settings.printerName });
+      // A rejected print is not proof the link is down. A malformed payload,
+      // a paper-out, or a job the driver refuses all land here with the
+      // websocket still open, and tearing the connection down over one of
+      // those just adds a reconnect cycle on top of an unrelated fault.
+      // Trust QZ's own view of the socket instead of the failure itself.
+      if (!qz.websocket.isActive()) {
+        this.connected.set(false);
+        this.printerAvailable.set(false);
+        this.scheduleReconnect();
+      }
+      logError(stage, error, { printerName: this.settings.printerName, socketActive: qz.websocket.isActive() });
       throw error;
     }
   }
