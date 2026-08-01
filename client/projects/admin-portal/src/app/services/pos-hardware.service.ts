@@ -20,8 +20,24 @@ function logStage(stage: string, detail?: Record<string, unknown>): void {
   console.log(`${LOG_PREFIX} ${stage}`, detail ?? '');
 }
 
+/**
+ * QZ builds its raw-print failures as
+ *   "Cannot parse (BASE64)<the entire image payload> into a raw IMAGE command: <cause>"
+ * so the only part that says what actually went wrong sits behind ~100KB of
+ * base64 and every console, toast and log record truncates before reaching it.
+ * Collapsing long base64 runs keeps both ends of the message readable.
+ */
+export function condenseHardwareError(message: string): string {
+  return message.replace(/[A-Za-z0-9+/=]{120,}/g, (blob) => `<base64 ${blob.length} chars>`);
+}
+
 function logError(stage: string, error: unknown, detail?: Record<string, unknown>): void {
-  console.error(`${LOG_PREFIX} ${stage} FAILED`, { error, ...detail });
+  const message = (error as { message?: string } | null)?.message;
+  console.error(`${LOG_PREFIX} ${stage} FAILED`, {
+    error,
+    ...(message ? { reason: condenseHardwareError(message) } : {}),
+    ...detail,
+  });
 }
 
 @Injectable({ providedIn: 'root' })
@@ -295,7 +311,10 @@ export class PosHardwareService {
   }
 
   private errorText(error: unknown): string {
-    return String((error as { message?: string } | null)?.message || error || 'Unknown hardware error').slice(0, 500);
+    const raw = String((error as { message?: string } | null)?.message || error || 'Unknown hardware error');
+    // Condense before slicing: a raw QZ print failure is all base64 for its
+    // first ~100KB, so a plain slice(0, 500) stored nothing but the payload.
+    return condenseHardwareError(raw).slice(0, 500);
   }
 
   /**

@@ -23,7 +23,7 @@ import {
   PosTransactionItem,
   PosZReport,
 } from '../../services/pos.service';
-import { PosHardwareService } from '../../services/pos-hardware.service';
+import { PosHardwareService, condenseHardwareError } from '../../services/pos-hardware.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
 import { ToastService } from '../../services/toast.service';
 import { ClientLoggerService } from '../../services/client-logger.service';
@@ -1926,6 +1926,10 @@ export class PosComponent implements OnInit, OnDestroy {
       message = candidate.error?.message || candidate.message || message;
       reference = candidate.error?.requestId ?? null;
     }
+    // A QZ print failure buries its cause behind the whole base64 payload, so
+    // an untouched message fills the toast with image data and shows the
+    // cashier nothing.
+    message = condenseHardwareError(message);
 
     if (!reference) return message;
     // Plain string, not an i18n key: this component is deliberately
