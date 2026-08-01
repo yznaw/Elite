@@ -59,12 +59,41 @@ export async function checkForPosUpdate(): Promise<PosUpdateResult> {
     return 'reloading';
   }
   await registration.update();
+  // update() resolves once the *check* is done, not the install. Reporting
+  // "already up to date" here while the new build is still downloading is how
+  // the button appeared to do nothing.
+  await settleInstalling(registration);
   if (!registration.waiting) return 'current';
   if (!posUpdateSafe) return 'busy';
-  // Activating makes the new worker take over, and the controllerchange
-  // listener above reloads the page onto the new build.
+
+  // Drive the reload from here rather than leaning on the passive
+  // controllerchange listener: that one stands down when the page loaded
+  // without a controller (the first load after a worker is unregistered), so
+  // the toast said "the register will reload" and nothing happened. Claiming
+  // the reload also stops the listener from firing a second one.
+  reloadStarted = true;
+  const activated = new Promise<void>((resolve) => {
+    navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+  });
   activateWaitingUpdate();
+  // Reload even if the takeover never reports back. The new worker is already
+  // installed, so the reload picks it up either way.
+  await Promise.race([activated, new Promise((resolve) => setTimeout(resolve, 3000))]);
+  window.location.reload();
   return 'updating';
+}
+
+/** Resolves once any in-flight worker install has finished (or failed). */
+function settleInstalling(reg: ServiceWorkerRegistration): Promise<void> {
+  const installing = reg.installing;
+  if (!installing) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => resolve();
+    installing.addEventListener('statechange', () => {
+      if (installing.state === 'installed' || installing.state === 'redundant') done();
+    });
+    setTimeout(done, 10000);
+  });
 }
 
 /**
