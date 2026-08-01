@@ -491,6 +491,16 @@ Hardware configuration is terminal-local and stored in IndexedDB:
 - Local device signer URL.
 - Drawer pin 2, pin 5, or disabled.
 
+### Touch sizing
+
+Every register is a touchscreen, so the POS treats 44px (the accessibility floor for a fingertip) as a floor rather than a target. Controls a cashier hits repeatedly, at speed, standing, often one-handed while holding the product are sized past it: modal close 52px, colour pills and quantity steppers 56px, size tiles 118px.
+
+Three rules apply to every button under `.pos-shell` rather than being repeated per component: `touch-action: manipulation` (drops the ~300ms the browser holds waiting for a double-tap-to-zoom, which reads as a laggy screen), `-webkit-tap-highlight-color: transparent` plus a deliberate `:active` scale (touch has no hover, so the press is the only chance to confirm the tap landed — without it cashiers tap twice), and `user-select: none` (repeated taps otherwise select the label and raise the text-selection handles mid-sale).
+
+Spacing matters as much as size: adjacent colour pills are the easiest thing to mis-tap and a wrong colour is only caught at the receipt.
+
+**A size tile never shows a colour name.** `sizeLabel()` must not fall back to `item.variant`, which the server builds as `color / size / material` joined — a variant with no size collapses to just its colour, which put a tile reading "Black" in a row with 5, 5.5 and 6. A sizeless variant reads "One size".
+
 ### Checking the running build
 
 The POS service worker holds a new build back until checkout is idle, but nothing ever called `registration.update()`, so the browser only looked for one on navigation. A till left open all day could sit several deploys behind with nothing on screen saying so, which made "is the fix live on this register?" unanswerable during remote support.

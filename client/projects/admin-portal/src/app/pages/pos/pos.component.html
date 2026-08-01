@@ -359,7 +359,7 @@
   @if (selectedProductGroup(); as group) {
     <div class="modal-backdrop" (click)="closeVariantPicker()">
       <section class="variant-picker" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="closeVariantPicker()">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="closeVariantPicker()">&times;</button>
         <span class="eyebrow">SELECT VARIANT</span>
         <h2>{{ group.title }}</h2>
 
@@ -434,16 +434,16 @@
               <span style="color:#737c78;font-size:10px">{{ formatMoney(selected.priceCents) }} each · {{ formatMoney(selectedVariantTotalCents()) }} total</span>
             </div>
             <div class="variant-summary-actions">
-              <div style="display:flex;align-items:center;border:1px solid var(--pos-line);background:#fff">
-                <button type="button" [disabled]="selectedVariantQuantity() <= 1" style="min-width:38px;padding:12px;border:0;background:transparent;color:var(--pos-ink)" (click)="changeSelectedVariantQuantity(-1)">-</button>
-                <span style="min-width:34px;text-align:center;font-weight:800">{{ selectedVariantQuantity() }}</span>
-                <button type="button" [disabled]="selectedVariantQuantity() >= selectedVariantMaxQuantity()" style="min-width:38px;padding:12px;border:0;background:transparent;color:var(--pos-ink)" (click)="changeSelectedVariantQuantity(1)">+</button>
+              <div class="qty-stepper">
+                <button type="button" aria-label="Decrease quantity" [disabled]="selectedVariantQuantity() <= 1" (click)="changeSelectedVariantQuantity(-1)">-</button>
+                <span>{{ selectedVariantQuantity() }}</span>
+                <button type="button" aria-label="Increase quantity" [disabled]="selectedVariantQuantity() >= selectedVariantMaxQuantity()" (click)="changeSelectedVariantQuantity(1)">+</button>
               </div>
-              <button type="button" [disabled]="selectedVariantMaxQuantity() <= 0" style="min-width:150px;padding:14px 18px;border:0;background:var(--pos-orange);color:#fff;font-weight:800;cursor:pointer" (click)="addSelectedVariant()">Add to cart · {{ formatMoney(selectedVariantTotalCents()) }}</button>
+              <button class="add-to-cart" type="button" [disabled]="selectedVariantMaxQuantity() <= 0" (click)="addSelectedVariant()">Add to cart · {{ formatMoney(selectedVariantTotalCents()) }}</button>
             </div>
           } @else {
             <span>Select a size to continue</span>
-            <button type="button" disabled style="min-width:150px;padding:14px 18px;border:0;background:var(--pos-orange);color:#fff;font-weight:800">Add to cart</button>
+            <button class="add-to-cart" type="button" disabled>Add to cart</button>
           }
         </div>
       </section>
@@ -453,7 +453,7 @@
   @if (paymentOpen()) {
     <div class="modal-backdrop" (click)="paymentOpen.set(false)">
       <section class="payment-sheet" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="paymentOpen.set(false)">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="paymentOpen.set(false)">&times;</button>
         <span class="eyebrow">PAYMENT</span>
         <h2>{{ formatMoney(totalCents()) }}</h2>
 
@@ -576,7 +576,7 @@
   @if (dialog() === 'park') {
     <div class="modal-backdrop" (click)="dialog.set('none')">
       <section class="utility-sheet compact" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
         <span class="eyebrow">PARK SALE</span>
         <h2>Hold this cart</h2>
         <label>Reference<input [(ngModel)]="parkLabel" placeholder="Customer or note" maxlength="80" /></label>
@@ -588,7 +588,7 @@
   @if (dialog() === 'parked') {
     <div class="modal-backdrop" (click)="dialog.set('none')">
       <section class="utility-sheet" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
         <span class="eyebrow">PARKED SALES</span>
         <h2>Resume a cart</h2>
         <div class="parked-list">
@@ -606,7 +606,7 @@
   @if (dialog() === 'operations') {
     <div class="modal-backdrop" (click)="dialog.set('none')">
       <section class="utility-sheet operations-sheet" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
         <span class="eyebrow">POST-SALE CORRECTION</span>
         <h2>Refund or void</h2>
         <div class="lookup-row">
@@ -645,7 +645,7 @@
   @if (dialog() === 'hardware') {
     <div class="modal-backdrop" (click)="dialog.set('none')">
       <section class="utility-sheet compact" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
         <span class="eyebrow">QZ TRAY</span>
         <h2>Receipt hardware</h2>
         <label>Printer name
@@ -699,7 +699,7 @@
   @if (dialog() === 'shift') {
     <div class="modal-backdrop" (click)="dialog.set('none')">
       <section class="utility-sheet shift-report-sheet" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
         <span class="eyebrow">X / Z REPORT</span>
         <h2>Current shift</h2>
         @if (shiftSummary(); as summary) {
@@ -751,7 +751,7 @@
   @if (dialog() === 'cash-movement') {
     <div class="modal-backdrop" (click)="dialog.set('none')">
       <section class="utility-sheet compact" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
         <span class="eyebrow">CASH DRAWER</span>
         <h2>Cash movement</h2>
 
@@ -794,7 +794,7 @@
   @if (dialog() === 'z-history') {
     <div class="modal-backdrop" (click)="dialog.set('none')">
       <section class="utility-sheet shift-report-sheet" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" (click)="dialog.set('none')">Close</button>
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
         <span class="eyebrow">HISTORY</span>
         <h2>Z-reports</h2>
         @if (loadingZHistory()) {

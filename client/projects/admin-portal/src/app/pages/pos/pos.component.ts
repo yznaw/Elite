@@ -1494,7 +1494,12 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   sizeLabel(item: PosCatalogItem): string {
-    return item.size || item.variant || item.sku;
+    if (item.size) return item.size;
+    // Never fall back to `variant` here. The server builds it as
+    // "color / size / material" joined, so a variant with no size collapses to
+    // just its colour — which printed a tile reading "Black" in the size grid,
+    // in a row with 5, 5.5 and 6. A sizeless variant is one size, so say that.
+    return 'One size';
   }
 
   colorCssFor(name: string): string {
