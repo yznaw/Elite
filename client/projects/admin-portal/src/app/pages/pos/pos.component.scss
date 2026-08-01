@@ -1420,6 +1420,30 @@ label input:focus {
 .printer-scan-row button:disabled { opacity: 0.5; cursor: not-allowed; }
 .printer-scan-hint { margin-top: 6px; color: #79817e; font-size: 11px; }
 
+.pos-build {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--pos-line);
+
+  h3 { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: #79817e; }
+  // The shared .muted-note centres itself for empty states; this one sits in a
+  // left-aligned settings column.
+  .muted-note { padding: 0 0 10px; text-align: start; line-height: 1.5; }
+  b { font-family: var(--pos-mono, ui-monospace, monospace); font-weight: 600; }
+  span { display: block; }
+  .build-stale { color: #9a5b16; }
+
+  button {
+    padding: 7px 14px;
+    font-size: 12px;
+    border: 1px solid var(--pos-line);
+    background: #fff;
+    cursor: pointer;
+
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+}
+
 .lookup-row { display: grid; grid-template-columns: 1fr auto; }
 .lookup-row input {
   min-width: 0;

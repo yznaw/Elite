@@ -28,7 +28,7 @@ import { AdminRefService, RefColor } from '../../services/admin-ref.service';
 import { ToastService } from '../../services/toast.service';
 import { ClientLoggerService } from '../../services/client-logger.service';
 import { PaginationComponent } from '../../shared/pagination/pagination.component';
-import { setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
+import { checkForPosUpdate, posBuildVersions, setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
 import { PosReceiptData } from '../../services/pos-receipt-renderer.service';
 
 type PosPhase = 'loading' | 'enrollment' | 'shift' | 'shift-recovery' | 'selling';
@@ -141,6 +141,9 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly cashMovements = signal<PosCashMovement[]>([]);
   readonly zReportHistory = signal<PosZReport[]>([]);
   readonly loadingZHistory = signal(false);
+  readonly posBuildRunning = signal<string | null>(null);
+  readonly posBuildDeployed = signal<string | null>(null);
+  readonly checkingPosUpdate = signal(false);
   readonly refColors = signal<RefColor[]>([]);
   private readonly posUpdateSafetyReady = signal(false);
   private readonly posUpdateSafetyEffect = effect(() => {
@@ -1125,11 +1128,45 @@ export class PosComponent implements OnInit, OnDestroy {
     this.hardwareSignerUrl = settings?.deviceSignerUrl || 'http://127.0.0.1:8182';
     this.hardwareDrawerPulse = settings?.drawerPulse || 'epson-pin-2';
     this.dialog.set('hardware');
+    void this.loadPosBuildVersions();
     // Re-typing the exact QZ printer name from memory is the main friction
     // point after site data gets cleared (browser "clear cookies" wipes the
     // IndexedDB-stored setting too, not just cookies). Auto-scan whenever
     // nothing is configured yet so re-setup is a click, not a memory test.
     if (!this.hardwarePrinter) await this.discoverPrinters();
+  }
+
+  private async loadPosBuildVersions(): Promise<void> {
+    const { running, deployed } = await posBuildVersions();
+    this.posBuildRunning.set(running);
+    this.posBuildDeployed.set(deployed);
+  }
+
+  /**
+   * A till left open all day only looks for a new build on navigation, so it
+   * can run several deploys behind with nothing on screen saying so. This is
+   * the manual check, and it reloads onto the new build when there is one.
+   */
+  async checkPosUpdate(): Promise<void> {
+    this.checkingPosUpdate.set(true);
+    try {
+      const result = await checkForPosUpdate();
+      await this.loadPosBuildVersions();
+      if (result === 'updating') {
+        this.toast.success('Updating', 'A newer version was found. The register will reload.');
+      } else if (result === 'current') {
+        this.toast.success('Up to date', 'This register is already running the newest version.');
+      } else if (result === 'busy') {
+        this.toast.warning(
+          'Update is ready but held back',
+          'Finish the sale and clear any queued offline sales first, then check again.',
+        );
+      }
+    } catch (error) {
+      this.toast.error("Couldn't check for updates", this.errorMessage(error));
+    } finally {
+      this.checkingPosUpdate.set(false);
+    }
   }
 
   async discoverPrinters(): Promise<void> {

@@ -487,6 +487,14 @@ Hardware configuration is terminal-local and stored in IndexedDB:
 - Local device signer URL.
 - Drawer pin 2, pin 5, or disabled.
 
+### Checking the running build
+
+The POS service worker holds a new build back until checkout is idle, but nothing ever called `registration.update()`, so the browser only looked for one on navigation. A till left open all day could sit several deploys behind with nothing on screen saying so, which made "is the fix live on this register?" unanswerable during remote support.
+
+POS tools → Hardware now ends with a **POS version** block showing the build this register is running against the build on the server, plus a **Check for updates** button. The two version strings come from the same source: `generate-pos-precache.mjs` stamps a content hash into `pos-sw.js` as `PRECACHE_VERSION` and writes the same value to `pos-precache.json`. The page asks the worker for its version over a `MessageChannel` (`GET_POS_VERSION`) and fetches the deployed one with `cache: 'no-store'`. `pos-precache.json` is deliberately neither precached nor matched by the worker's asset regex, so that request always reaches the server.
+
+The button respects the same safety gate as an automatic update. With a cart, an open payment, or queued offline sales, it reports that the update is held back rather than reloading the page under the cashier's hands.
+
 **The receipt image must be sent with `flavor: 'base64'`.** The body is a rasterized canvas (Arabic needs real text shaping, which ESC/POS text mode cannot do), and QZ's raw image path defaults `flavor` to a file path when it is omitted, so a canvas data URL fails with `Cannot parse (BASE64)iVBORw0KGgo...` and nothing prints. QZ wants the bare payload, so the `data:image/png;base64,` prefix `toDataURL()` produces is stripped at the QZ boundary; the renderer still returns a proper data URL.
 
 **A failed print does not tear down the connection.** Paper-out, a malformed payload, or a job the driver refuses all surface with the websocket still open, so `printRendered` consults `qz.websocket.isActive()` before marking the register disconnected. Previously any print rejection scheduled a reconnect on top of an unrelated fault.

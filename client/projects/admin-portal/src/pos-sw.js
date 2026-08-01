@@ -25,6 +25,13 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'ACTIVATE_POS_UPDATE') self.skipWaiting();
+  // Lets the page report which build is actually running. A register that has
+  // been open for days can be several deploys behind without anything on
+  // screen saying so, which made "is this the new build?" unanswerable during
+  // remote support.
+  if (event.data?.type === 'GET_POS_VERSION') {
+    event.ports[0]?.postMessage({ version: PRECACHE_VERSION });
+  }
 });
 
 self.addEventListener('activate', (event) => {

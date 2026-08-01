@@ -655,6 +655,25 @@
           </select>
         </label>
         <button class="primary-action" type="button" [disabled]="busy()" (click)="saveHardware()">Save and connect</button>
+
+        <div class="pos-build">
+          <h3>POS version</h3>
+          <p class="muted-note">
+            @if (posBuildRunning()) {
+              This register is running <b>{{ posBuildRunning() }}</b>.
+              @if (posBuildDeployed() && posBuildDeployed() !== posBuildRunning()) {
+                <span class="build-stale">A newer version ({{ posBuildDeployed() }}) is available.</span>
+              } @else if (posBuildDeployed()) {
+                <span>This is the newest version.</span>
+              }
+            } @else {
+              Version unavailable until the offline cache finishes installing.
+            }
+          </p>
+          <button type="button" [disabled]="checkingPosUpdate()" (click)="checkPosUpdate()">
+            {{ checkingPosUpdate() ? 'Checking...' : 'Check for updates' }}
+          </button>
+        </div>
       </section>
     </div>
   }
