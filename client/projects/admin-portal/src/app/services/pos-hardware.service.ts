@@ -405,13 +405,20 @@ export class PosHardwareService {
         // prefix that toDataURL() adds has to come off.
         flavor: 'base64',
         data: rendered.imageDataUrl.replace(/^data:image\/[a-z+]+;base64,/i, ''),
-        // QZ's default quantization ("alpha", threshold 127) applies a hard
-        // black/white cutoff per pixel — a real test print showed this
-        // dropping thin anti-aliased strokes out of small canvas-rendered
-        // text (whole letters vanishing mid-word). "dither" spreads the
-        // rounding error across neighboring pixels instead of a hard cutoff,
-        // which reads far more faithfully for text at this size/DPI.
-        options: { language: 'escpos', dotDensity: 'double', quantization: 'dither' },
+        // Quantization decides which pixels become black dots.
+        //
+        // Not "alpha" (QZ's default): it reads the alpha channel, and the
+        // receipt canvas is filled opaque white, so every pixel counts as ink
+        // and the whole receipt prints solid black.
+        //
+        // Not "dither" either, however good it looks on paper: QZ 2.2.6
+        // rejects the entire job with "Image quantization DITHER is not yet
+        // supported". The option is listed in the qz-tray JSDoc but the
+        // desktop app has not implemented it.
+        //
+        // "luma" thresholds on luminance, which is what black-on-white text
+        // actually needs, and is supported.
+        options: { language: 'escpos', dotDensity: 'double', quantization: 'luma' },
       },
       rendered.footerCommands,
     ];

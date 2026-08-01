@@ -89,15 +89,8 @@ export class PosReceiptRenderer {
    * SRP-QE300 spec: 80mm media, 180dpi, but only 72mm is actually printable
    * (confirmed by a real test print — 576px, sized for 80mm at 203dpi, cut
    * off the right ~15% of every line). 72mm / 25.4mm-per-inch * 180dpi ≈ 510px.
-   *
-   * MUST stay a multiple of 8. ESC/POS raster packs 8 horizontal pixels into
-   * each byte, so a width that does not divide evenly cannot be converted and
-   * QZ rejects the whole job with "Cannot parse (BASE64)iVBOR...". The 510px
-   * this rounds down from is what silently broke every receipt after the
-   * cutoff fix narrowed the original 576 (= 72 * 8). 504 is 63 * 8 and stays
-   * inside the printable area, so it keeps that fix intact.
    */
-  private readonly widthPx = 504;
+  private readonly widthPx = 510;
   private readonly marginPx = 28;
   private readonly lineHeightPx = 30;
   private readonly smallLineHeightPx = 24;

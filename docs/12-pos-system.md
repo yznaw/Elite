@@ -501,7 +501,9 @@ The button drives its own reload instead of relying on the passive `controllerch
 
 The button respects the same safety gate as an automatic update. With a cart, an open payment, or queued offline sales, it reports that the update is held back rather than reloading the page under the cashier's hands.
 
-**The receipt canvas width must be a multiple of 8.** ESC/POS raster packs 8 horizontal pixels into each byte, so a width that does not divide evenly cannot be converted and QZ rejects the entire job with `Cannot parse (BASE64)iVBOR...` — an error that names the encoding and says nothing about dimensions. The original 576px (72 × 8) printed correctly; the paper-cutoff fix narrowed it to the arithmetically correct 510px for the 72mm printable area and silently broke every receipt. It is now 504px (63 × 8), which stays inside the printable area. Do not "correct" this to a more precise non-multiple of 8.
+**Quantization must be `luma`, not `dither` and not the default.** Quantization decides which pixels become black dots. QZ's default, `alpha`, reads the alpha channel — and the receipt canvas is filled opaque white, so every pixel counts as ink and the whole receipt prints solid black. `dither` looks best on paper and is listed in the qz-tray JSDoc, but QZ Tray 2.2.6 has not implemented it and rejects the entire job with `Image quantization DITHER is not yet supported`. `luma` thresholds on luminance, which is what black-on-white text needs, and is supported.
+
+That rejection is what broke printing, and it took three wrong guesses to find because of the error-truncation problem described below. `flavor` and the canvas width were both fine all along.
 
 **The receipt image must be sent with `flavor: 'base64'`.** The body is a rasterized canvas (Arabic needs real text shaping, which ESC/POS text mode cannot do), and QZ's raw image path defaults `flavor` to a file path when it is omitted, so a canvas data URL fails with `Cannot parse (BASE64)iVBORw0KGgo...` and nothing prints. QZ wants the bare payload, so the `data:image/png;base64,` prefix `toDataURL()` produces is stripped at the QZ boundary; the renderer still returns a proper data URL.
 
