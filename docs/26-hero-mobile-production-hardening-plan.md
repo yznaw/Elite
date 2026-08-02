@@ -480,9 +480,17 @@ time so the art does not run under the notch in landscape.
 
 ### 9.4 Still open
 
-- **Phase 1A, the asset re-cut.** Unchanged and still the top item in §8: the
-  visible boundary is in the uploaded pixels and no code change addresses it.
+- **Phase 1A, the asset re-cut.** Still the top item in §8: the visible boundary
+  is in the uploaded pixels and no code change addresses it. Briefed and
+  tooled — see §9.7 — but not started, and it may turn out to be narrower than
+  the plan assumed.
 - **Phase 5, the physical-device matrix.** Automation cannot close this.
+
+### 9.5 Verification performed
+
+`npm run test:hero` — 30 passing (19 interaction, 11 resilience). Production
+build clean. All behaviour above was also confirmed by hand in a live browser
+against the real API before the tests were written.
 
 ### 9.6 `heroSrcset` — closed 2026-08-02
 
@@ -503,8 +511,26 @@ every hero image, so a test that only asserts "candidates resolve" passes either
 way and proves nothing. The two that matter trim the server's report to a
 partial or empty set and assert the client advertises no more than it was told.
 
-### 9.5 Verification performed
+### 9.7 Phase 1A handover, and a caveat about its evidence
 
-`npm run test:hero` — 30 passing (19 interaction, 11 resilience). Production
-build clean. All behaviour above was also confirmed by hand in a live browser
-against the real API before the tests were written.
+`server/scripts/audit-hero-alpha.js` lists every image the hero actually
+renders, reports the alpha anomalies it can measure, and with `--sheets` writes
+a four-background QA contact sheet per file. Read-only, and deliberately without
+a repair flag: the repair is a human re-cut, not a filter. The team brief that
+goes with it covers defect types, the export spec and the delivery steps.
+
+**The caveat matters more than the tooling.** §2.1 names one file,
+`ms3a8ern-21229187-pdp.webp`, observed in a browser session against production.
+That is a symptom, not an inventory. On the development database that filename
+does not exist, is not referenced by any content, and is not on disk; the six
+cut-outs the hero currently uses all measure clean (partial alpha reaching 1-2px
+past the silhouette, which is the antialiased edge) and review clean on white,
+the hero stage colour, dark green and a transparency check.
+
+So either the assets were already replaced here, or the defect is specific to
+production. Nobody should start retouching until the audit has been run against
+the environment being fixed. Phase 1A may be smaller than the plan assumed, or
+may target different files than the one named.
+
+Numeric thresholds in the script are triage. A clean cut-out always carries some
+partial alpha, so the contact sheet is the authority, exactly as §1B intended.

@@ -455,7 +455,7 @@ The API returns canonical structured `receiptData`; the Angular renderer convert
 - Cashier name.
 - Register name and full ID.
 - Product name **in Arabic above English** on each item line (the receipt's only bilingual element — everything else is English, owner decision 2026-08-01). The Arabic name is snapshotted onto `pos_transaction_items.product_name_ar` at sale time, so a reprint shows what was sold rather than what the catalogue says today.
-- Variant, SKU, quantity, unit price, and line total.
+- Variant, quantity, unit price, and line total. A numeric-only variant is printed as `Size 15`, because a bare number under a product name could equally be a quantity or a style code. **The SKU is not printed** (owner decision, 2026-08-02): it is an internal catalogue reference, and the receipt number plus the QR already cover returns and lookup. `PosReceiptLine.sku` remains on the interface for the refund and exchange screens.
 - Grand total. **No tax line:** Qatar has no sales tax (owner decision, 2026-08-01), so the receipt never prints one. Subtotal prints only when it differs from the total, which today it never does.
 - Payment method.
 - Tendered cash and change for cash sales.
@@ -472,6 +472,22 @@ Supported lookup input includes:
 - `#00000101` or `00000101`
 
 The QR command uses standard ESC/POS `GS ( k`. Always validate QR size, density, paper width, and scan reliability on the production printer.
+
+### 13.1 Printing rules the renderer has to obey
+
+Three constraints come from the printer rather than from taste. All three were violated on the receipt printed 2026-08-02 and are fixed in `pos-receipt-renderer.service.ts`.
+
+**There is no grey.** The canvas is sent to QZ with `quantization: 'luma'`, a hard threshold: every pixel is a black dot or bare paper. Grey does not print lighter, it prints *eroded*, because a glyph stem at 11-13px is roughly one antialiased pixel and tinting pushes its edges over the threshold. `#999` (luma 153) is above the threshold outright, so the QR caption, the SKU line and the CR number printed as nothing at all, silently. `#666` printed but shredded: `SCAN TO LOOK UP THIS SALE` came out as `SCAN TO _OGK UP TH S SALE`. De-emphasis is done with size and weight only. Small text also needs `500`-`600` weight so punctuation survives — a `15px` regular decimal point vanished, turning `QAR 1,220.00` into `QAR 1220 00`.
+
+**The QR is not in the raster.** The body is a canvas image; the QR is drawn by the printer from `footerCommands()` afterwards. Two consequences. It obeys the *printer's* justification, which defaults to left, so it must be wrapped in `ESC a 1` / `ESC a 0` or it prints against the left edge while the rest of the receipt is centred. And no vertical space should be reserved for it in the canvas — a `y += 140` "reservation" positioned nothing and simply emitted a blank band about a third of the receipt tall.
+
+**Module size 4 is too small to scan.** At 180dpi that is 0.56mm per module, roughly 12-14mm square for this payload. Size 8 gives 24-28mm, above the floor most phone cameras want, and still uses under half the 72mm printable width.
+
+### 13.2 Business profile and branches
+
+The header block below the wordmark (address, phone, CR number, return policy) is read from `pos_business_profile` and prints only what is filled in. `addressEn` is multi-line: entered line breaks are printed as written, and any line too wide for the tape is wrapped rather than clipped.
+
+**Known limitation:** `pos_business_profile` holds exactly one row per tenant and `pos_registers` carries no address, so every register prints the same address. A second branch cannot print its own. Giving `pos_registers` optional address/phone overrides that fall back to the tenant profile is the smallest fix.
 
 ## 14. Hardware Integration Summary
 

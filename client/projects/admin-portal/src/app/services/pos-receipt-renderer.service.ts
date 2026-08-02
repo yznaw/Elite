@@ -103,6 +103,29 @@ export class PosReceiptRenderer {
   private readonly displayFont = 'Georgia';
   private readonly bodyFont = 'Arial';
 
+  /**
+   * There is no grey on this receipt, and there cannot be one.
+   *
+   * The canvas goes to QZ with `quantization: 'luma'`, a hard threshold rather
+   * than a dither: each pixel is either a black dot or bare paper. Grey does
+   * not become lighter ink, it becomes *eroded* ink. A glyph stem at 11-13px
+   * is about one pixel wide and mostly antialiased, so tinting it grey pushes
+   * those blended edge pixels over the threshold and they drop out. The stem
+   * survives in pieces, or not at all.
+   *
+   * That was visible on the real print in two stages. `#999` (luma 153) sits
+   * above the threshold outright, so the QR caption, the per-item SKU and the
+   * CR number printed as nothing at all, silently, with no error. Moving them
+   * to `#666` made them appear but shredded: "SCAN TO LOOK UP THIS SALE" came
+   * out as "SCAN TO _OGK UP TH S SALE" because every thin stem lost pixels.
+   *
+   * So de-emphasis on paper is done with size and weight, never with tone.
+   * This constant stays as a single named seam for that rule: it is black, and
+   * the reason it exists at all is so the next person reads this comment
+   * before reaching for a grey.
+   */
+  private readonly inkMuted = '#000';
+
   private logoImage: HTMLImageElement | null = null;
   private logoLoadFailed = false;
 
@@ -208,13 +231,13 @@ export class PosReceiptRenderer {
     this.fillTextTracked(ctx, 'Z REPORT', centerX, y, 3);
     y += 26;
     ctx.font = `13px ${this.bodyFont}`;
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = this.inkMuted;
     ctx.fillText(this.formatQatarDateTime(report.createdAt), centerX, y);
     ctx.fillStyle = '#000';
     y += 22;
     if (report.registerName || report.cashierName) {
       ctx.font = `13px ${this.bodyFont}`;
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = this.inkMuted;
       ctx.fillText([report.cashierName, report.registerName].filter(Boolean).join('  ·  '), centerX, y);
       ctx.fillStyle = '#000';
       y += 22;
@@ -253,7 +276,7 @@ export class PosReceiptRenderer {
     y += 16;
 
     ctx.font = `13px ${this.bodyFont}`;
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = this.inkMuted;
     y = this.columns(ctx, 'Transactions', String(report.transactionCount), y);
     y = this.columns(ctx, 'Refunds', String(report.refundCount), y);
     y = this.columns(ctx, 'Voids', String(report.voidCount), y);
@@ -265,19 +288,29 @@ export class PosReceiptRenderer {
 
   /**
    * ESC/POS QR + cut, appended as raw commands after the rasterized image.
+   *
+   * Centring is not optional here, and its absence is why the QR printed hard
+   * against the left edge of every receipt while the rest of the page was
+   * centred. The body is a canvas raster, so its centring is baked into the
+   * pixels; the QR is not in that image at all, it is drawn by the printer
+   * from these commands, using the printer's own justification state. That
+   * state defaults to left. `ESC a 1` sets centre for the QR and `ESC a 0`
+   * puts it back so nothing after this inherits it.
+   *
    * A feed of blank lines is inserted between the QR print command and the
-   * cut command — the QR renders printer-side (module size 4 ≈ 0.56mm/module
-   * at 180dpi), and a real test print showed the auto-cutter slicing through
-   * it because no gap was reserved after it. `\x1b d n` feeds n lines before
-   * the cut fires, guaranteeing clear paper below the QR regardless of how
-   * tall it renders for a given payload length.
+   * cut command, because a real test print showed the auto-cutter slicing
+   * through the QR when no gap was reserved after it. `ESC d n` feeds n lines
+   * before the cut fires, guaranteeing clear paper below the QR regardless of
+   * how tall it renders for a given payload length.
    */
   private footerCommands(receipt: PosReceiptData): string {
     const gs = '\x1d';
     const esc = '\x1b';
+    const centre = esc + 'a' + '\x01';
+    const alignLeft = esc + 'a' + '\x00';
     const lookup = receipt.lookupCode || `#${receipt.receiptNumber}`;
     const feedLines = '\x06'; // 6 lines ≈ well clear of the largest QR this payload will ever produce
-    return this.qrCode(lookup) + esc + 'd' + feedLines + gs + 'V' + '\x01';
+    return centre + this.qrCode(lookup) + alignLeft + esc + 'd' + feedLines + gs + 'V' + '\x01';
   }
 
   private qrCode(data: string): string {
@@ -288,7 +321,15 @@ export class PosReceiptRenderer {
     const pH = String.fromCharCode(Math.floor(storeLen / 256));
     return [
       gs + '(k' + '\x04\x00\x31\x41\x32\x00', // select model 2
-      gs + '(k' + '\x03\x00\x31\x43\x04', // module size 4 (small, deliberate — not a dominant block)
+      // Module size 8, not 4.
+      //
+      // At 180dpi a module is 8/180in ≈ 1.13mm, so the short lookup payload
+      // used here (a version 1-2 symbol, 21-25 modules a side) prints about
+      // 24-28mm square. That clears the ~20mm floor most phone cameras want
+      // at arm's length and still leaves half the 72mm printable width free.
+      // Size 4 was chosen to keep the code visually quiet, but a QR nobody
+      // can scan is not restraint, it is decoration.
+      gs + '(k' + '\x03\x00\x31\x43\x08',
       gs + '(k' + '\x03\x00\x31\x45\x31', // error correction level M
       gs + '(k' + pL + pH + '\x31\x50\x30' + bytes, // store data
       gs + '(k' + '\x03\x00\x31\x51\x30', // print
@@ -339,7 +380,13 @@ export class PosReceiptRenderer {
     // receipt showed the logo and then jumped straight to the sale — which is
     // what the last real test print looked like. The receipt has to name the
     // shop (owner requirement, 2026-08-01: logo, brand name, branch, phone).
-    {
+    // Only when the wordmark actually rendered. This line is a subtitle *to*
+    // the logo, spelling out in plain letterforms what the mark says in
+    // stylised ones. On the fallback path the mark is already plain text, so
+    // printing this too gave "Elite Collection" in Georgia italic with
+    // "ELITE COLLECTION" in tracked caps directly beneath it: the same shop
+    // named twice, which reads as a rendering fault rather than a header.
+    if (logo) {
       ctx.font = `600 15px ${this.bodyFont}`;
       ctx.save();
       ctx.textAlign = 'center';
@@ -354,8 +401,21 @@ export class PosReceiptRenderer {
     y += 10;
 
     ctx.font = `13px ${this.bodyFont}`;
-    ctx.fillStyle = '#333';
-    if (profile?.addressEn) { ctx.fillText(profile.addressEn, centerX, y); y += 19; }
+    ctx.fillStyle = this.inkMuted;
+    // A real shop address does not fit on one line. The Pearl branch alone is
+    // "Parcel 14, 25 La Croisette Ground Floor / Shop 317, Marina Way 23 /
+    // The Pearl - Qatar" — printed with a single `fillText` it ran off both
+    // edges of a 72mm tape. Author-entered newlines are honoured as written,
+    // because a postal address has meaningful line breaks, and any line still
+    // too long for the paper is wrapped rather than clipped.
+    if (profile?.addressEn) {
+      for (const line of profile.addressEn.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true);
+      }
+      y += 2;
+    }
     if (profile?.phone) { ctx.fillText(profile.phone, centerX, y); y += 19; }
     ctx.fillStyle = '#000';
     y += 20;
@@ -374,14 +434,14 @@ export class PosReceiptRenderer {
     ctx.fillText(`No. ${receipt.receiptNumber}`, centerX, y);
     y += 26;
     ctx.font = `13px ${this.bodyFont}`;
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = this.inkMuted;
     ctx.fillText(this.formatQatarDateTime(receipt.createdAt), centerX, y);
     ctx.fillStyle = '#000';
     y += 30;
 
     ctx.textAlign = 'left';
     ctx.font = `13px ${this.bodyFont}`;
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = this.inkMuted;
     const meta: string[] = [];
     if (receipt.cashierName) meta.push(receipt.cashierName);
     if (receipt.registerName) meta.push(receipt.registerName);
@@ -393,7 +453,15 @@ export class PosReceiptRenderer {
     y += 16;
 
     ctx.font = `15px ${this.bodyFont}`;
-    for (const item of receipt.items ?? []) {
+    const items = receipt.items ?? [];
+    items.forEach((item, index) => {
+      // Each item is one block, and the spacing has to say so. The lines
+      // within a block are set tight and the gap between blocks is wide;
+      // previously both were the same, so on a two-line bilingual name the
+      // Arabic and English halves of one product read as two separate
+      // purchases sitting at opposite margins.
+      if (index > 0) y += 14;
+
       // Item lines are the one bilingual part of an otherwise English receipt
       // (owner decision, 2026-08-01): the Arabic name sits above the English
       // one so a customer reading either language recognises what they bought.
@@ -407,30 +475,35 @@ export class PosReceiptRenderer {
         ctx.textAlign = 'right';
         ctx.fillText(this.shapeArabic(item.nameAr), this.widthPx - this.marginPx, y);
         ctx.textAlign = 'left';
-        y += this.smallLineHeightPx;
+        y += 22;
       }
       ctx.font = `500 15px ${this.bodyFont}`;
       ctx.fillText(item.name, this.marginPx, y);
-      y += this.smallLineHeightPx;
+      y += 21;
       if (item.variant) {
+        // Labelled, because a bare "15" under a shoe name is not information.
+        // It could be a size, a quantity or a style code, and the customer has
+        // no way to tell which.
         ctx.font = `13px ${this.bodyFont}`;
-        ctx.fillStyle = '#666';
-        ctx.fillText(item.variant, this.marginPx, y);
+        ctx.fillStyle = this.inkMuted;
+        ctx.fillText(this.labelVariant(item.variant), this.marginPx, y);
         ctx.fillStyle = '#000';
         y += 20;
       }
-      if (item.sku) {
-        ctx.font = `12px ${this.bodyFont}`;
-        ctx.fillStyle = '#999';
-        ctx.fillText(item.sku, this.marginPx, y);
-        ctx.fillStyle = '#000';
-        y += 18;
-      }
-      ctx.font = `15px ${this.bodyFont}`;
+      // The SKU is deliberately not printed (owner decision, 2026-08-02).
+      // It is an internal catalogue reference: the receipt number and the QR
+      // already cover returns and lookup, so on a customer's copy it is noise.
+      // `PosReceiptLine.sku` stays on the interface because the refund and
+      // exchange screens still read it.
+      // 500 weight, not regular. At 15px regular the decimal point is barely
+      // more than one antialiased pixel, and luma thresholding rounds it away:
+      // the printed line read "QAR 1220 00" while the 20px bold total on the
+      // same receipt kept its point. Punctuation carries meaning in a price,
+      // so it needs enough stroke to survive the threshold.
+      ctx.font = `500 15px ${this.bodyFont}`;
       y = this.columns(ctx, `${item.quantity} × ${this.money(item.unitPriceCents)}`, this.money(item.lineTotalCents), y);
-      y += 6;
-    }
-    y += 4;
+    });
+    y += 12;
     y = this.rule(ctx, y);
     y += 16;
 
@@ -454,7 +527,7 @@ export class PosReceiptRenderer {
     y = this.columns(ctx, totalLabel, this.money(amount), y);
     y += 12;
     ctx.font = `13px ${this.bodyFont}`;
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = this.inkMuted;
     y = this.columns(ctx, 'Payment', String(receipt.paymentMethod || receipt.method || '').toUpperCase(), y);
     if (receipt.terminalReference) {
       y = this.columns(ctx, 'Terminal ref', receipt.terminalReference, y);
@@ -476,7 +549,7 @@ export class PosReceiptRenderer {
     // Return policy, English, if configured.
     if (profile?.returnPolicyEn) {
       ctx.font = `12px ${this.bodyFont}`;
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = this.inkMuted;
       ctx.textAlign = 'center';
       y = this.wrapText(ctx, profile.returnPolicyEn, this.marginPx, y, width - this.marginPx * 2, true);
       ctx.fillStyle = '#000';
@@ -484,8 +557,10 @@ export class PosReceiptRenderer {
     }
 
     if (profile?.crLicenseNumber) {
-      ctx.font = `11px ${this.bodyFont}`;
-      ctx.fillStyle = '#999';
+      // 12px, not 11: this is the commercial registration, the one line on the
+      // receipt that exists for a legal reason rather than a design one.
+      ctx.font = `12px ${this.bodyFont}`;
+      ctx.fillStyle = this.inkMuted;
       ctx.textAlign = 'center';
       ctx.fillText(`CR ${profile.crLicenseNumber}`, centerX, y);
       ctx.fillStyle = '#000';
@@ -494,7 +569,7 @@ export class PosReceiptRenderer {
 
     if (profile?.footerStampEn) {
       ctx.font = `italic 12px ${this.displayFont}`;
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = this.inkMuted;
       ctx.textAlign = 'center';
       ctx.fillText(profile.footerStampEn, centerX, y);
       y += 18;
@@ -507,19 +582,29 @@ export class PosReceiptRenderer {
     ctx.fillText(receipt.kind === 'void' ? 'Transaction cancelled' : 'Thank you', centerX, y);
     y += 30;
 
-    // QR lookup code: small, captioned, deliberately unobtrusive — a
-    // convenience for refund/exchange lookup, not a focal element.
+    // Caption for the QR the printer draws immediately after this image.
+    //
+    // 12px at 600 weight, which is heavier than it looks like it needs to be.
+    // This is the smallest line on the receipt, so it is the one most exposed
+    // to stroke erosion under thresholding — see `inkMuted`. Letter tracking
+    // makes it worse, not better, because it thins nothing but spaces the
+    // damage out, so it is kept modest.
     y += 10;
-    ctx.font = `10px ${this.bodyFont}`;
-    ctx.fillStyle = '#999';
-    ctx.fillText('SCAN TO LOOK UP THIS SALE', centerX, y);
+    ctx.font = `600 12px ${this.bodyFont}`;
+    ctx.fillStyle = this.inkMuted;
+    this.fillTextTracked(ctx, 'SCAN TO LOOK UP THIS SALE', centerX, y, 1);
     ctx.fillStyle = '#000';
-    // Reserve space for the physically-printed QR code below the image.
-    // Module size 4 at 180dpi ≈ 0.56mm/module; a short lookup code fits a
-    // version 1-2 QR (21-25 modules/side) ≈ 100-140px tall. The feed lines
-    // in footerCommands() add further clearance before the cut, but the
-    // image itself should already leave the QR's expected footprint clear.
-    y += 140;
+
+    // No space is reserved for the QR itself, deliberately.
+    //
+    // The QR is not part of this raster. It is printed after it, by the
+    // commands from `footerCommands()`, and the printer advances the paper on
+    // its own as it draws. Reserving its footprint here therefore did not
+    // position anything; it just emitted a blank band roughly a third of the
+    // receipt tall, followed by the QR, followed by the feed lines before the
+    // cut. All that is needed is a small gap so the caption is not touching
+    // the code beneath it.
+    y += 14;
 
     return y;
   }
@@ -631,8 +716,24 @@ export class PosReceiptRenderer {
     return cursorY;
   }
 
+  /**
+   * A bare size reads as a mystery number on paper. If the variant is nothing
+   * but digits it is a shoe size, so say so; anything else already describes
+   * itself ("Beige / 42", "Black") and is printed as stored.
+   */
+  private labelVariant(variant: string): string {
+    const value = variant.trim();
+    return /^\d+([.,]\d+)?$/.test(value) ? `Size ${value}` : value;
+  }
+
   private money(cents: number): string {
-    return `QAR ${(Number(cents) / 100).toFixed(2)}`;
+    // Grouped thousands. A four-figure sale is the normal case here, and
+    // "QAR 1220.00" makes the customer count digits to read their own total.
+    const amount = Number(cents) / 100;
+    return `QAR ${amount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   }
 
   private formatQatarDateTime(value: string): string {

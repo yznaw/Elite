@@ -129,13 +129,20 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                 <label class="lbl">{{ t('settings.receiptProfile.tradeNameAr') }}</label>
                 <input class="inp" dir="rtl" [ngModel]="receiptProfile().tradeNameAr" (ngModelChange)="setReceiptProfile('tradeNameAr', $event)"/>
               </div>
+              <!--
+                Textareas, not inputs. A real shop address here is three lines
+                ("Parcel 14, 25 La Croisette Ground Floor / Shop 317, Marina
+                Way 23 / The Pearl - Qatar") and the receipt renderer prints
+                the line breaks as entered. A single-line input made that
+                impossible to type in the first place.
+              -->
               <div>
                 <label class="lbl">{{ t('settings.receiptProfile.addressEn') }}</label>
-                <input class="inp" [ngModel]="receiptProfile().addressEn" (ngModelChange)="setReceiptProfile('addressEn', $event)"/>
+                <textarea class="inp" rows="3" [ngModel]="receiptProfile().addressEn" (ngModelChange)="setReceiptProfile('addressEn', $event)"></textarea>
               </div>
               <div>
                 <label class="lbl">{{ t('settings.receiptProfile.addressAr') }}</label>
-                <input class="inp" dir="rtl" [ngModel]="receiptProfile().addressAr" (ngModelChange)="setReceiptProfile('addressAr', $event)"/>
+                <textarea class="inp" dir="rtl" rows="3" [ngModel]="receiptProfile().addressAr" (ngModelChange)="setReceiptProfile('addressAr', $event)"></textarea>
               </div>
               <div>
                 <label class="lbl">{{ t('settings.receiptProfile.phone') }}</label>
