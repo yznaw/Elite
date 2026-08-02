@@ -287,11 +287,9 @@
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   transform: translateY(10px) scale(0.975);
-  filter: drop-shadow(0 30px 44px rgba(68, 42, 22, 0.11)) contrast(1.02) saturate(1.02);
   transition:
     opacity 0.58s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.58s cubic-bezier(0.22, 1, 0.36, 1),
-    filter 0.58s cubic-bezier(0.22, 1, 0.36, 1);
+    transform 0.58s cubic-bezier(0.22, 1, 0.36, 1);
 
   /* The hero sources carry a wide transparent margin: the shoe occupies only
      about 57% of the canvas width. `object-fit: contain` therefore fits the
@@ -313,6 +311,15 @@
     -webkit-user-drag: none;
     transform: scale(var(--hero-art-scale, 1.22));
     transform-origin: center;
+    /* Kept on the <img> itself, not the `picture` wrapper: the wrapper is an
+       animated compositing layer (opacity/transform transitions). On real
+       mobile GPUs (both iOS Safari and Android Chrome), `drop-shadow` applied
+       to a transformed/animated layer gets rasterized against that layer's
+       full rectangular tile bounds instead of the image's alpha silhouette,
+       leaving a faint rectangular seam around the whole hero frame. Desktop
+       browsers, including Chrome's device-emulation mode, use a different
+       compositor path and never reproduce it. */
+    filter: drop-shadow(0 30px 44px rgba(68, 42, 22, 0.11)) contrast(1.02) saturate(1.02);
   }
 }
 

@@ -5,18 +5,22 @@ written, rehearsed restore procedure that phase's test gate requires — read
 it end to end once before the first real production restore drill, not just
 when something has already gone wrong.
 
-**Status as of 2026-08-01:** scripts written and tested end-to-end against a
-local dev database (verified: backup → encrypt → decrypt → restore → row
-counts match exactly across `tenants`, `admin_users`, `products`). The backup
-format now also carries `uploads/` in the same encrypted bundle and verifies
-the extracted file count before restore. A 2026-08-01 smoke test created a real
-local `pg_dump`, encrypted/decrypted the bundle, verified its manifest and
-restored the upload file to an empty target. The local database user cannot
-create a disposable database, so the new bundle has not had a second real
-`pg_restore`; that remains part of the production drill below. **Not yet
-run against the production VPS** — this session has no SSH access to it.
-Everything below (cron install, first production backup, first production
-restore drill) still needs to be done once by whoever has server access.
+**Status as of 2026-08-02: the full loop has now run once for real, in
+production, and passed.** Daily cron backup installed and running since
+2026-08-01. First genuine production restore drill completed 2026-08-02
+against a real 03:00 automated backup (419MB encrypted bundle, 2905 upload
+files) — restored into disposable `elite_restore_drill`, verified against
+live production by row count and by a real transaction spot check, then
+cleaned up. See §5 for the full record and §4 for the resulting RTO
+measurement. This closes the Phase 9 test gate in docs/16 and item 3 in
+docs/27.
+
+Earlier local/dev-only verification (kept below for history): scripts were
+first proven end-to-end against a local dev database (backup → encrypt →
+decrypt → restore → row counts matched across `tenants`, `admin_users`,
+`products`), then against a temporary local bundle including `uploads/`.
+Neither of those substituted for a real production drill — this file used to
+say that gap was still open; it no longer is.
 
 ---
 
@@ -131,11 +135,26 @@ ls -la /var/backups/elite-postgres/
 
 ### 3.3 Run the restore
 
+First get the two secrets, don't guess at them:
+- **Database password** — `grep DATABASE_URL /var/www/elite/server/.env` and take the part between `elite:` and `@localhost`.
+- **`BACKUP_GPG_PASSPHRASE`** — from the password manager entry "Elite · Backup GPG Passphrase" (saved there per docs/27 item 1; it is not something to regenerate).
+
 ```bash
 RESTORE_DATABASE_URL="postgresql://elite:REPLACE_ME@localhost:5432/elite_restore_drill" \
-BACKUP_GPG_PASSPHRASE="REPLACE_WITH_THE_PASSPHRASE_FROM_2.2" \
+BACKUP_GPG_PASSPHRASE="REPLACE_WITH_THE_PASSPHRASE" \
 RESTORE_UPLOADS_DIR="/var/tmp/elite-uploads-restore-drill" \
 /var/www/elite/scripts/restore-database.sh /var/backups/elite-postgres/elite-<timestamp>.backup.tar.gpg
+```
+
+**Paste this as one line, not the multi-line form above.** The 2026-08-02
+drill hit `RESTORE_DATABASE_URL: RESTORE_DATABASE_URL is required` from this
+exact command — some terminals drop or mangle a trailing `\` line
+continuation on paste, which silently splits it into separate commands and
+the env vars never reach the script. The multi-line form above is kept for
+readability; run the single-line version:
+
+```bash
+RESTORE_DATABASE_URL="postgresql://elite:REPLACE_ME@localhost:5432/elite_restore_drill" BACKUP_GPG_PASSPHRASE="REPLACE_WITH_THE_PASSPHRASE" RESTORE_UPLOADS_DIR="/var/tmp/elite-uploads-restore-drill" /var/www/elite/scripts/restore-database.sh /var/backups/elite-postgres/elite-<timestamp>.backup.tar.gpg
 ```
 
 `RESTORE_UPLOADS_DIR` must be empty. The script verifies the restored file
@@ -148,24 +167,37 @@ supported for the duration of their retention window.
 
 Compare row counts between the live database and the restored one for a
 handful of core tables — they should match exactly (or be very close, if
-new data landed in production between the backup and the drill):
+new data landed in production between the backup and the drill). Single line,
+same reason as §3.3:
 
 ```bash
-for db in elite elite_restore_drill; do
-  echo "=== $db ==="
-  psql "postgresql://elite:REPLACE_ME@localhost:5432/$db" -t \
-    -c "SELECT count(*) FROM tenants;" \
-    -c "SELECT count(*) FROM admin_users;" \
-    -c "SELECT count(*) FROM products;" \
-    -c "SELECT count(*) FROM pos_transactions;" \
-    -c "SELECT count(*) FROM orders;"
-done
+for db in elite elite_restore_drill; do echo "=== $db ==="; psql "postgresql://elite:REPLACE_ME@localhost:5432/$db" -t -c "SELECT count(*) FROM tenants;" -c "SELECT count(*) FROM admin_users;" -c "SELECT count(*) FROM products;" -c "SELECT count(*) FROM pos_transactions;" -c "SELECT count(*) FROM orders;"; done
 ```
 
-Also spot-check one real record end-to-end (e.g. pull up the most recent
-real order/transaction in both databases and confirm the details match).
-Compare `find /var/www/elite-uploads -type f | wc -l` with the restored uploads
-directory, then open at least one real product image from the restored copy.
+A gap between `pos_transactions`/`orders` counts is expected and not a
+failure, as long as it's explained by transactions production took in after
+the backup ran — the spot check below is what actually proves that, rather
+than assuming it.
+
+Then spot-check one real transaction end-to-end. `pos_transactions` does not
+carry the receipt number directly — it lives on `pos_receipts`, joined by
+`receipt_id` — so pull both together:
+
+```bash
+psql "postgresql://elite:REPLACE_ME@localhost:5432/elite_restore_drill" -c "SELECT r.receipt_number, t.total_cents, t.created_at FROM pos_transactions t JOIN pos_receipts r ON r.id = t.receipt_id ORDER BY t.created_at DESC LIMIT 3;"
+```
+
+Run the same query against `elite` (production) in place of
+`elite_restore_drill`. The oldest row common to both results should match
+exactly — same receipt number, same `total_cents`, same `created_at` to the
+microsecond. Anything newer only in production is the expected gap explained
+above, not a discrepancy.
+
+Uploads: the restore script already verifies the extracted file count against
+the backup's own manifest and prints it (`Uploads restored into
+<dir>: N files`) — that is the file-count check, not merely a log line. What
+it does *not* prove is that the files are actually valid images, so open at
+least one real product photo from `RESTORE_UPLOADS_DIR` to confirm that.
 
 ### 3.5 Record the drill
 
@@ -199,13 +231,14 @@ conversation:**
   backup frequency needs to increase (e.g. every 4-6 hours) — this is a
   real tradeoff (more backups = more disk usage + more GPG/pg_dump load)
   that the owner should weigh in on, not something to silently decide here.
-- **RTO (Recovery Time Objective), measured from this session's actual
-  drill:** decrypt + restore took **under 5 seconds** for a small dev-sized
-  database. This will scale up with real production data volume and,
-  unlike this local test, will also involve the time to physically
-  provision/access a working Postgres instance if the original VPS itself
-  is gone — the drill above only measures the "have a working Postgres,
-  restore into it" portion, not a full bare-metal recovery timeline.
+- **RTO (Recovery Time Objective), measured against the real production
+  database (2026-08-02 drill, see §5):** decrypt + database restore +
+  uploads restore (2905 files, 419MB encrypted bundle) took **under 3
+  minutes** end to end. This is the "have a working Postgres, restore into
+  it" portion only — it does not include the time to provision a new VPS
+  or working Postgres instance if the original server itself is gone,
+  which is the dominant term in a real bare-metal-loss scenario, not this
+  step.
 
 **Action needed:** the owner should explicitly confirm or adjust these
 numbers before Phase 10 (pilot). Until then, treat "we could lose up to a
@@ -220,6 +253,7 @@ signed-off target.
 |---|---|---|---|---|
 | 2026-07-20 | Claude (this session) | local dev DB, not production | ✅ Row counts matched exactly (`tenants`, `admin_users`, `products`) | End-to-end test of the scripts themselves against a local dev database — proves the scripts work, does NOT count as the production restore drill Phase 9's test gate requires. That still needs to be run once by someone with VPS access, against a real production backup. |
 | 2026-08-01 | Codex (local workspace) | temporary combined bundle, not production | ✅ Real pg_dump + GPG + tar manifest + upload restore passed | One upload file was bundled, verified and copied to an empty restore directory. `pg_restore` was safely stubbed because the local DB role cannot create a disposable database; the 2026-07-20 drill remains the proof of the database restore path. |
+| 2026-08-02 | Owner, on the production VPS, walked through the procedure live | `elite-20260802T054706Z.backup.tar.gpg` (the daily 03:00 cron backup, taken 2026-08-02T05:47Z) | ✅ **First real production restore drill — passed.** Restored into disposable `elite_restore_drill`, not production. Uploads: manifest and restored-copy count both 2905, matching. Row counts on `tenants`/`admin_users`/`products` matched exactly; `pos_transactions` (29 vs 31) and `orders` (50 vs 52) differed by exactly the transactions that landed in production between the 05:47 backup and the drill — expected, not data loss. Spot check: receipt #1803 present in both the restored copy and live production with identical amount (80000 cents) and timestamp (2026-08-02 00:15:14.635088+02). | Cleaned up after (`DROP DATABASE`, uploads tmpdir removed). Closes docs/27 item 3 and the Phase 9 test gate in docs/16. Elapsed time from decrypt start to restore complete: under 3 minutes — see §4 for how this compares to the stated RTO target. |
 
 Add a new row every time this drill is actually run against production.
 
@@ -227,16 +261,15 @@ Add a new row every time this drill is actually run against production.
 
 ## 6. Follow-ups (not yet built, tracked here so they aren't lost)
 
-- **Offsite backup copy.** Sync `/var/backups/elite-postgres` to an
-  S3-compatible bucket (Backblaze B2 is inexpensive and S3-compatible) or a
-  second server after each successful backup, so a total VPS loss doesn't
-  also destroy the backups. Needs the owner to pick/provision a
-  destination.
-- **Backup-failure alert test.** The email-alert path
-  (`scripts/backup-database.sh`'s `send_failure_alert`) has not yet been
-  tested against a deliberately broken backup run on the production SMTP
-  config — Phase 9's test gate explicitly calls for this ("temporarily
-  break the backup job and confirm someone gets notified"). Easiest way:
-  temporarily point `DATABASE_URL` at a wrong port/password for one manual
-  run and confirm the failure email actually arrives.
+- **Offsite backup copy.** Decided 2026-08-02: manual periodic download
+  rather than automated sync, see docs/27 item 5 for the command and the
+  open item to pick a cadence. Revisit `rclone` to an S3-compatible bucket
+  (Backblaze B2) once volume or risk tolerance justifies automating it.
+- ~~**Backup-failure alert test.**~~ ✅ Done 2026-08-02. `/etc/elite-backup.env`
+  now carries real `SMTP_*` and `BACKUP_ALERT_EMAIL=hello@elitecollections.qa`.
+  Tested by pointing `DATABASE_URL` at a wrong password for one manual run
+  (real alert config, no real backup or config file touched) — `pg_dump`
+  failed as designed, and the failure email arrived in the real inbox within
+  about a minute, correct subject/timestamp/reason. Closes this gap and the
+  matching item in docs/27.
 - **RPO/RTO sign-off** — see §4.

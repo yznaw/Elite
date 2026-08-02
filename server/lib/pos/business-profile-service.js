@@ -10,6 +10,18 @@ function optionalText(value, field, maxLength = MAX_TEXT) {
   return result || null;
 }
 
+/**
+ * Optional, but stored as '' rather than NULL.
+ *
+ * For the columns declared `NOT NULL DEFAULT ''`, where "not provided" has to
+ * round-trip as an empty string instead of a null.
+ */
+function optionalBlank(value, field, maxLength = MAX_TEXT) {
+  const result = String(value ?? '').trim();
+  assertPos(result.length <= maxLength, 422, 'INVALID_FIELD', `${field} is too long.`);
+  return result;
+}
+
 function publicProfile(row) {
   if (!row) return null;
   return {
@@ -45,10 +57,22 @@ async function updateBusinessProfile(context, body) {
     'Only owners and admins can edit the POS business profile.',
   );
 
+  // Only what the receipt actually prints is required.
+  //
+  // The Arabic trade name and address were mandatory here from when the
+  // receipt was going to be bilingual. It is not: the receipt is English-only
+  // (owner decision, 2026-08-01) and the renderer never reads either field, so
+  // requiring them blocked the save on data that goes nowhere. They stay in
+  // the table because a bilingual receipt is still a plausible future, and
+  // because the storefront may want them; they are simply no longer a gate.
+  //
+  // The English name, the English address and the phone stay required. Those
+  // are printed, and a receipt that cannot say who issued it or where they
+  // are is a weak commercial document.
   const fields = {
-    trade_name_ar: nonEmpty(body?.tradeNameAr, 'tradeNameAr', 200),
+    trade_name_ar: optionalBlank(body?.tradeNameAr, 'tradeNameAr', 200),
     trade_name_en: nonEmpty(body?.tradeNameEn, 'tradeNameEn', 200),
-    address_ar: nonEmpty(body?.addressAr, 'addressAr', MAX_TEXT),
+    address_ar: optionalBlank(body?.addressAr, 'addressAr', MAX_TEXT),
     address_en: nonEmpty(body?.addressEn, 'addressEn', MAX_TEXT),
     phone: nonEmpty(body?.phone, 'phone', 40),
     cr_license_number: optionalText(body?.crLicenseNumber, 'crLicenseNumber', 80),

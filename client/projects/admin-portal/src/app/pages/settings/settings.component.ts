@@ -128,6 +128,7 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
               <div>
                 <label class="lbl">{{ t('settings.receiptProfile.tradeNameAr') }}</label>
                 <input class="inp" dir="rtl" [ngModel]="receiptProfile().tradeNameAr" (ngModelChange)="setReceiptProfile('tradeNameAr', $event)"/>
+                <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
               </div>
               <!--
                 Textareas, not inputs. A real shop address here is three lines
@@ -143,6 +144,7 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
               <div>
                 <label class="lbl">{{ t('settings.receiptProfile.addressAr') }}</label>
                 <textarea class="inp" dir="rtl" rows="3" [ngModel]="receiptProfile().addressAr" (ngModelChange)="setReceiptProfile('addressAr', $event)"></textarea>
+                <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
               </div>
               <div>
                 <label class="lbl">{{ t('settings.receiptProfile.phone') }}</label>

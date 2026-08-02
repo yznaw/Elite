@@ -14,34 +14,46 @@ Tracking list for the loose ends from the 2026-08-02 remote session (receipt pri
 
 ## Still open — do these next, in order
 
-### 1. Save the two secrets to a password manager — **do this first**
+### 1. Save the two secrets to a password manager — **do this first** — ✅ done 2026-08-02
 Nothing else here matters if these are lost.
-- [ ] `/var/lib/elite-pos/qz/private-key.pem` (QZ signing key — save as "Elite POS · QZ Signing Private Key"). Losing it means re-issuing a certificate and re-trusting QZ on every physical register.
-- [ ] `BACKUP_GPG_PASSPHRASE` from `/etc/elite-backup.env` (save as "Elite · Backup GPG Passphrase"). Losing it makes every existing and future backup file unrecoverable.
+- [x] `/var/lib/elite-pos/qz/private-key.pem` (QZ signing key — saved as "Elite POS · QZ Signing Private Key"). Losing it means re-issuing a certificate and re-trusting QZ on every physical register.
+- [x] `BACKUP_GPG_PASSPHRASE` from `/etc/elite-backup.env` (saved as "Elite · Backup GPG Passphrase"). Losing it makes every existing and future backup file unrecoverable.
 
-### 2. Confirm cleanup
-- [ ] `rm -f /etc/elite` (superseded by `/etc/elite-backup.env` — confirm it's actually gone, not just planned).
+### 2. Confirm cleanup — ✅ done 2026-08-02
+- [x] Confirmed: `ls -la /etc/elite` → "No such file or directory". Already gone, nothing further to do.
 
-### 3. Prove the backup is real, not just running
-- [ ] Run `scripts/restore-database.sh` against a **scratch/throwaway** database, not production. A backup that has never been restored is a guess, not a backup. Procedure: `docs/18-backup-restore-runbook.md`.
+### 3. Prove the backup is real, not just running — ✅ done 2026-08-02
+- [x] Ran `scripts/restore-database.sh` against a **scratch/throwaway** database (`elite_restore_drill`), not production. Restored `elite-20260802T054706Z.backup.tar.gpg` (the real 03:00 cron backup): uploads manifest matched restored count (2905 files), core table row counts matched production exactly, and `pos_transactions`/`orders` differed only by the transactions production took in after the backup ran — expected. Spot-checked receipt #1803 byte-for-byte identical (amount, timestamp) in both copies. Cleaned up (`DROP DATABASE`, tmp uploads removed) afterward. Full record in `docs/18-backup-restore-runbook.md` §5.
 
-### 4. Wire up failure alerts
-- [ ] Add `BACKUP_ALERT_EMAIL` and the `SMTP_*` values (same as `server/.env`) to `/etc/elite-backup.env`. Right now a silent cron failure at 3am stays silent until someone needs a restore and there isn't one.
+### 4. Wire up failure alerts — ✅ done 2026-08-02
+- [x] Added `BACKUP_ALERT_EMAIL=hello@elitecollections.qa` and the real `SMTP_*` values to `/etc/elite-backup.env`. **Tested for real**, not just configured: ran `backup-database.sh` with a deliberately wrong `DATABASE_URL` (real SMTP config, real alert email, everything else untouched — no real backup or config file affected), `pg_dump` failed as expected, and the failure email was received in the `hello@elitecollections.qa` inbox within about a minute — subject "Elite Collection: database backup FAILED", correct timestamp and reason. Closes the Phase 9 test gate in docs/16 and the matching follow-up in docs/18 §6.
 
-### 5. Offsite copy of backups
-Deferred by choice — `/var/backups/elite-postgres` and the live data are on the same disk, so a disk failure takes both. Revisit this. Cheapest interim fix: periodically `scp` the newest file down to a laptop:
+### 5. Offsite copy of backups — decided 2026-08-02: manual periodic download
+`/var/backups/elite-postgres` and the live data are on the same disk, so a disk
+failure takes both. Owner chose the manual route over `rclone`/cloud for now —
+cheapest, no new credentials to secure, revisit once volume/risk justifies
+automating it. This is a recurring human task, not a one-time fix: it only
+protects the business if it actually happens on a schedule.
 ```bash
 ls -lt /var/backups/elite-postgres/ | head -5   # find the newest
-scp root@<server-ip>:/var/backups/elite-postgres/<latest-file> ~/Backups/
+scp root@vmi3327182:/var/backups/elite-postgres/<latest-file> ~/Backups/
 ```
-- [ ] Decide: manual periodic download, or set up `rclone` to a cloud bucket (Backblaze B2 / S3 / Drive) later.
+- [ ] Pick a cadence (weekly, matching the monthly restore-drill rhythm in
+      docs/18 is a reasonable minimum) and put a recurring reminder on it —
+      nothing in the system prompts this download, so without a standing
+      reminder it will lapse silently.
+- [ ] Do the first download now, to confirm the command works end-to-end
+      before relying on it.
 
 ### 6. Finish the offline device signer install (till, not server)
-Node.js confirmed installed on the till (v24). Remaining steps, all on the till:
-- [ ] Copy `private-key.pem` from `/var/lib/elite-pos/qz/private-key.pem` (server) to `C:\ProgramData\ElitePOS\qz\private-key.pem` (till) — via USB or `scp`, never through chat.
-- [ ] Lock down its permissions: `icacls 'C:\ProgramData\ElitePOS\qz\private-key.pem' /inheritance:r /grant:r "$env:USERNAME:(R)" /grant:r 'Administrators:(F)'`
-- [ ] Copy `tools/pos-device-signer/` to the till.
-- [ ] Run `install-windows-startup.ps1` as Administrator with the cert/key paths and `-AllowedOrigins 'https://admin.elitecollections.qa'`.
+Node.js confirmed installed on the till (v24). This has its own complete,
+standalone, team-shareable runbook — **`docs/29-pos-till-device-signer-runbook.md`**
+— written so whoever does it needs no other context. Use that file, not this
+line item, when actually doing the install. Summary: copy the cert + key to
+the till, install the signer as a startup service, point Elite's own
+Hardware settings at it, then prove it with a real offline print (not just a
+`/health` check).
+- [ ] Done, per `docs/29`'s own report-back checklist.
 - [ ] Verify `http://127.0.0.1:8182/health` responds.
 - [ ] **Real test:** disconnect the till's Wi-Fi and print a receipt. `health` responding only proves the service is up, not that offline signing actually works.
 
