@@ -2042,12 +2042,14 @@ button:focus-visible {
     bottom: 0;
     left: 0;
     display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 14px;
     padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
     border-radius: 22px 22px 0 0;
     background: var(--pdp-surface);
     box-shadow: 0 -22px 70px rgba(26, 24, 21, 0.26);
     max-height: 50%;
+    overflow: hidden;
   }
 
   .size-sheet-head {
@@ -2096,6 +2098,10 @@ button:focus-visible {
   .size-list {
     display: grid;
     gap: 9px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .size-list .size-btn {
