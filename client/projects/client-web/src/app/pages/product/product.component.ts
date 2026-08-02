@@ -290,6 +290,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   @HostListener('document:keydown.escape')
   onEscape(): void {
     if (this.reviewOpen()) this.closeReview();
+    else if (this.sizePickerOpen()) this.closeSizePicker();
   }
 
   async goCollection(): Promise<void> {
@@ -450,7 +451,7 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   selectSize(s: number): void {
     this.selectedSize.set(s);
-    this.sizePickerOpen.set(false);
+    this.closeSizePicker();
     this.resetRestockForm();
   }
 
@@ -475,10 +476,12 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   openSizePicker(): void {
     this.sizePickerOpen.set(true);
+    this.lockBodyScroll();
   }
 
   closeSizePicker(): void {
     this.sizePickerOpen.set(false);
+    this.unlockBodyScroll();
   }
 
   async openSizeGuide(): Promise<void> {
