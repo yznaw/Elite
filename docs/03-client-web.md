@@ -97,8 +97,25 @@ colour preview, short description and shopping action at every breakpoint.
 ### Runtime Behavior
 
 - Slides advance by horizontal swipe, previous/next arrows or pagination segments.
-- Adjacent swipe/arrow moves use a 16px directional crossfade; pagination and colour previews use a plain crossfade.
+- Adjacent arrow moves on a fine pointer use a 16px directional crossfade at 220ms. Coarse pointers, pagination jumps and colour previews use a plain opacity crossfade, because navigation is repeated far more often by thumb than by mouse and the spatial cue reads as lag at that cadence.
 - RTL reverses physical travel direction. Keyboard activation and `prefers-reduced-motion` skip directional drift.
+
+### Hero Interaction Contract
+
+A tap has to be acknowledged immediately and resolved correctly even when several arrive before any image is ready. Four rules carry that:
+
+| Rule | Where | Why |
+|---|---|---|
+| Intent and commitment are separate signals | `heroPendingItemIndex` vs `activeHeroItemIndex` | Arrow taps step the intent instantly and the pagination follows it, so the control never feels dead. The committed index moves only once the destination image is decoded, so the art never blanks. Stepping from the committed index meant a burst of taps on a slow connection all targeted the same neighbour and advanced one slide. |
+| Only the newest request may commit | `heroSlideRequestId`, `heroColorRequestId` | An earlier, slower image arriving late cannot overwrite a destination the visitor has since changed. |
+| Decode is an optimisation, never a gate | `HERO_DECODE_DEADLINE_MS` | `img.decode()` on a detached element can stay pending forever in Chrome even after `load` fires. Awaiting it directly froze the hero completely: every control silently stopped working with no error. |
+| One gesture owns the stage | `onHeroPointerMove` axis lock | The gesture locks to an axis after 10px and takes pointer capture only once it is horizontal. Extra fingers are ignored rather than moving the start point, so a pinch cannot resolve as a swipe. |
+
+**Touch policy.** The viewport meta carries no scale cap: deliberate pinch zoom stays available everywhere. Accidental double-tap zoom is suppressed where it happens instead, by `touch-action: manipulation` on the hero's arrows, swatches, pagination segments and CTA. The stage itself declares `pan-y pinch-zoom`. Focus zoom on form fields is handled separately by the 16px control floor in `styles.scss` — that floor is what makes removing the cap safe, so the two must not be separated.
+
+**Responsive sources.** `heroSrcset()` reads `mediaVariants` from the content payload; it does not derive candidates from the filename. The server joins `media_assets` on each hero image and reports the sizes it actually generated, keyed by upload filename. This matters because `createImageVariants` skips any size wider than roughly the source, so a hero uploaded at 1200px has no `-zoom` sibling — and the old string-concatenation version still advertised `-zoom` at `1800w`, which a retina browser would then choose. An upload the map does not cover gets no `srcset` and a plain `src`: heavier, but never a request for a file that was never written.
+
+**Stacking.** `.hero-pagination` sets `position: relative; z-index: 3`. It runs an opacity animation with `fill: both`, which makes it a permanent stacking context; without an explicit z-index that context painted below `.hero-product`, and the absolutely positioned arrows inside it were completely unclickable at every width.
 - The stacked layout groups product name and description before the art, then pagination, colours and CTA.
 - On first eligible touch visit, a one-time swipe demonstration plays only while at least 45% of the hero stage is visible.
 
@@ -111,7 +128,7 @@ The stacked layout (`max-width: 1023px`) is a centered CSS grid driven by
 | Block | Element | Notes |
 |---|---|---|
 | Name + description | `.hero-intro` | Keeps the two lines visually grouped with a small safety floor; longer copy grows naturally and short copy gives the freed space back to the art while lower controls stay stable |
-| Product | `.hero-stage` / `.hero-product` | `touch-action: pan-y` keeps vertical page scroll working; `overflow: hidden` clips the entering preview |
+| Product | `.hero-stage` / `.hero-product` | `touch-action: pan-y pinch-zoom` keeps both vertical page scroll and deliberate zoom working; `overflow: hidden` clips the entering preview |
 | Side preview | `.hero-next-peek` | Next slide's product, offscreen at rest, slid in only during the one-time swipe demo |
 | Pagination | `.hero-pagination` | One 44px-high button per slide, rendered only when there are 2+ slides |
 | Description | `.hero-description` | Per-slide selling copy, clamped to three lines or two on very short screens |

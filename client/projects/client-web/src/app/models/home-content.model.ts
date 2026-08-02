@@ -167,6 +167,12 @@ export interface ContactContent {
   socialLinks: SocialLink[];
 }
 
+/** One generated size of an uploaded image, as the server actually wrote it. */
+export interface MediaVariant {
+  url: string;
+  width: number;
+}
+
 export interface HomeContentData {
   hero: HomeDiscountHeroContent;
   collections: HomeCollectionTileContent[];
@@ -175,6 +181,20 @@ export interface HomeContentData {
   promise: PromiseContent;
   stats: StatItem[];
   contact: ContactContent;
+  /**
+   * Responsive candidates for hero imagery, keyed by upload filename.
+   *
+   * A read-time projection rather than stored content: the server joins the
+   * media table on each hero image and reports the sizes that exist. The hero
+   * used to derive these by pasting suffixes onto the filename and asserting a
+   * width for each, which is wrong whenever the upload was too small for a
+   * given size to be generated.
+   *
+   * Keyed by basename so a lookup survives the `/api` prefix that
+   * `resolveClientMediaUrl` adds and any absolute host in older content. An
+   * absent key means no `srcset`, which is correct-but-heavy rather than broken.
+   */
+  mediaVariants: Record<string, MediaVariant[]>;
 }
 
 export function createEmptyHomeContent(): HomeContentData {
@@ -240,6 +260,7 @@ export function createEmptyHomeContent(): HomeContentData {
         items: [],
       },
     },
+    mediaVariants: {},
   };
 }
 

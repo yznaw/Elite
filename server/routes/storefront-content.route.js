@@ -261,7 +261,67 @@ async function loadContent(client, tenantId) {
     });
   }
 
+  content.mediaVariants = await loadHeroMediaVariants(client, tenantId, content);
+
   return content;
+}
+
+/**
+ * Real responsive variants for every image the hero can render.
+ *
+ * The storefront used to build its `srcset` by pasting `-card`, `-grid`, `-pdp`
+ * and `-zoom` onto the filename and declaring fixed widths for each. Both
+ * halves of that guess can be wrong. `createImageVariants` skips any size wider
+ * than roughly the source, so a 1200px hero upload has no `-zoom` sibling at
+ * all and the browser could pick a candidate that 404s. When a variant is
+ * missing the whole `srcset` is also a lie about width, which is the more
+ * common outcome: the browser trusts the declared `1800w`, picks it on a retina
+ * screen, and gets nothing.
+ *
+ * Returning what was actually generated makes the client's job a lookup rather
+ * than a guess. Anything absent from this map simply gets no `srcset` and falls
+ * back to a plain `src`, which is slower but always correct.
+ *
+ * Keyed by `media_assets.storage_url`, which is exactly the value the hero
+ * stores in its slide and colour entries.
+ */
+async function loadHeroMediaVariants(client, tenantId, content) {
+  const urls = new Set();
+  for (const item of content.heroSlider?.items ?? []) {
+    if (item.imageUrl) urls.add(item.imageUrl);
+    for (const colour of item.colors ?? []) {
+      if (colour.imageUrl) urls.add(colour.imageUrl);
+    }
+  }
+
+  // Bundled art under /assets carries no variants and is not a media asset.
+  const uploads = [...urls].filter((url) => url.includes('/uploads/'));
+  if (uploads.length === 0) return {};
+
+  // Matched on the basename so a row still resolves when the stored value
+  // carries an `/api` prefix or an absolute host from an older admin build.
+  const basenames = uploads.map((url) => url.split('/').pop());
+
+  const { rows } = await client.query(
+    `SELECT storage_url, metadata->'imageVariants' AS variants
+       FROM media_assets
+      WHERE tenant_id = $1
+        AND metadata ? 'imageVariants'
+        AND split_part(storage_url, '/', -1) = ANY($2::text[])`,
+    [tenantId, basenames],
+  );
+
+  const map = {};
+  for (const row of rows) {
+    const entries = Object.values(row.variants || {})
+      .filter((variant) => variant && variant.url && variant.width > 0)
+      // Ascending width, because that is the order `srcset` is read in and it
+      // keeps the payload stable between requests.
+      .sort((a, b) => a.width - b.width)
+      .map((variant) => ({ url: variant.url, width: variant.width }));
+    if (entries.length > 0) map[row.storage_url] = entries;
+  }
+  return map;
 }
 
 async function saveContent(client, tenantId, content) {
@@ -279,7 +339,13 @@ async function loadDraft(client, tenantId) {
     [tenantId],
   );
   const raw = result.rows[0]?.home_content_draft;
-  return raw ? normalizeContent(raw) : null;
+  if (!raw) return null;
+  const draft = normalizeContent(raw);
+  // The preview is meant to be the storefront, so it resolves variants the same
+  // way. Without this a draft renders every hero image at full size and the
+  // admin reviews a page that is heavier than the one visitors will get.
+  draft.mediaVariants = await loadHeroMediaVariants(client, tenantId, draft);
+  return draft;
 }
 
 async function saveDraft(client, tenantId, content) {

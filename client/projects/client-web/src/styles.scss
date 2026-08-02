@@ -59,6 +59,39 @@ textarea {
   font: inherit;
 }
 
+/* ── Touch focus-zoom guard ─────────────────────────────────────────────────
+   iOS Safari zooms the whole page when a focused control renders below 16px,
+   and it does not zoom back out on blur. The viewport meta used to suppress
+   that with `maximum-scale=1.0`, which also removed deliberate pinch zoom for
+   everyone. The meta restriction is gone (see index.html), so the threshold is
+   now cleared by the controls themselves.
+
+   This is a single global list on purpose: it is the invariant that keeps the
+   viewport policy safe, and it should be read and updated as one thing rather
+   than rediscovered per page. Any new focusable text control on the storefront
+   belongs here unless it already sits at 16px or above.
+
+   Only text-entry controls are listed. Checkboxes and radios take focus but
+   have no text box. `<select>` opens a native picker sheet rather than an
+   inline caret, so it does not trigger the zoom either; `.size-select` is
+   deliberately left at its 11px uppercase scale, where a bump to 16px would
+   overflow the quick-add pill. Pointer-coarse only, so desktop keeps its
+   tighter type scale.
+
+   `!important` is deliberate. Three of these four controls are styled from
+   component stylesheets, which Angular injects after this file and which match
+   at equal specificity, so an ordinary declaration here loses to every one of
+   them. This is an accessibility floor rather than a preference: a component
+   must not be able to reintroduce the zoom by restyling its own field. */
+@media (pointer: coarse) {
+  .float-input,
+  .review-field input,
+  .review-field textarea,
+  .restock-form-row input {
+    font-size: 16px !important;
+  }
+}
+
 html[dir='rtl'] body {
   direction: rtl;
 }

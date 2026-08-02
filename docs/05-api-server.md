@@ -279,6 +279,19 @@ See `server/routes/invitations.route.js`. Mounted in the **public** routes secti
 
 See `server/routes/storefront-content.route.js`. Exports a `publicRouter` and an `adminRouter`; the admin side requires an active admin session. Every write runs through `normalizeContent`, which fills missing keys from `DEFAULT_HOME_CONTENT` so a partial payload can never blank out a section.
 
+**`mediaVariants` is a read-time projection, not stored content.** `loadContent` and `loadDraft` join `media_assets` on every hero image and attach the responsive sizes that were actually generated, keyed by `storage_url`:
+
+```json
+"mediaVariants": {
+  "/uploads/abc123.webp": [
+    { "url": "/uploads/abc123-thumb.webp", "width": 240 },
+    { "url": "/uploads/abc123-card.webp",  "width": 640 }
+  ]
+}
+```
+
+It is deliberately absent from `normalizeContent`, so a client that PATCHes back content it just read cannot persist it. The storefront needs it because `createImageVariants` skips any size wider than roughly the source: an upload at 1200px genuinely has no `-zoom` sibling, and the client previously guessed the full set from the filename and advertised widths for files that were never written. Reporting the truth turns the client's `srcset` into a lookup — see `docs/03-client-web.md`.
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/storefront-content` | Published home content for the storefront. `Cache-Control: no-store`. |

@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { EMPTY_HOME_CONTENT, HomeContentData, createEmptyHomeContent } from '../models/home-content.model';
-import { resolveClientMediaUrl } from '../utils/media-url';
+import { EMPTY_HOME_CONTENT, HomeContentData, MediaVariant, createEmptyHomeContent } from '../models/home-content.model';
+import { mediaVariantKey, resolveClientMediaUrl } from '../utils/media-url';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -211,6 +211,24 @@ export class HomeContentService {
         imageUrl: this.resolveMediaUrl(color.imageUrl),
       })),
     }));
+
+    // Rekeyed to the bare filename and with each candidate rebased onto this
+    // page's API, so the hero can look a variant set up from whatever form of
+    // the URL it happens to be holding.
+    next.mediaVariants = Object.entries(content.mediaVariants ?? {}).reduce(
+      (map, [storageUrl, variants]) => {
+        const key = mediaVariantKey(storageUrl);
+        if (!key || !Array.isArray(variants)) return map;
+        map[key] = variants
+          .filter((variant) => variant?.url && variant.width > 0)
+          .map((variant) => ({
+            url: this.resolveMediaUrl(variant.url),
+            width: variant.width,
+          }));
+        return map;
+      },
+      {} as Record<string, MediaVariant[]>,
+    );
 
     return next;
   }

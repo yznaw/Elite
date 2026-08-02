@@ -5,7 +5,14 @@
   <meta charset="utf-8" />
   <title>Elite Collection — Arabic Leather Artisans</title>
   <base href="/" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <!-- `maximum-scale=1.0` was here to stop the hero double-tap zooming the page.
+       It never actually did that: it also removed deliberate pinch zoom for
+       every visitor, which is an accessibility regression, and iOS ignores it
+       for accessibility-driven zoom anyway. Accidental double-tap zoom is now
+       suppressed where it happens, by the touch contract on the hero controls
+       (see home.component.scss). Focus zoom is handled by the 16px control
+       floor in styles.scss. Do not reintroduce a scale cap here. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="description" content="Elite Collection — handcrafted Arabic leather shoes from Doha since 1962." />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="preload" as="image" type="image/webp" href="/assets/hero-scroll/elite-hero-sandals-cutout.webp" fetchpriority="high" />

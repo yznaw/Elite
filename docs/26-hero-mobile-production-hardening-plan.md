@@ -5,7 +5,8 @@ deployed build on a physical iPhone.
 
 Owner: Elite Collection  
 Created: 2026-08-01  
-Status: Proposed — analysis complete, implementation not started
+Status: Phases 2-4 implemented 2026-08-02. Phase 1 (asset re-cut) and Phase 5
+(physical-device gate) outstanding. See §9 for what changed against the plan.
 
 ---
 
@@ -403,3 +404,107 @@ assets.
 Do not combine the asset replacement and interaction state-machine change in one
 unverified release. Separate deployment checkpoints make regression diagnosis
 and rollback unambiguous.
+
+---
+
+## 9. Implementation notes, 2026-08-02
+
+What the plan got right, what it missed, and what it should not have asked for.
+
+### 9.1 Two defects the plan did not know about
+
+Both were found while building Phase 4 coverage, and both are larger than
+anything in §2. Either alone is enough to explain "the hero ignores my taps",
+and they were live together.
+
+**The hero never committed a slide change at all.** `ensureHeroImageReady`
+awaited `img.decode()`. On a detached image in Chrome that promise fires `load`
+and then never settles, so `prepareHeroItem` never reached its commit and
+arrows, pagination and swipe all silently stopped changing the slide. No error,
+no console output, no visual symptom other than a hero that ignored every
+interaction. Decode is now raced against a 120ms deadline and the fetch against
+a 6s one. This is almost certainly a substantial part of what was reported as a
+rapid-tap problem, and §2.2's race analysis, while correct, was not the whole
+story.
+
+**Both hero arrows were unclickable at every width.** `.hero-pagination` runs
+`heroFadeIn`, an opacity animation with `fill: both`, which makes it a stacking
+context that outlives the animation. That trapped the arrows' `z-index: 7`
+inside a context which itself painted below `.hero-product` at `z-index: 1`, and
+the figure's box spans both arrows from 390px to 1920px. Every pixel of both
+controls hit-tested as the artwork behind them. Fixed with
+`position: relative; z-index: 3` on the pagination, and guarded by a test that
+samples across each button's width rather than at its centre.
+
+The lesson for Phase 0 is that its diagnostic categories were too narrow. It
+asked whether a report was viewport zoom, document overflow or layer scale. The
+two real defects were neither, and a "record the failure precisely" phase that
+does not include "confirm the control fired at all" would have missed both.
+
+### 9.2 Prerequisite the plan omitted
+
+Removing `maximum-scale=1.0` is correct and is an accessibility win, but it is
+not a hero-local change. It re-enables iOS focus zoom on every storefront field
+below 16px, and there were four: `.float-input` above 640px, `.review-field`
+input and textarea at 13px, and `.restock-form-row input` at 11px. A 16px floor
+for coarse pointers now lives in `styles.scss` and must ship with the meta
+change, not after it. `.size-select` is deliberately excluded: a `<select>`
+opens a picker rather than an inline caret, and 16px overflows the quick-add
+pill.
+
+`viewport-fit=cover` also activates `env(safe-area-inset-*)`, which the hero
+already referenced for top and bottom. Horizontal insets were added at the same
+time so the art does not run under the notch in landscape.
+
+### 9.3 Deviations from the plan as written
+
+- **Phase 4 lives in a new `e2e-hero/hero-interaction.spec.ts`**, not in
+  `hero-resilience.spec.ts`. The existing file holds layout still and measures
+  once settled; these tests hold state and measure while moving. They need
+  different fixtures and different waits.
+- **Test 4 of Phase 4 was dropped.** Asserting `visualViewport.scale === 1` in
+  Chromium passes unconditionally, because Chromium does not implement the
+  Safari double-tap zoom it is meant to catch. The plan already concedes this in
+  its own closing paragraph. The touch contract is asserted directly instead:
+  the declared `touch-action` per control and the absence of a scale cap.
+- **Test 5's overflow assertion is scoped to hero layers, not the document.**
+  `body` already carries `overflow-x: hidden`, so a document-level
+  `scrollWidth <= clientWidth` check is satisfied by the clipping and proves
+  nothing. This also contradicts Phase 0's instruction not to add that
+  workaround before classifying: it was already there.
+- **Phase 1B is not implemented and should be reduced.** A contact-sheet
+  generator, an alpha anomaly heuristic and an admin publish gate is a large
+  amount of infrastructure to stop a human uploading one bad cut-out. Recording
+  `hasAlpha` and real variant dimensions in media metadata is cheap and worth
+  doing; the visual QA belongs in a documented human step.
+
+### 9.4 Still open
+
+- **Phase 1A, the asset re-cut.** Unchanged and still the top item in §8: the
+  visible boundary is in the uploaded pixels and no code change addresses it.
+- **Phase 5, the physical-device matrix.** Automation cannot close this.
+
+### 9.6 `heroSrcset` — closed 2026-08-02
+
+Listed as open above and then done. The client no longer derives responsive
+candidates from the filename. `loadContent` and `loadDraft` join `media_assets`
+on every hero image and publish a `mediaVariants` map of the sizes actually
+generated; `heroSrcset` reads it. An upload the map does not cover falls back to
+a plain `src`, which is heavier but always resolvable.
+
+Deliberately a read-time projection keyed by `storage_url`, so no migration, no
+change to the stored slide shape and no admin editor work. `normalizeContent`
+does not carry the field, so content read and PATCHed straight back cannot
+persist it.
+
+Two of the four new tests were confirmed to fail against the old
+implementation before being kept: the current dataset has all five variants for
+every hero image, so a test that only asserts "candidates resolve" passes either
+way and proves nothing. The two that matter trim the server's report to a
+partial or empty set and assert the client advertises no more than it was told.
+
+### 9.5 Verification performed
+
+`npm run test:hero` — 30 passing (19 interaction, 11 resilience). Production
+build clean. All behaviour above was also confirmed by hand in a live browser
+against the real API before the tests were written.

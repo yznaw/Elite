@@ -206,6 +206,14 @@
 }
 
 .hero-stage {
+  /* Single source for the colour crossfade length.
+     ⚠ Mirrored in home.component.ts by `heroColorTransitionMs()`, which sizes
+     the timer that removes the outgoing layer. The two must move together:
+     a timer shorter than the fade cuts the old colourway off mid-dissolve, and
+     a timer longer than it leaves a fully transparent layer stacked on the new
+     one. Same three branches, same order, in both files. */
+  --hero-color-fade: 280ms;
+
   position: relative;
   min-width: 0;
   max-width: 100%;
@@ -214,7 +222,31 @@
   height: 100%;
   display: grid;
   place-items: center;
-  touch-action: pan-y;
+  /* `pan-y` alone opts the stage out of pinch zoom, which is the one gesture a
+     visitor inspecting the leather grain actually wants. `pinch-zoom` gives it
+     back while still handing horizontal drags to the swipe handler. */
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Every control inside the hero opts out of the 300ms double-tap-to-zoom
+   window. This is the targeted replacement for the old `maximum-scale=1.0`:
+   two fast taps on an arrow or a swatch now fire two activations instead of
+   zooming the page, and pinch zoom elsewhere is untouched. Text outside the
+   controls stays selectable. */
+.hero-arrow,
+.hero-swatch,
+.hero-pagination__segment,
+.hero-cta {
+  touch-action: manipulation;
+}
+
+/* Colour changes are the most repeated hero interaction on a phone, where the
+   swatch row sits under the thumb. 280ms is tuned for a desktop pointer that
+   changes colour occasionally; at thumb cadence it reads as lag. */
+@media (any-pointer: coarse) {
+  .hero-stage {
+    --hero-color-fade: 180ms;
+  }
 }
 
 .hero-product {
@@ -247,6 +279,13 @@
   display: block;
   opacity: 0;
   pointer-events: none;
+  /* A long press on the shoe used to raise the iOS image callout and start a
+     drag ghost, which cancelled the swipe mid-gesture and left the pointer
+     sequence unfinished. The layers are decoration for a swipeable stage, not
+     saveable content. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   transform: translateY(10px) scale(0.975);
   filter: drop-shadow(0 30px 44px rgba(68, 42, 22, 0.11)) contrast(1.02) saturate(1.02);
   transition:
@@ -268,6 +307,10 @@
     height: 100%;
     object-fit: contain;
     display: block;
+    /* Paired with `draggable="false"` in the template: this covers WebKit, the
+       attribute covers the rest. Both are needed to keep a slow horizontal
+       swipe from turning into a native image drag. */
+    -webkit-user-drag: none;
     transform: scale(var(--hero-art-scale, 1.22));
     transform-origin: center;
   }
@@ -307,7 +350,7 @@
   z-index: 3;
   opacity: 1;
   transform: translateY(0) scale(1);
-  animation: heroColorFadeOut 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: heroColorFadeOut var(--hero-color-fade) cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 /* Adjacent navigation keeps the dissolve but adds a 16px spatial cue. The
@@ -624,6 +667,25 @@
   min-height: 44px;
   margin-top: -4px;
   animation: heroFadeIn 0.7s ease both 0.1s;
+
+  /* Both declarations exist to make the arrows clickable, and neither is
+     optional.
+
+     `heroFadeIn` animates opacity with `fill: both`, so its effect persists
+     after it finishes and this element is a stacking context forever. That
+     traps the arrows' `z-index: 7` inside it. Because the element was static
+     and `z-index: auto`, the whole context then painted *below*
+     `.hero-product`, which is positioned at `z-index: 1` and whose box spans
+     the arrows at every width. The result was two 52px controls that looked
+     perfect, hit-tested as the figure behind them, and silently did nothing on
+     desktop and phone alike.
+
+     `position: relative` is what lets this element take a z-index at all; the
+     value then has to clear `.hero-product`. Removing either one puts the
+     arrows back underneath the art. Layout is unaffected: the element is a grid
+     row either way. */
+  position: relative;
+  z-index: 3;
 }
 
 .hero-pagination__count {
@@ -687,6 +749,15 @@
 .hero-pagination__segment.is-active span {
   background: var(--green-2);
   transform: scaleY(1.66);
+}
+
+/* The indicator follows the tap, the picture follows the decode, and on a slow
+   connection those are not the same moment. The segment therefore moves at once
+   so the control never feels dead, and holds this softer fill until its image
+   is actually on screen. `aria-current` stays on the committed slide, so a
+   screen reader is told what is rendered rather than what is loading. */
+.hero-pagination__segment.is-loading span {
+  background: color-mix(in srgb, var(--green-2) 45%, transparent);
 }
 
 .hero-pagination__segment:focus-visible {
@@ -1195,7 +1266,16 @@
        included. The image stage below is the only part allowed to shrink. */
     height: 100svh;
     min-height: 0;
-    padding: calc(var(--hero-mobile-top) + env(safe-area-inset-top, 0px)) var(--hero-mobile-x) calc(24px + env(safe-area-inset-bottom, 0px));
+    /* The horizontal terms carry a safe-area max() because the viewport meta
+       now declares `viewport-fit=cover`. Without them the hero art and the
+       swatch row would run under the notch and the home indicator rail in
+       landscape on a notched iPhone. Portrait insets are zero, so the usual
+       case still resolves to plain `--hero-mobile-x`. */
+    padding:
+      calc(var(--hero-mobile-top) + env(safe-area-inset-top, 0px))
+      max(var(--hero-mobile-x), env(safe-area-inset-right, 0px))
+      calc(24px + env(safe-area-inset-bottom, 0px))
+      max(var(--hero-mobile-x), env(safe-area-inset-left, 0px));
   }
 
   .hero-layout {
@@ -1930,8 +2010,14 @@
   }
 }
 
-/* Entry animations collapse to an instant swap for reduced motion. */
+/* Reduced motion is a shorter, flatter transition, not the absence of one.
+   Entry animations and every spatial cue are dropped; the crossfade that tells
+   the visitor the picture changed is kept and shortened. */
 @media (prefers-reduced-motion: reduce) {
+  .hero-stage {
+    --hero-color-fade: 160ms;
+  }
+
   .hero-brand,
   .hero-product,
   .hero-pagination,
@@ -1941,9 +2027,14 @@
     animation: none !important;
   }
 
+  /* `0.01ms` here was effectively an instant cut: the incoming product appeared
+     with no transition at all, and paired with the disabled outgoing fade below
+     it produced a hard double-exposed frame. A short opacity ramp reads as a
+     change of state without anything appearing to travel. Transform stays off
+     so the layer never moves or scales. */
   .hero-product__image {
     transform: none;
-    transition: opacity 0.01ms linear;
+    transition: opacity 160ms linear;
   }
 
   .hero-pagination__segment span {
@@ -1954,10 +2045,18 @@
   .hero-stage.is-leather-peeking .hero-next-peek,
   .hero-stage.is-leather-peeking .hero-swipe-hint__arrow,
   .hero-swipe-hint,
-  .hero-product__image--color-outgoing,
   .hero-swatch.is-loading .hero-swatch__dot::after {
     animation: none;
   }
+
+  /* Deliberately NOT in the list above.
+     `.hero-product__image--color-outgoing` carries a hard-coded `opacity: 1`
+     and relies entirely on `heroColorFadeOut` to reach zero. Disabling its
+     animation left the previous colourway fully opaque on top of the new one
+     until the JavaScript timer removed the element, which is the flash that
+     Reduce Motion users reported. The animation is kept and shortened via
+     `--hero-color-fade` instead. It is opacity-only, so it carries no motion to
+     reduce in the first place. */
 
   .hero-stage.is-hero-slide-transition .hero-product__image.is-slide-incoming,
   .hero-stage.is-hero-slide-transition .hero-product__image.is-slide-outgoing {

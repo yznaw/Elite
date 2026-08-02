@@ -139,8 +139,10 @@
                       [class.is-hero-slide-next]="heroSlideDirection() === 1"
                       [class.is-hero-slide-previous]="heroSlideDirection() === -1"
                       (pointerdown)="onHeroPointerDown($event)"
+                      (pointermove)="onHeroPointerMove($event)"
                       (pointerup)="onHeroPointerUp($event)"
                       (pointercancel)="onHeroPointerCancel($event)"
+                      (lostpointercapture)="onHeroPointerCaptureLost($event)"
                     >
                     <figure
                       #heroProduct
@@ -191,6 +193,7 @@
                                 [attr.loading]="first ? 'eager' : 'lazy'"
                                 [attr.fetchpriority]="first ? 'high' : 'low'"
                                 decoding="async"
+                                draggable="false"
                               />
                             }
                           } @else {
@@ -210,6 +213,7 @@
                                 loading="lazy"
                                 fetchpriority="low"
                                 decoding="async"
+                                draggable="false"
                               />
                             }
                           }
@@ -238,6 +242,7 @@
                             [src]="outgoingHeroImage()"
                             alt=""
                             decoding="async"
+                            draggable="false"
                           />
                         </picture>
                       }
@@ -266,6 +271,7 @@
                           loading="eager"
                           fetchpriority="low"
                           decoding="async"
+                          draggable="false"
                         />
                       </picture>
                     }
@@ -307,7 +313,11 @@
                             <button
                               type="button"
                               class="hero-pagination__segment"
-                              [class.is-active]="i === activeHeroItemIndex()"
+                              [class.is-active]="i === heroPendingItemIndex()"
+                              [class.is-loading]="
+                                heroPendingItemIndex() !== activeHeroItemIndex() &&
+                                i === heroPendingItemIndex()
+                              "
                               [attr.aria-current]="
                                 i === activeHeroItemIndex() ? 'true' : null
                               "

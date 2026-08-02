@@ -20,7 +20,7 @@ import { ReferenceDataService } from '../../services/reference-data.service';
 import { ProductsService } from '../../services/products.service';
 import { HomeCollectionTileContent, HeroColorContent } from '../../models/home-content.model';
 import { colorKey } from '../../utils/color-slug';
-import { resolveClientMediaUrl } from '../../utils/media-url';
+import { mediaVariantKey, resolveClientMediaUrl } from '../../utils/media-url';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -51,8 +51,49 @@ const HERO_PEEK_DURATION_MS = 1500;
 const HERO_PEEK_ITERATIONS = 1;
 /** Matches the release transition on `.is-peek-releasing`. */
 const HERO_PEEK_RELEASE_MS = 180;
-/** Matches the adjacent slide keyframes in home.component.scss. */
+/**
+ * Adjacent-slide keyframe duration, mirrored from home.component.scss.
+ *
+ * Two values, because one duration cannot serve both pointer classes. The
+ * 420ms spatial cue reads well on a desktop where the arrows are clicked
+ * occasionally, and badly on a phone where the same gesture is repeated: a
+ * visitor swiping through five products spent over two seconds watching
+ * transitions. Coarse pointers get a short crossfade instead, and reduced
+ * motion gets a shorter one still.
+ */
 const HERO_SLIDE_TRANSITION_MS = 420;
+const HERO_SLIDE_TRANSITION_COARSE_MS = 180;
+const HERO_COLOR_TRANSITION_MS = 280;
+const HERO_COLOR_TRANSITION_COARSE_MS = 180;
+/**
+ * Reduced motion is its own transition, not the absence of one. Long enough to
+ * read as a change of state, short enough that nothing appears to travel.
+ */
+const HERO_REDUCED_TRANSITION_MS = 160;
+/**
+ * Removal is deliberately a little later than the fade it follows. Pulling the
+ * layer on the exact duration can land on the animation's last frame and snap
+ * the remaining opacity to zero, which is visible as a flick on a slow phone.
+ */
+const HERO_TRANSITION_CLEANUP_BUFFER_MS = 40;
+
+/**
+ * How long a decode may delay a committed swap.
+ *
+ * Short on purpose. Past this the image is already downloaded, so the only
+ * thing still owed is a decode the compositor can do during the fade.
+ */
+const HERO_DECODE_DEADLINE_MS = 120;
+/** Absolute ceiling on a fetch before the hero gives up and keeps what it has. */
+const HERO_LOAD_DEADLINE_MS = 6000;
+
+/** Travel before a gesture is committed to an axis. Below this it is a tap. */
+const HERO_SWIPE_AXIS_LOCK_PX = 10;
+/** Deliberate drag distance that completes a swipe on its own. */
+const HERO_SWIPE_DISTANCE_PX = 44;
+/** A flick completes below that distance if it is fast enough. */
+const HERO_SWIPE_VELOCITY_PX_PER_MS = 0.5;
+const HERO_SWIPE_FLICK_MIN_PX = 18;
 /** Teach the swipe once per visit rather than on every return to the home page. */
 const HERO_HINT_SESSION_KEY = 'elite:hero-swipe-hint-shown';
 
@@ -92,7 +133,24 @@ export class HomeComponent implements OnInit, OnDestroy {
   private heroColorRequestId = 0;
   private heroSlideRequestId = 0;
   private readonly heroImageLoads = new Map<string, Promise<void>>();
-  private heroSwipeStart: { x: number; y: number; pointerId: number } | null = null;
+  /** Strong references to in-flight preloads, so none is collected mid-fetch. */
+  private readonly heroImageElements = new Set<HTMLImageElement>();
+  private heroSwipeStart: {
+    x: number;
+    y: number;
+    pointerId: number;
+    time: number;
+    axis: 'undecided' | 'horizontal' | 'vertical';
+  } | null = null;
+  private heroCapturedPointer: { element: Element; pointerId: number } | null = null;
+  private heroReducedMotionMedia: MediaQueryList | undefined;
+  private readonly onHeroMotionPreferenceChange = (event: MediaQueryListEvent): void => {
+    this.heroReducedMotion.set(event.matches);
+    // Switching the OS setting mid-transition would otherwise leave the layer
+    // that the outgoing path owns behind, because the two paths clean up on
+    // different signals. Settle to the committed state and start clean.
+    this.settleHeroTransitions();
+  };
   private readonly onHeroStackedViewportChange = (event: MediaQueryListEvent): void => {
     if (event.matches && this.pageReady()) {
       this.scheduleHeroSwipeHint();
@@ -104,7 +162,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   @ViewChild('heroStage') private heroStageElement?: ElementRef<HTMLElement>;
 
   readonly metaVisible         = signal(false);
+  /** The slide on screen. Moves only once its image has decoded. */
   readonly activeHeroItemIndex = signal(0);
+  /**
+   * The slide the visitor has asked for. Moves on the tap.
+   *
+   * Splitting intent from the committed index is what makes a burst of taps
+   * deterministic: each tap steps this, the decode races settle in whatever
+   * order they finish, and only the newest request is allowed to commit. The
+   * pagination reads from this so the control acknowledges the tap immediately
+   * rather than appearing dead until the image lands.
+   */
+  readonly heroPendingItemIndex = signal(0);
   readonly contentData         = this.homeContent.contentData;
   readonly layoutSections      = this.homeContent.layoutSections;
   readonly collectionTiles     = signal<HomeCollectionTileContent[]>([]);
@@ -135,6 +204,18 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (!item) return '';
     return (this.isArabic() ? item.descriptionAr : item.descriptionEn)?.trim() ?? '';
   });
+
+  /**
+   * Live motion preference.
+   *
+   * A signal rather than a `matchMedia()` call at each use site: iOS lets the
+   * visitor toggle Reduce Motion from Control Center without reloading, and a
+   * transition started under one mode has to be cleaned up under the same one.
+   * Reading the query fresh mid-transition could pick opposite branches for the
+   * start and the cleanup of the same swap, which is how a colour layer got
+   * stranded on screen.
+   */
+  readonly heroReducedMotion = signal(false);
 
   readonly heroSwipeHintVisible = signal(false);
   readonly heroPeekActive = signal(false);
@@ -282,6 +363,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.heroStackedMedia = window.matchMedia(HERO_STACKED_QUERY);
     this.heroStackedMedia.addEventListener('change', this.onHeroStackedViewportChange);
+    this.heroReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+    this.heroReducedMotion.set(this.heroReducedMotionMedia.matches);
+    this.heroReducedMotionMedia.addEventListener('change', this.onHeroMotionPreferenceChange);
     void this.referenceData.ensureColors();
     // Feeds the `+N` colour chip. The service caches for 60s and revalidates on
     // return, so an admin adding a colourway shows up without a hard reload.
@@ -302,6 +386,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.heroStageObserver?.disconnect();
     if (this.heroStageObserverFrame) cancelAnimationFrame(this.heroStageObserverFrame);
     this.heroStackedMedia?.removeEventListener('change', this.onHeroStackedViewportChange);
+    this.heroReducedMotionMedia?.removeEventListener('change', this.onHeroMotionPreferenceChange);
+    // A capture held past teardown keeps the browser routing events at a
+    // detached element.
+    this.endHeroSwipe();
     if (this.metaTimer) clearTimeout(this.metaTimer);
     if (this.heroSwipeHintTimer) clearTimeout(this.heroSwipeHintTimer);
     if (this.heroSwipeHintDismissTimer) clearTimeout(this.heroSwipeHintDismissTimer);
@@ -349,11 +437,15 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.activeHeroColorKey.set(key);
       this.heroColorLoadingKey.set('');
 
+      // The removal timer has to agree with whichever fade the CSS is actually
+      // running, or the outgoing colourway is either cut off mid-fade or left
+      // sitting fully opaque over the new one. Both durations therefore come
+      // from the same resolver the stylesheet mirrors.
       if (this.heroColorSwapTimer) clearTimeout(this.heroColorSwapTimer);
       this.heroColorSwapTimer = window.setTimeout(() => {
         this.heroColorSwapTimer = undefined;
         this.outgoingHeroImage.set('');
-      }, 280);
+      }, this.heroColorTransitionMs() + HERO_TRANSITION_CLEANUP_BUFFER_MS);
     });
   }
 
@@ -374,7 +466,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.dismissHeroSwipeHint();
     const total = this.heroItems().length;
     if (total < 2) return;
-    const targetIndex = (this.activeHeroItemIndex() + direction + total) % total;
+    // Step from the pending intent, not from the committed slide. The committed
+    // index only moves once the destination image has decoded, so on a slow
+    // connection every tap in a burst used to compute the same neighbour and
+    // five taps advanced one slide. Intent advances on the tap; the commit
+    // follows whenever the pixels are ready.
+    // Clamped because the slider content can be refreshed from the admin while
+    // a request is pending, which can leave the intent pointing past the end.
+    const base = Math.min(this.heroPendingItemIndex(), total - 1);
+    const targetIndex = (base + direction + total) % total;
     // A keyboard-generated click has detail 0. Keep repeated keyboard actions
     // immediate; pointer clicks and real swipes receive the spatial cue.
     this.prepareHeroItem(targetIndex, !event || event.detail !== 0 ? direction : 0);
@@ -385,34 +485,131 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.heroInteracted = true;
     this.dismissHeroSwipeHint();
     const total = this.heroItems().length;
-    if (index < 0 || index >= total || index === this.activeHeroItemIndex()) return;
+    // Compared against intent so that tapping the segment for a slide already
+    // being loaded is a no-op rather than a second request for it.
+    if (index < 0 || index >= total || index === this.heroPendingItemIndex()) return;
     this.prepareHeroItem(index);
   }
 
+  /**
+   * Claim a gesture, or decline it.
+   *
+   * Only the primary pointer can start a swipe. A second finger landing on the
+   * stage used to overwrite the start point, so a pinch resolved as a long
+   * horizontal drag and changed the slide underneath the zoom. Extra pointers
+   * are now ignored outright and the first one keeps ownership until it ends.
+   */
   onHeroPointerDown(event: PointerEvent): void {
+    if (!event.isPrimary) return;
     if (this.isHeroControl(event.target) || this.heroItems().length < 2) return;
+    // A gesture already in flight owns the stage. Do not restart from here.
+    if (this.heroSwipeStart) return;
     this.heroInteracted = true;
     this.stopHeroPeek();
-    this.heroSwipeStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    this.heroSwipeStart = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+      time: event.timeStamp,
+      axis: 'undecided',
+    };
+  }
+
+  /**
+   * Lock the gesture to an axis, once, as soon as it has travelled far enough
+   * to be readable.
+   *
+   * The axis matters because the two outcomes are mutually exclusive: a
+   * horizontal gesture becomes a slide change and takes pointer capture so a
+   * finger that wanders off the stage still completes it, while a vertical one
+   * is the page scroll and must be released back to the browser immediately.
+   * Deciding this at pointerup instead, as the previous implementation did,
+   * meant a diagonal drag scrolled the page *and* changed the slide.
+   */
+  onHeroPointerMove(event: PointerEvent): void {
+    const start = this.heroSwipeStart;
+    if (!start || start.pointerId !== event.pointerId) return;
+    if (start.axis !== 'undecided') return;
+
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < HERO_SWIPE_AXIS_LOCK_PX && Math.abs(dy) < HERO_SWIPE_AXIS_LOCK_PX) return;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      start.axis = 'horizontal';
+      // Capture only now that the gesture is definitely ours. Capturing on
+      // pointerdown would swallow taps meant for the page.
+      try {
+        (event.currentTarget as Element | null)?.setPointerCapture?.(event.pointerId);
+        this.heroCapturedPointer = {
+          element: event.currentTarget as Element,
+          pointerId: event.pointerId,
+        };
+      } catch {
+        /* Capture is an optimisation: the gesture still completes without it. */
+      }
+    } else {
+      // Vertical wins: this is a scroll, not a swipe. Stop tracking so the rest
+      // of the drag cannot accumulate enough horizontal travel to fire a slide.
+      start.axis = 'vertical';
+      this.endHeroSwipe();
+    }
   }
 
   onHeroPointerUp(event: PointerEvent): void {
     const start = this.heroSwipeStart;
-    this.heroSwipeStart = null;
-    if (!start || start.pointerId !== event.pointerId || this.isHeroControl(event.target)) return;
+    if (!start || start.pointerId !== event.pointerId) {
+      this.endHeroSwipe();
+      return;
+    }
+    this.endHeroSwipe();
+    if (start.axis === 'vertical' || this.isHeroControl(event.target)) return;
+
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.4) return;
+
+    // Distance is the deliberate drag. Velocity is the flick: a short, fast
+    // gesture that never reaches 44px still reads as intentional, and only
+    // accepting distance made the hero feel unresponsive to a quick swipe.
+    const elapsed = Math.max(1, event.timeStamp - start.time);
+    const velocity = Math.abs(dx) / elapsed;
+    const travelled = Math.abs(dx) >= HERO_SWIPE_DISTANCE_PX;
+    const flicked = velocity >= HERO_SWIPE_VELOCITY_PX_PER_MS
+      && Math.abs(dx) >= HERO_SWIPE_FLICK_MIN_PX;
+    if (!travelled && !flicked) return;
+
     this.selectAdjacentHeroItem(dx < 0 ? 1 : -1);
   }
 
   onHeroPointerCancel(event: PointerEvent): void {
     if (this.heroSwipeStart?.pointerId !== event.pointerId) return;
-    this.heroSwipeStart = null;
+    this.endHeroSwipe();
   }
 
-  private prefersReducedMotion(): boolean {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /**
+   * The browser can take a capture away without a pointerup ever arriving, for
+   * instance when a system gesture or a scroll wins. Without this the tracker
+   * kept a stale start point and the next unrelated tap resolved as a swipe.
+   */
+  onHeroPointerCaptureLost(event: PointerEvent): void {
+    if (this.heroSwipeStart?.pointerId !== event.pointerId) return;
+    this.endHeroSwipe();
+  }
+
+  /** Single exit for every way a gesture can finish, including teardown. */
+  private endHeroSwipe(): void {
+    const captured = this.heroCapturedPointer;
+    this.heroCapturedPointer = null;
+    this.heroSwipeStart = null;
+    if (!captured) return;
+    try {
+      if (captured.element.hasPointerCapture?.(captured.pointerId)) {
+        captured.element.releasePointerCapture(captured.pointerId);
+      }
+    } catch {
+      /* Already released, or the element is gone with the component. */
+    }
   }
 
   /**
@@ -461,7 +658,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.markHeroHintSeen();
         this.heroSwipeHintVisible.set(true);
 
-        const reducedMotion = this.prefersReducedMotion();
+        const reducedMotion = this.heroReducedMotion();
         if (!reducedMotion) {
           this.heroPeekActive.set(true);
         }
@@ -618,9 +815,14 @@ export class HomeComponent implements OnInit, OnDestroy {
   private prepareHeroItem(index: number, direction: -1 | 0 | 1 = 0): void {
     const item = this.heroItems()[index];
     if (!item) return;
+    // Intent is published before the await so the next tap in a burst steps
+    // from here, and so the pagination reflects where the hero is heading.
+    this.heroPendingItemIndex.set(index);
     const requestId = ++this.heroSlideRequestId;
 
     void this.ensureHeroImageReady(item.imageUrl).then(() => {
+      // Only the newest request may commit. An earlier, slower image arriving
+      // late must not overwrite a destination the visitor has since changed.
       if (requestId !== this.heroSlideRequestId) return;
       this.cancelHeroColorSwap();
       this.beginHeroSlideTransition(direction);
@@ -631,21 +833,65 @@ export class HomeComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Spatial cue duration for the current input and motion mode.
+   *
+   * Returning zero means "no spatial transition": the layers cross-fade through
+   * their base CSS instead. That is the coarse-pointer and reduced-motion path.
+   */
+  private heroSlideTransitionMs(): number {
+    if (this.heroReducedMotion()) return 0;
+    return window.matchMedia(HERO_COARSE_POINTER_QUERY).matches
+      ? HERO_SLIDE_TRANSITION_COARSE_MS
+      : HERO_SLIDE_TRANSITION_MS;
+  }
+
+  private heroColorTransitionMs(): number {
+    if (this.heroReducedMotion()) return HERO_REDUCED_TRANSITION_MS;
+    return window.matchMedia(HERO_COARSE_POINTER_QUERY).matches
+      ? HERO_COLOR_TRANSITION_COARSE_MS
+      : HERO_COLOR_TRANSITION_MS;
+  }
+
   private beginHeroSlideTransition(direction: -1 | 0 | 1): void {
     if (this.heroSlideTransitionTimer) {
       clearTimeout(this.heroSlideTransitionTimer);
       this.heroSlideTransitionTimer = undefined;
     }
 
-    this.heroSlideDirection.set(direction);
-    this.outgoingHeroItemId.set(direction ? (this.activeHeroItem()?.id ?? '') : '');
-    if (!direction) return;
+    // The 16px directional travel is the one part of the hero that is pure
+    // decoration, so it is the first thing dropped when the visitor has asked
+    // for less motion or is navigating repeatedly by thumb.
+    const duration = this.heroSlideTransitionMs();
+    const effective = duration > 0 ? direction : 0;
+
+    this.heroSlideDirection.set(effective);
+    this.outgoingHeroItemId.set(effective ? (this.activeHeroItem()?.id ?? '') : '');
+    if (!effective) return;
 
     this.heroSlideTransitionTimer = window.setTimeout(() => {
       this.heroSlideTransitionTimer = undefined;
       this.heroSlideDirection.set(0);
       this.outgoingHeroItemId.set('');
-    }, HERO_SLIDE_TRANSITION_MS);
+    }, duration);
+  }
+
+  /**
+   * Force every hero transition to its committed end state.
+   *
+   * Used when the ground shifts under an in-flight transition, currently only a
+   * motion-preference change. Cleanup is deliberately not conditional on which
+   * path started the transition: the point is to reach one active layer no
+   * matter which branch is half-done.
+   */
+  private settleHeroTransitions(): void {
+    if (this.heroSlideTransitionTimer) {
+      clearTimeout(this.heroSlideTransitionTimer);
+      this.heroSlideTransitionTimer = undefined;
+    }
+    this.heroSlideDirection.set(0);
+    this.outgoingHeroItemId.set('');
+    this.cancelHeroColorSwap();
   }
 
   private cancelHeroColorSwap(): void {
@@ -782,16 +1028,47 @@ export class HomeComponent implements OnInit, OnDestroy {
         image.srcset = srcset;
       }
 
+      // Nothing else holds this element: the only references left after the
+      // executor returns are the event handlers. Keeping it in the map means a
+      // pending fetch cannot be collected out from under its own `load`.
+      this.heroImageElements.add(image);
+
+      let settled = false;
+      const settle = (): void => {
+        if (settled) return;
+        settled = true;
+        this.heroImageElements.delete(image);
+        resolve();
+      };
+
+      /**
+       * Decode is an optimisation, never a gate.
+       *
+       * `decode()` on a detached image can stay pending indefinitely in Chrome
+       * even after `load` has fired, and the hero used to await it directly.
+       * The consequence was not a slow transition, it was no transition at all:
+       * `prepareHeroItem` never reached its commit, so arrows, pagination and
+       * swipe all silently stopped changing the slide while the page looked
+       * perfectly healthy. Racing the deadline means the worst case is one
+       * frame of decode jank instead of a dead control.
+       */
       const finish = (): void => {
         if (typeof image.decode !== 'function') {
-          resolve();
+          settle();
           return;
         }
-        void image.decode().catch(() => undefined).then(() => resolve());
+        const deadline = window.setTimeout(settle, HERO_DECODE_DEADLINE_MS);
+        void image.decode().catch(() => undefined).then(() => {
+          clearTimeout(deadline);
+          settle();
+        });
       };
 
       image.onload = finish;
-      image.onerror = () => resolve();
+      image.onerror = settle;
+      // A fetch that never completes must not strand the hero either. On expiry
+      // the caller commits to the old image, which is still on screen.
+      window.setTimeout(settle, HERO_LOAD_DEADLINE_MS);
       // Match the <source> fallback rather than warming an unused original.
       image.src = srcset ? url : this.toWebp(url);
     });
@@ -811,29 +1088,28 @@ export class HomeComponent implements OnInit, OnDestroy {
   /**
    * Responsive srcset for an uploaded hero image.
    *
-   * Uploads are stored alongside resized variants (`-card` 640, `-grid` 900,
-   * `-pdp` 1400, `-zoom` 1800) next to the full-size original. The hero renders
-   * up to 940px wide, so a phone needs roughly the grid variant and a retina
-   * desktop the zoom variant. Without this the browser downloads the 3480px
-   * original on every device.
+   * Read from the variant map the server publishes with the content, not
+   * derived from the filename. The previous version pasted `-card`, `-grid`,
+   * `-pdp` and `-zoom` onto the stem and declared a fixed width for each. That
+   * is a guess about two separate things, and both can be wrong:
+   * `createImageVariants` skips any size wider than roughly the source, so a
+   * hero uploaded at 1200px has no `-zoom` sibling, yet the browser was still
+   * told an 1800w candidate existed and would pick it on a retina screen.
    *
-   * Returns '' for static assets and any URL that carries no variant siblings,
-   * in which case the template falls back to a plain `src`.
+   * Returns '' for bundled art and for any upload the map does not know about,
+   * in which case the template falls back to a plain `src`. Heavier than a
+   * correct srcset, but never a request for a file that was never written.
    */
   heroSrcset(url: string): string {
-    const webp = this.toWebp(url);
-    // Only uploads carry variants; bundled /assets art does not.
-    if (!/\/uploads\//.test(webp) || !/\.webp$/i.test(webp)) return '';
+    // Variant suffixes are stripped first: content can legitimately store a
+    // `-card` URL, and the map is keyed on the original upload.
+    const key = mediaVariantKey(url).replace(/-(thumb|card|grid|pdp|zoom)\.webp$/i, '.webp');
+    if (!key) return '';
 
-    // Strip any variant suffix so a stored `-card` URL still yields the full set.
-    const base = webp.replace(/-(thumb|card|grid|pdp|zoom)\.webp$/i, '.webp');
-    const stem = base.replace(/\.webp$/i, '');
-    return [
-      `${stem}-card.webp 640w`,
-      `${stem}-grid.webp 900w`,
-      `${stem}-pdp.webp 1400w`,
-      `${stem}-zoom.webp 1800w`,
-    ].join(', ');
+    const variants = this.contentData().mediaVariants?.[key];
+    if (!variants?.length) return '';
+
+    return variants.map((variant) => `${variant.url} ${variant.width}w`).join(', ');
   }
 
   /**

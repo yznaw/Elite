@@ -193,6 +193,28 @@ lsof -nP -iTCP:3000 -sTCP:LISTEN
 
 Failures upload a Playwright trace and screenshots under `client/test-results`. In CI the same suite runs in `.github/workflows/ci.yml` after the server tests and the admin build.
 
+### Run the storefront hero suite
+
+Separate from the POS gate: it drives the storefront on :4200 with the API behind it, and replaces the hero payload per test rather than seeding a tenant.
+
+```bash
+cd client && npm run test:hero
+```
+
+Two files, deliberately split by what they hold:
+
+- `e2e-hero/hero-resilience.spec.ts` — **layout** against content nobody has authored yet. Ten viewports, hostile copy lengths, an unmapped colour, a slide with no art. Every assertion is a measurement taken once the page is still.
+- `e2e-hero/hero-interaction.spec.ts` — **state** against input nobody has sent yet. Rapid and interleaved taps, images resolving out of order, a stalled decode, a failed load, reduced motion, and hit-testing the arrows across their width.
+
+It reuses an already-running `npm run dev`, so a developer with one open gets an instant run.
+
+**What it cannot certify.** Chromium will not reproduce Safari's double-tap zoom. The suite proves the contract that prevents it — the declared `touch-action` on each control and the absence of a scale cap in the viewport meta — but a physical iPhone pass stays mandatory before shipping hero changes.
+
+Two guards are worth knowing about before editing them, because both replaced a test that passed while asserting nothing:
+
+- Reduced motion is applied with `page.emulateMedia()` and then **verified** with an assertion. `test.use({ reducedMotion: 'reduce' })` silently did not take effect under this config, so the reduced-motion tests ran against the normal-motion path.
+- The "no directional cue under reduced motion" test has a normal-motion counterpart that asserts the cue **does** appear. Without it, the first test is satisfied by a hero that never cues at all. It also uses a real pointer click: the component reads `event.detail` to tell a pointer activation from a keyboard one, so a synthetic `element.click()` takes the no-cue branch by itself.
+
 ### Investigate an error a user reported
 
 Every request gets one correlation id, shared by the response, the log line, the error record and the audit row. The error toast shows its last 6 characters as a reference code.
