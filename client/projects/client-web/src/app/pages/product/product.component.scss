@@ -560,6 +560,14 @@
   border-top: 1px solid var(--pdp-line);
 }
 
+.size-required-message {
+  margin-top: 8px;
+  color: #a33a32;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .size-section:first-of-type,
 .color-section + .size-section {
   border-top: 0;
@@ -1997,6 +2005,8 @@ button:focus-visible {
     inset: 0;
     z-index: 60;
     display: block;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   .size-guide-modal {
@@ -2028,6 +2038,7 @@ button:focus-visible {
   .size-sheet-backdrop {
     position: absolute;
     inset: 0;
+    z-index: 0;
     width: 100%;
     min-height: 100%;
     padding: 0;
@@ -2041,15 +2052,18 @@ button:focus-visible {
     right: 0;
     bottom: 0;
     left: 0;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
     gap: 14px;
     padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
     border-radius: 22px 22px 0 0;
     background: var(--pdp-surface);
     box-shadow: 0 -22px 70px rgba(26, 24, 21, 0.26);
-    max-height: 50%;
+    height: 50dvh;
+    max-height: 50dvh;
     overflow: hidden;
+    touch-action: pan-y;
   }
 
   .size-sheet-head {
@@ -2062,6 +2076,13 @@ button:focus-visible {
   .size-sheet-head div {
     display: grid;
     gap: 4px;
+  }
+
+  .size-required-message {
+    color: #a33a32;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
   }
 
   .size-sheet-head span {
@@ -2096,16 +2117,21 @@ button:focus-visible {
   }
 
   .size-list {
-    display: grid;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
     gap: 9px;
     min-height: 0;
+    min-width: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
   }
 
   .size-list .size-btn {
     width: 100%;
+    flex: 0 0 52px;
     height: 52px;
     padding: 0 16px;
     border-color: var(--pdp-line);

@@ -109,6 +109,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly thumbStripCanScrollStart = signal(false);
   readonly thumbStripCanScrollEnd = signal(false);
   readonly selectedSize = signal<number | null>(null);
+  readonly sizeSelectionError = signal(false);
   readonly selectedColor = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
   readonly colorSwatchImageByName = this.referenceData.colorSwatchImageByName;
@@ -212,9 +213,19 @@ export class ProductComponent implements OnInit, OnDestroy {
       return (p.stock ?? 1) > 0;
     }
     const size = this.selectedSize();
-    if (!size) return true;
+    if (size === null) return false;
     const state = this.availableSizes().find((item) => item.size === size);
     return state ? state.available && state.inStock : false;
+  });
+
+  readonly canPurchaseProduct = computed(() => {
+    const p = this.product();
+    if (!p) return false;
+    if (!p.sizes?.length) return this.selectedSizeInStock();
+    if (this.selectedSize() === null) {
+      return this.availableSizes().some((item) => item.available && item.inStock);
+    }
+    return this.selectedSizeInStock();
   });
 
   readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
@@ -339,7 +350,8 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.galleryIdx.set(0);
     this.selectedColor.set(null);
     this.applyColorParam(this.route.snapshot.queryParamMap.get('color'), nextProduct);
-    this.selectedSize.set(this.defaultSizeForProduct(nextProduct));
+    this.selectedSize.set(null);
+    this.sizeSelectionError.set(false);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
     this.sizeGuideOpen.set(false);
@@ -352,7 +364,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   goToProduct(nextProduct: Product): void {
     this.product.set(nextProduct);
     this.galleryIdx.set(0);
-    this.selectedSize.set(nextProduct.sizes[0] ?? null);
+    this.selectedSize.set(null);
+    this.sizeSelectionError.set(false);
     this.selectedColor.set(null);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
@@ -451,6 +464,7 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   selectSize(s: number): void {
     this.selectedSize.set(s);
+    this.sizeSelectionError.set(false);
     this.closeSizePicker();
     this.resetRestockForm();
   }
@@ -458,7 +472,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   selectProductColor(color: string): void {
     this.selectedColor.set(color);
     this.selectGalleryIndex(0);
-    this.selectedSize.set(this.defaultSizeForProduct(this.product()));
+    this.selectedSize.set(null);
+    this.sizeSelectionError.set(false);
     this.resetRestockForm();
     void this.router.navigate([], {
       relativeTo: this.route,
@@ -518,6 +533,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   add(): void {
     const p = this.product();
     if (!p) return;
+    if (!this.requireSizeSelection()) return;
     if (!this.selectedSizeInStock()) {
       this.openRestockForm();
       return;
@@ -531,6 +547,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   buyNow(): void {
     const p = this.product();
     if (!p) return;
+    if (!this.requireSizeSelection()) return;
     if (!this.selectedSizeInStock()) {
       this.openRestockForm();
       return;
@@ -787,16 +804,12 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.resetRestockForm();
   }
 
-  private defaultSizeForProduct(product: Product | null): number | null {
-    if (!product?.sizes?.length) return null;
-    const current = this.selectedSize();
-    const sizes = this.availableSizes();
-    if (current && sizes.some((item) => item.size === current && item.available && item.inStock)) return current;
-
-    return sizes.find((item) => item.available && item.inStock)?.size
-      ?? sizes.find((item) => item.available)?.size
-      ?? product.sizes[0]
-      ?? null;
+  private requireSizeSelection(): boolean {
+    const p = this.product();
+    if (!p?.sizes?.length || this.selectedSize() !== null) return true;
+    this.sizeSelectionError.set(true);
+    this.openSizePicker();
+    return false;
   }
 
   private selectedVariant(product: Product): ProductVariant | undefined {
