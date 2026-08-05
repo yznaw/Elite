@@ -201,10 +201,10 @@ Each was invisible for as long as the suite was red, and none would have been ca
 **Status:** ⬜ not started (technical pipeline built; content, legal sign-off and two gaps outstanding)
 
 ### What is already true
-The renderer is canvas-rasterised (the only approach that can shape Arabic correctly), prints through QZ Tray with signing working end to end on the real Bixolon SRP-QE300, uses `Asia/Qatar` local time, and reads a `pos_business_profile` row that has an admin editing screen.
+The renderer is canvas-rasterised (the only approach that can shape Arabic correctly), prints through QZ Tray with signing working end to end on the real Bixolon SRP-QE300, uses `Asia/Qatar` local time, and — **2026-08-03: reads a per-branch profile**, not a single tenant-wide row. `pos_business_profile` (one row per tenant) is superseded by `pos_branches` (one row per physical shop, migration 027): each register is assigned to a branch and prints that branch's content, falling back to the tenant's default branch when unassigned. Managed from Settings → General → Branches, with register assignment in Devices & Security. Full design in `docs/12-pos-system.md` §13.2. The receipt header, the QR position/size, and the ink-erosion bug that silently dropped several fields (SKU, QR caption, CR number) were also fixed in the same pass — see `docs/12` §13.1.
 
 ### What is missing
-1. **`pos_business_profile` is empty**, so the printed receipt is English-only with no address, CR number or return policy. Until it is filled, the receipt does not meet the MOCI Arabic-invoice requirement identified in docs/14 §P0-4.
+1. **Real content is not confirmed entered for both shops on production.** The Pearl's real trade name/address/phone were entered and verified end-to-end (including a live printed-receipt render through the printer's exact 1-bit threshold) during development. What has **not** been confirmed: (a) that data is actually saved on the *production* `pos_branches` table, not just dev; (b) the second shop has its own branch created with real content at all; (c) every production register is assigned to the correct branch, not left on the default. Until all three are confirmed on production, this remains not-done, not merely "needs a re-check."
 2. **The 510px width fix has never been re-printed.** The last physical receipt was cut off on the right; the fix (576 → 510px, correcting a 203dpi assumption to the real 180dpi/72mm printable width) is committed but unverified on paper.
 3. ~~**A void produces no printed receipt.**~~ ✅ Implemented 2026-08-01: the original immutable sale snapshot is rendered through the same receipt renderer with a `VOID` heading, void time, reason and amount. It keeps the original receipt number and lookup QR, opens the drawer only for a cash void, and treats print failure as post-commit (`Sale voided, receipt not printed`) with a `PRINT_FAILED` diagnostic.
 4. **No customer copy by email or WhatsApp.** The plumbing exists — `sale-service.js` calls `sendReceiptForPaidOrder` after commit — but `order-receipt.js:24` returns `customer_email_missing` on **every POS sale**, because checkout always sends `customerId: null`. The feature is wired and permanently inert. It only becomes real after Phase 5.
@@ -214,12 +214,12 @@ Keep one renderer as the single source of truth for all three outputs (thermal, 
 
 ### Integration impact
 - **Void receipt** reuses the sale/refund renderer with a `VOID` header; there is no third layout. It is a cancellation copy of the original receipt, not a new financial document, so it retains the original receipt number and QR rather than consuming a new sequence number.
-- **Business-profile caching:** `pos-hardware.service.ts` caches the profile for 5 minutes and falls back gracefully offline. Filling the profile therefore takes up to 5 minutes to appear on a register, and a register that has never been online since the profile was set prints the fallback. Worth stating in the operator runbook so an empty test print is not misdiagnosed as a bug.
+- **Branch-profile caching:** `pos-hardware.service.ts` caches the resolved profile for 5 minutes and falls back gracefully offline. Editing a branch, or reassigning a register to a different branch, therefore takes up to 5 minutes to appear on that register, and a register that has never been online since the change prints the stale cached one. Worth stating in the operator runbook so a receipt that still shows the old shop right after a reassignment is not misdiagnosed as the feature not working.
 - **Email/PDF receipt** depends on Phase 5 for an address, and on consent rules. It must not be sent to a customer record that was created at the till without explicit consent.
 - **Legal sign-off is a gate, not a task.** It cannot start before the content decision in Phase 0.
 
 ### Exit gate
-- [ ] Real business content entered; a printed receipt shows correct Arabic and English trade name, address, phone, CR number, return policy.
+- [ ] Real business content entered **for every branch**, on production, and every production register confirmed assigned to its correct branch; a printed receipt from each shop's register shows that shop's own trade name, address, phone, CR number, return policy.
 - [ ] Five consecutive prints with no clipping on any edge and an intact QR.
 - [ ] Printed QR scans with a phone camera and with the shop's scanner.
 - [ ] A void prints a customer-facing void receipt. **Implemented and Angular-compiled; one physical cash void and one card void still need printer verification.**

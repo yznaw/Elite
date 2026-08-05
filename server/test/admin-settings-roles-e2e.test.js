@@ -65,6 +65,12 @@ test('team invitations and direct team-member edits validate role against an all
       body: JSON.stringify({ email: `cashier-${runId}@elite.local`, role: 'cashier' }),
     });
     assert.ok(invite.inviteLink);
+    // No SMTP_HOST in this test environment, so the send is expected to fail
+    // gracefully — the important thing is that invitation creation still
+    // succeeds and still returns a usable link (see invitation-email.js /
+    // admin-settings.route.js POST /invitations: email is best-effort, never
+    // a blocker).
+    assert.equal(invite.emailSent, false);
 
     // Invalid/garbage role must be rejected with a clean validation error,
     // not silently inserted (the pre-fix behavior) or a raw DB error.

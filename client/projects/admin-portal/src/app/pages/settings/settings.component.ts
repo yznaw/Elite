@@ -10,13 +10,13 @@ import { SortableTableComponent, CellTplDirective, TableColumn } from '../../sha
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminSettingsService, Invitation, PosRegisterRow, PosEnrollmentTokenRow, ManagerPinRow, PosPolicy } from '../../services/admin-settings.service';
+import { AdminSettingsService, Invitation, PosRegisterRow, PosBranchRow, PosBranchInput, PosEnrollmentTokenRow, ManagerPinRow, PosPolicy } from '../../services/admin-settings.service';
 import { AuthService } from '../../services/auth.service';
 import { StoreConfigService } from '../../services/store-config.service';
-import { PosService, PosBusinessProfile } from '../../services/pos.service';
+import { PosService } from '../../services/pos.service';
 import { INTEGRATIONS } from '../../data/mock';
-import { TeamMember, TeamMemberRole } from '../../models';
-import { rolePillKind, registerStatusPillKind, tokenStatusPillKind, PillInfo } from '../../shared/pill/status-pill';
+import { TeamMember, TeamMemberRole, TeamMemberStatus } from '../../models';
+import { rolePillKind, registerStatusPillKind, tokenStatusPillKind, teamStatusPillKind, PillInfo } from '../../shared/pill/status-pill';
 
 type Tab = 'general' | 'team' | 'security' | 'integrations';
 
@@ -101,82 +101,148 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
           }
         </div>
 
+        @if (canEditBranches()) {
         <div class="card card-pad mt-24" style="max-width:680px;">
           <div class="card-header mb-16">
             <div>
-              <div class="card-title">{{ t('settings.receiptProfile') }}</div>
-              <div class="card-sub">{{ t('settings.receiptProfile.sub') }}</div>
+              <div class="card-title">{{ t('settings.branches.title') }}</div>
+              <div class="card-sub">{{ t('settings.branches.sub') }}</div>
             </div>
+            @if (!loadingBranches()) {
+              <button class="btn btn-outline btn-sm" (click)="startAddBranch()">
+                <ap-icon name="plus" [size]="12"/> {{ t('settings.branches.add') }}
+              </button>
+            }
           </div>
 
-          @if (loadingReceiptProfile()) {
+          @if (loadingBranches()) {
             <div class="row gap-sm" style="padding:24px 0;justify-content:center;">
               <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
             </div>
-          } @else if (!canEditReceiptProfile()) {
-            <div class="muted small">{{ t('settings.receiptProfile.readOnly') }}</div>
-            <div class="col gap-sm mt-16">
-              <div><span class="muted small">{{ t('settings.receiptProfile.tradeNameEn') }}:</span> {{ receiptProfile().tradeNameEn || '—' }}</div>
-              <div><span class="muted small">{{ t('settings.receiptProfile.tradeNameAr') }}:</span> {{ receiptProfile().tradeNameAr || '—' }}</div>
-            </div>
           } @else {
-            <div class="grid-2">
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.tradeNameEn') }}</label>
-                <input class="inp" [ngModel]="receiptProfile().tradeNameEn" (ngModelChange)="setReceiptProfile('tradeNameEn', $event)"/>
-              </div>
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.tradeNameAr') }}</label>
-                <input class="inp" dir="rtl" [ngModel]="receiptProfile().tradeNameAr" (ngModelChange)="setReceiptProfile('tradeNameAr', $event)"/>
-                <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
-              </div>
-              <!--
-                Textareas, not inputs. A real shop address here is three lines
-                ("Parcel 14, 25 La Croisette Ground Floor / Shop 317, Marina
-                Way 23 / The Pearl - Qatar") and the receipt renderer prints
-                the line breaks as entered. A single-line input made that
-                impossible to type in the first place.
-              -->
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.addressEn') }}</label>
-                <textarea class="inp" rows="3" [ngModel]="receiptProfile().addressEn" (ngModelChange)="setReceiptProfile('addressEn', $event)"></textarea>
-              </div>
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.addressAr') }}</label>
-                <textarea class="inp" dir="rtl" rows="3" [ngModel]="receiptProfile().addressAr" (ngModelChange)="setReceiptProfile('addressAr', $event)"></textarea>
-                <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
-              </div>
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.phone') }}</label>
-                <input class="inp" type="tel" placeholder="+974 XXXX XXXX" [ngModel]="receiptProfile().phone" (ngModelChange)="setReceiptProfile('phone', $event)"/>
-              </div>
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.crLicense') }}</label>
-                <input class="inp" [ngModel]="receiptProfile().crLicenseNumber" (ngModelChange)="setReceiptProfile('crLicenseNumber', $event)"/>
-              </div>
-            </div>
+            <div class="col gap-lg">
+              @if (addingBranch()) {
+                <div class="card" style="border:1px solid var(--border);">
+                  <div class="card-pad">
+                    <ng-container
+                      [ngTemplateOutlet]="branchForm"
+                      [ngTemplateOutletContext]="{ draft: newBranchDraft(), setField: setNewBranchField }"
+                    />
+                    <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+                      <button class="btn btn-gold" [disabled]="savingBranch() || !newBranchDraft().name.trim() || !newBranchDraft().tradeNameEn.trim()" (click)="saveNewBranch()">
+                        @if (savingBranch()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+                        @else { {{ t('common.save') }} }
+                      </button>
+                      <button class="btn btn-outline" [disabled]="savingBranch()" (click)="cancelAddBranch()">{{ t('common.cancel') }}</button>
+                    </div>
+                  </div>
+                </div>
+              }
 
-            <div class="grid-2 mt-16">
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.returnPolicyEn') }}</label>
-                <textarea class="inp" rows="2" [ngModel]="receiptProfile().returnPolicyEn" (ngModelChange)="setReceiptProfile('returnPolicyEn', $event)"></textarea>
-              </div>
-              <div>
-                <label class="lbl">{{ t('settings.receiptProfile.returnPolicyAr') }}</label>
-                <textarea class="inp" dir="rtl" rows="2" [ngModel]="receiptProfile().returnPolicyAr" (ngModelChange)="setReceiptProfile('returnPolicyAr', $event)"></textarea>
-              </div>
+              @for (b of branches(); track b.id) {
+                <div class="card" style="border:1px solid var(--border);">
+                  <div class="card-header" style="padding:12px 16px;">
+                    <div class="row gap-sm" style="align-items:center;">
+                      <span class="strong">{{ b.name }}</span>
+                      @if (b.isDefault) { <ap-pill kind="green">{{ t('settings.branches.default') }}</ap-pill> }
+                    </div>
+                    @if (canEditBranches()) {
+                      <div class="row gap-sm">
+                        @if (!b.isDefault) {
+                          <button class="btn btn-outline btn-sm" [disabled]="settingDefaultBranchId() === b.id" (click)="setDefaultBranch(b)">{{ t('settings.branches.setDefault') }}</button>
+                        }
+                        <button class="btn btn-outline btn-sm" (click)="toggleEditBranch(b)">
+                          {{ editingBranchId() === b.id ? t('common.cancel') : t('common.edit') }}
+                        </button>
+                        <button class="btn btn-danger btn-sm" [disabled]="deletingBranchId() === b.id" (click)="deleteBranch(b)"><ap-icon name="trash" [size]="12"/></button>
+                      </div>
+                    }
+                  </div>
+
+                  @if (editingBranchId() === b.id) {
+                    <div class="card-pad">
+                      <ng-container
+                        [ngTemplateOutlet]="branchForm"
+                        [ngTemplateOutletContext]="{ draft: branchDrafts()[b.id], setField: makeSetBranchField(b.id) }"
+                      />
+                      <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+                        <button class="btn btn-gold" [disabled]="savingBranch() || !branchDrafts()[b.id]?.name?.trim() || !branchDrafts()[b.id]?.tradeNameEn?.trim()" (click)="saveEditedBranch(b)">
+                          @if (savingBranch()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+                          @else { {{ t('common.save') }} }
+                        </button>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="card-pad muted small">{{ b.tradeNameEn }} · {{ b.addressEn || '—' }} · {{ b.phone || '—' }}</div>
+                  }
+                </div>
+              }
             </div>
 
             <div class="muted small mt-16">{{ t('settings.receiptProfile.disclaimer') }}</div>
-
-            <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
-              <button class="btn btn-gold" [disabled]="savingReceiptProfile() || !receiptProfile().tradeNameEn.trim()" (click)="saveReceiptProfile()">
-                @if (savingReceiptProfile()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
-                @else { {{ t('common.save') }} }
-              </button>
-            </div>
           }
         </div>
+
+        <!--
+          Shared field layout for both the "add branch" and "edit branch"
+          cards above — one template, parameterized by which draft object and
+          setter it writes into, so the two flows can never drift apart.
+        -->
+        <ng-template #branchForm let-draft="draft" let-setField="setField">
+          <div class="grid-2">
+            <div>
+              <label class="lbl">{{ t('settings.branches.name') }}</label>
+              <input class="inp" [ngModel]="draft.name" (ngModelChange)="setField('name', $event)"/>
+              <div class="muted small mt-8">{{ t('settings.branches.nameHint') }}</div>
+            </div>
+            <div></div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.tradeNameEn') }}</label>
+              <input class="inp" [ngModel]="draft.tradeNameEn" (ngModelChange)="setField('tradeNameEn', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.tradeNameAr') }}</label>
+              <input class="inp" dir="rtl" [ngModel]="draft.tradeNameAr" (ngModelChange)="setField('tradeNameAr', $event)"/>
+              <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
+            </div>
+            <!--
+              Textareas, not inputs. A real shop address here is three lines
+              ("Parcel 14, 25 La Croisette Ground Floor / Shop 317, Marina
+              Way 23 / The Pearl - Qatar") and the receipt renderer prints
+              the line breaks as entered. A single-line input made that
+              impossible to type in the first place.
+            -->
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.addressEn') }}</label>
+              <textarea class="inp" rows="3" [ngModel]="draft.addressEn" (ngModelChange)="setField('addressEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.addressAr') }}</label>
+              <textarea class="inp" dir="rtl" rows="3" [ngModel]="draft.addressAr" (ngModelChange)="setField('addressAr', $event)"></textarea>
+              <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.phone') }}</label>
+              <input class="inp" type="tel" placeholder="+974 XXXX XXXX" [ngModel]="draft.phone" (ngModelChange)="setField('phone', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.crLicense') }}</label>
+              <input class="inp" [ngModel]="draft.crLicenseNumber" (ngModelChange)="setField('crLicenseNumber', $event)"/>
+            </div>
+          </div>
+
+          <div class="grid-2 mt-16">
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.returnPolicyEn') }}</label>
+              <textarea class="inp" rows="2" [ngModel]="draft.returnPolicyEn" (ngModelChange)="setField('returnPolicyEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.returnPolicyAr') }}</label>
+              <textarea class="inp" dir="rtl" rows="2" [ngModel]="draft.returnPolicyAr" (ngModelChange)="setField('returnPolicyAr', $event)"></textarea>
+            </div>
+          </div>
+        </ng-template>
+        }
 
         @if (canSetOwnManagerPin()) {
           <div class="card card-pad mt-24" style="max-width:680px;">
@@ -234,6 +300,18 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                 </ng-template>
                 <ng-template apCellTpl="status" let-r>
                   <ap-pill [kind]="registerPill(r.status).kind">{{ t(registerPill(r.status).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="branchName" let-r>
+                  @if (canEditBranches()) {
+                    <select class="inp inp-sm" [ngModel]="r.branchId || ''" (ngModelChange)="setRegisterBranch(r, $event || null)">
+                      <option value="">{{ t('settings.branches.useDefault') }}</option>
+                      @for (b of branches(); track b.id) {
+                        <option [value]="b.id">{{ b.name }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <span class="muted small">{{ r.branchName || t('settings.branches.useDefault') }}</span>
+                  }
                 </ng-template>
                 <ng-template apCellTpl="lastSeenAt" let-r>
                   <span class="muted small">{{ r.lastSeenAt ? (r.lastSeenAt | date:'MMM d, HH:mm') : t('common.never') }}</span>
@@ -445,6 +523,17 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
               </button>
             </div>
             @if (inviteLink()) {
+              @if (inviteLink()!.emailSent) {
+                <div class="invite-email-sent">
+                  <ap-icon name="mail" [size]="14"/>
+                  {{ t('settings.team.emailSentTo').replace('{email}', inviteLink()!.email) }}
+                </div>
+              } @else {
+                <div class="invite-email-failed">
+                  <ap-icon name="warning" [size]="14"/>
+                  {{ t('settings.team.emailFailed') }}
+                </div>
+              }
               <div class="invite-link-box">
                 <ap-icon name="link" [size]="13"/>
                 <span class="inv-email">{{ inviteLink()!.email }}</span>
@@ -453,6 +542,9 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                 <button class="btn btn-outline btn-sm" (click)="copyInviteLink()">{{ t('settings.team.copyLink') }}</button>
               </div>
               <div class="muted small" style="margin-top:4px;">{{ t('settings.team.linkExpiry') }}</div>
+              @if (inviteLink()!.hadPendingInvite) {
+                <div class="muted small" style="margin-top:4px;">{{ t('settings.team.replacedPending') }}</div>
+              }
             }
           </div>
 
@@ -470,8 +562,20 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                     <ap-icon name="mail" [size]="13" style="opacity:.4"/>
                     <div class="inv-info">
                       <div class="strong">{{ inv.email }}</div>
-                      <div class="muted small">{{ inv.role | titlecase }} · invited {{ inv.created_at | date:'MMM d' }}</div>
+                      <div class="muted small">
+                        {{ inv.role | titlecase }} · invited {{ inv.created_at | date:'MMM d' }}
+                        @if (inv.invited_by_name) { {{ t('settings.team.by') }} {{ inv.invited_by_name }} }
+                        @if (inv.resend_count > 0) { · {{ t('settings.team.resentN').replace('{n}', inv.resend_count.toString()) }} }
+                      </div>
+                      <div class="small" [class.invite-expiry-warn]="isExpiringSoon(inv.expires_at)">
+                        <ap-icon [name]="inv.email_sent ? 'mail' : 'warning'" [size]="11"/>
+                        {{ inv.email_sent ? t('settings.team.emailedBadge') : t('settings.team.emailFailedBadge') }} · {{ expiryLabel(inv.expires_at) }}
+                      </div>
                     </div>
+                    <button class="btn btn-outline btn-sm" [disabled]="resendingInviteId() === inv.id" (click)="resendInvite(inv)">
+                      @if (resendingInviteId() === inv.id) { <ap-spinner [size]="11"/> }
+                      @else { <ap-icon name="mail" [size]="12"/> {{ t('settings.team.resend') }} }
+                    </button>
                     <button class="btn btn-ghost btn-sm" style="color:var(--danger);" (click)="revokeInvite(inv.id)">{{ t('settings.team.revoke') }}</button>
                   </div>
                 }
@@ -515,8 +619,22 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                     }
                   </div>
                 </ng-template>
+                <ng-template apCellTpl="status" let-r>
+                  <ap-pill [kind]="statusPill(r.status).kind">{{ t(statusPill(r.status).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="lastActive" let-r>
+                  <span class="muted small">{{ lastActiveLabel(r) }}</span>
+                </ng-template>
                 <ng-template apCellTpl="actions" let-r>
-                  <button class="btn btn-danger btn-sm" (click)="removeMember(r.id)"><ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}</button>
+                  <div class="row gap-sm" style="justify-content:flex-end;">
+                    @if (r.role !== 'Owner') {
+                      <button class="btn btn-outline btn-sm" (click)="toggleMemberStatus(r)">
+                        @if (r.status === 'disabled') { <ap-icon name="check" [size]="12"/> {{ t('settings.team.reactivate') }} }
+                        @else { <ap-icon name="lock" [size]="12"/> {{ t('settings.team.disable') }} }
+                      </button>
+                      <button class="btn btn-danger btn-sm" (click)="removeMember(r.id)"><ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}</button>
+                    }
+                  </div>
                 </ng-template>
               </ap-sortable-table>
             }
@@ -553,6 +671,9 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
     .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
     .btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
     .invite-link-box { display: flex; align-items: center; gap: 8px; padding: 10px 14px; margin-top: 12px; background: rgba(2,70,56,.06); border: 1px solid rgba(2,70,56,.15); border-radius: 8px; flex-wrap: wrap; }
+    .invite-email-sent { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--green); }
+    .invite-email-failed { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--danger); }
+    .invite-expiry-warn { color: var(--danger); font-weight: 600; }
     .inv-email { font-weight: 700; font-size: 13px; color: var(--green); }
     .inv-link-input { flex: 1; min-width: 180px; border: none; background: transparent; font-size: 12px; font-family: monospace; color: var(--ink-2); cursor: pointer; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .inv-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border,#e4e4e7); }
@@ -611,15 +732,33 @@ export class SettingsComponent implements OnInit {
     this.lowStockThreshold() !== this._storeSnapshot.lowStockThreshold
   );
 
-  // ── POS receipt/legal profile ───────────────────────────────────────────────
-  readonly loadingReceiptProfile = signal(true);
-  readonly savingReceiptProfile = signal(false);
-  readonly canEditReceiptProfile = computed(() => this.auth.hasRole('owner', 'admin'));
-  readonly receiptProfile = signal({
-    tradeNameAr: '', tradeNameEn: '', addressAr: '', addressEn: '', phone: '',
-    crLicenseNumber: '', returnPolicyAr: '', returnPolicyEn: '',
-    footerStampAr: '', footerStampEn: '',
-  });
+  // ── POS branches (each a printable receipt identity for one physical shop) ──
+  readonly loadingBranches = signal(true);
+  readonly canEditBranches = computed(() => this.auth.hasRole('owner', 'admin'));
+  readonly branches = signal<PosBranchRow[]>([]);
+  readonly savingBranch = signal(false);
+  readonly deletingBranchId = signal<string | null>(null);
+  readonly settingDefaultBranchId = signal<string | null>(null);
+  readonly editingBranchId = signal<string | null>(null);
+  readonly branchDrafts = signal<Record<string, PosBranchInput>>({});
+  readonly addingBranch = signal(false);
+  readonly newBranchDraft = signal<PosBranchInput>(this.emptyBranchDraft());
+
+  private emptyBranchDraft(): PosBranchInput {
+    return {
+      name: '', tradeNameAr: '', tradeNameEn: '', addressAr: '', addressEn: '',
+      phone: '', crLicenseNumber: '', returnPolicyAr: '', returnPolicyEn: '',
+    };
+  }
+
+  private draftFromBranch(b: PosBranchRow): PosBranchInput {
+    return {
+      name: b.name, tradeNameAr: b.tradeNameAr, tradeNameEn: b.tradeNameEn,
+      addressAr: b.addressAr, addressEn: b.addressEn, phone: b.phone,
+      crLicenseNumber: b.crLicenseNumber || '',
+      returnPolicyAr: b.returnPolicyAr || '', returnPolicyEn: b.returnPolicyEn || '',
+    };
+  }
 
   // ── Manager PIN ──────────────────────────────────────────────────────────
   // Only owner/admin/manager roles are ever asked for a manager PIN (cashiers
@@ -663,6 +802,7 @@ export class SettingsComponent implements OnInit {
   readonly registerColumns: TableColumn<PosRegisterRow>[] = [
     { key: 'displayName', label: 'Device',    labelKey: 'settings.col.name' },
     { key: 'status',      label: 'Status',    labelKey: 'settings.col.status', noSort: true },
+    { key: 'branchName',  label: 'Branch',    labelKey: 'settings.security.devices.col.branch', noSort: true },
     { key: 'lastSeenAt',  label: 'Last seen', labelKey: 'settings.security.devices.col.lastSeen' },
     { key: 'createdAt',   label: 'Created',   labelKey: 'settings.security.devices.col.created' },
     { key: 'actions',     label: '',                                          noSort: true, align: 'right' },
@@ -689,7 +829,8 @@ export class SettingsComponent implements OnInit {
   readonly invite = signal({ name: '', email: '', role: 'Manager' as Exclude<TeamMemberRole, 'Owner'> });
   readonly inviting = signal(false);
   readonly pendingInvitations = signal<Invitation[]>([]);
-  readonly inviteLink = signal<{ email: string; link: string } | null>(null);
+  readonly inviteLink = signal<{ email: string; link: string; emailSent: boolean; hadPendingInvite: boolean } | null>(null);
+  readonly resendingInviteId = signal<string | null>(null);
 
   // ── Integrations ─────────────────────────────────────────────────────────
   readonly integrations = INTEGRATIONS;
@@ -700,16 +841,21 @@ export class SettingsComponent implements OnInit {
   });
 
   readonly teamColumns: TableColumn<TeamMember>[] = [
-    { key: 'name',    label: 'Name',    labelKey: 'settings.col.name' },
-    { key: 'email',   label: 'Email',   labelKey: 'settings.col.email' },
-    { key: 'role',    label: 'Role',    labelKey: 'settings.col.role',  noSort: true },
-    { key: 'actions', label: '',                                         noSort: true, align: 'right' },
+    { key: 'name',       label: 'Name',        labelKey: 'settings.col.name' },
+    { key: 'email',      label: 'Email',       labelKey: 'settings.col.email' },
+    { key: 'role',       label: 'Role',        labelKey: 'settings.col.role',       noSort: true },
+    { key: 'status',     label: 'Status',      labelKey: 'settings.col.status',     noSort: true },
+    { key: 'lastActive', label: 'Last active', labelKey: 'settings.col.lastActive', noSort: true },
+    { key: 'actions',    label: '',                                                 noSort: true, align: 'right' },
   ];
 
   async ngOnInit(): Promise<void> {
-    const tasks = [this.loadStore(), this.loadTeam(), this.loadReceiptProfile()];
+    const tasks = [this.loadStore(), this.loadTeam()];
     if (this.canManageRegisters()) {
-      tasks.push(this.loadRegisters(), this.loadTokens(), this.loadManagerPins(), this.loadPosPolicy());
+      // Branches share the same owner/admin gate as everything else here —
+      // GET /admin/pos-branches 403s for any other role, and the registers
+      // table's branch-picker column needs the branch list loaded too.
+      tasks.push(this.loadBranches(), this.loadRegisters(), this.loadTokens(), this.loadManagerPins(), this.loadPosPolicy());
     }
     await Promise.all(tasks);
   }
@@ -731,47 +877,129 @@ export class SettingsComponent implements OnInit {
     }
   }
 
-  private async loadReceiptProfile(): Promise<void> {
+  private async loadBranches(): Promise<void> {
     try {
-      const profile = await this.posApi.businessProfile();
-      if (profile) {
-        this.receiptProfile.set({
-          tradeNameAr: profile.tradeNameAr, tradeNameEn: profile.tradeNameEn,
-          addressAr: profile.addressAr, addressEn: profile.addressEn, phone: profile.phone,
-          crLicenseNumber: profile.crLicenseNumber || '',
-          returnPolicyAr: profile.returnPolicyAr || '', returnPolicyEn: profile.returnPolicyEn || '',
-          footerStampAr: profile.footerStampAr || '', footerStampEn: profile.footerStampEn || '',
-        });
-      }
+      this.branches.set(await this.settingsApi.listBranches());
     } catch {
-      // keep defaults — the profile may simply not exist yet
+      this.branches.set([]);
     } finally {
-      this.loadingReceiptProfile.set(false);
+      this.loadingBranches.set(false);
     }
   }
 
-  setReceiptProfile<K extends keyof ReturnType<typeof this.receiptProfile>>(key: K, value: string): void {
-    this.receiptProfile.update((p) => ({ ...p, [key]: value }));
+  startAddBranch(): void {
+    this.newBranchDraft.set(this.emptyBranchDraft());
+    this.addingBranch.set(true);
+    this.editingBranchId.set(null);
   }
 
-  async saveReceiptProfile(): Promise<void> {
-    if (this.savingReceiptProfile() || !this.canEditReceiptProfile()) return;
-    if (!this.receiptProfile().tradeNameEn.trim()) return;
-    this.savingReceiptProfile.set(true);
+  cancelAddBranch(): void {
+    this.addingBranch.set(false);
+  }
+
+  readonly setNewBranchField = <K extends keyof PosBranchInput>(key: K, value: string): void => {
+    this.newBranchDraft.update((d) => ({ ...d, [key]: value }));
+  };
+
+  /** One updater per branch id, so editing one branch's draft can never bleed into another's. */
+  makeSetBranchField(branchId: string): <K extends keyof PosBranchInput>(key: K, value: string) => void {
+    return (key, value) => {
+      this.branchDrafts.update((drafts) => ({
+        ...drafts,
+        [branchId]: { ...drafts[branchId], [key]: value },
+      }));
+    };
+  }
+
+  toggleEditBranch(b: PosBranchRow): void {
+    this.addingBranch.set(false);
+    if (this.editingBranchId() === b.id) {
+      this.editingBranchId.set(null);
+      return;
+    }
+    this.branchDrafts.update((drafts) => ({ ...drafts, [b.id]: this.draftFromBranch(b) }));
+    this.editingBranchId.set(b.id);
+  }
+
+  async saveNewBranch(): Promise<void> {
+    if (this.savingBranch()) return;
+    const draft = this.newBranchDraft();
+    if (!draft.name.trim() || !draft.tradeNameEn.trim()) return;
+    this.savingBranch.set(true);
     try {
-      const saved = await this.posApi.updateBusinessProfile(this.receiptProfile() as Omit<PosBusinessProfile, 'updatedAt'>);
-      this.receiptProfile.set({
-        tradeNameAr: saved.tradeNameAr, tradeNameEn: saved.tradeNameEn,
-        addressAr: saved.addressAr, addressEn: saved.addressEn, phone: saved.phone,
-        crLicenseNumber: saved.crLicenseNumber || '',
-        returnPolicyAr: saved.returnPolicyAr || '', returnPolicyEn: saved.returnPolicyEn || '',
-        footerStampAr: saved.footerStampAr || '', footerStampEn: saved.footerStampEn || '',
-      });
-      this.toast.success(this.t('settings.toast.saved'), this.t('settings.receiptProfile.saved.sub'));
+      const created = await this.settingsApi.createBranch(draft);
+      this.branches.update((list) => [...list, created]);
+      this.addingBranch.set(false);
+      this.toast.success(this.t('settings.toast.branchSaved'));
+    } catch {
+      // Global interceptor surfaces the error (e.g. BRANCH_NAME_TAKEN).
+    } finally {
+      this.savingBranch.set(false);
+    }
+  }
+
+  async saveEditedBranch(b: PosBranchRow): Promise<void> {
+    if (this.savingBranch()) return;
+    const draft = this.branchDrafts()[b.id];
+    if (!draft || !draft.name.trim() || !draft.tradeNameEn.trim()) return;
+    this.savingBranch.set(true);
+    try {
+      const saved = await this.settingsApi.updateBranch(b.id, draft);
+      this.branches.update((list) => list.map((x) => (x.id === b.id ? saved : x)));
+      this.editingBranchId.set(null);
+      this.toast.success(this.t('settings.toast.branchSaved'));
     } catch {
       // Global interceptor surfaces the error.
     } finally {
-      this.savingReceiptProfile.set(false);
+      this.savingBranch.set(false);
+    }
+  }
+
+  async setDefaultBranch(b: PosBranchRow): Promise<void> {
+    if (this.settingDefaultBranchId()) return;
+    this.settingDefaultBranchId.set(b.id);
+    try {
+      await this.settingsApi.setDefaultBranch(b.id);
+      this.branches.update((list) => list.map((x) => ({ ...x, isDefault: x.id === b.id })));
+      this.toast.success(this.t('settings.toast.branchSaved'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.settingDefaultBranchId.set(null);
+    }
+  }
+
+  async deleteBranch(b: PosBranchRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.deleteBranch.title').replace('{name}', b.name),
+      message: this.t('settings.confirm.deleteBranch.message'),
+      confirmLabel: this.t('settings.confirm.deleteBranch.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.deleteBranch.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    this.deletingBranchId.set(b.id);
+    try {
+      await this.settingsApi.deleteBranch(b.id);
+      this.branches.update((list) => list.filter((x) => x.id !== b.id));
+      this.toast.success(this.t('settings.toast.branchDeleted'));
+    } catch {
+      // Global interceptor surfaces the server's guard message as-is —
+      // BRANCH_LAST_REMAINING or BRANCH_HAS_REGISTERS both read fine
+      // unmodified as a toast.
+    } finally {
+      this.deletingBranchId.set(null);
+    }
+  }
+
+  async setRegisterBranch(r: PosRegisterRow, branchId: string | null): Promise<void> {
+    const previous = this.registers();
+    const branchName = branchId ? this.branches().find((b) => b.id === branchId)?.name ?? null : null;
+    this.registers.update((list) => list.map((x) => (x.registerId === r.registerId ? { ...x, branchId, branchName } : x)));
+    try {
+      await this.settingsApi.setRegisterBranch(r.registerId, branchId);
+    } catch {
+      this.registers.set(previous);
     }
   }
 
@@ -1002,9 +1230,12 @@ export class SettingsComponent implements OnInit {
         this.settingsApi.getTeam(),
         this.settingsApi.getInvitations().catch(() => [] as Invitation[]),
       ]);
+      // GET /admin/settings/team already excludes status='removed' server-side;
+      // this filter stays as a harmless safety net in case an older cached
+      // response or a future caller ever includes one.
       this.team.set(
         list
-          .filter((m: TeamMember & { status?: string }) => m.status !== 'removed')
+          .filter((m) => m.status !== 'removed')
           .map((m) => ({
             ...m,
             role: capitalizeRole(m.role),
@@ -1080,10 +1311,14 @@ export class SettingsComponent implements OnInit {
     try {
       const result = await this.settingsApi.sendInvitation({ email: f.email.trim(), role: f.role });
       this.invite.update(v => ({ ...v, email: '' }));
-      this.inviteLink.set({ email: result.email, link: result.inviteLink });
+      this.inviteLink.set({ email: result.email, link: result.inviteLink, emailSent: result.emailSent, hadPendingInvite: result.hadPendingInvite });
       const invites = await this.settingsApi.getInvitations().catch(() => this.pendingInvitations());
       this.pendingInvitations.set(invites);
-      this.toast.success(this.t('settings.toast.invitationCreated'), this.t('settings.toast.invitationCreated.sub'));
+      if (result.emailSent) {
+        this.toast.success(this.t('settings.toast.invitationEmailed'), this.t('settings.toast.invitationEmailed.sub').replace('{email}', result.email));
+      } else {
+        this.toast.success(this.t('settings.toast.invitationCreated'), this.t('settings.toast.invitationCreated.sub'));
+      }
     } catch {
       // Global interceptor surfaces the error.
     } finally {
@@ -1107,8 +1342,72 @@ export class SettingsComponent implements OnInit {
     } catch { /* Global interceptor */ }
   }
 
+  async resendInvite(inv: Invitation): Promise<void> {
+    if (this.resendingInviteId()) return;
+    this.resendingInviteId.set(inv.id);
+    try {
+      const result = await this.settingsApi.resendInvitation(inv.id);
+      const invites = await this.settingsApi.getInvitations().catch(() => this.pendingInvitations());
+      this.pendingInvitations.set(invites);
+      if (result.emailSent) {
+        this.toast.success(this.t('settings.toast.invitationEmailed'), this.t('settings.toast.invitationEmailed.sub').replace('{email}', result.email));
+      } else {
+        this.toast.error(this.t('settings.team.emailFailed'));
+      }
+    } catch { /* Global interceptor */ } finally {
+      this.resendingInviteId.set(null);
+    }
+  }
+
+  // Highlights an invite in the last ~12h of its 48h window so an admin
+  // notices before it silently expires, instead of only finding out when
+  // the invitee complains the link doesn't work.
+  isExpiringSoon(expiresAt: string): boolean {
+    return new Date(expiresAt).getTime() - Date.now() < 12 * 60 * 60 * 1000;
+  }
+
+  expiryLabel(expiresAt: string): string {
+    const hours = Math.round((new Date(expiresAt).getTime() - Date.now()) / (60 * 60 * 1000));
+    if (hours <= 0) return this.t('settings.team.expiresSoon');
+    if (hours < 24) return this.t('settings.team.expiresInHours').replace('{n}', String(hours));
+    return this.t('settings.team.expiresInDays').replace('{n}', String(Math.round(hours / 24)));
+  }
+
   rolePill(role: string): PillInfo {
     return rolePillKind(role);
+  }
+
+  statusPill(status: TeamMemberStatus): PillInfo {
+    return teamStatusPillKind(status);
+  }
+
+  lastActiveLabel(member: TeamMember): string {
+    if (!member.last_login_at) return this.t('settings.team.neverSignedIn');
+    const days = Math.floor((Date.now() - new Date(member.last_login_at).getTime()) / (24 * 60 * 60 * 1000));
+    if (days <= 0) return this.t('settings.team.activeToday');
+    if (days === 1) return this.t('settings.team.activeYesterday');
+    return this.t('settings.team.activeDaysAgo').replace('{n}', String(days));
+  }
+
+  async toggleMemberStatus(member: TeamMember): Promise<void> {
+    const next: TeamMemberStatus = member.status === 'disabled' ? 'active' : 'disabled';
+    if (next === 'disabled') {
+      const ok = await this.confirm.ask({
+        title: this.t('settings.confirm.disableMember.title').replace('{name}', member.name),
+        message: this.t('settings.confirm.disableMember.message'),
+        confirmLabel: this.t('settings.confirm.disableMember.confirmLabel'),
+        cancelLabel: this.t('settings.confirm.disableMember.cancelLabel'),
+        variant: 'danger',
+      });
+      if (!ok) return;
+    }
+    this.team.update((t) => t.map((m) => (m.id === member.id ? { ...m, status: next } : m)));
+    try {
+      await this.settingsApi.patchTeam(member.id, { status: next });
+      this.toast.success(next === 'disabled' ? this.t('settings.toast.memberDisabled') : this.t('settings.toast.memberReactivated'));
+    } catch {
+      this.team.update((t) => t.map((m) => (m.id === member.id ? { ...m, status: member.status } : m)));
+    }
   }
 
   async updateRole(id: string, role: Exclude<TeamMemberRole, 'Owner'>): Promise<void> {

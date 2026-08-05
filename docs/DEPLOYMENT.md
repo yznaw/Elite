@@ -57,7 +57,7 @@ pm2 reload elite-api --update-env
 pm2 logs elite-api --lines 100
 ```
 
-At startup the API applies migrations `015`–`026` in order under a PostgreSQL advisory lock. The API refuses to start if database preparation fails; PM2 logs must not contain `Database preparation failed`.
+At startup the API applies migrations `015`–`027` in order under a PostgreSQL advisory lock. The API refuses to start if database preparation fails; PM2 logs must not contain `Database preparation failed`. (`027_pos_branches.sql` — multi-branch receipt profiles, see `docs/12-pos-system.md` §13.2 — is additive and idempotent like the others; its backfill runs once per tenant automatically, no manual step required.)
 
 Verify the new schema. `DATABASE_URL` lives in `server/.env` and is **not** exported into the deploy shell, so a bare `psql "$DATABASE_URL"` connects as the OS user and fails with `role "root" does not exist`. Do not reach for `. ./.env` either: the file holds unquoted values containing spaces (the receipt printer name, for one), which `source` tries to execute as commands. `dotenv` parses them correctly, so go through node and reuse the API's own pool:
 

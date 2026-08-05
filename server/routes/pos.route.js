@@ -20,15 +20,16 @@ const { deleteParkedCart, listParkedCarts, parkCart } = require('../lib/pos/park
 const { createRefund, findTransaction, voidTransaction } = require('../lib/pos/correction-service');
 const { listConflicts, resolveConflict } = require('../lib/pos/conflict-service');
 const { getQzCertificate, signQzRequest } = require('../lib/pos/qz-service');
-const { getBusinessProfile, updateBusinessProfile } = require('../lib/pos/business-profile-service');
+const { getEffectiveBranchProfile } = require('../lib/pos/branch-service');
 const { resolveCustomer } = require('../lib/customer-identity');
 const { audit, inTransaction } = require('../lib/pos/db');
 
 const router = Router();
 // Cashier is POS-only and lowest privilege; manager-scoped actions (e.g.
-// setting another user's PIN, editing the business profile) are further
-// restricted inside their own service functions, not here — see
-// register-service.js's setManagerPin and business-profile-service.js.
+// setting another user's PIN) are further restricted inside their own
+// service functions, not here — see register-service.js's setManagerPin.
+// Editing branch details is admin-only and lives entirely off this router,
+// in admin-pos-branches.route.js.
 const POS_ROLES = ['owner', 'admin', 'manager', 'cashier'];
 
 // SSE replay-buffer retention. Connection-time pruning is throttled to roughly
@@ -104,12 +105,12 @@ router.post('/registers/receipt-number-blocks', asyncHandler(async (req, res) =>
   created(res, await allocateReceiptBlock(context(req)));
 }));
 
+// The register's own branch, falling back to the tenant's default branch —
+// see branch-service.js's getEffectiveBranchProfile. Writes no longer go
+// through this router at all: they're admin-only actions now, handled by
+// /admin/pos-branches (see admin-pos-branches.route.js).
 router.get('/business-profile', asyncHandler(async (req, res) => {
-  ok(res, await getBusinessProfile(context(req)));
-}));
-
-router.put('/business-profile', asyncHandler(async (req, res) => {
-  ok(res, await updateBusinessProfile(context(req), req.body));
+  ok(res, await getEffectiveBranchProfile(context(req)));
 }));
 
 router.put('/manager-pin', posPinLimiter, asyncHandler(async (req, res) => {

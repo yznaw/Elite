@@ -122,10 +122,10 @@ export const FUNNEL: FunnelStep[] = [
 ];
 
 export const TEAM: TeamMember[] = [
-  { id: 'T-1', name: 'Yusuf Hamad', email: 'yusuf@elitecollection.qa', role: 'Admin', joined: '2023-06-01', initials: 'YH' },
-  { id: 'T-2', name: 'Mona Al-Sayed', email: 'mona@elitecollection.qa', role: 'Manager', joined: '2024-02-14', initials: 'MS' },
-  { id: 'T-3', name: 'Hassan Karim', email: 'hassan@elitecollection.qa', role: 'Manager', joined: '2024-09-08', initials: 'HK' },
-  { id: 'T-4', name: 'Lina Bassam', email: 'lina@elitecollection.qa', role: 'Viewer', joined: '2025-03-22', initials: 'LB' },
+  { id: 'T-1', name: 'Yusuf Hamad', email: 'yusuf@elitecollection.qa', role: 'Admin', joined: '2023-06-01', initials: 'YH', status: 'active', last_login_at: '2026-08-04T09:00:00Z' },
+  { id: 'T-2', name: 'Mona Al-Sayed', email: 'mona@elitecollection.qa', role: 'Manager', joined: '2024-02-14', initials: 'MS', status: 'active', last_login_at: '2026-08-03T14:00:00Z' },
+  { id: 'T-3', name: 'Hassan Karim', email: 'hassan@elitecollection.qa', role: 'Manager', joined: '2024-09-08', initials: 'HK', status: 'disabled', last_login_at: '2026-07-20T10:00:00Z' },
+  { id: 'T-4', name: 'Lina Bassam', email: 'lina@elitecollection.qa', role: 'Viewer', joined: '2025-03-22', initials: 'LB', status: 'active', last_login_at: null },
 ];
 
 export const INTEGRATIONS: Integration[] = [

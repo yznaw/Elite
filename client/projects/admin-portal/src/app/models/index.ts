@@ -148,6 +148,7 @@ export interface Trigger {
 }
 
 export type TeamMemberRole = 'Owner' | 'Admin' | 'Manager' | 'Cashier' | 'Viewer';
+export type TeamMemberStatus = 'invited' | 'active' | 'disabled' | 'removed';
 
 export interface TeamMember {
   id: string;
@@ -156,6 +157,8 @@ export interface TeamMember {
   role: TeamMemberRole;
   joined: string;
   initials: string;
+  status: TeamMemberStatus;
+  last_login_at: string | null;
 }
 
 export interface Integration {

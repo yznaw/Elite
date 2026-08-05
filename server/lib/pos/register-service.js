@@ -176,10 +176,12 @@ async function listAllRegisters(context) {
   const client = await db.pool.connect();
   try {
     const result = await client.query(
-      `SELECT id, display_name, status, last_seen_at, created_at
-       FROM pos_registers
-       WHERE tenant_id = $1
-       ORDER BY display_name ASC`,
+      `SELECT r.id, r.display_name, r.status, r.last_seen_at, r.created_at,
+              r.branch_id, b.name AS branch_name
+       FROM pos_registers r
+       LEFT JOIN pos_branches b ON b.id = r.branch_id AND b.tenant_id = r.tenant_id
+       WHERE r.tenant_id = $1
+       ORDER BY r.display_name ASC`,
       [context.tenantId],
     );
     return result.rows.map((row) => ({
@@ -188,6 +190,11 @@ async function listAllRegisters(context) {
       status: row.status,
       lastSeenAt: row.last_seen_at,
       createdAt: row.created_at,
+      // null means "not explicitly assigned" — the till still resolves to
+      // the tenant's default branch (branch-service.js's
+      // getEffectiveBranchProfile), the admin UI just labels this "Default".
+      branchId: row.branch_id,
+      branchName: row.branch_name,
     }));
   } finally {
     client.release();
@@ -209,6 +216,44 @@ async function revokeRegister(context, registerId) {
     assertPos(result.rowCount === 1, 404, 'REGISTER_NOT_FOUND', 'Register not found or already revoked.');
     await audit(client, context, 'pos.register.revoked', 'pos_register', registerId, { displayName: result.rows[0].display_name });
     return { registerId, status: 'revoked' };
+  });
+}
+
+/**
+ * `branchId` is nullable — unassigning a register (setting it back to null)
+ * is a normal, supported action, not an error path: it makes the register
+ * fall back to whatever the tenant's default branch is.
+ *
+ * When a branchId is given, it's verified to belong to this tenant with an
+ * explicit lookup rather than relying on the FK constraint alone — a bad id
+ * would otherwise surface as the FK's generic 422 `POS_DATA_INVALID` instead
+ * of a clean, actionable 404.
+ */
+async function setRegisterBranch(context, registerId, branchId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can assign a register to a branch.');
+  uuid(registerId, 'registerId');
+  if (branchId !== null && branchId !== undefined) uuid(branchId, 'branchId');
+  const targetBranchId = branchId || null;
+
+  return inTransaction(async (client) => {
+    if (targetBranchId) {
+      const branchExists = await client.query(
+        'SELECT 1 FROM pos_branches WHERE tenant_id = $1 AND id = $2',
+        [context.tenantId, targetBranchId],
+      );
+      assertPos(branchExists.rowCount === 1, 404, 'BRANCH_NOT_FOUND', 'Branch not found.');
+    }
+
+    const result = await client.query(
+      `UPDATE pos_registers
+       SET branch_id = $3
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING id, display_name`,
+      [context.tenantId, registerId, targetBranchId],
+    );
+    assertPos(result.rowCount === 1, 404, 'REGISTER_NOT_FOUND', 'Register not found.');
+    await audit(client, context, 'pos.register.branch-assigned', 'pos_register', registerId, { branchId: targetBranchId });
+    return { registerId, branchId: targetBranchId };
   });
 }
 
@@ -312,4 +357,5 @@ module.exports = {
   listEnrollmentTokens,
   revokeEnrollmentToken,
   revokeRegister,
+  setRegisterBranch,
 };

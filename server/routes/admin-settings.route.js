@@ -3,6 +3,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, validationError } = require('./lib');
+const { sendInvitationEmail } = require('../lib/invitation-email');
 
 const router = Router();
 
@@ -68,7 +69,7 @@ router.get('/team', asyncHandler(async (_req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
-      'SELECT id, full_name AS name, email, role, initials, created_at AS joined, status FROM admin_users WHERE tenant_id = $1 ORDER BY created_at',
+      'SELECT id, full_name AS name, email, role, initials, created_at AS joined, status, last_login_at FROM admin_users WHERE tenant_id = $1 AND status != \'removed\' ORDER BY created_at',
       [tenant.id],
     );
     ok(res, result.rows);
@@ -167,7 +168,7 @@ router.get('/invitations', asyncHandler(async (req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
-      `SELECT i.id, i.email, i.role, i.expires_at, i.created_at,
+      `SELECT i.id, i.email, i.role, i.expires_at, i.created_at, i.last_sent_at, i.email_sent, i.resend_count,
               u.full_name AS invited_by_name
        FROM team_invitations i
        LEFT JOIN admin_users u ON u.id = i.invited_by
@@ -181,37 +182,101 @@ router.get('/invitations', asyncHandler(async (req, res) => {
   }
 }));
 
+// Shared by POST /invitations (new invite) and POST /invitations/:id/resend
+// (same email, fresh token) — both boil down to "issue a token, mail it,
+// record what happened," they only differ in how the row gets there.
+async function dispatchInvitation(client, { tenant, email, role, invitedBy, req, resend }) {
+  const token     = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+  await client.query(
+    resend
+      ? `UPDATE team_invitations
+         SET token_hash = $3, expires_at = NOW() + INTERVAL '48 hours',
+             last_sent_at = NOW(), resend_count = resend_count + 1
+         WHERE tenant_id = $1 AND email = $2`
+      : `INSERT INTO team_invitations (tenant_id, email, role, token_hash, invited_by, last_sent_at)
+         VALUES ($1, $2, $4, $3, $5, NOW())
+         ON CONFLICT (tenant_id, email) DO UPDATE
+         SET role = EXCLUDED.role, token_hash = EXCLUDED.token_hash,
+             invited_by = EXCLUDED.invited_by,
+             expires_at = NOW() + INTERVAL '48 hours',
+             created_at = NOW(), last_sent_at = NOW(), resend_count = 0`,
+    resend ? [tenant.id, email, tokenHash] : [tenant.id, email, tokenHash, role, invitedBy],
+  );
+
+  // Prefer the actual origin this request came from over a hardcoded
+  // fallback — a request from the real admin portal always carries its own
+  // origin, so this needs no separate env var to stay in sync with
+  // wherever the admin portal is actually deployed. ADMIN_ORIGIN remains a
+  // manual override for the rare case of no Origin header (e.g. a
+  // server-to-server call); localhost:4300 is a dev-only last resort and
+  // must never be reached in production once CORS_ORIGINS is set.
+  const inviteBase = req.get('origin') || process.env.ADMIN_ORIGIN || 'http://localhost:4300';
+  const inviteLink = `${inviteBase}/accept-invite?token=${token}`;
+
+  let inviterName = null;
+  if (invitedBy) {
+    const inviter = await client.query('SELECT full_name FROM admin_users WHERE id = $1', [invitedBy]);
+    inviterName = inviter.rows[0]?.full_name || null;
+  }
+
+  // The invite link above is always returned regardless of what happens
+  // here — email is a delivery convenience on top of it, never the only
+  // way to get it, matching the .catch-and-log convention every other
+  // sendMail() caller in this codebase uses (see order-receipt.js).
+  let emailSent = false;
+  try {
+    await sendInvitationEmail({ to: email, role, inviteLink, inviterName, tenantName: tenant.name });
+    emailSent = true;
+  } catch (err) {
+    console.warn('[settings] Invitation email failed:', err.message);
+  }
+  await client.query('UPDATE team_invitations SET email_sent = $3 WHERE tenant_id = $1 AND email = $2', [tenant.id, email, emailSent]);
+
+  return { inviteLink, emailSent };
+}
+
 router.post('/invitations', asyncHandler(async (req, res) => {
-  const { email, role: rawRole } = req.body;
-  if (!email) return validationError(res, ['Email is required.']);
+  const { email: rawEmail, role: rawRole } = req.body;
+  if (!rawEmail) return validationError(res, ['Email is required.']);
   const role = normalizeRole(rawRole);
   if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+  const email = rawEmail.toLowerCase().trim();
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
-    const token     = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const invitedBy = req.session?.userId || null;
-    await client.query(
-      `INSERT INTO team_invitations (tenant_id, email, role, token_hash, invited_by)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (tenant_id, email) DO UPDATE
-       SET role = EXCLUDED.role, token_hash = EXCLUDED.token_hash,
-           invited_by = EXCLUDED.invited_by,
-           expires_at = NOW() + INTERVAL '48 hours',
-           created_at = NOW()`,
-      [tenant.id, email.toLowerCase().trim(), role, tokenHash, invitedBy],
+
+    const existing = await client.query(
+      'SELECT id, created_at FROM team_invitations WHERE tenant_id = $1 AND email = $2 AND expires_at > NOW()',
+      [tenant.id, email],
     );
-    // Prefer the actual origin this request came from over a hardcoded
-    // fallback — a request from the real admin portal always carries its own
-    // origin, so this needs no separate env var to stay in sync with
-    // wherever the admin portal is actually deployed. ADMIN_ORIGIN remains a
-    // manual override for the rare case of no Origin header (e.g. a
-    // server-to-server call); localhost:4300 is a dev-only last resort and
-    // must never be reached in production once CORS_ORIGINS is set.
-    const inviteBase = req.get('origin') || process.env.ADMIN_ORIGIN || 'http://localhost:4300';
-    const inviteLink = `${inviteBase}/accept-invite?token=${token}`;
-    created(res, { email, inviteLink }, 'Invitation sent.');
+    const hadPendingInvite = existing.rowCount > 0;
+
+    const { inviteLink, emailSent } = await dispatchInvitation(client, { tenant, email, role, invitedBy, req, resend: false });
+
+    created(res, { email, inviteLink, emailSent, hadPendingInvite }, emailSent ? 'Invitation emailed.' : 'Invitation created.');
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/invitations/:id/resend', asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const existing = await client.query(
+      'SELECT email, role FROM team_invitations WHERE tenant_id = $1 AND id = $2',
+      [tenant.id, req.params.id],
+    );
+    if (existing.rowCount === 0) return notFound(res, 'Invitation not found.');
+    const { email, role } = existing.rows[0];
+    const invitedBy = req.session?.userId || null;
+
+    const { inviteLink, emailSent } = await dispatchInvitation(client, { tenant, email, role, invitedBy, req, resend: true });
+
+    ok(res, { email, inviteLink, emailSent }, emailSent ? 'Invitation re-emailed.' : 'Invitation link renewed.');
   } finally {
     client.release();
   }

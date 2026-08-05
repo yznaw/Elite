@@ -277,12 +277,14 @@ export class PosService {
     return firstValueFrom(this.api.post<PosReceiptBlock>('/pos/registers/receipt-number-blocks', {}));
   }
 
+  /**
+   * The calling register's own branch (falling back to the tenant's default
+   * branch) — server-resolved, see branch-service.js's
+   * getEffectiveBranchProfile. Writing is admin-only now and lives entirely
+   * under AdminSettingsService's branch methods, not here.
+   */
   businessProfile(): Promise<PosBusinessProfile | null> {
     return firstValueFrom(this.api.get<PosBusinessProfile | null>('/pos/business-profile'));
-  }
-
-  updateBusinessProfile(profile: Omit<PosBusinessProfile, 'updatedAt'>): Promise<PosBusinessProfile> {
-    return firstValueFrom(this.api.put<PosBusinessProfile>('/pos/business-profile', profile));
   }
 
   openShift(openingFloatCents: number): Promise<PosShift> {

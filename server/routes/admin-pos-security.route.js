@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { asyncHandler, ok } = require('./lib');
 const { PosError } = require('../lib/pos/errors');
-const { listAllRegisters, revokeRegister, listEnrollmentTokens, revokeEnrollmentToken } = require('../lib/pos/register-service');
+const { listAllRegisters, revokeRegister, setRegisterBranch, listEnrollmentTokens, revokeEnrollmentToken } = require('../lib/pos/register-service');
 const { listManagerPins, clearManagerPin } = require('../lib/pos/manager-service');
 const { getPosPolicy, updatePosPolicy } = require('../lib/pos/policy-service');
 
@@ -26,6 +26,10 @@ router.get('/registers', asyncHandler(async (req, res) => {
 
 router.post('/registers/:id/revoke', asyncHandler(async (req, res) => {
   ok(res, await revokeRegister(context(req), req.params.id));
+}));
+
+router.put('/registers/:id/branch', asyncHandler(async (req, res) => {
+  ok(res, await setRegisterBranch(context(req), req.params.id, req.body?.branchId ?? null));
 }));
 
 router.get('/enrollment-tokens', asyncHandler(async (req, res) => {

@@ -13,6 +13,7 @@ const adminAnalyticsRouter = require('./admin-analytics.route');
 const adminPosReconciliationRouter = require('./admin-pos-reconciliation.route');
 const adminPosReportsRouter = require('./admin-pos-reports.route');
 const adminPosSecurityRouter = require('./admin-pos-security.route');
+const adminPosBranchesRouter = require('./admin-pos-branches.route');
 const adminBulkImportRouter = require('./admin-bulk-import.route');
 const adminRefRouter = require('./admin-ref.route');
 const productsRouter = require('./products.route');
@@ -88,6 +89,9 @@ admin.use('/pos-reports', requireAuth({ roles: ['owner', 'admin', 'manager'] }),
 // owner/admin only, since these are the exact same permission checks the
 // underlying services already enforce (createEnrollmentToken, setManagerPin).
 admin.use('/pos-security', requireAuth({ roles: ['owner', 'admin'] }), adminPosSecurityRouter);
+// Physical shop locations, each with its own printable receipt identity —
+// see server/db/migrations/027_pos_branches.sql and branch-service.js.
+admin.use('/pos-branches', requireAuth({ roles: ['owner', 'admin'] }), adminPosBranchesRouter);
 // Diagnostics: grouped application errors (server + register browsers + CSP)
 // and the audit trail, which had no UI at all before this. Owner/admin only —
 // stack traces and audit rows are not for every role.

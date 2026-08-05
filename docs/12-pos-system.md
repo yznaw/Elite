@@ -483,11 +483,15 @@ Three constraints come from the printer rather than from taste. All three were v
 
 **Module size 4 is too small to scan.** At 180dpi that is 0.56mm per module, roughly 12-14mm square for this payload. Size 8 gives 24-28mm, above the floor most phone cameras want, and still uses under half the 72mm printable width.
 
-### 13.2 Business profile and branches
+### 13.2 Branches
 
-The header block below the wordmark (address, phone, CR number, return policy) is read from `pos_business_profile` and prints only what is filled in. `addressEn` is multi-line: entered line breaks are printed as written, and any line too wide for the tape is wrapped rather than clipped.
+**Resolved 2026-08-03** — multiple physical shops, each with its own printable receipt identity. `pos_branches` (migration 027) holds one row per branch: name (internal label, never printed), trade name, address, phone, CR number, return policy, each EN/AR as applicable. `pos_registers.branch_id` assigns a register to exactly one branch; an unassigned register (`branch_id IS NULL`) falls back to the tenant's default branch (`pos_branches.is_default`, enforced unique per tenant by a partial index).
 
-**Known limitation:** `pos_business_profile` holds exactly one row per tenant and `pos_registers` carries no address, so every register prints the same address. A second branch cannot print its own. Giving `pos_registers` optional address/phone overrides that fall back to the tenant profile is the smallest fix.
+The header block below the wordmark (address, phone, CR number, return policy) is read from the calling register's effective branch — `server/lib/pos/branch-service.js`'s `getEffectiveBranchProfile()`, one query, no N+1: register's own branch → tenant default → oldest branch → `null`. `addressEn` is multi-line: entered line breaks are printed as written, and any line too wide for the tape is wrapped rather than clipped.
+
+Managed from Settings → General (owner/admin only): add/edit/delete a branch, set the default, and assign each register to a branch from the Devices & Security registers table. A branch cannot be deleted while any register is still assigned to it, or if it is the tenant's only remaining branch — both return a 409 naming the reason. Deleting the current default promotes the next-oldest branch to default in the same transaction, so a tenant is never left without one.
+
+The old single-profile table (`pos_business_profile`, one row per tenant) is superseded but left in place, untouched, as the migration's backfill source and a rollback path — not read or written by anything anymore. `footerStampEn`/`footerStampAr` exist as columns on `pos_branches` for schema parity but are not exposed in the API or UI; they've had no template field, no i18n key and no renderer usage since the original table (migration 017).
 
 ## 14. Hardware Integration Summary
 
