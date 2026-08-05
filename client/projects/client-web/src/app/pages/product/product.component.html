@@ -132,36 +132,8 @@
               }
             </div>
           }
-        </div>
-
-        <article class="details-panel">
-          <h1>{{ productName(p) }}</h1>
-          <p class="descriptor">{{ productLeather(p.leather) }}</p>
-
-          <div class="price-row">
-            <span>{{ price(p.price) }}</span>
-          </div>
-
-          @if (productDescription(p); as description) {
-            <!-- Rich text from the admin editor. Angular sanitizes innerHTML. -->
-            <div class="description" [innerHTML]="description"></div>
-          } @else {
-            <p class="description">
-              {{ t("product.descriptionTemplate", { name: productName(p) }) }}
-            </p>
-          }
-
-          <!-- <dl class="attribute-grid">
-            @for (a of attributes(); track a.key) {
-              <div>
-                <dt>{{ t(a.key) }}</dt>
-                <dd>{{ a.value }}</dd>
-              </div>
-            }
-          </dl> -->
-
           @if (productColorNames(p).length > 0) {
-            <div class="color-section">
+            <div class="color-section gallery-color-section">
               <div class="section-label">
                 <span>{{ t("product.color.label") }}</span>
                 @if (selectedColor()) {
@@ -195,6 +167,33 @@
               </div>
             </div>
           }
+        </div>
+
+        <article class="details-panel">
+          <h1>{{ productName(p) }}</h1>
+          <p class="descriptor">{{ productLeather(p.leather) }}</p>
+
+          <div class="price-row">
+            <span>{{ price(p.price) }}</span>
+          </div>
+
+          @if (productDescription(p); as description) {
+            <!-- Rich text from the admin editor. Angular sanitizes innerHTML. -->
+            <div class="description" [innerHTML]="description"></div>
+          } @else {
+            <p class="description">
+              {{ t("product.descriptionTemplate", { name: productName(p) }) }}
+            </p>
+          }
+
+          <!-- <dl class="attribute-grid">
+            @for (a of attributes(); track a.key) {
+              <div>
+                <dt>{{ t(a.key) }}</dt>
+                <dd>{{ a.value }}</dd>
+              </div>
+            }
+          </dl> -->
 
           @if (p.sizes && p.sizes.length > 0) {
             <div id="size-section" class="size-section">
@@ -208,6 +207,7 @@
                 class="mobile-size-trigger"
                 (click)="openSizePicker()"
                 [attr.aria-expanded]="sizePickerOpen()"
+                [attr.aria-invalid]="sizeSelectionError()"
               >
                 <span>{{ t("product.size.choose") }}</span>
                 <strong>UK {{ selectedSize() ?? "—" }}</strong>
@@ -232,6 +232,11 @@
                   </button>
                 }
               </div>
+              @if (sizeSelectionError()) {
+                <p class="size-required-message" role="alert">
+                  {{ t("product.size.required") }}
+                </p>
+              }
             </div>
 
             @if (sizePickerOpen()) {
@@ -252,6 +257,11 @@
                     <div>
                       <span>{{ t("product.size.choose") }}</span>
                       <strong>{{ t("product.size.label") }}</strong>
+                      @if (sizeSelectionError()) {
+                        <small class="size-required-message" role="alert">
+                          {{ t("product.size.required") }}
+                        </small>
+                      }
                     </div>
                     <button
                       type="button"
@@ -308,7 +318,7 @@
           </div>
 
           <div class="cta-stack">
-            @if (selectedSizeInStock()) {
+            @if (canPurchaseProduct()) {
               <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart" [attr.data-track-product]="p.id">
                 @if (addedFeedback()) {
                   <span>✓ {{ t("product.cta.added") }}</span>
@@ -748,7 +758,7 @@
     </div>
 
     <div class="sticky-atc" id="sticky-atc">
-      @if (selectedSizeInStock()) {
+      @if (canPurchaseProduct()) {
         <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart-sticky" [attr.data-track-product]="p.id">
           @if (addedFeedback()) {
             <ng-container>{{ t("product.sticky.added") }}</ng-container>

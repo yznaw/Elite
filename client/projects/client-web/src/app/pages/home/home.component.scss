@@ -183,7 +183,7 @@
 .hero-brand p {
   margin: 0;
   font-family: var(--hero-font-display);
-  font-size: clamp(34px, 3.7vw, 66px);
+  font-size: clamp(34px, 3.3vw, 66px);
   font-weight: 600;
   letter-spacing: 0.045em;
   line-height: 1;
@@ -1363,7 +1363,7 @@
 
   .hero-brand p {
     max-width: min(100%, 34rem);
-    font-size: clamp(25px, 7.6vw, 32px);
+    font-size: clamp(25px, 7.6vw, 27px);
     letter-spacing: clamp(0.03em, 0.5vw, 0.06em);
     line-height: 1.08;
     overflow-wrap: anywhere;
