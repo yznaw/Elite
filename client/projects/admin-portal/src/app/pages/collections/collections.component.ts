@@ -156,15 +156,15 @@ interface HierarchyGroup {
             </div>
           }
           @if (c.hidden) {
-            <span class="prod-3d-badge badge-hidden">○ {{ t('collections.hidden') }}</span>
+            <span class="corner-badge badge-hidden">○ {{ t('collections.hidden') }}</span>
           }
           @if (c.parentId) {
-            <span class="prod-3d-badge badge-sub" style="inset-inline-start:10px;inset-inline-end:auto;">
+            <span class="corner-badge badge-sub" style="inset-inline-start:10px;inset-inline-end:auto;">
               <ap-icon name="hierarchy" [size]="9"/> {{ t('collections.sub') }}
             </span>
           }
           @if (c.system) {
-            <span class="prod-3d-badge badge-system">○ {{ t('collections.allProducts') }}</span>
+            <span class="corner-badge badge-system">○ {{ t('collections.allProducts') }}</span>
           }
         </div>
         <div class="prod-body">

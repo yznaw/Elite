@@ -9,6 +9,7 @@ export interface StoreSettingsPayload {
   currency?: string;
   timezone?: string;
   language?: string;
+  logoUrl?: string | null;
 }
 
 export interface StoreSettingsResponse {
@@ -18,6 +19,7 @@ export interface StoreSettingsResponse {
   timezone: string;
   store_name?: string;
   language?: string;
+  logo_url?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

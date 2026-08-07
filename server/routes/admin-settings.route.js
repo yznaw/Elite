@@ -4,8 +4,19 @@ const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, validationError } = require('./lib');
 const { sendInvitationEmail } = require('../lib/invitation-email');
+const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
+
+// This router mixes broad-read endpoints (any authenticated role can GET
+// store settings / team / integrations / invitations — see index.js's
+// mount comment) with owner/admin-only writes. requireAuth() at the
+// router-mount level only proves "logged in," so every write route below
+// applies this explicitly — it was previously missing entirely, meaning
+// the client's roleGuard(['owner','admin']) on the /settings route was the
+// *only* thing stopping a manager/cashier/viewer session from calling
+// these directly (docs/32-permission-enforcement-ux-design.md §1).
+const ownerOrAdmin = requireAuth({ roles: ['owner', 'admin'] });
 
 router.get('/store', asyncHandler(async (_req, res) => {
   const client = await db.pool.connect();
@@ -27,7 +38,7 @@ router.get('/store', asyncHandler(async (_req, res) => {
   }
 }));
 
-router.patch('/store', asyncHandler(async (req, res) => {
+router.patch('/store', ownerOrAdmin, asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -54,6 +65,20 @@ router.patch('/store', asyncHandler(async (req, res) => {
       `,
       [tenant.id, req.body.storeName || req.body.name, req.body.contactEmail, req.body.supportPhone, req.body.checkoutEnabled],
     );
+    // logoUrl is a distinct key (not COALESCE-skippable like the fields
+    // above) because "remove the logo" is a valid action — the client sends
+    // an explicit null to clear it, which must not be treated as "field
+    // omitted, keep existing value."
+    if (req.body.logoUrl !== undefined) {
+      await client.query(
+        `
+          INSERT INTO brand_profiles (tenant_id, logo_url)
+          VALUES ($1, $2)
+          ON CONFLICT (tenant_id) DO UPDATE SET logo_url = EXCLUDED.logo_url
+        `,
+        [tenant.id, req.body.logoUrl],
+      );
+    }
     await client.query('COMMIT');
     ok(res, { tenantId: tenant.id }, 'Store settings updated.');
   } catch (err) {
@@ -78,10 +103,11 @@ router.get('/team', asyncHandler(async (_req, res) => {
   }
 }));
 
-router.post('/team', asyncHandler(async (req, res) => {
+router.post('/team', ownerOrAdmin, asyncHandler(async (req, res) => {
   if (!req.body.email || !req.body.name) return validationError(res, ['Team member name and email are required.']);
   const role = normalizeRole(req.body.role);
   if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+  if (!canAssignRole(req.user.role, role)) return validationError(res, ['Only the owner can grant the owner role.']);
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -101,11 +127,12 @@ router.post('/team', asyncHandler(async (req, res) => {
   }
 }));
 
-router.patch('/team/:id', asyncHandler(async (req, res) => {
+router.patch('/team/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
   let role = null;
   if (req.body.role) {
     role = normalizeRole(req.body.role);
     if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+    if (!canAssignRole(req.user.role, role)) return validationError(res, ['Only the owner can grant the owner role.']);
   }
   const client = await db.pool.connect();
   try {
@@ -140,7 +167,7 @@ router.get('/integrations', asyncHandler(async (_req, res) => {
   }
 }));
 
-router.post('/integrations', asyncHandler(async (req, res) => {
+router.post('/integrations', ownerOrAdmin, asyncHandler(async (req, res) => {
   if (!req.body.key && !req.body.integrationKey) return validationError(res, ['Integration key is required.']);
   const client = await db.pool.connect();
   try {
@@ -237,11 +264,12 @@ async function dispatchInvitation(client, { tenant, email, role, invitedBy, req,
   return { inviteLink, emailSent };
 }
 
-router.post('/invitations', asyncHandler(async (req, res) => {
+router.post('/invitations', ownerOrAdmin, asyncHandler(async (req, res) => {
   const { email: rawEmail, role: rawRole } = req.body;
   if (!rawEmail) return validationError(res, ['Email is required.']);
   const role = normalizeRole(rawRole);
   if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+  if (!canAssignRole(req.user.role, role)) return validationError(res, ['Only the owner can grant the owner role.']);
   const email = rawEmail.toLowerCase().trim();
   const client = await db.pool.connect();
   try {
@@ -262,7 +290,7 @@ router.post('/invitations', asyncHandler(async (req, res) => {
   }
 }));
 
-router.post('/invitations/:id/resend', asyncHandler(async (req, res) => {
+router.post('/invitations/:id/resend', ownerOrAdmin, asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -282,7 +310,7 @@ router.post('/invitations/:id/resend', asyncHandler(async (req, res) => {
   }
 }));
 
-router.delete('/invitations/:id', asyncHandler(async (req, res) => {
+router.delete('/invitations/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -302,13 +330,22 @@ function initials(name) {
   return String(name || 'User').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || 'U';
 }
 
-// Owner is not assignable through invite/team-edit — it is set only at
-// tenant creation. Cashier is POS-only (server/routes/pos.route.js).
-const ASSIGNABLE_ROLES = ['admin', 'manager', 'cashier', 'viewer'];
+// Owner is assignable like any other role (no separate "promote" flow —
+// picking it in the same role dropdown is the whole action), but only an
+// existing owner can hand it out. Cashier is POS-only
+// (server/routes/pos.route.js).
+const ASSIGNABLE_ROLES = ['owner', 'admin', 'manager', 'cashier', 'viewer'];
 
 function normalizeRole(role) {
   const value = String(role || 'viewer').toLowerCase();
   return ASSIGNABLE_ROLES.includes(value) ? value : null;
+}
+
+// Only an owner can grant the owner role — an admin (who otherwise passes
+// `ownerOrAdmin` on every route below) must not be able to hand out the
+// account's top permission tier to themselves or anyone else.
+function canAssignRole(actorRole, targetRole) {
+  return targetRole !== 'owner' || actorRole === 'owner';
 }
 
 module.exports = router;

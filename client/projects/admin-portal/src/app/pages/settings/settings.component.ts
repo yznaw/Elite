@@ -6,6 +6,7 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
+import { PermHintComponent } from '../../shared/perm-hint/perm-hint.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
@@ -22,7 +23,7 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
 
 @Component({
     selector: 'ap-settings',
-    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent],
+    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent],
     template: `
     <div class="page-fade">
       @if (tab() === 'general') {
@@ -89,12 +90,22 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
             <div class="mt-24">
               <label class="lbl">{{ t('settings.logo') }}</label>
               <div style="padding:18px;border:1px dashed var(--border);border-radius:10px;background:var(--bg);display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-                <div class="avatar lg" style="border-radius:8px;background:var(--green);color:var(--gold);font-family:var(--ff-disp);font-size:18px;">EC</div>
+                @if (logoUrl()) {
+                  <img [src]="logoUrl()" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:contain;background:var(--surface);"/>
+                } @else {
+                  <div class="avatar lg" style="border-radius:8px;background:var(--green);color:var(--gold);font-family:var(--ff-disp);font-size:18px;">EC</div>
+                }
                 <div class="grow" style="min-width:0;">
-                  <div class="strong mono">elite-logo.svg</div>
-                  <div class="muted small">SVG · 4 KB</div>
+                  <div class="strong mono">{{ logoUrl() ? t('settings.logo.custom') : t('settings.logo.default') }}</div>
+                  <div class="muted small">{{ t('settings.logo.hint') }}</div>
                 </div>
-                <button class="btn btn-outline btn-sm"><ap-icon name="upload" [size]="12"/> {{ t('common.edit') }}</button>
+                <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+                  <ap-icon name="upload" [size]="12"/> {{ logoUrl() ? t('common.replace') : t('common.edit') }}
+                  <input type="file" accept="image/*" hidden (change)="onLogoPick($event)"/>
+                </label>
+                @if (logoUrl()) {
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger);" (click)="removeLogo()">{{ t('common.remove') }}</button>
+                }
               </div>
             </div>
 
@@ -431,7 +442,7 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                 <div class="muted small mt-16">{{ t('settings.security.selfApproval.warning') }}</div>
               }
               @if (!canEditPosPolicy()) {
-                <div class="muted small mt-16">{{ t('settings.security.approvals.ownerOnly') }}</div>
+                <div class="mt-16"><ap-perm-hint scope="owner"/></div>
               }
             }
           </div>
@@ -506,6 +517,9 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
               <div>
                 <label class="lbl">{{ t('settings.role') }}</label>
                 <select class="inp" [ngModel]="invite().role" (ngModelChange)="setInvite('role', $event)">
+                  @if (isOwner()) {
+                    <option value="Owner">{{ t('settings.role.owner') }}</option>
+                  }
                   <option value="Admin">{{ t('settings.role.admin') }}</option>
                   <option value="Manager">{{ t('settings.role.manager') }}</option>
                   <option value="Cashier">{{ t('settings.role.cashier') }}</option>
@@ -611,6 +625,9 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                     <ap-pill [kind]="rolePill(r.role).kind">{{ t(rolePill(r.role).labelKey) }}</ap-pill>
                     @if (r.role !== 'Owner') {
                       <select class="inp" style="width:110px;padding:4px 8px;font-size:11px;" [ngModel]="r.role" (ngModelChange)="updateRole(r.id, $event)">
+                        @if (isOwner()) {
+                          <option value="Owner">{{ t('settings.role.owner') }}</option>
+                        }
                         <option value="Admin">{{ t('settings.role.admin') }}</option>
                         <option value="Manager">{{ t('settings.role.manager') }}</option>
                         <option value="Cashier">{{ t('settings.role.cashier') }}</option>
@@ -720,16 +737,18 @@ export class SettingsComponent implements OnInit {
   readonly timezone  = signal('Asia/Qatar');
   readonly language  = signal('en');
   readonly lowStockThreshold = signal(this.storeConfig.lowStockThreshold());
+  readonly logoUrl = signal<string | null>(null);
 
   // Snapshot for discard
-  private _storeSnapshot = { storeName: 'Elite Collection', currency: 'QAR', timezone: 'Asia/Qatar', language: 'en', lowStockThreshold: 8 };
+  private _storeSnapshot = { storeName: 'Elite Collection', currency: 'QAR', timezone: 'Asia/Qatar', language: 'en', lowStockThreshold: 8, logoUrl: null as string | null };
 
   readonly isDirty = computed(() =>
     this.storeName() !== this._storeSnapshot.storeName ||
     this.currency()  !== this._storeSnapshot.currency  ||
     this.timezone()  !== this._storeSnapshot.timezone  ||
     this.language()  !== this._storeSnapshot.language  ||
-    this.lowStockThreshold() !== this._storeSnapshot.lowStockThreshold
+    this.lowStockThreshold() !== this._storeSnapshot.lowStockThreshold ||
+    this.logoUrl() !== this._storeSnapshot.logoUrl
   );
 
   // ── POS branches (each a printable receipt identity for one physical shop) ──
@@ -824,9 +843,14 @@ export class SettingsComponent implements OnInit {
   ];
 
   // ── Team ──────────────────────────────────────────────────────────────────
+  // Only an existing owner can grant the Owner role to someone else — this
+  // gates the "Owner" option itself in both role selects below (invite form
+  // and the per-row role editor), matching the server-side check in
+  // admin-settings.route.js's normalizeRole/canAssignRole.
+  readonly isOwner = computed(() => this.auth.hasRole('owner'));
   readonly loadingTeam = signal(true);
   readonly team = signal<TeamMember[]>([]);
-  readonly invite = signal({ name: '', email: '', role: 'Manager' as Exclude<TeamMemberRole, 'Owner'> });
+  readonly invite = signal({ name: '', email: '', role: 'Manager' as TeamMemberRole });
   readonly inviting = signal(false);
   readonly pendingInvitations = signal<Invitation[]>([]);
   readonly inviteLink = signal<{ email: string; link: string; emailSent: boolean; hadPendingInvite: boolean } | null>(null);
@@ -866,10 +890,12 @@ export class SettingsComponent implements OnInit {
       const name = s.store_name || s.name || 'Elite Collection';
       const cur = s.currency || 'QAR';
       const tz  = s.timezone || 'Asia/Qatar';
+      const logo = s.logo_url || null;
       this.storeName.set(name);
       this.currency.set(cur);
       this.timezone.set(tz);
-      this._storeSnapshot = { storeName: name, currency: cur, timezone: tz, language: 'en', lowStockThreshold: this.storeConfig.lowStockThreshold() };
+      this.logoUrl.set(logo);
+      this._storeSnapshot = { storeName: name, currency: cur, timezone: tz, language: 'en', lowStockThreshold: this.storeConfig.lowStockThreshold(), logoUrl: logo };
     } catch {
       // keep defaults
     } finally {
@@ -1258,6 +1284,7 @@ export class SettingsComponent implements OnInit {
     this.timezone.set(this._storeSnapshot.timezone);
     this.language.set(this._storeSnapshot.language);
     this.lowStockThreshold.set(this._storeSnapshot.lowStockThreshold);
+    this.logoUrl.set(this._storeSnapshot.logoUrl);
     this.storeNameError.set(false);
   }
 
@@ -1276,6 +1303,7 @@ export class SettingsComponent implements OnInit {
         currency: this.currency(),
         timezone: this.timezone(),
         language: this.language(),
+        logoUrl: this.logoUrl(),
       });
       this.storeConfig.setLowStockThreshold(this.lowStockThreshold());
       this._storeSnapshot = {
@@ -1284,6 +1312,7 @@ export class SettingsComponent implements OnInit {
         timezone: this.timezone(),
         language: this.language(),
         lowStockThreshold: this.lowStockThreshold(),
+        logoUrl: this.logoUrl(),
       };
       this.toast.success(this.t('settings.toast.saved'), this.t('settings.toast.saved.sub'));
     } catch {
@@ -1291,6 +1320,27 @@ export class SettingsComponent implements OnInit {
     } finally {
       this.savingGeneral.set(false);
     }
+  }
+
+  // Logo — read as a data URL and stage it, same pattern as the collection
+  // cover-image picker (collection-drawer.component.ts): no separate upload
+  // round-trip, it's saved together with the rest of the General form.
+  onLogoPick(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) this.readLogo(file);
+    input.value = '';
+  }
+
+  removeLogo(): void {
+    this.logoUrl.set(null);
+  }
+
+  private readLogo(file: File): void {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => this.logoUrl.set(reader.result as string);
+    reader.readAsDataURL(file);
   }
 
   // ── Team ──────────────────────────────────────────────────────────────────
@@ -1410,7 +1460,7 @@ export class SettingsComponent implements OnInit {
     }
   }
 
-  async updateRole(id: string, role: Exclude<TeamMemberRole, 'Owner'>): Promise<void> {
+  async updateRole(id: string, role: TeamMemberRole): Promise<void> {
     const member = this.team().find((m) => m.id === id);
     if (!member || member.role === role) return;
     const previous = member.role;

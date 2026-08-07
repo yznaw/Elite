@@ -8,6 +8,8 @@ import { I18nService } from '../../services/i18n.service';
 import { AuthService } from '../../services/auth.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
 
+type Role = 'owner' | 'admin' | 'manager' | 'cashier' | 'viewer';
+
 interface NavLink {
   path: string;
   labelKey: string;
@@ -16,6 +18,14 @@ interface NavLink {
   exact?: boolean;
   /** Plain <a href target="_blank"> instead of an Angular routerLink — for links that leave the app's own routes, e.g. the static staff guide. */
   external?: boolean;
+  /**
+   * Roles allowed to see this link — must mirror the `roleGuard([...])` on
+   * the matching route in app.routes.ts exactly (see
+   * docs/32-permission-enforcement-ux-design.md §3.1). Omit for a link
+   * whose route carries no roleGuard, meaning any authenticated role can
+   * reach it.
+   */
+  roles?: Role[];
 }
 
 interface NavGroup {
@@ -394,15 +404,17 @@ export class SidebarComponent {
       links: [
         // 'barcode' distinguishes POS from Storefront's 'store' icon — both
         // used to share 'store', with nothing to tell them apart at a glance.
-        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode' },
+        // Excludes viewer, matching roleGuard(['owner','admin','manager','cashier']) on /pos.
+        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode', roles: ['owner', 'admin', 'manager', 'cashier'] },
         { path: '/orders',         labelKey: 'nav.orders',         subKey: 'nav.orders.sub',         icon: 'orders' },
         { path: '/customers',      labelKey: 'nav.customers',      subKey: 'nav.customers.sub',      icon: 'users' },
         // 'scale' (a balance) for reconciling two totals against each other —
         // previously reused 'chart', identical to Analytics' icon.
-        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale' },
+        // No cashier access, matching roleGuard(['owner','admin','manager']) on /reconciliation.
+        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale', roles: ['owner', 'admin', 'manager'] },
         // 'csv' for exportable ledger reports — previously reused 'docs',
-        // identical to Policies' icon.
-        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv' },
+        // identical to Policies' icon. Same access scope as reconciliation.
+        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv', roles: ['owner', 'admin', 'manager'] },
       ],
     },
     {
@@ -416,8 +428,9 @@ export class SidebarComponent {
     {
       labelKey: 'nav.section.system',
       links: [
-        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference' },
-        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings' },
+        // Matches roleGuard(['owner','admin']) on /reference and /settings.
+        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference', roles: ['owner', 'admin'] },
+        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings', roles: ['owner', 'admin'] },
         { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
       ],
     },
@@ -441,16 +454,19 @@ export class SidebarComponent {
   private readonly diagnosticsLink: NavLink = { path: '/diagnostics', labelKey: 'nav.diagnostics', subKey: 'nav.diagnostics.sub', icon: 'warning' };
 
   readonly visibleGroups = computed<NavGroup[]>(() => {
-    const role = this.user()?.role;
+    const role = this.user()?.role as Role | undefined;
     const extras: NavLink[] = [];
     if (role === 'manager') extras.push(this.myPinLink);
     if (role === 'owner' || role === 'admin') extras.push(this.diagnosticsLink, this.stocktakeLink);
-    if (!extras.length) return this.groups;
-    return this.groups.map((group) =>
-      group.labelKey === 'nav.section.system'
-        ? { ...group, links: [...group.links, ...extras] }
-        : group,
-    );
+    return this.groups
+      .map((group) => ({
+        ...group,
+        links: [
+          ...group.links.filter((link) => !link.roles || !role || link.roles.includes(role)),
+          ...(group.labelKey === 'nav.section.system' ? extras : []),
+        ],
+      }))
+      .filter((group) => group.links.length > 0);
   });
 
   constructor() {

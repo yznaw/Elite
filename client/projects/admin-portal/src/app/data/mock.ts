@@ -51,19 +51,13 @@ export const COLLECTIONS: Collection[] = [
 export const MEDIA_INIT: MediaFile[] = [
   { id: 'M-001', name: 'EC-AMO-2026-front.jpg', kind: 'image', size: 2453621, w: 1600, h: 1600, uploaded: '2026-04-25 14:22', linkedTo: 'P-001', uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=400&q=80&auto=format&fit=crop' },
   { id: 'M-002', name: 'EC-AMO-2026-side.jpg', kind: 'image', size: 1893004, w: 1600, h: 1600, uploaded: '2026-04-25 14:22', linkedTo: 'P-001', uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=400&q=80&auto=format&fit=crop' },
-  { id: 'M-003', name: 'EC-AMO-2026.glb', kind: 'glb', size: 4203456, uploaded: '2026-04-12 09:14', linkedTo: 'P-001', uploader: 'Yusuf Hamad', initials: 'YH' },
   { id: 'M-004', name: 'EC-NDB-2026-front.jpg', kind: 'image', size: 2104382, w: 1600, h: 1600, uploaded: '2026-04-22 11:05', linkedTo: 'P-002', uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=400&q=80&auto=format&fit=crop' },
-  { id: 'M-005', name: 'EC-NDB-2026.glb', kind: 'glb', size: 3892012, uploaded: '2026-04-13 16:30', linkedTo: 'P-002', uploader: 'Yusuf Hamad', initials: 'YH' },
   { id: 'M-006', name: 'EC-HLF-2026-front.jpg', kind: 'image', size: 2304567, w: 1600, h: 1600, uploaded: '2026-04-23 09:18', linkedTo: 'P-003', uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=400&q=80&auto=format&fit=crop' },
-  { id: 'M-007', name: 'EC-HLF-2026.glb', kind: 'glb', size: 4102345, uploaded: '2026-04-14 10:42', linkedTo: 'P-003', uploader: 'Yusuf Hamad', initials: 'YH' },
   { id: 'M-008', name: 'EC-RKB-2026-front.jpg', kind: 'image', size: 2856710, w: 1600, h: 1600, uploaded: '2026-04-28 16:42', linkedTo: null, uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=400&q=80&auto=format&fit=crop' },
   { id: 'M-009', name: 'EC-RKB-2026-side.jpg', kind: 'image', size: 2104228, w: 1600, h: 1600, uploaded: '2026-04-28 16:43', linkedTo: null, uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=400&q=80&auto=format&fit=crop' },
   { id: 'M-010', name: 'EC-MML-2026.jpg', kind: 'image', size: 1678234, w: 1200, h: 1200, uploaded: '2026-04-28 11:08', linkedTo: null, uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1560343776-97e7d202ff0e?w=400&q=80&auto=format&fit=crop' },
   { id: 'M-011', name: 'AD-SMB-BLK-front.jpg', kind: 'image', size: 1789234, w: 1200, h: 1200, uploaded: '2026-04-28 09:32', linkedTo: null, uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=400&q=80&auto=format&fit=crop' },
-  { id: 'M-012', name: 'NB-990V6-GRY.glb', kind: 'glb', size: 5421032, uploaded: '2026-04-27 17:12', linkedTo: null, uploader: 'Yusuf Hamad', initials: 'YH' },
   { id: 'M-013', name: 'NKE-AM90-WHT-1.jpg', kind: 'image', size: 1923546, w: 1200, h: 1200, uploaded: '2026-04-20 13:48', linkedTo: 'P-007', uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=400&q=80&auto=format&fit=crop' },
-  { id: 'M-014', name: 'NKE-AM90-WHT.glb', kind: 'glb', size: 5621032, uploaded: '2026-04-15 17:22', linkedTo: 'P-007', uploader: 'Yusuf Hamad', initials: 'YH' },
-  { id: 'M-015', name: 'CP-ACH-WHT.glb', kind: 'glb', size: 4892145, uploaded: '2026-04-19 11:08', linkedTo: 'P-010', uploader: 'Yusuf Hamad', initials: 'YH' },
   { id: 'M-016', name: 'workshop-hero.jpg', kind: 'image', size: 4203456, w: 2400, h: 1600, uploaded: '2026-04-26 14:20', linkedTo: null, uploader: 'Yusuf Hamad', initials: 'YH', preview: 'https://images.unsplash.com/photo-1582588678413-dbf45f4823e9?w=400&q=80&auto=format&fit=crop' },
   { id: 'M-017', name: 'IMG_2849.jpg', kind: 'image', size: 3128456, w: 3000, h: 2000, uploaded: '2026-04-29 10:14', linkedTo: null, uploader: 'Mona Al-Sayed', initials: 'MS', preview: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=400&q=80&auto=format&fit=crop' },
 ];
@@ -142,7 +136,7 @@ export const STOREFRONT_DEFAULT: StorefrontBlock[] = [
 ];
 
 export const PALETTE: PaletteEntry[] = [
-  { type: 'Hero Banner', desc: 'Full-bleed kicker with 3D model' },
+  { type: 'Hero Banner', desc: 'Full-bleed kicker with featured image' },
   { type: 'Featured Products', desc: 'Curated 3-up grid' },
   { type: 'New Arrivals', desc: 'Auto-pulls latest SKUs' },
   { type: 'Sale Items', desc: 'Discount-tagged products' },

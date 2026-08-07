@@ -67,12 +67,12 @@ const MOBILE_BP = 900;
           </div>
         }
 
-        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
+        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" [title]="t('common.exportCsv')">
           @if (exporting()) { <ap-icon name="spinner" [size]="14"/> } @else { <ap-icon name="download" [size]="14"/> }
           <span class="btn-lbl">{{ exporting() ? t('common.exporting') : t('common.exportCsv') }}</span>
         </button>
         @if (!isMobile()) {
-          <button class="btn btn-gold" (click)="createCustomer()" title="Add Customer"><ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('customers.add') }}</span></button>
+          <button class="btn btn-gold" (click)="createCustomer()" [title]="t('customers.add')"><ap-icon name="plus" [size]="14"/> <span class="btn-lbl">{{ t('customers.add') }}</span></button>
         }
       </div>
 
@@ -563,7 +563,10 @@ export class CustomersComponent implements OnInit, OnDestroy {
     this.exporting.set(true);
     try {
       const list = this.filtered();
-      const headers = ['Name', 'Email', 'City', 'Orders', 'LTV (QAR)', 'Size (EU)', 'Last Order', 'Joined'];
+      const headers = [
+        this.t('customers.csv.name'), this.t('customers.csv.email'), this.t('customers.csv.city'), this.t('customers.csv.orders'),
+        this.t('customers.csv.ltv'), this.t('customers.csv.size'), this.t('customers.csv.lastOrder'), this.t('customers.csv.joined'),
+      ];
       const rows = list.map((c) => [
         c.name, c.email, c.city, c.orders,
         c.ltv.toFixed(2), c.sizePref || '', c.lastOrder, c.joined,

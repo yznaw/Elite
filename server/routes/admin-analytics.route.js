@@ -205,7 +205,7 @@ router.get('/overview', asyncHandler(async (_req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
-    const [metrics, traffic, funnel, top3d] = await Promise.all([
+    const [metrics, traffic, funnel] = await Promise.all([
       client.query(
         `
           SELECT metric_date AS day, round(revenue_cents / 100.0)::integer AS rev, sessions, conversions, orders_count
@@ -236,23 +236,12 @@ router.get('/overview', asyncHandler(async (_req, res) => {
         `,
         [tenant.id],
       ),
-      client.query(
-        `
-          SELECT name AS label, views_3d AS value
-          FROM products
-          WHERE tenant_id = $1
-          ORDER BY views_3d DESC
-          LIMIT 10
-        `,
-        [tenant.id],
-      ),
     ]);
 
     ok(res, {
       revenue30d: metrics.rows.reverse(),
       traffic: traffic.rows,
       funnel: funnel.rows,
-      top3d: top3d.rows,
     });
   } finally {
     client.release();

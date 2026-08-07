@@ -156,7 +156,7 @@ function readPreview(file: File): Promise<string> {
           <div class="prod-img" style="border-radius:10px;">
             <img [src]="primaryImage()" [alt]="form().name" (error)="onImgError($event)"/>
             @if (form().images.length > 1) {
-              <span class="prod-3d-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">{{ form().images.length }}</span>
+              <span class="corner-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">{{ form().images.length }}</span>
             }
           </div>
           <div>

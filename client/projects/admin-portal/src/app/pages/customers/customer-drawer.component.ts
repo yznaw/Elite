@@ -108,7 +108,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
             <div>
               <label class="lbl">{{ t('customerDrawer.field.phone') }}</label>
               <input class="inp" type="tel"
-                     placeholder="+966 5x xxx xxxx"
+                     [placeholder]="t('customerDrawer.field.phone.placeholder')"
                      [ngModel]="form().phone" (ngModelChange)="set('phone', $event)"/>
             </div>
           </div>
@@ -517,7 +517,7 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
     if (this.deleting()) return;
     const ok = await this.confirm.ask({
       title: this.t('customerDrawer.deleteConfirm.title'),
-      message: `${this.t('customerDrawer.deleteConfirm.message')} "${this.customer.name}". Their order history will be preserved.`,
+      message: `${this.t('customerDrawer.deleteConfirm.message')} "${this.customer.name}". ${this.t('customerDrawer.deleteConfirm.historyPreserved')}`,
       confirmLabel: this.t('customerDrawer.deleteConfirm.confirm'),
       cancelLabel: this.t('common.cancel'),
       variant: 'danger',

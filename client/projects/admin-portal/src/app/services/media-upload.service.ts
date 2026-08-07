@@ -29,7 +29,7 @@ interface ApiEnvelope<T> {
   message?: string;
 }
 
-const ACCEPTED_TYPES = /^(image\/(jpeg|png|webp|gif|avif)|model\/gltf-binary|application\/octet-stream)$/i;
+const ACCEPTED_TYPES = /^image\/(jpeg|png|webp|gif|avif)$/i;
 const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 
 /**
@@ -46,8 +46,7 @@ export class MediaUploadService {
   /** Validates a File against the same rules the server enforces, locally
       so the UI can reject obvious mismatches without a round-trip. */
   validate(file: File): string | null {
-    const isGlb = (file.name || '').toLowerCase().endsWith('.glb');
-    if (!isGlb && !ACCEPTED_TYPES.test(file.type)) {
+    if (!ACCEPTED_TYPES.test(file.type)) {
       return `Unsupported file type: ${file.type || 'unknown'}`;
     }
     if (file.size > MAX_SIZE_BYTES) {

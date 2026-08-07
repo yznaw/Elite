@@ -45,32 +45,30 @@ M client/projects/client-web/src/app/pages/home/home.component.scss
 
 ## 1. Admin Portal
 
-### 1.1 Storefront content is not actually editable from the admin — the biggest gap here
+### 1.1 Storefront content editability — CLOSED, this section was stale
 
 **Source:** `docs/storefront-content-plan.html`, corroborated by
-`docs/progress-tracker.html` F5+F7.
+`docs/progress-tracker.html` F5+F7. **Re-verified 2026-08-05: the claim below
+no longer holds. Whatever this described has since been built.**
 
-The storefront's Home, Our Story, and Contact pages **do not read from the
-`storefront-content` service at all** — they render hardcoded values in the
-Angular components (`home.component.ts`, `story.component.ts`,
-`contact.component.ts`). An admin editing "Our Story" or "Contact Us" content
-has no effect on the live site, because there is no admin UI for those pages
-to begin with, and even if there were, the storefront doesn't read from it.
+Current state, traced end-to-end:
+- Admin editor: `pages/storefront/storefront.component.ts` has full
+  `homeSubTab`/`storySubTab`/`contactSubTab` editors (hero, hero-facts,
+  intro, chapters, info blocks, phone/social — not just home hero/promise/
+  stats).
+- Server: `server/routes/storefront-content.route.js` — `GET`/`PATCH /`,
+  `GET`/`POST`/`DELETE /draft`, `POST /publish`, `POST /preview-token`.
+  `normalizeContent()` covers `hero`, `collections`, `story`, `heroSlider`,
+  `promise`, `stats`, `contact` as first-class sections, backed by
+  `store_settings.home_content`/`home_content_draft` jsonb columns.
+- Storefront: `client-web`'s `home.component.ts`, `story.component.ts`, and
+  `contact.component.ts` all inject `HomeContentService` and render from
+  `contentData()` — confirmed via live template bindings (17 in Story, 19 in
+  Contact), not hardcoded strings.
 
-To actually close this:
-- Extend the `storefront-content` schema and `HomeContentData` model to cover
-  Story and Contact page content (not just the home hero/promise/stats it
-  already covers).
-- Wire `home.component.ts` fully, and `story.component.ts` /
-  `contact.component.ts` from scratch, to read from the content service
-  instead of hardcoded values.
-- Build a 3-tab admin editor (Home / Our Story / Contact Us) with sub-tab
-  editors per section.
-- Deprecate the old `/home-content` route once the new one covers everything
-  it did.
-
-This is a real feature build, not a bug fix — size it accordingly before
-committing to it.
+Editing Home, Our Story, or Contact in the admin editor genuinely changes
+what a shopper sees, including a working draft/preview-token flow before
+publish. No further build work is needed here.
 
 ### 1.2 Product catalog feature backlog (0 of 52 tasks — `docs/progress-tracker.html`)
 
@@ -111,25 +109,46 @@ can be picked up separately:
 ### 1.3 Arabic translation coverage (`docs/04-admin-portal.md`)
 
 Sidebar Nav and Dashboard are fully translated. Product Catalog is "in
-progress" per the doc's own tracker. **Storefront Editor, Order Management,
-and Customer CRM have no Arabic translation started at all.**
+progress" per the doc's own tracker.
 
-### 1.4 Known-broken UI, already found and deferred (`docs/admin-portal-qa-plan.html`)
+**Storefront Editor, Order Management, and Customer CRM: closed 2026-08-05.**
+Every hardcoded English string in the live, routed components
+(`pages/storefront/storefront.component.ts`, `pages/orders/*.ts`,
+`pages/customers/*.ts`) — title/placeholder attributes, toast/confirm
+messages, timeline entries, CSV export headers — now routes through `t()`
+with an EN+AR key. Verified with a clean production build. (The dead,
+unrouted `pages/home-content/home-content.component.ts` was left alone —
+`/home-content` redirects to `/storefront`, so it has no live audience.)
 
-Three specific findings from a QA pass, explicitly marked deferred rather
-than fixed:
+### 1.4 Known-broken UI (`docs/admin-portal-qa-plan.html`) — status as of 2026-08-05
 
-- **Logo upload has no handler.** Settings → General → Logo section shows a
-  display and an "Edit" button, but the button has no `(click)` handler at
-  all — it's a visual stub.
-- **Currency setting doesn't propagate.** The currency value saves correctly
-  to the API, but `QAR()` — the price-formatting utility used everywhere
-  prices are displayed — is a hardcoded static function that never reads it.
-  Changing the currency setting currently does nothing visible anywhere.
-- **3D/GLB upload buttons in the product drawer are stubs.** Replace,
-  Unlink, Upload 3D, and Link URL all render but none have click handlers.
-  **Do not implement these** — see F4 above, the direction is to remove the
-  3D feature, not finish it.
+Three specific findings from a QA pass:
+
+- **Logo upload has no handler. FIXED 2026-08-05.** Settings → General →
+  Logo now has a real file picker (reused the same read-as-data-URL pattern
+  already used for collection cover images), shows the current logo or the
+  default mark, and a Remove action. Saved together with the rest of the
+  General form via the existing save bar — `PATCH /admin/settings/store`
+  now writes `logoUrl` into `brand_profiles.logo_url`, a column that had
+  existed since migration 001 but nothing ever wrote to or read it
+  meaningfully. Verified end-to-end (set / survives an unrelated save /
+  explicit-null clear) in `server/test/store-logo-e2e.test.js`.
+- **Currency setting doesn't propagate.** Still true — `QAR()` is a
+  hardcoded static function that ignores `tenants.currency`. **Left
+  unfixed on purpose**: the currency `<select>` in Settings → General only
+  ever offers one option (`QAR`), so there is currently no way to actually
+  change it to anything else — wiring the propagation would change nothing
+  observable. Worth doing only if/when real multi-currency support becomes
+  a requirement (more `<option>`s + a shared formatting service); doing the
+  plumbing before that is invisible work.
+- **3D/GLB upload buttons in the product drawer are stubs. Already gone,
+  doc was stale.** Checked 2026-08-05 — `has3d`/`views3d` and the
+  Replace/Unlink/Upload 3D/Link URL buttons this item described no longer
+  exist anywhere in `product-drawer.component.ts` or the wider admin-portal
+  app. Whatever removed them didn't update this doc. What's left of the
+  broader F4 3D-removal backlog item is smaller than this doc implied: the
+  dashboard "Top 3D Views" card, `media.filter.3d` i18n keys, and a leftover
+  `prod-3d-badge` CSS class — see F4 above.
 
 ### 1.5 Orders/Customers tracker — status unverified, check before acting
 
@@ -222,12 +241,9 @@ If picking one thing to start with:
 2. **§2.1 (hero re-cut)** if the storefront's first impression matters most
    right now — the tooling is already built, so this is mostly the human
    photo-retouching step plus an upload.
-3. **§1.1 (storefront content editability)** if the content team is
-   currently blocked from updating Story/Contact pages — this is the
-   largest single gap in the whole list, but it's a real feature build, not
-   a quick fix.
-4. Everything else in §1.2–§1.5 and §2.2–§2.4 can be parallelized across
-   different people since they don't depend on each other.
+3. Everything else in §1.2, §1.4–§1.5, and §2.2–§2.4 can be parallelized
+   across different people since they don't depend on each other. (§1.1 and
+   §1.3 are closed — see those sections.)
 
 ---
 

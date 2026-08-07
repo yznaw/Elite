@@ -17,15 +17,8 @@ interface Suggestion {
     template: `
     <div class="media-card" [class.selected]="selected" (click)="clicked.emit()">
       <div class="media-thumb">
-        @if (media.kind === 'image') {
-          <img [src]="media.preview" [alt]="media.name" (error)="onImgError($event)"/>
-        } @else {
-          <div class="glb-thumb">
-            <ap-icon name="cube" [size]="42"/>
-            <div class="glb-thumb-label">{{ t('media.thumb.gridLabel') }}</div>
-          </div>
-        }
-        <span class="type-badge">{{ media.kind === 'glb' ? '.GLB' : extension(media.name) }}</span>
+        <img [src]="media.preview" [alt]="media.name" (error)="onImgError($event)"/>
+        <span class="type-badge">{{ extension(media.name) }}</span>
         @if (linkedProduct) {
           <span class="link-pill linked"><ap-icon name="check" [size]="9"/> {{ t('media.thumb.linked') }}</span>
         } @else if (suggestion) {

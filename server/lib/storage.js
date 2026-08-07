@@ -137,7 +137,6 @@ function extFromMime(mime) {
   if (mime === 'image/webp') return '.webp';
   if (mime === 'image/gif') return '.gif';
   if (mime === 'image/avif') return '.avif';
-  if (mime === 'model/gltf-binary' || mime === 'application/octet-stream') return '.glb';
   return '';
 }
 
@@ -149,8 +148,6 @@ function mimeFromExt(ext) {
     case '.webp': return 'image/webp';
     case '.gif':  return 'image/gif';
     case '.avif': return 'image/avif';
-    case '.glb':  return 'model/gltf-binary';
-    case '.gltf': return 'model/gltf+json';
     default: return null;
   }
 }

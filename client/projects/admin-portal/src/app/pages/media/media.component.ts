@@ -16,7 +16,7 @@ import { AdminProductsService } from '../../services/admin-products.service';
 import { MediaUploadService } from '../../services/media-upload.service';
 import { fmtBytes, MediaFile, Product } from '../../models';
 
-type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
+type FilterKey = 'all' | 'image' | 'unlinked';
 
 interface PendingUpload {
   id: string;
@@ -35,7 +35,7 @@ interface PendingUpload {
         <div class="stat-card">
           <div class="lbl">{{ t('media.totalFiles') }}</div>
           <div class="v">{{ counts().all }}</div>
-          <div class="muted small mt-8">{{ counts().image }} {{ t('media.filter.images') }} · {{ counts().glb }} {{ t('media.filter.3d') }}</div>
+          <div class="muted small mt-8">{{ counts().image }} {{ t('media.filter.images') }}</div>
         </div>
         <div class="stat-card">
           <div class="lbl">{{ t('media.linkedCount') }}</div>
@@ -70,7 +70,7 @@ interface PendingUpload {
             <div class="row gap-sm" style="justify-content:center;flex-wrap:wrap;">
               <label class="btn btn-primary" style="cursor:pointer;">
                 <ap-icon name="upload" [size]="14"/> {{ t('media.browse') }}
-                <input type="file" multiple accept="image/*,.glb,.gltf" hidden (change)="onPick($event)"/>
+                <input type="file" multiple accept="image/*" hidden (change)="onPick($event)"/>
               </label>
               <button class="btn btn-outline" (click)="openGDrive()">
                 <ap-icon name="link" [size]="14"/> {{ t('media.gdrive.btn') }}
@@ -91,7 +91,7 @@ interface PendingUpload {
                 <div class="upload-row" [class.is-error]="!!u.error">
                   <div class="upload-thumb">
                     @if (u.thumb) { <img [src]="u.thumb" [alt]="u.name"/> }
-                    @else { <ap-icon name="cube" [size]="18"/> }
+                    @else { <ap-icon name="media" [size]="18"/> }
                   </div>
                   <div class="upload-meta">
                     <div class="upload-name">{{ u.name }}</div>
@@ -118,9 +118,6 @@ interface PendingUpload {
           </button>
           <button class="chip" [class.active]="filter() === 'image'" (click)="filter.set('image'); page.set(0)">
             {{ t('media.filter.images') }} <span class="chip-count">{{ counts().image }}</span>
-          </button>
-          <button class="chip" [class.active]="filter() === 'glb'" (click)="filter.set('glb'); page.set(0)">
-            {{ t('media.filter.3d') }} <span class="chip-count">{{ counts().glb }}</span>
           </button>
           <button class="chip" [class.active]="filter() === 'unlinked'" (click)="filter.set('unlinked'); page.set(0)"
                   [style.background]="filter() === 'unlinked' ? 'var(--warning)' : ''" [style.border-color]="filter() === 'unlinked' ? 'var(--warning)' : ''">
@@ -449,7 +446,6 @@ export class MediaComponent implements OnInit {
     return {
       all: m.length,
       image: m.filter((x) => x.kind === 'image').length,
-      glb: m.filter((x) => x.kind === 'glb').length,
       unlinked: m.filter((x) => !x.linkedTo).length,
     };
   });
@@ -466,7 +462,6 @@ export class MediaComponent implements OnInit {
     const m = this.media();
     if (f === 'all') return m;
     if (f === 'image') return m.filter((x) => x.kind === 'image');
-    if (f === 'glb') return m.filter((x) => x.kind === 'glb');
     return m.filter((x) => !x.linkedTo);
   });
 

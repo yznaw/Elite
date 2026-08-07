@@ -367,7 +367,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                        (drop)="onProductDrop(i, $event)">
                     <div class="prod-img">
                       <img [src]="p.image" [alt]="p.name"/>
-                      <span class="prod-3d-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
+                      <span class="corner-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
                       <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)">
                         <ap-icon name="x" [size]="12"/>
                       </button>

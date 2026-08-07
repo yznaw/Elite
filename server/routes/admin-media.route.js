@@ -11,7 +11,7 @@ function mapMedia(row) {
   return {
     id: row.id,
     name: row.filename,
-    kind: row.kind === 'model_3d' ? 'glb' : row.kind,
+    kind: row.kind,
     size: Number(row.size_bytes || 0),
     w: row.width || undefined,
     h: row.height || undefined,
@@ -33,10 +33,8 @@ async function removeAssetFiles(metadata = {}) {
   await storage.removeMany([metadata.storagePath, ...variantPaths]);
 }
 
-function kindFromMime(mime, originalname) {
-  if ((originalname || '').toLowerCase().endsWith('.glb')) return 'model_3d';
+function kindFromMime(mime, _originalname) {
   if (mime && mime.startsWith('image/')) return 'image';
-  if (mime === 'model/gltf-binary') return 'model_3d';
   return 'document';
 }
 
@@ -164,7 +162,7 @@ router.post(
     const client = await db.pool.connect();
     try {
       const tenant = await ensureDefaultTenant(client);
-      const kind = req.body.kind === 'glb' ? 'model_3d' : req.body.kind || 'image';
+      const kind = req.body.kind || 'image';
       const result = await client.query(
         `
           INSERT INTO media_assets (tenant_id, filename, kind, mime_type, size_bytes, width, height, storage_url, preview_url)

@@ -82,14 +82,15 @@ test('team invitations and direct team-member edits validate role against an all
       (error) => error.response.status === 422,
     );
 
-    // Owner is not assignable through this endpoint.
-    await assert.rejects(
-      api('/admin/settings/invitations', {
-        method: 'POST',
-        body: JSON.stringify({ email: `owner-attempt-${runId}@elite.local`, role: 'owner' }),
-      }),
-      (error) => error.response.status === 422,
-    );
+    // Owner IS assignable through this endpoint, but only by an existing
+    // owner (this session is the bootstrap owner) — see
+    // test/multi-owner-e2e.test.js for the admin-blocked half of this rule
+    // and the full invite+accept+re-grant flow.
+    const ownerInvite = await api('/admin/settings/invitations', {
+      method: 'POST',
+      body: JSON.stringify({ email: `owner-attempt-${runId}@elite.local`, role: 'owner' }),
+    });
+    assert.ok(ownerInvite.inviteLink);
 
     // Direct team-member add: same validation applies.
     const member = await api('/admin/settings/team', {

@@ -56,7 +56,7 @@ export interface Collection {
 export interface MediaFile {
   id: string;
   name: string;
-  kind: 'image' | 'glb';
+  kind: 'image';
   size: number;
   w?: number;
   h?: number;

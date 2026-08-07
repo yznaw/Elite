@@ -87,13 +87,13 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           <div class="nbox-failure-callout mb-16">
             <ap-icon name="warning" [size]="14" style="flex-shrink:0;margin-top:1px;"/>
             <div style="flex:1;min-width:0;">
-              <strong>Delivery booking failed</strong>
+              <strong>{{ t('orderDrawer.delivery.failed') }}</strong>
               @if (order().nboxBookingError) {
                 <div class="small" style="margin-top:2px;opacity:0.8;">{{ order().nboxBookingError }}</div>
               }
             </div>
             <button class="btn btn-sm btn-outline" [disabled]="busy()" (click)="rebookDelivery()" style="flex-shrink:0;">
-              @if (busy()) { <ap-spinner [size]="12"/> } Retry booking
+              @if (busy()) { <ap-spinner [size]="12"/> } {{ t('orderDrawer.delivery.retry') }}
             </button>
           </div>
         }
@@ -611,7 +611,7 @@ export class OrderDrawerComponent {
         fulfillment: target,
         trackingNumber: target === 'shipped' ? this.trackingDraft().trim() : undefined,
         timelineKind: target as OrderTimelineEntry['kind'],
-        detail: target === 'shipped' ? this.trackingDraft().trim() : `Marked ${target}`,
+        detail: target === 'shipped' ? this.trackingDraft().trim() : this.t('orderDrawer.timeline.marked').replace('{status}', target),
       });
       if (updated) {
         const toastKey = `orderDrawer.toast.${target}.title`;
@@ -630,7 +630,7 @@ export class OrderDrawerComponent {
       const updated = await this.safeUpdateStatus({
         payment: 'paid',
         timelineKind: 'paid',
-        detail: 'Payment confirmed',
+        detail: this.t('orderDrawer.timeline.paymentConfirmed'),
       });
       if (updated) this.toast.success(this.t('orderDrawer.toast.paid.title'), o.id);
     } finally {
@@ -655,7 +655,7 @@ export class OrderDrawerComponent {
         status: 'cancelled',
         fulfillment: 'cancelled',
         timelineKind: 'cancelled',
-        detail: 'Order cancelled',
+        detail: this.t('orderDrawer.timeline.cancelled'),
       });
       if (updated) this.toast.info(this.t('orderDrawer.toast.cancelled.title'), o.id);
     } finally {
@@ -738,7 +738,7 @@ export class OrderDrawerComponent {
       const updated = await this.ordersApi.rebookDelivery(o.id);
       this._order.set(updated);
       this.updated.emit(updated);
-      this.toast.success('Delivery booking submitted', o.id);
+      this.toast.success(this.t('orderDrawer.toast.deliverySubmitted'), o.id);
     } catch {
       // Global interceptor surfaces the error.
     } finally {

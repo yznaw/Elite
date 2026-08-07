@@ -22,21 +22,14 @@ interface Suggestion {
       <div class="drawer-head">
         <div>
           <div class="card-title mono" style="font-size:15px;">{{ media.name }}</div>
-          <div class="card-sub">{{ media.kind === 'glb' ? t('media.detail.headerType3d') : t('media.detail.headerTypeImage') }} · {{ size }}{{ media.w ? ' · ' + media.w + '×' + media.h : '' }}</div>
+          <div class="card-sub">{{ t('media.detail.headerTypeImage') }} · {{ size }}{{ media.w ? ' · ' + media.w + '×' + media.h : '' }}</div>
         </div>
         <button class="x-btn" (click)="closed.emit()"><ap-icon name="x" [size]="14"/></button>
       </div>
 
       <div class="drawer-body">
         <div style="aspect-ratio:1.4/1;background:var(--bg-2);border-radius:10px;overflow:hidden;margin-bottom:20px;">
-          @if (media.kind === 'image') {
-            <img [src]="media.preview" [alt]="media.name" style="width:100%;height:100%;object-fit:cover;" (error)="onImgError($event)"/>
-          } @else {
-            <div class="glb-thumb" style="aspect-ratio:1.4/1;">
-              <ap-icon name="cube" [size]="64"/>
-              <div class="glb-thumb-label">.GLB · {{ size }}</div>
-            </div>
-          }
+          <img [src]="media.preview" [alt]="media.name" style="width:100%;height:100%;object-fit:cover;" (error)="onImgError($event)"/>
         </div>
 
         <div class="mb-24">
@@ -99,7 +92,7 @@ interface Suggestion {
             </div>
             <div class="ms-row" style="padding:10px 14px;">
               <span class="muted small">{{ t('media.detail.type') }}</span>
-              <span class="strong">{{ media.kind === 'glb' ? t('media.detail.type3d') : t('media.detail.typeImage') }}</span>
+              <span class="strong">{{ t('media.detail.typeImage') }}</span>
             </div>
             <div class="ms-row" style="padding:10px 14px;">
               <span class="muted small">{{ t('media.detail.size') }}</span>

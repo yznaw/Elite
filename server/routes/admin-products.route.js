@@ -537,10 +537,8 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     toCents(product.price),
     currency,
     stockQty,
-    false,  // has_3d always false — feature removed
-    0,      // views_3d always 0 — feature removed
-    metaTitle,   // $13
-    metaDesc,    // $14
+    metaTitle,   // $11
+    metaDesc,    // $12
   ];
 
   const upserted = product.id
@@ -556,12 +554,10 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
             base_price_cents = $8,
             currency = $9,
             stock_quantity = $10,
-            has_3d = $11,
-            views_3d = $12,
-            meta_title = $13,
-            meta_desc = $14,
+            meta_title = $11,
+            meta_desc = $12,
             updated_at = now()
-        WHERE tenant_id = $1 AND id = $15
+        WHERE tenant_id = $1 AND id = $13
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       [...params, product.id],
@@ -570,10 +566,10 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
       `
         INSERT INTO products (
           tenant_id, sku, brand, name, slug, status, description,
-          base_price_cents, currency, stock_quantity, has_3d, views_3d,
+          base_price_cents, currency, stock_quantity,
           meta_title, meta_desc
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
         ON CONFLICT (tenant_id, sku) DO UPDATE
         SET brand = EXCLUDED.brand,
             name = EXCLUDED.name,
@@ -583,8 +579,6 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
             base_price_cents = EXCLUDED.base_price_cents,
             currency = EXCLUDED.currency,
             stock_quantity = EXCLUDED.stock_quantity,
-            has_3d = EXCLUDED.has_3d,
-            views_3d = EXCLUDED.views_3d,
             meta_title = EXCLUDED.meta_title,
             meta_desc = EXCLUDED.meta_desc
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc

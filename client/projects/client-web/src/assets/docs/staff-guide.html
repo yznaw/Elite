@@ -283,7 +283,7 @@
       <div><b>Prepared for:</b> Elite Collection staff &amp; new hires</div>
       <div><b>Covers:</b> Dashboard, Catalog, Collections, Media, Storefront, Point of Sale (rules, roles, PIN approvals, cash movements, Z-reports), Card Settlement Reconciliation, Orders, Customers, Feedback, Policies, Analytics, Reference Lists, Settings, Reports &amp; Exports, Troubleshooting</div>
       <div><b>Document type:</b> HTML — open in any browser, edit the text directly, then print to PDF (Cmd/Ctrl + P → Save as PDF)</div>
-      <div><b>Last updated:</b> 3 August 2026 — added multi-branch receipt profiles (Settings → Branches, and register assignment under Devices &amp; Security) now that Elite operates more than one shop; documented the previously-missing Devices &amp; Security tab. Prior update: 20 July 2026 (Manager PIN self-service, invite-link domain, cash-movement labels, Reconciliation).</div>
+      <div><b>Last updated:</b> 7 August 2026 — rewrote Section 2 (Staff Roles &amp; Permissions): the sidebar now hides links your role can't use instead of showing everything and bouncing you back silently; documented multiple Owners (any Owner can grant the Owner role to a teammate directly from the Team Members role dropdown, Owner-only, no separate promote step). Prior update: 3 August 2026 (multi-branch receipt profiles, Devices &amp; Security tab). Before that: 20 July 2026 (Manager PIN self-service, invite-link domain, cash-movement labels, Reconciliation).</div>
     </div>
   </div>
 
@@ -364,7 +364,7 @@
     <h2>1.3 — Finding your way around</h2>
     <p>Every page shares the same layout:</p>
     <ul class="plain">
-      <li><strong>Left sidebar</strong> — the main menu (Dashboard, Catalog, Collections, Media, Storefront, Point of Sale, Orders, Customers, Feedback, Policies, Analytics, Reconciliation, Reference Lists, Settings). Every role sees the same full menu — see <a href="#sec-roles">Section 2</a> for what each link actually does once clicked. Click the arrow icon at the top of the sidebar to collapse it to icons-only.</li>
+      <li><strong>Left sidebar</strong> — the main menu (Dashboard, Catalog, Collections, Media, Storefront, Point of Sale, Orders, Customers, Feedback, Policies, Analytics, Reconciliation, Reference Lists, Settings). The sidebar only shows links your role can actually open — see <a href="#sec-roles">Section 2</a> for exactly what each role sees. Click the arrow icon at the top of the sidebar to collapse it to icons-only.</li>
       <li><strong>Top bar</strong> — quick search, language switch (EN/AR), notification bell, and your account avatar (top right) for signing out.</li>
       <li><strong>On a phone</strong>, the sidebar becomes a bottom tab bar (Dashboard · Catalog · Orders · Customers · More) — tap <strong>More</strong> for the rest of the menu.</li>
     </ul>
@@ -376,10 +376,19 @@
     <h1 class="title">Staff Roles &amp; Permissions — What Each Role Can Actually Do</h1>
     <p>Every staff account is assigned one of five roles when they're invited: <strong>Owner</strong>, <strong>Admin</strong>, <strong>Manager</strong>, <strong>Cashier</strong>, or <strong>Viewer</strong>. Roles are set and changed under <strong>Settings → Team Members</strong> (Owners and Admins only — see <a href="#sec-settings">Section 16.2</a>).</p>
 
-    <div class="callout warn">
-      <b>Read this before assigning roles — the sidebar menu is the same for everyone</b>
-      Every role sees the <em>same full sidebar</em> — Dashboard, Catalog, Collections, Media, Storefront, Point of Sale, Orders, Customers, Feedback, Policies, Analytics, Reconciliation, Reference Lists, Settings. The menu does not hide items based on role (only Managers get one extra link, "My Manager PIN"). What actually happens when a role clicks a link they're not allowed into is a <strong>silent redirect back to the Dashboard</strong> — no "access denied" message, the page just doesn't open. This is normal, not a bug — but it also means <strong>Cashier and Viewer accounts can open, add, edit, and delete in Catalog, Collections, Media, Storefront, Orders, Customers, Feedback, Policies, and Analytics today</strong> — those pages are only gated by "are you logged in," not by role. Only four areas are actually role-restricted: <strong>Settings</strong>, <strong>Reference Lists</strong>, <strong>Reconciliation</strong>, and <strong>Point of Sale</strong>. If your business needs Cashiers or Viewers locked out of the catalog/orders/customer data, that isn't enforced yet — brief staff on what they should and shouldn't touch, and flag this to whoever maintains the portal if it needs tightening.
+    <div class="callout note">
+      <b>The sidebar now matches your actual access</b>
+      The menu only shows links your role can open — if you don't see "Settings" or "Point of Sale" in your sidebar, your role genuinely can't use them, not a display glitch. Typing a restricted page's address directly still bounces you back to the Dashboard with no error message, but that's now a backstop for direct links, not something you'll hit from normal clicking around.
     </div>
+
+    <h2>2.0 — What each role actually is</h2>
+    <ul class="plain">
+      <li><strong>Owner</strong> — full access to everything, with no exceptions. The only role that can grant the Owner role to someone else, and the only role that can change the two most sensitive POS approval settings (self-close shift, self-approval — see <a href="#sec-settings">Section 16.1b</a>). A shop can have more than one Owner (see 2.1a below) — it isn't limited to a single founder account.</li>
+      <li><strong>Admin</strong> — same day-to-day reach as Owner (catalog, storefront, orders, customers, POS, reconciliation, reports, settings, team management, devices) with one carve-out: an Admin cannot grant the Owner role to anyone, including themselves, and cannot touch the Owner-only approval settings mentioned above. Best for a store manager or operations lead who runs the business day-to-day.</li>
+      <li><strong>Manager</strong> — full POS access plus reconciliation and reports, but no Settings, no Team Members, no Reference Lists. Their defining job in the system is approving Cashier actions with their manager PIN (voids, refunds, drawer opens, paid-outs, shift closes) — see <a href="#pos-pin">Section 8.3</a>. Best for a shift lead or senior floor staff.</li>
+      <li><strong>Cashier</strong> — POS only. Can sell, park/resume a sale, reprint a receipt, and manage their own shift; anything sensitive (void, refund, no-sale drawer open, cash-out) needs a Manager/Admin/Owner PIN. Best for front-of-house till staff.</li>
+      <li><strong>Viewer</strong> — read access to the general admin pages, no POS access at all. Best for a stakeholder or advisor who needs visibility, not day-to-day control.</li>
+    </ul>
 
     <h2>2.1 — Role access matrix (verified against the live portal)</h2>
     <table class="grid" style="font-size:11.5px;">
@@ -430,8 +439,15 @@
         <td class="no">No</td>
       </tr>
     </table>
-    <p style="font-family:'Helvetica Neue',Arial,sans-serif; font-size:12px; color:var(--muted); margin-top:-10px;">*General admin pages = Dashboard, Catalog, Collections, Media, Storefront, Orders, Customers, Feedback, Policies, Analytics. *Cashier/Viewer access here is <strong>not actually restricted</strong> — see the warning above.</p>
-    <p style="font-family:'Helvetica Neue',Arial,sans-serif; font-size:13px;"><strong>Best for:</strong> Owner — business owner/founder · Admin — store manager/operations lead · Manager — shift lead/senior floor staff · Cashier — front-of-house/till staff · Viewer — stakeholders, intended read-only observers.</p>
+    <p style="font-family:'Helvetica Neue',Arial,sans-serif; font-size:12px; color:var(--muted); margin-top:-10px;">*General admin pages = Dashboard, Catalog, Collections, Media, Storefront, Orders, Customers, Feedback, Policies, Analytics. These pages are not role-gated at all today — any signed-in role, including Cashier and Viewer, can open them directly and fully add/edit/delete there, same as an Owner. In normal day-to-day use a Cashier never sees this (signing in sends them straight to POS, a separate full-screen page with no sidebar), so this only matters if someone types one of these pages' address directly. See the warning below.</p>
+    <p style="font-family:'Helvetica Neue',Arial,sans-serif; font-size:13px;"><strong>Best for:</strong> Owner — business owner/founder (one or more) · Admin — store manager/operations lead · Manager — shift lead/senior floor staff · Cashier — front-of-house/till staff · Viewer — stakeholders, intended read-only observers.</p>
+
+    <h2 id="roles-multi-owner">2.1a — More than one Owner</h2>
+    <p>A shop is not limited to a single Owner account. Any existing Owner can hand the Owner role to another team member directly — there is no separate "promote" step or confirmation flow: it's the same role dropdown used for every other role change (<strong>Settings → Team Members</strong>, or the Role field on the invite form), it just happens to include "Owner" as one of the choices. Two things to know:</p>
+    <ul class="plain">
+      <li><strong>Only an Owner can grant Owner.</strong> The "Owner" option in the role dropdown only appears when you yourself are signed in as an Owner — an Admin's dropdown never shows it, even to promote themselves, and a direct attempt to do so is rejected by the server, not just hidden in the UI.</li>
+      <li><strong>Once someone is made Owner, their row locks</strong> — same as any Owner account, there's no role dropdown or Remove button on their row in Team Members. There is currently no built-in way to demote or remove an Owner through the portal; treat granting Owner as a permanent decision.</li>
+    </ul>
 
     <div class="callout note">
       <b>Manager PIN — who can hold one and why it matters</b>
@@ -440,11 +456,11 @@
 
     <div class="callout warn">
       <b>Cashier and Viewer "read-only" note</b>
-      Beyond the four gated areas above, there is currently no enforced read-only mode anywhere in the portal — a Viewer who opens Catalog, for example, sees the exact same New Product / Import / Export / Edit / Delete controls an Owner would. Treat role assignment as a trust boundary based on training and instructions, not a hard technical guarantee, until this is tightened.
+      There is currently no enforced read-only mode anywhere in the portal — a Viewer who opens Catalog, for example, sees the exact same New Product / Import / Export / Edit / Delete controls an Owner would; nothing there is actually disabled for them. Treat role assignment as a trust boundary based on training and instructions for the general admin pages, not a hard technical guarantee, until read-only enforcement is built. POS, Settings, Reconciliation, and Reference Lists are the areas that are genuinely, technically restricted — those are the ones a Viewer or Cashier cannot reach no matter what.
     </div>
 
     <h2>2.2 — Changing someone's role or removing access</h2>
-    <p>Covered in full in <a href="#sec-settings">Section 16.2</a>. In short: go to <strong>Settings → Team Members</strong>, use the role dropdown next to their name to change it, or click <strong>Remove</strong> to revoke their access entirely.</p>
+    <p>Covered in full in <a href="#sec-settings">Section 16.2</a>. In short: go to <strong>Settings → Team Members</strong>, use the role dropdown next to their name to change it (Owners only see "Owner" as an option to grant — see 2.1a above), or click <strong>Remove</strong> to revoke their access entirely.</p>
   </div>
 
   <!-- ================= 3. DASHBOARD ================= -->
@@ -1005,7 +1021,7 @@
     <h3><span class="badge add">Add</span>&nbsp; Inviting a new staff member</h3>
     <ol class="steps">
       <li>Under <strong>Invite Team Member</strong>, enter their work <strong>email</strong>.</li>
-      <li>Choose their <strong>Role</strong> from the dropdown: <strong>Admin</strong>, <strong>Manager</strong>, <strong>Cashier</strong>, or <strong>Viewer</strong>. A short description appears under the dropdown for some roles — treat it as a rough guide, not a guarantee (see the access-matrix warning in <a href="#sec-roles">Section 2</a>, since actual access is broader than that description for Cashier/Viewer today).</li>
+      <li>Choose their <strong>Role</strong> from the dropdown: <strong>Admin</strong>, <strong>Manager</strong>, <strong>Cashier</strong>, or <strong>Viewer</strong> — and <strong>Owner</strong> too, but only if you yourself are signed in as an Owner (see <a href="#roles-multi-owner">Section 2.1a</a>). See the access-matrix warning in <a href="#sec-roles">Section 2</a>, since actual access is broader than the role name suggests for Cashier/Viewer today.</li>
       <li>Click <strong>Send Invitation</strong>. A one-time invite link is generated in a box on this page — <strong>copy and share it directly</strong> with the new hire (click <strong>Copy link</strong>); it expires after 48 hours and can only be used once. The invite is also listed under <strong>Pending Invitations</strong> until accepted, where you can <strong>Revoke</strong> it if sent by mistake.</li>
     </ol>
 
@@ -1096,8 +1112,8 @@
 
     <h2>19.1 — Access &amp; sign-in</h2>
 
-    <h3>I can't see Settings, Reference Lists, or Reconciliation — or they redirect me back to Dashboard.</h3>
-    <p>Settings and Reference Lists are Owner/Admin only. Reconciliation is Owner/Admin/Manager only. The link still shows in your sidebar even if you can't use it — clicking it silently bounces you back to Dashboard rather than showing an error (see <a href="#sec-roles">Section 2</a>). If you need something changed there, ask an Owner, Admin, or (for Reconciliation) a Manager.</p>
+    <h3>I don't see Settings, Reference Lists, or Reconciliation in my sidebar.</h3>
+    <p>Settings and Reference Lists are Owner/Admin only. Reconciliation is Owner/Admin/Manager only — your sidebar correctly leaves those links out if your role can't use them (see <a href="#sec-roles">Section 2</a>). If you follow an old bookmark or a direct link to one of these pages anyway, you'll be silently bounced back to Dashboard rather than shown an error — that's still normal, not a bug. If you need something changed there, ask an Owner, Admin, or (for Reconciliation) a Manager.</p>
 
     <h3>I can't open Point of Sale.</h3>
     <p>POS is available to Owner, Admin, Manager, and Cashier roles. Viewers cannot access it and are redirected to Dashboard — ask an Admin to check your assigned role under Settings → Team Members.</p>

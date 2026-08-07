@@ -17,6 +17,8 @@ interface PrimaryTab {
   icon: IconName;
 }
 
+type Role = 'owner' | 'admin' | 'manager' | 'cashier' | 'viewer';
+
 interface SecondaryItem {
   path: string;
   labelKey: string;
@@ -24,6 +26,13 @@ interface SecondaryItem {
   icon: IconName;
   /** Plain <a href target="_blank"> instead of a routerLink — leaves the app's own routes, e.g. the static staff guide. */
   external?: boolean;
+  /**
+   * Roles allowed to see this item — must mirror the `roleGuard([...])` on
+   * the matching route in app.routes.ts exactly (see
+   * docs/32-permission-enforcement-ux-design.md §3.1). Omit for an item
+   * whose route carries no roleGuard.
+   */
+  roles?: Role[];
 }
 
 interface SecondaryGroup {
@@ -393,9 +402,11 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
     {
       labelKey: 'nav.section.sales',
       items: [
-        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode' },
-        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale' },
-        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv' },
+        // Excludes viewer, matching roleGuard(['owner','admin','manager','cashier']) on /pos.
+        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode', roles: ['owner', 'admin', 'manager', 'cashier'] },
+        // No cashier access, matching roleGuard(['owner','admin','manager']) on /reconciliation and /reports.
+        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale', roles: ['owner', 'admin', 'manager'] },
+        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv', roles: ['owner', 'admin', 'manager'] },
       ],
     },
     {
@@ -409,8 +420,9 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
     {
       labelKey: 'nav.section.system',
       items: [
-        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference' },
-        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings' },
+        // Matches roleGuard(['owner','admin']) on /reference and /settings.
+        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference', roles: ['owner', 'admin'] },
+        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings', roles: ['owner', 'admin'] },
         { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
       ],
     },
@@ -426,16 +438,19 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
   private readonly diagnosticsItem: SecondaryItem = { path: '/diagnostics', labelKey: 'nav.diagnostics', subKey: 'nav.diagnostics.sub', icon: 'warning' };
 
   readonly visibleGroups = computed<SecondaryGroup[]>(() => {
-    const role = this.auth.user()?.role;
+    const role = this.auth.user()?.role as Role | undefined;
     const extras: SecondaryItem[] = [];
     if (role === 'manager') extras.push(this.myPinItem);
     if (role === 'owner' || role === 'admin') extras.push(this.diagnosticsItem, this.stocktakeItem);
-    if (!extras.length) return this.secondaryGroups;
-    return this.secondaryGroups.map((group) =>
-      group.labelKey === 'nav.section.system'
-        ? { ...group, items: [...group.items, ...extras] }
-        : group,
-    );
+    return this.secondaryGroups
+      .map((group) => ({
+        ...group,
+        items: [
+          ...group.items.filter((item) => !item.roles || !role || item.roles.includes(role)),
+          ...(group.labelKey === 'nav.section.system' ? extras : []),
+        ],
+      }))
+      .filter((group) => group.items.length > 0);
   });
 
   ngAfterViewInit(): void {

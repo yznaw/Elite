@@ -28,7 +28,6 @@ const CATALOG = [
     brand: 'Elite Atelier',
     price: 2800,
     stock: 14,
-    has3d: true,
     image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Hand-stitched in our Doha atelier from full-grain camel leather.</p>',
     descriptionAr: '<p>مصنوع يدوياً في ورشتنا بالدوحة من جلد الجمل الكامل.</p>',
@@ -44,7 +43,6 @@ const CATALOG = [
     brand: 'Elite Atelier',
     price: 2200,
     stock: 9,
-    has3d: true,
     image: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Classic derby silhouette refined in supple Najd-tanned leather.</p>',
     descriptionAr: '<p>تصميم ديربي كلاسيكي بجلد نجدي رفيع.</p>',
@@ -59,7 +57,6 @@ const CATALOG = [
     brand: 'Elite Atelier',
     price: 1950,
     stock: 22,
-    has3d: true,
     image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Featherweight loafer with hand-finished braided trim.</p>',
     descriptionAr: '<p>حذاء لوفر خفيف بتطعيمات يدوية مجدولة.</p>',
@@ -75,7 +72,6 @@ const CATALOG = [
     brand: 'Elite Atelier',
     price: 3400,
     stock: 5,
-    has3d: false,
     image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Desert-tested boot with hand-burnished cap toe.</p>',
     descriptionAr: '<p>بوت صحراوي بمقدّمة يدوية ملمّعة.</p>',
@@ -90,7 +86,6 @@ const CATALOG = [
     brand: 'Elite Atelier',
     price: 2650,
     stock: 11,
-    has3d: true,
     image: 'https://images.unsplash.com/photo-1518639192441-8fce0a366e2e?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Hand-lasted Chelsea boot with elastic gussets and pull-tab.</p>',
     descriptionAr: '<p>حذاء تشيلسي بشريط مطاطي وحلقة سحب يدوية.</p>',
@@ -105,7 +100,6 @@ const CATALOG = [
     brand: 'Nike',
     price: 680,
     stock: 42,
-    has3d: true,
     image: 'https://images.unsplash.com/photo-1542291026-7b4d3fef59c8?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Iconic 1990 silhouette in cool grey and infrared accents.</p>',
     descriptionAr: '<p>تصميم 1990 الأيقوني برمادي بارد ولمسات إنفراريد.</p>',
@@ -121,7 +115,6 @@ const CATALOG = [
     brand: 'New Balance',
     price: 980,
     stock: 18,
-    has3d: true,
     image: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Made-in-USA 990v6 with ENCAP cushioning.</p>',
     descriptionAr: '<p>إصدار 990v6 الأمريكي بوسادة ENCAP.</p>',
@@ -136,7 +129,6 @@ const CATALOG = [
     brand: 'Common Projects',
     price: 1740,
     stock: 7,
-    has3d: true,
     image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&q=80&auto=format&fit=crop',
     descriptionEn: '<p>Minimal Italian sneaker with gold-foiled heel stamp.</p>',
     descriptionAr: '<p>حذاء رياضي إيطالي بسيط مع طبعة كعب ذهبية.</p>',
@@ -302,9 +294,9 @@ async function seedProducts(client, tenantId) {
       `
         INSERT INTO products (
           tenant_id, sku, brand, name, slug, status, description,
-          base_price_cents, currency, stock_quantity, has_3d
+          base_price_cents, currency, stock_quantity
         )
-        VALUES ($1, $2, $3, $4, $5, 'active', $6::jsonb, $7, 'QAR', $8, $9)
+        VALUES ($1, $2, $3, $4, $5, 'active', $6::jsonb, $7, 'QAR', $8)
         ON CONFLICT (tenant_id, sku) DO UPDATE
         SET brand = EXCLUDED.brand,
             name = EXCLUDED.name,
@@ -312,8 +304,7 @@ async function seedProducts(client, tenantId) {
             status = 'active',
             description = EXCLUDED.description,
             base_price_cents = EXCLUDED.base_price_cents,
-            stock_quantity = EXCLUDED.stock_quantity,
-            has_3d = EXCLUDED.has_3d
+            stock_quantity = EXCLUDED.stock_quantity
         RETURNING id
       `,
       [
@@ -325,7 +316,6 @@ async function seedProducts(client, tenantId) {
         JSON.stringify({ en: p.descriptionEn, ar: p.descriptionAr }),
         toCents(p.price),
         p.stock,
-        p.has3d,
       ],
     );
     const productId = inserted.rows[0].id;

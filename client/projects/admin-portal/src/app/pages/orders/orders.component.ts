@@ -27,7 +27,7 @@ import { Order, QAR } from '../../models';
           <ap-icon name="search" [size]="14"/>
           <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="onSearchChange($event)"/>
         </div>
-        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
+        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" [title]="t('common.exportCsv')">
           @if (exporting()) {
             <ap-spinner/> <span class="btn-lbl">{{ t('common.exporting') }}</span>
           } @else {
@@ -121,7 +121,7 @@ import { Order, QAR } from '../../models';
                 <div class="row gap-sm" style="align-items:center;">
                   <ap-pill [kind]="paymentPill(r.payment).kind">{{ t(paymentPill(r.payment).labelKey) }}</ap-pill>
                   @if (isStalePayment(r)) {
-                    <span class="stale-warn" title="Payment pending for over 30 minutes">
+                    <span class="stale-warn" [title]="t('orders.payment.stalePendingTooltip')">
                       <ap-icon name="warning" [size]="12"/>
                     </span>
                   }
@@ -183,7 +183,7 @@ import { Order, QAR } from '../../models';
                   <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
                   <ap-pill [kind]="paymentPill(o.payment).kind">{{ t(paymentPill(o.payment).labelKey) }}</ap-pill>
                   @if (isStalePayment(o)) {
-                    <span class="stale-warn" title="Payment pending for over 30 minutes"><ap-icon name="warning" [size]="12"/></span>
+                    <span class="stale-warn" [title]="t('orders.payment.stalePendingTooltip')"><ap-icon name="warning" [size]="12"/></span>
                   }
                 </div>
                 <div class="oc-cta">{{ t('orders.cta.view') }} →</div>
@@ -345,7 +345,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
         }
       }
     } catch {
-      if (!silent) this.loadError.set('Could not load orders. Check your connection and try again.');
+      if (!silent) this.loadError.set(this.t('orders.loadError'));
     } finally {
       if (!silent) this.loading.set(false);
     }
@@ -469,7 +469,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
       const updated = await this.ordersApi.updateStatus(o.id, {
         fulfillment: 'shipped',
         timelineKind: 'shipped',
-        detail: 'Marked shipped from list view',
+        detail: this.t('orders.timeline.markedShippedFromList'),
       });
       this._ordersSignal.update((all) => all.map((x) => (x.id === o.id ? { ...x, ...updated } : x)));
       this.toast.success(this.t('orders.toast.shipped'), `${o.id} · ${o.customer}`, {
@@ -488,7 +488,10 @@ export class OrdersComponent implements OnInit, OnDestroy {
     this.exporting.set(true);
     try {
       const orders = this._orders();
-      const headers = ['Order ID', 'Date', 'Customer', 'Items', 'Total (QAR)', 'Payment', 'Fulfillment'];
+      const headers = [
+        this.t('orders.csv.orderId'), this.t('orders.csv.date'), this.t('orders.csv.customer'),
+        this.t('orders.csv.items'), this.t('orders.csv.total'), this.t('orders.csv.payment'), this.t('orders.csv.fulfillment'),
+      ];
       const rows = orders.map((o) => [
         o.id, o.date, o.customer, o.itemsCount,
         o.total.toFixed(2), o.payment, o.fulfillment,

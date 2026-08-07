@@ -93,7 +93,7 @@ interface StorefrontContent {
         <!-- Preview — always shown -->
         <button class="pub-bar__btn pub-bar__btn--ghost" type="button"
                 [disabled]="generatingToken()" (click)="openPreview()"
-                title="Open a fresh preview tab showing the current saved draft">
+                [title]="t('storefront.editor.btn.preview.tooltip')">
           @if (generatingToken()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="eye" [size]="14"/> }
           <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.preview') }}</span>
         </button>
@@ -103,7 +103,7 @@ interface StorefrontContent {
           <div class="pub-bar__divider"></div>
           <button class="pub-bar__btn pub-bar__btn--discard" type="button"
                   [disabled]="savingDraft()" (click)="discardContent()"
-                  title="Discard unsaved edits and reload last saved state">
+                  [title]="t('storefront.editor.btn.discard.tooltip')">
             <ap-icon name="x" [size]="13"/>
             <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.discard') }}</span>
           </button>
@@ -119,7 +119,7 @@ interface StorefrontContent {
           <div class="pub-bar__divider"></div>
           <button class="pub-bar__btn pub-bar__btn--revert" type="button"
                   [disabled]="revertingDraft()" (click)="revertToLive()"
-                  title="Discard this draft and go back to the published live content">
+                  [title]="t('storefront.editor.btn.revertToLive.tooltip')">
             @if (revertingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="x" [size]="13"/> }
             <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.revertToLive') }}</span>
           </button>
@@ -135,7 +135,7 @@ interface StorefrontContent {
         <!-- Publish layout — always available -->
         <button class="pub-bar__btn pub-bar__btn--layout" type="button"
                 [disabled]="publishing()" (click)="publish()"
-                title="Publish section order and visibility to the live storefront">
+                [title]="t('storefront.editor.btn.publishLayout.tooltip')">
           @if (publishing()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="sync" [size]="13"/> }
           <span class="pub-bar__btn-label">@if (publishing()) { {{ t('storefront.editor.btn.publishingLayout') }} } @else { {{ t('storefront.editor.btn.publishLayout') }} }</span>
         </button>
@@ -199,8 +199,8 @@ interface StorefrontContent {
                     (drop)="onDrop($event, block.id)" (dragend)="onDragEnd()">
                     <span class="layout-handle"><ap-icon name="drag" [size]="14"/></span>
                     <div class="layout-copy">
-                      <div class="layout-title">{{ block.title }}</div>
-                      <div class="layout-meta">{{ block.config }}</div>
+                      <div class="layout-title">{{ t(blockTitleKey(block.id)) }}</div>
+                      <div class="layout-meta">{{ t(blockMetaKey(block.id)) }}</div>
                     </div>
                     <button class="toggle" type="button" [class.on]="block.visible" (click)="toggleVisible(block.id)"></button>
                   </article>
@@ -538,7 +538,7 @@ interface StorefrontContent {
                 <div class="col-picker mb-16">
                   <div class="col-picker-search">
                     <ap-icon name="search" [size]="13"/>
-                    <input class="inp with-icon" placeholder="Search…" [ngModel]="pickerSearch()" (ngModelChange)="pickerSearch.set($event)"/>
+                    <input class="inp with-icon" [placeholder]="t('common.searchPlaceholder')" [ngModel]="pickerSearch()" (ngModelChange)="pickerSearch.set($event)"/>
                   </div>
                   <div class="col-picker-list">
                     @if (collectionsLoading()) { <div class="col-picker-row muted"><ap-spinner [size]="12"/> {{ t('common.loading') }}</div> }
@@ -558,7 +558,7 @@ interface StorefrontContent {
               }
               <div class="manual-entry">
                 <span class="manual-prefix">/collection/</span>
-                <input class="inp manual-inp" [(ngModel)]="manualHandle" placeholder="type-a-handle" (keydown.enter)="addManualHandle()"/>
+                <input class="inp manual-inp" [(ngModel)]="manualHandle" [placeholder]="t('storefront.editor.collections.handlePlaceholder')" (keydown.enter)="addManualHandle()"/>
                 <button class="btn btn-outline btn-sm" type="button" (click)="addManualHandle()" [disabled]="!manualHandle.trim()">{{ t('storefront.editor.collections.add') }}</button>
               </div>
             </div>
@@ -603,7 +603,7 @@ interface StorefrontContent {
                                 <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="tileFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                                 <button class="btn btn-outline btn-sm" (click)="openMediaPicker('tile-'+ti)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                               </div>
-                              <input class="inp" [ngModel]="tile.imageUrl" (ngModelChange)="patchTile(ti,'imageUrl',$event)" placeholder="https://…"/>
+                              <input class="inp" [ngModel]="tile.imageUrl" (ngModelChange)="patchTile(ti,'imageUrl',$event)" [placeholder]="t('common.urlPlaceholder')"/>
                             </div>
                           </div>
                         </label>
@@ -635,7 +635,7 @@ interface StorefrontContent {
                         <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="heroFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('hero')"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
-                      <input class="inp" placeholder="https://…" [ngModel]="content().hero.imageUrl" (ngModelChange)="patchHero('imageUrl',$event)"/>
+                      <input class="inp" [placeholder]="t('common.urlPlaceholder')" [ngModel]="content().hero.imageUrl" (ngModelChange)="patchHero('imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
@@ -743,7 +743,7 @@ interface StorefrontContent {
                         <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="shFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('story-hero')"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
-                      <input class="inp" placeholder="https://…" [ngModel]="content().story.hero.imageUrl" (ngModelChange)="patchStoryHero('imageUrl',$event)"/>
+                      <input class="inp" [placeholder]="t('common.urlPlaceholder')" [ngModel]="content().story.hero.imageUrl" (ngModelChange)="patchStoryHero('imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
@@ -771,7 +771,7 @@ interface StorefrontContent {
             <div class="card-pad field-stack">
               @for (fact of content().story.heroFacts; track fact.id; let fi = $index) {
                 <div class="row gap-sm align-center">
-                  <input class="inp" style="flex:1" [placeholder]="'Fact label…'" [ngModel]="fact.label" (ngModelChange)="patchHeroFact(fi,'label',$event)"/>
+                  <input class="inp" style="flex:1" [placeholder]="t('storefront.editor.heroFacts.labelPlaceholder')" [ngModel]="fact.label" (ngModelChange)="patchHeroFact(fi,'label',$event)"/>
                   @if (content().story.heroFacts.length > 1) {
                     <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeHeroFact(fi)">
                       <ap-icon name="trash" [size]="12"/>
@@ -807,7 +807,7 @@ interface StorefrontContent {
           @for (chapter of content().story.chapters; track chapter.id; let i = $index) {
             <div class="card mb-16">
               <div class="card-header">
-                <div><div class="card-title">Chapter {{ i + 1 }}</div><div class="card-sub mono">{{ chapter.id }}</div></div>
+                <div><div class="card-title">{{ chapterTitle(i + 1) }}</div><div class="card-sub mono">{{ chapter.id }}</div></div>
                 @if (content().story.chapters.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeChapter(i)">
                     <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.chapters.remove') }}
@@ -827,7 +827,7 @@ interface StorefrontContent {
                         <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="chFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('chapter-'+i)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
-                      <input class="inp" placeholder="https://…" [ngModel]="chapter.imageUrl" (ngModelChange)="patchChapter(i,'imageUrl',$event)"/>
+                      <input class="inp" [placeholder]="t('common.urlPlaceholder')" [ngModel]="chapter.imageUrl" (ngModelChange)="patchChapter(i,'imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
@@ -936,7 +936,7 @@ interface StorefrontContent {
           @for (block of content().contact.infoBlocks; track block.id; let i = $index) {
             <div class="card mb-16">
               <div class="card-header">
-                <div><div class="card-title">{{ block.titleEn || 'Info Block ' + (i+1) }}</div><div class="card-sub mono">{{ block.id }}</div></div>
+                <div><div class="card-title">{{ block.titleEn || infoBlockTitle(i + 1) }}</div><div class="card-sub mono">{{ block.id }}</div></div>
                 @if (content().contact.infoBlocks.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeInfoBlock(i)">
                     <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.infoBlocks.remove') }}
@@ -953,7 +953,7 @@ interface StorefrontContent {
                 </div>
                 @for (line of block.lines; track line; let li = $index) {
                   <div class="row gap-sm">
-                    <input class="inp" style="flex:1" [placeholder]="'Line ' + (li+1)" [ngModel]="line" (ngModelChange)="patchInfoBlockLine(i, li, $event)"/>
+                    <input class="inp" style="flex:1" [placeholder]="lineLabel(li + 1)" [ngModel]="line" (ngModelChange)="patchInfoBlockLine(i, li, $event)"/>
                     @if (block.lines.length > 1) {
                       <button class="btn btn-outline btn-sm" style="color:var(--danger);" type="button" (click)="removeInfoBlockLine(i, li)">
                         <ap-icon name="x" [size]="11"/>
@@ -982,7 +982,7 @@ interface StorefrontContent {
               <label><span class="lbl">{{ t('storefront.editor.phone.email') }}</span><input class="inp" type="email" [ngModel]="content().contact.email" (ngModelChange)="patchContact('email',$event)"/></label>
               <div class="two-col">
                 <label><span class="lbl">{{ t('storefront.editor.phone.phone') }}</span><input class="inp" [ngModel]="content().contact.phone" (ngModelChange)="patchContact('phone',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.phone.whatsapp') }}</span><input class="inp mono" placeholder="+974 XXXX XXXX" [ngModel]="content().contact.whatsapp" (ngModelChange)="patchContact('whatsapp',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.phone.whatsapp') }}</span><input class="inp mono" [placeholder]="t('storefront.editor.phone.whatsappPlaceholder')" [ngModel]="content().contact.whatsapp" (ngModelChange)="patchContact('whatsapp',$event)"/></label>
               </div>
               <div class="hint-box">{{ t('storefront.editor.phone.whatsappHint') }}</div>
               <label><span class="lbl">{{ t('storefront.editor.phone.promise') }}</span><textarea class="inp" rows="2" [ngModel]="content().contact.promiseLine" (ngModelChange)="patchContact('promiseLine',$event)"></textarea></label>
@@ -1016,7 +1016,7 @@ interface StorefrontContent {
                       <option value="linkedin">LinkedIn</option>
                     </select>
                   </div>
-                  <input class="inp inp-sm" style="flex:1;" [placeholder]="link.platform === 'whatsapp' ? 'Uses phone above' : '@handle or page name'" [disabled]="link.platform === 'whatsapp'" [ngModel]="link.platform === 'whatsapp' ? content().contact.whatsapp : link.handle" (ngModelChange)="patchSocialLink(si,'handle',$event)"/>
+                  <input class="inp inp-sm" style="flex:1;" [placeholder]="link.platform === 'whatsapp' ? t('storefront.editor.social.usesPhoneAbove') : t('storefront.editor.social.handlePlaceholder')" [disabled]="link.platform === 'whatsapp'" [ngModel]="link.platform === 'whatsapp' ? content().contact.whatsapp : link.handle" (ngModelChange)="patchSocialLink(si,'handle',$event)"/>
                   <button class="toggle" [class.on]="link.enabled" type="button" (click)="toggleSocialLink(si)"></button>
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);" type="button" (click)="removeSocialLink(si)">
                     <ap-icon name="trash" [size]="12"/>
@@ -1054,7 +1054,7 @@ interface StorefrontContent {
       <div class="mpp-toolbar">
         <div class="mpp-search">
           <ap-icon name="search" [size]="13"/>
-          <input class="inp" placeholder="Search files…"
+          <input class="inp" [placeholder]="t('storefront.editor.mediaPicker.searchPlaceholder')"
                  [ngModel]="mediaPickerSearch()" (ngModelChange)="mediaPickerSearch.set($event)"/>
         </div>
         <label class="btn btn-gold btn-sm mpp-upload-btn" style="cursor:pointer;flex-shrink:0;">
@@ -1100,7 +1100,7 @@ interface StorefrontContent {
        PREVIEW MODAL — fullscreen iframe, Shopify-style
   ═══════════════════════════════════════════════════════════════ -->
   @if (previewOpen()) {
-    <div class="pv-modal" role="dialog" aria-label="Storefront preview">
+    <div class="pv-modal" role="dialog" [attr.aria-label]="t('storefront.editor.preview.ariaLabel')">
 
       <!-- Toolbar -->
       <div class="pv-toolbar">
@@ -1111,14 +1111,14 @@ interface StorefrontContent {
 
         <div class="pv-device-group">
           <button class="pv-device-btn" [class.active]="previewDevice() === 'desktop'"
-                  (click)="previewDevice.set('desktop')" title="Desktop (full width)">
+                  (click)="previewDevice.set('desktop')" [title]="t('storefront.editor.preview.desktopTitle')">
             <svg width="16" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
             </svg>
             {{ t('storefront.editor.preview.desktop') }}
           </button>
           <button class="pv-device-btn" [class.active]="previewDevice() === 'mobile'"
-                  (click)="previewDevice.set('mobile')" title="Mobile (393 px — iPhone 14)">
+                  (click)="previewDevice.set('mobile')" [title]="t('storefront.editor.preview.mobileTitle')">
             <svg width="11" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/>
             </svg>
@@ -1127,7 +1127,7 @@ interface StorefrontContent {
         </div>
 
         <div class="pv-toolbar-right">
-          <button class="pv-newtab" type="button" (click)="openPreviewInNewTab()" title="Open in a new browser tab">
+          <button class="pv-newtab" type="button" (click)="openPreviewInNewTab()" [title]="t('storefront.editor.preview.newTabTitle')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
@@ -1146,7 +1146,7 @@ interface StorefrontContent {
           <!-- Desktop: full-width iframe -->
           <iframe class="pv-iframe-desktop"
                   [src]="previewSafeUrl()"
-                  title="Storefront preview"
+                  [title]="t('storefront.editor.preview.ariaLabel')"
                   allow="same-origin"></iframe>
         }
 
@@ -1167,7 +1167,7 @@ interface StorefrontContent {
               <!-- Storefront iframe -->
               <iframe class="pv-phone__iframe"
                       [src]="previewSafeUrl()"
-                      title="Storefront mobile preview"
+                      [title]="t('storefront.editor.preview.mobileIframeTitle')"
                       allow="same-origin"></iframe>
               <!-- Home indicator -->
               <div class="pv-phone__home" aria-hidden="true"></div>
@@ -2990,6 +2990,29 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.blocks.update((blocks) => blocks.map((b) => b.id === id ? { ...b, visible: !b.visible } : b));
   }
 
+  // block.title/block.config (HOME_LAYOUT_BLOCKS in storefront.service.ts)
+  // are internal English fallback labels, not i18n-routed — this maps the
+  // stable block id to a translation key instead of rendering them directly.
+  blockTitleKey(blockId: string): string {
+    return `storefront.block.${blockId}.title`;
+  }
+
+  blockMetaKey(blockId: string): string {
+    return `storefront.block.${blockId}.meta`;
+  }
+
+  chapterTitle(n: number): string {
+    return this.t('storefront.editor.chapters.chapterN').replace('{n}', String(n));
+  }
+
+  infoBlockTitle(n: number): string {
+    return this.t('storefront.editor.infoBlocks.blockN').replace('{n}', String(n));
+  }
+
+  lineLabel(n: number): string {
+    return this.t('storefront.editor.line.placeholder').replace('{n}', String(n));
+  }
+
   resetLayout(): void {
     this.blocks.set(HOME_LAYOUT_BLOCKS.map((b) => ({ ...b })));
   }
@@ -2999,7 +3022,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     if (this.publishing()) return;
     const ok = await this.confirm.ask({
       title: this.t('storefront.publishConfirm.title'),
-      message: `Publish ${this.visibleCount()} visible sections to the storefront?`,
+      message: this.t('storefront.publishConfirm.message').replace('{n}', String(this.visibleCount())),
       confirmLabel: this.t('storefront.publish'),
       cancelLabel: this.t('common.cancel'),
       variant: 'info',
