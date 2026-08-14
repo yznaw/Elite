@@ -111,6 +111,15 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           t('error.422.title'),
           msg || t('error.422.sub'),
         );
+      } else if (err.status === 413) {
+        // A file/request that's too large can be rejected by our own body-size
+        // check (JSON body with a friendly `message`) or, if a host-level proxy
+        // blocks it first, with no parseable body at all — hence the fallback
+        // to a fixed, simple explanation instead of a raw HTTP status line.
+        toast.error(
+          t('error.413.title'),
+          err.error?.message || t('error.413.sub'),
+        );
       } else if (err.status === 429) {
         toast.warning(
           t('error.429.title'),
@@ -123,9 +132,12 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           { label: t('common.retry'), run: () => {} },
         );
       } else if (!(err.status === 428 && isRegisterProbe)) {
+        // Prefer the backend's own friendly `message` (e.g. "Only CSV files are
+        // accepted.") over the raw HTTP status line — the latter is only shown
+        // when there's truly no parseable body to explain what happened.
         toast.error(
           t('error.unknown.title'),
-          `${err.status} — ${err.statusText || t('error.unknown.sub')}`,
+          err.error?.message || `${err.status} — ${err.statusText || t('error.unknown.sub')}`,
         );
       }
 

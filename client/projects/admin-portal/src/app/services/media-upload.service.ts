@@ -44,13 +44,18 @@ export class MediaUploadService {
   private readonly api = inject(ApiClient);
 
   /** Validates a File against the same rules the server enforces, locally
-      so the UI can reject obvious mismatches without a round-trip. */
-  validate(file: File): string | null {
+      so the UI can reject obvious mismatches without a round-trip.
+      `maxBytes` defaults to the real per-file limit (50 MB); callers that
+      embed the file as a base64 data URL inside a JSON request instead of
+      uploading it (see product-drawer's pre-save gallery) pass a much
+      lower cap, since that path has a far smaller real ceiling. */
+  validate(file: File, maxBytes: number = MAX_SIZE_BYTES): string | null {
     if (!ACCEPTED_TYPES.test(file.type)) {
-      return `Unsupported file type: ${file.type || 'unknown'}`;
+      return 'Unsupported image type — use JPEG, PNG, WebP, GIF, or AVIF.';
     }
-    if (file.size > MAX_SIZE_BYTES) {
-      return `File exceeds the 50 MB limit (${(file.size / 1024 / 1024).toFixed(1)} MB).`;
+    if (file.size > maxBytes) {
+      const limitMb = (maxBytes / 1024 / 1024).toFixed(maxBytes < 1024 * 1024 * 10 ? 1 : 0);
+      return `Image is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit here is ${limitMb} MB per image.`;
     }
     return null;
   }

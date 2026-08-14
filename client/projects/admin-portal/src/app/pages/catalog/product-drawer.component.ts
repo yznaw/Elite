@@ -36,6 +36,16 @@ interface FormShape {
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
+// A brand-new product isn't saved yet, so its gallery images ride along as
+// base64 data URLs inside the JSON create-product request (see uploadFiles
+// below) instead of the multipart upload used everywhere else — and that
+// request is capped at 10 MB (server/index.js), not the 50 MB per-file
+// limit the rest of the app promises. Base64 inflates raw bytes by ~4/3, so
+// these caps sit well below 50 MB to leave headroom for that encoding plus
+// the rest of the product form.
+const PRESAVE_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const PRESAVE_IMAGE_TOTAL_BUDGET_BYTES = 7 * 1024 * 1024;
+
 
 /** Read a File as a data URL — used for the upload-row thumbnail before
     the server returns the canonical URL. Resolves to '' on non-images. */
@@ -2140,6 +2150,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   onDragOver(ev: DragEvent): void { ev.preventDefault(); }
 
+  /** Estimates the raw byte size already sitting in the draft's local (not
+      yet uploaded) gallery images, by inverting base64's ~4/3 expansion.
+      Used to budget how many more pre-save images the JSON request can
+      still fit under its 10 MB limit. */
+  private presaveImageBytes(): number {
+    return this.form().images
+      .filter((src) => src.startsWith('data:'))
+      .reduce((total, src) => total + Math.floor(((src.length - src.indexOf(',') - 1) * 3) / 4), 0);
+  }
+
   /**
    * Uploads images via the storage adapter. We buffer files into the
    * pendingUploads signal so the UI renders a thumbnail + progress bar per
@@ -2154,8 +2174,25 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private async uploadFiles(files: File[]): Promise<void> {
     if (this.product?.id?.startsWith('P-NEW-')) {
       // Pre-save stub: keep using local data URLs so the gallery preview
-      // works before the product exists on the server.
+      // works before the product exists on the server. These ride inside
+      // the JSON create-product request (10 MB limit), not the multipart
+      // upload's 50 MB one, so they're validated against the much lower
+      // pre-save budget instead of the real per-file limit.
+      let runningBytes = this.presaveImageBytes();
+      let added = 0;
       for (const file of files) {
+        const reason = this.uploads.validate(file, PRESAVE_IMAGE_MAX_BYTES);
+        if (reason) {
+          this.toast.error(reason, file.name);
+          continue;
+        }
+        if (runningBytes + file.size > PRESAVE_IMAGE_TOTAL_BUDGET_BYTES) {
+          this.toast.warning(
+            'These photos are getting large for an unsaved product',
+            'Save the product first, then add the rest from its gallery — that path allows up to 50 MB per image.',
+          );
+          break;
+        }
         const reader = new FileReader();
         await new Promise<void>((resolve) => {
           reader.onload = () => {
@@ -2165,8 +2202,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
           };
           reader.readAsDataURL(file);
         });
+        runningBytes += file.size;
+        added += 1;
       }
-      this.toast.info(this.t('product.gallery.upload'), this.t('product.gallery.empty.sub'));
+      if (added > 0) this.toast.info(this.t('product.gallery.upload'), this.t('product.gallery.empty.sub'));
       return;
     }
 

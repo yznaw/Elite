@@ -21,6 +21,9 @@
         <button class="header-tool" type="button" (click)="syncPendingSales()" [disabled]="!online() || syncing()">
           {{ syncing() ? 'Syncing' : 'Queue ' + pendingSales() }}
         </button>
+        <button class="header-tool" type="button" (click)="shortcutsHelpOpen.set(true)">
+          Shortcuts <kbd class="key-badge">F1</kbd>
+        </button>
       }
       <button class="exit-button" type="button" (click)="exitPos()">Admin</button>
     </div>
@@ -158,8 +161,8 @@
       <div class="selling-main">
         <nav class="pos-tools" aria-label="POS operations">
           <div>
-            <button type="button" [disabled]="!cart().length" (click)="dialog.set('park')">Park sale</button>
-            <button type="button" (click)="dialog.set('parked'); loadParkedCarts()">Parked <span>{{ parkedCarts().length }}</span></button>
+            <button type="button" [disabled]="!cart().length" (click)="dialog.set('park')">Park sale <kbd class="key-badge">F9</kbd></button>
+            <button type="button" (click)="dialog.set('parked'); loadParkedCarts()">Parked <span>{{ parkedCarts().length }}</span> <kbd class="key-badge">F10</kbd></button>
             <button type="button" [disabled]="!online()" (click)="dialog.set('operations')">Returns / voids</button>
           </div>
           <div>
@@ -202,8 +205,9 @@
           <div class="catalog-panel">
             <div class="catalog-tools">
               <label class="search-box">
-                <span>SEARCH</span>
+                <span>SEARCH <kbd class="key-badge">F2</kbd></span>
                 <input
+                  #searchInputRef
                   [(ngModel)]="searchQuery"
                   (ngModelChange)="queueSearch()"
                   placeholder="Product name, SKU, or barcode"
@@ -305,18 +309,24 @@
             <span class="eyebrow">CURRENT SALE</span>
             <h2>Cart</h2>
           </div>
-          <span>{{ cartCount() }} item{{ cartCount() === 1 ? '' : 's' }}</span>
+          <div class="cart-title-actions">
+            <span>{{ cartCount() }} item{{ cartCount() === 1 ? '' : 's' }}</span>
+            <button type="button" class="link-button" (click)="startNewSale()">New sale <kbd class="key-badge">F5</kbd></button>
+          </div>
         </div>
 
+        @if (cart().length) {
+          <p class="cart-keys-hint"><kbd class="key-badge">&uarr;&darr;</kbd> select · <kbd class="key-badge">Delete</kbd> remove</p>
+        }
         <div class="cart-lines">
           @for (line of cart(); track line.item.variantId) {
-            <article class="cart-line">
+            <article class="cart-line" [class.selected]="selectedLineId() === line.item.variantId" (click)="selectCartLine(line.item.variantId)">
               <div class="line-top">
                 <div>
                   <strong>{{ line.item.name }}</strong>
                   <small>{{ line.item.variant || line.item.sku }}</small>
                 </div>
-                <button type="button" (click)="removeLine(line.item.variantId)" aria-label="Remove item">Remove</button>
+                <button type="button" (click)="$event.stopPropagation(); removeLine(line.item.variantId)" aria-label="Remove item">Remove</button>
               </div>
               <div class="line-bottom">
                 <div class="stepper">
@@ -348,7 +358,7 @@
           <div class="grand-total"><span>Total</span><b>{{ formatMoney(totalCents()) }}</b></div>
           <button class="checkout-button" type="button" [disabled]="!cart().length || busy() || offlineCatalogBlocked()" (click)="beginPayment()">
             Take payment
-            <span>{{ formatMoney(totalCents()) }}</span>
+            <span>{{ formatMoney(totalCents()) }} <kbd class="key-badge key-badge--dark">F4</kbd></span>
           </button>
           <small>Receipt {{ receiptBlock() ? '#' + receiptBlock()!.next : 'number unavailable' }}</small>
         </div>
@@ -490,8 +500,8 @@
             </div>
           } @else {
             <label class="customer-search">
-              <span>Customer (optional)</span>
-              <input [(ngModel)]="customerQuery" (ngModelChange)="queueCustomerSearch()" placeholder="Phone, name, or email" />
+              <span>Customer (optional) <kbd class="key-badge">F6</kbd></span>
+              <input #customerInputRef [(ngModel)]="customerQuery" (ngModelChange)="queueCustomerSearch()" placeholder="Phone, name, or email" />
             </label>
             @if (customerSearching()) {
               <div class="customer-hint">Searching…</div>
@@ -566,9 +576,28 @@
             <div><dt>Change</dt><dd>{{ formatMoney(sale.changeGivenCents) }}</dd></div>
           }
         </dl>
-        <button class="primary-action" type="button" (click)="closeReceipt()">New sale</button>
+        <button class="primary-action" type="button" (click)="closeReceipt()">New sale <kbd class="key-badge key-badge--dark">F5</kbd></button>
         <button class="secondary-action" type="button" (click)="reprintLastSale()">Print again</button>
         <small>{{ sale.status === 'pending-sync' ? 'Saved offline and waiting to synchronize.' : 'Saved in Elite.' }}</small>
+      </section>
+    </div>
+  }
+
+  @if (shortcutsHelpOpen()) {
+    <div class="modal-backdrop" (click)="shortcutsHelpOpen.set(false)">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="shortcutsHelpOpen.set(false)">&times;</button>
+        <span class="eyebrow">KEYBOARD</span>
+        <h2>Shortcuts</h2>
+        <ul class="shortcuts-list">
+          @for (shortcut of shortcutList; track shortcut.keys) {
+            <li>
+              <kbd class="key-badge">{{ shortcut.keys }}</kbd>
+              <span>{{ shortcut.label }}</span>
+            </li>
+          }
+        </ul>
+        <small class="shortcuts-note">These sit on top of the touchscreen — every action here also works by tapping.</small>
       </section>
     </div>
   }

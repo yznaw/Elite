@@ -40,6 +40,12 @@ export class AppComponent {
     return !this.shelllessRoutes.some((r) => u.startsWith(r));
   });
 
+  // The POS cart panel is a fixed 390px column pinned to the viewport's
+  // right edge, with "Take payment" flush at its bottom — exactly where
+  // <ap-toast> anchors by default. See styles.scss for the offset this
+  // drives.
+  readonly isPosRoute = computed(() => this.currentUrl().startsWith('/pos'));
+
   readonly flushTop = computed(() => {
     const u = this.currentUrl();
     return this.flushTopRoutes.some((r) => u.startsWith(r));

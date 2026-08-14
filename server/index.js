@@ -197,7 +197,7 @@ app.use((err, req, res, _next) => {
   if (err && err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,
-      message: 'Request body is too large. Upload images through the media uploader instead of saving large inline data URLs.',
+      message: 'This file is too large to save here. Use the media uploader for images instead — it supports files up to 50 MB.',
     });
   }
 

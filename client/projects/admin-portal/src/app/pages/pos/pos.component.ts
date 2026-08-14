@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -136,6 +136,30 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly selectedVariantQuantity = signal(1);
   readonly dialog = signal<PosDialog>('none');
   readonly parkedCarts = signal<PosParkedCart[]>([]);
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  // Every register is a touchscreen (see pos.component.scss), so shortcuts
+  // are a speed layer for staff who also have a keyboard at the counter —
+  // never a replacement for tapping. F-keys are used for the primary actions
+  // because they can never collide with typed text or with the barcode
+  // scanner, which only ever sends digits followed by Enter.
+  readonly shortcutsHelpOpen = signal(false);
+  readonly selectedLineId = signal<string | null>(null);
+  readonly shortcutList: { keys: string; label: string }[] = [
+    { keys: 'F1', label: 'Show this list' },
+    { keys: 'F2', label: 'Jump to search / barcode' },
+    { keys: 'F4', label: 'Take payment' },
+    { keys: 'F5', label: 'Start a new sale' },
+    { keys: 'F6', label: 'Look up a customer' },
+    { keys: 'F9', label: 'Park the current sale' },
+    { keys: 'F10', label: 'View parked sales' },
+    { keys: '↑ / ↓', label: 'Move between cart items' },
+    { keys: 'Delete', label: 'Remove the selected cart item' },
+    { keys: 'Esc', label: 'Close a dialog' },
+  ];
+  @ViewChild('searchInputRef') private searchInputRef?: ElementRef<HTMLInputElement>;
+  @ViewChild('customerInputRef') private customerInputRef?: ElementRef<HTMLInputElement>;
+
   readonly operationTransaction = signal<PosSaleResult | null>(null);
   readonly shiftSummary = signal<PosShiftSummary | null>(null);
   readonly syncConflicts = signal<PosSyncConflict[]>([]);
@@ -339,6 +363,142 @@ export class PosComponent implements OnInit, OnDestroy {
     if (this.freshnessClockTimer) clearInterval(this.freshnessClockTimer);
     if (this.posBuildCheckTimer) clearInterval(this.posBuildCheckTimer);
     this.eventSource?.close();
+  }
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+
+  @HostListener('window:keydown', ['$event'])
+  onGlobalKeydown(event: KeyboardEvent): void {
+    // Only live on the actual selling screen — the shift/enrollment/loading
+    // screens have their own single primary action and no cart to act on.
+    if (this.phase() !== 'selling' || event.isComposing) return;
+    // A modifier chord (Ctrl+P, Cmd+R, …) is the browser's or OS's to keep.
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    switch (event.key) {
+      case 'F1':
+        event.preventDefault();
+        this.shortcutsHelpOpen.update((open) => !open);
+        return;
+      case 'F2':
+        event.preventDefault();
+        this.focusSearch();
+        return;
+      case 'F4':
+        event.preventDefault();
+        this.beginPayment();
+        return;
+      case 'F5':
+        event.preventDefault();
+        this.startNewSale();
+        return;
+      case 'F6':
+        event.preventDefault();
+        this.focusCustomerSearch();
+        return;
+      case 'F9':
+        event.preventDefault();
+        if (this.cart().length) this.dialog.set('park');
+        return;
+      case 'F10':
+        event.preventDefault();
+        this.dialog.set('parked');
+        void this.loadParkedCarts();
+        return;
+    }
+
+    // Enter completes the sale from anywhere in the payment sheet, including
+    // the tendered-amount field — a cash register's Enter has always meant
+    // "tender this," so this one case is allowed even while typing.
+    if (event.key === 'Enter' && this.paymentOpen() && !event.repeat) {
+      event.preventDefault();
+      void this.completeSale();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      if (this.shortcutsHelpOpen()) this.shortcutsHelpOpen.set(false);
+      else if (this.dialog() !== 'none') this.dialog.set('none');
+      else if (this.paymentOpen()) this.paymentOpen.set(false);
+      return;
+    }
+
+    // Everything past this point edits the cart. Never hijack normal typing —
+    // Delete/Backspace and the arrow keys all have native meaning in a field.
+    if (this.isTypingTarget(event.target)) return;
+
+    switch (event.key) {
+      case 'Delete':
+        event.preventDefault();
+        this.deleteSelectedLine();
+        return;
+      case 'ArrowDown':
+        event.preventDefault();
+        this.moveLineSelection(1);
+        return;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.moveLineSelection(-1);
+        return;
+    }
+  }
+
+  private isTypingTarget(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable;
+  }
+
+  focusSearch(): void {
+    const input = this.searchInputRef?.nativeElement;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }
+
+  focusCustomerSearch(): void {
+    if (!this.paymentOpen()) {
+      if (!this.cart().length) return;
+      this.beginPayment();
+    }
+    // The field renders only once `paymentOpen` flips true and change
+    // detection runs the payment sheet into the DOM, so the focus has to
+    // wait a tick behind it.
+    setTimeout(() => this.customerInputRef?.nativeElement.focus(), 0);
+  }
+
+  startNewSale(): void {
+    if (this.lastSale()) {
+      this.closeReceipt();
+      return;
+    }
+    if (!this.cart().length && !this.selectedCustomer()) return;
+    if (this.cart().length && !window.confirm('Clear the current cart and start a new sale?')) return;
+    this.cart.set([]);
+    this.selectedLineId.set(null);
+    this.selectedCustomer.set(null);
+    this.pendingIdempotencyKey = null;
+    this.paymentOpen.set(false);
+  }
+
+  selectCartLine(variantId: string): void {
+    this.selectedLineId.set(variantId);
+  }
+
+  private moveLineSelection(delta: number): void {
+    const lines = this.cart();
+    if (!lines.length) return;
+    const currentIndex = lines.findIndex((line) => line.item.variantId === this.selectedLineId());
+    const nextIndex = currentIndex === -1
+      ? (delta > 0 ? 0 : lines.length - 1)
+      : Math.min(lines.length - 1, Math.max(0, currentIndex + delta));
+    this.selectedLineId.set(lines[nextIndex].item.variantId);
+  }
+
+  private deleteSelectedLine(): void {
+    const id = this.selectedLineId();
+    if (!id) return;
+    this.removeLine(id);
   }
 
   /**
@@ -676,6 +836,9 @@ export class PosComponent implements OnInit, OnDestroy {
     this.cart.update((lines) => existing
       ? lines.map((line) => line.item.variantId === item.variantId ? { ...line, quantity: line.quantity + 1 } : line)
       : [...lines, { item, quantity: 1 }]);
+    // Whatever the cashier just scanned or tapped is what F9/Delete should
+    // act on next — keep the keyboard selection following the action.
+    this.selectedLineId.set(item.variantId);
     this.pendingIdempotencyKey = null;
   }
 
@@ -691,6 +854,10 @@ export class PosComponent implements OnInit, OnDestroy {
 
   removeLine(variantId: string): void {
     this.cart.update((lines) => lines.filter((line) => line.item.variantId !== variantId));
+    if (this.selectedLineId() === variantId) {
+      const remaining = this.cart();
+      this.selectedLineId.set(remaining.length ? remaining[0].item.variantId : null);
+    }
     this.pendingIdempotencyKey = null;
   }
 
@@ -866,6 +1033,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.receiptBlock.set(await this.local.getReceiptBlock());
       this.applyStockUpdates(result.stockUpdates);
       this.cart.set([]);
+      this.selectedLineId.set(null);
       this.selectedCustomer.set(null);
       this.pendingIdempotencyKey = null;
       this.paymentOpen.set(false);
@@ -1016,6 +1184,7 @@ export class PosComponent implements OnInit, OnDestroy {
       if (this.online()) await this.pos.parkCart(this.parkLabel.trim(), { items: this.cart() });
       else await this.local.parkCart(this.parkLabel.trim(), { items: this.cart() });
       this.cart.set([]);
+      this.selectedLineId.set(null);
       this.parkLabel = '';
       this.dialog.set('none');
       this.toast.success('Sale parked');
@@ -1047,6 +1216,7 @@ export class PosComponent implements OnInit, OnDestroy {
   async restoreParkedCart(parked: PosParkedCart): Promise<void> {
     if (this.cart().length && !window.confirm('Replace the current cart with this parked sale?')) return;
     this.cart.set(parked.payload.items);
+    this.selectedLineId.set(parked.payload.items[0]?.item.variantId ?? null);
     if (parked.local) await this.local.deleteParkedCart(parked.parkedCartId);
     else await this.pos.deleteParkedCart(parked.parkedCartId);
     await this.loadParkedCarts();

@@ -2515,6 +2515,25 @@ html[dir='rtl'] .drawer {
   .modal-body { padding: 16px !important; }
 }
 
+/* POS: the cart panel is a fixed 390px column pinned to the viewport's
+   right edge, with "Take payment" flush at its bottom — the default
+   bottom-right toast position sits directly on top of it, and since error
+   toasts are persistent (never auto-dismiss), that can block the button
+   entirely until a cashier notices and closes the toast. Shifted left of
+   the cart column instead, over the catalog panel's low-stakes bottom
+   corner. Desktop-only: below 761px POS collapses to a single stacked
+   column and the default mobile toast rule below already handles it. */
+@media (min-width: 761px) {
+  ap-toast.pos-mode .toast-stack {
+    right: 414px;
+    // Without this, a 400px-wide toast at a 761px-wide register (the narrow
+    // end of this breakpoint) would push 53px past the left edge of the
+    // screen — the offset above only accounts for clearing the cart column,
+    // not for staying on-screen itself.
+    max-width: calc(100vw - 438px);
+  }
+}
+
 /* Toast stack on mobile: full width minus margins, anchored bottom */
 @media (max-width: 600px) {
   .toast-stack {

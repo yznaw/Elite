@@ -1722,6 +1722,107 @@ label input:focus {
 .conflict-row span { display: grid; gap: 3px; }
 .conflict-row small { color: var(--pos-orange); font-size: 9px; text-transform: uppercase; }
 
+// ── Keyboard shortcuts ────────────────────────────────────────────────────
+// Badges are informational, not interactive — they never affect layout of
+// the button/label they sit in beyond a small gap, so a register with no
+// keyboard reads them as harmless decoration rather than a broken control.
+.key-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 5px;
+  padding: 2px 6px;
+  border: 1px solid var(--pos-line);
+  border-radius: 4px;
+  background: rgba(255, 254, 250, 0.6);
+  color: #737c78;
+  font-family: var(--pos-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+// Used on dark or saturated surfaces (header, primary/checkout buttons) where
+// the default muted badge would lose contrast.
+.key-badge--dark {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.header-tool .key-badge { margin-inline-start: 6px; }
+.pos-tools button .key-badge { font-size: 9px; }
+
+.checkout-button span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cart-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cart-keys-hint {
+  margin: 0;
+  padding: 8px 22px;
+  border-bottom: 1px solid var(--pos-line);
+  color: #79817e;
+  font-size: 10px;
+}
+.cart-keys-hint .key-badge { margin-inline-start: 0; margin-inline-end: 4px; }
+
+// A cart line becomes "selected" on click or via the ↑/↓ shortcuts — this is
+// what F-Delete acts on. The left accent mirrors the orange used for prices
+// elsewhere in the cart, so it reads as "this is the active line," not as a
+// generic hover state.
+.cart-line {
+  cursor: pointer;
+  border-inline-start: 3px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cart-line.selected {
+  background: rgba(184, 146, 74, 0.08);
+  border-inline-start-color: var(--pos-orange);
+}
+
+.shortcuts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.shortcuts-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.shortcuts-list .key-badge {
+  min-width: 44px;
+  margin-inline-start: 0;
+  justify-content: center;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.shortcuts-list span {
+  color: var(--pos-ink);
+  font-size: 13px;
+}
+.shortcuts-note {
+  display: block;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--pos-line);
+  color: #858c89;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 @media (max-width: 1000px) {
   .pos-shell.is-selling { grid-template-columns: minmax(0, 1fr) 350px; }
   .setup-stage { gap: 40px; }
@@ -1740,6 +1841,11 @@ label input:focus {
   .selling-main { display: block; }
   .pos-header { min-height: 62px; padding: 0 14px; }
   .cashier, .shift-chip { display: none; }
+  // A phone-sized register has no physical keyboard, so the F-key badges
+  // would be pure noise here even though the shortcuts themselves keep
+  // working for anyone who does plug one in.
+  .key-badge { display: none; }
+  .cart-keys-hint { display: none; }
   .setup-stage, .shift-stage { grid-template-columns: 1fr; padding: 24px 16px; }
   .setup-intro { display: none; }
   .shift-note { padding: 24px; }
