@@ -271,7 +271,7 @@ Creates one admin per role — `owner`, `admin`, `manager`, `viewer` — and wri
 | Driver selection | `STORAGE_DRIVER=disk` (default). New drivers register in `server/lib/storage.js`. |
 | Local disk path | `server/uploads/` — gitignored. Served as `/uploads/*` via `express.static`. |
 | Max file size | `UPLOAD_MAX_SIZE_BYTES` env (default `52428800` = 50 MB). 413 returned on overflow. |
-| Allowed types | `image/{jpeg,png,webp,gif,avif}` + `.glb` (model/gltf-binary). 415 on mismatch. |
+| Allowed types | `image/{jpeg,png,webp,gif,avif}`. 415 on mismatch. (3D/GLB support was removed — see root commit "remove 3D/GLB".) |
 | Filenames on disk | `<base36-timestamp>-<8 hex>.<ext>` — collision-free and never exposes the user-supplied name. |
 | Tracking on disk | `media_assets.metadata->>'storagePath'` stores the absolute path so DELETE can clean up the file. |
 
@@ -290,6 +290,8 @@ Creates one admin per role — `owner`, `admin`, `manager`, `viewer` — and wri
 | Media library drop zone → real upload + auto-refresh | [pages/media/media.component.ts](../client/projects/admin-portal/src/app/pages/media/media.component.ts) |
 
 Validation runs locally first (same rules the server enforces) so the UI rejects obvious mismatches without a round-trip; the server check is the authority.
+
+**Exception — the product drawer's pre-save gallery.** A brand-new, not-yet-saved product (`P-NEW-*`) has no server-side row for the multipart endpoint to attach to, so its gallery images are base64-encoded and carried inline in the JSON `create-product` request instead — which goes through `express.json({ limit: '10mb' })`, not the 50 MB multer limit above. `MediaUploadService.validate()` takes an optional `maxBytes` override for exactly this: the drawer calls it with a 4 MB per-image / 7 MB combined budget (base64 inflates raw bytes by ~4/3, and the JSON needs headroom for the rest of the form). This path previously had no local validation at all, so an oversized image only failed — with a generic message — at save time, disconnected from the image that caused it.
 
 Touch UX: every upload trigger is a `<label>` wrapping a hidden `<input type="file">`, so phones get the OS file picker on tap without needing drag/drop.
 

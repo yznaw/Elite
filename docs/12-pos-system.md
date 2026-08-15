@@ -48,6 +48,7 @@ The result is one source of truth. Products, stock, customers, sales, refunds, a
 - POS/client/server diagnostics correlated by request ID.
 - Reason-coded inventory adjustments and blind/open stocktakes for owners/admins.
 - Server integration tests and authenticated browser checkout E2E coverage.
+- Keyboard shortcuts for the core sale flow (search, pay, park, customer lookup, new sale, cart-line selection) with always-visible key badges — see [Keyboard shortcuts](#keyboard-shortcuts) below.
 
 ### Not yet complete or intentionally deferred
 
@@ -520,6 +521,28 @@ Three rules apply to every button under `.pos-shell` rather than being repeated 
 Spacing matters as much as size: adjacent colour pills are the easiest thing to mis-tap and a wrong colour is only caught at the receipt.
 
 **A size tile never shows a colour name.** `sizeLabel()` must not fall back to `item.variant`, which the server builds as `color / size / material` joined — a variant with no size collapses to just its colour, which put a tile reading "Black" in a row with 5, 5.5 and 6. A sizeless variant reads "One size".
+
+### Keyboard shortcuts
+
+Every register is a touchscreen (see above), so shortcuts are a speed layer for staff who also have a keyboard at the counter — never a replacement for tapping. All of them live in `pos.component.ts`'s single `onGlobalKeydown()` `@HostListener`, active only while `phase() === 'selling'`.
+
+| Key | Action |
+|---|---|
+| `F1` | Toggle the shortcuts help overlay |
+| `F2` | Focus the search / barcode field |
+| `F4` | Open payment (`beginPayment()`) |
+| `F5` | Start a new sale — closes the receipt screen if one is showing, otherwise clears the cart (confirms first if it isn't empty) |
+| `F6` | Focus the customer lookup field, opening payment first if it isn't already open |
+| `F9` | Park the current sale |
+| `F10` | Open the parked-sales list |
+| `Enter` | Completes the sale, but only while the payment sheet is open — this is the one case allowed to fire from inside a text field (the tendered-amount input), matching how a physical cash register's Enter has always worked |
+| `↑` / `↓` | Move the selected cart line (`selectedLineId`) |
+| `Delete` | Remove the selected cart line |
+| `Esc` | Close whichever is open: the help overlay, a dialog, or the payment sheet |
+
+F-keys are used for the primary actions specifically because they can never collide with typed text or with the barcode scanner, which only ever sends digits followed by `Enter`. Everything else is gated behind `isTypingTarget()` so it never hijacks normal typing in a field.
+
+Key badges (`<kbd class="key-badge">`) sit next to every button they correspond to and are always visible on desktop-width registers — not hidden behind a modifier key — so a new hire discovers them without being told. They're hidden below the 760px mobile breakpoint, where a physical keyboard is never present.
 
 ### Checking the running build
 

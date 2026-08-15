@@ -166,6 +166,7 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **Files:** `services/admin-media.service.ts`, `services/media-upload.service.ts`
 - **Purpose:** `AdminMediaService` fetches the media list and handles deletes. `MediaUploadService` wraps the multipart upload to `POST /api/admin/media` with per-file progress reporting via RxJS.
+- **`validate(file, maxBytes = 50 MB)`:** local pre-flight check (type + size) shared by every upload call site, so mismatches are rejected before a round-trip. `maxBytes` is a parameter, not hard-coded — the product drawer's pre-save gallery (see below) calls it with a much lower cap, since that path doesn't hit this multipart endpoint at all.
 
 ### `AdminRefService`
 
@@ -323,8 +324,10 @@ For visual consistency, hero shots should match the slide image's angle, crop, a
 
 - **File:** `interceptors/http-error.interceptor.ts`
 - **Purpose:** Global HTTP error interceptor
-- **Features:** Catches all failed HTTP requests globally and displays contextual toasts via `ToastService` based on status code (401, 403, 404, 422, etc.).
+- **Features:** Catches all failed HTTP requests globally and displays contextual toasts via `ToastService` based on status code (401, 403, 404, 413, 422, 429, etc.).
 - **401 handling:** Uses `toast.error` (not warning) and redirects to `/login?returnUrl=<current-path>` so the admin lands back on the same page after re-authenticating. Skipped when the request is the `/auth/me` auth probe or when already on `/login`.
+- **413 handling:** Shows `error.413.title` / `error.413.sub` (a plain-language "File too large" message stating the 50 MB per-file limit), falling back to the server's own `message` when the response has one — e.g. the parked-cart/QZ-signing 413s, which carry their own specific text.
+- **Fallback branch (any status with no dedicated case):** prefers the server's JSON `message` over the raw `${status} — ${statusText}` line. Before this it always showed the technical line even when the backend had already sent a friendly one (e.g. multer's "Only CSV files are accepted."), which is what a raw `413 — Request Entity Too Large` toast turned out to be — an unhandled status falling through to this branch, not a missing-message case.
 
 ---
 
