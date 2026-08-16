@@ -661,7 +661,11 @@
                password input: with plain autocomplete="off" the password manager
                filled the account email into Reason and the saved login password
                into the PIN box, so every override failed with PIN_INVALID. -->
-          <label>Manager PIN<input [(ngModel)]="managerPin" name="correctionManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          @if (managerPinConfigured()) {
+            <label>Manager PIN<input [(ngModel)]="managerPin" name="correctionManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          } @else {
+            <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
+          }
           <div class="correction-actions">
             <button type="button" [disabled]="busy() || transaction.status !== 'completed'" (click)="refundCurrentTransaction()">Refund selected</button>
             <button class="danger-action" type="button" [disabled]="busy() || transaction.status !== 'completed' || !!transaction.refunds?.length" (click)="voidCurrentTransaction()">Void entire sale</button>
@@ -769,7 +773,11 @@
           }
           <label class="money-field"><span>Physical cash</span><div><b>QAR</b><input [(ngModel)]="physicalCash" inputmode="decimal" /></div></label>
           @if (!shiftSelfCloseAllowed()) {
-            <label>Manager PIN<input [(ngModel)]="managerPin" name="zReportManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+            @if (managerPinConfigured()) {
+              <label>Manager PIN<input [(ngModel)]="managerPin" name="zReportManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+            } @else {
+              <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
+            }
           }
           <button class="primary-action" type="button" [disabled]="busy() || pendingSales() > 0 || rejectedSales() > 0" (click)="closeCurrentShift()">Create Z report and close</button>
         }
@@ -798,10 +806,14 @@
         }
         <label>Reason<input [(ngModel)]="cashMovementReason" name="cashMovementReason" placeholder="Required" autocomplete="off" /></label>
         @if (cashMovementNeedsOverride()) {
-          <label>Manager PIN<input [(ngModel)]="cashMovementManagerPin" name="cashMovementManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          @if (managerPinConfigured()) {
+            <label>Manager PIN<input [(ngModel)]="cashMovementManagerPin" name="cashMovementManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          } @else {
+            <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
+          }
         }
         <button class="primary-action" type="button"
-          [disabled]="busy() || !cashMovementReason.trim() || (cashMovementNeedsOverride() && !cashMovementManagerPin)"
+          [disabled]="busy() || !cashMovementReason.trim() || (cashMovementNeedsOverride() && managerPinConfigured() && !cashMovementManagerPin)"
           (click)="recordCashMovement()">Record movement</button>
 
         @if (cashMovements().length) {

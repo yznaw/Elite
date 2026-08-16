@@ -95,15 +95,24 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
         // fix ("another manager has to approve this"), so the generic
         // permission-denied toast would only bury it under a second banner.
         if (!isManagerPinVerify) {
+          // Every 403 this app raises already carries a specific, actionable
+          // reason (e.g. "Only owners and admins can enroll POS terminals.",
+          // "This POS register is disabled or revoked.") — showing the fixed
+          // generic sub-text instead threw that away and left the operator
+          // with no next step, which is exactly what a flat "Access denied"
+          // toast on the POS enrollment screen looked like.
           toast.error(
             t('error.403.title'),
-            t('error.403.sub'),
+            err.error?.message || t('error.403.sub'),
           );
         }
       } else if (err.status === 404) {
+        // Many 404s here name the exact thing that's missing (e.g. "No
+        // active product uses barcode 6291041500213.") — worth more to a
+        // cashier at a scanner than the fixed "resource not found" text.
         toast.warning(
           t('error.404.title'),
-          t('error.404.sub'),
+          err.error?.message || t('error.404.sub'),
         );
       } else if (err.status === 422) {
         const msg = err.error?.message || err.error?.error || '';
@@ -123,7 +132,7 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
       } else if (err.status === 429) {
         toast.warning(
           t('error.429.title'),
-          t('error.429.sub'),
+          err.error?.message || t('error.429.sub'),
         );
       } else if (err.status >= 500) {
         toast.error(

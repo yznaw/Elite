@@ -15,6 +15,10 @@ const context = {
 };
 
 test('failed manager PIN persists its failure counter before returning an error', async () => {
+  // A real PIN-holder exists (unlike the auto-approve test below) whose hash
+  // just doesn't match what was typed — this is what should exercise the
+  // wrong-PIN/failure-counting path, distinct from "nobody has a PIN set up."
+  const someoneElsesHash = await bcrypt.hash('9999', 12);
   const statements = [];
   const originalConnect = db.pool.connect;
   db.pool.connect = async () => ({
@@ -25,7 +29,9 @@ test('failed manager PIN persists its failure counter before returning an error'
         return { rowCount: 1, rows: [{ id: context.registerId, status: 'active' }] };
       }
       if (sql.startsWith('SELECT * FROM pos_pin_failures')) return { rowCount: 0, rows: [] };
-      if (sql.startsWith('SELECT id, pos_pin_hash FROM admin_users')) return { rowCount: 0, rows: [] };
+      if (sql.startsWith('SELECT id, pos_pin_hash FROM admin_users')) {
+        return { rowCount: 1, rows: [{ id: '44444444-4444-4444-8444-444444444444', pos_pin_hash: someoneElsesHash }] };
+      }
       return { rowCount: 1, rows: [] };
     },
     release() {},
@@ -39,6 +45,40 @@ test('failed manager PIN persists its failure counter before returning an error'
     assert.ok(statements.some((sql) => sql.startsWith('INSERT INTO pos_pin_failures')));
     assert.equal(statements.at(-1), 'COMMIT');
     assert.ok(!statements.includes('ROLLBACK'));
+  } finally {
+    db.pool.connect = originalConnect;
+  }
+});
+
+test('no manager PIN configured anywhere auto-approves instead of failing every attempt', async () => {
+  // Before this behavior existed, an empty admin_users result here fell into
+  // the same branch as a wrong PIN — every attempt failed as PIN_INVALID and
+  // counted toward the five/ten-attempt lockout, even though there was never
+  // a PIN to check against. Setup gaps should not lock the register.
+  const statements = [];
+  const originalConnect = db.pool.connect;
+  db.pool.connect = async () => ({
+    async query(text) {
+      const sql = String(text).replace(/\s+/g, ' ').trim();
+      statements.push(sql);
+      if (sql.startsWith('SELECT * FROM pos_registers')) {
+        return { rowCount: 1, rows: [{ id: context.registerId, status: 'active' }] };
+      }
+      if (sql.startsWith('SELECT id, pos_pin_hash FROM admin_users')) return { rowCount: 0, rows: [] };
+      if (sql.startsWith('INSERT INTO pos_manager_overrides')) {
+        return { rowCount: 1, rows: [{ id: 'override-auto', manager_id: context.userId, action: 'void', expires_at: new Date() }] };
+      }
+      return { rowCount: 1, rows: [] };
+    },
+    release() {},
+  });
+
+  try {
+    const result = await verifyManagerPin(context, { action: 'void' });
+    assert.equal(result.managerId, context.userId);
+    assert.equal(result.autoApproved, true);
+    assert.ok(!statements.some((sql) => sql.startsWith('SELECT * FROM pos_pin_failures')));
+    assert.ok(!statements.some((sql) => sql.startsWith('INSERT INTO pos_pin_failures')));
   } finally {
     db.pool.connect = originalConnect;
   }

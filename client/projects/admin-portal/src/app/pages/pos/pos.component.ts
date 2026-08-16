@@ -668,7 +668,9 @@ export class PosComponent implements OnInit, OnDestroy {
       openingFloatCents: storedShift.openingFloatCents,
       openedAt: storedShift.openedAt,
     };
-    this.register.set({ registerId: identity.registerId, displayName: identity.displayName, status: 'offline', shift });
+    // Unknown offline — default to requiring a PIN (fail safe) rather than
+    // silently skipping approval because the real answer can't be fetched.
+    this.register.set({ registerId: identity.registerId, displayName: identity.displayName, status: 'offline', managerPinConfigured: true, shift });
     this.shiftId.set(storedShift.shiftId);
     this.products.set(cachedCatalog.products);
     this.catalogCachedAt.set(cachedCatalog.cachedAt);
@@ -1240,7 +1242,7 @@ export class PosComponent implements OnInit, OnDestroy {
 
   async voidCurrentTransaction(): Promise<void> {
     const transaction = this.operationTransaction();
-    if (!transaction || !this.managerPin || !this.correctionReason.trim()) return;
+    if (!transaction || (this.managerPinConfigured() && !this.managerPin) || !this.correctionReason.trim()) return;
     const originalReceipt = transaction.receipt?.receiptData as PosReceiptData | undefined;
     if (!originalReceipt?.receiptNumber) {
       this.toast.error("Couldn't void sale", 'The original receipt data is unavailable. Look up the sale again before retrying.');
@@ -1304,7 +1306,7 @@ export class PosComponent implements OnInit, OnDestroy {
         restock: this.refundRestock[item.id] !== false,
       }))
       .filter((line) => line.quantity > 0);
-    if (!transaction || !shiftId || !lines.length || !this.managerPin || !this.correctionReason.trim()) return;
+    if (!transaction || !shiftId || !lines.length || (this.managerPinConfigured() && !this.managerPin) || !this.correctionReason.trim()) return;
     this.busy.set(true);
     try {
       await this.ensureReceiptBlock();
@@ -1436,12 +1438,20 @@ export class PosComponent implements OnInit, OnDestroy {
     return this.shiftSummary()?.selfCloseAllowed === true;
   }
 
+  /** False once the tenant has never configured a manager PIN — void,
+      refund, drawer-open, z-report and sync-conflict approvals then skip
+      asking for one entirely (server auto-approves; see manager-service.js).
+      Defaults to true (safe) if the register payload hasn't loaded it. */
+  managerPinConfigured(): boolean {
+    return this.register()?.managerPinConfigured !== false;
+  }
+
   async closeCurrentShift(): Promise<void> {
     const summary = this.shiftSummary();
     const physicalCashCents = this.moneyInputToCents(this.physicalCash);
     if (!summary || physicalCashCents === null) return;
     const selfClose = this.shiftSelfCloseAllowed();
-    if (!selfClose && !this.managerPin) return;
+    if (!selfClose && this.managerPinConfigured() && !this.managerPin) return;
     await this.refreshQueueState();
     if (this.pendingSales() || this.rejectedSales()) {
       this.toast.warning('Resolve all pending and rejected offline sales before closing the shift.');
@@ -1513,7 +1523,7 @@ export class PosComponent implements OnInit, OnDestroy {
     const summary = this.shiftSummary();
     if (!summary || !this.cashMovementReason.trim()) return;
     const needsOverride = this.cashMovementNeedsOverride();
-    if (needsOverride && !this.cashMovementManagerPin) return;
+    if (needsOverride && this.managerPinConfigured() && !this.cashMovementManagerPin) return;
     const amountCents = this.cashMovementKind === 'no_sale_drawer_open'
       ? 0
       : this.moneyInputToCents(this.cashMovementAmount);
@@ -1601,7 +1611,7 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   async resolveSyncConflict(conflict: PosSyncConflict): Promise<void> {
-    if (!this.managerPin || !this.conflictResolution.trim()) return;
+    if ((this.managerPinConfigured() && !this.managerPin) || !this.conflictResolution.trim()) return;
     this.busy.set(true);
     try {
       const override = await this.pos.verifyManagerPin(this.managerPin, 'sync-conflict-override');

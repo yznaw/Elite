@@ -39,6 +39,10 @@ export interface PosCurrentRegister {
   registerId: string;
   displayName: string;
   status: string;
+  /** False when no owner/admin/manager has ever set a manager PIN for this
+      tenant — protected actions (void/refund/drawer-open/z-report/
+      sync-conflict) then skip asking for one and auto-approve. */
+  managerPinConfigured: boolean;
   shift: {
     id: string;
     state: 'open' | 'closing';
@@ -106,6 +110,9 @@ export interface PosManagerOverride {
   managerId: string;
   action: 'refund' | 'void' | 'z-report' | 'drawer-open' | 'sync-conflict-override';
   expiresAt: string;
+  /** True when this override was granted without checking a PIN, because
+      no owner/admin/manager has configured one for this tenant. */
+  autoApproved?: boolean;
 }
 
 export interface PosParkedCart {

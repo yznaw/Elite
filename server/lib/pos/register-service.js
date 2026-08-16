@@ -153,10 +153,24 @@ async function currentRegister(context) {
        ORDER BY opened_at DESC LIMIT 1`,
       [context.tenantId, register.id],
     );
+    // Lets the client skip showing a Manager PIN field at all for void,
+    // refund, drawer-open, z-report and sync-conflict approvals when no
+    // owner/admin/manager has ever configured one (see manager-service.js,
+    // verifyManagerPin) — checked once per POS session instead of on every
+    // protected action.
+    const pinResult = await client.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM admin_users
+         WHERE tenant_id = $1 AND status = 'active'
+           AND role IN ('owner', 'admin', 'manager') AND pos_pin_hash IS NOT NULL
+       ) AS configured`,
+      [context.tenantId],
+    );
     return {
       registerId: register.id,
       displayName: register.display_name,
       status: register.status,
+      managerPinConfigured: Boolean(pinResult.rows[0]?.configured),
       shift: shiftResult.rowCount
         ? {
             id: shiftResult.rows[0].id,

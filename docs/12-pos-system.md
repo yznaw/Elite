@@ -218,12 +218,14 @@ That recovery existed but was masked: the outer `catch` in `initialize()` sent *
 - PINs are 4 to 8 digits and stored only as bcrypt hashes.
 - Any active owner/admin/manager with a configured PIN can approve a protected action.
 - A successful check produces a single-use, action-scoped token valid for five minutes.
-- Five failed checks lock that cashier/register combination for five minutes.
+- Ten failed checks lock that cashier/register combination for five minutes (raised from five — a known small shop with one till doesn't need a tight trigger, and five was tight enough to lock the register over ordinary typos).
 - Approval and failure events are audited.
 
 Cashiers cannot configure or provide a manager PIN. Protected actions require a different active owner/admin/manager; self-approval remains blocked.
 
-When the operator enters their own correct PIN and `tenants.pos_emergency_self_approval_enabled` is off, the endpoint answers `403 SELF_APPROVAL_BLOCKED`, not `401 PIN_INVALID`. The attempt is audited as `pos.manager-pin.self-approval-blocked` and does not count toward the five-attempt lockout, because the PIN was correct and the operator is already authenticated. A single-manager shop previously read this case as "Manager PIN is incorrect" and retyped a PIN that was right all along.
+When the operator enters their own correct PIN and `tenants.pos_emergency_self_approval_enabled` is off, the endpoint answers `403 SELF_APPROVAL_BLOCKED`, not `401 PIN_INVALID`. The attempt is audited as `pos.manager-pin.self-approval-blocked` and does not count toward the lockout, because the PIN was correct and the operator is already authenticated. A single-manager shop previously read this case as "Manager PIN is incorrect" and retyped a PIN that was right all along.
+
+**No manager PIN configured anywhere.** If no active owner/admin/manager has ever set a PIN for the tenant, `verifyManagerPin` (`server/lib/pos/manager-service.js`) auto-approves instead of checking one — there is nothing to compare a typed PIN against, and treating that state as "incorrect" meant every attempt failed and could eventually lock the register over a setup gap, not a wrong guess. The override is recorded with `manager_id` set to the requesting cashier and audited as `pos.manager-pin.approved` with `autoApproved: true, reason: 'no_manager_pin_configured'`, so the trail still names exactly who did what even though no PIN was checked. `GET /pos/registers/current` returns `managerPinConfigured` so the client can skip showing the PIN field entirely (with an inline explanation in its place) instead of asking for one it already knows isn't needed — mirrors the `selfCloseAllowed` pattern used for shift close.
 
 ### Closing a shift
 

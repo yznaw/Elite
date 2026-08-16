@@ -6,9 +6,43 @@ const { PosError, assertPos, nonEmpty, uuid } = require('./errors');
 const { hash } = require('./register-service');
 
 const ACTIONS = new Set(['refund', 'void', 'z-report', 'drawer-open', 'sync-conflict-override']);
-const MAX_FAILURES = 5;
+// A known small shop with one till: ten wrong guesses in a row is still
+// clearly not a legitimate cashier who forgot a PIN, but five was tight
+// enough to lock the register over ordinary typos.
+const MAX_FAILURES = 10;
 const LOCK_MS = 5 * 60 * 1000;
 const OVERRIDE_TTL_MS = 5 * 60 * 1000;
+
+/** Shared by the normal PIN-match path and the no-PIN-configured auto-approve
+    path below, so the override row and its audit event are only built once. */
+async function insertOverride(client, context, register, action, managerId, extra = undefined) {
+  const rawToken = crypto.randomBytes(32).toString('base64url');
+  const overrideResult = await client.query(
+    `INSERT INTO pos_manager_overrides
+      (tenant_id, register_id, cashier_id, manager_id, action, token_hash, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, manager_id, action, expires_at`,
+    [
+      context.tenantId,
+      register.id,
+      context.userId,
+      managerId,
+      action,
+      hash(rawToken),
+      new Date(Date.now() + OVERRIDE_TTL_MS),
+    ],
+  );
+  const override = overrideResult.rows[0];
+  await audit(client, context, 'pos.manager-pin.approved', 'pos_manager_override', override.id, {
+    action,
+    managerId,
+    ...extra,
+  });
+  // `extra` (autoApproved, selfApproval, ...) is echoed onto the response
+  // too, not just the audit row, so the client can tell an operator why no
+  // PIN was asked for without a second lookup.
+  return { overrideId: override.id, token: rawToken, managerId, action, expiresAt: override.expires_at, ...extra };
+}
 
 async function setManagerPin(context, body) {
   const managerId = body?.managerId ? uuid(body.managerId, 'managerId') : context.userId;
@@ -36,7 +70,6 @@ async function setManagerPin(context, body) {
 }
 
 async function verifyManagerPin(context, body) {
-  const pin = nonEmpty(body?.pin, 'pin', 12);
   const action = nonEmpty(body?.action, 'action', 40);
   assertPos(ACTIONS.has(action), 422, 'OVERRIDE_ACTION_INVALID', 'Manager override action is invalid.');
 
@@ -47,6 +80,32 @@ async function verifyManagerPin(context, body) {
       [context.tenantId],
     );
     const emergencySelfApprovalEnabled = Boolean(tenantResult.rows[0]?.pos_emergency_self_approval_enabled);
+
+    const managers = await client.query(
+      `SELECT id, pos_pin_hash FROM admin_users
+       WHERE tenant_id = $1
+         AND status = 'active'
+         AND role IN ('owner', 'admin', 'manager')
+         AND pos_pin_hash IS NOT NULL`,
+      [context.tenantId],
+    );
+
+    // Nobody has ever set up a manager PIN for this shop, so there is
+    // nothing to check a typed PIN against — every attempt would otherwise
+    // fail as "incorrect" and eventually lock the register over a setup gap,
+    // not a wrong guess. Approve immediately; the cashier's own account is
+    // recorded as the approver and the audit trail still names exactly who
+    // did what and that no PIN was configured to check.
+    if (managers.rowCount === 0) {
+      return {
+        value: await insertOverride(client, context, register, action, context.userId, {
+          autoApproved: true,
+          reason: 'no_manager_pin_configured',
+        }),
+      };
+    }
+
+    const pin = nonEmpty(body?.pin, 'pin', 12);
     const failuresResult = await client.query(
       `SELECT * FROM pos_pin_failures
        WHERE tenant_id = $1 AND register_id = $2 AND cashier_id = $3
@@ -58,14 +117,6 @@ async function verifyManagerPin(context, body) {
       return { error: new PosError(429, 'PIN_LOCKED', 'Manager PIN verification is temporarily locked.') };
     }
 
-    const managers = await client.query(
-      `SELECT id, pos_pin_hash FROM admin_users
-       WHERE tenant_id = $1
-         AND status = 'active'
-         AND role IN ('owner', 'admin', 'manager')
-         AND pos_pin_hash IS NOT NULL`,
-      [context.tenantId],
-    );
     let managerId = null;
     let selfPinMatched = false;
     for (const manager of managers.rows) {
@@ -131,31 +182,11 @@ async function verifyManagerPin(context, body) {
        WHERE tenant_id = $1 AND register_id = $2 AND cashier_id = $3`,
       [context.tenantId, register.id, context.userId],
     );
-    const rawToken = crypto.randomBytes(32).toString('base64url');
-    const overrideResult = await client.query(
-      `INSERT INTO pos_manager_overrides
-        (tenant_id, register_id, cashier_id, manager_id, action, token_hash, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, manager_id, action, expires_at`,
-      [
-        context.tenantId,
-        register.id,
-        context.userId,
-        managerId,
-        action,
-        hash(rawToken),
-        new Date(Date.now() + OVERRIDE_TTL_MS),
-      ],
-    );
-    const override = overrideResult.rows[0];
     const isSelfApproval = managerId === context.userId;
-    await audit(client, context, 'pos.manager-pin.approved', 'pos_manager_override', override.id, {
-      action,
-      managerId,
-      ...(isSelfApproval ? { selfApproval: true, emergencySelfApprovalEnabled: true } : {}),
-    });
     return {
-      value: { overrideId: override.id, token: rawToken, managerId, action, expiresAt: override.expires_at },
+      value: await insertOverride(client, context, register, action, managerId, {
+        ...(isSelfApproval ? { selfApproval: true, emergencySelfApprovalEnabled: true } : {}),
+      }),
     };
   });
   if (outcome.error) throw outcome.error;
