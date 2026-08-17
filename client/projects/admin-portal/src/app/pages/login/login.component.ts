@@ -4,13 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
+import { IconComponent } from '../../shared/icons/icon.component';
 import { AuthService } from '../../services/auth.service';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 
 @Component({
     selector: 'ap-login',
-    imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent],
+    imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent, IconComponent],
     template: `
     <div class="login-shell" [attr.dir]="locale.dir()">
       <div class="login-wrap">
@@ -36,18 +37,29 @@ import { LocaleService } from '../../services/locale.service';
             />
 
             <label class="lbl" for="password">{{ t('login.password') }}</label>
-            <input
-              id="password"
-              class="inp mb-16"
-              type="password"
-              autocomplete="current-password"
-              required
-              [placeholder]="t('login.password.placeholder')"
-              [ngModel]="password()"
-              (ngModelChange)="password.set($event)"
-              name="password"
-              [disabled]="busy()"
-            />
+            <div class="pw-field mb-16">
+              <input
+                id="password"
+                class="inp"
+                [type]="showPassword() ? 'text' : 'password'"
+                autocomplete="current-password"
+                required
+                [placeholder]="t('login.password.placeholder')"
+                [ngModel]="password()"
+                (ngModelChange)="password.set($event)"
+                name="password"
+                [disabled]="busy()"
+              />
+              <button
+                type="button"
+                class="pw-toggle"
+                [attr.aria-label]="showPassword() ? t('login.password.hide') : t('login.password.show')"
+                [disabled]="busy()"
+                (click)="showPassword.update(v => !v)"
+              >
+                <ap-icon [name]="showPassword() ? 'eyeOff' : 'eye'" [size]="16"/>
+              </button>
+            </div>
 
             @if (errorMessage()) {
               <div class="login-error">{{ errorMessage() }}</div>
@@ -141,6 +153,25 @@ import { LocaleService } from '../../services/locale.service';
       line-height: 1.5;
     }
     .login-form { display: flex; flex-direction: column; }
+    .pw-field { position: relative; }
+    .pw-field .inp { padding-inline-end: 40px; }
+    .pw-toggle {
+      position: absolute;
+      inset-inline-end: 4px;
+      top: 4px;
+      bottom: 4px;
+      width: 32px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .pw-toggle:hover:not(:disabled) { background: var(--border-2); color: var(--ink); }
+    .pw-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
     .login-error {
       background: rgba(239,68,68,0.08);
       color: var(--danger);
@@ -176,6 +207,7 @@ export class LoginComponent implements OnInit {
   readonly t = (k: string) => this.i18n.t(k);
   readonly email = signal('');
   readonly password = signal('');
+  readonly showPassword = signal(false);
   readonly busy = signal(false);
   readonly errorMessage = signal<string>('');
 
