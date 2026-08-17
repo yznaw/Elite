@@ -398,6 +398,8 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 | `PATCH` | `/api/admin/orders/:id/status` | Transaction: `UPDATE` statuses, `INSERT` timeline entry |
 | `POST` | `/api/admin/orders/:id/notes` | `INSERT` internal order note |
 
+**`orders.public_number` generation.** `server/lib/order-number.js` is shared by this route and the storefront checkout (`server/routes/carts.route.js`) — POS sales use a different, DB-sequence-backed number (`docs/12-pos-system.md`, "Receipt Numbers and Idempotency") and don't need this. `generateOrderNumber()` produces a non-sequential `EC-YY-` + 12 digits (a customer or admin should not be able to infer order volume or guess another order's number from their own), and `insertWithRetry()` wraps the `INSERT` in a `SAVEPOINT`, regenerating and retrying (up to 5 times) specifically on a `public_number` collision (`orders_tenant_public_number_key`, `23505`) rather than failing the request — a real duplicate-key error inside a transaction aborts it in Postgres, so the retry rolls back to the savepoint instead of redoing everything from `BEGIN`. Any other error (including an idempotency-key collision, which the caller already handles by returning the existing row) is rethrown unchanged, not retried. Before this, both call sites generated their own number inline with no retry path at all — a collision surfaced as a raw 500 to whoever was checking out.
+
 ### Media
 
 | Method | Endpoint | Database behavior |

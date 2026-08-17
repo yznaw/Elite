@@ -5,6 +5,7 @@ const { bookNboxForPaidOrder, nboxQuoteMetadata } = require('../lib/order-delive
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { resolveCustomer } = require('../lib/customer-identity');
+const { insertWithRetry } = require('../lib/order-number');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
@@ -74,12 +75,6 @@ async function refreshCartSubtotal(client, cartId) {
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
-}
-
-function publicOrderNumber() {
-  const year = new Date().getFullYear().toString().slice(2);
-  const suffix = `${Date.now().toString().slice(-5)}${Math.floor(Math.random() * 90 + 10)}`;
-  return `EC-${year}-${suffix}`;
 }
 
 function normalizeCheckout(req) {
@@ -425,7 +420,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     const paymentStatus = isPaidPayment(checkout.payment) ? 'paid' : 'pending';
     const paidAt = paymentStatus === 'paid' ? new Date() : null;
 
-    const order = await client.query(
+    const order = await insertWithRetry(client, (publicNumber) => client.query(
       `
         INSERT INTO orders (
           tenant_id, public_number, customer_id, customer_email, customer_name, customer_phone,
@@ -437,7 +432,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       `,
       [
         tenant.id,
-        publicOrderNumber(),
+        publicNumber,
         customerId,
         checkout.customer.email,
         checkout.customer.name,
@@ -462,7 +457,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         }),
         idempotencyKey,
       ],
-    );
+    ));
     createdOrder = order.rows[0];
 
     // Cancel any other pending orders from the same customer that were created

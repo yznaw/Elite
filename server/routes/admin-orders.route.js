@@ -4,6 +4,7 @@ const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const { ensurePaidOrderStock, reversePaidOrderStock } = require('../lib/order-stock');
 const { ensureDefaultTenant } = require('../db/tenant');
+const { insertWithRetry } = require('../lib/order-number');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
@@ -194,14 +195,8 @@ router.post('/', asyncHandler(async (req, res) => {
     }
 
     const subtotal = items.reduce((sum, item) => sum + toCents(item.price || item.p || 0) * (Number(item.quantity || item.q) || 1), 0);
-    // Use a date-seeded public number: EC-YY-MMDD-{ms-suffix} reduces collision window
-    const now = new Date();
-    const yy = now.getFullYear().toString().slice(2);
-    const mmdd = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const suffix = Date.now().toString().slice(-6);
-    const publicNumber = req.body.publicNumber || `EC-${yy}-${mmdd}-${suffix}`;
 
-    const order = await client.query(
+    const order = await insertWithRetry(client, (publicNumber) => client.query(
       `
         INSERT INTO orders (
           tenant_id, public_number, idempotency_key,
@@ -230,7 +225,7 @@ router.post('/', asyncHandler(async (req, res) => {
         JSON.stringify(req.body.shippingAddress || { line1: req.body.address || '' }),
         JSON.stringify(req.body.billingAddress || req.body.shippingAddress || {}),
       ],
-    );
+    ));
 
     for (const item of items) {
       const qty = Number(item.quantity || item.q) || 1;
