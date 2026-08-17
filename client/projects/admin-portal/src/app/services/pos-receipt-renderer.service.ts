@@ -394,10 +394,11 @@ export class PosReceiptRenderer {
       ctx.restore();
       y += 22;
     }
-    // The receipt is English-only (owner decision, 2026-08-01), so the profile's
-    // Arabic trade name, address, return policy and footer stamp are stored but
-    // never printed. Arabic shaping stays in this file because *product* names
-    // can still be Arabic and must render correctly on the item lines.
+    // The receipt is English-only for the header/items (owner decision,
+    // 2026-08-01) — the profile's Arabic trade name, address, and footer
+    // stamp are stored but never printed. The return/exchange policy is the
+    // one exception (owner decision, 2026-08-17): it prints in both
+    // languages, Arabic above English, same convention as the item lines.
     y += 10;
 
     ctx.font = `13px ${this.bodyFont}`;
@@ -546,12 +547,37 @@ export class PosReceiptRenderer {
     y = this.rule(ctx, y);
     y += 18;
 
-    // Return policy, English, if configured.
+    // Return/exchange policy — Arabic above English, same order and reasoning
+    // as the item lines: whichever language the customer reads, it's the
+    // first thing under the rule, not buried below the other one.
+    //
+    // Printed as separate points (Refunds / Exchanges / Condition, each its
+    // own line in the stored text) rather than one run-on paragraph — same
+    // "author's line breaks are meaningful" handling as the address block
+    // above. Without this, wrapText (which only breaks on spaces) would
+    // glue "...original receipt.\n\nExchanges: Within 14 days..." into one
+    // continuous ribbon with no visual separation between points.
+    if (profile?.returnPolicyAr) {
+      ctx.font = `500 12px ${this.bodyFont}`;
+      ctx.fillStyle = this.inkMuted;
+      ctx.textAlign = 'center';
+      for (const line of profile.returnPolicyAr.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true, true);
+      }
+      ctx.fillStyle = '#000';
+      y += 6;
+    }
     if (profile?.returnPolicyEn) {
       ctx.font = `12px ${this.bodyFont}`;
       ctx.fillStyle = this.inkMuted;
       ctx.textAlign = 'center';
-      y = this.wrapText(ctx, profile.returnPolicyEn, this.marginPx, y, width - this.marginPx * 2, true);
+      for (const line of profile.returnPolicyEn.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true);
+      }
       ctx.fillStyle = '#000';
       y += 10;
     }
@@ -695,14 +721,28 @@ export class PosReceiptRenderer {
     return y + this.lineHeightPx;
   }
 
-  private wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, center = false): number {
+  /**
+   * `rtl` shapes each wrapped LINE individually (not the whole paragraph
+   * once before wrapping) — `shapeArabic`'s RLE/PDF embedding marks only
+   * balance correctly within a single `fillText` call. Wrapping the full
+   * string first and then splitting it on spaces would hand `fillText` an
+   * unclosed RLE on the first line and an orphaned PDF on the last, which
+   * is exactly the kind of thing that renders fine on screen and wrong on
+   * a thermal printer. `measureText` is run on the unshaped word/line: the
+   * marks are zero-width formatting characters, so this doesn't skew the
+   * wrap width.
+   */
+  private wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, center = false, rtl = false): number {
     const words = text.split(' ');
     let line = '';
     let cursorY = y;
+    const draw = (value: string): void => {
+      ctx.fillText(rtl ? this.shapeArabic(value) : value, center ? this.widthPx / 2 : x, cursorY);
+    };
     for (const word of words) {
       const attempt = line ? `${line} ${word}` : word;
       if (ctx.measureText(attempt).width > maxWidth && line) {
-        ctx.fillText(line, center ? this.widthPx / 2 : x, cursorY);
+        draw(line);
         line = word;
         cursorY += 18;
       } else {
@@ -710,7 +750,7 @@ export class PosReceiptRenderer {
       }
     }
     if (line) {
-      ctx.fillText(line, center ? this.widthPx / 2 : x, cursorY);
+      draw(line);
       cursorY += 18;
     }
     return cursorY;
