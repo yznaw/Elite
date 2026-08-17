@@ -239,6 +239,7 @@ function mapRefund(row, { stockUpdates = [], items = [] } = {}) {
     amountCents: Number(row.amount_cents),
     method: row.method,
     reason: row.reason,
+    terminalReference: row.terminal_reference || null,
     orderPaymentStatus: row.order_payment_status,
     stockUpdates,
     receipt: {
@@ -253,6 +254,7 @@ function mapRefund(row, { stockUpdates = [], items = [] } = {}) {
         registerId: row.register_id || '',
         registerName: row.register_name || '',
         method: row.method,
+        terminalReference: row.terminal_reference || undefined,
         items: receiptItems,
         amountCents: Number(row.amount_cents),
         reason: row.reason,
@@ -269,6 +271,13 @@ async function createRefund(context, body) {
   const receiptNumber = positiveInt(body?.receiptNumber, 'receiptNumber');
   const method = String(body?.refundMethod || '');
   assertPos(['cash', 'card'].includes(method), 422, 'REFUND_METHOD_INVALID', 'Refund method must be cash or card.');
+  // Same reasoning as the original sale (sale-service.js): the card terminal
+  // here is standalone with no API link, so a card refund needs its own
+  // terminal action and the approval/reference code off that slip is the
+  // only proof it happened — required, not optional, mirroring the sale.
+  const terminalReference = method === 'card'
+    ? nonEmpty(body?.terminalReference, 'terminalReference', 80)
+    : null;
   const reason = nonEmpty(body?.reason, 'reason', 500);
   assertPos(Array.isArray(body?.lines) && body.lines.length > 0 && body.lines.length <= 100, 422, 'REFUND_LINES_INVALID', 'Refund must contain 1 to 100 lines.');
   const seen = new Set();
@@ -361,8 +370,8 @@ async function createRefund(context, body) {
       `INSERT INTO pos_refunds (
          tenant_id, original_transaction_id, original_order_id, original_payment_id,
          receipt_id, register_id, shift_id, cashier_id, manager_id, idempotency_key,
-         method, amount_cents, status, reason
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'completed',$13)
+         method, amount_cents, status, reason, terminal_reference
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'completed',$13,$14)
        RETURNING *`,
       [
         context.tenantId,
@@ -378,6 +387,7 @@ async function createRefund(context, body) {
         method,
         amountCents,
         reason,
+        terminalReference,
       ],
     );
     const refund = refundResult.rows[0];

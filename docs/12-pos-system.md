@@ -168,6 +168,7 @@ The checkout can link an existing Elite customer or quick-create one while onlin
 - A **refund** can occur after the sale, supports selected lines and quantities, prevents over-refunding, optionally restores inventory, creates `pos_refunds`, `pos_refund_items`, and `payment_refunds`, and updates order/payment status.
 - Both operations are idempotent and audited.
 - Refund receipts contain cashier, register, item/SKU, amount, method, reason, receipt number, and QR lookup data.
+- **A card refund requires its own terminal reference** (`pos_refunds.terminal_reference`, migration 030), separate from the original sale's — the card terminal is standalone with no API link (docs/15 Phase 4), so refunding to a card is a second, distinct action on that terminal and needs its own proof of having happened. Enforced in `correction-service.js`'s `createRefund` the same way `sale-service.js` requires one for the original card sale; null for a cash refund, where there's nothing to reference.
 
 ### Reporting
 

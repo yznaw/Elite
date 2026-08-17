@@ -26,7 +26,10 @@ test('QZ signing rejects an oversized request', () => {
   const oversized = 'a'.repeat(200 * 1024);
   assert.throws(
     () => parseQzRequest(oversized),
-    (error) => error instanceof PosError && (error.code === 'QZ_REQUEST_TOO_LARGE' || error.code === 'INVALID_FIELD'),
+    // nonEmpty()'s own length cap (FIELD_TOO_LONG) fires before the
+    // byte-length QZ_REQUEST_TOO_LARGE check below it ever runs — both are
+    // "this is too big," just from two different validators.
+    (error) => error instanceof PosError && ['QZ_REQUEST_TOO_LARGE', 'INVALID_FIELD', 'FIELD_TOO_LONG'].includes(error.code),
   );
 });
 

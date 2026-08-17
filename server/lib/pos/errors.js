@@ -29,7 +29,11 @@ function positiveInt(value, field) {
 
 function nonEmpty(value, field, maxLength = 250) {
   const result = String(value || '').trim();
-  assertPos(result.length > 0 && result.length <= maxLength, 422, 'INVALID_FIELD', `${field} is required.`);
+  assertPos(result.length > 0, 422, 'INVALID_FIELD', `${field} is required.`);
+  // A separate check/code: "is required" was shown for this case too, which
+  // reads as wrong to anyone looking at a clearly non-empty field — the
+  // problem is length, not absence.
+  assertPos(result.length <= maxLength, 422, 'FIELD_TOO_LONG', `${field} must be ${maxLength} characters or fewer.`);
   return result;
 }
 

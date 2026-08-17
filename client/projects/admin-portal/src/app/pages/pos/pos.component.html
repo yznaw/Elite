@@ -657,6 +657,12 @@
             }
           </div>
           <label>Reason<input [(ngModel)]="correctionReason" name="correctionReason" placeholder="Required permanent reason" autocomplete="off" /></label>
+          @if (transaction.paymentMethod === 'card') {
+            <!-- The card terminal here is standalone (docs/12, "Card") — a
+                 refund needs its own action on it, and this reference is the
+                 only proof it actually happened, same as the original sale. -->
+            <label>Refund terminal reference<input [(ngModel)]="refundTerminalReference" name="refundTerminalReference" placeholder="From the terminal's refund slip" autocomplete="off" /></label>
+          }
           <!-- autocomplete="one-time-code" is the only value Chrome honours on a
                password input: with plain autocomplete="off" the password manager
                filled the account email into Reason and the saved login password
@@ -667,7 +673,7 @@
             <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
           }
           <div class="correction-actions">
-            <button type="button" [disabled]="busy() || transaction.status !== 'completed'" (click)="refundCurrentTransaction()">Refund selected</button>
+            <button type="button" [disabled]="busy() || transaction.status !== 'completed' || (transaction.paymentMethod === 'card' && !refundTerminalReference.trim())" (click)="refundCurrentTransaction()">Refund selected</button>
             <button class="danger-action" type="button" [disabled]="busy() || transaction.status !== 'completed' || !!transaction.refunds?.length" (click)="voidCurrentTransaction()">Void entire sale</button>
           </div>
         }

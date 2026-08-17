@@ -280,6 +280,9 @@ export class PosComponent implements OnInit, OnDestroy {
   parkLabel = '';
   transactionLookup = '';
   correctionReason = '';
+  /** Only used for a card refund — the terminal is standalone, so this is
+      the sole proof the refund was actually run on it (docs/12, "Card"). */
+  refundTerminalReference = '';
   managerPin = '';
   physicalCash = '';
   refundQuantities: Record<string, number> = {};
@@ -1306,7 +1309,13 @@ export class PosComponent implements OnInit, OnDestroy {
         restock: this.refundRestock[item.id] !== false,
       }))
       .filter((line) => line.quantity > 0);
-    if (!transaction || !shiftId || !lines.length || (this.managerPinConfigured() && !this.managerPin) || !this.correctionReason.trim()) return;
+    const refundTerminalReference = this.refundTerminalReference.trim();
+    if (
+      !transaction || !shiftId || !lines.length
+      || (this.managerPinConfigured() && !this.managerPin)
+      || !this.correctionReason.trim()
+      || (transaction.paymentMethod === 'card' && !refundTerminalReference)
+    ) return;
     this.busy.set(true);
     try {
       await this.ensureReceiptBlock();
@@ -1320,6 +1329,7 @@ export class PosComponent implements OnInit, OnDestroy {
         originalTransactionId: transaction.transactionId,
         lines,
         refundMethod: transaction.paymentMethod,
+        ...(transaction.paymentMethod === 'card' ? { terminalReference: refundTerminalReference } : {}),
         reason: this.correctionReason.trim(),
         managerOverrideId: override.overrideId,
         managerOverrideToken: override.token,
@@ -1331,6 +1341,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.operationTransaction.set(await this.pos.findTransaction(transaction.transactionId));
       this.managerPin = '';
       this.correctionReason = '';
+      this.refundTerminalReference = '';
       this.toast.success('Refund completed');
     } catch (error) {
       this.toast.error("Couldn't complete refund", this.errorMessage(error));

@@ -1,0 +1,13 @@
+-- The card terminal at this shop is standalone with no cable/API link to the
+-- POS (docs/15 Phase 4, 018_pos_card_reference_and_reconciliation.sql), so a
+-- card *sale* captures the cashier-entered terminal/approval code as its only
+-- paper trail (payments.terminal_reference). A card *refund* also requires a
+-- separate action on that same standalone terminal, but pos_refunds had
+-- nowhere to record its reference at all — server/lib/pos/correction-service.js
+-- accepted any card refund with zero proof it was ever run on the terminal.
+--
+-- Nullable at the DB level: only a card refund has a terminal reference to
+-- capture (a cash refund has nothing to reference). The application layer
+-- enforces it as required specifically when refundMethod = 'card', mirroring
+-- how sale-service.js already requires one for a card sale.
+ALTER TABLE pos_refunds ADD COLUMN IF NOT EXISTS terminal_reference text;

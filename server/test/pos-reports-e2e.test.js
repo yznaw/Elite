@@ -142,6 +142,7 @@ test('core reporting: daily sales, cash movements, card exceptions, inventory, r
         originalTransactionId: sale2.transactionId,
         lines: [{ transactionItemId: sale2.items?.[0]?.id, quantity: 1, restock: true }],
         refundMethod: 'card',
+        terminalReference: 'TERM-REPORTS-REFUND-1',
         reason: 'E2E reports test refund',
         managerOverrideId: refundOverride.overrideId,
         managerOverrideToken: refundOverride.token,

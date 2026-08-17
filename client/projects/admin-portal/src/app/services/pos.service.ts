@@ -394,10 +394,14 @@ export class PosService {
     originalTransactionId: string;
     lines: Array<{ transactionItemId: string; quantity: number; restock: boolean }>;
     refundMethod: 'cash' | 'card';
+    /** Required by the server when refundMethod is 'card' — the card
+        terminal here is standalone, so this is the only proof the refund
+        was actually run on it. */
+    terminalReference?: string;
     reason: string;
     managerOverrideId: string;
     managerOverrideToken: string;
-  }): Promise<PosSaleResult & { refundId: string; refundReceiptNumber: string; amountCents: number; method: 'cash' | 'card' }> {
+  }): Promise<PosSaleResult & { refundId: string; refundReceiptNumber: string; amountCents: number; method: 'cash' | 'card'; terminalReference: string | null }> {
     return firstValueFrom(this.api.post('/pos/refunds', input));
   }
 
