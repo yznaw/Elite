@@ -115,7 +115,9 @@ flowchart LR
 
 ### Catalog and inventory
 
-The POS does not maintain a separate product catalog. It reads active Elite products and variants. Each sellable row includes:
+The POS does not maintain a separate product catalog. It reads Elite products and variants whose product status is not `archived` (variants must also have `is_active = true`). Each sellable row includes:
+
+**Correction, 2026-08-18 — POS used to require `status = 'active'`, excluding hidden products.** `product.status` has three values: `active`, `hidden`, and `archived`. `hidden` means "not shown on the public storefront" (`server/routes/products.route.js` filters on it) — it says nothing about whether the item still exists to be sold in a shop. Before this fix, `server/lib/pos/sale-service.js`'s `searchProducts`, `listProductFilters`, `findByBarcode`, and `createSale`'s line-item check all required `status = 'active'`, so a product an admin marked "hidden" (e.g. a seasonal item pulled from the website but still on the shelf) silently disappeared from POS search, barcode scan, and even a same-second sale attempt with `VARIANT_INACTIVE` — while the admin catalog grid kept listing it (tagged "Hidden") the whole time, which read as "item vanished from the system." Fixed by relaxing all four checks to `status <> 'archived'`, matching the same "still in the catalog" definition `admin-products.route.js` already uses for its own listing. Only `archived` (true deletion) now excludes an item from POS; `hidden` only ever affects the storefront.
 
 - Product and variant IDs.
 - Product name and variant description.
@@ -125,6 +127,8 @@ The POS does not maintain a separate product catalog. It reads active Elite prod
 - Primary product image.
 
 Online sales lock the register and relevant variants, validate the current catalog price and stock, decrement variant stock, recompute parent product stock, and publish `stock.updated` events. Other connected registers receive those events through SSE and update their visible and cached stock.
+
+**Not POS-only (2026-08-18):** `stock.updated` events are published by every stock-writing path in the system, not just till sales — a paid web order, an admin manual adjustment, a posted stocktake, a catalog edit, and a CSV bulk import all call the same `publishStockEvent()` helper (`server/lib/inventory-ledger.js`, next to `recordMovement()`) in the same transaction as the stock write. A cashier's screen now reflects a sale made on the website, or a correction made in the admin catalog, within the usual ~1s poll — not only on the next catalog search. These writers use `register_id = NULL`, which the existing SSE filter (`register_id IS NULL OR register_id = ctx.registerId`) already broadcasts to every connected register in the tenant, so no server or frontend change was needed beyond adding the publish call itself.
 
 ### Shared inventory operating model
 

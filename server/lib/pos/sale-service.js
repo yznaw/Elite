@@ -27,7 +27,10 @@ function mapCatalogRow(row) {
     priceCents: Number(row.price_cents),
     stock: Number(row.stock_quantity),
     imageUrl: row.image_url || '',
-    isActive: row.product_status === 'active' && row.is_active,
+    // 'archived' is the only status that means gone-for-good; 'hidden' only
+    // controls storefront visibility (server/routes/products.route.js uses
+    // the stricter status = 'active'), so it must not also block a sale here.
+    isActive: row.product_status !== 'archived' && row.is_active,
   };
 }
 
@@ -52,7 +55,7 @@ async function searchProducts(context, query) {
   // query where it doesn't appear.
   const matchClause = `
     p2.tenant_id = $1
-    AND p2.status = 'active'
+    AND p2.status <> 'archived'
     AND pv2.is_active = true
     AND ($2 = '%%' OR p2.name ILIKE $2 OR pv2.sku ILIKE $2 OR pv2.barcode ILIKE $2)
     AND ($3::boolean OR pv2.stock_quantity > 0)
@@ -83,7 +86,7 @@ async function searchProducts(context, query) {
        LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.locale = 'ar'
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE pv.tenant_id = $1
-         AND p.status = 'active'
+         AND p.status <> 'archived'
          AND pv.is_active = true
          AND ($2 = '%%' OR p.name ILIKE $2 OR pv.sku ILIKE $2 OR pv.barcode ILIKE $2)
          AND ($3::boolean OR pv.stock_quantity > 0)
@@ -122,7 +125,7 @@ async function listProductFilters(context) {
          COALESCE(array_agg(DISTINCT pv.color) FILTER (WHERE pv.color IS NOT NULL AND pv.color <> ''), ARRAY[]::text[]) AS colors
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
-       WHERE pv.tenant_id = $1 AND p.status = 'active' AND pv.is_active = true`,
+       WHERE pv.tenant_id = $1 AND p.status <> 'archived' AND pv.is_active = true`,
       [context.tenantId],
     );
     const row = result.rows[0];
@@ -148,7 +151,7 @@ async function findByBarcode(context, barcodeValue) {
        LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.locale = 'ar'
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE pv.tenant_id = $1 AND lower(pv.barcode) = lower($2)
-         AND p.status = 'active' AND pv.is_active = true`,
+         AND p.status <> 'archived' AND pv.is_active = true`,
       [context.tenantId, barcode],
     );
     assertPos(result.rowCount === 1, 404, 'BARCODE_NOT_FOUND', `No active product uses barcode ${barcode}.`);
@@ -412,7 +415,7 @@ async function createSale(context, body, options = {}) {
     const pendingConflicts = [];
     const saleLines = sale.items.map((item) => {
       const variant = variants.get(item.variantId);
-      assertPos(variant.is_active && variant.product_status === 'active', 422, 'VARIANT_INACTIVE', `${variant.sku} is not available for sale.`);
+      assertPos(variant.is_active && variant.product_status !== 'archived', 422, 'VARIANT_INACTIVE', `${variant.sku} is not available for sale.`);
       const availableStock = Number(variant.stock_quantity);
       const catalogPriceCents = Number(variant.price_cents);
       if (availableStock < item.quantity) {

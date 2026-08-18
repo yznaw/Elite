@@ -1,5 +1,5 @@
 const db = require('../db/client');
-const { recordMovement } = require('./inventory-ledger');
+const { recordMovement, publishStockEvent } = require('./inventory-ledger');
 const { PosError, assertPos, nonEmpty, uuid } = require('./pos/errors');
 const { logger } = require('./logger');
 
@@ -127,6 +127,7 @@ async function adjustStock(context, body) {
       // on this.
       metadata: { adjustmentReason: reason, note, sku: variant.rows[0].sku, before, after },
     });
+    await publishStockEvent(client, context.tenantId, variantId, after);
     await recomputeProductTotal(client, variant.rows[0].product_id);
     await writeAudit(client, context, 'inventory.adjusted', 'product_variant', variantId, {
       delta, reason, note, before, after, sku: variant.rows[0].sku,
@@ -390,6 +391,8 @@ async function postStocktake(context, stocktakeId, body = {}) {
             : {}),
         },
       });
+      // eslint-disable-next-line no-await-in-loop
+      await publishStockEvent(client, context.tenantId, line.variant_id, newStock);
       touchedProducts.add(line.product_id);
       applied.push({ sku: line.sku, discrepancy, stockBefore: currentStock, stockAfter: newStock });
     }

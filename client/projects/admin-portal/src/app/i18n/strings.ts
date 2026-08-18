@@ -289,7 +289,7 @@ const EN = {
   'product.visibility.visibleTitle': 'Visible on storefront',
   'product.visibility.visibleSub': 'Customers can find and purchase this product. Toggle off to hide while editing.',
   'product.visibility.hiddenTitle': 'Hidden from storefront',
-  'product.visibility.hiddenSub': 'This product is not shown to shoppers. Existing orders and links keep working.',
+  'product.visibility.hiddenSub': 'This product is not shown to shoppers online. Existing orders and links keep working, and staff can still sell it in-store on the POS.',
 
   'product.fact.linkedMedia': 'Linked media',
   'product.fact.file': 'file',
@@ -2213,7 +2213,7 @@ const AR: Record<keyof typeof EN, string> = {
   'product.visibility.visibleTitle': 'ظاهر للمتسوّقين',
   'product.visibility.visibleSub': 'يمكن للعملاء استكشاف هذا المنتج وإتمام شرائه. عطّل المفتاح لإخفائه مؤقتاً أثناء التحرير.',
   'product.visibility.hiddenTitle': 'مخفي عن المتسوّقين',
-  'product.visibility.hiddenSub': 'لن يظهر هذا المنتج للزوار. الطلبات السابقة والروابط الحالية تبقى تعمل دون أثر.',
+  'product.visibility.hiddenSub': 'لن يظهر هذا المنتج للزوار على الموقع فقط. الطلبات السابقة والروابط الحالية تبقى تعمل، ويقدر الكاشير يبيعه عادي من نقطة البيع (POS).',
 
   'product.fact.linkedMedia': 'الوسائط المرتبطة',
   'product.fact.file': 'ملف',

@@ -80,4 +80,24 @@ async function currentStock(client, tenantId, variantId) {
   return result.rowCount ? Number(result.rows[0].stock_quantity) : null;
 }
 
-module.exports = { recordMovement };
+/**
+ * Pushes a `stock.updated` event onto `pos_events` so every connected POS
+ * register picks up the new quantity within its ~1s poll, without waiting for
+ * the next catalog search.
+ *
+ * `register_id` is always NULL here: the writer is not a till (a web order, an
+ * admin adjustment, a stocktake, a catalog edit, a bulk import), so there is no
+ * originating register to exclude from the broadcast — every register in the
+ * tenant should see it. Call this in the same transaction as the stock write,
+ * right next to `recordMovement()`, so the two either both land or both roll
+ * back together.
+ */
+async function publishStockEvent(client, tenantId, variantId, stock) {
+  await client.query(
+    `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
+     VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,
+    [tenantId, JSON.stringify({ variantId, stock })],
+  );
+}
+
+module.exports = { recordMovement, publishStockEvent };

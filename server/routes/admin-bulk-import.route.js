@@ -20,6 +20,7 @@ const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { slugify, toCents } = require('./lib');
 const { storage } = require('../lib/storage');
+const { recordMovement, publishStockEvent } = require('../lib/inventory-ledger');
 
 const router = Router();
 
@@ -423,6 +424,19 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
         // Track which color URLs have already been queued this import (avoid re-downloading same folder)
         const processedColorImages = new Set();
 
+        // Stock held by this product's variants before the import touches them.
+        // Every stock_quantity write below must post a matching inventory_movements
+        // row against these values — see server/lib/inventory-ledger.js for why,
+        // and admin-products.route.js's replaceVariants() for the same pattern.
+        const previousStockBySku = new Map();
+        const existingVariants = await client.query(
+          'SELECT sku, stock_quantity FROM product_variants WHERE tenant_id = $1 AND product_id = $2',
+          [tenant.id, productId],
+        );
+        for (const row of existingVariants.rows) {
+          previousStockBySku.set(row.sku, Number(row.stock_quantity) || 0);
+        }
+
         for (const [varIdx, row] of groupRows.entries()) {
           const priceCents    = toCents(parsePrice(row.priceRaw));
           const costCents     = row.costRaw     ? toCents(parsePrice(row.costRaw))     : null;
@@ -448,12 +462,39 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
                stock_quantity=CASE WHEN $10::int > 0 THEN $10::int ELSE product_variants.stock_quantity END,
                sort_order=$11, updated_at=NOW(),
                color_ref_id=(SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($5)) LIMIT 1)
-             RETURNING id, (xmax=0) AS inserted`,
+             RETURNING id, stock_quantity, (xmax=0) AS inserted`,
             [tenant.id, productId, row.sku, barcodeVal, colorVal, sizeVal,
              priceCents, costCents, shippingCents, stockQty, varIdx]
           );
           const variantId = varResult.rows[0].id;
-          if (varResult.rows[0].inserted) variantsCreated++; else variantsUpdated++;
+          const variantInserted = varResult.rows[0].inserted;
+          if (variantInserted) variantsCreated++; else variantsUpdated++;
+
+          // The upsert's CASE means the stored stock is not always what was
+          // sent (a CSV row with an empty quantity must not zero out real
+          // stock), so the delta is computed from what the database actually
+          // ended up with — same convention as replaceVariants() in
+          // admin-products.route.js.
+          const previousStock = previousStockBySku.get(row.sku) ?? 0;
+          const newStock = Number(varResult.rows[0].stock_quantity) || 0;
+          const stockDelta = newStock - previousStock;
+          if (stockDelta !== 0) {
+            await recordMovement(client, { tenantId: tenant.id, userId }, {
+              productId,
+              variantId,
+              delta: stockDelta,
+              reason: 'bulk_import',
+              referenceType: 'product',
+              referenceId: productId,
+              metadata: {
+                sku: row.sku,
+                action: variantInserted ? 'variant_created' : 'variant_updated',
+                previousStock,
+                newStock,
+              },
+            });
+            await publishStockEvent(client, tenant.id, variantId, newStock);
+          }
 
           // Images: only download for the first row that introduces this Drive URL
           if (!skipImages && row.imageUrl && !processedColorImages.has(row.imageUrl)) {
@@ -497,6 +538,19 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
             }
           }
         }
+
+        // Re-sum all variant stock onto the parent product so the catalog
+        // stock total stays accurate — same statement used by every other
+        // stock-writing path in the codebase (replaceVariants, /bulk-stock,
+        // sale-service, order-stock). Runs before the dryRun check so a dry
+        // run's would-be total still gets rolled back with everything else.
+        await client.query(
+          `UPDATE products
+              SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1),
+                  updated_at = now()
+            WHERE id = $1`,
+          [productId],
+        );
 
         if (firstMediaId) {
           await client.query(

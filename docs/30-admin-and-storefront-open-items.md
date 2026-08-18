@@ -75,11 +75,19 @@ publish. No further build work is needed here.
 An explicit, unstarted backlog across 6 features. Each is independent and
 can be picked up separately:
 
-- **F1 — Stock auto-compute.** Product `stock_quantity` should be computed
-  automatically from the sum of its variants on save
-  (`admin-products.route.js`), and the manual stock input in the product
-  drawer should hide/omit itself once variants exist — right now it's
-  possible for the two to disagree.
+- ~~**F1 — Stock auto-compute.**~~ ✅ **Resolved 2026-08-18.** The product
+  drawer already hid the manual stock input once variants exist and synced
+  `stock_quantity` from the variant sum on save, and `admin-products.route.js`
+  already recomputed it on every catalog-edit and `/bulk-stock` write. The one
+  remaining gap was the CSV bulk importer (`admin-bulk-import.route.js`),
+  which wrote `product_variants.stock_quantity` directly with no
+  `inventory_movements` row and never recomputed the parent product's total —
+  so a CSV-imported product's stock could disagree with its variants and the
+  drift job never saw the change at all. Fixed: the importer now posts a
+  `bulk_import` ledger movement per variant delta (same `previousStockBySku`
+  pattern as `replaceVariants()`) and recomputes `products.stock_quantity`
+  from the variant sum before commit. Verified end-to-end (ledger row, parent
+  total, zero drift) against a real database.
 - **F2 — Cost price.** ⚠ **Check this before starting** — the tracker
   describes adding a `cost_price_cents` migration on `product_variants`, but
   `docs/25-pos-readiness-master-plan.md` states that column has existed
@@ -224,11 +232,15 @@ listed here since it's admin, not storefront).
 - **Product cards** (collection grid): no color-dot swatches, and no
   hover-to-preview-a-color image swap. Currently a card only ever shows one
   photo regardless of how many colorways the product has.
-- **Product detail page**: size availability isn't filtered to the
-  currently-selected color's actual stock, there's no `?color=camel`-style
-  URL param for deep-linking a specific colorway, and exotic-leather
-  colorways have no texture-swatch treatment (they render as a flat color
-  dot like any other color, which misrepresents the material).
+- **Product detail page**: ~~size availability isn't filtered to the
+  currently-selected color's actual stock~~ — **verified 2026-08-18: this is
+  already correct.** `product.component.ts`'s `availableSizes` computed
+  scopes both `available` and `inStock` to the selected color's variants
+  (`colorScoped`) before checking quantity; this note was stale. What's
+  genuinely still missing: there's no `?color=camel`-style URL param for
+  deep-linking a specific colorway, and exotic-leather colorways have no
+  texture-swatch treatment (they render as a flat color dot like any other
+  color, which misrepresents the material).
 
 ---
 

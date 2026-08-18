@@ -9,7 +9,7 @@ const { processRestockNotifications } = require('../lib/restock-notifications');
 // Every stock_quantity write in this file posts a matching ledger row in the
 // same transaction — see server/lib/inventory-ledger.js for why that invariant
 // exists and what breaks when a write skips it (docs/25 Phase 1b).
-const { recordMovement } = require('../lib/inventory-ledger');
+const { recordMovement, publishStockEvent } = require('../lib/inventory-ledger');
 
 const router = Router();
 
@@ -145,6 +145,8 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
       referenceId: productId,
       metadata: { sku: removed.sku, action: 'variant_removed', previousStock: stock },
     });
+    // eslint-disable-next-line no-await-in-loop
+    await publishStockEvent(client, tenantId, removed.id, 0);
   }
 
   // Null-out cart references for variants being removed (ON DELETE RESTRICT)
@@ -252,6 +254,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
             newStock: Number(saved.stock_quantity) || 0,
           },
         });
+        await publishStockEvent(client, tenantId, saved.id, Number(saved.stock_quantity) || 0);
       }
     }
   }
@@ -808,6 +811,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
             referenceId: null,
             metadata: { sku, previousStock: Number(row.previous), newStock: stock },
           });
+          await publishStockEvent(client, tenant.id, row.variant_id, stock);
         }
         // Re-sum all variant stock onto the parent product so the catalog stock total stays accurate
         const productId = varResult.rows[0].product_id;

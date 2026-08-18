@@ -624,6 +624,7 @@ Admin authentication uses **server-side sessions** (no JWT):
 - **`color_ref_id` set on variant upsert:** Both the `INSERT` and the `ON CONFLICT DO UPDATE` branches now set `color_ref_id` via an inline subquery against `ref_colors`, linking the variant to the normalized color reference.
 - **Stock preserved on re-import:** Variants with `stock_quantity = 0` in the CSV no longer zero out existing stock. Only positive CSV stock values overwrite; zero is treated as "no data".
 - **SKU normalization fix:** `v.sku.replace()` changed to `v.sku.replaceAll()` so all hyphens are replaced when constructing variant SKUs, not just the first one.
+- **Inventory ledger + live sync (2026-08-18):** the variant upsert previously wrote `stock_quantity` directly with no `inventory_movements` row and never recomputed the parent product's total — every stock change made through this endpoint was invisible to the hourly drift job and could leave `products.stock_quantity` disagreeing with its variants. Fixed: a `previousStockBySku` snapshot is taken per product group (same pattern as `replaceVariants()`), each variant delta posts a `bulk_import` ledger movement via `recordMovement()`, `publishStockEvent()` pushes a `stock.updated` row onto `pos_events` so connected POS registers see it live, and `products.stock_quantity` is recomputed from the variant sum before commit (rolled back with everything else on a dry run).
 
 ### Bulk Delete endpoint (`POST /api/admin/products/bulk-delete`)
 

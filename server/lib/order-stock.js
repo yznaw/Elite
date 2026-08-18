@@ -1,5 +1,5 @@
 const db = require('../db/client');
-const { recordMovement } = require('./inventory-ledger');
+const { recordMovement, publishStockEvent } = require('./inventory-ledger');
 const { logger } = require('./logger');
 const { sendAlert } = require('./alerts');
 
@@ -182,14 +182,17 @@ async function ensurePaidOrderStock(tenantId, orderId, options = {}) {
       const missing = line.quantity - applied;
       if (missing > 0) shortages.push({ sku: line.sku, requested: line.quantity, missing });
 
+      let newStock = available;
       if (applied > 0) {
         // eslint-disable-next-line no-await-in-loop
-        await client.query(
+        const updated = await client.query(
           `UPDATE product_variants
               SET stock_quantity = stock_quantity - $3, updated_at = now()
-            WHERE tenant_id = $1 AND id = $2`,
+            WHERE tenant_id = $1 AND id = $2
+            RETURNING stock_quantity`,
           [tenantId, line.variant_id, applied],
         );
+        newStock = Number(updated.rows[0].stock_quantity) || 0;
       }
 
       // The ledger row is written even for a zero-quantity application, so the
@@ -211,6 +214,10 @@ async function ensurePaidOrderStock(tenantId, orderId, options = {}) {
           ...(missing > 0 ? { shortageQuantity: missing } : {}),
         },
       });
+      // eslint-disable-next-line no-await-in-loop -- lets every connected POS
+      // register see this web sale's effect on stock within its ~1s poll,
+      // instead of only on its next catalog search.
+      await publishStockEvent(client, tenantId, line.variant_id, newStock);
       touchedProducts.add(line.product_id);
     }
 
@@ -302,10 +309,11 @@ async function reversePaidOrderStock(tenantId, orderId, options = {}) {
       const quantity = Math.abs(Number(movement.delta) || 0);
       if (!quantity || !movement.variant_id) continue;
       // eslint-disable-next-line no-await-in-loop
-      await client.query(
+      const updated = await client.query(
         `UPDATE product_variants
             SET stock_quantity = stock_quantity + $3, updated_at = now()
-          WHERE tenant_id = $1 AND id = $2`,
+          WHERE tenant_id = $1 AND id = $2
+          RETURNING stock_quantity`,
         [tenantId, movement.variant_id, quantity],
       );
       // eslint-disable-next-line no-await-in-loop
@@ -318,6 +326,8 @@ async function reversePaidOrderStock(tenantId, orderId, options = {}) {
         referenceId: orderId,
         metadata: { reversalOf: PAID_REASON, trigger: reason, sku: movement.metadata?.sku },
       });
+      // eslint-disable-next-line no-await-in-loop
+      await publishStockEvent(client, tenantId, movement.variant_id, Number(updated.rows[0].stock_quantity) || 0);
       touchedProducts.add(movement.product_id);
     }
 
