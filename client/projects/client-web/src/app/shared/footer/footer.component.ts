@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { SocialLink } from '../../models/home-content.model';
+import { NousBadgeComponent } from '../nous-badge/nous-badge.component';
 
 interface FooterLink {
   labelKey: string;
@@ -25,7 +26,7 @@ interface PolicyMeta {
 
 @Component({
     selector: 'cw-footer',
-    imports: [CommonModule, RouterLink],
+    imports: [CommonModule, RouterLink, NousBadgeComponent],
     template: `
     <footer id="site-footer" class="site-footer">
       <div class="footer-grid" [class.has-legal]="policyLinks().length > 0">
@@ -110,9 +111,7 @@ interface PolicyMeta {
         <p>
           {{ t('footer.cities') }}
         </p>
-        <p>
-          {{ t('footer.poweredBy') }}
-        </p>
+        <cw-nous-badge/>
       </div>
     </footer>
   `,

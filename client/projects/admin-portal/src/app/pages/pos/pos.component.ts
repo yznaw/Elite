@@ -30,6 +30,7 @@ import { ClientLoggerService } from '../../services/client-logger.service';
 import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { checkForPosUpdate, posBuildVersions, setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
 import { PosReceiptData } from '../../services/pos-receipt-renderer.service';
+import { NousBadgeComponent } from '../../shared/nous-badge/nous-badge.component';
 
 type PosPhase = 'loading' | 'enrollment' | 'resume-failed' | 'shift' | 'shift-recovery' | 'selling';
 type PaymentMethod = 'cash' | 'card';
@@ -56,7 +57,7 @@ const OFFLINE_CATALOG_BLOCK_AFTER_MS = 12 * 60 * 60 * 1000;
 
 @Component({
     selector: 'ap-pos',
-    imports: [CommonModule, FormsModule, PaginationComponent],
+    imports: [CommonModule, FormsModule, PaginationComponent, NousBadgeComponent],
     templateUrl: './pos.component.html',
     changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './pos.component.scss'

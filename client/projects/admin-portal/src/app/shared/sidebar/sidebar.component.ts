@@ -7,6 +7,7 @@ import { AvatarComponent } from '../avatar/avatar.component';
 import { I18nService } from '../../services/i18n.service';
 import { AuthService } from '../../services/auth.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
+import { NousBadgeComponent } from '../nous-badge/nous-badge.component';
 
 type Role = 'owner' | 'admin' | 'manager' | 'cashier' | 'viewer';
 
@@ -35,7 +36,7 @@ interface NavGroup {
 
 @Component({
     selector: 'ap-sidebar',
-    imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent],
+    imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent, NousBadgeComponent],
     template: `
     @if (toggle.open()) {
       <div class="sidebar-backdrop" (click)="toggle.close()" aria-hidden="true"></div>
@@ -124,6 +125,7 @@ interface NavGroup {
             </div>
           </div>
         }
+        <ap-nous-badge placement="sidebar" class="sidebar-nous-badge"/>
       </div>
     </aside>
   `,
@@ -300,6 +302,7 @@ interface NavGroup {
     .sidebar-user-email {
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
     }
+    .sidebar-nous-badge { margin-top: 12px; }
     /* ── Collapsed state (desktop) ─────── */
     @media (min-width: 1025px) {
       .sidebar.collapsed {
@@ -308,7 +311,8 @@ interface NavGroup {
       }
       .sidebar.collapsed .nav-section-label,
       .sidebar.collapsed .nav-label,
-      .sidebar.collapsed .sidebar-user-meta {
+      .sidebar.collapsed .sidebar-user-meta,
+      .sidebar.collapsed .sidebar-nous-badge {
         display: none;
       }
       .sidebar.collapsed .sidebar-brand { padding-inline: 4px; justify-content: center; }
