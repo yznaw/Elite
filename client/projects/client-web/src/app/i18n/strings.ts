@@ -184,7 +184,6 @@ const EN = {
   'product.aria.increaseQty': 'Increase quantity',
   'product.handcraftedSuffix': 'Handcrafted in Doha',
   'product.dutiesIncluded': '· Duties included',
-  'product.descriptionTemplate': 'A statement of understated authority. The {name} is individually shaped on a hand-carved wooden last, requiring 48 hours of continuous attention from a single master artisan. Limited to 40 pairs per season.',
 
   'product.attr.leather': 'Leather',
   'product.attr.style': 'Style',
@@ -638,7 +637,6 @@ const AR: Record<keyof typeof EN, string> = {
   'product.aria.increaseQty': 'زيادة الكمية',
   'product.handcraftedSuffix': 'صناعة يدوية في الدوحة',
   'product.dutiesIncluded': '· الرسوم مشمولة',
-  'product.descriptionTemplate': 'بيان من السلطة الهادئة. يُشكَّل {name} على قالب خشبي محفور يدوياً، ويتطلب 48 ساعة من الانتباه المتواصل لحرفي ماهر واحد. محدود بـ 40 زوجاً في الموسم.',
 
   'product.attr.leather': 'الجلد',
   'product.attr.style': 'الطراز',

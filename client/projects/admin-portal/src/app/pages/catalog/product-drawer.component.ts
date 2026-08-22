@@ -28,6 +28,8 @@ interface FormShape {
   price: number; stock: number; hidden: boolean;
   enDesc: string; arDesc: string;
   shortEn: string; shortAr: string;
+  teaserEn: string; teaserAr: string;
+  careEn: string; careAr: string;
   metaTitle: string; metaDesc: string; slug: string;
   variants: ProductVariant[];
   images: string[];
@@ -641,7 +643,7 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <div [style.display]="isMobile() && !openSections().has('desc') ? 'none' : ''">
-          <!-- Short copy: single line, used on the home hero and other compact
+          <!-- Hook: single line, used on the home hero and other compact
                surfaces. Plain text on purpose — no rich formatting fits there. -->
           <div class="short-desc-grid mb-24">
             <div>
@@ -671,21 +673,51 @@ function readPreview(file: File): Promise<string> {
           </div>
           <p class="short-desc-hint">{{ t('product.field.shortHint') }}</p>
 
+          <!-- Short description: shown directly under the product name on the
+               product detail page. Plain text, same compact shape as the Hook. -->
+          <div class="short-desc-grid mb-24">
+            <div>
+              <label class="lbl">
+                {{ t('product.field.teaserEn') }}
+                <span class="short-desc-count" [class.over]="(form().teaserEn || '').length > 160">
+                  {{ (form().teaserEn || '').length }}/160
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="ltr"
+                        [placeholder]="t('product.field.teaserEn.ph')"
+                        [ngModel]="form().teaserEn"
+                        (ngModelChange)="set('teaserEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">
+                {{ t('product.field.teaserAr') }}
+                <span class="short-desc-count" [class.over]="(form().teaserAr || '').length > 160">
+                  {{ (form().teaserAr || '').length }}/160
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="rtl"
+                        [placeholder]="t('product.field.teaserAr.ph')"
+                        [ngModel]="form().teaserAr"
+                        (ngModelChange)="set('teaserAr', $event)"></textarea>
+            </div>
+          </div>
+          <p class="short-desc-hint">{{ t('product.field.teaserHint') }}</p>
+
           <div class="mb-24">
-            <label class="lbl">{{ t('product.field.descEn') }}</label>
+            <label class="lbl">{{ t('product.field.careEn') }}</label>
             <ap-rich-text
               dir="ltr"
-              [value]="form().enDesc"
-              [ariaLabel]="t('product.field.descEn')"
-              (valueChange)="set('enDesc', $event)"/>
+              [value]="form().careEn"
+              [ariaLabel]="t('product.field.careEn')"
+              (valueChange)="set('careEn', $event)"/>
           </div>
           <div class="mb-24">
-            <label class="lbl">{{ t('product.field.descAr') }}</label>
+            <label class="lbl">{{ t('product.field.careAr') }}</label>
             <ap-rich-text
               dir="rtl"
-              [value]="form().arDesc"
-              [ariaLabel]="t('product.field.descAr')"
-              (valueChange)="set('arDesc', $event)"/>
+              [value]="form().careAr"
+              [ariaLabel]="t('product.field.careAr')"
+              (valueChange)="set('careAr', $event)"/>
           </div>
         </div>
 
@@ -2045,6 +2077,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       price: 0, stock: 0, hidden: false,
       enDesc: '', arDesc: '',
       shortEn: '', shortAr: '',
+      teaserEn: '', teaserAr: '',
+      careEn: '', careAr: '',
       metaTitle: '', metaDesc: '', slug: '',
       variants: [],
       images: [],
@@ -2067,6 +2101,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       arDesc: p.arDesc ?? '',
       shortEn: p.shortEn ?? '',
       shortAr: p.shortAr ?? '',
+      teaserEn: p.teaserEn ?? '',
+      teaserAr: p.teaserAr ?? '',
+      careEn: p.careEn ?? '',
+      careAr: p.careAr ?? '',
       metaTitle: p.metaTitle || `${p.name} · ${p.brand} · Elite Collection`,
       metaDesc: p.metaDesc || `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
       slug: p.slug || p.name.toLowerCase().replace(/\s+/g, '-'),
@@ -2785,6 +2823,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.arDesc = saved.arDesc ?? f.arDesc;
       this.product.shortEn = saved.shortEn ?? f.shortEn;
       this.product.shortAr = saved.shortAr ?? f.shortAr;
+      this.product.teaserEn = saved.teaserEn ?? f.teaserEn;
+      this.product.teaserAr = saved.teaserAr ?? f.teaserAr;
+      this.product.careEn = saved.careEn ?? f.careEn;
+      this.product.careAr = saved.careAr ?? f.careAr;
       this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
       this.product.images = [...(saved.images ?? f.images)];
       this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };

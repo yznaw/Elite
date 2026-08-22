@@ -112,9 +112,12 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   const image = row.image || media[0] || defaultImage;
   const images = [...new Set([image, ...media])];
 
-  // Long copy drives the product detail page; short copy drives compact
-  // surfaces such as the home hero. Both are bilingual.
+  // Hook (shortEn/shortAr) drives the home hero and other compact surfaces.
+  // teaserEn/teaserAr is the short blurb under the product name on the PDP.
+  // descriptionEn/Ar is the legacy long copy, kept only as a fallback for the
+  // Material & Care section on products that predate care_instructions.
   const desc = (row.description && typeof row.description === 'object') ? row.description : {};
+  const care = (row.care_instructions && typeof row.care_instructions === 'object') ? row.care_instructions : {};
 
   return {
     id: row.id,
@@ -124,6 +127,10 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
     descriptionAr: desc.ar || '',
     shortDescriptionEn: desc.shortEn || '',
     shortDescriptionAr: desc.shortAr || '',
+    teaserEn: desc.teaserEn || '',
+    teaserAr: desc.teaserAr || '',
+    careInstructionsEn: care.en || '',
+    careInstructionsAr: care.ar || '',
     price: Math.round(Number(row.base_price_cents || 0) / 100),
     tag: row.tag || '',
     leather: row.leather || '',
@@ -188,6 +195,7 @@ router.get('/', async (_req, res, next) => {
           p.name,
           p.brand,
           p.description,
+          p.care_instructions,
           p.base_price_cents,
           p.tag,
           p.leather,
@@ -314,6 +322,7 @@ router.get('/:id', async (req, res, next) => {
           p.name,
           p.brand,
           p.description,
+          p.care_instructions,
           p.base_price_cents,
           p.tag,
           p.leather,

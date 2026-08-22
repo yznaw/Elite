@@ -242,6 +242,29 @@ export class ProductComponent implements OnInit, OnDestroy {
     const en = (product.descriptionEn || '').trim();
     return (this.locale.locale() === 'ar' ? (ar || en) : (en || ar));
   }
+
+  /**
+   * Short description shown under the product name, locale-aware with a
+   * same-fallback-shape as productDescription. Empty means the template
+   * renders nothing rather than a placeholder line.
+   */
+  productTeaser(product: Product): string {
+    const ar = (product.teaserAr || '').trim();
+    const en = (product.teaserEn || '').trim();
+    return (this.locale.locale() === 'ar' ? (ar || en) : (en || ar));
+  }
+
+  /**
+   * Material & Care copy. Falls back to the legacy long description so
+   * products saved before this field existed still show something in that
+   * section during the transition period.
+   */
+  productCareInstructions(product: Product): string {
+    const ar = (product.careInstructionsAr || '').trim();
+    const en = (product.careInstructionsEn || '').trim();
+    const direct = this.locale.locale() === 'ar' ? (ar || en) : (en || ar);
+    return direct || this.productDescription(product);
+  }
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
   readonly productTag = (value: string): string => this.i18n.productTag(value);
 

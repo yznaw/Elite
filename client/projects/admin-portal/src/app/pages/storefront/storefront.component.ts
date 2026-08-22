@@ -2536,6 +2536,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         ...item,
         name:          fill(item.name, product.name),
         subtitle:      fill(item.subtitle, this.productSubtitle(product)),
+        // Seeded from the product's Hook (shortEn/shortAr); falls back to the
+        // legacy long description only if the Hook itself is empty.
         descriptionEn: fill(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
         descriptionAr: fill(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
         alt:           fill(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
@@ -2586,6 +2588,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           productId,
           name:          keep(item.name, product.name),
           subtitle:      keep(item.subtitle, this.productSubtitle(product)),
+          // Seeded from the product's Hook (shortEn/shortAr); falls back to the
+          // legacy long description only if the Hook itself is empty.
           descriptionEn: keep(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
           descriptionAr: keep(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
           alt:           keep(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
@@ -2607,8 +2611,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Hero copy for a product: its short description when set, otherwise the
-   * first sentence of the long one as a stopgap. Rich-text markup is stripped
+   * Hero copy for a product: its Hook when set, otherwise the first sentence
+   * of the legacy long description as a stopgap. Rich-text markup is stripped
    * because the hero renders plain text.
    */
   private heroCopy(short?: string, long?: string): string {

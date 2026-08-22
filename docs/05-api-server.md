@@ -334,14 +334,16 @@ Step 3 is what keeps slides saved before this change rendering — the admin no 
 
 ### Product Descriptions
 
-`products.description` is a JSONB column holding four bilingual fields. There is no separate table or migration for these.
+`products.description` and `products.care_instructions` are both JSONB columns holding bilingual copy. There is no separate table or migration for these.
 
-| JSONB key | Admin field | Public API field | Used by |
-|---|---|---|---|
-| `en` / `ar` | `enDesc` / `arDesc` | `descriptionEn` / `descriptionAr` | Product detail page. Rich text. |
-| `shortEn` / `shortAr` | `shortEn` / `shortAr` | `shortDescriptionEn` / `shortDescriptionAr` | Home hero and other compact surfaces. Plain text, ~90 chars. |
+| JSONB key | Column | Admin field | Public API field | Used by |
+|---|---|---|---|---|
+| `en` / `ar` | `description` | `enDesc` / `arDesc` | `descriptionEn` / `descriptionAr` | Legacy long copy. No longer editable; kept as a fallback source for the Material & Care section on products saved before `care_instructions` was activated. |
+| `shortEn` / `shortAr` | `description` | `shortEn` / `shortAr` | `shortDescriptionEn` / `shortDescriptionAr` | **Hook.** Home hero and other compact surfaces. Plain text, ~90 chars. |
+| `teaserEn` / `teaserAr` | `description` | `teaserEn` / `teaserAr` | `teaserEn` / `teaserAr` | Short description shown directly under the product name on the product detail page. Plain text, ~160 chars. |
+| `en` / `ar` | `care_instructions` | `careEn` / `careAr` | `careInstructionsEn` / `careInstructionsAr` | Material & Care section on the product detail page. Rich text. Falls back to the legacy `description.en/ar` when empty. |
 
-Adding a fifth key needs no schema change: extend `mapAdminProduct()` (read), the `description` object in `upsertProduct()` (write), and the PATCH payload so a partial update does not blank it.
+Adding a new key to either JSONB column needs no schema change: extend `mapAdminProduct()` (read), the relevant object literal in `upsertProduct()` (write), and the PATCH payload so a partial update does not blank it.
 
 ### Admin — Bulk Import (`/api/admin/bulk-import`)
 

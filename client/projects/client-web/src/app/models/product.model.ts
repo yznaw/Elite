@@ -12,12 +12,20 @@ export interface Product {
   id: string;
   name: string;
   brand?: string;
-  /** Long copy for the product detail page. May contain rich-text markup. */
+  /** Legacy long copy. No longer editable in the admin; kept only as a
+   *  fallback for the Material & Care section on products saved before it
+   *  existed. May contain rich-text markup. */
   descriptionEn?: string;
   descriptionAr?: string;
-  /** One-line copy for compact surfaces such as the home hero. */
+  /** Hook: one-line copy for compact surfaces such as the home hero. */
   shortDescriptionEn?: string;
   shortDescriptionAr?: string;
+  /** Short description shown directly under the product name on the PDP. */
+  teaserEn?: string;
+  teaserAr?: string;
+  /** Material & Care copy, its own PDP section. May contain rich-text markup. */
+  careInstructionsEn?: string;
+  careInstructionsAr?: string;
   price: number;
   tag: string;
   leather: string;

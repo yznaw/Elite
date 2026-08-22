@@ -492,6 +492,15 @@
   text-transform: uppercase;
 }
 
+.teaser {
+  margin: 0 0 20px;
+  color: var(--pdp-ink-soft);
+  font-family: var(--ff-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
 .price-row {
   flex-wrap: wrap;
   gap: 10px 14px;
@@ -513,15 +522,6 @@
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-}
-
-.description {
-  margin: 0 0 2px;
-  color: var(--pdp-ink-soft);
-  font-family: var(--ff-sans);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.78;
 }
 
 .attribute-grid {
@@ -1670,7 +1670,8 @@
   grid-template-rows: 1fr;
 }
 
-.accordion-content p {
+.accordion-content p,
+.accordion-content .description {
   min-height: 0;
   margin: 0;
   padding: 0 0 20px;
@@ -1937,13 +1938,6 @@ button:focus-visible {
 
   .price-row span {
     font-size: 30px;
-  }
-
-  .description {
-    margin-bottom: 24px;
-    padding-bottom: 22px;
-    font-size: 14px;
-    line-height: 1.7;
   }
 
   .attribute-grid {

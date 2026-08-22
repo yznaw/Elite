@@ -173,18 +173,13 @@
           <h1>{{ productName(p) }}</h1>
           <p class="descriptor">{{ productLeather(p.leather) }}</p>
 
+          @if (productTeaser(p); as teaser) {
+            <p class="teaser">{{ teaser }}</p>
+          }
+
           <div class="price-row">
             <span>{{ price(p.price) }}</span>
           </div>
-
-          @if (productDescription(p); as description) {
-            <!-- Rich text from the admin editor. Angular sanitizes innerHTML. -->
-            <div class="description" [innerHTML]="description"></div>
-          } @else {
-            <p class="description">
-              {{ t("product.descriptionTemplate", { name: productName(p) }) }}
-            </p>
-          }
 
           <!-- <dl class="attribute-grid">
             @for (a of attributes(); track a.key) {
@@ -422,7 +417,14 @@
                   class="accordion-content"
                   [class.open]="openAccordion() === acc.id"
                 >
-                  <p>{{ t(acc.contentKey) }}</p>
+                  @if (acc.id === 'material') {
+                    <!-- Per-product Material & Care copy from the admin editor,
+                         falling back to the generic static text when a product
+                         has none. Angular sanitizes innerHTML. -->
+                    <div class="description" [innerHTML]="productCareInstructions(p) || t(acc.contentKey)"></div>
+                  } @else {
+                    <p>{{ t(acc.contentKey) }}</p>
+                  }
                 </div>
               </section>
             }

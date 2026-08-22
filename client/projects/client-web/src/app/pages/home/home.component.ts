@@ -196,8 +196,8 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /**
    * Short selling copy under the product. Empty renders nothing rather than a
-   * blank line: the admin seeds this from the product's short description when a
-   * slide is linked, so an empty value means the editor cleared it on purpose.
+   * blank line: the admin seeds this from the product's Hook when a slide is
+   * linked, so an empty value means the editor cleared it on purpose.
    */
   readonly activeHeroDescription = computed(() => {
     const item = this.activeHeroItem();

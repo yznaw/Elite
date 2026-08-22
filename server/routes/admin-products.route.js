@@ -426,6 +426,7 @@ async function replaceRecommendations(client, tenantId, productId, relatedProduc
 
 function mapAdminProduct(row) {
   const desc = row.description || {};
+  const care = row.care_instructions || {};
   return {
     id: row.id,
     name: row.name,
@@ -441,10 +442,15 @@ function mapAdminProduct(row) {
     variants: row.variants || [],
     enDesc: desc.en || '',
     arDesc: desc.ar || '',
-    // Short marketing copy for compact surfaces (home hero, cards). The long
-    // description stays for the product detail page.
+    // Hook: the tagline used on the home hero and other compact surfaces.
     shortEn: desc.shortEn || '',
     shortAr: desc.shortAr || '',
+    // Short description shown directly under the product name on the PDP.
+    teaserEn: desc.teaserEn || '',
+    teaserAr: desc.teaserAr || '',
+    // Material & Care copy, its own PDP section.
+    careEn: care.en || '',
+    careAr: care.ar || '',
     metaTitle: row.meta_title || '',
     metaDesc: row.meta_desc || '',
     slug: row.slug || '',
@@ -519,6 +525,12 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     ar: String(product.arDesc || '').trim(),
     shortEn: String(product.shortEn || '').trim(),
     shortAr: String(product.shortAr || '').trim(),
+    teaserEn: String(product.teaserEn || '').trim(),
+    teaserAr: String(product.teaserAr || '').trim(),
+  };
+  const careInstructions = {
+    en: String(product.careEn || '').trim(),
+    ar: String(product.careAr || '').trim(),
   };
 
   const metaTitle = String(product.metaTitle || '').trim() || null;
@@ -537,11 +549,12 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     slugify(product.slug || name),
     status,
     JSON.stringify(description),
+    JSON.stringify(careInstructions),
     toCents(product.price),
     currency,
     stockQty,
-    metaTitle,   // $11
-    metaDesc,    // $12
+    metaTitle,   // $12
+    metaDesc,    // $13
   ];
 
   const upserted = product.id
@@ -554,13 +567,14 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
             slug = $5,
             status = $6,
             description = $7::jsonb,
-            base_price_cents = $8,
-            currency = $9,
-            stock_quantity = $10,
-            meta_title = $11,
-            meta_desc = $12,
+            care_instructions = $8::jsonb,
+            base_price_cents = $9,
+            currency = $10,
+            stock_quantity = $11,
+            meta_title = $12,
+            meta_desc = $13,
             updated_at = now()
-        WHERE tenant_id = $1 AND id = $13
+        WHERE tenant_id = $1 AND id = $14
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       [...params, product.id],
@@ -568,17 +582,18 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     : await client.query(
       `
         INSERT INTO products (
-          tenant_id, sku, brand, name, slug, status, description,
+          tenant_id, sku, brand, name, slug, status, description, care_instructions,
           base_price_cents, currency, stock_quantity,
           meta_title, meta_desc
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13)
         ON CONFLICT (tenant_id, sku) DO UPDATE
         SET brand = EXCLUDED.brand,
             name = EXCLUDED.name,
             slug = EXCLUDED.slug,
             status = EXCLUDED.status,
             description = EXCLUDED.description,
+            care_instructions = EXCLUDED.care_instructions,
             base_price_cents = EXCLUDED.base_price_cents,
             currency = EXCLUDED.currency,
             stock_quantity = EXCLUDED.stock_quantity,
@@ -878,6 +893,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       arDesc: req.body.arDesc ?? existing.description?.ar,
       shortEn: req.body.shortEn ?? existing.description?.shortEn,
       shortAr: req.body.shortAr ?? existing.description?.shortAr,
+      teaserEn: req.body.teaserEn ?? existing.description?.teaserEn,
+      teaserAr: req.body.teaserAr ?? existing.description?.teaserAr,
+      careEn: req.body.careEn ?? existing.care_instructions?.en,
+      careAr: req.body.careAr ?? existing.care_instructions?.ar,
       slug: req.body.slug ?? existing.slug,
       metaTitle: req.body.metaTitle ?? existing.meta_title,
       metaDesc: req.body.metaDesc ?? existing.meta_desc,

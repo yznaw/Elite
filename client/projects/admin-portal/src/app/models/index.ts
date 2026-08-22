@@ -30,12 +30,19 @@ export interface Product {
   imageColors?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
-  /** Long description shown on the product detail page. */
+  /** Legacy long description. No longer editable; kept as a fallback source
+      for products saved before Material & Care existed. */
   enDesc?: string;
   arDesc?: string;
-  /** Short marketing line for compact surfaces such as the home hero. */
+  /** Hook: the tagline used on the home hero and other compact surfaces. */
   shortEn?: string;
   shortAr?: string;
+  /** Short description shown directly under the product name on the PDP. */
+  teaserEn?: string;
+  teaserAr?: string;
+  /** Material & Care copy, its own section on the PDP. */
+  careEn?: string;
+  careAr?: string;
   metaTitle?: string;
   metaDesc?: string;
   slug?: string;
