@@ -162,10 +162,10 @@
 
           @if (productColorNames(p).length > 0) {
             <div class="color-section gallery-color-section">
-              <div class="section-label">
+              <div class="section-label section-label--pair">
                 <span>{{ t("product.color.label") }}</span>
-                @if (selectedColor()) {
-                  <strong>{{ selectedColor() }}</strong>
+                @if (selectedColor(); as color) {
+                  <strong>{{ colorLabel(color) }}</strong>
                 }
               </div>
 
@@ -180,16 +180,16 @@
                     [class.is-selected]="colorSelected(color)"
                     [class.has-image]="colorSwatchImage(color)"
                     [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
-                    [attr.title]="color"
-                    [attr.aria-label]="t('product.color.choose', { color })"
+                    [attr.title]="colorLabel(color)"
+                    [attr.aria-label]="t('product.color.choose', { color: colorLabel(color) })"
                     [attr.aria-pressed]="colorSelected(color)"
                     (click)="selectProductColor(color)"
                     (keydown)="onProductColorKeydown(color, $event)"
                   >
                     @if (colorSwatchImage(color); as swatchImage) {
-                      <img [src]="swatchImage" [alt]="color" loading="lazy" decoding="async" />
+                      <img [src]="swatchImage" [alt]="colorLabel(color)" loading="lazy" decoding="async" />
                     }
-                    <span class="sr-only">{{ color }}</span>
+                    <span class="sr-only">{{ colorLabel(color) }}</span>
                   </button>
                 }
               </div>

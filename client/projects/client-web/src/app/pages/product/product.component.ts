@@ -113,6 +113,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly selectedColor = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
   readonly colorSwatchImageByName = this.referenceData.colorSwatchImageByName;
+  readonly colorNameArByName = this.referenceData.colorNameArByName;
   readonly sizeSets = this.referenceData.sizeSets;
   readonly openAccordion = signal<string | null>(null);
   readonly addedFeedback = signal(false);
@@ -418,6 +419,14 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.galleryIdx.set(0);
     this.selectedColor.set(null);
     this.applyColorParam(this.route.snapshot.queryParamMap.get('color'), nextProduct);
+    // With nothing selected the colour label has nothing to name, so the
+    // section reads "Select Colour" over a row of unlabelled dots. Default to
+    // the first colour (the one the gallery is already showing) unless a
+    // ?color= deep link has already picked one.
+    if (!this.selectedColor()) {
+      const firstColor = this.productColorNames(nextProduct)[0];
+      if (firstColor) this.selectedColor.set(firstColor);
+    }
     this.selectedSize.set(null);
     this.sizeSelectionError.set(false);
     this.qty.set(1);
@@ -656,6 +665,22 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   colorSwatchImage(name: string): string | null {
     return this.colorSwatchImageByName()[this.colorKey(name)] ?? null;
+  }
+
+  /**
+   * Display name for a colour. Products store the English name (it is the join
+   * key for swatches, variants and the ?color= deep link), so the Arabic name
+   * is looked up from ref_colors at render time and never persisted here.
+   *
+   * Falls back to the stored name when a colour has no Arabic translation yet,
+   * or when it is a free-text value with no ref_colors row at all — better an
+   * English label than a blank one.
+   */
+  colorLabel(name: string | null | undefined): string {
+    const value = String(name || '').trim();
+    if (!value) return '';
+    if (this.locale.locale() !== 'ar') return value;
+    return this.colorNameArByName()[this.colorKey(value)] || value;
   }
 
   colorSelected(name: string): boolean {

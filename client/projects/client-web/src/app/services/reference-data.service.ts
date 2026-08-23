@@ -40,6 +40,10 @@ export class ReferenceDataService {
   private readonly cacheMs = 60 * 60_000;
   private readonly _colorHexByName = signal<Record<string, string>>({});
   private readonly _colorSwatchImageByName = signal<Record<string, string>>({});
+  /** Arabic display name per colour, keyed by the lowercased English name that
+   *  products actually store. Empty name_ar rows are skipped so the caller can
+   *  fall back to the English name rather than render a blank label. */
+  private readonly _colorNameArByName = signal<Record<string, string>>({});
   private readonly _sizeSets = signal<RefSizeSet[]>([]);
   private colorsPromise: Promise<Record<string, string>> | null = null;
   private sizeSetsPromise: Promise<RefSizeSet[]> | null = null;
@@ -48,6 +52,7 @@ export class ReferenceDataService {
 
   readonly colorHexByName = this._colorHexByName.asReadonly();
   readonly colorSwatchImageByName = this._colorSwatchImageByName.asReadonly();
+  readonly colorNameArByName = this._colorNameArByName.asReadonly();
   readonly sizeSets = this._sizeSets.asReadonly();
 
   async ensureColors(): Promise<Record<string, string>> {
@@ -103,8 +108,15 @@ export class ReferenceDataService {
           if (name && image) acc[name] = image;
           return acc;
         }, {});
+        const nameArMap = colors.reduce<Record<string, string>>((acc, color) => {
+          const name = String(color.name_en || '').trim().toLowerCase();
+          const nameAr = String(color.name_ar || '').trim();
+          if (name && nameAr) acc[name] = nameAr;
+          return acc;
+        }, {});
         this._colorHexByName.set(map);
         this._colorSwatchImageByName.set(swatchMap);
+        this._colorNameArByName.set(nameArMap);
         this.colorsLoadedAt = Date.now();
         return map;
       })

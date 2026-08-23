@@ -135,6 +135,16 @@ The stacked layout (`max-width: 1023px`) is a centered CSS grid driven by
 | Swatches | `.hero-swatches` | Up to 4 featured colourways plus an explicit `+N` overflow control |
 | CTA | `.hero-cta` | Primary filled shopping action linked to the active product |
 
+### Colour Names on the Product Page
+
+`ref_colors` has carried `name_ar` since migration 003 and `GET /api/ref/colors` has always returned it — `ReferenceDataService` simply discarded it, keeping only hex and swatch image. The Arabic storefront therefore showed English colour names.
+
+- **`colorLabel(name)`** on `product.component.ts` resolves the display name: Arabic locale looks up `colorNameArByName` (keyed by the lowercased English name via `colorKey`), everything else returns the stored name. It falls back to the stored name when a colour has no `name_ar` yet, or no `ref_colors` row at all — some catalogue "colours" are supplier codes like `390`, and an English label beats a blank one.
+- **The English name stays the join key.** Products, variants, `imageColors`, and the `?color=` deep link all match on it. Arabic is a render-time lookup and is never persisted on a product, so renaming a colour in Reference Data updates every surface at once.
+- **The name sits beside the label, not across the row.** `.section-label` defaults to `justify-content: space-between`, which is right for the size row (its trailing Size Guide button belongs at the far end) but pushed the colour name to the opposite edge of the panel. The colour row carries `.section-label--pair` instead: `flex-start` with a 10px gap, so "Select Colour" and "Black" read as one phrase in both directions.
+- **Used for the section label, swatch `title`, `aria-label`, `alt`, and the screen-reader name** — a swatch is a coloured dot with no text, so those attributes are the only name a screen reader gets.
+- **The first colour is selected on load** (unless `?color=` already picked one). Without a selection the section rendered "Select Colour" over unlabelled dots with no name beside it. This also means `availableSizes` is colour-scoped from the start and the cart records a colour rather than `null`.
+
 ### Hero Colour Swatches
 
 Each slide can link to a product (`productId`) and feature up to 4 of its colourways (`colors[]`).

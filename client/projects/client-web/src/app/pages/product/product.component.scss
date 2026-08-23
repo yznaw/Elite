@@ -719,6 +719,14 @@
   margin-bottom: 14px;
 }
 
+/* Label and value read as one phrase ("Select colour — Black"), so they sit
+   together. space-between belongs on the size row, where the trailing item is
+   a separate Size Guide control that should hold the far end. */
+.section-label--pair {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
 .section-label span,
 .qty-row > span {
   color: var(--pdp-ink-soft);
