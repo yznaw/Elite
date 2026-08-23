@@ -394,6 +394,8 @@ See `server/routes/pos.route.js`. All endpoints require an authenticated owner/a
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/api/pos/registers` | List active registers for the "which till is this?" picker |
+| `POST` | `/api/pos/registers/claim` | Bind this browser to a register, or create one by name (owner/admin) |
 | `POST` | `/api/pos/registers/enrollment-tokens` | Create one-time terminal enrollment token |
 | `POST` | `/api/pos/registers/enroll` | Enroll and bind a physical register |
 | `POST` | `/api/pos/registers/check-in` | Validate stored register credentials |

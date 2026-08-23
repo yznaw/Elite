@@ -281,9 +281,9 @@
     </div>
     <div class="meta">
       <div><b>Prepared for:</b> Elite Collection staff &amp; new hires</div>
-      <div><b>Covers:</b> Dashboard, Catalog, Collections, Media, Storefront, Point of Sale (daily opening, shared stock, offline operation, hardware, approvals, cash movements, Z-reports), Card Settlement Reconciliation, Orders, Customers, Feedback, Policies, Analytics, Reference Lists, Settings, Reports, Stocktake, Diagnostics &amp; Troubleshooting</div>
+      <div><b>Covers:</b> Dashboard, Catalog (product copy fields, variants, size notes), Collections, Media, Storefront, Point of Sale (choosing a till, daily opening, shared stock, offline operation, hardware, approvals, cash movements, Z-reports), Card Settlement Reconciliation, Orders, Customers, Feedback, Policies, Analytics, Reference Lists, Settings, Reports, Stocktake, Diagnostics &amp; Troubleshooting</div>
       <div><b>Document type:</b> HTML — open in any browser, edit the text directly, then print to PDF (Cmd/Ctrl + P → Save as PDF)</div>
-      <div><b>Last updated:</b> 7 August 2026 — rewrote Section 2 (Staff Roles &amp; Permissions): the sidebar now hides links your role can't use instead of showing everything and bouncing you back silently; documented multiple Owners (any Owner can grant the Owner role to a teammate directly from the Team Members role dropdown, Owner-only, no separate promote step). Prior update: 3 August 2026 (multi-branch receipt profiles, Devices &amp; Security tab). Before that: 1 August 2026 (production POS release, two-shop shared inventory, morning shift recovery, persistent hardware/reconnect, offline safety, Stocktake, Diagnostics).</div>
+      <div><b>Last updated:</b> 23 August 2026 — POS setup no longer needs a one-time token: a computer opening the till now asks &ldquo;Which till is this?&rdquo; and staff pick their counter from a list (new Section 8.0, plus two new troubleshooting entries). Product copy was split into four purpose-built fields — Hook, Short description, Product note, and Material &amp; Care — with the old long Description now read-only (new Section 4.2a), and variants gained a per-size <strong>Size note</strong> (Section 4.5). Prior update: 7 August 2026 (Staff Roles &amp; Permissions rewrite; the sidebar now hides links your role can't use, and any Owner can grant the Owner role from the Team Members role dropdown). Before that: 3 August 2026 (multi-branch receipt profiles, Devices &amp; Security tab) and 1 August 2026 (production POS release, two-shop shared inventory, morning shift recovery, persistent hardware/reconnect, offline safety, Stocktake, Diagnostics).</div>
     </div>
   </div>
 
@@ -509,12 +509,26 @@
       <li><strong>Product Info</strong> — fill in the <strong>Product Name (English)</strong>, <strong>Arabic Name</strong>, <strong>Brand</strong>, and <strong>SKU</strong> (your internal product code).</li>
       <li><strong>Pricing &amp; Stock</strong> — enter the <strong>Price (QAR)</strong>. If the product has no size/color variants, also enter <strong>Stock (units)</strong> directly here. (If you add variants in the next step, total stock is calculated automatically from the variants instead.)</li>
       <li><strong>Variants</strong> (optional but recommended for shoes/clothing) — click <strong>Add variant</strong> to create a size/color combination, each with its own SKU, price, stock, and photo. See <a href="#catalog-variants">4.5 — Working with variants</a> below.</li>
-      <li><strong>Description</strong> — write the English and Arabic descriptions using the rich-text editor (bold, italic, underline, lists, links).</li>
+      <li><strong>Description</strong> — four separate pieces of copy, each in English and Arabic. They are not interchangeable; see <a href="#catalog-copy">4.2a</a> for which goes where.</li>
       <li><strong>Organization</strong> — tick the <strong>Collections</strong> this product belongs to (e.g. Men, Kids, Sunglasses), and optionally pick related products to show under "You May Also Like" on the product page.</li>
       <li><strong>SEO</strong> — set the <strong>Meta Title</strong>, <strong>Meta Description</strong> (160-character limit shown live), and <strong>URL Slug</strong> (the web address for this product's page).</li>
       <li>By default a new product is marked <strong>Hidden</strong> (the red "Hidden from storefront" banner and toggle at the top). Flip the toggle to make it visible to shoppers once you're happy with it.</li>
       <li>A green save bar appears at the bottom once you've made changes — click <strong>Save</strong> to publish your edits, or <strong>Discard</strong> to cancel.</li>
     </ol>
+
+    <h2 id="catalog-copy">4.2a — The four description fields, and where each one shows up</h2>
+    <p>The old single long description was split into four purpose-built fields. Each one appears in a different place on the website, so putting the right text in the right box is what makes the product page read well.</p>
+    <table class="grid">
+      <tr><th>Field</th><th>Length</th><th>Where the shopper sees it</th></tr>
+      <tr><td><strong>Hook</strong></td><td>One line</td><td>The home-page hero and other compact places. A tagline, not a sentence about features. Example: &ldquo;Full-grain leather, hand stitched in Italy.&rdquo;</td></tr>
+      <tr><td><strong>Short description</strong></td><td>Up to 160 characters, counter shown live</td><td>Directly under the product name on the product page. Example: &ldquo;A timeless silhouette crafted for everyday carry.&rdquo;</td></tr>
+      <tr><td><strong>Product note</strong></td><td>Up to 80 characters</td><td>On the product page whether or not a size is picked. Use it for something true of <em>every</em> size. Example: &ldquo;Runs one size small.&rdquo;</td></tr>
+      <tr><td><strong>Material &amp; Care</strong></td><td>Rich text</td><td>Its own section further down the product page. Fabric, leather type, washing and storage instructions.</td></tr>
+    </table>
+    <div class="callout note">
+      <b>The old long Description is now read-only</b>
+      Products saved before this change keep their original long description and it still shows on the storefront, but there is no longer a box to edit it. To update that copy, move it into the four fields above. Once you do, the old text stops being used.
+    </div>
 
     <h2><span class="badge edit">Edit</span>&nbsp; 4.3 — Editing an existing product</h2>
     <ol class="steps">
@@ -551,7 +565,8 @@
     <ol class="steps">
       <li>Inside a product's panel, go to the <strong>Variants</strong> section and click <strong>Add variant</strong>, or use the <strong>Generate sizes</strong> wizard to create a full size run at once from one of your saved Size Charts.</li>
       <li>For each variant row, set: <strong>Color</strong>, <strong>Size</strong>, <strong>Stock</strong>, <strong>Price</strong>, and <strong>SKU</strong> — these five columns are always visible.</li>
-      <li>Click the small <strong>⌄</strong> arrow on a row to expand extra fields: <strong>Material</strong>, <strong>Barcode</strong> (defaults to the SKU if left blank), <strong>Cost price</strong>, and an auto-calculated <strong>Margin</strong> (colour-coded: green ≥40%, amber 20–40%, red &lt;20%).</li>
+      <li>Click the small <strong>⌄</strong> arrow on a row to expand extra fields: <strong>Material</strong>, <strong>Barcode</strong> (defaults to the SKU if left blank), <strong>Cost price</strong>, an auto-calculated <strong>Margin</strong> (colour-coded: green ≥40%, amber 20–40%, red &lt;20%), and a <strong>Size note</strong> in English and Arabic.</li>
+      <li>The <strong>Size note</strong> shows on the storefront only when a shopper picks that particular size — use it for a detail this size has and the others don't (&ldquo;Back zipper&rdquo;), instead of adding a whole extra photo. It stacks <em>underneath</em> the product-wide note from <a href="#catalog-copy">4.2a</a> rather than replacing it, so both can be true at once.</li>
       <li>To control which photo shows for each color, click the small photo icon in a variant's row — an image picker pops up so you can link that color to a specific gallery image.</li>
       <li>Stock turns <strong>red</strong> when a variant hits 0, and <strong>amber</strong> when below 5 — a quick visual cue to reorder stock.</li>
       <li>Use <strong>Print barcode label</strong> on a single row, or <strong>Print Labels</strong> at the bottom of the Variants section to print labels for every variant at once.</li>
@@ -688,9 +703,22 @@
 
     <div class="shot"><b>Screenshot placeholder: pos.png</b>POS screen — search/barcode bar, available products grid on the left, live Cart with Total and Take Payment button on the right</div>
 
+    <h2 id="pos-pick">8.0 — Choosing which till this computer is</h2>
+    <p>The first time you open <strong>Point of Sale</strong> on a computer, Elite asks <strong>&ldquo;Which till is this?&rdquo;</strong> and shows the list of counters in your shop. Tap the one you are standing at. That is the whole setup, and Elite remembers it on that computer from then on.</p>
+    <p>Each row tells you when the till was last used, and flags <strong>Shift open</strong> with the cashier's name if someone already has a shift running on it. Check that line before tapping: taking over a till that belongs to another cashier's open drawer is what causes end-of-day cash counts to disagree.</p>
+    <div class="callout note">
+      <b>Why this screen exists at all when you're already signed in</b>
+      Signing in tells Elite <em>who you are</em>. It cannot tell Elite <em>which counter you are standing at</em>, and that is what the shift, the cash drawer, and the receipt numbers are attached to. Two computers ringing sales into what Elite thinks is one drawer is what makes a Z-report impossible to reconcile.
+    </div>
+    <ul class="plain">
+      <li><strong>One till, one computer.</strong> If the same till is picked on a second computer, the first one is signed out of it and returns to this screen. That is deliberate.</li>
+      <li><strong>Adding a new till</strong> — Owners and Admins get <strong>Add a new register</strong> on the same screen. Name it after the counter it sits on so cash counts are easy to match up. Cashiers and Managers pick from the list instead.</li>
+      <li><strong>Setting up a counter you're not standing at</strong> — use <strong>Use a setup token instead</strong>. An Owner or Admin generates a one-time token from Settings → Devices &amp; Security, and it is pasted on the other machine. This is the only situation that still needs a token.</li>
+    </ul>
+
     <h2>8.1 — Making a sale</h2>
     <ol class="steps">
-      <li>Open <strong>Point of Sale</strong>. The register, printer, drawer, and offline signer settings restore automatically on this dedicated browser profile.</li>
+      <li>Open <strong>Point of Sale</strong>. The till, printer, drawer, and offline signer settings restore automatically on this computer. If you are asked which till this is, see <a href="#pos-pick">8.0</a>.</li>
       <li>Find items by typing into <strong>Search</strong> (name, SKU) or scanning a barcode into the <strong>Barcode</strong> field.</li>
       <li>Tap a product to add it to the <strong>Cart</strong> on the right; for products with variants, choose the size/color first.</li>
       <li>Review the <strong>Total</strong>, then click <strong>Take payment</strong>. Qatar sales tax is not added, so there is no tax line.</li>
@@ -774,7 +802,7 @@
     </div>
     <ul class="plain">
       <li>QZ Tray and the Elite device signer must start with Windows. The signer health address is <code>http://127.0.0.1:8182/health</code>.</li>
-      <li>Never use private/incognito mode and never clear Elite's cookies/site data on a register. That removes register enrollment, hardware settings, catalog cache, and any unsynced offline queue.</li>
+      <li>Never use private/incognito mode and never clear Elite's cookies/site data on a register. That wipes the hardware settings, the catalog cache, and <strong>any offline sales still waiting to sync</strong> — those cannot be recovered. Which till the computer is stays easy to fix: just pick it again from the list (<a href="#pos-pick">8.0</a>).</li>
       <li>A printer failure never reverses a saved sale. Find the transaction and reprint; do not ring the sale again.</li>
     </ul>
 
@@ -1031,8 +1059,8 @@
     <h2 id="pos-devices">16.1b — Devices &amp; Security</h2>
     <p>Owner/Admin only — this whole tab is hidden from Manager, Cashier and Viewer accounts. It's where connected POS registers actually live, separate from the "generate a setup code" step in <a href="#sec-settings">Section 16.1</a> above.</p>
     <ul class="plain">
-      <li><strong>Registered Devices</strong> — every register that has completed setup, with its status, <strong>Branch</strong> assignment (this is where you do the assignment described above), and last-seen time. Click <strong>Revoke</strong> on a register that's been decommissioned or lost — this signs it out immediately and it can no longer open shifts or take payments; it does not un-print anything already sold.</li>
-      <li><strong>Enrollment Tokens</strong> — setup codes generated from Section 16.1 that haven't been used yet (or are still within their 15-minute window). Revoke one here if it was sent to the wrong place.</li>
+      <li><strong>Registered Devices</strong> — every register that has completed setup, with its status, <strong>Branch</strong> assignment (this is where you do the assignment described above), and last-seen time. Click <strong>Revoke</strong> on a register that's been decommissioned or lost — this signs it out immediately and it can no longer open shifts or take payments; it does not un-print anything already sold. A revoked till also disappears from the &ldquo;Which till is this?&rdquo; list, so nobody can pick it by mistake.</li>
+      <li><strong>Enrollment Tokens</strong> — setup codes that haven't been used yet (or are still within their 15-minute window). Revoke one here if it was sent to the wrong place. Most tills never need a token now: staff pick their counter from a list instead (<a href="#pos-pick">Section 8.0</a>), and tokens are only for setting up a machine nobody is standing at.</li>
       <li><strong>Manager PINs</strong> — a list of which Owner/Admin/Manager accounts currently have a working PIN set (see <a href="#pos-pin">Section 8.3</a> for what PINs are used for). Reset someone's PIN from here if they've forgotten it or left the shop.</li>
       <li><strong>Self-close shift policy</strong> — Owner only. Toggles whether the cashier who opened a shift can also close it themselves, or whether a second manager must approve the close (see <a href="#pos-shifts">Section 8.6</a>).</li>
     </ul>
@@ -1198,7 +1226,17 @@
     <p>This can be correct: the browser may reach the Wi-Fi router but not the Elite API. POS tests server reachability and safely falls back to its offline queue. Continue only if the catalog is within the allowed age and the queue/storage warnings are healthy; otherwise reconnect the API before taking payment.</p>
 
     <h3>POS says "Resolve the previous shift" in the morning.</h3>
-    <p>The register still has a previous-day shift, another cashier's shift, or a shift whose close is incomplete. Use <strong>Review and close previous shift</strong> and complete the manager-controlled Z report. Do not clear browser data or create another register to bypass it.</p>
+    <p>The register still has a previous-day shift, another cashier's shift, or a shift whose close is incomplete. Use <strong>Review and close previous shift</strong> and complete the manager-controlled Z report. Do not clear browser data, and do not pick or add a different register to bypass it.</p>
+
+    <h3>POS is asking &ldquo;Which till is this?&rdquo; on a computer that was already set up.</h3>
+    <p>Something wiped this computer's local Elite data — usually cleared site data, private/incognito mode, a new browser profile, or a re-imaged machine. It can also mean an Owner revoked this register, or the same till was picked on another computer (only one computer can hold a till at a time). Just pick the same counter from the list again and carry on; no Owner and no setup token is needed. If the till is not in the list, it has been revoked — an Owner can check under Settings → Devices &amp; Security (<a href="#pos-devices">Section 16.1b</a>).</p>
+    <div class="callout warn">
+      <b>Check for unsynced sales first</b>
+      Picking the till again restores the till itself, but it does not bring back offline sales that were still waiting to sync when the data was cleared. Those are gone. If this machine had been selling offline, tell an Owner before carrying on so the day's takings can be checked against the Z-report.
+    </div>
+
+    <h3>Two computers are fighting over the same till.</h3>
+    <p>Each time one picks the till, the other gets signed out of it. That is working as intended — a till is one physical counter, and two computers sharing one drawer makes the end-of-day cash count impossible to reconcile. Give each counter its own register: an Owner or Admin uses <strong>Add a new register</strong> on the same screen (<a href="#pos-pick">Section 8.0</a>).</p>
 
     <h3>I have an error reference and need to know what happened.</h3>
     <p>Give the short reference, exact time, register, and action to an Owner/Admin. They can search <strong>Diagnostics → Errors</strong>, then use the full Request ID in <strong>Diagnostics → Audit</strong>. This correlates the cashier message with browser and server logs without exposing technical details to the cashier.</p>

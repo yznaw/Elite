@@ -94,6 +94,116 @@ async function enrollRegister(context, body) {
   });
 }
 
+/**
+ * The registers a cashier can pick from when this browser has no stored
+ * identity. Deliberately readable by every POS role: choosing which till you
+ * are standing at is not a privileged act, and gating it behind owner/admin
+ * (as `listAllRegisters` does for the Settings device table) is what used to
+ * strand a cashier mid-shift after an IndexedDB wipe.
+ */
+async function listSelectableRegisters(context) {
+  const client = await db.pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT r.id, r.display_name, r.last_seen_at,
+              s.id AS open_shift_id, u.full_name AS open_shift_cashier
+       FROM pos_registers r
+       LEFT JOIN LATERAL (
+         SELECT id, cashier_id FROM pos_shifts
+         WHERE tenant_id = r.tenant_id AND register_id = r.id AND state IN ('open', 'closing')
+         ORDER BY opened_at DESC LIMIT 1
+       ) s ON true
+       LEFT JOIN admin_users u ON u.id = s.cashier_id
+       WHERE r.tenant_id = $1 AND r.status = 'active'
+       ORDER BY r.last_seen_at DESC NULLS LAST, r.display_name ASC`,
+      [context.tenantId],
+    );
+    return result.rows.map((row) => ({
+      registerId: row.id,
+      displayName: row.display_name,
+      lastSeenAt: row.last_seen_at,
+      openShiftId: row.open_shift_id,
+      openShiftCashier: row.open_shift_cashier,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Bind this browser to a till without the enrollment-token ceremony.
+ *
+ * Pass `registerId` to take over an existing till, or `displayName` (owner/
+ * admin only) to create a new one. Either way a fresh credential is minted and
+ * the old one stops working, so a register stays one physical terminal: if the
+ * counter machine is re-imaged, or IndexedDB is cleared, or someone opens the
+ * till in a new browser profile, they pick the same register again and carry
+ * on. The previous device is bounced back to this picker on its next check-in.
+ *
+ * `createEnrollmentToken`/`enrollRegister` remain for the case this cannot
+ * cover: handing setup to someone at a counter you are not standing at.
+ */
+async function claimRegister(context, body) {
+  const registerId = body?.registerId ? nonEmpty(body.registerId, 'registerId', 50) : null;
+  const displayName = body?.displayName ? nonEmpty(body.displayName, 'displayName', 80) : null;
+  assertPos(registerId || displayName, 400, 'REGISTER_CLAIM_INVALID', 'Choose a register or name a new one.');
+
+  return inTransaction(async (client) => {
+    const rawCredential = secret();
+
+    if (registerId) {
+      const existing = await client.query(
+        `SELECT id, display_name, status FROM pos_registers
+         WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [context.tenantId, registerId],
+      );
+      const register = existing.rows[0];
+      assertPos(register, 404, 'REGISTER_NOT_FOUND', 'That register no longer exists. Pick another one.');
+      assertPos(register.status === 'active', 403, 'REGISTER_DISABLED', 'This POS register is disabled or revoked.');
+
+      await client.query(
+        'UPDATE pos_registers SET credential_hash = $1, last_seen_at = now() WHERE id = $2',
+        [hash(rawCredential), register.id],
+      );
+      await audit(client, context, 'pos.register.claimed', 'pos_register', register.id, {
+        displayName: register.display_name,
+      });
+      return { registerId: register.id, displayName: register.display_name, registerCredential: rawCredential };
+    }
+
+    assertPos(
+      ['owner', 'admin'].includes(context.role),
+      403,
+      'INSUFFICIENT_PERMISSIONS',
+      'Only owners and admins can add a new register. Pick an existing one from the list.',
+    );
+    const nameTaken = await client.query(
+      'SELECT 1 FROM pos_registers WHERE tenant_id = $1 AND lower(display_name) = lower($2)',
+      [context.tenantId, displayName],
+    );
+    assertPos(
+      nameTaken.rowCount === 0,
+      409,
+      'REGISTER_NAME_TAKEN',
+      `A register named "${displayName}" already exists. Pick it from the list, or choose a different name.`,
+    );
+
+    const created = await client.query(
+      `INSERT INTO pos_registers
+        (tenant_id, display_name, credential_hash, created_by_user_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, display_name`,
+      [context.tenantId, displayName, hash(rawCredential), context.userId],
+    );
+    const register = created.rows[0];
+    await audit(client, context, 'pos.register.claimed', 'pos_register', register.id, {
+      displayName: register.display_name,
+      created: true,
+    });
+    return { registerId: register.id, displayName: register.display_name, registerCredential: rawCredential };
+  });
+}
+
 async function checkInRegister(context, body) {
   const registerId = nonEmpty(body?.registerId, 'registerId', 50);
   const credential = nonEmpty(body?.registerCredential, 'registerCredential', 200);
@@ -363,12 +473,14 @@ async function allocateReceiptBlock(context) {
 module.exports = {
   allocateReceiptBlock,
   checkInRegister,
+  claimRegister,
   createEnrollmentToken,
   currentRegister,
   enrollRegister,
   hash,
   listAllRegisters,
   listEnrollmentTokens,
+  listSelectableRegisters,
   revokeEnrollmentToken,
   revokeRegister,
   setRegisterBranch,

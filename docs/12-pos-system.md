@@ -23,7 +23,7 @@ The result is one source of truth. Products, stock, customers, sales, refunds, a
 
 - Authenticated cashier UI at `/pos`.
 - Dedicated `cashier` role with POS access.
-- Register enrollment and persistent terminal credentials.
+- Register selection ("which till is this?") plus setup tokens, with persistent terminal credentials.
 - One active shift per register.
 - Server-reserved, tenant-wide receipt number blocks.
 - Product search and USB HID barcode input.
@@ -78,7 +78,7 @@ flowchart LR
 ### Trust boundaries
 
 1. **User identity:** Elite's server-side authenticated session identifies the operator and tenant.
-2. **Register identity:** A one-time enrollment creates a register credential. Check-in binds that register ID to the authenticated server session.
+2. **Register identity:** Claiming a register (or consuming a setup token) mints a register credential. Check-in binds that register ID to the authenticated server session.
 3. **Transaction authority:** The API derives tenant, cashier, and register from the session. The browser cannot choose another cashier or tenant in a sale payload.
 4. **Database authority:** Online stock, price, receipt ownership, shift state, refund quantities, and totals are validated inside PostgreSQL transactions.
 5. **Offline authority:** IndexedDB holds a temporary local queue and reserved receipt numbers. The server remains authoritative when those transactions synchronize.
@@ -109,6 +109,7 @@ flowchart LR
 | Diagnostics | `server/routes/admin-diagnostics.route.js`, `server/routes/client-logs.route.js`, and admin `/diagnostics` |
 | Inventory operations | `server/lib/inventory-ops-service.js` and admin `/stocktake` |
 | API integration test | `server/test/pos-authenticated-e2e.test.js` |
+| Register picker test | `server/test/pos-register-picker-e2e.test.js` |
 | Browser E2E | `client/e2e/pos-checkout.spec.ts` |
 
 ## 5. How POS Connects to Elite
@@ -200,19 +201,24 @@ All `/api/pos/*` routes use Elite's authenticated session cookie. The permitted 
 
 The route is also protected in the Angular router. Session-cookie and CORS settings must allow the admin origin to send credentials to the API.
 
-### Register enrollment
+### Picking a register
 
-Enrollment is a one-time action per browser profile/physical register:
+A browser with no stored register identity shows **"Which till is this?"** — a list of the tenant's active registers. The cashier taps the counter they are standing at, and that is the whole setup:
 
-1. An owner or admin creates a one-time token for a named register.
-2. The token expires after 15 minutes and can be consumed only once.
-3. Enrollment creates a `pos_registers` row and returns a random register credential once.
-4. The browser stores the register ID and credential in IndexedDB.
-5. Later visits use those credentials to check in and bind the register to the user's session.
+1. `GET /pos/registers` lists active registers with last-used time and any open shift. Readable by every POS role.
+2. `POST /pos/registers/claim` with `registerId` mints a fresh credential for that register.
+3. The browser stores the register ID and credential in IndexedDB.
+4. Later visits use those credentials to check in and bind the register to the user's session.
 
-Owners and admins can enter a terminal name on the setup screen and create/consume the token in one flow. A manager must paste a token previously created by an owner or admin.
+Owners and admins also get **Add a new register**, which posts `displayName` to the same `claim` endpoint and creates the `pos_registers` row inline. A cashier who tries this gets `INSUFFICIENT_PERMISSIONS` and is pointed back at the list.
 
-Clearing the browser profile removes the local credential. Treat that as a terminal re-enrollment event; disable/revoke the abandoned register record before issuing a new identity.
+**Claiming rotates the credential.** A register stays one physical terminal: the previously bound machine fails its next check-in with `REGISTER_CREDENTIAL_INVALID` and is sent back to the picker. This is deliberate — two browsers ringing sales into one drawer makes the Z-report cash count meaningless.
+
+**Why this replaced the token as the default path.** Enrollment tokens are owner-only to mint and expire in 15 minutes, so a cleared IndexedDB, a re-imaged counter machine, or a new browser profile stranded a cashier mid-shift waiting for an owner to walk over. Picking from a list removes that dependency without weakening anything real: the picker is already behind an authenticated POS-role session, and the token never protected sale integrity anyway (anyone with a valid session could always ring sales). What register binding actually buys is drawer accountability, and the `pos.register.claimed` audit entry preserves that.
+
+**Setup tokens still exist** for the case the picker cannot cover: connecting a counter you are not standing at. `POST /registers/enrollment-tokens` and `POST /registers/enroll` are unchanged, reachable from **Use a setup token instead** on the setup screen and from Settings, Devices and Security.
+
+Clearing the browser profile removes the local credential. The cashier simply picks the same register again; no administrative action is needed. Revoke a register record only when the terminal is genuinely retired.
 
 **Logging out does not un-enroll a register.** The identity lives in IndexedDB and survives logout; only the session's `posRegisterId` binding is lost, and `initialize()` re-binds it automatically by calling `/registers/check-in` with the stored credential after `/registers/current` answers `428`.
 
@@ -364,6 +370,8 @@ All paths below are under `/api/pos` and require an authenticated allowed role. 
 
 | Method | Path | Purpose |
 |---|---|---|
+| `GET` | `/registers` | List active registers for the picker; any POS role |
+| `POST` | `/registers/claim` | Bind this browser to a register by `registerId`, or create one by `displayName` (owner/admin); rotates the credential |
 | `POST` | `/registers/enrollment-tokens` | Create a 15-minute one-time token; owner/admin only |
 | `POST` | `/registers/enroll` | Consume a token and create register identity |
 | `POST` | `/registers/check-in` | Validate stored register credentials and bind the session |
@@ -713,12 +721,12 @@ Those are mandatory hardware acceptance tests.
 
 - **Printer failed:** Do not repeat the sale. Use **Print again** or transaction lookup/reprint.
 - **Unknown whether sale saved:** Search by receipt/QR before retrying. Idempotency protects the original browser attempt, but operator verification prevents confusion.
-- **Browser was cleared:** Stop using the old register identity, revoke it administratively/database-side, and enroll a new register.
+- **Browser was cleared:** Open `/pos` and pick the same register from the list. The credential rotates automatically; no owner action and no revoke is needed.
 - **Offline receipt block exhausted:** Reconnect and allocate another block; do not invent receipt numbers.
 - **Rejected offline sale:** Preserve the queue item, inspect its error, and resolve the register/receipt/shift issue before retry.
 - **Stock conflict:** The financial sale remains accepted. A manager records the reconciliation outcome.
 - **Shift will not close:** Clear pending/rejected queue entries legitimately and resolve required approvals; never delete IndexedDB to bypass the close gate.
-- **Hardware is red:** Wait for automatic reconnect, verify QZ Tray and `http://127.0.0.1:8182/health`, then use Hardware to retry discovery. Do not re-enroll the register.
+- **Hardware is red:** Wait for automatic reconnect, verify QZ Tray and `http://127.0.0.1:8182/health`, then use Hardware to retry discovery. Do not re-claim the register.
 - **Need to trace a problem:** Copy the request reference shown to the cashier. Owner/Admin can search it in `/diagnostics`; signer logs are at `C:\ProgramData\ElitePOS\device-signer\logs\signer.log`.
 
 ## 19. Monitoring and Audit
@@ -744,7 +752,7 @@ Audit-sensitive actions include enrollment, receipt allocation, shift open/close
 
 - [ ] Migrations `015`–`025` apply without changing unrelated Elite data; verify observability, customer link, Arabic item snapshot, inventory ledger, and stocktake schema.
 - [ ] POS routes require authenticated allowed roles.
-- [ ] Register enrollment, check-in, disable/revoke behavior is tested.
+- [ ] Register selection, claim/credential rotation, check-in, and disable/revoke behavior is tested (`server/test/pos-register-picker-e2e.test.js`).
 - [ ] Two-register receipt blocks do not overlap.
 - [ ] Online concurrent last-unit sale behavior is tested.
 - [ ] Offline sale survives refresh/restart and synchronizes once.

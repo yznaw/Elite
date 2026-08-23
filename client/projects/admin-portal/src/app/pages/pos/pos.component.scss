@@ -347,42 +347,104 @@ label input:focus {
   box-shadow: 0 0 0 3px rgba(6, 75, 61, 0.08);
 }
 
-.enroll-tabs {
-  display: flex;
-  margin-bottom: 24px;
-  border: 1px solid var(--pos-line);
-  border-radius: 3px;
-  overflow: hidden;
+.register-picker {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 0;
+  list-style: none;
 }
 
-.enroll-tabs button {
-  flex: 1;
-  padding: 11px 10px;
-  border: 0;
+.register-picker button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--pos-line);
+  border-radius: 3px;
   background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+
+.register-picker button:hover:not(:disabled),
+.register-picker button:focus-visible {
+  border-color: var(--pos-green);
+  background: rgba(0, 69, 56, 0.04);
+}
+
+.register-picker button:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.register-picker button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.register-name {
+  color: var(--pos-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.register-meta {
   color: #69736f;
+  font-size: 11px;
+}
+
+/* Marks a till someone else already has a shift open on, so the cashier
+   knows before taking it over rather than after. */
+.register-meta b {
+  margin-left: 8px;
+  color: var(--pos-green);
+  font-weight: 700;
+}
+
+.register-skeleton {
+  display: block;
+  height: 58px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(23, 34, 31, 0.05), rgba(23, 34, 31, 0.1), rgba(23, 34, 31, 0.05));
+  background-size: 200% 100%;
+  animation: posShimmer 1.2s linear infinite;
+}
+
+@keyframes posShimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .register-skeleton { animation: none; }
+  .register-picker button { transition: none; }
+}
+
+.register-empty {
+  margin-bottom: 20px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.setup-alt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.link-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pos-green);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-
-.enroll-tabs button + button {
-  border-left: 1px solid var(--pos-line);
-}
-
-.enroll-tabs button.active {
-  background: var(--pos-green);
-  color: #fff;
-}
-
-.enroll-hint {
-  display: block;
-  margin-top: -2px;
-  color: #858c89;
-  font-size: 10px;
-  line-height: 1.5;
 }
 
 .enroll-success {

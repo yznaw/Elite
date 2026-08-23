@@ -17,6 +17,7 @@ import {
   PosCustomer,
   PosParkedCart,
   PosSaleResult,
+  PosSelectableRegister,
   PosService,
   PosShiftSummary,
   PosSyncConflict,
@@ -91,8 +92,10 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly resumeError = signal<string | null>(null);
   readonly busy = signal(false);
   readonly online = signal(navigator.onLine);
-  readonly enrollMode = signal<'token' | 'create'>('token');
+  readonly enrollMode = signal<'pick' | 'token' | 'create'>('pick');
   readonly justEnrolled = signal(false);
+  readonly availableRegisters = signal<PosSelectableRegister[]>([]);
+  readonly registersLoading = signal(false);
   readonly register = signal<PosCurrentRegister | null>(null);
   readonly shiftId = signal<string | null>(null);
   readonly shiftRecovery = signal<{
@@ -571,7 +574,7 @@ export class PosComponent implements OnInit, OnDestroy {
       } catch (currentError) {
         const identity = await this.local.getRegister();
         if (!identity) {
-          this.phase.set('enrollment');
+          this.enterEnrollment();
           return;
         }
         // navigator.onLine only says that Windows has a network interface. A
@@ -594,28 +597,7 @@ export class PosComponent implements OnInit, OnDestroy {
         current = await this.pos.currentRegister();
       }
 
-      this.register.set(current);
-      await this.hardware.initialize();
-      await this.ensureReceiptBlock();
-      if (current.shift) {
-        this.shiftId.set(current.shift.id);
-        await this.local.setShift({
-          shiftId: current.shift.id,
-          registerId: current.registerId,
-          cashierId: current.shift.cashierId,
-          openingFloatCents: current.shift.openingFloatCents,
-          openedAt: current.shift.openedAt,
-        });
-        const recovery = this.shiftRecoveryFor(current.shift);
-        if (recovery) {
-          this.shiftRecovery.set(recovery);
-          this.phase.set('shift-recovery');
-          return;
-        }
-        await this.enterSelling();
-      } else {
-        this.phase.set('shift');
-      }
+      await this.enterRegister(current);
     } catch (error) {
       // Enrollment is a one-time, owner-only ceremony: it needs a fresh token
       // from Settings and a person who can generate one. Sending a register
@@ -631,7 +613,7 @@ export class PosComponent implements OnInit, OnDestroy {
         return;
       }
       this.toast.warning('Could not resume this register', this.errorMessage(error));
-      this.phase.set('enrollment');
+      this.enterEnrollment();
     } finally {
       this.busy.set(false);
     }
@@ -647,6 +629,53 @@ export class PosComponent implements OnInit, OnDestroy {
     return code === 'REGISTER_CREDENTIAL_INVALID'
       || code === 'REGISTER_NOT_FOUND'
       || code === 'REGISTER_DISABLED';
+  }
+
+  /**
+   * Bring up hardware and receipt numbers for a bound register, then route by
+   * the till's own shift state: resume selling, offer recovery, or ask for an
+   * opening float.
+   *
+   * Shared by `initialize()` and by every path that binds this browser to a
+   * register. The picker made that sharing necessary: enrollment only ever
+   * produced a brand-new till, so jumping straight to "open a shift" was safe,
+   * but a claimed register can already have one open — and `pos_shifts`'
+   * active-register unique index would then reject the second open, stranding
+   * the cashier on a screen whose only button cannot work.
+   */
+  private async enterRegister(current: PosCurrentRegister): Promise<void> {
+    this.register.set(current);
+    await this.hardware.initialize();
+    await this.ensureReceiptBlock();
+    if (!current.shift) {
+      this.phase.set('shift');
+      return;
+    }
+    this.shiftId.set(current.shift.id);
+    await this.local.setShift({
+      shiftId: current.shift.id,
+      registerId: current.registerId,
+      cashierId: current.shift.cashierId,
+      openingFloatCents: current.shift.openingFloatCents,
+      openedAt: current.shift.openedAt,
+    });
+    const recovery = this.shiftRecoveryFor(current.shift);
+    if (recovery) {
+      this.shiftRecovery.set(recovery);
+      this.phase.set('shift-recovery');
+      return;
+    }
+    await this.enterSelling();
+  }
+
+  /**
+   * Show the one-time setup screen and start fetching the register list, so
+   * the picker is already populated by the time the cashier looks at it.
+   */
+  private enterEnrollment(): void {
+    this.enrollMode.set('pick');
+    this.phase.set('enrollment');
+    void this.loadRegisters();
   }
 
   /** Retry after a failed resume, without touching the stored identity. */
@@ -712,10 +741,67 @@ export class PosComponent implements OnInit, OnDestroy {
     }).format(new Date(value));
   }
 
-  setEnrollMode(mode: 'token' | 'create'): void {
+  setEnrollMode(mode: 'pick' | 'token' | 'create'): void {
     this.enrollMode.set(mode);
     this.enrollmentToken = '';
     this.terminalName = '';
+    if (mode === 'pick') void this.loadRegisters();
+  }
+
+  /**
+   * Fill the "which till is this?" picker. A failure here is not fatal: the
+   * token and new-register paths still work, so we leave the list empty and
+   * let the template offer those instead of blocking the counter.
+   */
+  async loadRegisters(): Promise<void> {
+    this.registersLoading.set(true);
+    try {
+      this.availableRegisters.set(await this.pos.listRegisters());
+    } catch {
+      this.availableRegisters.set([]);
+    } finally {
+      this.registersLoading.set(false);
+    }
+  }
+
+  /** Take over an existing till, or create one by name (owner/admin). */
+  async claimRegister(registerId?: string): Promise<void> {
+    const displayName = this.terminalName.trim();
+    if (!registerId && !displayName) {
+      this.toast.warning('Pick a register, or name a new one.');
+      return;
+    }
+    this.busy.set(true);
+    try {
+      const identity = await this.pos.claimRegister(registerId ? { registerId } : { displayName });
+      await this.finishRegisterSetup(identity);
+    } catch (error) {
+      this.toast.warning(...this.enrollmentErrorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** Shared tail of every path that binds this browser to a till. */
+  private async finishRegisterSetup(identity: { registerId: string; displayName: string; registerCredential: string }): Promise<void> {
+    await this.local.setRegister(identity);
+    const current = await this.pos.currentRegister();
+    this.toast.success('Register connected', identity.displayName);
+    this.justEnrolled.set(true);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    this.justEnrolled.set(false);
+    await this.enterRegister(current);
+  }
+
+  /** "Last used" line under each register in the picker. */
+  registerLastSeen(register: PosSelectableRegister): string {
+    if (!register.lastSeenAt) return 'Never used';
+    const minutes = Math.round((Date.now() - new Date(register.lastSeenAt).getTime()) / 60000);
+    if (minutes < 2) return 'In use now';
+    if (minutes < 60) return `Last used ${minutes} minutes ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `Last used ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    return `Last used ${this.qatarDate(register.lastSeenAt)}`;
   }
 
   async enrollTerminal(): Promise<void> {
@@ -730,15 +816,7 @@ export class PosComponent implements OnInit, OnDestroy {
         const enrollment = await this.pos.createEnrollmentToken(this.terminalName.trim());
         token = enrollment.token;
       }
-      const identity = await this.pos.enroll(token);
-      await this.local.setRegister(identity);
-      this.register.set(await this.pos.currentRegister());
-      await this.hardware.initialize();
-      await this.ensureReceiptBlock();
-      this.toast.success('Register connected', identity.displayName);
-      this.justEnrolled.set(true);
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      this.phase.set('shift');
+      await this.finishRegisterSetup(await this.pos.enroll(token));
     } catch (error) {
       this.toast.warning(...this.enrollmentErrorMessage(error));
     } finally {
@@ -762,6 +840,14 @@ export class PosComponent implements OnInit, OnDestroy {
         return ['Token already used', 'This token already connected a register. Ask your manager for a new one.'];
       case 'ENROLLMENT_TOKEN_INVALID':
         return ['Invalid token', 'Check for typos, or ask your manager to generate a new one.'];
+      case 'REGISTER_NOT_FOUND':
+        return ['Register is gone', 'That register was removed. Pick another one from the list.'];
+      case 'REGISTER_DISABLED':
+        return ['Register disabled', 'An owner or admin revoked this register. Pick another one.'];
+      case 'REGISTER_NAME_TAKEN':
+        return ['Name already used', 'A register with that name exists. Pick it from the list instead.'];
+      case 'INSUFFICIENT_PERMISSIONS':
+        return ['Ask an owner or admin', 'Only they can add a new register. Pick an existing one from the list.'];
       default:
         return ["Couldn't connect this register", this.errorMessage(error)];
     }

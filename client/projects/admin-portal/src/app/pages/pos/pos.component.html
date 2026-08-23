@@ -53,9 +53,8 @@
   @if (phase() === 'enrollment') {
     <section class="setup-stage">
       <div class="setup-intro">
-        <span class="eyebrow">ONE-TIME SETUP</span>
-        <h1>Connect this counter to Elite.</h1>
-        <p>This connects sales, receipts, and shifts on this counter to your Elite account.</p>
+        <h1>Which till is this?</h1>
+        <p>Pick the counter you are standing at. Elite remembers it on this computer, so you only do this once.</p>
       </div>
       <div class="setup-card">
         @if (justEnrolled()) {
@@ -64,35 +63,74 @@
             <h2>Register connected</h2>
             <p>{{ register()?.displayName }}</p>
           </div>
-        } @else {
-          @if (auth.user()?.role === 'owner' || auth.user()?.role === 'admin') {
-            <div class="enroll-tabs" role="tablist">
-              <button type="button" role="tab" [class.active]="enrollMode() === 'token'" (click)="setEnrollMode('token')">I have a token</button>
-              <button type="button" role="tab" [class.active]="enrollMode() === 'create'" (click)="setEnrollMode('create')">Set up a new register</button>
+        } @else if (enrollMode() === 'pick') {
+          @if (registersLoading()) {
+            <ul class="register-picker" aria-busy="true">
+              @for (row of [1, 2, 3]; track row) {
+                <li><span class="register-skeleton"></span></li>
+              }
+            </ul>
+          } @else if (availableRegisters().length) {
+            <ul class="register-picker">
+              @for (item of availableRegisters(); track item.registerId) {
+                <li>
+                  <button type="button" [disabled]="busy()" (click)="claimRegister(item.registerId)">
+                    <span class="register-name">{{ item.displayName }}</span>
+                    <span class="register-meta">
+                      {{ registerLastSeen(item) }}
+                      @if (item.openShiftId) {
+                        <b>Shift open{{ item.openShiftCashier ? ' - ' + item.openShiftCashier : '' }}</b>
+                      }
+                    </span>
+                  </button>
+                </li>
+              }
+            </ul>
+          } @else {
+            <div class="register-empty">
+              <h2>No registers yet</h2>
+              <p>
+                @if (auth.user()?.role === 'owner' || auth.user()?.role === 'admin') {
+                  Add the first one to start selling on this counter.
+                } @else {
+                  Ask an owner or admin to add this counter as a register.
+                }
+              </p>
             </div>
           }
 
-          @if (enrollMode() === 'token' || !(auth.user()?.role === 'owner' || auth.user()?.role === 'admin')) {
-            <h2>Enroll register</h2>
-            <p>Use a token created by an Elite administrator.</p>
-            <label>
-              Enrollment token
-              <input [(ngModel)]="enrollmentToken" placeholder="Paste one-time token" autocomplete="off" />
-            </label>
-            <small class="enroll-hint">Ask your manager or admin to generate a token from this screen.</small>
-          } @else {
-            <h2>Set up a new register</h2>
-            <p>Generate a one-time token and connect this counter in the same step.</p>
-            <label>
-              Register name
-              <input [(ngModel)]="terminalName" placeholder="Main counter" maxlength="80" />
-            </label>
-          }
-
+          <div class="setup-alt">
+            @if (auth.user()?.role === 'owner' || auth.user()?.role === 'admin') {
+              <button type="button" class="link-action" (click)="setEnrollMode('create')">Add a new register</button>
+            }
+            <button type="button" class="link-action" (click)="setEnrollMode('token')">Use a setup token instead</button>
+          </div>
+        } @else if (enrollMode() === 'create') {
+          <h2>Add a new register</h2>
+          <p>Name it after the counter it sits on, so end-of-day cash counts are easy to match up.</p>
+          <label>
+            Register name
+            <input [(ngModel)]="terminalName" placeholder="Main counter" maxlength="80" />
+          </label>
+          <button class="primary-action" type="button" [disabled]="busy()" (click)="claimRegister()">
+            {{ busy() ? 'Connecting...' : 'Add and connect' }}
+          </button>
+          <div class="setup-alt">
+            <button type="button" class="link-action" (click)="setEnrollMode('pick')">Back to the register list</button>
+          </div>
+        } @else {
+          <h2>Use a setup token</h2>
+          <p>For connecting a counter you are not standing at. An owner or admin generates the token.</p>
+          <label>
+            Setup token
+            <input [(ngModel)]="enrollmentToken" placeholder="Paste one-time token" autocomplete="off" />
+          </label>
           <button class="primary-action" type="button" [disabled]="busy()" (click)="enrollTerminal()">
             {{ busy() ? 'Connecting...' : 'Connect register' }}
           </button>
-          <small>The register credential is stored locally and is never shown again.</small>
+          <div class="setup-alt">
+            <button type="button" class="link-action" (click)="setEnrollMode('pick')">Back to the register list</button>
+          </div>
         }
       </div>
     </section>

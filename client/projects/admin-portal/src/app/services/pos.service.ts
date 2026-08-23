@@ -35,6 +35,15 @@ export interface PosProductFilters {
   colors: string[];
 }
 
+/** One row of the "which till is this?" picker shown on a fresh browser. */
+export interface PosSelectableRegister {
+  registerId: string;
+  displayName: string;
+  lastSeenAt: string | null;
+  openShiftId: string | null;
+  openShiftCashier: string | null;
+}
+
 export interface PosCurrentRegister {
   registerId: string;
   displayName: string;
@@ -266,6 +275,16 @@ export class PosService {
 
   createEnrollmentToken(displayName: string): Promise<{ token: string }> {
     return firstValueFrom(this.api.post<{ token: string }>('/pos/registers/enrollment-tokens', { displayName }));
+  }
+
+  listRegisters(): Promise<PosSelectableRegister[]> {
+    return firstValueFrom(this.api.get<{ registers: PosSelectableRegister[] }>('/pos/registers'))
+      .then((response) => response.registers);
+  }
+
+  /** Pick an existing till, or (owner/admin) name a new one. */
+  claimRegister(body: { registerId?: string; displayName?: string }): Promise<PosRegisterIdentity> {
+    return firstValueFrom(this.api.post<PosRegisterIdentity>('/pos/registers/claim', body));
   }
 
   enroll(enrollmentToken: string): Promise<PosRegisterIdentity> {

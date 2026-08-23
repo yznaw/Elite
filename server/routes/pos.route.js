@@ -8,8 +8,10 @@ const {
   allocateReceiptBlock,
   checkInRegister,
   createEnrollmentToken,
+  claimRegister,
   currentRegister,
   enrollRegister,
+  listSelectableRegisters,
 } = require('../lib/pos/register-service');
 const { setManagerPin, verifyManagerPin } = require('../lib/pos/manager-service');
 const { closeShift, currentSummary, getZReport, listZReports, openShift } = require('../lib/pos/shift-service');
@@ -76,6 +78,18 @@ router.post('/registers/enrollment-tokens', posPinLimiter, asyncHandler(async (r
 
 router.post('/registers/enroll', posPinLimiter, asyncHandler(async (req, res) => {
   const register = await enrollRegister(context(req), req.body);
+  req.session.posRegisterId = register.registerId;
+  await saveSession(req);
+  created(res, register);
+}));
+
+router.get('/registers', asyncHandler(async (req, res) => {
+  ok(res, { registers: await listSelectableRegisters(context(req)) });
+}));
+
+// The everyday path onto a counter: pick your till, no token to mint or paste.
+router.post('/registers/claim', posPinLimiter, asyncHandler(async (req, res) => {
+  const register = await claimRegister(context(req), req.body);
   req.session.posRegisterId = register.registerId;
   await saveSession(req);
   created(res, register);

@@ -755,7 +755,7 @@ See [08 – Database & API Implementation](./08-database-api-implementation.md) 
 
 > **Status: Implemented baseline.** The `/pos` route is a standalone full-screen Angular page backed by authenticated `/api/pos/*` routes, PostgreSQL POS records, IndexedDB offline state, a service-worker app shell, and QZ Tray hardware integration.
 
-The implemented workflow covers register enrollment, shift open/close, catalog and barcode lookup, cash/manual-card checkout, offline synchronization, parked carts, receipt printing, refunds, same-shift voids, manager approvals, live stock events, and conflict reconciliation.
+The implemented workflow covers register selection (the "which till is this?" picker, with setup tokens as the remote-setup fallback), shift open/close, catalog and barcode lookup, cash/manual-card checkout, offline synchronization, parked carts, receipt printing, refunds, same-shift voids, manager approvals, live stock events, and conflict reconciliation.
 
 Printing uses QZ Tray with authenticated server-side signing and a loopback device signer for offline operation. It does not use the older proposed WebUSB or direct TCP printer design.
 
