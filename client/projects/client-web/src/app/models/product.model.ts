@@ -13,13 +13,6 @@ export interface ProductVariant {
   stock: number;
 }
 
-export interface ColorCopy {
-  hookEn: string;
-  hookAr: string;
-  teaserEn: string;
-  teaserAr: string;
-}
-
 export interface Product {
   id: string;
   name: string;
@@ -35,6 +28,10 @@ export interface Product {
   /** Short description shown directly under the product name on the PDP. */
   teaserEn?: string;
   teaserAr?: string;
+  /** Product-wide note. Shown on the PDP whether or not a size is selected;
+   *  a per-variant note stacks under it once a size that has one is picked. */
+  noteEn?: string;
+  noteAr?: string;
   /** Material & Care copy, its own PDP section. May contain rich-text markup. */
   careInstructionsEn?: string;
   careInstructionsAr?: string;
@@ -54,9 +51,6 @@ export interface Product {
   images?: string[];
   imageVariants?: Record<string, Record<string, { url: string; width?: number; mimeType?: string }>>;
   colorImages?: Record<string, string>;
-  /** Per-colour Hook/Short description override, keyed by lowercase colour
-      name. A colour with no entry falls back to the fields above. */
-  colorCopy?: Record<string, ColorCopy>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
 }

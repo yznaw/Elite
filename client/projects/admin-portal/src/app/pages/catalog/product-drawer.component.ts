@@ -20,9 +20,7 @@ import { MediaUploadService, ProductImageUploadResult } from '../../services/med
 import { AdminMediaService } from '../../services/admin-media.service';
 import { StorageService } from '../../services/storage.service';
 import { LabelPrinterService } from '../../services/label-printer.service';
-import { ColorCopy, Collection, ME, Product, ProductVariant } from '../../models';
-
-const EMPTY_COLOR_COPY: ColorCopy = { hookEn: '', hookAr: '', teaserEn: '', teaserAr: '' };
+import { Collection, ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
   name: string; nameAr: string; sku: string; brand: string; collectionIds: string[];
@@ -31,12 +29,12 @@ interface FormShape {
   enDesc: string; arDesc: string;
   shortEn: string; shortAr: string;
   teaserEn: string; teaserAr: string;
+  noteEn: string; noteAr: string;
   careEn: string; careAr: string;
   metaTitle: string; metaDesc: string; slug: string;
   variants: ProductVariant[];
   images: string[];
   imageColors: Record<string, string>;
-  colorCopy: Record<string, ColorCopy>;
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -434,45 +432,6 @@ function readPreview(file: File): Promise<string> {
                       }
                     </div>
 
-                    <!-- Per-color Hook/Short description trigger + popover -->
-                    <div class="vcg-img-wrap" (click)="$event.stopPropagation()">
-                      <button class="vcg-img-btn" type="button"
-                              (click)="toggleVariantPicker('copy-' + group.colorKey)"
-                              [class.has-img]="hasColorCopy(group.colorName)"
-                              [attr.title]="group.colorName ? t('product.variants.editCopyFor') + ' ' + group.colorName : t('product.variants.editCopy')">
-                        <ap-icon name="edit" [size]="13"/>
-                      </button>
-
-                      @if (variantPickerOpenId() === 'copy-' + group.colorKey) {
-                        <div class="vc-img-picker vc-img-picker--group vc-copy-picker" (click)="$event.stopPropagation()">
-                          <div class="vc-img-picker-head">
-                            {{ t('product.variants.editCopyFor') }} <strong>{{ group.colorName }}</strong>
-                            <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
-                          </div>
-
-                          <label class="lbl">{{ t('product.field.colorHookEn') }}</label>
-                          <input class="inp inp-sm" dir="ltr"
-                                 [ngModel]="colorCopyFor(group.colorName).hookEn"
-                                 (ngModelChange)="setColorCopyField(group.colorName, 'hookEn', $event)"/>
-
-                          <label class="lbl">{{ t('product.field.colorHookAr') }}</label>
-                          <input class="inp inp-sm" dir="rtl"
-                                 [ngModel]="colorCopyFor(group.colorName).hookAr"
-                                 (ngModelChange)="setColorCopyField(group.colorName, 'hookAr', $event)"/>
-
-                          <label class="lbl">{{ t('product.field.colorTeaserEn') }}</label>
-                          <textarea class="inp inp-sm" rows="2" dir="ltr"
-                                    [ngModel]="colorCopyFor(group.colorName).teaserEn"
-                                    (ngModelChange)="setColorCopyField(group.colorName, 'teaserEn', $event)"></textarea>
-
-                          <label class="lbl">{{ t('product.field.colorTeaserAr') }}</label>
-                          <textarea class="inp inp-sm" rows="2" dir="rtl"
-                                    [ngModel]="colorCopyFor(group.colorName).teaserAr"
-                                    (ngModelChange)="setColorCopyField(group.colorName, 'teaserAr', $event)"></textarea>
-                        </div>
-                      }
-                    </div>
-
                     <!-- Spacer -->
                     <span style="flex:1;"></span>
 
@@ -765,6 +724,38 @@ function readPreview(file: File): Promise<string> {
             </div>
           </div>
           <p class="short-desc-hint">{{ t('product.field.teaserHint') }}</p>
+
+          <!-- Product note: a fact that holds for the whole product, shown on
+               the storefront without waiting for a size to be picked. A size
+               note set on a variant stacks underneath it rather than replacing
+               it, so both can be true at once. -->
+          <div class="short-desc-grid mb-24">
+            <div>
+              <label class="lbl">
+                {{ t('product.field.noteEn') }}
+                <span class="short-desc-count" [class.over]="(form().noteEn || '').length > 80">
+                  {{ (form().noteEn || '').length }}/80
+                </span>
+              </label>
+              <input class="inp" dir="ltr"
+                     [placeholder]="t('product.field.noteEn.ph')"
+                     [ngModel]="form().noteEn"
+                     (ngModelChange)="set('noteEn', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">
+                {{ t('product.field.noteAr') }}
+                <span class="short-desc-count" [class.over]="(form().noteAr || '').length > 80">
+                  {{ (form().noteAr || '').length }}/80
+                </span>
+              </label>
+              <input class="inp" dir="rtl"
+                     [placeholder]="t('product.field.noteAr.ph')"
+                     [ngModel]="form().noteAr"
+                     (ngModelChange)="set('noteAr', $event)"/>
+            </div>
+          </div>
+          <p class="short-desc-hint">{{ t('product.field.noteHint') }}</p>
 
           <div class="mb-24">
             <label class="lbl">{{ t('product.field.careEn') }}</label>
@@ -1653,16 +1644,6 @@ function readPreview(file: File): Promise<string> {
     .vc-img-picker-grid {
       display: flex; flex-wrap: wrap; gap: 6px;
     }
-    .vc-copy-picker {
-      min-width: 260px; max-width: 280px;
-    }
-    .vc-copy-picker .lbl {
-      display: block; margin: 10px 0 4px;
-      font-size: 10px; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.04em;
-    }
-    .vc-copy-picker .lbl:first-of-type { margin-top: 0; }
-    .vc-copy-picker textarea.inp { resize: vertical; }
     .vc-img-opt {
       width: 56px; height: 56px;
       border-radius: 8px;
@@ -2155,12 +2136,12 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       enDesc: '', arDesc: '',
       shortEn: '', shortAr: '',
       teaserEn: '', teaserAr: '',
+      noteEn: '', noteAr: '',
       careEn: '', careAr: '',
       metaTitle: '', metaDesc: '', slug: '',
       variants: [],
       images: [],
       imageColors: {},
-      colorCopy: {},
       relatedProductIds: [],
     };
   }
@@ -2181,6 +2162,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       shortAr: p.shortAr ?? '',
       teaserEn: p.teaserEn ?? '',
       teaserAr: p.teaserAr ?? '',
+      noteEn: p.noteEn ?? '',
+      noteAr: p.noteAr ?? '',
       careEn: p.careEn ?? '',
       careAr: p.careAr ?? '',
       metaTitle: p.metaTitle || `${p.name} · ${p.brand} · Elite Collection`,
@@ -2189,9 +2172,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       variants: (p.variants ?? []).map(v => ({ ...v })),
       images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
       imageColors: { ...(p.imageColors ?? {}) },
-      colorCopy: Object.fromEntries(
-        Object.entries(p.colorCopy ?? {}).map(([color, entry]) => [color, { ...entry }])
-      ),
       relatedProductIds: [...(p.relatedProductIds ?? [])],
     };
   }
@@ -2778,21 +2758,6 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return this.form().imageColors[imageUrl] || null;
   }
 
-  colorCopyFor(colorName: string): ColorCopy {
-    return this.form().colorCopy[colorName] ?? EMPTY_COLOR_COPY;
-  }
-
-  hasColorCopy(colorName: string): boolean {
-    const entry = this.form().colorCopy[colorName];
-    return !!entry && (!!entry.hookEn || !!entry.hookAr || !!entry.teaserEn || !!entry.teaserAr);
-  }
-
-  setColorCopyField(colorName: string, field: keyof ColorCopy, value: string): void {
-    const current = this.colorCopyFor(colorName);
-    const next = { ...this.form().colorCopy, [colorName]: { ...current, [field]: value } };
-    this.set('colorCopy', next);
-  }
-
   private pruneImageColors(imageColors: Record<string, string>, images: string[]): Record<string, string> {
     const imageSet = new Set(images);
     return Object.entries(imageColors).reduce<Record<string, string>>((map, [url, color]) => {
@@ -2921,12 +2886,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.shortAr = saved.shortAr ?? f.shortAr;
       this.product.teaserEn = saved.teaserEn ?? f.teaserEn;
       this.product.teaserAr = saved.teaserAr ?? f.teaserAr;
+      this.product.noteEn = saved.noteEn ?? f.noteEn;
+      this.product.noteAr = saved.noteAr ?? f.noteAr;
       this.product.careEn = saved.careEn ?? f.careEn;
       this.product.careAr = saved.careAr ?? f.careAr;
       this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
       this.product.images = [...(saved.images ?? f.images)];
       this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };
-      this.product.colorCopy = { ...(saved.colorCopy ?? f.colorCopy) };
       this.product.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
       // Keep the legacy `image` field in sync with images[0] so the catalog
       // grid, dashboard heatmap, and order rows use the new primary.

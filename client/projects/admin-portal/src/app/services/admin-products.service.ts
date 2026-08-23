@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from './api-client.service';
-import { ColorCopy, Product, ProductVariant } from '../models';
+import { Product, ProductVariant } from '../models';
 
 export interface SaveProductPayload {
   name: string;
@@ -16,6 +16,8 @@ export interface SaveProductPayload {
   shortAr: string;
   teaserEn: string;
   teaserAr: string;
+  noteEn: string;
+  noteAr: string;
   careEn: string;
   careAr: string;
   metaTitle: string;
@@ -24,7 +26,6 @@ export interface SaveProductPayload {
   variants: ProductVariant[];
   images: string[];
   imageColors: Record<string, string>;
-  colorCopy: Record<string, ColorCopy>;
   relatedProductIds: string[];
 }
 

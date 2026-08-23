@@ -341,22 +341,25 @@ Step 3 is what keeps slides saved before this change rendering — the admin no 
 | `en` / `ar` | `description` | `enDesc` / `arDesc` | `descriptionEn` / `descriptionAr` | Legacy long copy. No longer editable; kept as a fallback source for the Material & Care section on products saved before `care_instructions` was activated. |
 | `shortEn` / `shortAr` | `description` | `shortEn` / `shortAr` | `shortDescriptionEn` / `shortDescriptionAr` | **Hook.** Home hero and other compact surfaces. Plain text, ~90 chars. |
 | `teaserEn` / `teaserAr` | `description` | `teaserEn` / `teaserAr` | `teaserEn` / `teaserAr` | Short description shown directly under the product name on the product detail page. Plain text, ~160 chars. |
+| `noteEn` / `noteAr` | `description` | `noteEn` / `noteAr` | `noteEn` / `noteAr` | **Product note.** One short line true of every size, shown on the product page without waiting for a size to be picked. Stacks above the per-variant size note. Plain text, ~80 chars. |
 | `en` / `ar` | `care_instructions` | `careEn` / `careAr` | `careInstructionsEn` / `careInstructionsAr` | Material & Care section on the product detail page. Rich text. Falls back to the legacy `description.en/ar` when empty. |
 
 Adding a new key to either JSONB column needs no schema change: extend `mapAdminProduct()` (read), the relevant object literal in `upsertProduct()` (write), and the PATCH payload so a partial update does not blank it.
 
-### Per-colour copy
+> [!WARNING]
+> `PATCH /api/admin/products/:id` does **not** spread `req.body`. It builds an explicit merge object field by field (`req.body.x ?? existing.description?.x`) so a partial update cannot blank a field the caller omitted. A new JSONB key that is not added to that object saves on `POST` and silently drops on every `PATCH` — which, because the admin drawer uses `PATCH` for existing products, looks exactly like the field not saving at all.
 
-`product_color_copy` (migration 032) holds a per-colour override of the Hook and Short description above — one row per `(product_id, color)`, same shape as the `product_color_images` pivot (migration 010). A colour with no row here falls back to the product-level Hook/Short description, both in the admin drawer and on the storefront.
+### Product note and per-variant size note
 
-| Column | Admin field (nested under `colorCopy[color]`) | Public API field (nested under `colorCopy[color]`) | Used by |
-|---|---|---|---|
-| `hook_en` / `hook_ar` | `hookEn` / `hookAr` | `hookEn` / `hookAr` | Preferred over the product-level Hook when seeding a home hero slide whose default colourway has an entry here. |
-| `teaser_en` / `teaser_ar` | `teaserEn` / `teaserAr` | `teaserEn` / `teaserAr` | Preferred over the product-level Short description on the product detail page while that colour is selected. |
+Two separate notes that stack on the storefront, general first:
 
-Written by `replaceColorCopy()` in `server/routes/admin-products.route.js`, called from `upsertProduct()` alongside `replaceColorImages()`. Read via a `jsonb_object_agg` subquery (`COLOR_COPY_SELECT` in `products.route.js`, inlined in the admin SELECTs) keyed by lowercase colour name, matching `product_color_images`' convention. Rows with every field blank are skipped on write and pruned on the next save, so a colour is never left with an empty override entry.
+| | Stored | Shows |
+|---|---|---|
+| **Product note** | `products.description->>'noteEn'` / `noteAr` (JSONB, no migration) | Always, from page load |
+| **Size note** | `product_variants.note_en` / `note_ar` (migration 031) | Only once a size carrying one is selected |
 
-### Per-variant size note
+Keeping them apart is the point: "runs one size small" is true of the whole product, "back zipper" is true of three sizes out of nine, and collapsing both into one field would force the shop to either repeat the general line on every variant or lose it.
+
 
 `product_variants.note_en` / `note_ar` (migration `031_variant_notes.sql`) hold one short bilingual line describing a construction detail that applies to some sizes and not others — the originating case was a garment with a back zipper on the 2-4 sizes but none on 6-10. Storing it on the variant rather than the product is what makes it a per-size fact; two plain text columns rather than JSONB keeps it queryable and mirrors the `ar`/`en` split already used by `product_translations`.
 
@@ -365,7 +368,7 @@ Written by `replaceColorCopy()` in `server/routes/admin-products.route.js`, call
 | DB | `note_en`, `note_ar` | Nullable text on `product_variants`. Also created idempotently by `ensure-migrations.js` on boot, so a deploy that has not run the migration file self-heals. |
 | Admin API | `noteEn` / `noteAr` on each variant | Read in all three admin variant selects, written by `replaceVariants()`. Empty string is stored as `NULL`, so clearing the field in the editor actually clears it rather than leaving the old value. |
 | Public API | `noteEn` / `noteAr` on each variant of `GET /api/products` and `/api/products/:id` | Empty string when unset. |
-| Storefront | `selectedSizeNote()` in `product.component.ts` | Picks the note off the variant matching both the selected size and the selected colour, then the locale (with a fallback to the other language when only one is filled). Rendered under the size options and again as a chip under the gallery. |
+| Storefront | `productNote()` and `selectedSizeNote()` in `product.component.ts` | `selectedSizeNote()` picks the note off the variant matching both the selected size and the selected colour; both resolve the locale with a fallback to the other language when only one is filled. Rendered stacked in `.gallery-bar` inside the gallery frame, with the size note repeated as a plain line under the size options. |
 
 ### Admin — Bulk Import (`/api/admin/bulk-import`)
 

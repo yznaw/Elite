@@ -16,13 +16,6 @@ export interface ProductVariant {
   stock: number;
 }
 
-export interface ColorCopy {
-  hookEn: string;
-  hookAr: string;
-  teaserEn: string;
-  teaserAr: string;
-}
-
 export interface Product {
   id: string;
   name: string;
@@ -39,9 +32,6 @@ export interface Product {
   images?: string[];
   /** Gallery image URL -> color name selected in the product drawer. */
   imageColors?: Record<string, string>;
-  /** Per-colour Hook/Short description override, keyed by lowercase colour
-      name. A colour with no entry falls back to the product-level fields. */
-  colorCopy?: Record<string, ColorCopy>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
   /** Legacy long description. No longer editable; kept as a fallback source
@@ -54,6 +44,9 @@ export interface Product {
   /** Short description shown directly under the product name on the PDP. */
   teaserEn?: string;
   teaserAr?: string;
+  /** Product-wide note, shown on the storefront above any per-variant note. */
+  noteEn?: string;
+  noteAr?: string;
   /** Material & Care copy, its own section on the PDP. */
   careEn?: string;
   careAr?: string;

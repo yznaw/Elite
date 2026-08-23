@@ -405,39 +405,6 @@ async function replaceColorImages(client, tenantId, productId, urls, colorsByUrl
   }
 }
 
-async function replaceColorCopy(client, tenantId, productId, colorCopy) {
-  try {
-    await client.query(
-      'DELETE FROM product_color_copy WHERE tenant_id = $1 AND product_id = $2',
-      [tenantId, productId],
-    );
-
-    for (const [color, entry] of Object.entries(colorCopy || {})) {
-      const colorKey = String(color).trim().toLowerCase();
-      if (!colorKey) continue;
-
-      const hookEn = String(entry?.hookEn || '').trim();
-      const hookAr = String(entry?.hookAr || '').trim();
-      const teaserEn = String(entry?.teaserEn || '').trim();
-      const teaserAr = String(entry?.teaserAr || '').trim();
-      if (!hookEn && !hookAr && !teaserEn && !teaserAr) continue;
-
-      await client.query(
-        `INSERT INTO product_color_copy (tenant_id, product_id, color, hook_en, hook_ar, teaser_en, teaser_ar)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (product_id, color)
-         DO UPDATE SET hook_en = EXCLUDED.hook_en, hook_ar = EXCLUDED.hook_ar,
-                        teaser_en = EXCLUDED.teaser_en, teaser_ar = EXCLUDED.teaser_ar,
-                        updated_at = now()`,
-        [tenantId, productId, colorKey, hookEn, hookAr, teaserEn, teaserAr],
-      );
-    }
-  } catch (err) {
-    // Non-fatal: table may not exist on environments that haven't run migration 032 yet.
-    if (err.code !== '42P01') throw err;
-  }
-}
-
 async function replaceRecommendations(client, tenantId, productId, relatedProductIds) {
   await ensureProductRecommendationsSchema(client);
   await ensureSeoColumns(client);
@@ -502,6 +469,9 @@ function mapAdminProduct(row) {
     // Short description shown directly under the product name on the PDP.
     teaserEn: desc.teaserEn || '',
     teaserAr: desc.teaserAr || '',
+    // Product-wide note, shown on the PDP above any size-specific note.
+    noteEn: desc.noteEn || '',
+    noteAr: desc.noteAr || '',
     // Material & Care copy, its own PDP section.
     careEn: care.en || '',
     careAr: care.ar || '',
@@ -509,10 +479,6 @@ function mapAdminProduct(row) {
     metaDesc: row.meta_desc || '',
     slug: row.slug || '',
     relatedProductIds: row.related_product_ids || [],
-    // Per-colour Hook/Short description override, keyed by lowercase colour
-    // name. A colour with no entry here falls back to the product-level
-    // fields above (both here and on the storefront).
-    colorCopy: row.color_copy || {},
   };
 }
 
@@ -560,14 +526,6 @@ async function loadAdminProduct(client, tenantId, productId) {
             AND pr.product_id = p.id
             AND rp.status <> 'archived'
         ), ARRAY[]::uuid[]) AS related_product_ids,
-        COALESCE((
-          SELECT jsonb_object_agg(pcc.color, jsonb_build_object(
-            'hookEn', pcc.hook_en, 'hookAr', pcc.hook_ar,
-            'teaserEn', pcc.teaser_en, 'teaserAr', pcc.teaser_ar
-          ))
-          FROM product_color_copy pcc
-          WHERE pcc.product_id = p.id
-        ), '{}'::jsonb) AS color_copy,
         pt_ar.name AS name_ar
       FROM products p
       LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -596,6 +554,11 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     shortAr: String(product.shortAr || '').trim(),
     teaserEn: String(product.teaserEn || '').trim(),
     teaserAr: String(product.teaserAr || '').trim(),
+    // Product note: one short line that holds for the whole product, shown on
+    // the storefront without waiting for a size to be picked. Sits above the
+    // per-variant note rather than replacing it.
+    noteEn: String(product.noteEn || '').trim(),
+    noteAr: String(product.noteAr || '').trim(),
   };
   const careInstructions = {
     en: String(product.careEn || '').trim(),
@@ -684,7 +647,6 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     );
   }
   await replaceImages(client, tenant.id, saved.id, images, imageColors);
-  await replaceColorCopy(client, tenant.id, saved.id, product.colorCopy);
   if (hasRelatedProductIds) {
     await replaceRecommendations(client, tenant.id, saved.id, product.relatedProductIds);
   }
@@ -750,14 +712,6 @@ router.get('/', asyncHandler(async (_req, res) => {
               AND pr.product_id = p.id
               AND rp.status <> 'archived'
           ), ARRAY[]::uuid[]) AS related_product_ids,
-          COALESCE((
-            SELECT jsonb_object_agg(pcc.color, jsonb_build_object(
-              'hookEn', pcc.hook_en, 'hookAr', pcc.hook_ar,
-              'teaserEn', pcc.teaser_en, 'teaserAr', pcc.teaser_ar
-            ))
-            FROM product_color_copy pcc
-            WHERE pcc.product_id = p.id
-          ), '{}'::jsonb) AS color_copy,
           pt_ar.name AS name_ar
         FROM products p
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -820,14 +774,6 @@ router.get('/:id', asyncHandler(async (req, res) => {
               AND pr.product_id = p.id
               AND rp.status <> 'archived'
           ), ARRAY[]::uuid[]) AS related_product_ids,
-          COALESCE((
-            SELECT jsonb_object_agg(pcc.color, jsonb_build_object(
-              'hookEn', pcc.hook_en, 'hookAr', pcc.hook_ar,
-              'teaserEn', pcc.teaser_en, 'teaserAr', pcc.teaser_ar
-            ))
-            FROM product_color_copy pcc
-            WHERE pcc.product_id = p.id
-          ), '{}'::jsonb) AS color_copy,
           pt_ar.name AS name_ar
         FROM products p
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -987,6 +933,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       shortAr: req.body.shortAr ?? existing.description?.shortAr,
       teaserEn: req.body.teaserEn ?? existing.description?.teaserEn,
       teaserAr: req.body.teaserAr ?? existing.description?.teaserAr,
+      noteEn: req.body.noteEn ?? existing.description?.noteEn,
+      noteAr: req.body.noteAr ?? existing.description?.noteAr,
       careEn: req.body.careEn ?? existing.care_instructions?.en,
       careAr: req.body.careAr ?? existing.care_instructions?.ar,
       slug: req.body.slug ?? existing.slug,
@@ -996,7 +944,6 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       nameAr: req.body.nameAr,
       variants: patchVariants,
       images: req.body.images,
-      colorCopy: req.body.colorCopy,
       imageColors: req.body.imageColors,
       relatedProductIds: req.body.relatedProductIds,
     };
