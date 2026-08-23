@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { CartService } from '../../services/cart.service';
 import { ProductsService } from '../../services/products.service';
-import { Product, ProductVariant } from '../../models/product.model';
+import { ColorCopy, Product, ProductVariant } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
@@ -205,6 +205,37 @@ export class ProductComponent implements OnInit, OnDestroy {
     });
   });
 
+  /**
+   * Note attached to the size the customer has picked, e.g. "Back zipper" on
+   * the small sizes of a dress whose larger sizes have none. The same gallery
+   * covers the whole range, so this line is what tells the two apart.
+   *
+   * Scoped by colour the same way availableSizes is: a note set on the sage
+   * variant must not surface while the customer is looking at the navy one.
+   * Empty string means the template renders nothing at all.
+   */
+  readonly selectedSizeNote = computed<string>(() => {
+    const p = this.product();
+    const size = this.selectedSize();
+    if (!p || size === null) return '';
+
+    const selectedColorKey = this.selectedColor() ? this.colorKey(this.selectedColor() || '') : '';
+    const matches = (p.variants || []).filter((variant) => {
+      if (Number(variant.size) !== size) return false;
+      if (!selectedColorKey || !variant.color) return true;
+      return this.colorKey(variant.color) === selectedColorKey;
+    });
+
+    const isArabic = this.locale.locale() === 'ar';
+    for (const variant of matches) {
+      const ar = (variant.noteAr || '').trim();
+      const en = (variant.noteEn || '').trim();
+      const note = isArabic ? (ar || en) : (en || ar);
+      if (note) return note;
+    }
+    return '';
+  });
+
   readonly selectedSizeInStock = computed(() => {
     const p = this.product();
     if (!p) return false;
@@ -245,13 +276,35 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   /**
    * Short description shown under the product name, locale-aware with a
-   * same-fallback-shape as productDescription. Empty means the template
-   * renders nothing rather than a placeholder line.
+   * same-fallback-shape as productDescription. Prefers the selected colour's
+   * own short description (same lookup as the gallery's per-colour image)
+   * and falls back to the product-level one when that colour has none set.
+   * Empty means the template renders nothing rather than a placeholder line.
    */
   productTeaser(product: Product): string {
+    const selected = this.selectedColor();
+    if (selected) {
+      const entry = this.colorCopyEntry(product, this.colorKey(selected));
+      if (entry) {
+        const colorAr = (entry.teaserAr || '').trim();
+        const colorEn = (entry.teaserEn || '').trim();
+        const colorValue = this.locale.locale() === 'ar' ? (colorAr || colorEn) : (colorEn || colorAr);
+        if (colorValue) return colorValue;
+      }
+    }
     const ar = (product.teaserAr || '').trim();
     const en = (product.teaserEn || '').trim();
     return (this.locale.locale() === 'ar' ? (ar || en) : (en || ar));
+  }
+
+  private colorCopyEntry(product: Product, key: string): ColorCopy | null {
+    const colorCopy = product.colorCopy || {};
+    const direct = colorCopy[key];
+    if (direct) return direct;
+
+    const target = this.colorSlug(key);
+    const match = Object.entries(colorCopy).find(([color]) => this.colorSlug(color) === target);
+    return match?.[1] || null;
   }
 
   /**

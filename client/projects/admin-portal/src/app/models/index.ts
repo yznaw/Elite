@@ -5,11 +5,22 @@ export interface ProductVariant {
   size: string;
   color: string;
   material: string;
+  /** Bilingual note for a detail unique to this size/colour, e.g. "Back zipper".
+   *  Shown on the storefront next to the selected size. */
+  noteEn?: string;
+  noteAr?: string;
   price: number;
   costPrice?: number;
   shippingCost?: number;
   totalCost?: number;
   stock: number;
+}
+
+export interface ColorCopy {
+  hookEn: string;
+  hookAr: string;
+  teaserEn: string;
+  teaserAr: string;
 }
 
 export interface Product {
@@ -28,6 +39,9 @@ export interface Product {
   images?: string[];
   /** Gallery image URL -> color name selected in the product drawer. */
   imageColors?: Record<string, string>;
+  /** Per-colour Hook/Short description override, keyed by lowercase colour
+      name. A colour with no entry falls back to the product-level fields. */
+  colorCopy?: Record<string, ColorCopy>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
   /** Legacy long description. No longer editable; kept as a fallback source

@@ -36,6 +36,20 @@ async function ensureCostPriceColumn(client) {
   costPriceColumnReady = true;
 }
 
+// Ensure the bilingual per-variant note columns exist (migration 031 may not
+// have run on all environments). The note carries a construction difference
+// that only applies to some sizes, e.g. "Back zipper" on 2-4 but not 6-10.
+let variantNoteColumnsReady = false;
+async function ensureVariantNoteColumns(client) {
+  if (variantNoteColumnsReady) return;
+  await client.query(`
+    ALTER TABLE product_variants
+      ADD COLUMN IF NOT EXISTS note_en text,
+      ADD COLUMN IF NOT EXISTS note_ar text
+  `);
+  variantNoteColumnsReady = true;
+}
+
 const IMAGE_COLORS_SELECT = `
         COALESCE((
           SELECT jsonb_object_agg(url, color)
@@ -73,6 +87,7 @@ function validateProduct(body) {
 }
 
 async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true, actorUserId = null } = {}) {
+  await ensureVariantNoteColumns(client);
   // Resolve each variant's SKU up front. A variant saved without one (e.g. a
   // manually-added row the admin never typed a SKU for) falls back to a
   // generated-but-unique SKU instead of being silently dropped further down —
@@ -189,9 +204,10 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
         INSERT INTO product_variants (
           tenant_id, product_id, sku, barcode, size, color, material,
           price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order, is_active,
+          note_en, note_ar,
           color_ref_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, $14,
           (SELECT id FROM ref_colors
            WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($6))
            LIMIT 1))
@@ -201,6 +217,8 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
           size               = EXCLUDED.size,
           color              = EXCLUDED.color,
           material           = EXCLUDED.material,
+          note_en            = EXCLUDED.note_en,
+          note_ar            = EXCLUDED.note_ar,
           price_cents        = EXCLUDED.price_cents,
           cost_price_cents   = EXCLUDED.cost_price_cents,
           shipping_cost_cents = EXCLUDED.shipping_cost_cents,
@@ -230,6 +248,8 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
         shippingCents,
         incomingStock,
         index,
+        String(variant.noteEn || '').trim() || null,
+        String(variant.noteAr || '').trim() || null,
       ],
     );
 
@@ -385,10 +405,44 @@ async function replaceColorImages(client, tenantId, productId, urls, colorsByUrl
   }
 }
 
+async function replaceColorCopy(client, tenantId, productId, colorCopy) {
+  try {
+    await client.query(
+      'DELETE FROM product_color_copy WHERE tenant_id = $1 AND product_id = $2',
+      [tenantId, productId],
+    );
+
+    for (const [color, entry] of Object.entries(colorCopy || {})) {
+      const colorKey = String(color).trim().toLowerCase();
+      if (!colorKey) continue;
+
+      const hookEn = String(entry?.hookEn || '').trim();
+      const hookAr = String(entry?.hookAr || '').trim();
+      const teaserEn = String(entry?.teaserEn || '').trim();
+      const teaserAr = String(entry?.teaserAr || '').trim();
+      if (!hookEn && !hookAr && !teaserEn && !teaserAr) continue;
+
+      await client.query(
+        `INSERT INTO product_color_copy (tenant_id, product_id, color, hook_en, hook_ar, teaser_en, teaser_ar)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (product_id, color)
+         DO UPDATE SET hook_en = EXCLUDED.hook_en, hook_ar = EXCLUDED.hook_ar,
+                        teaser_en = EXCLUDED.teaser_en, teaser_ar = EXCLUDED.teaser_ar,
+                        updated_at = now()`,
+        [tenantId, productId, colorKey, hookEn, hookAr, teaserEn, teaserAr],
+      );
+    }
+  } catch (err) {
+    // Non-fatal: table may not exist on environments that haven't run migration 032 yet.
+    if (err.code !== '42P01') throw err;
+  }
+}
+
 async function replaceRecommendations(client, tenantId, productId, relatedProductIds) {
   await ensureProductRecommendationsSchema(client);
   await ensureSeoColumns(client);
   await ensureCostPriceColumn(client);
+  await ensureVariantNoteColumns(client);
   const ids = [...new Set((Array.isArray(relatedProductIds) ? relatedProductIds : [])
     .map((id) => String(id || '').trim())
     .filter((id) => id && id !== productId))];
@@ -455,6 +509,10 @@ function mapAdminProduct(row) {
     metaDesc: row.meta_desc || '',
     slug: row.slug || '',
     relatedProductIds: row.related_product_ids || [],
+    // Per-colour Hook/Short description override, keyed by lowercase colour
+    // name. A colour with no entry here falls back to the product-level
+    // fields above (both here and on the storefront).
+    colorCopy: row.color_copy || {},
   };
 }
 
@@ -462,6 +520,7 @@ async function loadAdminProduct(client, tenantId, productId) {
   await ensureProductRecommendationsSchema(client);
   await ensureSeoColumns(client);
   await ensureCostPriceColumn(client);
+  await ensureVariantNoteColumns(client);
   const result = await client.query(
     `
       SELECT
@@ -475,6 +534,8 @@ async function loadAdminProduct(client, tenantId, productId) {
             'size', pv.size,
             'color', pv.color,
             'material', pv.material,
+            'noteEn', pv.note_en,
+            'noteAr', pv.note_ar,
             'price', round(pv.price_cents / 100.0),
             'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
             'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
@@ -499,6 +560,14 @@ async function loadAdminProduct(client, tenantId, productId) {
             AND pr.product_id = p.id
             AND rp.status <> 'archived'
         ), ARRAY[]::uuid[]) AS related_product_ids,
+        COALESCE((
+          SELECT jsonb_object_agg(pcc.color, jsonb_build_object(
+            'hookEn', pcc.hook_en, 'hookAr', pcc.hook_ar,
+            'teaserEn', pcc.teaser_en, 'teaserAr', pcc.teaser_ar
+          ))
+          FROM product_color_copy pcc
+          WHERE pcc.product_id = p.id
+        ), '{}'::jsonb) AS color_copy,
         pt_ar.name AS name_ar
       FROM products p
       LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -615,6 +684,7 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     );
   }
   await replaceImages(client, tenant.id, saved.id, images, imageColors);
+  await replaceColorCopy(client, tenant.id, saved.id, product.colorCopy);
   if (hasRelatedProductIds) {
     await replaceRecommendations(client, tenant.id, saved.id, product.relatedProductIds);
   }
@@ -642,6 +712,7 @@ router.get('/', asyncHandler(async (_req, res) => {
     await ensureProductRecommendationsSchema(client);
   await ensureSeoColumns(client);
   await ensureCostPriceColumn(client);
+  await ensureVariantNoteColumns(client);
     const result = await client.query(
       `
         SELECT
@@ -655,6 +726,8 @@ router.get('/', asyncHandler(async (_req, res) => {
               'size', pv.size,
               'color', pv.color,
               'material', pv.material,
+              'noteEn', pv.note_en,
+              'noteAr', pv.note_ar,
               'price', round(pv.price_cents / 100.0),
               'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
               'stock', pv.stock_quantity
@@ -677,6 +750,14 @@ router.get('/', asyncHandler(async (_req, res) => {
               AND pr.product_id = p.id
               AND rp.status <> 'archived'
           ), ARRAY[]::uuid[]) AS related_product_ids,
+          COALESCE((
+            SELECT jsonb_object_agg(pcc.color, jsonb_build_object(
+              'hookEn', pcc.hook_en, 'hookAr', pcc.hook_ar,
+              'teaserEn', pcc.teaser_en, 'teaserAr', pcc.teaser_ar
+            ))
+            FROM product_color_copy pcc
+            WHERE pcc.product_id = p.id
+          ), '{}'::jsonb) AS color_copy,
           pt_ar.name AS name_ar
         FROM products p
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -701,6 +782,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
     await ensureProductRecommendationsSchema(client);
   await ensureSeoColumns(client);
   await ensureCostPriceColumn(client);
+  await ensureVariantNoteColumns(client);
     const result = await client.query(
       `
         SELECT
@@ -714,6 +796,8 @@ router.get('/:id', asyncHandler(async (req, res) => {
               'size', pv.size,
               'color', pv.color,
               'material', pv.material,
+              'noteEn', pv.note_en,
+              'noteAr', pv.note_ar,
               'price', round(pv.price_cents / 100.0),
               'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
               'stock', pv.stock_quantity
@@ -736,6 +820,14 @@ router.get('/:id', asyncHandler(async (req, res) => {
               AND pr.product_id = p.id
               AND rp.status <> 'archived'
           ), ARRAY[]::uuid[]) AS related_product_ids,
+          COALESCE((
+            SELECT jsonb_object_agg(pcc.color, jsonb_build_object(
+              'hookEn', pcc.hook_en, 'hookAr', pcc.hook_ar,
+              'teaserEn', pcc.teaser_en, 'teaserAr', pcc.teaser_ar
+            ))
+            FROM product_color_copy pcc
+            WHERE pcc.product_id = p.id
+          ), '{}'::jsonb) AS color_copy,
           pt_ar.name AS name_ar
         FROM products p
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
@@ -904,6 +996,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       nameAr: req.body.nameAr,
       variants: patchVariants,
       images: req.body.images,
+      colorCopy: req.body.colorCopy,
       imageColors: req.body.imageColors,
       relatedProductIds: req.body.relatedProductIds,
     };

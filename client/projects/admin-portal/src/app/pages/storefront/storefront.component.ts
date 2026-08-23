@@ -16,7 +16,7 @@ import { MediaUploadService } from '../../services/media-upload.service';
 import { AdminMediaService } from '../../services/admin-media.service';
 import { AdminProductsService } from '../../services/admin-products.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
-import { Collection, MediaFile, Product, StorefrontBlock } from '../../models';
+import { Collection, ColorCopy, MediaFile, Product, StorefrontBlock } from '../../models';
 
 // ── Page-tab types ────────────────────────────────────────────────────
 type PageTab = 'home' | 'story' | 'contact';
@@ -2532,14 +2532,17 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         return derived;
       };
 
+      const colorHook = this.colorHookEntry(product, item.defaultColorSlug);
+
       return {
         ...item,
         name:          fill(item.name, product.name),
         subtitle:      fill(item.subtitle, this.productSubtitle(product)),
-        // Seeded from the product's Hook (shortEn/shortAr); falls back to the
-        // legacy long description only if the Hook itself is empty.
-        descriptionEn: fill(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
-        descriptionAr: fill(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
+        // Seeded from the slide's default colour's own Hook when it has one,
+        // else the product's Hook (shortEn/shortAr); falls back to the legacy
+        // long description only if both are empty.
+        descriptionEn: fill(item.descriptionEn, this.heroCopy(colorHook?.hookEn || product.shortEn, product.enDesc)),
+        descriptionAr: fill(item.descriptionAr, this.heroCopy(colorHook?.hookAr || product.shortAr, product.arDesc)),
         alt:           fill(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
       };
     });
@@ -2582,24 +2585,40 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         if (idx !== i) return item;
         const keep = (current: string, next: string) =>
           (!overwrite && current.trim()) ? current : (next || current);
+        const resolvedDefaultSlug = (!overwrite && item.defaultColorSlug) ? item.defaultColorSlug : (colors[0]?.slug ?? '');
+        const colorHook = this.colorHookEntry(product, resolvedDefaultSlug);
 
         return {
           ...item,
           productId,
           name:          keep(item.name, product.name),
           subtitle:      keep(item.subtitle, this.productSubtitle(product)),
-          // Seeded from the product's Hook (shortEn/shortAr); falls back to the
-          // legacy long description only if the Hook itself is empty.
-          descriptionEn: keep(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
-          descriptionAr: keep(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
+          // Seeded from the slide's default colour's own Hook when it has one,
+          // else the product's Hook (shortEn/shortAr); falls back to the legacy
+          // long description only if both are empty.
+          descriptionEn: keep(item.descriptionEn, this.heroCopy(colorHook?.hookEn || product.shortEn, product.enDesc)),
+          descriptionAr: keep(item.descriptionAr, this.heroCopy(colorHook?.hookAr || product.shortAr, product.arDesc)),
           alt:           keep(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
           colors: (!overwrite && (item.colors ?? []).length) ? item.colors : colors,
-          defaultColorSlug: (!overwrite && item.defaultColorSlug) ? item.defaultColorSlug : (colors[0]?.slug ?? ''),
+          defaultColorSlug: resolvedDefaultSlug,
         };
       });
       return { ...c, heroSlider: { ...c.heroSlider, items } };
     });
     this.markDirty();
+  }
+
+  /**
+   * The linked product's per-colour Hook override for the slide's default
+   * colourway, if that colour has one set. Falls through to the product-level
+   * Hook (via heroCopy's own fallback) when there's no colour match or no
+   * override for it — this is per-colour Hook's only real consumer today.
+   */
+  private colorHookEntry(product: Product, defaultColorSlug: string): ColorCopy | null {
+    if (!defaultColorSlug) return null;
+    const matchName = this.productColorNames(product.id).find((name) => heroColorSlug(name) === defaultColorSlug);
+    if (!matchName) return null;
+    return product.colorCopy?.[matchName.trim().toLowerCase()] || null;
   }
 
   /** Bilingual subtitle in the "العربية / English" shape the hero splits on. */

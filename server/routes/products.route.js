@@ -19,6 +19,15 @@ async function getDefaultImage(client, tenantId) {
     return BUILT_IN_FALLBACK;
   }
 }
+const COLOR_COPY_SELECT = `
+          COALESCE((
+            SELECT jsonb_object_agg(pcc.color, jsonb_build_object(
+              'hookEn', pcc.hook_en, 'hookAr', pcc.hook_ar,
+              'teaserEn', pcc.teaser_en, 'teaserAr', pcc.teaser_ar
+            ))
+            FROM product_color_copy pcc
+            WHERE pcc.product_id = p.id
+          ), '{}'::jsonb) AS color_copy`;
 const COLOR_IMAGES_SELECT = `
           COALESCE(
             -- Prefer pivot table written by migration 010 + replaceColorImages()
@@ -97,6 +106,11 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
         size: Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
         color: variant.color || '',
         material: variant.material || '',
+        // Bilingual note describing a construction detail that only applies to
+        // some sizes (e.g. a back zipper on the small sizes). Surfaced next to
+        // the size the customer picked instead of being burned onto the photo.
+        noteEn: variant.noteEn || '',
+        noteAr: variant.noteAr || '',
         price: Math.round(Number(variant.price || 0)),
         stock: Math.max(0, Number.parseInt(variant.stock, 10) || 0),
       }))
@@ -118,6 +132,10 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   // Material & Care section on products that predate care_instructions.
   const desc = (row.description && typeof row.description === 'object') ? row.description : {};
   const care = (row.care_instructions && typeof row.care_instructions === 'object') ? row.care_instructions : {};
+  // Per-colour override of the Hook/Short description above, keyed by
+  // lowercase colour name — same convention as colorImages below. A colour
+  // with no entry here falls back to the product-level fields.
+  const colorCopy = (row.color_copy && typeof row.color_copy === 'object') ? row.color_copy : {};
 
   return {
     id: row.id,
@@ -131,6 +149,7 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
     teaserAr: desc.teaserAr || '',
     careInstructionsEn: care.en || '',
     careInstructionsAr: care.ar || '',
+    colorCopy,
     price: Math.round(Number(row.base_price_cents || 0) / 100),
     tag: row.tag || '',
     leather: row.leather || '',
@@ -157,6 +176,8 @@ function variantsSelect() {
               'size', sv.size,
               'color', sv.color,
               'material', sv.material,
+              'noteEn', sv.note_en,
+              'noteAr', sv.note_ar,
               'price', round(sv.price_cents / 100.0),
               'stock', sv.stock_quantity
             ) ORDER BY sv.sort_order, sv.created_at)
@@ -278,6 +299,7 @@ router.get('/', async (_req, res, next) => {
           ) AS images,
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
+          ${COLOR_COPY_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -405,6 +427,7 @@ router.get('/:id', async (req, res, next) => {
           ) AS images,
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
+          ${COLOR_COPY_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr

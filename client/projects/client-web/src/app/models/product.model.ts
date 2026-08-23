@@ -4,8 +4,20 @@ export interface ProductVariant {
   size?: number;
   color?: string;
   material?: string;
+  /** Detail that applies to this size/colour only, e.g. a back zipper on the
+   *  small sizes. Shown next to the size picker so one gallery can cover a
+   *  range whose construction is not identical throughout. */
+  noteEn?: string;
+  noteAr?: string;
   price?: number;
   stock: number;
+}
+
+export interface ColorCopy {
+  hookEn: string;
+  hookAr: string;
+  teaserEn: string;
+  teaserAr: string;
 }
 
 export interface Product {
@@ -42,6 +54,9 @@ export interface Product {
   images?: string[];
   imageVariants?: Record<string, Record<string, { url: string; width?: number; mimeType?: string }>>;
   colorImages?: Record<string, string>;
+  /** Per-colour Hook/Short description override, keyed by lowercase colour
+      name. A colour with no entry falls back to the fields above. */
+  colorCopy?: Record<string, ColorCopy>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
 }

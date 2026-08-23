@@ -345,6 +345,28 @@ Step 3 is what keeps slides saved before this change rendering — the admin no 
 
 Adding a new key to either JSONB column needs no schema change: extend `mapAdminProduct()` (read), the relevant object literal in `upsertProduct()` (write), and the PATCH payload so a partial update does not blank it.
 
+### Per-colour copy
+
+`product_color_copy` (migration 032) holds a per-colour override of the Hook and Short description above — one row per `(product_id, color)`, same shape as the `product_color_images` pivot (migration 010). A colour with no row here falls back to the product-level Hook/Short description, both in the admin drawer and on the storefront.
+
+| Column | Admin field (nested under `colorCopy[color]`) | Public API field (nested under `colorCopy[color]`) | Used by |
+|---|---|---|---|
+| `hook_en` / `hook_ar` | `hookEn` / `hookAr` | `hookEn` / `hookAr` | Preferred over the product-level Hook when seeding a home hero slide whose default colourway has an entry here. |
+| `teaser_en` / `teaser_ar` | `teaserEn` / `teaserAr` | `teaserEn` / `teaserAr` | Preferred over the product-level Short description on the product detail page while that colour is selected. |
+
+Written by `replaceColorCopy()` in `server/routes/admin-products.route.js`, called from `upsertProduct()` alongside `replaceColorImages()`. Read via a `jsonb_object_agg` subquery (`COLOR_COPY_SELECT` in `products.route.js`, inlined in the admin SELECTs) keyed by lowercase colour name, matching `product_color_images`' convention. Rows with every field blank are skipped on write and pruned on the next save, so a colour is never left with an empty override entry.
+
+### Per-variant size note
+
+`product_variants.note_en` / `note_ar` (migration `031_variant_notes.sql`) hold one short bilingual line describing a construction detail that applies to some sizes and not others — the originating case was a garment with a back zipper on the 2-4 sizes but none on 6-10. Storing it on the variant rather than the product is what makes it a per-size fact; two plain text columns rather than JSONB keeps it queryable and mirrors the `ar`/`en` split already used by `product_translations`.
+
+| Layer | Field | Notes |
+|---|---|---|
+| DB | `note_en`, `note_ar` | Nullable text on `product_variants`. Also created idempotently by `ensure-migrations.js` on boot, so a deploy that has not run the migration file self-heals. |
+| Admin API | `noteEn` / `noteAr` on each variant | Read in all three admin variant selects, written by `replaceVariants()`. Empty string is stored as `NULL`, so clearing the field in the editor actually clears it rather than leaving the old value. |
+| Public API | `noteEn` / `noteAr` on each variant of `GET /api/products` and `/api/products/:id` | Empty string when unset. |
+| Storefront | `selectedSizeNote()` in `product.component.ts` | Picks the note off the variant matching both the selected size and the selected colour, then the locale (with a fallback to the other language when only one is filled). Rendered under the size options and again as a chip under the gallery. |
+
 ### Admin — Bulk Import (`/api/admin/bulk-import`)
 
 See `server/routes/admin-bulk-import.route.js`. CSV upload → NDJSON streaming progress. See [Bulk Import endpoint](#bulk-import-endpoint-post-apiadminbulk-import) below.
