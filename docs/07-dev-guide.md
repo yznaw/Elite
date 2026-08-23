@@ -277,6 +277,33 @@ When adding a field that existing saved rows will not have, give it a derived fa
 > [!NOTE]
 > The API server does not hot-reload route files in every setup. After editing `server/routes/*.js`, restart it or the storefront will keep serving the old shape and the new field will look like it is being dropped.
 
+### Add a Bilingual Product Field (no migration)
+
+`products.description` is a JSONB column, so a new product-level text field needs no schema change. `noteEn` / `noteAr` (the product note) is the worked example. Four places, and the third is the one that bites:
+
+1. **`upsertProduct()`** in `admin-products.route.js` — add the key to the `description` object literal (write).
+2. **`mapAdminProduct()`** in the same file — read it back as `desc.yourField || ''`, or the admin never sees what it saved.
+3. **The `PATCH /:id` merge object** in the same file — `yourField: req.body.yourField ?? existing.description?.yourField`. This handler does *not* spread `req.body`; it lists every field explicitly so a partial update cannot blank an omitted one. Skip this and the field saves on create and silently drops on every edit.
+4. **`mapProduct()`** in `products.route.js` — expose it on the public payload.
+
+Then the client side: `SaveProductPayload` and `Product` in `admin-portal`, `FormShape` + `makeEmptyForm()` + `makeFormFromProduct()` + the post-save writeback in `product-drawer.component.ts`, the input in the ⑤ Description section, `EN`/`AR` labels in `strings.ts`, and `Product` in `client-web`.
+
+### Add a Field to a Product Variant
+
+A variant field spans two routes and two apps. Miss one of the SQL selects and the value saves but never comes back, which looks identical to it not saving at all. `note_en` / `note_ar` (migration 031) is the worked example to copy.
+
+1. **Migration** — `server/db/migrations/0NN_your_field.sql` with `ADD COLUMN IF NOT EXISTS`, and add the same `ALTER TABLE` to `server/db/ensure-migrations.js` so deploys that have not run the file self-heal on boot.
+2. **`server/routes/admin-products.route.js`** — three things, all required:
+   - the column in the `INSERT` list, its placeholder in `VALUES`, its line in `ON CONFLICT DO UPDATE SET`, and its value appended to the params array (order must match the placeholder numbers);
+   - the field in **all three** `jsonb_build_object` variant selects (`loadAdminProduct` plus the two list queries) — they are separate copies, not a shared constant;
+   - an `ensureXColumns(client)` guard if the field is new enough that some environment may not have the column yet.
+3. **`server/routes/products.route.js`** — the field in `variantsSelect()` and in the variant `.map()` inside the row mapper. Without the second one the SQL returns it and the mapper drops it.
+4. **Models** — `admin-portal/src/app/models/index.ts` (`ProductVariant`) and `client-web/src/app/models/product.model.ts` (`ProductVariant`). These are two separate declarations.
+5. **Admin editor** — `catalog/product-drawer.component.ts`, in the collapsible `.vc-detail` block, wired with `updateVariant(item.globalIndex, { yourField: $event })`. Labels go in both `EN` and `AR` in `admin-portal/src/app/i18n/strings.ts`.
+6. **Storefront** — read it off the variant matching the selected size *and* colour, the way `selectedSizeNote()` does. Scoping by size alone will leak a value from one colourway into another.
+
+Verify with `node --test test/product-save-e2e.test.js` in `server/`, which round-trips a variant through POST and PATCH; assert both that the value comes back and that clearing it clears it.
+
 ### Pick the Right Image URL
 
 Uploads are stored with resized variants alongside the original (`-thumb` 240, `-card` 640, `-grid` 900, `-pdp` 1400, `-zoom` 1800; see `server/lib/storage.js`). The admin media API returns two URLs and they are not interchangeable:

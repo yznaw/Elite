@@ -294,11 +294,14 @@
 }
 
 .gallery-count {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  z-index: 3;
+  flex-shrink: 0;
+  /* Physical, not logical: parks the counter on the right whether or not a
+     note shares the bar, and in both text directions. */
+  margin-left: auto;
   min-width: 48px;
+  /* "1 / 16" is a fraction, not prose. Without this it renders as "16 / 1" in
+     Arabic, because bidi reorders the operands around the slash. */
+  direction: ltr;
   padding: 7px 10px;
   border: 1px solid rgba(255, 255, 255, 0.52);
   border-radius: 999px;
@@ -567,6 +570,142 @@
   font-weight: 700;
   line-height: 1.35;
 }
+
+/* Size note beside the picker — a plain restatement of the line already shown
+   on the photo, placed where the customer is actually choosing the size. The
+   product note is not repeated here; it is permanent on the frame. */
+.note-panel {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--pdp-line);
+  border-radius: 10px;
+  background: var(--pdp-surface);
+}
+
+/* ── Gallery bottom bar ──
+   Mounted on the photo itself so the note cannot be scrolled past, with the
+   image counter folded into the same row. Two chips fighting for the same
+   corner reads as clutter; one bar reads as design. */
+.gallery-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px;
+  pointer-events: none;
+}
+
+/* The counter keeps its corner in both languages — it is a UI landmark people
+   look for in a fixed spot, not prose that should mirror. Reversing the bar in
+   RTL puts the main axis left-to-right in both directions, so the note falls on
+   the free side and the plain margin below always parks the counter on the
+   right. The note itself still inherits the document direction, so its Arabic
+   text and size badge lay out correctly. */
+:host-context(html[dir='rtl']) .gallery-bar {
+  flex-direction: row-reverse;
+}
+
+/* Scrim only when a note is present — with just the counter the photo needs
+   no darkening, and adding it anyway would dull every product shot. */
+.gallery-bar--noted::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: 190%;
+  content: "";
+  border-radius: 0 0 var(--pdp-radius) var(--pdp-radius);
+  background: linear-gradient(180deg, rgba(24, 20, 14, 0) 0%, rgba(24, 20, 14, 0.42) 100%);
+}
+
+/* Same material as the counter, so the two read as one component. */
+.gallery-note {
+  max-width: min(74%, 430px);
+  padding: 10px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 13px;
+  background: rgba(22, 18, 12, 0.66);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 26px -14px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  animation: productNoteRise 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gallery-note-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #f6f1e6;
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.gallery-note-row--size {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.gallery-note-row--size:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Gold against the dark panel: the one element on the bar meant to be caught
+   from across the page, since it marks the line as size-specific. */
+.gallery-note-size {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--pdp-gold);
+  color: #211c12;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+@keyframes productNoteRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-note { animation: none; }
+}
+
+/* Blur is decoration here, not structure — without it the panel must still be
+   opaque enough to carry white text over any photo. */
+@media (prefers-reduced-transparency: reduce) {
+  .gallery-note {
+    background: rgba(22, 18, 12, 0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.note-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--pdp-ink);
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 
 .size-section:first-of-type,
 .color-section + .size-section {

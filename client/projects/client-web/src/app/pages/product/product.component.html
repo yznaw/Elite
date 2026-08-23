@@ -54,9 +54,6 @@
             </button> -->
 
             @if (gallery().length > 1) {
-              <span class="gallery-count" aria-live="polite">
-                {{ galleryIdx() + 1 }} / {{ gallery().length }}
-              </span>
               <button
                 type="button"
                 class="gallery-nav gallery-nav-prev"
@@ -73,6 +70,36 @@
               >
                 ›
               </button>
+            }
+
+            <!-- Bottom bar: the note sits on the photo, where the question it
+                 answers is being asked, and the image counter joins it rather
+                 than floating beside it as a second, competing chip. -->
+            @if (productNote() || selectedSizeNote() || gallery().length > 1) {
+              <div
+                class="gallery-bar"
+                [class.gallery-bar--noted]="!!(productNote() || selectedSizeNote())"
+              >
+                @if (productNote() || selectedSizeNote()) {
+                  <div class="gallery-note" aria-live="polite">
+                    @if (productNote(); as note) {
+                      <p class="gallery-note-row">{{ note }}</p>
+                    }
+                    @if (selectedSizeNote(); as note) {
+                      <p class="gallery-note-row gallery-note-row--size">
+                        <span class="gallery-note-size">{{ selectedSize() }}</span>
+                        <span>{{ note }}</span>
+                      </p>
+                    }
+                  </div>
+                }
+
+                @if (gallery().length > 1) {
+                  <span class="gallery-count" aria-live="polite">
+                    {{ galleryIdx() + 1 }} / {{ gallery().length }}
+                  </span>
+                }
+              </div>
             }
           </div>
 
@@ -132,6 +159,7 @@
               }
             </div>
           }
+
           @if (productColorNames(p).length > 0) {
             <div class="color-section gallery-color-section">
               <div class="section-label">
@@ -227,6 +255,10 @@
                   </button>
                 }
               </div>
+              @if (selectedSizeNote(); as note) {
+                <p class="note-panel note-row" aria-live="polite">{{ note }}</p>
+              }
+
               @if (sizeSelectionError()) {
                 <p class="size-required-message" role="alert">
                   {{ t("product.size.required") }}

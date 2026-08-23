@@ -89,6 +89,55 @@ test('product create + read still works after the has_3d/views_3d column removal
       body: JSON.stringify({ name: 'E2E Test Loafer', sku: `E2E-${runId}`, brand: 'Elite Test', price: 475, stock: 5, id: created.id }),
     });
     assert.equal(updated.price, 475);
+
+    // Per-variant bilingual note (migration 031). The whole point is that two
+    // size ranges of one product can differ in construction without needing
+    // two galleries, so the note must survive the admin save and come back on
+    // the public product payload the storefront reads.
+    const withVariants = await api(`/admin/products/${created.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        id: created.id,
+        name: 'E2E Test Loafer',
+        sku: `E2E-${runId}`,
+        brand: 'Elite Test',
+        price: 475,
+        stock: 5,
+        // Product-wide note. Independent of the per-variant notes below — both
+        // must survive the same save, since the storefront stacks them.
+        noteEn: 'Runs one size small',
+        noteAr: 'المقاس يجي أصغر بمقاس',
+        variants: [
+          { sku: `E2E-${runId}-2`, size: '2', color: 'Sage', price: 475, stock: 3, noteEn: 'Back zipper', noteAr: 'سحاب خلفي' },
+          { sku: `E2E-${runId}-6`, size: '6', color: 'Sage', price: 475, stock: 4 },
+        ],
+      }),
+    });
+    assert.equal(withVariants.noteEn, 'Runs one size small');
+    assert.equal(withVariants.noteAr, 'المقاس يجي أصغر بمقاس');
+    const small = withVariants.variants.find((v) => String(v.size) === '2');
+    const large = withVariants.variants.find((v) => String(v.size) === '6');
+    assert.equal(small.noteEn, 'Back zipper');
+    assert.equal(small.noteAr, 'سحاب خلفي');
+    assert.equal(large.noteEn, null, 'a variant saved without a note stays empty');
+
+    // Clearing the note must clear it, not leave the previous value behind.
+    const cleared = await api(`/admin/products/${created.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        id: created.id,
+        name: 'E2E Test Loafer',
+        sku: `E2E-${runId}`,
+        brand: 'Elite Test',
+        price: 475,
+        stock: 5,
+        variants: [
+          { sku: `E2E-${runId}-2`, size: '2', color: 'Sage', price: 475, stock: 3, noteEn: '', noteAr: '' },
+          { sku: `E2E-${runId}-6`, size: '6', color: 'Sage', price: 475, stock: 4 },
+        ],
+      }),
+    });
+    assert.equal(cleared.variants.find((v) => String(v.size) === '2').noteEn, null);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

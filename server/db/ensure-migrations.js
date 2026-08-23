@@ -298,6 +298,16 @@ async function ensureAllMigrations(client) {
     console.warn('[migrations] barcode backfill skipped:', err.message);
   }
 
+  // ── Migration 031: bilingual per-variant note ────────────────────────────
+  // Carries a construction detail that applies to some sizes only (a back
+  // zipper on 2-4 but not on 6-10), so the storefront can state the difference
+  // next to the selected size instead of needing a separate photo shoot.
+  await client.query(`
+    ALTER TABLE product_variants
+      ADD COLUMN IF NOT EXISTS note_en TEXT,
+      ADD COLUMN IF NOT EXISTS note_ar TEXT
+  `);
+
   _done = true;
 }
 
