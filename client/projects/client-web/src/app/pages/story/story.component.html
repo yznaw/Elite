@@ -11,27 +11,27 @@
     <div class="story-hero__veil"></div>
 
     <div class="story-hero__content anim-fade-up">
-      <p class="story-kicker">{{ content().hero.kicker }}</p>
+      <p class="story-kicker">{{ localized(content().hero.kickerEn, content().hero.kickerAr, content().hero.kicker) }}</p>
       <h1>
-        <span>{{ content().hero.title }}</span>
-        <em>{{ content().hero.accent }}</em>
+        <span>{{ localized(content().hero.titleEn, content().hero.titleAr, content().hero.title) }}</span>
+        <em>{{ localized(content().hero.accentEn, content().hero.accentAr, content().hero.accent) }}</em>
       </h1>
-      <p class="story-hero__body">{{ content().hero.body }}</p>
+      <p class="story-hero__body">{{ localized(content().hero.bodyEn, content().hero.bodyAr, content().hero.body) }}</p>
     </div>
 
     <div class="story-hero__facts" aria-label="Story highlights">
       @for (fact of content().heroFacts; track fact.id) {
-        <span>{{ fact.label }}</span>
+        <span>{{ localized(fact.labelEn, fact.labelAr, fact.label) }}</span>
       }
     </div>
   </section>
 
   <section class="story-intro" aria-label="Craft philosophy">
     <div>
-      <p class="story-kicker">{{ content().intro.kicker }}</p>
-      <h2>{{ content().intro.headline }}</h2>
+      <p class="story-kicker">{{ localized(content().intro.kickerEn, content().intro.kickerAr, content().intro.kicker) }}</p>
+      <h2>{{ localized(content().intro.headlineEn, content().intro.headlineAr, content().intro.headline) }}</h2>
     </div>
-    <p>{{ content().intro.body }}</p>
+    <p>{{ localized(content().intro.bodyEn, content().intro.bodyAr, content().intro.body) }}</p>
   </section>
 
   <section class="chapter-stack" aria-label="Elite story chapters">
@@ -43,33 +43,33 @@
         </div>
 
         <div class="chapter__copy">
-          <p class="story-kicker">{{ chapter.eyebrow }}</p>
-          <h2>{{ chapter.title }}</h2>
-          <p>{{ chapter.body }}</p>
+          <p class="story-kicker">{{ localized(chapter.eyebrowEn, chapter.eyebrowAr, chapter.eyebrow) }}</p>
+          <h2>{{ localized(chapter.titleEn, chapter.titleAr, chapter.title) }}</h2>
+          <p>{{ localized(chapter.bodyEn, chapter.bodyAr, chapter.body) }}</p>
         </div>
       </article>
     }
   </section>
 
   <section class="quote-band" aria-label="Atelier quote">
-    <p>{{ content().quote.text }}</p>
-    <strong>{{ content().quote.accent }}</strong>
-    <span>{{ content().quote.author }}</span>
+    <p>{{ localized(content().quote.textEn, content().quote.textAr, content().quote.text) }}</p>
+    <strong>{{ localized(content().quote.accentEn, content().quote.accentAr, content().quote.accent) }}</strong>
+    <span>{{ localized(content().quote.authorEn, content().quote.authorAr, content().quote.author) }}</span>
   </section>
 
   <section class="atelier">
     <div class="atelier__head">
-      <p class="story-kicker">{{ content().atelier.kicker }}</p>
-      <h2>{{ content().atelier.title }}</h2>
-      <span>{{ content().atelier.body }}</span>
+      <p class="story-kicker">{{ localized(content().atelier.kickerEn, content().atelier.kickerAr, content().atelier.kicker) }}</p>
+      <h2>{{ localized(content().atelier.titleEn, content().atelier.titleAr, content().atelier.title) }}</h2>
+      <span>{{ localized(content().atelier.bodyEn, content().atelier.bodyAr, content().atelier.body) }}</span>
     </div>
 
     <div class="atelier__grid">
       @for (item of content().atelier.items; track item.id; let i = $index) {
         <article class="atelier-card">
           <span>{{ (i + 1).toString().padStart(2, '0') }}</span>
-          <h3>{{ item.title }}</h3>
-          <p>{{ item.meta }}</p>
+          <h3>{{ localized(item.titleEn, item.titleAr, item.title) }}</h3>
+          <p>{{ localized(item.metaEn, item.metaAr, item.meta) }}</p>
         </article>
       }
     </div>

@@ -24,7 +24,7 @@
                       [class.has-description]="!!activeHeroDescription()"
                     >
                       <div class="hero-brand">
-                        <p id="home-hero-brand">{{ activeHeroItem().name }}</p>
+                        <p id="home-hero-brand">{{ heroItemName(activeHeroItem()) }}</p>
                       </div>
 
                       @if (activeHeroDescription()) {
@@ -325,7 +325,7 @@
                                 t('home.hero.viewProduct', {
                                   index: i + 1,
                                   total: heroItems().length,
-                                  product: item.name
+                                  product: heroItemName(item)
                                 })
                               "
                               (click)="selectHeroItem(i)"
@@ -355,7 +355,7 @@
                   >
                     {{
                       t("home.hero.activeProduct", {
-                        product: activeHeroItem().name,
+                        product: heroItemName(activeHeroItem()),
                         index: activeHeroItemIndex() + 1,
                         total: heroItems().length
                       })
@@ -401,10 +401,10 @@
                         (click)="goToCollectionTile(tile)"
                       >
                         @if (tile.imageUrl) {
-                          <img [src]="tile.imageUrl" [alt]="tile.title" />
+                          <img [src]="tile.imageUrl" [alt]="collectionTitle(tile)" />
                         }
                         <span class="collection-overlay"></span>
-                        <span class="collection-title">{{ tile.title }}</span>
+                        <span class="collection-title">{{ collectionTitle(tile) }}</span>
                       </button>
                     }
                   } @else {
@@ -426,16 +426,16 @@
                 <div class="discount-image">
                   <img
                     [src]="contentData().hero.imageUrl"
-                    [alt]="contentData().hero.title"
+                    [alt]="localized(contentData().hero.titleEn, contentData().hero.titleAr, contentData().hero.title)"
                   />
                 </div>
 
                 <div class="discount-copy">
                   <p class="discount-kicker">Elite Collection</p>
                   <h2 id="home-discount-title">
-                    {{ contentData().hero.title }}
+                    {{ localized(contentData().hero.titleEn, contentData().hero.titleAr, contentData().hero.title) }}
                   </h2>
-                  <p class="discount-body">{{ contentData().hero.body }}</p>
+                  <p class="discount-body">{{ localized(contentData().hero.bodyEn, contentData().hero.bodyAr, contentData().hero.body) }}</p>
 
                   <div class="discount-callout">
                     <span>Come and Enjoy Sale!</span>
@@ -447,7 +447,7 @@
                     class="discount-cta"
                     (click)="goToContentLink(contentData().hero.ctaLink)"
                   >
-                    {{ contentData().hero.ctaText }}
+                    {{ localized(contentData().hero.ctaTextEn, contentData().hero.ctaTextAr, contentData().hero.ctaText) }}
                   </button>
                 </div>
               </div>

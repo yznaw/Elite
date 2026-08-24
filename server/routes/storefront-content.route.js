@@ -255,6 +255,7 @@ async function loadContent(client, tenantId) {
       return {
         ...tile,
         title:    col.title    || tile.title,
+        titleEn:  col.title    || tile.titleEn,
         imageUrl: col.image_url || tile.imageUrl,
         link:     `/collection/${col.handle}`,
       };
@@ -457,6 +458,12 @@ function normalizeHero(hero = {}) {
     discountText: asText(hero.discountText, DEFAULT_HOME_CONTENT.hero.discountText),
     ctaText: asText(hero.ctaText, DEFAULT_HOME_CONTENT.hero.ctaText),
     ctaLink: asText(hero.ctaLink, DEFAULT_HOME_CONTENT.hero.ctaLink),
+    titleEn: asText(hero.titleEn, asText(hero.title, DEFAULT_HOME_CONTENT.hero.title)),
+    titleAr: asText(hero.titleAr, ''),
+    bodyEn: asText(hero.bodyEn, asText(hero.body, DEFAULT_HOME_CONTENT.hero.body)),
+    bodyAr: asText(hero.bodyAr, ''),
+    ctaTextEn: asText(hero.ctaTextEn, asText(hero.ctaText, DEFAULT_HOME_CONTENT.hero.ctaText)),
+    ctaTextAr: asText(hero.ctaTextAr, ''),
   };
 }
 
@@ -476,6 +483,10 @@ function normalizeCollections(collections = []) {
       title:    asText(item.title,    fallback.title),
       imageUrl: asText(item.imageUrl, fallback.imageUrl),
       link:     asText(item.link,     fallback.link),
+      titleEn: asText(item.titleEn, asText(item.title, fallback.title)),
+      titleAr: asText(item.titleAr, ''),
+      ctaTextEn: asText(item.ctaTextEn, asText(item.ctaText, fallback.ctaText || '')),
+      ctaTextAr: asText(item.ctaTextAr, ''),
       ...(asText(item.ctaText, fallback.ctaText || '') ? { ctaText: asText(item.ctaText, fallback.ctaText || '') } : {}),
     };
   });
@@ -490,6 +501,14 @@ function normalizeStoryHero(hero = {}) {
     body: asText(hero.body, fallback.body),
     imageUrl: asText(hero.imageUrl, fallback.imageUrl),
     imageAlt: asText(hero.imageAlt, fallback.imageAlt),
+    kickerEn: asText(hero.kickerEn, asText(hero.kicker, fallback.kicker)),
+    kickerAr: asText(hero.kickerAr, ''),
+    titleEn: asText(hero.titleEn, asText(hero.title, fallback.title)),
+    titleAr: asText(hero.titleAr, ''),
+    accentEn: asText(hero.accentEn, asText(hero.accent, fallback.accent)),
+    accentAr: asText(hero.accentAr, ''),
+    bodyEn: asText(hero.bodyEn, asText(hero.body, fallback.body)),
+    bodyAr: asText(hero.bodyAr, ''),
   };
 }
 
@@ -508,10 +527,24 @@ function normalizeStoryChapters(chapters = []) {
         body: asText(chapter.body, fallback.body),
         imageUrl: asText(chapter.imageUrl, fallback.imageUrl),
         imageAlt: asText(chapter.imageAlt, fallback.imageAlt),
+        eyebrowEn: asText(chapter.eyebrowEn, asText(chapter.eyebrow, fallback.eyebrow)),
+        eyebrowAr: asText(chapter.eyebrowAr, ''),
+        titleEn: asText(chapter.titleEn, asText(chapter.title, fallback.title)),
+        titleAr: asText(chapter.titleAr, ''),
+        bodyEn: asText(chapter.bodyEn, asText(chapter.body, fallback.body)),
+        bodyAr: asText(chapter.bodyAr, ''),
       };
     });
   const missing = defaults.filter((fallback) => !ordered.some((chapter) => chapter.id === fallback.id));
-  return [...ordered, ...missing.map(clone)];
+  return [...ordered, ...missing.map((fallback) => ({
+    ...clone(fallback),
+    eyebrowEn: fallback.eyebrow,
+    eyebrowAr: '',
+    titleEn: fallback.title,
+    titleAr: '',
+    bodyEn: fallback.body,
+    bodyAr: '',
+  }))];
 }
 
 function normalizeAtelierItems(items = []) {
@@ -523,6 +556,10 @@ function normalizeAtelierItems(items = []) {
       id: fallback.id,
       title: asText(item.title, fallback.title),
       meta: asText(item.meta, fallback.meta),
+      titleEn: asText(item.titleEn, asText(item.title, fallback.title)),
+      titleAr: asText(item.titleAr, ''),
+      metaEn: asText(item.metaEn, asText(item.meta, fallback.meta)),
+      metaAr: asText(item.metaAr, ''),
     };
   });
 }
@@ -534,6 +571,8 @@ function normalizeHeroFacts(facts = []) {
   return incoming.filter((f) => f && f.id).map((f) => ({
     id:    f.id,
     label: asText(f.label, ''),
+    labelEn: asText(f.labelEn, asText(f.label, '')),
+    labelAr: asText(f.labelAr, ''),
   }));
 }
 
@@ -553,6 +592,12 @@ function normalizeStory(story = {}) {
           body:     asText(c.body,     fb.body      || ''),
           imageUrl: asText(c.imageUrl, fb.imageUrl  || ''),
           imageAlt: asText(c.imageAlt, fb.imageAlt  || ''),
+          eyebrowEn: asText(c.eyebrowEn, asText(c.eyebrow, fb.eyebrow || '')),
+          eyebrowAr: asText(c.eyebrowAr, ''),
+          titleEn: asText(c.titleEn, asText(c.title, fb.title || '')),
+          titleAr: asText(c.titleAr, ''),
+          bodyEn: asText(c.bodyEn, asText(c.body, fb.body || '')),
+          bodyAr: asText(c.bodyAr, ''),
         };
       })
     : normalizeStoryChapters(story.chapters);
@@ -568,6 +613,10 @@ function normalizeStory(story = {}) {
           id:    it.id,
           title: asText(it.title, fb.title || ''),
           meta:  asText(it.meta,  fb.meta  || ''),
+          titleEn: asText(it.titleEn, asText(it.title, fb.title || '')),
+          titleAr: asText(it.titleAr, ''),
+          metaEn: asText(it.metaEn, asText(it.meta, fb.meta || '')),
+          metaAr: asText(it.metaAr, ''),
         };
       })
     : normalizeAtelierItems(story.atelier?.items);
@@ -579,17 +628,35 @@ function normalizeStory(story = {}) {
       kicker:   asText(story.intro?.kicker,   fallback.intro.kicker),
       headline: asText(story.intro?.headline, fallback.intro.headline),
       body:     asText(story.intro?.body,     fallback.intro.body),
+      kickerEn: asText(story.intro?.kickerEn, asText(story.intro?.kicker, fallback.intro.kicker)),
+      kickerAr: asText(story.intro?.kickerAr, ''),
+      headlineEn: asText(story.intro?.headlineEn, asText(story.intro?.headline, fallback.intro.headline)),
+      headlineAr: asText(story.intro?.headlineAr, ''),
+      bodyEn: asText(story.intro?.bodyEn, asText(story.intro?.body, fallback.intro.body)),
+      bodyAr: asText(story.intro?.bodyAr, ''),
     },
     chapters,
     quote: {
       text:   asText(story.quote?.text,   fallback.quote.text),
       accent: asText(story.quote?.accent, fallback.quote.accent),
       author: asText(story.quote?.author, fallback.quote.author),
+      textEn: asText(story.quote?.textEn, asText(story.quote?.text, fallback.quote.text)),
+      textAr: asText(story.quote?.textAr, ''),
+      accentEn: asText(story.quote?.accentEn, asText(story.quote?.accent, fallback.quote.accent)),
+      accentAr: asText(story.quote?.accentAr, ''),
+      authorEn: asText(story.quote?.authorEn, asText(story.quote?.author, fallback.quote.author)),
+      authorAr: asText(story.quote?.authorAr, ''),
     },
     atelier: {
       kicker: asText(story.atelier?.kicker, fallback.atelier.kicker),
       title:  asText(story.atelier?.title,  fallback.atelier.title),
       body:   asText(story.atelier?.body,   fallback.atelier.body),
+      kickerEn: asText(story.atelier?.kickerEn, asText(story.atelier?.kicker, fallback.atelier.kicker)),
+      kickerAr: asText(story.atelier?.kickerAr, ''),
+      titleEn: asText(story.atelier?.titleEn, asText(story.atelier?.title, fallback.atelier.title)),
+      titleAr: asText(story.atelier?.titleAr, ''),
+      bodyEn: asText(story.atelier?.bodyEn, asText(story.atelier?.body, fallback.atelier.body)),
+      bodyAr: asText(story.atelier?.bodyAr, ''),
       items:  atelierItems,
     },
   };
@@ -664,6 +731,10 @@ function normalizeHeroSlider(heroSlider = {}) {
         id:       item.id,
         name:     asText(item.name,     fallback.name     || ''),
         subtitle: asText(item.subtitle, fallback.subtitle || ''),
+        nameEn: asText(item.nameEn, asText(item.name, fallback.name || '')),
+        nameAr: asText(item.nameAr, ''),
+        subtitleEn: asText(item.subtitleEn, asText(item.subtitle, fallback.subtitle || '')),
+        subtitleAr: asText(item.subtitleAr, ''),
         descriptionEn: asText(item.descriptionEn, fallback.descriptionEn || ''),
         descriptionAr: asText(item.descriptionAr, fallback.descriptionAr || ''),
         ...resolveHeroSlideImage(
@@ -821,7 +892,7 @@ function registerPatch(router) {
   router.post(
     '/reset',
     asyncHandler(async (_req, res) => {
-      const defaults = clone(DEFAULT_HOME_CONTENT);
+      const defaults = normalizeContent(DEFAULT_HOME_CONTENT);
       const client = await db.pool.connect();
       try {
         const tenant = await ensureDefaultTenant(client);

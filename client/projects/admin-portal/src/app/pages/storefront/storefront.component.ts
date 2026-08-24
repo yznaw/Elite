@@ -34,16 +34,16 @@ function heroColorSlug(value: string): string {
 
 // ── Content data shapes (mirrors server defaults) ─────────────────────
 interface HeroColor     { label: string; slug: string; imageUrl: string; }
-interface HeroSliderItem { id: string; name: string; subtitle: string; descriptionEn: string; descriptionAr: string; imageUrl: string; alt: string; productId: string; colors: HeroColor[]; defaultColorSlug: string; }
+interface HeroSliderItem { id: string; name: string; subtitle: string; nameEn: string; nameAr: string; subtitleEn: string; subtitleAr: string; descriptionEn: string; descriptionAr: string; imageUrl: string; alt: string; productId: string; colors: HeroColor[]; defaultColorSlug: string; }
 interface PromiseCard   { id: string; icon: string; labelEn: string; labelAr: string; subEn: string; subAr: string; }
 interface StatItem      { id: string; value: string; labelEn: string; labelAr: string; }
 interface ContactBlock  { id: string; icon: string; titleEn: string; titleAr: string; lines: string[]; }
 interface SocialLink    { id: string; platform: string; handle: string; enabled: boolean; }
-interface HeroFact      { id: string; label: string; }
+interface HeroFact      { id: string; label: string; labelEn: string; labelAr: string; }
 
 interface StorefrontContent {
-  hero: { imageUrl: string; title: string; body: string; discountText: string; ctaText: string; ctaLink: string; };
-  collections: Array<{ id: string; collectionId?: string; title: string; imageUrl: string; link: string; ctaText?: string; }>;
+  hero: { imageUrl: string; title: string; body: string; discountText: string; ctaText: string; ctaLink: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; ctaTextEn: string; ctaTextAr: string; };
+  collections: Array<{ id: string; collectionId?: string; title: string; imageUrl: string; link: string; ctaText?: string; titleEn: string; titleAr: string; ctaTextEn: string; ctaTextAr: string; }>;
   heroSlider: { ctaEn: string; ctaAr: string; items: HeroSliderItem[]; };
   promise: { cards: PromiseCard[]; };
   stats: StatItem[];
@@ -55,12 +55,12 @@ interface StorefrontContent {
     infoBlocks: ContactBlock[]; socialLinks: SocialLink[];
   };
   story: {
-    hero:      { kicker: string; title: string; accent: string; body: string; imageUrl: string; imageAlt: string; };
+    hero:      { kicker: string; title: string; accent: string; body: string; imageUrl: string; imageAlt: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; accentEn: string; accentAr: string; bodyEn: string; bodyAr: string; };
     heroFacts: HeroFact[];
-    intro:     { kicker: string; headline: string; body: string; };
-    chapters:  Array<{ id: string; eyebrow: string; title: string; body: string; imageUrl: string; imageAlt: string; }>;
-    quote:     { text: string; accent: string; author: string; };
-    atelier:   { kicker: string; title: string; body: string; items: Array<{ id: string; title: string; meta: string; }>; };
+    intro:     { kicker: string; headline: string; body: string; kickerEn: string; kickerAr: string; headlineEn: string; headlineAr: string; bodyEn: string; bodyAr: string; };
+    chapters:  Array<{ id: string; eyebrow: string; title: string; body: string; imageUrl: string; imageAlt: string; eyebrowEn: string; eyebrowAr: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; }>;
+    quote:     { text: string; accent: string; author: string; textEn: string; textAr: string; accentEn: string; accentAr: string; authorEn: string; authorAr: string; };
+    atelier:   { kicker: string; title: string; body: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; items: Array<{ id: string; title: string; meta: string; titleEn: string; titleAr: string; metaEn: string; metaAr: string; }>; };
   };
 }
 
@@ -474,8 +474,12 @@ interface StorefrontContent {
                   </div>
 
                   <div class="two-col">
-                    <label><span class="lbl">{{ t('storefront.editor.slider.productName') }}</span><input class="inp" [ngModel]="item.name" (ngModelChange)="patchSliderItem(i,'name',$event)"/></label>
-                    <label><span class="lbl">{{ t('storefront.editor.slider.subtitle') }}</span><input class="inp" [ngModel]="item.subtitle" (ngModelChange)="patchSliderItem(i,'subtitle',$event)"/></label>
+                    <label><span class="lbl">Product name (English)</span><input class="inp" [ngModel]="item.nameEn" (ngModelChange)="patchSliderItem(i,'nameEn',$event)"/></label>
+                    <label><span class="lbl">اسم المنتج (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.nameAr" (ngModelChange)="patchSliderItem(i,'nameAr',$event)"/></label>
+                  </div>
+                  <div class="two-col">
+                    <label><span class="lbl">Subtitle (English)</span><input class="inp" [ngModel]="item.subtitleEn" (ngModelChange)="patchSliderItem(i,'subtitleEn',$event)"/></label>
+                    <label><span class="lbl">العنوان الفرعي (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.subtitleAr" (ngModelChange)="patchSliderItem(i,'subtitleAr',$event)"/></label>
                   </div>
                   <div class="two-col">
                     <label>
@@ -584,7 +588,10 @@ interface StorefrontContent {
                           <span class="live-badge">⟳ {{ t('storefront.editor.tiles.liveBadge') }}</span>
                           <span class="live-hint">{{ t('storefront.editor.tiles.liveHint') }}</span>
                         </div>
-                        <label><span class="lbl">{{ t('storefront.editor.tiles.titleReadonly') }}</span><input class="inp" [ngModel]="tile.title" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
+                        <div class="two-col">
+                          <label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="tile.titleEn" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
+                          <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="tile.titleAr" (ngModelChange)="patchTile(ti,'titleAr',$event)"/></label>
+                        </div>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.imageReadonly') }}</span>
                           <div class="row gap-sm">
                             @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
@@ -593,7 +600,10 @@ interface StorefrontContent {
                         </label>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.linkReadonly') }}</span><input class="inp" [ngModel]="tile.link" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
                       } @else {
-                        <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="tile.title" (ngModelChange)="patchTile(ti,'title',$event)"/></label>
+                        <div class="two-col">
+                          <label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="tile.titleEn" (ngModelChange)="patchTile(ti,'titleEn',$event)"/></label>
+                          <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="tile.titleAr" (ngModelChange)="patchTile(ti,'titleAr',$event)"/></label>
+                        </div>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.imageUrl') }}</span>
                           <div class="row gap-sm">
                             @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
@@ -609,7 +619,10 @@ interface StorefrontContent {
                         </label>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.link') }}</span><input class="inp" [ngModel]="tile.link" (ngModelChange)="patchTile(ti,'link',$event)"/></label>
                       }
-                      <label><span class="lbl">{{ t('storefront.editor.tiles.cta') }}</span><input class="inp" [ngModel]="tile.ctaText || ''" (ngModelChange)="patchTile(ti,'ctaText',$event)"/></label>
+                      <div class="two-col">
+                        <label><span class="lbl">CTA (English)</span><input class="inp" [ngModel]="tile.ctaTextEn" (ngModelChange)="patchTile(ti,'ctaTextEn',$event)"/></label>
+                        <label><span class="lbl">CTA (العربية)</span><input class="inp" dir="rtl" [ngModel]="tile.ctaTextAr" (ngModelChange)="patchTile(ti,'ctaTextAr',$event)"/></label>
+                      </div>
                     </div>
                   </article>
                 }
@@ -639,12 +652,19 @@ interface StorefrontContent {
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">{{ t('storefront.editor.promotion.header') }}</span><input class="inp" [ngModel]="content().hero.title" (ngModelChange)="patchHero('title',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.promotion.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().hero.body" (ngModelChange)="patchHero('body',$event)"></textarea></label>
+                <div class="two-col">
+                  <label><span class="lbl">Header (English)</span><input class="inp" [ngModel]="content().hero.titleEn" (ngModelChange)="patchHero('titleEn',$event)"/></label>
+                  <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.titleAr" (ngModelChange)="patchHero('titleAr',$event)"/></label>
+                </div>
+                <div class="two-col">
+                  <label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="content().hero.bodyEn" (ngModelChange)="patchHero('bodyEn',$event)"></textarea></label>
+                  <label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().hero.bodyAr" (ngModelChange)="patchHero('bodyAr',$event)"></textarea></label>
+                </div>
                 <div class="two-col">
                   <label><span class="lbl">{{ t('storefront.editor.promotion.discount') }}</span><input class="inp" [ngModel]="content().hero.discountText" (ngModelChange)="patchHero('discountText',$event)"/></label>
-                  <label><span class="lbl">{{ t('storefront.editor.promotion.btnLabel') }}</span><input class="inp" [ngModel]="content().hero.ctaText" (ngModelChange)="patchHero('ctaText',$event)"/></label>
+                  <label><span class="lbl">CTA (English)</span><input class="inp" [ngModel]="content().hero.ctaTextEn" (ngModelChange)="patchHero('ctaTextEn',$event)"/></label>
                 </div>
+                <label><span class="lbl">CTA (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.ctaTextAr" (ngModelChange)="patchHero('ctaTextAr',$event)"/></label>
                 <label><span class="lbl">{{ t('storefront.editor.promotion.btnLink') }}</span><input class="inp" [ngModel]="content().hero.ctaLink" (ngModelChange)="patchHero('ctaLink',$event)"/></label>
               </div>
             </div>
@@ -730,10 +750,10 @@ interface StorefrontContent {
             <div class="card">
               <div class="card-header"><div class="card-title">{{ t('storefront.editor.storyHero.title') }}</div></div>
               <div class="card-pad field-stack">
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.kicker') }}</span><input class="inp" [ngModel]="content().story.hero.kicker" (ngModelChange)="patchStoryHero('kicker',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="content().story.hero.title" (ngModelChange)="patchStoryHero('title',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.accent') }}</span><input class="inp" [ngModel]="content().story.hero.accent" (ngModelChange)="patchStoryHero('accent',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().story.hero.body" (ngModelChange)="patchStoryHero('body',$event)"></textarea></label>
+                <div class="two-col"><label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().story.hero.kickerEn" (ngModelChange)="patchStoryHero('kickerEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.kickerAr" (ngModelChange)="patchStoryHero('kickerAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="content().story.hero.titleEn" (ngModelChange)="patchStoryHero('titleEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.titleAr" (ngModelChange)="patchStoryHero('titleAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Accent (English)</span><input class="inp" [ngModel]="content().story.hero.accentEn" (ngModelChange)="patchStoryHero('accentEn',$event)"/></label><label><span class="lbl">النص المميز (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.accentAr" (ngModelChange)="patchStoryHero('accentAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="content().story.hero.bodyEn" (ngModelChange)="patchStoryHero('bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().story.hero.bodyAr" (ngModelChange)="patchStoryHero('bodyAr',$event)"></textarea></label></div>
                 <label><span class="lbl">{{ t('storefront.editor.storyHero.image') }}</span>
                   <div class="image-picker-row">
                     @if (content().story.hero.imageUrl) { <img class="img-thumb" [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/> }
@@ -754,7 +774,7 @@ interface StorefrontContent {
               <div class="card-header"><div class="card-title">{{ t('storefront.editor.promotion.preview') }}</div></div>
               <div class="card-pad story-preview-hero">
                 <img [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/>
-                <div><small>{{ content().story.hero.kicker }}</small><h3>{{ content().story.hero.title }}</h3><em>{{ content().story.hero.accent }}</em></div>
+                <div><small>{{ content().story.hero.kickerEn }}</small><h3>{{ content().story.hero.titleEn }}</h3><em>{{ content().story.hero.accentEn }}</em></div>
               </div>
             </div>
           </div>
@@ -771,7 +791,8 @@ interface StorefrontContent {
             <div class="card-pad field-stack">
               @for (fact of content().story.heroFacts; track fact.id; let fi = $index) {
                 <div class="row gap-sm align-center">
-                  <input class="inp" style="flex:1" [placeholder]="t('storefront.editor.heroFacts.labelPlaceholder')" [ngModel]="fact.label" (ngModelChange)="patchHeroFact(fi,'label',$event)"/>
+                  <input class="inp" style="flex:1" placeholder="Label (English)" [ngModel]="fact.labelEn" (ngModelChange)="patchHeroFact(fi,'labelEn',$event)"/>
+                  <input class="inp" style="flex:1" dir="rtl" placeholder="التسمية (العربية)" [ngModel]="fact.labelAr" (ngModelChange)="patchHeroFact(fi,'labelAr',$event)"/>
                   @if (content().story.heroFacts.length > 1) {
                     <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeHeroFact(fi)">
                       <ap-icon name="trash" [size]="12"/>
@@ -793,9 +814,9 @@ interface StorefrontContent {
           <div class="card">
             <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.intro.title') }}</div><div class="card-sub">{{ t('storefront.editor.intro.sub') }}</div></div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">{{ t('storefront.editor.intro.kicker') }}</span><input class="inp" [ngModel]="content().story.intro.kicker" (ngModelChange)="patchStoryIntro('kicker',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.intro.headline') }}</span><input class="inp" [ngModel]="content().story.intro.headline" (ngModelChange)="patchStoryIntro('headline',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.field.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().story.intro.body" (ngModelChange)="patchStoryIntro('body',$event)"></textarea></label>
+              <div class="two-col"><label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().story.intro.kickerEn" (ngModelChange)="patchStoryIntro('kickerEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.intro.kickerAr" (ngModelChange)="patchStoryIntro('kickerAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Headline (English)</span><input class="inp" [ngModel]="content().story.intro.headlineEn" (ngModelChange)="patchStoryIntro('headlineEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.intro.headlineAr" (ngModelChange)="patchStoryIntro('headlineAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="content().story.intro.bodyEn" (ngModelChange)="patchStoryIntro('bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().story.intro.bodyAr" (ngModelChange)="patchStoryIntro('bodyAr',$event)"></textarea></label></div>
             </div>
           </div>
         </div>
@@ -815,9 +836,9 @@ interface StorefrontContent {
                 }
               </div>
               <div class="card-pad field-stack">
-                <label><span class="lbl">{{ t('storefront.editor.chapters.eyebrow') }}</span><input class="inp" [ngModel]="chapter.eyebrow" (ngModelChange)="patchChapter(i,'eyebrow',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="chapter.title" (ngModelChange)="patchChapter(i,'title',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.chapters.body') }}</span><textarea class="inp" rows="3" [ngModel]="chapter.body" (ngModelChange)="patchChapter(i,'body',$event)"></textarea></label>
+                <div class="two-col"><label><span class="lbl">Eyebrow (English)</span><input class="inp" [ngModel]="chapter.eyebrowEn" (ngModelChange)="patchChapter(i,'eyebrowEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="chapter.eyebrowAr" (ngModelChange)="patchChapter(i,'eyebrowAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="chapter.titleEn" (ngModelChange)="patchChapter(i,'titleEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="chapter.titleAr" (ngModelChange)="patchChapter(i,'titleAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="chapter.bodyEn" (ngModelChange)="patchChapter(i,'bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="chapter.bodyAr" (ngModelChange)="patchChapter(i,'bodyAr',$event)"></textarea></label></div>
                 <label><span class="lbl">{{ t('storefront.editor.chapters.image') }}</span>
                   <div class="image-picker-row">
                     @if (chapter.imageUrl) { <img class="img-thumb" [src]="chapter.imageUrl" [alt]="chapter.imageAlt"/> }
@@ -847,13 +868,13 @@ interface StorefrontContent {
           <div class="card">
             <div class="card-header"><div class="card-title">{{ t('storefront.editor.quote.title') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">{{ t('storefront.editor.quote.text') }}</span><input class="inp" [ngModel]="content().story.quote.text" (ngModelChange)="patchQuote('text',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.quote.accent') }}</span><input class="inp" [ngModel]="content().story.quote.accent" (ngModelChange)="patchQuote('accent',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.quote.author') }}</span><input class="inp" [ngModel]="content().story.quote.author" (ngModelChange)="patchQuote('author',$event)"/></label>
+              <div class="two-col"><label><span class="lbl">Quote (English)</span><input class="inp" [ngModel]="content().story.quote.textEn" (ngModelChange)="patchQuote('textEn',$event)"/></label><label><span class="lbl">الاقتباس (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.quote.textAr" (ngModelChange)="patchQuote('textAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Accent (English)</span><input class="inp" [ngModel]="content().story.quote.accentEn" (ngModelChange)="patchQuote('accentEn',$event)"/></label><label><span class="lbl">النص المميز (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.quote.accentAr" (ngModelChange)="patchQuote('accentAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Author (English)</span><input class="inp" [ngModel]="content().story.quote.authorEn" (ngModelChange)="patchQuote('authorEn',$event)"/></label><label><span class="lbl">المصدر (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.quote.authorAr" (ngModelChange)="patchQuote('authorAr',$event)"/></label></div>
               <div class="quote-preview">
-                <p>"{{ content().story.quote.text }}</p>
-                <p>{{ content().story.quote.accent }}"</p>
-                <strong>— {{ content().story.quote.author }}</strong>
+                <p>"{{ content().story.quote.textEn }}</p>
+                <p>{{ content().story.quote.accentEn }}"</p>
+                <strong>— {{ content().story.quote.authorEn }}</strong>
               </div>
             </div>
           </div>
@@ -866,9 +887,9 @@ interface StorefrontContent {
           <div class="card mb-16">
             <div class="card-header"><div class="card-title">{{ t('storefront.editor.atelier.header') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">{{ t('storefront.editor.field.kicker') }}</span><input class="inp" [ngModel]="content().story.atelier.kicker" (ngModelChange)="patchAtelier('kicker',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="content().story.atelier.title" (ngModelChange)="patchAtelier('title',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.field.body') }}</span><textarea class="inp" rows="2" [ngModel]="content().story.atelier.body" (ngModelChange)="patchAtelier('body',$event)"></textarea></label>
+              <div class="two-col"><label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().story.atelier.kickerEn" (ngModelChange)="patchAtelier('kickerEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.atelier.kickerAr" (ngModelChange)="patchAtelier('kickerAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="content().story.atelier.titleEn" (ngModelChange)="patchAtelier('titleEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.atelier.titleAr" (ngModelChange)="patchAtelier('titleAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="2" [ngModel]="content().story.atelier.bodyEn" (ngModelChange)="patchAtelier('bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="2" [ngModel]="content().story.atelier.bodyAr" (ngModelChange)="patchAtelier('bodyAr',$event)"></textarea></label></div>
             </div>
           </div>
           <div class="card">
@@ -884,8 +905,10 @@ interface StorefrontContent {
                       </button>
                     }
                   </div>
-                  <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="item.title" (ngModelChange)="patchAtelierItem(i,'title',$event)"/></label>
-                  <label><span class="lbl">{{ t('storefront.editor.field.meta') }}</span><input class="inp" [ngModel]="item.meta" (ngModelChange)="patchAtelierItem(i,'meta',$event)"/></label>
+                  <label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="item.titleEn" (ngModelChange)="patchAtelierItem(i,'titleEn',$event)"/></label>
+                  <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.titleAr" (ngModelChange)="patchAtelierItem(i,'titleAr',$event)"/></label>
+                  <label><span class="lbl">Meta (English)</span><input class="inp" [ngModel]="item.metaEn" (ngModelChange)="patchAtelierItem(i,'metaEn',$event)"/></label>
+                  <label><span class="lbl">الوصف (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.metaAr" (ngModelChange)="patchAtelierItem(i,'metaAr',$event)"/></label>
                 </div>
               }
             </div>
@@ -2535,7 +2558,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       return {
         ...item,
         name:          fill(item.name, product.name),
+        nameEn:        fill(item.nameEn, product.name),
+        nameAr:        fill(item.nameAr, product.nameAr || ''),
         subtitle:      fill(item.subtitle, this.productSubtitle(product)),
+        subtitleEn:    fill(item.subtitleEn, product.brand || ''),
+        subtitleAr:    fill(item.subtitleAr, product.nameAr || ''),
         // Seeded from the product's Hook (shortEn/shortAr); falls back to the
         // legacy long description only if the Hook itself is empty.
         descriptionEn: fill(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
@@ -2587,7 +2614,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           ...item,
           productId,
           name:          keep(item.name, product.name),
+          nameEn:        keep(item.nameEn, product.name),
+          nameAr:        keep(item.nameAr, product.nameAr || ''),
           subtitle:      keep(item.subtitle, this.productSubtitle(product)),
+          subtitleEn:    keep(item.subtitleEn, product.brand || ''),
+          subtitleAr:    keep(item.subtitleAr, product.nameAr || ''),
           // Seeded from the product's Hook (shortEn/shortAr); falls back to the
           // legacy long description only if the Hook itself is empty.
           descriptionEn: keep(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
@@ -2733,7 +2764,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
 
   addSliderItem(): void {
     const newId = `slide-${Date.now()}`;
-    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', descriptionEn: '', descriptionAr: '', imageUrl: '', alt: '', productId: '', colors: [], defaultColorSlug: '' };
+    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', nameEn: '', nameAr: '', subtitleEn: '', subtitleAr: '', descriptionEn: '', descriptionAr: '', imageUrl: '', alt: '', productId: '', colors: [], defaultColorSlug: '' };
     this.content.update((c) => ({
       ...c,
       heroSlider: { ...c.heroSlider, items: [...c.heroSlider.items, newItem] },
@@ -2766,6 +2797,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           ...t,
           collectionId: colId || undefined,
           title: col?.title || t.title,
+          titleEn: col?.title || t.titleEn,
           imageUrl: col?.imageUrl || t.imageUrl,
           link: col ? `/collection/${col.handle}` : t.link,
         };
@@ -2828,7 +2860,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   addHeroFact(): void {
     this.content.update((c) => ({
       ...c,
-      story: { ...c.story, heroFacts: [...c.story.heroFacts, { id: `fact-${Date.now()}`, label: '' }] },
+      story: { ...c.story, heroFacts: [...c.story.heroFacts, { id: `fact-${Date.now()}`, label: '', labelEn: '', labelAr: '' }] },
     }));
     this.markDirty();
   }
@@ -2846,7 +2878,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     const id = `chapter-${Date.now()}`;
     this.content.update((c) => ({
       ...c,
-      story: { ...c.story, chapters: [...c.story.chapters, { id, eyebrow: '', title: '', body: '', imageUrl: '', imageAlt: '' }] },
+      story: { ...c.story, chapters: [...c.story.chapters, { id, eyebrow: '', title: '', body: '', imageUrl: '', imageAlt: '', eyebrowEn: '', eyebrowAr: '', titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' }] },
     }));
     this.markDirty();
   }
@@ -2864,7 +2896,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     const id = `artisan-${Date.now()}`;
     this.content.update((c) => ({
       ...c,
-      story: { ...c.story, atelier: { ...c.story.atelier, items: [...c.story.atelier.items, { id, title: '', meta: '' }] } },
+      story: { ...c.story, atelier: { ...c.story.atelier, items: [...c.story.atelier.items, { id, title: '', meta: '', titleEn: '', titleAr: '', metaEn: '', metaAr: '' }] } },
     }));
     this.markDirty();
   }

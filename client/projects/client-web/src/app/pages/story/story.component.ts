@@ -17,6 +17,10 @@ export class StoryComponent implements OnInit {
   readonly content  = computed(() => this.homeContent.contentData().story);
   readonly chapters = computed(() => this.content().chapters);
 
+  localized(en: string | undefined, ar: string | undefined, legacy = ''): string {
+    return (this.locale.locale() === 'ar' ? ar : en)?.trim() || legacy;
+  }
+
   ngOnInit(): void {
     void this.homeContent.refresh(true);
   }

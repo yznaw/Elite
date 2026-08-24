@@ -205,6 +205,19 @@ export class HomeComponent implements OnInit, OnDestroy {
     return (this.isArabic() ? item.descriptionAr : item.descriptionEn)?.trim() ?? '';
   });
 
+  /** Select an editor-managed translation, retaining legacy content as fallback. */
+  localized(en: string | undefined, ar: string | undefined, legacy = ''): string {
+    return (this.isArabic() ? ar : en)?.trim() || legacy;
+  }
+
+  heroItemName(item: { name: string; nameEn: string; nameAr: string }): string {
+    return this.localized(item.nameEn, item.nameAr, item.name);
+  }
+
+  collectionTitle(tile: HomeCollectionTileContent): string {
+    return this.localized(tile.titleEn, tile.titleAr, tile.title);
+  }
+
   /**
    * Live motion preference.
    *
@@ -961,6 +974,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.collectionTiles.set(ordered.slice(0, 3).map((row) => ({
         id: row.id,
         title: row.title,
+        titleEn: row.title,
+        titleAr: '',
+        ctaTextEn: '',
+        ctaTextAr: '',
         imageUrl: this.resolveMediaUrl(row.imageUrl),
         link: `/collection/${row.handle}`,
       })));

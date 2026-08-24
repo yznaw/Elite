@@ -5,6 +5,12 @@ export interface HomeDiscountHeroContent {
   discountText: string;
   ctaText: string;
   ctaLink: string;
+  titleEn: string;
+  titleAr: string;
+  bodyEn: string;
+  bodyAr: string;
+  ctaTextEn: string;
+  ctaTextAr: string;
 }
 
 export interface HomeCollectionTileContent {
@@ -13,6 +19,10 @@ export interface HomeCollectionTileContent {
   imageUrl: string;
   link: string;
   ctaText?: string;
+  titleEn: string;
+  titleAr: string;
+  ctaTextEn: string;
+  ctaTextAr: string;
 }
 
 export interface StoryHeroContent {
@@ -22,12 +32,26 @@ export interface StoryHeroContent {
   body: string;
   imageUrl: string;
   imageAlt: string;
+  kickerEn: string;
+  kickerAr: string;
+  titleEn: string;
+  titleAr: string;
+  accentEn: string;
+  accentAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryIntroContent {
   kicker: string;
   headline: string;
   body: string;
+  kickerEn: string;
+  kickerAr: string;
+  headlineEn: string;
+  headlineAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryChapterContent {
@@ -37,17 +61,29 @@ export interface StoryChapterContent {
   body: string;
   imageUrl: string;
   imageAlt: string;
+  eyebrowEn: string;
+  eyebrowAr: string;
+  titleEn: string;
+  titleAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryAtelierItemContent {
   id: string;
   title: string;
   meta: string;
+  titleEn: string;
+  titleAr: string;
+  metaEn: string;
+  metaAr: string;
 }
 
 export interface StoryHeroFact {
   id: string;
   label: string;
+  labelEn: string;
+  labelAr: string;
 }
 
 export interface StoryContentData {
@@ -59,11 +95,23 @@ export interface StoryContentData {
     text: string;
     accent: string;
     author: string;
+    textEn: string;
+    textAr: string;
+    accentEn: string;
+    accentAr: string;
+    authorEn: string;
+    authorAr: string;
   };
   atelier: {
     kicker: string;
     title: string;
     body: string;
+    kickerEn: string;
+    kickerAr: string;
+    titleEn: string;
+    titleAr: string;
+    bodyEn: string;
+    bodyAr: string;
     items: StoryAtelierItemContent[];
   };
 }
@@ -91,6 +139,10 @@ export interface HeroSliderItem {
   id: string;
   name: string;
   subtitle: string;
+  nameEn: string;
+  nameAr: string;
+  subtitleEn: string;
+  subtitleAr: string;
   descriptionEn: string;
   descriptionAr: string;
   /**
@@ -206,6 +258,7 @@ export function createEmptyHomeContent(): HomeContentData {
       discountText: '',
       ctaText: '',
       ctaLink: '',
+      titleEn: '', titleAr: '', bodyEn: '', bodyAr: '', ctaTextEn: '', ctaTextAr: '',
     },
     collections: [],
     heroSlider: {
@@ -241,22 +294,26 @@ export function createEmptyHomeContent(): HomeContentData {
         body: '',
         imageUrl: '',
         imageAlt: '',
+        kickerEn: '', kickerAr: '', titleEn: '', titleAr: '', accentEn: '', accentAr: '', bodyEn: '', bodyAr: '',
       },
       intro: {
         kicker: '',
         headline: '',
         body: '',
+        kickerEn: '', kickerAr: '', headlineEn: '', headlineAr: '', bodyEn: '', bodyAr: '',
       },
       chapters: [],
       quote: {
         text: '',
         accent: '',
         author: '',
+        textEn: '', textAr: '', accentEn: '', accentAr: '', authorEn: '', authorAr: '',
       },
       atelier: {
         kicker: '',
         title: '',
         body: '',
+        kickerEn: '', kickerAr: '', titleEn: '', titleAr: '', bodyEn: '', bodyAr: '',
         items: [],
       },
     },
