@@ -308,6 +308,16 @@ async function ensureAllMigrations(client) {
       ADD COLUMN IF NOT EXISTS note_ar TEXT
   `);
 
+  // ── Migration 032: bilingual policy title and content ────────────────────
+  // policies had no Arabic column at all, so the storefront's Arabic locale
+  // silently fell back to English legal copy. Matches the descriptionEn/Ar
+  // split already used on products.
+  await client.query(`
+    ALTER TABLE policies
+      ADD COLUMN IF NOT EXISTS title_ar   TEXT,
+      ADD COLUMN IF NOT EXISTS content_ar TEXT
+  `);
+
   _done = true;
 }
 

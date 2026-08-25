@@ -45,8 +45,10 @@ function slugify(s: string): string {
 
 interface PolicyForm {
   title: string;
+  titleAr: string;
   handle: string;
   content: string;
+  contentAr: string;
   policyType: PolicyType;
   status: 'active' | 'draft';
 }
@@ -160,6 +162,21 @@ const ALL_TYPES: PolicyType[] = [
               />
             </div>
 
+            <!-- Title (Arabic) -->
+            <div class="field">
+              <label class="field-label" for="pol-title-ar">{{ t('policies.drawer.titleAr') }}</label>
+              <input
+                id="pol-title-ar"
+                class="inp"
+                type="text"
+                dir="rtl"
+                [ngModel]="form().titleAr"
+                (ngModelChange)="onTitleArChange($event)"
+                [placeholder]="form().title"
+              />
+              <div class="field-hint">{{ t('policies.drawer.titleAr.hint') }}</div>
+            </div>
+
             <!-- Handle -->
             <div class="field">
               <label class="field-label" for="pol-handle">{{ t('policies.drawer.handle') }}</label>
@@ -260,6 +277,18 @@ const ALL_TYPES: PolicyType[] = [
             } @else {
               <div class="content-preview" [innerHTML]="previewHtml()"></div>
             }
+          </section>
+
+          <!-- 4b. CONTENT (Arabic) -->
+          <section class="drawer-section">
+            <div class="ds-label">{{ t('policies.drawer.contentAr') }}</div>
+            <ap-rich-text
+              [value]="form().contentAr"
+              (valueChange)="onContentArChange($event)"
+              [placeholder]="t('policies.drawer.contentAr.hint')"
+              dir="rtl"
+            />
+            <div class="field-hint">{{ t('policies.drawer.contentAr.hint') }}</div>
           </section>
 
           <!-- 4. DANGER ZONE -->
@@ -517,16 +546,20 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
 
   readonly form = signal<PolicyForm>({
     title: '',
+    titleAr: '',
     handle: '',
     content: '',
+    contentAr: '',
     policyType: 'privacy_policy',
     status: 'active',
   });
 
   private readonly original = signal<PolicyForm>({
     title: '',
+    titleAr: '',
     handle: '',
     content: '',
+    contentAr: '',
     policyType: 'privacy_policy',
     status: 'active',
   });
@@ -539,11 +572,13 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     const f = this.form();
     const o = this.original();
     return (
-      f.title    !== o.title    ||
-      f.handle   !== o.handle   ||
-      f.content  !== o.content  ||
+      f.title     !== o.title     ||
+      f.titleAr   !== o.titleAr   ||
+      f.handle    !== o.handle    ||
+      f.content   !== o.content   ||
+      f.contentAr !== o.contentAr ||
       f.policyType !== o.policyType ||
-      f.status   !== o.status
+      f.status    !== o.status
     );
   });
 
@@ -580,14 +615,18 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     const p = this.policy;
     const f: PolicyForm = p ? {
       title:      p.title,
+      titleAr:    p.titleAr || '',
       handle:     p.handle,
       content:    p.content,
+      contentAr:  p.contentAr || '',
       policyType: p.policyType,
       status:     p.status,
     } : {
       title:      '',
+      titleAr:    '',
       handle:     TYPE_META['privacy_policy'].handle,
       content:    '',
+      contentAr:  '',
       policyType: 'privacy_policy',
       status:     'active',
     };
@@ -628,12 +667,20 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     this.patch({ title: v, ...(autoHandle ? { handle: slugify(v) } : {}) });
   }
 
+  onTitleArChange(v: string): void {
+    this.patch({ titleAr: v });
+  }
+
   onHandleChange(v: string): void {
     this.patch({ handle: slugify(v) });
   }
 
   onContentChange(v: string): void {
     this.patch({ content: v });
+  }
+
+  onContentArChange(v: string): void {
+    this.patch({ contentAr: v });
   }
 
   private triggerShake(): void {
@@ -674,8 +721,10 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     try {
       const payload = {
         title:      f.title || this.t('policies.type.' + f.policyType),
+        titleAr:    f.titleAr,
         handle,
         content:    f.content,
+        contentAr:  f.contentAr,
         policyType: f.policyType,
         status:     f.status,
       };

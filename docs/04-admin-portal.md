@@ -499,6 +499,14 @@ The size picker column repeats only the size note, as a plain line under the siz
 - **Empty is empty:** a blank note renders nothing at all — no placeholder line, no empty chip. Clearing the field in the admin clears the stored value rather than leaving the previous one behind.
 - **Fallback:** if only one language is filled in, the other locale shows that one rather than nothing (same shape as `productTeaser` / `productDescription`).
 
+### Bilingual policy pages (2026-08)
+
+`policies.title_ar` / `content_ar` (migration `032_policy_arabic.sql`) hold an optional Arabic title and rich-text body for legal pages — Privacy Policy, Shipping Policy, etc. Before this the table had one English title/content pair, so the storefront's Arabic locale showed English legal copy with no way to fix it from the admin.
+
+- **Where it is edited:** `policy-drawer.component.ts`, directly under the existing English title and content fields — a "Title (Arabic)" text input (`dir="rtl"`), and a second `ap-rich-text` editor for the Arabic body. Both optional; leaving them blank is the supported way to keep a policy English-only.
+- **Fallback:** empty is not an error state. The storefront's Arabic locale shows `titleAr`/`contentAr` when set, otherwise falls back to the English `title`/`content` — the same shape `productTeaser` / `productDescription` and the per-variant notes already use, so a policy saved before this feature existed still renders instead of going blank.
+- **Where it surfaces:** `policy.component.ts` (the `/policy/:handle` page) and the footer's policy link list (`footer.component.ts`), both locale-aware.
+
 ### CSS Grid
 
 ```

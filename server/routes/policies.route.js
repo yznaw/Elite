@@ -12,7 +12,7 @@ router.get('/', asyncHandler(async (req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
-      `SELECT id, handle, title, policy_type, updated_at
+      `SELECT id, handle, title, title_ar, policy_type, updated_at
          FROM policies
         WHERE tenant_id = $1 AND status = 'active'
         ORDER BY sort_order, created_at`,
@@ -22,6 +22,7 @@ router.get('/', asyncHandler(async (req, res) => {
       id:         r.id,
       handle:     r.handle,
       title:      r.title,
+      titleAr:    r.title_ar || '',
       policyType: r.policy_type,
       updatedAt:  r.updated_at,
     })));
@@ -37,7 +38,7 @@ router.get('/:handle', asyncHandler(async (req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
-      `SELECT id, handle, title, content, policy_type, updated_at
+      `SELECT id, handle, title, title_ar, content, content_ar, policy_type, updated_at
          FROM policies
         WHERE tenant_id = $1 AND handle = $2 AND status = 'active'`,
       [tenant.id, req.params.handle],
@@ -48,7 +49,9 @@ router.get('/:handle', asyncHandler(async (req, res) => {
       id:         r.id,
       handle:     r.handle,
       title:      r.title,
+      titleAr:    r.title_ar || '',
       content:    r.content || '',
+      contentAr:  r.content_ar || '',
       policyType: r.policy_type,
       updatedAt:  r.updated_at,
     });

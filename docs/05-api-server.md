@@ -380,6 +380,26 @@ Keeping them apart is the point: "runs one size small" is true of the whole prod
 | Public API | `noteEn` / `noteAr` on each variant of `GET /api/products` and `/api/products/:id` | Empty string when unset. |
 | Storefront | `productNote()` and `selectedSizeNote()` in `product.component.ts` | `selectedSizeNote()` picks the note off the variant matching both the selected size and the selected colour; both resolve the locale with a fallback to the other language when only one is filled. Rendered stacked in `.gallery-bar` inside the gallery frame, with the size note repeated as a plain line under the size options. |
 
+### Public — Policies (`/api/policies`) and Admin — Policies (`/api/admin/policies`)
+
+See `server/routes/policies.route.js` (public) and `server/routes/admin-policies.route.js` (admin, requires session). Legal pages — Privacy Policy, Terms of Service, Shipping Policy, etc. — surfaced in the storefront footer and at `/policy/:handle`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/policies` | Active policies, list only (`id`, `handle`, `title`, `titleAr`, `policyType`, `updatedAt`) — no `content`, for nav/footer. |
+| `GET` | `/api/policies/:handle` | Full content of one active policy, including `titleAr` and `contentAr`. |
+| `GET` | `/api/admin/policies` | All policies regardless of status. |
+| `POST` \| `PATCH` | `/api/admin/policies`, `/api/admin/policies/:id` | Create / update, accepting `titleAr` and `contentAr` alongside the existing `title`/`content`. |
+
+`policies.title_ar` / `content_ar` (migration `032_policy_arabic.sql`) hold the Arabic title and rich-text body. Both nullable — a policy has always had one English title/content pair, so an Arabic column with no value must render the page rather than leave it blank. Also created idempotently by `ensure-migrations.js` on boot, so a deploy that has not run the migration file self-heals.
+
+| Layer | Field | Notes |
+|---|---|---|
+| Admin API | `titleAr` / `contentAr` | Trimmed to `NULL` when empty on `PATCH`, matching how `noteEn`/`noteAr` are stored on variants. |
+| Public API | `titleAr` / `contentAr` | Empty string (`''`) when unset, not `NULL` — the storefront never has to distinguish "unset" from "explicitly cleared". |
+| Admin UI | `policy-drawer.component.ts` — "Title (Arabic)" input and a second `ap-rich-text` editor with `dir="rtl"`, directly under the English equivalents | Both optional; leaving them blank is the supported way to publish English-only. |
+| Storefront | `policyTitle()` / `policyContent()` in `policy.component.ts`, `policyTitle()` in `footer.component.ts` | Same fallback shape as `Product.descriptionAr` elsewhere: Arabic locale shows `titleAr`/`contentAr` when set, otherwise falls back to the English value rather than rendering blank. |
+
 ### Admin — Bulk Import (`/api/admin/bulk-import`)
 
 See `server/routes/admin-bulk-import.route.js`. CSV upload → NDJSON streaming progress. See [Bulk Import endpoint](#bulk-import-endpoint-post-apiadminbulk-import) below.

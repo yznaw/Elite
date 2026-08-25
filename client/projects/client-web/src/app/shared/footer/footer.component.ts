@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { SocialLink } from '../../models/home-content.model';
 import { NousBadgeComponent } from '../nous-badge/nous-badge.component';
@@ -22,6 +23,7 @@ interface FooterColumn {
 interface PolicyMeta {
   handle: string;
   title: string;
+  titleAr: string;
 }
 
 @Component({
@@ -96,7 +98,7 @@ interface PolicyMeta {
           <div class="footer-column">
             <div class="footer-column-title">{{ t('footer.col.legal') || 'Legal' }}</div>
             @for (p of policyLinks(); track p.handle) {
-              <a [routerLink]="'/policy/' + p.handle" class="footer-link">{{ p.title }}</a>
+              <a [routerLink]="'/policy/' + p.handle" class="footer-link">{{ policyTitle(p) }}</a>
             }
           </div>
         }
@@ -303,6 +305,10 @@ interface PolicyMeta {
 })
 export class FooterComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+  private readonly locale = inject(LocaleService);
+
+  readonly policyTitle = (p: PolicyMeta): string =>
+    this.locale.locale() === 'ar' ? (p.titleAr || p.title) : p.title;
   private readonly http = inject(HttpClient);
   private readonly homeContent = inject(HomeContentService);
   readonly t = this.i18n.t;

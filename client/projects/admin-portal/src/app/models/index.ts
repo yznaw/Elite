@@ -238,7 +238,9 @@ export interface Policy {
   id: string;
   handle: string;
   title: string;
+  titleAr: string;
   content: string;
+  contentAr: string;
   policyType: PolicyType;
   status: 'active' | 'draft';
   sortOrder: number;

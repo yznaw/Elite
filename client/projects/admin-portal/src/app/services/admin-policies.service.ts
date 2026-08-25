@@ -5,8 +5,10 @@ import { Policy, PolicyType } from '../models';
 
 export interface PolicyPayload {
   title?: string;
+  titleAr?: string;
   handle?: string;
   content?: string;
+  contentAr?: string;
   policyType?: PolicyType;
   status?: 'active' | 'draft';
   sortOrder?: number;
