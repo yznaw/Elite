@@ -7,6 +7,7 @@ import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { SocialLink } from '../../models/home-content.model';
+import { SeoService } from '../../services/seo.service';
 
 interface ContactForm {
   name: string;
@@ -28,7 +29,14 @@ export class ContactComponent implements OnInit {
   readonly locale              = inject(LocaleService);
   private readonly homeContent = inject(HomeContentService);
   private readonly http        = inject(HttpClient);
+  private readonly seo         = inject(SeoService);
   private readonly apiBase     = this.resolveApiBase();
+
+  private readonly seoTags = this.seo.watch(() => ({
+    title: this.i18n.t('seo.contact.title'),
+    description: this.i18n.t('seo.contact.description'),
+    canonicalPath: '/contact',
+  }));
 
   readonly t = (key: string): string => this.i18n.t(key);
   readonly contactContent = computed(() => this.homeContent.contentData().contact);

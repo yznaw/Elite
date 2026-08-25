@@ -21,6 +21,7 @@ import { ProductsService } from '../../services/products.service';
 import { HomeCollectionTileContent, HeroColorContent } from '../../models/home-content.model';
 import { colorKey } from '../../utils/color-slug';
 import { mediaVariantKey, resolveClientMediaUrl } from '../../utils/media-url';
+import { SeoService } from '../../services/seo.service';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -112,7 +113,37 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly homeContent          = inject(HomeContentService);
   private readonly referenceData = inject(ReferenceDataService);
   private readonly productsService = inject(ProductsService);
+  private readonly seo          = inject(SeoService);
   private readonly apiBase      = this.resolveApiBase();
+
+  // Field initializer, so the effect is owned by this component's injector and
+  // is torn down on navigation. Re-runs when the locale flips.
+  private readonly seoTags = this.seo.watch(() => ({
+    title: this.i18n.t('seo.home.title'),
+    description: this.i18n.t('seo.home.description'),
+    canonicalPath: '/',
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: this.i18n.t('seo.siteName'),
+        url: this.seo.origin(),
+        logo: `${this.seo.origin()}/assets/brand/elite-logo-green.png`,
+        foundingDate: '2018',
+        address: {
+          '@type': 'PostalAddress',
+          addressLocality: 'Doha',
+          addressCountry: 'QA',
+        },
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: this.i18n.t('seo.siteName'),
+        url: this.seo.origin(),
+      },
+    ],
+  }));
 
   private metaTimer: number | undefined;
   private heroSwipeHintTimer: number | undefined;

@@ -61,6 +61,16 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # Crawlers expect the sitemap at the site root, but it is generated from
+    # live catalogue data by the API. Without this block the SPA fallback
+    # above would answer /sitemap.xml with index.html.
+    location = /sitemap.xml {
+        proxy_pass http://elite_api/api/sitemap.xml;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location /api/ {
         proxy_pass http://elite_api;
         proxy_http_version 1.1;

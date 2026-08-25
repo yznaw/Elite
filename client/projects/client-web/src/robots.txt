@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Transactional dead ends - nothing to index, and crawling them creates
+# orphan carts and payment-return hits.
+Disallow: /checkout
+Disallow: /checkout/
+Disallow: /thank-you
+
+Sitemap: https://elitecollections.qa/sitemap.xml

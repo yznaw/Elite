@@ -10,6 +10,7 @@ import { I18nService } from '../../services/i18n.service';
 import { CartService } from '../../services/cart.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
 import { resolveClientMediaUrl } from '../../utils/media-url';
+import { SeoService } from '../../services/seo.service';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
@@ -97,7 +98,53 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);
   private readonly cart = inject(CartService);
   private readonly referenceData = inject(ReferenceDataService);
+  private readonly seo = inject(SeoService);
   private readonly apiBase = this.resolveApiBase();
+
+  /**
+   * Head tags for whichever collection the route is pointing at. Returns null
+   * until the collection list has loaded on a deep link, so the landing-page
+   * copy is not briefly published as the title of a specific collection.
+   *
+   * The canonical is built from the route rather than the current URL because
+   * this page carries filter and sort query params: without that every filter
+   * combination would present itself to Google as a separate page.
+   */
+  private readonly seoTags = this.seo.watch(() => {
+    const collection = this.activeCollection();
+    const sub = this.activeSubCollection();
+
+    if (!this.activeCollectionKey()) {
+      return {
+        title: this.i18n.t('seo.collection.title'),
+        description: this.i18n.t('seo.collection.description'),
+        canonicalPath: '/collection',
+      };
+    }
+    if (!collection) return null;
+
+    const title = this.activeCollectionDisplayTitle() || collection.title;
+    const path = sub
+      ? `/collection/${collection.handle}/${sub.handle}`
+      : `/collection/${collection.handle}`;
+
+    return {
+      title,
+      description: collection.description?.trim()
+        || this.i18n.t('seo.collection.pageDescription', {
+          title,
+          count: this.activeCollectionTotalCount(),
+        }),
+      image: collection.imageUrl || undefined,
+      canonicalPath: path,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: title,
+        url: `${this.seo.origin()}${path}`,
+      },
+    };
+  });
   private addedTimer: number | undefined;
   private mobileMediaQuery?: MediaQueryList;
   private mobileMediaQueryHandler?: () => void;

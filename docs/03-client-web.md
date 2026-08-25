@@ -45,6 +45,42 @@ export const routes: Routes = [
 ];
 ```
 
+### Search Engine Discovery
+
+`robots.txt` lives at `projects/client-web/src/robots.txt` and is copied to the bundle root by the `assets` list in `client/angular.json`. It allows everything except `/checkout` and `/thank-you`, and points crawlers at `https://elitecollections.qa/sitemap.xml`.
+
+The sitemap itself is **not** a static file. It is generated from live catalogue data by `GET /api/sitemap.xml` (see `docs/05-api-server.md`) and exposed at the site root by an nginx `location = /sitemap.xml` proxy, because the SPA fallback would otherwise answer it with `index.html`. Adding a public route to `app.routes.ts` therefore means adding it to `STATIC_ROUTES` in `server/routes/sitemap.route.js` as well — nothing scans the route table automatically.
+
+### Per-page Head Tags (`SeoService`)
+
+`services/seo.service.ts` owns everything in `<head>` that varies by page: `<title>`, `meta[name=description]`, `link[rel=canonical]`, the Open Graph and Twitter Card set, and one JSON-LD block.
+
+Pages do not call it imperatively. They declare a factory in a **field initializer**:
+
+```ts
+private readonly seoTags = this.seo.watch(() => ({
+  title: this.i18n.t('seo.story.title'),
+  description: this.i18n.t('seo.story.description'),
+  canonicalPath: '/story',
+}));
+```
+
+`watch()` wraps the factory in an `effect`, which has two consequences worth knowing:
+
+- It must stay in an injection context (field initializer or constructor). Moving the call into `ngOnInit` throws, and worse, an effect created outside the component's injector would outlive the page and keep writing to the head after navigation.
+- It re-runs whenever any signal it reads changes. That covers both "the product finished loading" and "the visitor switched to Arabic" without either case needing its own wiring. Return `null` while data is still loading and the previous page's tags stay up rather than flashing an empty title.
+
+Two behaviours exist for specific reasons:
+
+- **The canonical drops the query string.** `/product/:id` carries `?color=`, and `/collection/...` carries filter and sort params. Left alone, every filter combination would present itself to Google as a separate page competing with the others. `canonicalPath` is built from the route, never from `router.url`.
+- **JSON-LD is replaced, not appended.** One `script[data-seo]` element is reused across navigations and removed when a page supplies none, so a stale `Product` block cannot linger on a policy page.
+
+Copy lives in `i18n/strings.ts` under the `seo.*` prefix, in both languages. `SeoService` appends the site name to every title, so those keys hold the page part only.
+
+Deliberately **not** implemented: `AggregateRating` in the product JSON-LD (the storefront has no rating aggregate to read, and inventing one violates Google's structured-data policy) and `hreflang` (EN and AR share one URL, so there is no alternate to point at).
+
+Note the app is still client-rendered. Googlebot executes JavaScript and will see these tags; the social crawlers behind WhatsApp, Facebook and X do not, so link previews continue to show the static `index.html` copy until the app is server-rendered or prerendered.
+
 ---
 
 ## App Shell
@@ -584,6 +620,12 @@ export class YourPageComponent {}
 
 4. **Add i18n keys** if needed
 5. **Add nav link** in `NavComponent` if it should appear in navigation
+6. **Wire the head tags.** Inject `SeoService` and declare a `seoTags` field
+   initializer with `seo.watch(...)`, plus `seo.<page>.title` / `.description`
+   keys in both languages (see Search Engine Discovery above). A page without
+   this inherits whatever the previously visited page left in `<head>`.
+7. **Add the path to `STATIC_ROUTES`** in `server/routes/sitemap.route.js` if
+   the page should be indexed. The sitemap does not read `app.routes.ts`.
 
 ---
 

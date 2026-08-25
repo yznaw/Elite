@@ -165,6 +165,16 @@ See `server/routes/config.route.js`. No auth required.
 |---|---|---|
 | `GET` | `/api/config` | Returns public tenant configuration — `{ defaultImage }`. `defaultImage` is stored in `tenants.config` JSONB and set via the media "Set as Default Fallback" button. The client-web reads this on init to use as a product image fallback. |
 
+### Public — Sitemap (`/api/sitemap.xml`)
+
+See `server/routes/sitemap.route.js`. No auth required. Generated from live data on every request and cached for an hour at the edge.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/sitemap.xml` | `application/xml` sitemap covering the storefront's indexable URLs: the static pages (`/`, `/collection`, `/story`, `/experience`, `/contact`), every `status = 'active'` collection (nested ones as `/collection/:parent/:child`), every `status = 'active'` product (`/product/:id`), and every `status = 'active'` policy (`/policy/:handle`). `<lastmod>` comes from each row's `updated_at`. |
+
+Checkout, `/thank-you` and the checkout-result routes are deliberately excluded — transactional dead ends with nothing to index. Crawlers reach this at `https://elitecollections.qa/sitemap.xml`; nginx proxies that root path to this endpoint so the SPA fallback does not answer it with `index.html` (see `docs/09-nginx-https.md`). `robots.txt` ships as a static asset with the Angular bundle at `client/projects/client-web/src/robots.txt` and points at the same URL.
+
 ### Admin — Products (`/api/admin/products`)
 
 See `server/routes/admin-products.route.js`. Full CRUD, bulk delete, media gallery management. All endpoints require an active admin session.
@@ -433,6 +443,7 @@ cp server/.env.example server/.env
 | `DEFAULT_TENANT_NAME` | `Elite` | No | Human name of the tenant |
 | `DEFAULT_CURRENCY` | `QAR` | No | Currency code shown in formatted prices |
 | `CORS_ORIGINS` | `http://localhost:4200,http://localhost:4300` | No | Comma-separated allowed origins |
+| `SITE_URL` | `https://elitecollections.qa` | No | Public origin of the storefront. Used to build absolute URLs in `/api/sitemap.xml`. Set this on any non-production deployment so the sitemap does not advertise the live domain. |
 | `NODE_ENV` | `development` | No | `development` or `production` |
 | `SESSION_SECRET` | — | **Yes** | Long random string for signing the session cookie. Generate with `openssl rand -hex 32` |
 | `SESSION_COOKIE_NAME` | `elite.sid` | No | Name of the session cookie |

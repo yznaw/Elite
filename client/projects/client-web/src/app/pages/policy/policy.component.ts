@@ -4,6 +4,7 @@ import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
+import { SeoService } from '../../services/seo.service';
 
 interface PolicyPage {
   id: string;
@@ -250,8 +251,23 @@ export class PolicyComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly http   = inject(HttpClient);
   private readonly i18n   = inject(I18nService);
+  private readonly seo    = inject(SeoService);
 
   readonly t = (k: string): string => this.i18n.t(k);
+
+  // Policies are thin, near-duplicate pages across stores. They stay indexable
+  // (customers do search for "Elite Collection returns"), but carry no image
+  // and no structured data.
+  private readonly seoTags = this.seo.watch(() => {
+    const policy = this.policy();
+    if (!policy) return null;
+    return {
+      title: policy.title,
+      description: this.i18n.t('seo.policy.description', { title: policy.title }),
+      canonicalPath: `/policy/${policy.handle}`,
+      type: 'article' as const,
+    };
+  });
 
   readonly loading = signal(true);
   readonly error   = signal(false);

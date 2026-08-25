@@ -19,6 +19,7 @@ const adminRefRouter = require('./admin-ref.route');
 const productsRouter = require('./products.route');
 const collectionsRouter = require('./collections.route');
 const policiesRouter = require('./policies.route');
+const sitemapRouter = require('./sitemap.route');
 const adminPoliciesRouter = require('./admin-policies.route');
 const storefrontRouter = require('./storefront.route');
 const refRouter = require('./ref.route');
@@ -48,6 +49,9 @@ router.use('/products', reviewsPublicRouter);
 router.use('/reviews', reviewsGeneralRouter);
 router.use('/collections', collectionsRouter);
 router.use('/policies', policiesRouter);
+// Served to crawlers as https://<storefront>/sitemap.xml — nginx proxies that
+// path here so the SPA's catch-all route never swallows it.
+router.use('/sitemap.xml', sitemapRouter);
 router.use('/storefront', storefrontRouter.router);
 router.use('/ref', refRouter);
 router.use('/contact', contactRouter);

@@ -471,6 +471,25 @@ const EN = {
   'productData.style.derby': 'Derby',
   'productData.style.loafer': 'Loafer',
   'productData.style.boot': 'Boot',
+
+  // SEO — page titles, meta descriptions and link-preview copy. SeoService
+  // appends the site name to every title, so these hold the page part only.
+  'seo.siteName': 'Elite Collection',
+  'seo.tagline': 'Arabic Leather Artisans',
+  'seo.defaultDescription': 'Qatari footwear and accessories with a distinct point of view, custom-crafted in Italy.',
+  'seo.home.title': 'Qatari Footwear, Crafted in Italy',
+  'seo.home.description': 'Discover refined footwear and accessories designed from a Qatari perspective and custom-crafted in Italy.',
+  'seo.collection.title': 'The Collection',
+  'seo.collection.description': 'Every pair in the Elite Collection catalogue, filtered by leather, style, color and size.',
+  'seo.collection.pageDescription': '{title} from Elite Collection. Explore {count} refined pieces.',
+  'seo.story.title': 'Our Story',
+  'seo.story.description': 'Founded in Qatar in 2018, Elite Collection brings a distinct Qatari perspective to pieces custom-crafted in Italy.',
+  'seo.experience.title': 'The Experience',
+  'seo.experience.description': 'What a fitting at the Elite Collection atelier involves, and how a bespoke pair is made.',
+  'seo.contact.title': 'Contact',
+  'seo.contact.description': 'Reach the Elite Collection atelier in Doha for bespoke appointments, sizing help or order enquiries.',
+  'seo.product.description': '{name} in {leather}. Custom-crafted in Italy, {price}.',
+  'seo.policy.description': '{title} for Elite Collection, Doha.',
 } as const;
 
 const AR: Record<keyof typeof EN, string> = {
@@ -915,6 +934,23 @@ const AR: Record<keyof typeof EN, string> = {
   'productData.style.derby': 'ديربي',
   'productData.style.loafer': 'لوفر',
   'productData.style.boot': 'بوت',
+  // SEO
+  'seo.siteName': 'إيليت كوليكشن',
+  'seo.tagline': 'حرفيون عرب لصناعة الجلود',
+  'seo.defaultDescription': 'أحذية وإكسسوارات راقية برؤية قطرية مميزة، تُصنع حسب الطلب في إيطاليا.',
+  'seo.home.title': 'أحذية قطرية بحِرفة إيطالية',
+  'seo.home.description': 'اكتشف أحذية وإكسسوارات راقية تنطلق من رؤية قطرية وتُصنع حسب الطلب في إيطاليا.',
+  'seo.collection.title': 'المجموعة',
+  'seo.collection.description': 'كل قطعة في كتالوج إيليت كوليكشن، مع تصفية حسب الجلد والطراز واللون والمقاس.',
+  'seo.collection.pageDescription': '{title} من إيليت كوليكشن. اكتشف {count} قطعة راقية.',
+  'seo.story.title': 'قصتنا',
+  'seo.story.description': 'تأسست إيليت كولكشن في قطر عام 2018، وتقدّم رؤية قطرية مميزة في قطع تُصنع حسب الطلب في إيطاليا.',
+  'seo.experience.title': 'التجربة',
+  'seo.experience.description': 'ما يجري في جلسة القياس داخل أتيليه إيليت كوليكشن، وكيف يُصنع الحذاء المفصّل.',
+  'seo.contact.title': 'تواصل معنا',
+  'seo.contact.description': 'تواصل مع أتيليه إيليت كوليكشن في الدوحة لحجز موعد تفصيل أو الاستفسار عن المقاسات والطلبات.',
+  'seo.product.description': '{name} من {leather}. يُصنع حسب الطلب في إيطاليا، {price}.',
+  'seo.policy.description': '{title} لدى إيليت كوليكشن، الدوحة.',
 };
 
 export const STRINGS: Record<Locale, Record<string, string>> = {

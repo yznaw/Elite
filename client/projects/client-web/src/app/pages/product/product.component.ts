@@ -11,6 +11,7 @@ import { LocaleService } from '../../services/locale.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
 import { AnalyticsService } from '../../services/analytics.service';
 import { colorKey, colorSlug } from '../../utils/color-slug';
+import { SeoService } from '../../services/seo.service';
 
 interface Accordion {
   id: string;
@@ -63,7 +64,63 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly locale = inject(LocaleService);
   private readonly referenceData = inject(ReferenceDataService);
   private readonly analytics = inject(AnalyticsService);
+  private readonly seo = inject(SeoService);
   private readonly apiBase = this.resolveApiBase();
+
+  /**
+   * Head tags for the product on screen. Null while it loads, so a shared link
+   * never resolves to an empty title.
+   *
+   * The canonical deliberately drops the `?color=` query: each colour is the
+   * same product at the same price, and letting four colour URLs compete would
+   * split whatever ranking the product earns.
+   */
+  private readonly seoTags = this.seo.watch(() => {
+    const p = this.product();
+    if (!p) return null;
+
+    const name = this.i18n.productName(p);
+    const inStock = (p.variants || []).some((v) => Number(v.stock) > 0)
+      || (!p.variants?.length && (p.stock ?? 1) > 0);
+    // Product copy is rich text, so it is flattened before it goes anywhere
+    // a crawler reads it verbatim.
+    const description = this.seo.plainText(
+      this.productTeaser(p) || this.productDescription(p),
+    ) || this.i18n.t('seo.product.description', {
+      name,
+      leather: this.i18n.productLeather(p.leather),
+      price: this.i18n.price(p.price),
+    });
+    const material = this.i18n.productLeather(p.leather).trim();
+
+    return {
+      title: name,
+      description,
+      image: this.gallery()[0],
+      canonicalPath: `/product/${p.id}`,
+      type: 'product' as const,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name,
+        description,
+        image: this.gallery().slice(0, 6).map((src) => this.seo.absolute(src)),
+        brand: { '@type': 'Brand', name: p.brand?.trim() || this.i18n.t('seo.siteName') },
+        // Omitted rather than emitted empty: a blank property is worse than
+        // an absent one, and not every product has a leather on record.
+        ...(material ? { material } : {}),
+        offers: {
+          '@type': 'Offer',
+          price: p.price,
+          priceCurrency: 'QAR',
+          availability: inStock
+            ? 'https://schema.org/InStock'
+            : 'https://schema.org/OutOfStock',
+          url: `${this.seo.origin()}/product/${p.id}`,
+        },
+      },
+    };
+  });
 
   private feedbackTimer: number | undefined;
   private routeSub?: Subscription;

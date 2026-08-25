@@ -2,6 +2,8 @@ import { Component, OnInit, computed, inject, ChangeDetectionStrategy } from '@a
 import { CommonModule } from '@angular/common';
 import { HomeContentService } from '../../services/home-content.service';
 import { LocaleService } from '../../services/locale.service';
+import { I18nService } from '../../services/i18n.service';
+import { SeoService } from '../../services/seo.service';
 
 @Component({
     selector: 'cw-story',
@@ -12,7 +14,16 @@ import { LocaleService } from '../../services/locale.service';
 })
 export class StoryComponent implements OnInit {
   private readonly homeContent = inject(HomeContentService);
+  private readonly i18n = inject(I18nService);
+  private readonly seo = inject(SeoService);
   readonly locale = inject(LocaleService);
+
+  private readonly seoTags = this.seo.watch(() => ({
+    title: this.i18n.t('seo.story.title'),
+    description: this.i18n.t('seo.story.description'),
+    canonicalPath: '/story',
+    type: 'article' as const,
+  }));
 
   readonly content  = computed(() => this.homeContent.contentData().story);
   readonly chapters = computed(() => this.content().chapters);

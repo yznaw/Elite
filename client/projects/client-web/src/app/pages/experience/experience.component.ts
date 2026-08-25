@@ -6,6 +6,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { I18nService } from '../../services/i18n.service';
+import { SeoService } from '../../services/seo.service';
 import { firstValueFrom } from 'rxjs';
 
 type ExperienceView = 'main' | 'thanks';
@@ -644,6 +646,17 @@ const STRINGS: Record<ExperienceLang, Record<string, any>> = {
 export class ExperienceComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly i18n = inject(I18nService);
+  private readonly seo = inject(SeoService);
+
+  // This page keeps its own copy in a local STRINGS map, but the head tags
+  // follow the site-wide locale like every other page.
+  private readonly seoTags = this.seo.watch(() => ({
+    title: this.i18n.t('seo.experience.title'),
+    description: this.i18n.t('seo.experience.description'),
+    canonicalPath: '/experience',
+    type: 'article' as const,
+  }));
 
   // ── Lang ───────────────────────────────────────────────────
   readonly lang = signal<ExperienceLang>('en');
