@@ -56,7 +56,7 @@
   margin: 0 0 14px;
   color: var(--gold);
   font-family: var(--ff-sans);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -74,9 +74,9 @@
 }
 
 .story-hero h1 {
-  max-width: 760px;
-  font-size: clamp(48px, 7.4vw, 92px);
-  line-height: 0.93;
+  max-width: 720px;
+  font-size: clamp(46px, 6.7vw, 84px);
+  line-height: 0.96;
 }
 
 .story-hero h1 span,
@@ -95,7 +95,7 @@
   max-width: 500px;
   margin: 26px 0 0;
   color: var(--cream-dim);
-  font-size: clamp(14px, 1.15vw, 16px);
+  font-size: clamp(15px, 1.15vw, 17px);
   font-weight: 450;
   line-height: 1.8;
 }
@@ -128,10 +128,10 @@
 .story-intro {
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
-  gap: clamp(28px, 7vw, 96px);
+  gap: clamp(28px, 5vw, 72px);
   width: min(1120px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 74px 0 46px;
+  padding: 64px 0 42px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -145,16 +145,16 @@
   align-self: end;
   margin: 0;
   color: var(--cream-dim);
-  font-size: clamp(14px, 1.08vw, 16px);
+  font-size: clamp(15px, 1.08vw, 17px);
   line-height: 1.82;
 }
 
 .chapter-stack {
   display: grid;
-  gap: clamp(34px, 7vw, 86px);
+  gap: clamp(34px, 5vw, 64px);
   width: min(1120px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 72px 0 86px;
+  padding: 60px 0 72px;
 }
 
 .chapter {
@@ -178,7 +178,7 @@
 
 .chapter__image {
   position: relative;
-  min-height: 480px;
+  min-height: 440px;
   overflow: hidden;
   border-radius: 8px;
   background: var(--card);
@@ -223,16 +223,16 @@
   max-width: 500px;
   margin: 24px 0 0;
   color: var(--cream-dim);
-  font-size: clamp(14px, 1.05vw, 15px);
-  line-height: 1.85;
+  font-size: clamp(15px, 1.05vw, 16px);
+  line-height: 1.8;
 }
 
 .quote-band {
   display: grid;
   gap: 12px;
   width: min(1000px, calc(100% - 40px));
-  margin: 0 auto 84px;
-  padding: clamp(42px, 7vw, 74px) clamp(24px, 6vw, 76px);
+  margin: 0 auto 68px;
+  padding: clamp(40px, 5vw, 60px) clamp(24px, 6vw, 76px);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   text-align: center;
@@ -240,14 +240,14 @@
 
 .quote-band p {
   color: var(--cream);
-  font-size: clamp(34px, 5.5vw, 66px);
+  font-size: clamp(32px, 4.8vw, 56px);
   line-height: 1.02;
 }
 
 .quote-band strong {
   color: var(--gold);
   font-family: var(--ff-serif);
-  font-size: clamp(22px, 4vw, 42px);
+  font-size: clamp(22px, 3.5vw, 36px);
   font-style: italic;
   font-weight: 500;
   line-height: 1.15;
@@ -265,7 +265,7 @@
 .atelier {
   width: min(1120px, calc(100% - 40px));
   margin: 0 auto;
-  padding-bottom: 96px;
+  padding-bottom: 80px;
 }
 
 .atelier__head {
@@ -282,7 +282,7 @@
 
 .atelier__head span {
   color: var(--cream-dim);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.75;
 }
 
@@ -295,8 +295,8 @@
 }
 
 .atelier-card {
-  min-height: 190px;
-  padding: 24px;
+  min-height: 164px;
+  padding: 22px;
   background: var(--bg);
 }
 
@@ -308,7 +308,7 @@
 }
 
 .atelier-card h3 {
-  margin: 42px 0 8px;
+  margin: 30px 0 8px;
   color: var(--cream);
   font-family: var(--ff-serif);
   font-size: 22px;
@@ -385,15 +385,15 @@
   }
 
   .story-hero h1 {
-    font-size: clamp(42px, 13vw, 54px);
-    line-height: 0.96;
+    font-size: clamp(38px, 11vw, 46px);
+    line-height: 1;
   }
 
   .story-hero__body {
     max-width: 340px;
     margin-top: 22px;
-    font-size: 14px;
-    line-height: 1.72;
+    font-size: 15px;
+    line-height: 1.7;
   }
 
   .story-hero__facts {
@@ -420,12 +420,14 @@
 
   .story-intro > p,
   .chapter__copy > p:last-child {
-    font-size: 14px;
-    line-height: 1.78;
+    font-size: 15px;
+    line-height: 1.72;
   }
 
   .chapter-stack {
     padding-top: 50px;
+    padding-bottom: 64px;
+    gap: 42px;
   }
 
   .chapter__image {
@@ -434,12 +436,12 @@
   }
 
   .quote-band {
-    margin-bottom: 64px;
-    padding: 42px 20px;
+    margin-bottom: 56px;
+    padding: 38px 20px;
   }
 
   .quote-band p {
-    font-size: 36px;
+    font-size: 32px;
   }
 
   .atelier__grid {
@@ -447,6 +449,16 @@
   }
 
   .atelier-card {
-    min-height: 154px;
+    min-height: 132px;
+    padding: 20px;
+  }
+
+  .atelier-card h3 {
+    margin-top: 24px;
+  }
+
+  :host-context(html[dir='rtl']) .story-hero h1 {
+    font-size: clamp(38px, 10.5vw, 44px);
+    line-height: 1.06;
   }
 }

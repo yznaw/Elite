@@ -55,10 +55,10 @@ interface StorefrontContent {
     infoBlocks: ContactBlock[]; socialLinks: SocialLink[];
   };
   story: {
-    hero:      { kicker: string; title: string; accent: string; body: string; imageUrl: string; imageAlt: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; accentEn: string; accentAr: string; bodyEn: string; bodyAr: string; };
+    hero:      { kicker: string; title: string; accent: string; body: string; imageUrl: string; imageAlt: string; imageAltEn: string; imageAltAr: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; accentEn: string; accentAr: string; bodyEn: string; bodyAr: string; };
     heroFacts: HeroFact[];
     intro:     { kicker: string; headline: string; body: string; kickerEn: string; kickerAr: string; headlineEn: string; headlineAr: string; bodyEn: string; bodyAr: string; };
-    chapters:  Array<{ id: string; eyebrow: string; title: string; body: string; imageUrl: string; imageAlt: string; eyebrowEn: string; eyebrowAr: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; }>;
+    chapters:  Array<{ id: string; eyebrow: string; title: string; body: string; imageUrl: string; imageAlt: string; imageAltEn: string; imageAltAr: string; eyebrowEn: string; eyebrowAr: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; }>;
     quote:     { text: string; accent: string; author: string; textEn: string; textAr: string; accentEn: string; accentAr: string; authorEn: string; authorAr: string; };
     atelier:   { kicker: string; title: string; body: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; items: Array<{ id: string; title: string; meta: string; titleEn: string; titleAr: string; metaEn: string; metaAr: string; }>; };
   };
@@ -767,7 +767,7 @@ interface StorefrontContent {
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.imageAlt') }}</span><input class="inp" [ngModel]="content().story.hero.imageAlt" (ngModelChange)="patchStoryHero('imageAlt',$event)"/></label>
+                <div class="two-col"><label><span class="lbl">Image description (English)</span><input class="inp" [ngModel]="content().story.hero.imageAltEn" (ngModelChange)="patchStoryHero('imageAltEn',$event)"/></label><label><span class="lbl">وصف الصورة (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.imageAltAr" (ngModelChange)="patchStoryHero('imageAltAr',$event)"/></label></div>
               </div>
             </div>
             <div class="card preview-card">
@@ -852,7 +852,7 @@ interface StorefrontContent {
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">{{ t('storefront.editor.chapters.imageAlt') }}</span><input class="inp" [ngModel]="chapter.imageAlt" (ngModelChange)="patchChapter(i,'imageAlt',$event)"/></label>
+                <div class="two-col"><label><span class="lbl">Image description (English)</span><input class="inp" [ngModel]="chapter.imageAltEn" (ngModelChange)="patchChapter(i,'imageAltEn',$event)"/></label><label><span class="lbl">وصف الصورة (العربية)</span><input class="inp" dir="rtl" [ngModel]="chapter.imageAltAr" (ngModelChange)="patchChapter(i,'imageAltAr',$event)"/></label></div>
               </div>
             </div>
           }
@@ -2878,7 +2878,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     const id = `chapter-${Date.now()}`;
     this.content.update((c) => ({
       ...c,
-      story: { ...c.story, chapters: [...c.story.chapters, { id, eyebrow: '', title: '', body: '', imageUrl: '', imageAlt: '', eyebrowEn: '', eyebrowAr: '', titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' }] },
+      story: { ...c.story, chapters: [...c.story.chapters, { id, eyebrow: '', title: '', body: '', imageUrl: '', imageAlt: '', imageAltEn: '', imageAltAr: '', eyebrowEn: '', eyebrowAr: '', titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' }] },
     }));
     this.markDirty();
   }

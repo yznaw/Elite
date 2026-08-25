@@ -32,6 +32,8 @@ export interface StoryHeroContent {
   body: string;
   imageUrl: string;
   imageAlt: string;
+  imageAltEn: string;
+  imageAltAr: string;
   kickerEn: string;
   kickerAr: string;
   titleEn: string;
@@ -61,6 +63,8 @@ export interface StoryChapterContent {
   body: string;
   imageUrl: string;
   imageAlt: string;
+  imageAltEn: string;
+  imageAltAr: string;
   eyebrowEn: string;
   eyebrowAr: string;
   titleEn: string;
@@ -294,6 +298,8 @@ export function createEmptyHomeContent(): HomeContentData {
         body: '',
         imageUrl: '',
         imageAlt: '',
+        imageAltEn: '',
+        imageAltAr: '',
         kickerEn: '', kickerAr: '', titleEn: '', titleAr: '', accentEn: '', accentAr: '', bodyEn: '', bodyAr: '',
       },
       intro: {

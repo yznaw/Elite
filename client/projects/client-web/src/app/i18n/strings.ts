@@ -11,8 +11,8 @@ const EN = {
   // ─────────────────────────────────────────────────────────────────────
   'brand.name': 'ELITE',
   'brand.tagline': 'Arabic Leather Artisans',
-  'brand.heritageEst': 'Est. 1962 · Doha',
-  'brand.heritageEstFull': 'Est. 1962 · Doha, Kingdom of Qatar',
+  'brand.heritageEst': 'Est. 2018 · Qatar',
+  'brand.heritageEstFull': 'Established 2018 · Qatar',
 
   // ─────────────────────────────────────────────────────────────────────
   //  Navigation
@@ -78,7 +78,7 @@ const EN = {
   // ─────────────────────────────────────────────────────────────────────
   //  Footer
   // ─────────────────────────────────────────────────────────────────────
-  'footer.tagline': 'Handcrafted in Doha since 1962. Limited to 400 pairs per year.',
+  'footer.tagline': 'Founded in Qatar in 2018. Custom-crafted in Italy.',
   'footer.col.collection': 'Collection',
   'footer.col.atelier': 'Home',
   'footer.col.client': 'Client',
@@ -477,8 +477,8 @@ const AR: Record<keyof typeof EN, string> = {
   // Brand
   'brand.name': 'إيليت',
   'brand.tagline': 'حرفيون عرب لصناعة الجلود',
-  'brand.heritageEst': 'تأسس 1962 · الدوحة',
-  'brand.heritageEstFull': 'تأسس 1962 · الدوحة، دولة قطر',
+  'brand.heritageEst': 'تأسست 2018 · قطر',
+  'brand.heritageEstFull': 'تأسست عام 2018 · قطر',
 
   // Navigation
   'nav.atelier': 'الرئيسية',
@@ -536,7 +536,7 @@ const AR: Record<keyof typeof EN, string> = {
   'cart.trust.returns': 'إرجاع خلال 30 يوماً',
 
   // Footer
-  'footer.tagline': 'صناعة يدوية في الدوحة منذ 1962. محدود بـ 400 زوج سنوياً.',
+  'footer.tagline': 'تأسست في قطر عام 2018. تُصنع حسب الطلب في إيطاليا.',
   'footer.col.collection': 'المجموعة',
   'footer.col.atelier': 'الرئيسية',
   'footer.col.client': 'خدمة العملاء',

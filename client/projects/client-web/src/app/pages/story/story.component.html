@@ -3,7 +3,7 @@
     <div class="story-hero__media">
       <img
         [src]="content().hero.imageUrl"
-        [alt]="content().hero.imageAlt"
+        [alt]="localizedImageAlt(content().hero.imageAltEn, content().hero.imageAltAr, content().hero.imageAlt)"
         (error)="onImgError($event)"
       />
     </div>
@@ -19,14 +19,14 @@
       <p class="story-hero__body">{{ localized(content().hero.bodyEn, content().hero.bodyAr, content().hero.body) }}</p>
     </div>
 
-    <div class="story-hero__facts" aria-label="Story highlights">
+    <div class="story-hero__facts" [attr.aria-label]="localized('Story highlights', 'أبرز محطات القصة')">
       @for (fact of content().heroFacts; track fact.id) {
         <span>{{ localized(fact.labelEn, fact.labelAr, fact.label) }}</span>
       }
     </div>
   </section>
 
-  <section class="story-intro" aria-label="Craft philosophy">
+  <section class="story-intro" [attr.aria-label]="localized('Craft philosophy', 'فلسفة الحرفة')">
     <div>
       <p class="story-kicker">{{ localized(content().intro.kickerEn, content().intro.kickerAr, content().intro.kicker) }}</p>
       <h2>{{ localized(content().intro.headlineEn, content().intro.headlineAr, content().intro.headline) }}</h2>
@@ -34,11 +34,15 @@
     <p>{{ localized(content().intro.bodyEn, content().intro.bodyAr, content().intro.body) }}</p>
   </section>
 
-  <section class="chapter-stack" aria-label="Elite story chapters">
+  <section class="chapter-stack" [attr.aria-label]="localized('Elite story chapters', 'فصول قصة إيليت')">
     @for (chapter of chapters(); track chapter.id; let i = $index) {
       <article class="chapter" [class.chapter--reverse]="i % 2 === 1">
         <div class="chapter__image">
-          <img [src]="chapter.imageUrl" [alt]="chapter.imageAlt" (error)="onImgError($event)" />
+          <img
+            [src]="chapter.imageUrl"
+            [alt]="localizedImageAlt(chapter.imageAltEn, chapter.imageAltAr, chapter.imageAlt)"
+            (error)="onImgError($event)"
+          />
           <span>{{ (i + 1).toString().padStart(2, '0') }}</span>
         </div>
 
@@ -51,13 +55,13 @@
     }
   </section>
 
-  <section class="quote-band" aria-label="Atelier quote">
+  <section class="quote-band" [attr.aria-label]="localized('Atelier quote', 'اقتباس إيليت')">
     <p>{{ localized(content().quote.textEn, content().quote.textAr, content().quote.text) }}</p>
     <strong>{{ localized(content().quote.accentEn, content().quote.accentAr, content().quote.accent) }}</strong>
     <span>{{ localized(content().quote.authorEn, content().quote.authorAr, content().quote.author) }}</span>
   </section>
 
-  <section class="atelier">
+  <section class="atelier" [attr.aria-label]="localized('Our standard', 'معيارنا')">
     <div class="atelier__head">
       <p class="story-kicker">{{ localized(content().atelier.kickerEn, content().atelier.kickerAr, content().atelier.kicker) }}</p>
       <h2>{{ localized(content().atelier.titleEn, content().atelier.titleAr, content().atelier.title) }}</h2>

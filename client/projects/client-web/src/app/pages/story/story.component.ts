@@ -21,6 +21,15 @@ export class StoryComponent implements OnInit {
     return (this.locale.locale() === 'ar' ? ar : en)?.trim() || legacy;
   }
 
+  localizedImageAlt(en: string | undefined, ar: string | undefined, legacy = ''): string {
+    const localizedAlt = this.localized(en, ar);
+    if (localizedAlt) return localizedAlt;
+    if (this.locale.locale() !== 'ar' && legacy.trim()) return legacy.trim();
+    return this.locale.locale() === 'ar'
+      ? 'قطعة جلدية من إيليت كولكشن منفّذة بعناية'
+      : 'An Elite Collection leather piece, crafted with care';
+  }
+
   ngOnInit(): void {
     void this.homeContent.refresh(true);
   }

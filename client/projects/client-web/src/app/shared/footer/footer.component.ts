@@ -162,7 +162,7 @@ interface PolicyMeta {
       padding-top: 12px;
       color: var(--muted);
       font-family: var(--ff-sans);
-      font-size: 9px;
+      font-size: 10px;
       line-height: 1;
       letter-spacing: 0;
       text-transform: uppercase;
@@ -180,14 +180,14 @@ interface PolicyMeta {
 
     .footer-brand p,
     .footer-bottom p {
-      color: var(--muted);
+      color: var(--cream-dim);
       font-family: var(--ff-sans);
     }
 
     .footer-brand p {
-      max-width: 240px;
-      font-size: 11px;
-      line-height: 1.8;
+      max-width: 270px;
+      font-size: 13px;
+      line-height: 1.7;
     }
 
     .footer-social {
@@ -217,7 +217,7 @@ interface PolicyMeta {
       margin-bottom: 16px;
       color: var(--gold);
       font-family: var(--ff-sans);
-      font-size: 9px;
+      font-size: 10px;
       line-height: 1;
       letter-spacing: 0;
       text-transform: uppercase;
@@ -227,9 +227,9 @@ interface PolicyMeta {
       display: block;
       width: fit-content;
       padding: 4px 0;
-      color: var(--muted);
+      color: var(--cream-dim);
       font-family: var(--ff-sans);
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1.45;
       letter-spacing: 0;
       text-align: start;
@@ -257,7 +257,7 @@ interface PolicyMeta {
     }
 
     .footer-bottom p {
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1.4;
       letter-spacing: 0;
     }
