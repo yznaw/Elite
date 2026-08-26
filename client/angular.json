@@ -25,7 +25,12 @@
             "assets": [
               "projects/client-web/src/favicon.ico",
               "projects/client-web/src/robots.txt",
-              "projects/client-web/src/assets"
+              "projects/client-web/src/assets",
+              {
+                "glob": "elitebooth.html",
+                "input": "projects/client-web/src/standalone",
+                "output": "/"
+              }
             ],
             "styles": ["projects/client-web/src/styles.scss"],
             "scripts": []
