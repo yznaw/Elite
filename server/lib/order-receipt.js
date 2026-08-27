@@ -56,7 +56,7 @@ async function sendReceiptForPaidOrder(client, tenantId, orderId) {
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;background:#fffdf9;border:1px solid #e8e1d6;border-top:4px solid #b8924a">
               <tr><td style="padding:34px 36px 28px;background:#024638;color:#fffaf0">
                 <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;letter-spacing:.16em;line-height:34px">ELITE</div>
-                <div style="margin-top:8px;color:#d6bc91;font-size:11px;letter-spacing:.18em;text-transform:uppercase">Arabic Leather Artisans · Est. 1962</div>
+                <div style="margin-top:8px;color:#d6bc91;font-size:11px;letter-spacing:.18em;text-transform:uppercase">Arabic Leather Artisans · Est. 2018</div>
               </td></tr>
               <tr><td style="padding:34px 36px 12px">
                 <div style="color:#b8924a;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:bold">Payment confirmed</div>

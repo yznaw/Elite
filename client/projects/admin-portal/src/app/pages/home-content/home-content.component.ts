@@ -112,7 +112,7 @@ const DEFAULT_HOME_CONTENT: HomeContentData = {
   ],
   story: {
     hero: {
-      kicker: 'Est. 1962 · Doha',
+      kicker: 'Est. 2018 · Doha',
       title: 'A House Built by Hand',
       accent: 'and carried by craft',
       body: 'Elite began as a small atelier serving men who wanted shoes with presence, patience, and a story in every stitch.',
@@ -122,7 +122,7 @@ const DEFAULT_HOME_CONTENT: HomeContentData = {
     chapters: [
       {
         id: 'origin',
-        eyebrow: '1962 · The first bench',
+        eyebrow: '2018 · The first bench',
         title: 'A single workbench in old Doha',
         body: 'Our first pairs were measured by hand, cut in quiet batches, and finished for customers who cared about the feel of leather as much as the look of it.',
         imageUrl: 'https://images.unsplash.com/photo-1582588678413-dbf45f4823e9?w=1000&q=85&auto=format&fit=crop',

@@ -186,7 +186,7 @@ These keys contain the Elite brand identity and MUST be changed:
 'contact.info.client.l2': 'advisors@acmeshoes.com',
 
 // Story page (if enabled)
-'story.chapter.1962.title': 'A Workshop in Brera',  // ← Rewrite the entire story
+'story.chapter.2018.title': 'A Workshop in Brera',  // ← Rewrite the entire story
 // ... all story.* keys
 
 // Product descriptions

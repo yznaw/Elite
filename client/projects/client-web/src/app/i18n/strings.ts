@@ -378,8 +378,8 @@ const EN = {
   'story.hero.alt': 'Artisan workshop',
   'story.subhead': 'Six decades of Arabic leather artisanship. Twelve master craftsmen. One unbroken promise.',
 
-  'story.chapter.1962.title': 'A Workshop in Al-Dirah',
-  'story.chapter.1962.body': "In the ancient souks of Doha's Al-Dirah quarter, master cobbler Khalid Al-Rashidi opened a workshop with nothing but a single last, a curved needle, and an uncompromising vision. Every pair he produced bore the weight of his name — each stitch a contract between craftsman and wearer.",
+  'story.chapter.2018.title': 'A Workshop in Al-Dirah',
+  'story.chapter.2018.body': "In the ancient souks of Doha's Al-Dirah quarter, master cobbler Khalid Al-Rashidi opened a workshop with nothing but a single last, a curved needle, and an uncompromising vision. Every pair he produced bore the weight of his name — each stitch a contract between craftsman and wearer.",
   'story.chapter.1978.title': 'The Camel Leather Discovery',
   'story.chapter.1978.body': "A chance encounter with Bedouin leather traders from the Najd plateau introduced Khalid to full-grain camel hide — a material of extraordinary durability, warmth, and a grain unlike anything sourced from European tanneries. The leather breathes in desert heat and softens with wear into a second skin. It became the house's defining material overnight.",
   'story.chapter.1995.title': 'Royal Patronage',
@@ -845,8 +845,8 @@ const AR: Record<keyof typeof EN, string> = {
   'story.hero.alt': 'ورشة حرفيين',
   'story.subhead': 'ستة عقود من الحرفية الجلدية العربية. اثنا عشر حرفياً ماهراً. وعد واحد لا يُكسَر.',
 
-  'story.chapter.1962.title': 'ورشة في الدِّيرة',
-  'story.chapter.1962.body': 'في أسواق حي الدِّيرة العتيقة في الدوحة، افتتح الحرفي الماهر خالد الراشدي ورشةً بقالبٍ واحد، وإبرة منحنية، ورؤية لا تقبل المساومة. كل زوج صنعه حمل ثقل اسمه — كل غرزة عقدٌ بين الحرفي ومُرتديه.',
+  'story.chapter.2018.title': 'ورشة في الدِّيرة',
+  'story.chapter.2018.body': 'في أسواق حي الدِّيرة العتيقة في الدوحة، افتتح الحرفي الماهر خالد الراشدي ورشةً بقالبٍ واحد، وإبرة منحنية، ورؤية لا تقبل المساومة. كل زوج صنعه حمل ثقل اسمه — كل غرزة عقدٌ بين الحرفي ومُرتديه.',
   'story.chapter.1978.title': 'اكتشاف جلد الجمل',
   'story.chapter.1978.body': 'لقاء عابر مع تجار جلود بدو من هضبة نجد عرّف خالد على جلد الجمل كامل الحبيبات — مادة استثنائية في المتانة والدفء وحبيبات لا تشبه أي جلد من المدابغ الأوروبية. الجلد يتنفس في حر الصحراء ويلين بالاستعمال إلى جلد ثانٍ. أصبح المادة المُعرّفة للدار بين عشية وضحاها.',
   'story.chapter.1995.title': 'الرعاية الملكية',
