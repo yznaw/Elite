@@ -380,6 +380,40 @@ Keeping them apart is the point: "runs one size small" is true of the whole prod
 | Public API | `noteEn` / `noteAr` on each variant of `GET /api/products` and `/api/products/:id` | Empty string when unset. |
 | Storefront | `productNote()` and `selectedSizeNote()` in `product.component.ts` | `selectedSizeNote()` picks the note off the variant matching both the selected size and the selected colour; both resolve the locale with a fallback to the other language when only one is filled. Rendered stacked in `.gallery-bar` inside the gallery frame, with the size note repeated as a plain line under the size options. |
 
+### Admin — Expenses (`/api/admin/expenses`)
+
+See `server/routes/admin-expenses.route.js`. The operating-expense ledger — rent, salaries, utilities, marketing — which nothing tracked before migration `033_expenses.sql`. Mounted with `requireAuth({ roles: ['owner', 'admin'] })`: this is whole-business financial data, a narrower scope than `/pos-reports` (which managers can also reach).
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/expenses` | Ledger for a window. Query: `from`, `to` (both `YYYY-MM-DD`, defaulting to the current month), `category`, `search` (matches vendor or note). |
+| `GET` | `/api/admin/expenses/summary` | `{ total, byCategory[] }` for a window — the shape the Analytics page folds into net profit. |
+| `GET` | `/api/admin/expenses/export.csv` | The filtered ledger as CSV, UTF-8 with a BOM so Excel reads Arabic vendor/note columns correctly. |
+| `POST` \| `PATCH` \| `DELETE` | `/api/admin/expenses`, `/api/admin/expenses/:id` | Create / update / delete. `amount` is sent in QAR and stored via `toCents()`. |
+| `POST` | `/api/admin/expenses/import-pos-cash-outs` | Mirrors `pos_cash_movements` rows of kind `paid_out` into the ledger as `source = 'pos_cash_out'`. |
+
+**Recurrence is expanded on read, not scheduled.** A monthly or yearly bill is stored as one template row; `generate_series` projects its later occurrences across the requested window (a `none` row falls out of the same series as a single row, via a 1000-year step). There is no cron job to keep alive and no drift between what was scheduled and what the ledger says. Projected occurrences come back with `isProjected: true` and no row of their own; editing one materialises it as a real row carrying `recurrence_parent_id`, and the template's occurrence for that date is then suppressed, so only that period changes.
+
+**The POS import is idempotent.** The partial unique index `expenses_pos_source_idx ON (tenant_id, source_ref_id) WHERE source = 'pos_cash_out'` plus `ON CONFLICT DO NOTHING` means re-running the import can never double-count a cash movement. Verified: first run imports, every subsequent run reports `imported: 0`.
+
+**Dates are returned as plain `YYYY-MM-DD` strings.** A Postgres `date` arrives in Node as a Date at local midnight, which serialises to the *previous* day in UTC JSON (Qatar is UTC+3) — an expense dated the 5th would reach the edit form as the 4th. `toIsoDate()` in the route pulls the calendar date out in local terms instead.
+
+### Admin — Shipping Cost Report (`/api/admin/analytics/shipping-costs`)
+
+In `server/routes/admin-analytics.route.js`. Per-product shipping-cost coverage across the whole catalogue, plus a `coverage` block (`totalVariants`, `withShipping`, `withoutShipping`, `coveragePct`, `avgShipping`, `totalShipping`). Not range-scoped — the catalogue is a current-state question, not a time-series one.
+
+The important difference from `/cost-summary`: that endpoint inner-joins on `total_cost_cents IS NOT NULL`, which hides exactly the products the shop owner needs to find. Here every non-archived product comes back regardless, with nulls where no shipping cost is recorded, and results are ordered **missing first** so the list doubles as a to-do. `variantsWithShipping` vs `variantCount` distinguishes a product with no data at all from one that is only partly filled in.
+
+Note that shipping cost is already inside `product_variants.total_cost_cents` (a stored generated column, `cost_price_cents + shipping_cost_cents`, from migration `012_shipping_cost.sql`), so it is *already* subtracted by the COGS figure in `/profit-summary`. This report is for finding gaps in the data, not for adding shipping into profit a second time.
+
+### Admin — Profit Summary (`/api/admin/analytics/profit-summary`)
+
+Added to `server/routes/admin-analytics.route.js` alongside `/storefront`, `/overview`, and `/cost-summary`; takes the same `?range=7d|30d|90d|1y` key.
+
+Returns `revenue`, `cogs`, `expenses`, `netProfit`, `netMarginPct`, `expensesByCategory[]`, and `cogsCoverage`.
+
+This is a different — and truer — figure than `/cost-summary`. That endpoint averages catalogue margin percentages across variants, which says how profitable the products *could* be; this one computes COGS from what actually sold (`order_items.quantity * product_variants.total_cost_cents` over paid orders in the window) and then subtracts real operating expenses on top. `cogsCoverage.lineItemsWithoutCost` reports how many sold line items have no cost recorded, so the UI can warn rather than quietly overstate profit.
+
 ### Public — Policies (`/api/policies`) and Admin — Policies (`/api/admin/policies`)
 
 See `server/routes/policies.route.js` (public) and `server/routes/admin-policies.route.js` (admin, requires session). Legal pages — Privacy Policy, Terms of Service, Shipping Policy, etc. — surfaced in the storefront footer and at `/policy/:handle`.

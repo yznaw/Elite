@@ -407,6 +407,8 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
         // No cashier access, matching roleGuard(['owner','admin','manager']) on /reconciliation and /reports.
         { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale', roles: ['owner', 'admin', 'manager'] },
         { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv', roles: ['owner', 'admin', 'manager'] },
+        // Owner/admin only — matches roleGuard on /expenses.
+        { path: '/expenses',       labelKey: 'nav.expenses',       subKey: 'nav.expenses.sub',       icon: 'expenses', roles: ['owner', 'admin'] },
       ],
     },
     {

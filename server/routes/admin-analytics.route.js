@@ -333,6 +333,208 @@ router.get('/cost-summary', asyncHandler(async (_req, res) => {
   }
 }));
 
+// ── Shipping Cost Report ──────────────────────────────────────────────────────
+// Every non-archived product with its shipping-cost coverage, including the
+// ones that have none recorded.
+//
+// This is deliberately different from /cost-summary, which inner-joins on
+// `total_cost_cents IS NOT NULL` and so hides exactly the products the shop
+// owner needs to find — the ones still missing a shipping cost. Here the join
+// is a LEFT JOIN and a product with no cost at all still comes back, with
+// nulls, so the gap is visible instead of silently excluded.
+router.get('/shipping-costs', asyncHandler(async (_req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+
+    const [coverage, perProduct] = await Promise.all([
+      client.query(
+        `
+          SELECT
+            COUNT(*)::int                                                          AS total_variants,
+            COUNT(*) FILTER (WHERE pv.shipping_cost_cents IS NOT NULL)::int        AS with_shipping,
+            COUNT(*) FILTER (WHERE pv.shipping_cost_cents IS NULL)::int            AS without_shipping,
+            round(AVG(pv.shipping_cost_cents) / 100.0, 2)::float                   AS avg_shipping,
+            COALESCE(SUM(pv.shipping_cost_cents), 0)::bigint                       AS total_shipping_cents
+          FROM product_variants pv
+          JOIN products p ON p.id = pv.product_id
+          WHERE pv.tenant_id = $1 AND p.status <> 'archived'
+        `,
+        [tenant.id],
+      ),
+      client.query(
+        `
+          SELECT
+            p.id                                                                   AS product_id,
+            p.name,
+            p.sku,
+            COUNT(pv.id)::int                                                      AS variant_count,
+            COUNT(pv.shipping_cost_cents)::int                                     AS variants_with_shipping,
+            round(AVG(pv.shipping_cost_cents) / 100.0, 2)::float                   AS avg_shipping,
+            round(MIN(pv.shipping_cost_cents) / 100.0, 2)::float                   AS min_shipping,
+            round(MAX(pv.shipping_cost_cents) / 100.0, 2)::float                   AS max_shipping,
+            round(AVG(pv.cost_price_cents)    / 100.0, 2)::float                   AS avg_cost,
+            round(AVG(pv.price_cents)         / 100.0, 2)::float                   AS avg_price
+          FROM products p
+          JOIN product_variants pv ON pv.product_id = p.id
+          WHERE p.tenant_id = $1 AND p.status <> 'archived'
+          GROUP BY p.id, p.name, p.sku
+          -- Products missing shipping data first: that is the list to act on.
+          ORDER BY (COUNT(pv.shipping_cost_cents) = 0) DESC,
+                   (COUNT(pv.id) - COUNT(pv.shipping_cost_cents)) DESC,
+                   p.name
+        `,
+        [tenant.id],
+      ),
+    ]);
+
+    const c = coverage.rows[0] || {};
+    const totalVariants = Number(c.total_variants || 0);
+    const withShipping = Number(c.with_shipping || 0);
+
+    ok(res, {
+      coverage: {
+        totalVariants,
+        withShipping,
+        withoutShipping: Number(c.without_shipping || 0),
+        coveragePct: totalVariants ? Math.round((withShipping / totalVariants) * 1000) / 10 : 0,
+        avgShipping: c.avg_shipping,
+        totalShipping: Math.round(Number(c.total_shipping_cents || 0)) / 100,
+      },
+      products: perProduct.rows.map((r) => ({
+        productId: r.product_id,
+        name: r.name,
+        sku: r.sku,
+        variantCount: r.variant_count,
+        variantsWithShipping: r.variants_with_shipping,
+        avgShipping: r.avg_shipping,
+        minShipping: r.min_shipping,
+        maxShipping: r.max_shipping,
+        avgCost: r.avg_cost,
+        avgPrice: r.avg_price,
+      })),
+    });
+  } finally {
+    client.release();
+  }
+}));
+
+// ── Profit Summary ────────────────────────────────────────────────────────────
+// Revenue minus cost of goods sold minus operating expenses, over the same
+// range keys the rest of the page uses.
+//
+// Note this is a different (and truer) figure than /cost-summary above:
+// /cost-summary averages catalogue margin percentages across variants, which
+// says how profitable the products *could* be. This computes COGS from what
+// actually sold, and then subtracts real operating expenses on top.
+router.get('/profit-summary', asyncHandler(async (req, res) => {
+  const interval = RANGE_INTERVALS[req.query.range] || RANGE_INTERVALS['30d'];
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const args = [tenant.id, interval];
+
+    const [revenue, cogs, expenses] = await Promise.all([
+      client.query(
+        `
+          SELECT COALESCE(SUM(total_cents) FILTER (WHERE payment_status = 'paid'), 0)::bigint AS revenue_cents
+          FROM orders
+          WHERE tenant_id = $1 AND COALESCE(paid_at, created_at) >= now() - $2::interval
+        `,
+        args,
+      ),
+      // Cost of goods actually sold. Line items whose variant was deleted, or
+      // whose variant never had a cost entered, contribute 0 to COGS but are
+      // counted so the UI can warn that coverage is partial.
+      client.query(
+        `
+          SELECT
+            COALESCE(SUM(oi.quantity * pv.total_cost_cents), 0)::bigint            AS cogs_cents,
+            COUNT(*)::int                                                          AS line_items,
+            COUNT(*) FILTER (WHERE pv.total_cost_cents IS NULL)::int               AS line_items_without_cost
+          FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id
+          LEFT JOIN product_variants pv ON pv.id = oi.variant_id
+          WHERE o.tenant_id = $1
+            AND o.payment_status = 'paid'
+            AND COALESCE(o.paid_at, o.created_at) >= now() - $2::interval
+        `,
+        args,
+      ),
+      // Mirrors the recurrence expansion in admin-expenses.route.js so a
+      // recurring bill counts once per period inside the window.
+      client.query(
+        `
+          WITH occ AS (
+            SELECT e.*, g.d::date AS occurrence_date
+            FROM expenses e
+            CROSS JOIN LATERAL generate_series(
+              e.expense_date::timestamp,
+              now()::timestamp,
+              CASE e.recurrence
+                WHEN 'monthly' THEN interval '1 month'
+                WHEN 'yearly'  THEN interval '1 year'
+                ELSE interval '1000 years'
+              END
+            ) AS g(d)
+            WHERE e.tenant_id = $1 AND e.expense_date <= now()::date
+          ),
+          expanded AS (
+            SELECT occ.* FROM occ
+            WHERE occ.occurrence_date >= (now() - $2::interval)::date
+              AND NOT EXISTS (
+                SELECT 1 FROM expenses child
+                WHERE child.tenant_id = occ.tenant_id
+                  AND child.recurrence_parent_id = occ.id
+                  AND child.expense_date = occ.occurrence_date
+              )
+          )
+          SELECT category,
+                 COALESCE(SUM(amount_cents), 0)::bigint AS total_cents
+          FROM expanded
+          GROUP BY category
+          ORDER BY total_cents DESC
+        `,
+        args,
+      ),
+    ]);
+
+    const revenueCents = Number(revenue.rows[0]?.revenue_cents || 0);
+    const cogsRow = cogs.rows[0] || {};
+    const cogsCents = Number(cogsRow.cogs_cents || 0);
+    const expenseRows = expenses.rows;
+    const expensesCents = expenseRows.reduce((sum, r) => sum + Number(r.total_cents), 0);
+
+    const toQar = (cents) => Math.round(Number(cents || 0)) / 100;
+    const totalExpenses = expensesCents;
+
+    ok(res, {
+      revenue:   toQar(revenueCents),
+      cogs:      toQar(cogsCents),
+      expenses:  toQar(expensesCents),
+      netProfit: toQar(revenueCents - cogsCents - expensesCents),
+      // Net margin against revenue, one decimal, matching the rest of the page.
+      netMarginPct: revenueCents
+        ? Math.round(((revenueCents - cogsCents - expensesCents) / revenueCents) * 1000) / 10
+        : 0,
+      // Lets the UI say "cost data missing for N items" instead of quietly
+      // overstating profit.
+      cogsCoverage: {
+        lineItems: Number(cogsRow.line_items || 0),
+        lineItemsWithoutCost: Number(cogsRow.line_items_without_cost || 0),
+      },
+      expensesByCategory: expenseRows.map((r, i) => ({
+        category: r.category,
+        total: toQar(r.total_cents),
+        pct: totalExpenses ? Math.round((Number(r.total_cents) / totalExpenses) * 1000) / 10 : 0,
+        color: EVENT_COLORS[i % EVENT_COLORS.length],
+      })),
+    });
+  } finally {
+    client.release();
+  }
+}));
+
 router.post('/events', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {

@@ -26,6 +26,7 @@ const META: Record<string, PageMeta> = {
   '/orders':     { crumbKey: 'page.orders.crumb',     titleKey: 'page.orders.title' },
   '/customers':  { crumbKey: 'page.customers.crumb',  titleKey: 'page.customers.title' },
   '/analytics':  { crumbKey: 'page.analytics.crumb',  titleKey: 'page.analytics.title' },
+  '/expenses':   { crumbKey: 'page.expenses.crumb',   titleKey: 'page.expenses.title' },
   '/sync':       { crumbKey: 'page.sync.crumb',       titleKey: 'page.sync.title' },
   '/settings':   { crumbKey: 'page.settings.crumb',   titleKey: 'page.settings.title' },
 };

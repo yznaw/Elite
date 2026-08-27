@@ -419,6 +419,9 @@ export class SidebarComponent {
         // 'csv' for exportable ledger reports — previously reused 'docs',
         // identical to Policies' icon. Same access scope as reconciliation.
         { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv', roles: ['owner', 'admin', 'manager'] },
+        // Money leaving the business (rent, salaries, marketing). Owner/admin
+        // only — narrower than reports, matching roleGuard on /expenses.
+        { path: '/expenses',       labelKey: 'nav.expenses',       subKey: 'nav.expenses.sub',       icon: 'expenses', roles: ['owner', 'admin'] },
       ],
     },
     {

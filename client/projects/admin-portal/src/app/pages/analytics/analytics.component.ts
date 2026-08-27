@@ -7,7 +7,7 @@ import { BarChartComponent } from '../../shared/charts/bar-chart.component';
 import { PieChartComponent } from '../../shared/charts/pie-chart.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 import { AdminAnalyticsService } from '../../services/admin-analytics.service';
-import { QAR } from '../../models';
+import { formatQAR } from '../../models';
 import { ApiClient } from '../../services/api-client.service';
 import { I18nService } from '../../services/i18n.service';
 
@@ -34,6 +34,41 @@ interface CostProduct {
 interface CostSummary {
   catalog: CostCatalog;
   products: CostProduct[];
+}
+
+interface ShippingProduct {
+  productId: string;
+  name: string;
+  sku: string;
+  variantCount: number;
+  variantsWithShipping: number;
+  avgShipping: number | null;
+  minShipping: number | null;
+  maxShipping: number | null;
+  avgCost: number | null;
+  avgPrice: number | null;
+}
+
+interface ShippingReport {
+  coverage: {
+    totalVariants: number;
+    withShipping: number;
+    withoutShipping: number;
+    coveragePct: number;
+    avgShipping: number | null;
+    totalShipping: number;
+  };
+  products: ShippingProduct[];
+}
+
+interface ProfitSummary {
+  revenue: number;
+  cogs: number;
+  expenses: number;
+  netProfit: number;
+  netMarginPct: number;
+  cogsCoverage: { lineItems: number; lineItemsWithoutCost: number };
+  expensesByCategory: Array<{ category: string; total: number; pct: number; color: string }>;
 }
 
 @Component({
@@ -93,6 +128,39 @@ interface CostSummary {
     .table-wrap { overflow-x: auto; }
     .sort-btn { background: none; border: none; cursor: pointer; padding: 0 4px; opacity: .5; font-size: 10px; }
     .sort-btn.active { opacity: 1; color: var(--gold); }
+
+    /* Expenses & Net Profit */
+    .mt-16 { margin-top: 16px; }
+    .mt-24 { margin-top: 24px; }
+    .profit-row { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+    .profit-step {
+      flex: 1; min-width: 150px;
+      background: var(--surface-2, #fafafa); border: 1px solid var(--border, #e4e4e7);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .profit-step.net { background: transparent; border-width: 2px; }
+    .profit-op {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: var(--muted); flex: 0 0 auto; width: 18px;
+    }
+    .cost-kpi-sub.warn { color: #d97706; }
+
+    /* Shipping cost report */
+    .ship-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .ship-toolbar .inp { flex: 1; min-width: 180px; max-width: 320px; }
+    .ship-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+    .row-missing td { background: rgba(217,119,6,.05); }
+    .tag-missing, .tag-partial {
+      display: inline-block; margin-inline-start: 8px; padding: 1px 7px;
+      border-radius: 99px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em; vertical-align: middle;
+    }
+    .tag-missing { background: rgba(220,38,38,.1); color: #dc2626; }
+    .tag-partial { background: rgba(217,119,6,.12); color: #d97706; }
+    @media (max-width: 760px) {
+      .profit-row { flex-direction: column; }
+      .profit-op { width: 100%; height: 18px; }
+    }
   `],
     changeDetection: ChangeDetectionStrategy.Eager,
     template: `
@@ -344,6 +412,167 @@ interface CostSummary {
         </div>
       </div>
 
+      <!-- ── Shipping Cost Report ──────────────────────────────────────── -->
+      <div class="card mt-24">
+        <div class="card-header">
+          <div>
+            <div class="card-title">{{ t('analytics.card.shipping') }}</div>
+            <div class="card-sub">{{ t('analytics.card.shippingSub') }}</div>
+          </div>
+          <button class="btn btn-outline btn-sm" (click)="loadShipping()">{{ t('analytics.legend.refresh') }}</button>
+        </div>
+        <div class="card-pad">
+          @if (shippingLoading()) {
+            <div class="cost-loading">{{ t('common.loading') }}</div>
+          } @else if (!shipping() || shipping()!.coverage.totalVariants === 0) {
+            <ap-empty-state icon="cube" [title]="t('analytics.ship.empty')" [sub]="t('analytics.ship.emptySub')"/>
+          } @else {
+            <div class="cost-kpi-grid">
+              <div class="cost-kpi">
+                <div class="cost-kpi-label">{{ t('analytics.ship.avg') }}</div>
+                <div class="cost-kpi-val mono">{{ fmtQAR(shipping()!.coverage.avgShipping) }}</div>
+                <div class="cost-kpi-sub">{{ t('analytics.ship.perVariant') }}</div>
+              </div>
+              <div class="cost-kpi">
+                <div class="cost-kpi-label">{{ t('analytics.ship.recorded') }}</div>
+                <div class="cost-kpi-val mono">{{ shipping()!.coverage.withShipping }}</div>
+                <div class="cost-kpi-sub">{{ t('analytics.ship.ofVariants') }} {{ shipping()!.coverage.totalVariants }}</div>
+              </div>
+              <div class="cost-kpi" [style.border-color]="shipping()!.coverage.withoutShipping > 0 ? 'rgba(217,119,6,.35)' : ''">
+                <div class="cost-kpi-label">{{ t('analytics.ship.missing') }}</div>
+                <div class="cost-kpi-val mono" [class.pct-amber]="shipping()!.coverage.withoutShipping > 0">
+                  {{ shipping()!.coverage.withoutShipping }}
+                </div>
+                <div class="cost-kpi-sub">{{ t('analytics.ship.missingSub') }}</div>
+              </div>
+              <div class="cost-kpi">
+                <div class="cost-kpi-label">{{ t('analytics.ship.coverage') }}</div>
+                <div class="cost-kpi-val" [class]="coverageClass()">{{ shipping()!.coverage.coveragePct | number:'1.1-1' }}%</div>
+                <div class="cost-kpi-sub">{{ t('analytics.ship.coverageSub') }}</div>
+              </div>
+            </div>
+
+            <div class="ship-toolbar">
+              <input class="inp inp-sm" type="text" [value]="shipSearch()"
+                     (input)="shipSearch.set($any($event.target).value)"
+                     [placeholder]="t('analytics.ship.search')"/>
+              <label class="ship-toggle">
+                <input type="checkbox" [checked]="onlyMissing()"
+                       (change)="onlyMissing.set($any($event.target).checked)"/>
+                <span>{{ t('analytics.ship.onlyMissing') }}</span>
+              </label>
+              <span class="muted small">{{ shippingRows().length }} {{ t('analytics.ship.products') }}</span>
+            </div>
+
+            @if (shippingRows().length === 0) {
+              <div class="cost-loading">{{ t('analytics.ship.noMatch') }}</div>
+            } @else {
+              <div class="table-wrap">
+                <table class="margin-table">
+                  <thead>
+                    <tr>
+                      <th>{{ t('analytics.col.product') }}</th>
+                      <th style="text-align:right;">{{ t('analytics.col.variants') }}</th>
+                      <th style="text-align:right;">{{ t('analytics.ship.col.withCost') }}</th>
+                      <th style="text-align:right;">{{ t('analytics.ship.col.avg') }}</th>
+                      <th style="text-align:right;">{{ t('analytics.ship.col.range') }}</th>
+                      <th style="text-align:right;">{{ t('analytics.col.avgPrice') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (p of shippingRows(); track p.productId) {
+                      <tr [class.row-missing]="p.variantsWithShipping === 0">
+                        <td class="strong">
+                          {{ p.name }}
+                          @if (p.variantsWithShipping === 0) {
+                            <span class="tag-missing">{{ t('analytics.ship.tagMissing') }}</span>
+                          } @else if (p.variantsWithShipping < p.variantCount) {
+                            <span class="tag-partial">{{ t('analytics.ship.tagPartial') }}</span>
+                          }
+                        </td>
+                        <td style="text-align:right;" class="muted small">{{ p.variantCount }}</td>
+                        <td style="text-align:right;" class="mono"
+                            [class.pct-amber]="p.variantsWithShipping < p.variantCount">
+                          {{ p.variantsWithShipping }}/{{ p.variantCount }}
+                        </td>
+                        <td style="text-align:right;" class="mono">{{ fmtQAR(p.avgShipping) }}</td>
+                        <td style="text-align:right;" class="mono muted small">{{ shipRange(p) }}</td>
+                        <td style="text-align:right;" class="mono">{{ fmtQAR(p.avgPrice) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </div>
+      </div>
+
+      <!-- ── Expenses & Net Profit ─────────────────────────────────────── -->
+      <div class="card mt-24">
+        <div class="card-header">
+          <div>
+            <div class="card-title">{{ t('analytics.card.netProfit') }}</div>
+            <div class="card-sub">{{ t('analytics.card.netProfitSub') }} · {{ activeLabel() }}</div>
+          </div>
+        </div>
+        <div class="card-pad">
+          @if (profitLoading()) {
+            <div class="cost-loading">{{ t('common.loading') }}</div>
+          } @else if (!profit()) {
+            <ap-empty-state icon="expenses" [title]="t('analytics.card.profitEmpty')"
+              [sub]="t('analytics.card.profitEmptySub')"/>
+          } @else {
+            <div class="profit-row">
+              <div class="profit-step">
+                <div class="cost-kpi-label">{{ t('analytics.profit.revenue') }}</div>
+                <div class="cost-kpi-val mono">{{ fmtQAR(profit()!.revenue) }}</div>
+              </div>
+              <div class="profit-op">−</div>
+              <div class="profit-step">
+                <div class="cost-kpi-label">{{ t('analytics.profit.cogs') }}</div>
+                <div class="cost-kpi-val mono">{{ fmtQAR(profit()!.cogs) }}</div>
+                @if (profit()!.cogsCoverage.lineItemsWithoutCost > 0) {
+                  <div class="cost-kpi-sub warn">
+                    {{ profit()!.cogsCoverage.lineItemsWithoutCost }} {{ t('analytics.profit.missingCost') }}
+                  </div>
+                }
+              </div>
+              <div class="profit-op">−</div>
+              <div class="profit-step">
+                <div class="cost-kpi-label">{{ t('analytics.profit.expenses') }}</div>
+                <div class="cost-kpi-val mono">{{ fmtQAR(profit()!.expenses) }}</div>
+              </div>
+              <div class="profit-op">=</div>
+              <div class="profit-step net" [style.border-color]="netBorderColor()">
+                <div class="cost-kpi-label">{{ t('analytics.profit.net') }}</div>
+                <div class="cost-kpi-val mono" [class]="netClass()">{{ fmtQAR(profit()!.netProfit) }}</div>
+                <div class="cost-kpi-sub">{{ profit()!.netMarginPct | number:'1.1-1' }}% {{ t('analytics.profit.netMargin') }}</div>
+              </div>
+            </div>
+
+            @if (profit()!.expensesByCategory.length > 0) {
+              <div class="section-title mt-24">{{ t('analytics.profit.byCategory') }}</div>
+              <div class="split-inner">
+                <ap-pie-chart [data]="expensePie()" [centerLabel]="t('analytics.profit.pieLabel')"/>
+                <div>
+                  @for (c of profit()!.expensesByCategory; track c.category) {
+                    <div class="rank-row">
+                      <span [style.background]="c.color" style="width:10px;height:10px;border-radius:2px;flex-shrink:0;"></span>
+                      <span class="grow strong">{{ t('expenses.category.' + c.category) }}</span>
+                      <span class="muted">{{ c.pct }}%</span>
+                      <span class="strong" style="width:90px;text-align:right;">{{ fmtQAR(c.total) }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            } @else {
+              <div class="muted small mt-16">{{ t('analytics.profit.noExpenses') }}</div>
+            }
+          }
+        </div>
+      </div>
+
     </div>
   `
 })
@@ -378,11 +607,21 @@ export class AnalyticsComponent implements OnInit {
     if (key === this.range()) return;
     this.range.set(key);
     void this.svc.load(key);
+    // Profit is range-scoped too, so it has to follow the filter.
+    this.loadProfitSummary();
   }
 
   readonly costSummary = signal<CostSummary | null>(null);
   readonly costLoading = signal(false);
-  readonly money = (v: number): string => QAR(v);
+  readonly profit = signal<ProfitSummary | null>(null);
+  readonly profitLoading = signal(false);
+  readonly shipping = signal<ShippingReport | null>(null);
+  readonly shippingLoading = signal(false);
+  readonly shipSearch = signal('');
+  readonly onlyMissing = signal(false);
+  // Headline revenue reads better whole; cost and expense figures need the
+  // piastres. Both now come from the same formatter.
+  readonly money = (v: number): string => formatQAR(v, 0);
   readonly xLabel = (d: Record<string, unknown>): string => {
     const day = d['day'];
     if (typeof day !== 'string' || !day) return '';
@@ -394,6 +633,8 @@ export class AnalyticsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadCostSummary();
+    this.loadProfitSummary();
+    this.loadShipping();
   }
 
   loadCostSummary(): void {
@@ -404,11 +645,75 @@ export class AnalyticsComponent implements OnInit {
     });
   }
 
+  loadProfitSummary(): void {
+    this.profitLoading.set(true);
+    this.api.get<ProfitSummary>(`/admin/analytics/profit-summary?range=${this.range()}`).subscribe({
+      next: data => { this.profit.set(data); this.profitLoading.set(false); },
+      error: ()  => { this.profitLoading.set(false); },
+    });
+  }
+
+  // Catalogue-wide, so it does not depend on the range filter and is only
+  // fetched once (plus on explicit refresh).
+  loadShipping(): void {
+    this.shippingLoading.set(true);
+    this.api.get<ShippingReport>('/admin/analytics/shipping-costs').subscribe({
+      next: data => { this.shipping.set(data); this.shippingLoading.set(false); },
+      error: ()  => { this.shippingLoading.set(false); },
+    });
+  }
+
+  /** Search by name or SKU, optionally narrowed to products missing data. */
+  readonly shippingRows = computed<ShippingProduct[]>(() => {
+    const rows = this.shipping()?.products ?? [];
+    const q = this.shipSearch().toLowerCase().trim();
+    const missingOnly = this.onlyMissing();
+    return rows.filter(p => {
+      if (missingOnly && p.variantsWithShipping === p.variantCount) return false;
+      if (!q) return true;
+      return p.name.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q);
+    });
+  });
+
+  /** Collapses to a single figure when every variant ships for the same price. */
+  shipRange(p: ShippingProduct): string {
+    if (p.minShipping == null || p.maxShipping == null) return '—';
+    if (p.minShipping === p.maxShipping) return this.fmtQAR(p.minShipping);
+    return `${this.fmtQAR(p.minShipping)} - ${this.fmtQAR(p.maxShipping)}`;
+  }
+
+  coverageClass(): string {
+    const pct = this.shipping()?.coverage.coveragePct ?? 0;
+    if (pct >= 90) return 'pct-green';
+    if (pct >= 50) return 'pct-amber';
+    return 'pct-red';
+  }
+
+  /** Expense categories shaped for the shared pie chart. */
+  readonly expensePie = computed(() =>
+    (this.profit()?.expensesByCategory ?? []).map(c => ({
+      source: this.t('expenses.category.' + c.category),
+      count: c.total,
+      pct: c.pct,
+      color: c.color,
+    })));
+
+  netClass(): string {
+    const net = this.profit()?.netProfit ?? 0;
+    return net < 0 ? 'pct-red' : net > 0 ? 'pct-green' : '';
+  }
+
+  netBorderColor(): string {
+    const net = this.profit()?.netProfit ?? 0;
+    if (net < 0) return 'rgba(220,38,38,.4)';
+    if (net > 0) return 'rgba(22,163,74,.4)';
+    return 'var(--border, #e4e4e7)';
+  }
+
   fmtNum = (v: number): string => v.toLocaleString();
 
   fmtQAR(v: number | null): string {
-    if (v == null) return '—';
-    return 'QAR ' + v.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return formatQAR(v, 2);
   }
 
   marginClass(pct: number | null): string {

@@ -13,7 +13,7 @@ interface PieSlice { source: string; pct: number; count: number; color: string; 
         <path [attr.d]="s.d" [attr.fill]="s.color" stroke="#fff" stroke-width="2"/>
       }
       <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="rInner" fill="#fff"/>
-      <text [attr.x]="cx" [attr.y]="cy - 4" text-anchor="middle" font-size="11" fill="#6b7088" style="font-family: var(--ff-ui);" letter-spacing="1.2">SOURCES</text>
+      <text [attr.x]="cx" [attr.y]="cy - 4" text-anchor="middle" font-size="11" fill="#6b7088" style="font-family: var(--ff-ui);" letter-spacing="1.2">{{ centerLabel }}</text>
       <text [attr.x]="cx" [attr.y]="cy + 16" text-anchor="middle" font-size="22" fill="#0f2356" style="font-family: var(--ff-disp);" font-weight="500">{{ total() }}</text>
     </svg>
   `
@@ -21,6 +21,8 @@ interface PieSlice { source: string; pct: number; count: number; color: string; 
 export class PieChartComponent {
   @Input({ required: true }) set data(d: PieSlice[]) { this._data.set(d); }
   @Input() size = 220;
+  /** Caption inside the donut. Defaults to the traffic-sources wording. */
+  @Input() centerLabel = 'SOURCES';
 
   private _data = signal<PieSlice[]>([]);
 

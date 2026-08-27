@@ -250,6 +250,67 @@ export interface Policy {
 
 export const QAR = (n: number): string => 'QAR ' + n.toLocaleString();
 
+/**
+ * Money for display, with control over the piastres. Headline revenue figures
+ * read better whole; cost and expense figures need the decimals. Use this
+ * rather than hand-rolling a toLocaleString per component, which is how the
+ * Analytics page ended up showing revenue and costs in two different formats.
+ */
+export const formatQAR = (n: number | null | undefined, decimals = 0): string => {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return 'QAR ' + n.toLocaleString('en', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+};
+
+export type ExpenseCategory =
+  | 'rent' | 'salaries' | 'utilities' | 'marketing' | 'logistics'
+  | 'supplies' | 'software' | 'fees' | 'maintenance' | 'other';
+
+export type ExpensePaymentMethod = 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'other';
+
+export type ExpenseRecurrence = 'none' | 'monthly' | 'yearly';
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  'rent', 'salaries', 'utilities', 'marketing', 'logistics',
+  'supplies', 'software', 'fees', 'maintenance', 'other',
+];
+
+export const EXPENSE_PAYMENT_METHODS: ExpensePaymentMethod[] =
+  ['cash', 'card', 'bank_transfer', 'cheque', 'other'];
+
+export interface Expense {
+  id: string;
+  expenseDate: string;
+  category: ExpenseCategory;
+  amount: number;
+  vendor: string;
+  paymentMethod: ExpensePaymentMethod;
+  note: string;
+  receiptMediaId: string | null;
+  receiptUrl: string | null;
+  recurrence: ExpenseRecurrence;
+  source: 'manual' | 'pos_cash_out';
+  /** A future occurrence of a recurring bill that has no row of its own yet. */
+  isProjected: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpenseListResult {
+  from: string;
+  to: string;
+  expenses: Expense[];
+}
+
+export interface ExpenseSummary {
+  from: string;
+  to: string;
+  total: number;
+  byCategory: Array<{ category: ExpenseCategory; total: number; entryCount: number }>;
+}
+
 export const fmtBytes = (n: number): string => {
   if (n < 1024) return n + ' B';
   if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';

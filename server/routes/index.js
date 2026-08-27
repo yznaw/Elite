@@ -21,6 +21,7 @@ const collectionsRouter = require('./collections.route');
 const policiesRouter = require('./policies.route');
 const sitemapRouter = require('./sitemap.route');
 const adminPoliciesRouter = require('./admin-policies.route');
+const adminExpensesRouter = require('./admin-expenses.route');
 const storefrontRouter = require('./storefront.route');
 const refRouter = require('./ref.route');
 const contactRouter = require('./contact.route');
@@ -104,6 +105,10 @@ admin.use('/diagnostics', requireAuth({ roles: ['owner', 'admin'] }), adminDiagn
 // number, as opposed to editing it in the catalogue with no reason attached
 // (docs/25 Phase 8). Owner/admin only; the service enforces the same check.
 admin.use('/inventory', requireAuth({ roles: ['owner', 'admin'] }), adminInventoryRouter);
+// Operating expenses — rent, salaries, marketing and the rest of the money
+// leaving the business, which nothing tracked before this. Owner/admin only:
+// this is whole-business financial data, not per-shift till figures.
+admin.use('/expenses', requireAuth({ roles: ['owner', 'admin'] }), adminExpensesRouter);
 admin.use('/', reviewsAdminRouter);
 
 router.use('/admin', admin);

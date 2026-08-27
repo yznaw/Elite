@@ -318,6 +318,54 @@ async function ensureAllMigrations(client) {
       ADD COLUMN IF NOT EXISTS content_ar TEXT
   `);
 
+  // ── Migration 033: business expense ledger ───────────────────────────────
+  // The only cost the system tracked was cost of goods (cost_price_cents +
+  // shipping_cost_cents), so Analytics could show gross margin but never real
+  // profitability. This is the operating-expense side: rent, salaries,
+  // utilities, marketing. Lets Analytics compute revenue - COGS - expenses.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      expense_date date NOT NULL,
+      category text NOT NULL CHECK (category IN (
+        'rent', 'salaries', 'utilities', 'marketing', 'logistics',
+        'supplies', 'software', 'fees', 'maintenance', 'other'
+      )),
+      amount_cents bigint NOT NULL CHECK (amount_cents >= 0),
+      vendor text,
+      payment_method text NOT NULL DEFAULT 'cash' CHECK (payment_method IN (
+        'cash', 'card', 'bank_transfer', 'cheque', 'other'
+      )),
+      note text,
+      receipt_media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      recurrence text NOT NULL DEFAULT 'none' CHECK (recurrence IN ('none', 'monthly', 'yearly')),
+      recurrence_parent_id uuid REFERENCES expenses(id) ON DELETE SET NULL,
+      source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'pos_cash_out')),
+      source_ref_id uuid,
+      created_by_user_id uuid REFERENCES admin_users(id) ON DELETE SET NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      CHECK (
+        (source = 'pos_cash_out' AND source_ref_id IS NOT NULL)
+        OR (source = 'manual' AND source_ref_id IS NULL)
+      )
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS expenses_tenant_date_idx
+      ON expenses (tenant_id, expense_date DESC)
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS expenses_tenant_category_idx
+      ON expenses (tenant_id, category, expense_date DESC)
+  `);
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS expenses_pos_source_idx
+      ON expenses (tenant_id, source_ref_id)
+      WHERE source = 'pos_cash_out'
+  `);
+
   _done = true;
 }
 

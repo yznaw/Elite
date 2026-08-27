@@ -91,6 +91,14 @@ export const routes: Routes = [
           import('./pages/analytics/analytics.component').then((m) => m.AnalyticsComponent),
       },
       {
+        // Operating expenses ledger. Owner/admin only — matches the API mount,
+        // since this is whole-business financial data.
+        path: 'expenses',
+        canMatch: [roleGuard(['owner', 'admin'])],
+        loadComponent: () =>
+          import('./pages/expenses/expenses.component').then((m) => m.ExpensesComponent),
+      },
+      {
         path: 'reference',
         canMatch: [roleGuard(['owner', 'admin'])],
         loadComponent: () =>

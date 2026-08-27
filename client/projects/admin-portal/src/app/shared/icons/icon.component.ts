@@ -10,7 +10,7 @@ export type IconName =
   | 'eyeOff'
   | 'docs' | 'bold' | 'italic' | 'underline' | 'h2' | 'h3'
   | 'listBullet' | 'listOrdered' | 'quote' | 'undo' | 'redo' | 'externalLink'
-  | 'lock' | 'scale' | 'device';
+  | 'lock' | 'scale' | 'device' | 'expenses';
 
 @Component({
     selector: 'ap-icon',
@@ -329,6 +329,13 @@ export type IconName =
       @case ('scale') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
           <path d="M12 3v18"/><path d="M5 21h14"/><path d="M7 7l-4 8a4 4 0 008 0z"/><path d="M17 7l-4 8a4 4 0 008 0z"/><path d="M5 7h14"/>
+        </svg>
+      }
+      @case ('expenses') {
+        <!-- A receipt with a torn bottom edge: money leaving the business,
+             distinct from 'scale' (reconciliation) and 'csv' (reports). -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21z"/><path d="M9 8h6"/><path d="M9 12h6"/>
         </svg>
       }
       @case ('device') {

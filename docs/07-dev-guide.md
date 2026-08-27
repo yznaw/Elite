@@ -288,6 +288,19 @@ When adding a field that existing saved rows will not have, give it a derived fa
 
 Then the client side: `SaveProductPayload` and `Product` in `admin-portal`, `FormShape` + `makeEmptyForm()` + `makeFormFromProduct()` + the post-save writeback in `product-drawer.component.ts`, the input in the ⑤ Description section, `EN`/`AR` labels in `strings.ts`, and `Product` in `client-web`.
 
+### Add a Whole Admin Page
+
+`expenses` (migration 033) is the worked example. A new page touches more files than it looks, and the two easiest to forget are both navigation:
+
+1. **Migration** — `server/db/migrations/0NN_name.sql` *and* the same statements in `server/db/ensure-migrations.js`. There is no migration runner; `ensure-migrations.js` is what actually runs on boot. Restart twice and confirm the second boot is a clean no-op.
+2. **Route** — `server/routes/admin-<name>.route.js` copying `admin-policies.route.js`, plus three edits in `server/routes/index.js`: the `require`, the mount, and a comment saying why the role scope is what it is. Restrict with `requireAuth({ roles: [...] })` on the mount.
+3. **Service + models** — `services/admin-<name>.service.ts` copying `admin-policies.service.ts`, types in the `models/index.ts` barrel.
+4. **i18n** — both `EN` and `AR` blocks of `i18n/strings.ts` in the same commit. `AR` is typed `Record<keyof typeof EN, string>`, so a missing Arabic key fails the build.
+5. **Page + drawer** — `pages/<name>/`, copying the `pages/policies/` two-file split. There is no shared drawer component.
+6. **Navigation — all four:** `app.routes.ts` (with a `roleGuard` matching the API mount), `shared/sidebar/sidebar.component.ts`, `shared/bottom-nav/bottom-nav.component.ts` (a separate duplicated array — miss it and the page is unreachable on mobile), and `shared/topbar/topbar.component.ts`'s `META` map (miss it and the page's breadcrumb reads "Dashboard").
+
+Verify in the browser in **both languages** — RTL is where a new layout usually breaks first.
+
 ### Add a Field to a Product Variant
 
 A variant field spans two routes and two apps. Miss one of the SQL selects and the value saves but never comes back, which looks identical to it not saving at all. `note_en` / `note_ar` (migration 031) is the worked example to copy.
