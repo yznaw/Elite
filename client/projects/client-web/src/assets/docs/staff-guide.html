@@ -309,9 +309,10 @@
       <li><span class="sec">15.</span> <a href="#sec-reference">Reference Lists — Colors, Materials, Sizes</a></li>
       <li><span class="sec">16.</span> <a href="#sec-settings">Settings — Store Info, Team &amp; Integrations</a></li>
       <li><span class="sec">17.</span> <a href="#sec-reports">Reports, Stocktake &amp; Diagnostics</a></li>
-      <li><span class="sec">18.</span> <a href="#sec-cheatsheet">Quick-Reference Cheat Sheet</a></li>
-      <li><span class="sec">19.</span> <a href="#sec-troubleshoot">Troubleshooting &amp; FAQ</a></li>
-      <li><span class="sec">20.</span> <a href="#sec-glossary">Glossary</a></li>
+      <li><span class="sec">18.</span> <a href="#sec-expenses">Expenses — Operating Cost Ledger</a></li>
+      <li><span class="sec">19.</span> <a href="#sec-cheatsheet">Quick-Reference Cheat Sheet</a></li>
+      <li><span class="sec">20.</span> <a href="#sec-troubleshoot">Troubleshooting &amp; FAQ</a></li>
+      <li><span class="sec">21.</span> <a href="#sec-glossary">Glossary</a></li>
     </ol>
     <div class="callout note" style="margin-top:30px;">
       <b>How to use this document</b>
@@ -392,9 +393,10 @@
 
     <h2>2.1 — Role access matrix (verified against the live portal)</h2>
     <table class="grid" style="font-size:11.5px;">
-      <tr><th>Role</th><th>General admin pages*</th><th>POS</th><th>Reconcil-<br>iation</th><th>Settings</th><th>Reference Lists</th><th>Own manager PIN</th></tr>
+      <tr><th>Role</th><th>General admin pages*</th><th>POS</th><th>Reconcil-<br>iation</th><th>Settings</th><th>Reference Lists</th><th>Expenses</th><th>Own manager PIN</th></tr>
       <tr>
         <td><strong>Owner</strong></td>
+        <td class="yes">Yes</td>
         <td class="yes">Yes</td>
         <td class="yes">Yes</td>
         <td class="yes">Yes</td>
@@ -409,6 +411,7 @@
         <td class="yes">Yes</td>
         <td class="yes">Yes</td>
         <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
         <td>Settings → General</td>
       </tr>
       <tr>
@@ -416,6 +419,7 @@
         <td class="yes">Yes</td>
         <td class="yes">Yes</td>
         <td class="yes">Yes</td>
+        <td class="no">No</td>
         <td class="no">No</td>
         <td class="no">No</td>
         <td>Own "My Manager PIN" page</td>
@@ -427,11 +431,13 @@
         <td class="no">No</td>
         <td class="no">No</td>
         <td class="no">No</td>
+        <td class="no">No</td>
         <td class="no">Cannot set one</td>
       </tr>
       <tr>
         <td><strong>Viewer</strong></td>
         <td class="partial">Yes*</td>
+        <td class="no">No</td>
         <td class="no">No</td>
         <td class="no">No</td>
         <td class="no">No</td>
@@ -971,6 +977,22 @@
       <li>Choose a time range: <strong>Last 7 days / Last 30 days / Last 90 days / Last year</strong>.</li>
       <li><strong>Financial</strong> — Revenue, Paid Orders, Average Order Value, Conversion Rate.</li>
       <li><strong>Behavior</strong> — Visitors, Sessions, Page Views, Clicks, plus traffic sources and a conversion funnel further down the page.</li>
+      <li><strong>Cost &amp; Margin</strong> — average product cost, shipping cost, and gross margin per product, for products that already have cost data entered.</li>
+    </ul>
+
+    <h2 id="analytics-shipping">14.1 — Shipping Costs by Product</h2>
+    <p>Further down the page, a table lists <strong>every active product</strong> — including the ones with no shipping cost entered yet, listed first so the gap is easy to find and fix. A coverage strip at the top shows how many variants store-wide have a shipping cost recorded versus how many don't.</p>
+    <ul class="plain">
+      <li>Search by product name or SKU, or tick <strong>Only incomplete</strong> to see just the products still missing data.</li>
+      <li>Each row shows how many of that product's variants are covered, the average shipping cost, and the price range across its variants.</li>
+      <li>To fix a gap, open that product in <strong>Catalog</strong> and fill in the <strong>Shipping</strong> field on each variant — see <a href="#catalog-variants">Section 4.5</a>.</li>
+    </ul>
+
+    <h2 id="analytics-profit">14.2 — Expenses &amp; Net Profit</h2>
+    <p>The bottom of the page shows a true profit figure for the selected time range: <strong>Revenue − Cost of Goods Sold − Operating Expenses = Net Profit</strong>, plus a donut chart breaking operating expenses down by category.</p>
+    <ul class="plain">
+      <li><strong>Cost of Goods Sold</strong> is calculated from what actually sold in the period (quantity × each variant's cost + shipping), not an average — if any sold items have no cost recorded, a warning shows how many, since Net Profit is understated until that data is filled in.</li>
+      <li><strong>Operating Expenses</strong> comes from the ledger described in <a href="#sec-expenses">Section 18</a>. With nothing logged there yet, Net Profit is simply Revenue minus Cost of Goods Sold.</li>
     </ul>
   </div>
 
@@ -1115,6 +1137,7 @@
       <tr><td>Inventory count and discrepancy posting</td><td>Stocktake</td><td>On-screen history</td><td>Owner/Admin only</td></tr>
       <tr><td>Application/POS errors grouped by code and request</td><td>Diagnostics → Errors</td><td>On-screen</td><td>Owner/Admin only</td></tr>
       <tr><td>Trace sensitive activity by request ID</td><td>Diagnostics → Audit</td><td>On-screen</td><td>Owner/Admin only</td></tr>
+      <tr><td>Operating expenses (rent, salaries, utilities, marketing…) and net profit</td><td>Expenses, and Analytics → Expenses &amp; Net Profit</td><td>On-screen, plus Export CSV on Expenses</td><td>Owner/Admin only</td></tr>
     </table>
 
     <h2>17.1 — Stocktake</h2>
@@ -1137,14 +1160,60 @@
     </ol>
 
     <div class="callout note">
-      <b>No consolidated financial report yet</b>
-      There is currently no single page that combines sales, inventory movement, cash, and card reconciliation into one report — you assemble the full picture from the Dashboard, Analytics, Z-report history, and Reconciliation history separately. If your business needs a combined daily/weekly report, that would need to be built as a new feature rather than assembled from an existing screen.
+      <b>No single combined report yet</b>
+      Analytics → Expenses &amp; Net Profit now gives a true Revenue − Cost of Goods Sold − Operating Expenses figure for a chosen period (see <a href="#analytics-profit">Section 14.2</a>), but there is still no single page that also folds in inventory movement, cash reconciliation, and card settlement — you assemble that fuller picture from the Dashboard, Analytics, Z-report history, and Reconciliation history separately.
     </div>
   </div>
 
-  <!-- ================= 18. CHEAT SHEET ================= -->
-  <div class="page" id="sec-cheatsheet">
+
+  <!-- ================= 18. EXPENSES ================= -->
+  <div class="page" id="sec-expenses">
     <div class="kicker">Section 18</div>
+    <h1 class="title">Expenses — Operating Cost Ledger</h1>
+    <div class="path">Sidebar → Expenses &nbsp;·&nbsp; Owner/Admin only</div>
+    <p>The running-costs ledger — rent, salaries, utilities, marketing, and everything else that leaves the business but isn't the cost of a product itself. This is what feeds the <strong>Net Profit</strong> figure on <a href="#analytics-profit">Analytics → Expenses &amp; Net Profit</a> (Section 14.2); with nothing logged here, Net Profit is only Revenue minus Cost of Goods Sold.</p>
+
+    <div class="shot"><b>Screenshot placeholder: expenses.png</b>Date-range and category filters, a totals strip (grand total + top 3 categories), the expense ledger table with category pills, and the + Add Expense button top right</div>
+
+    <div class="callout warn">
+      <b>Do not log inbound shipping here</b>
+      The shipping cost you pay to bring stock in is already part of each product's cost (Cost + Shipping on the variant, see <a href="#catalog-variants">Section 4.5</a>) and is already subtracted automatically as part of Cost of Goods Sold. Logging that same shipping again under the <strong>Logistics</strong> category here would subtract it from profit twice. The <strong>Logistics</strong> category is for delivering orders <em>to</em> customers, not for bringing stock <em>in</em> — the Expense drawer shows this same warning the moment you pick that category.
+    </div>
+
+    <h2><span class="badge add">Add</span>&nbsp; 18.1 — Logging an expense</h2>
+    <ol class="steps">
+      <li>Click <strong>+ Add Expense</strong> (top right of the Expenses page). A panel slides in from the right.</li>
+      <li>Enter the <strong>Amount (QAR)</strong>, the <strong>Date</strong>, and choose a <strong>Category</strong> — Rent, Salaries, Utilities, Marketing, Logistics, Supplies, Software, Fees, Maintenance, or Other.</li>
+      <li>Optionally fill in <strong>Vendor</strong> (who was paid), <strong>Payment Method</strong> (Cash, Card, Bank Transfer, Cheque, Other), and a <strong>Note</strong>.</li>
+      <li>For a bill that repeats, set <strong>Repeats</strong> to Monthly or Yearly — see 18.2 below.</li>
+      <li>Optionally attach a photo or PDF of the receipt under <strong>Receipt</strong>.</li>
+      <li>Click <strong>Save Changes</strong>. The drawer closes and the new entry appears at the top of the ledger.</li>
+    </ol>
+
+    <h2 id="expenses-recurring">18.2 — Recurring expenses</h2>
+    <p>A bill that repeats every month or year — rent, a software subscription — only needs to be entered once. Set <strong>Repeats</strong> to Monthly or Yearly when you first log it, and every later occurrence appears automatically in the ledger, tagged <strong>Upcoming</strong>, without you re-entering it.</p>
+    <ul class="plain">
+      <li>An <strong>Upcoming</strong> row is a projection, not a real entry yet — opening and saving it (even with no changes) records that one period on its own, without touching the rest of the schedule.</li>
+      <li>To stop a recurring bill going forward, open its most recent real entry and change <strong>Repeats</strong> back to "Does not repeat."</li>
+    </ul>
+
+    <h2><span class="badge edit">Edit</span>&nbsp; 18.3 — Editing or deleting an expense</h2>
+    <p>Click any row in the ledger to reopen its drawer. Change any field and <strong>Save Changes</strong>, or scroll to the bottom and click <strong>Delete Expense</strong> to remove it — deleting stops it from counting toward Net Profit from that point on.</p>
+
+    <h2>18.4 — Filtering, search &amp; export</h2>
+    <ul class="plain">
+      <li>Use the <strong>From / To</strong> date fields and the <strong>Category</strong> dropdown to narrow the ledger; the totals strip updates to match.</li>
+      <li>Search by <strong>vendor or note</strong> text using the search box.</li>
+      <li>Click <strong>Export CSV</strong> to download the currently filtered list — useful for handing figures to an accountant.</li>
+    </ul>
+
+    <h2>18.5 — Importing POS cash-outs</h2>
+    <p>Cash paid out of a POS till mid-shift (petty cash, a delivery tip) is already recorded in POS as a <strong>Cash Movement</strong> (Section 8.5), separate from this ledger. Click <strong>Import POS cash-outs</strong> at the bottom of the Expenses page to pull those paid-out movements into this ledger as expenses, categorized as Other. It's safe to click more than once — a cash movement already imported is never imported twice.</p>
+  </div>
+
+  <!-- ================= 19. CHEAT SHEET ================= -->
+  <div class="page" id="sec-cheatsheet">
+    <div class="kicker">Section 19</div>
     <h1 class="title">Quick-Reference Cheat Sheet</h1>
     <p>Where to go for the most common tasks:</p>
     <table class="grid">
@@ -1177,12 +1246,14 @@
       <tr><td>Reconcile card settlement for a day</td><td>Reconciliation</td><td>Check POS total → enter Bank Settlement Total → Submit settlement</td></tr>
       <tr><td>Count stock and post discrepancies</td><td>Stocktake (Owner/Admin)</td><td>Start stocktake → Count/Recount → Post</td></tr>
       <tr><td>Trace a POS or portal error</td><td>Diagnostics (Owner/Admin)</td><td>Search the cashier's reference / Request ID</td></tr>
+      <tr><td>Log a business expense</td><td>Expenses (Owner/Admin)</td><td>+ Add Expense</td></tr>
+      <tr><td>Check net profit for a period</td><td>Analytics → Expenses &amp; Net Profit</td><td>Choose a date range</td></tr>
     </table>
   </div>
 
-  <!-- ================= 19. TROUBLESHOOTING ================= -->
+  <!-- ================= 20. TROUBLESHOOTING ================= -->
   <div class="page" id="sec-troubleshoot">
-    <div class="kicker">Section 19</div>
+    <div class="kicker">Section 20</div>
     <h1 class="title">Troubleshooting &amp; FAQ</h1>
 
     <h2>19.1 — Access &amp; sign-in</h2>
@@ -1277,9 +1348,9 @@
     </table>
   </div>
 
-  <!-- ================= 20. GLOSSARY ================= -->
+  <!-- ================= 21. GLOSSARY ================= -->
   <div class="page" id="sec-glossary">
-    <div class="kicker">Section 20</div>
+    <div class="kicker">Section 21</div>
     <h1 class="title">Glossary</h1>
     <table class="grid">
       <tr><th>Term</th><th>Meaning</th></tr>
@@ -1303,6 +1374,9 @@
       <tr><td>Stocktake</td><td>A controlled physical count whose posted discrepancy corrects shared inventory without undoing sales made during counting.</td></tr>
       <tr><td>Device signer</td><td>The localhost Windows service that lets QZ verify and print receipts while the Elite API is offline.</td></tr>
       <tr><td>QAR</td><td>Qatari Riyal — the store's currency.</td></tr>
+      <tr><td>COGS (Cost of Goods Sold)</td><td>What the products sold in a period actually cost — quantity × each variant's Cost + Shipping — used to calculate Net Profit on Analytics.</td></tr>
+      <tr><td>Net Profit</td><td>Revenue minus Cost of Goods Sold minus Operating Expenses, shown on Analytics for the selected date range.</td></tr>
+      <tr><td>Recurring expense</td><td>An expense entered once in the Expenses ledger with Repeats set to Monthly or Yearly, which then appears automatically every period after.</td></tr>
     </table>
 
     <div class="foot-note">
