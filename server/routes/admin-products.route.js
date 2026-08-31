@@ -9,7 +9,7 @@ const { processRestockNotifications } = require('../lib/restock-notifications');
 // Every stock_quantity write in this file posts a matching ledger row in the
 // same transaction — see server/lib/inventory-ledger.js for why that invariant
 // exists and what breaks when a write skips it (docs/25 Phase 1b).
-const { recordMovement, publishStockEvent } = require('../lib/inventory-ledger');
+const { recordMovement, publishStockEvent, publishCatalogEvent } = require('../lib/inventory-ledger');
 
 const router = Router();
 
@@ -82,6 +82,9 @@ function validateProduct(body) {
   if (!String(body.brand || '').trim()) errors.push('Brand is required.');
   if (Number(body.price) < 0) errors.push('Price cannot be negative.');
   if (Number(body.stock) < 0) errors.push('Stock cannot be negative.');
+  if (!Array.isArray(body.variants) || body.variants.length === 0) {
+    errors.push('At least one product variant is required.');
+  }
 
   return errors;
 }
@@ -457,6 +460,7 @@ function mapAdminProduct(row) {
     price: Math.round(Number(row.base_price_cents || 0) / 100),
     stock: Number(row.stock_quantity || 0),
     hidden: row.status === 'hidden',
+    posHidden: row.pos_status === 'hidden',
     image: row.image || '',
     images: row.images || [],
     imageColors: normalizeImageColors(row.image_colors),
@@ -544,6 +548,7 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
   const brand = String(product.brand).trim();
   const currency = product.currency || tenant.currency;
   const status = product.hidden ? 'hidden' : 'active';
+  const posStatus = product.posHidden ? 'hidden' : 'active';
   const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
   const imageColors = normalizeImageColors(product.imageColors);
   const hasRelatedProductIds = Object.prototype.hasOwnProperty.call(product, 'relatedProductIds');
@@ -587,6 +592,7 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     stockQty,
     metaTitle,   // $12
     metaDesc,    // $13
+    posStatus,   // $14
   ];
 
   const upserted = product.id
@@ -605,8 +611,9 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
             stock_quantity = $11,
             meta_title = $12,
             meta_desc = $13,
+            pos_status = $14,
             updated_at = now()
-        WHERE tenant_id = $1 AND id = $14
+        WHERE tenant_id = $1 AND id = $15
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       [...params, product.id],
@@ -616,9 +623,9 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
         INSERT INTO products (
           tenant_id, sku, brand, name, slug, status, description, care_instructions,
           base_price_cents, currency, stock_quantity,
-          meta_title, meta_desc
+          meta_title, meta_desc, pos_status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (tenant_id, sku) DO UPDATE
         SET brand = EXCLUDED.brand,
             name = EXCLUDED.name,
@@ -630,7 +637,8 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
             currency = EXCLUDED.currency,
             stock_quantity = EXCLUDED.stock_quantity,
             meta_title = EXCLUDED.meta_title,
-            meta_desc = EXCLUDED.meta_desc
+            meta_desc = EXCLUDED.meta_desc,
+            pos_status = EXCLUDED.pos_status
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       params,
@@ -664,6 +672,8 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     );
   }
 
+  await publishCatalogEvent(client, tenant.id, saved.id, product.id ? 'updated' : 'created');
+
   return { ...saved, tenantId: tenant.id, imageCount: images.length };
 }
 
@@ -692,6 +702,8 @@ router.get('/', asyncHandler(async (_req, res) => {
               'noteAr', pv.note_ar,
               'price', round(pv.price_cents / 100.0),
               'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
+              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
+              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
               'stock', pv.stock_quantity
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
@@ -754,6 +766,8 @@ router.get('/:id', asyncHandler(async (req, res) => {
               'noteAr', pv.note_ar,
               'price', round(pv.price_cents / 100.0),
               'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
+              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
+              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
               'stock', pv.stock_quantity
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
@@ -819,6 +833,20 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
   if (!Array.isArray(updates) || updates.length === 0) {
     return validationError(res, ['updates must be a non-empty array of { sku, stock } objects.']);
   }
+  const seenSkus = new Set();
+  const updateErrors = [];
+  updates.forEach((item, index) => {
+    const sku = String(item?.sku || '').trim();
+    const stock = Number(item?.stock);
+    if (!sku) updateErrors.push(`updates[${index}].sku is required.`);
+    if (!Number.isSafeInteger(stock) || stock < 0) {
+      updateErrors.push(`updates[${index}].stock must be a whole number greater than or equal to zero.`);
+    }
+    const key = sku.toLowerCase();
+    if (sku && seenSkus.has(key)) updateErrors.push(`Duplicate SKU "${sku}".`);
+    seenSkus.add(key);
+  });
+  if (updateErrors.length) return validationError(res, updateErrors);
 
   const client = await db.pool.connect();
   try {
@@ -831,8 +859,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
 
     for (const item of updates) {
       const sku = String(item.sku || '').trim();
-      const stock = Math.max(0, Number.parseInt(item.stock, 10) || 0);
-      if (!sku) continue;
+      const stock = Number(item.stock);
 
       // Update the variant row first (preferred — variant SKUs are unique).
       // `stock_quantity` before the write is returned so the ledger records a
@@ -875,17 +902,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
         );
         updated += varResult.rowCount;
       } else {
-        // Fall back to product-level SKU (no-variant products)
-        const prodResult = await client.query(
-          "UPDATE products SET stock_quantity = $1, updated_at = now() WHERE tenant_id = $2 AND sku = $3 AND status <> 'archived' RETURNING id",
-          [stock, tenant.id, sku],
-        );
-        if (prodResult.rowCount === 0) {
-          notFound.push(sku);
-        } else {
-          changedProductIds.add(prodResult.rows[0].id);
-          updated += prodResult.rowCount;
-        }
+        notFound.push(sku);
       }
     }
 
@@ -914,7 +931,22 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     }
 
     const existing = current.rows[0];
-    const patchVariants = req.body.variants;
+    const existingFull = await loadAdminProduct(client, tenant.id, req.params.id);
+    let patchVariants = req.body.variants;
+    if (!Array.isArray(patchVariants)) {
+      const existingVariants = await client.query(
+        `SELECT id, sku, barcode, size, color, material, note_en AS "noteEn", note_ar AS "noteAr",
+                round(price_cents / 100.0) AS price,
+                CASE WHEN cost_price_cents IS NULL THEN NULL ELSE round(cost_price_cents / 100.0) END AS "costPrice",
+                CASE WHEN shipping_cost_cents IS NULL THEN NULL ELSE round(shipping_cost_cents / 100.0) END AS "shippingCost",
+                stock_quantity AS stock
+           FROM product_variants
+          WHERE tenant_id = $1 AND product_id = $2
+          ORDER BY sort_order, created_at`,
+        [tenant.id, req.params.id],
+      );
+      patchVariants = existingVariants.rows;
+    }
     const patchStockRaw = req.body.stock ?? existing.stock_quantity;
     const patchStock = Array.isArray(patchVariants) && patchVariants.length > 0
       ? patchVariants.reduce((sum, v) => sum + (Math.max(0, Number.parseInt(v.stock, 10) || 0)), 0)
@@ -927,6 +959,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       price: req.body.price ?? Math.round(Number(existing.base_price_cents) / 100),
       stock: patchStock,
       hidden: req.body.hidden ?? existing.status === 'hidden',
+      posHidden: req.body.posHidden ?? existing.pos_status === 'hidden',
       enDesc: req.body.enDesc ?? existing.description?.en,
       arDesc: req.body.arDesc ?? existing.description?.ar,
       shortEn: req.body.shortEn ?? existing.description?.shortEn,
@@ -941,12 +974,20 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       metaTitle: req.body.metaTitle ?? existing.meta_title,
       metaDesc: req.body.metaDesc ?? existing.meta_desc,
       id: req.params.id,
-      nameAr: req.body.nameAr,
+      nameAr: req.body.nameAr ?? existingFull?.nameAr ?? '',
       variants: patchVariants,
-      images: req.body.images,
-      imageColors: req.body.imageColors,
-      relatedProductIds: req.body.relatedProductIds,
+      images: Object.prototype.hasOwnProperty.call(req.body, 'images') ? req.body.images : existingFull?.images,
+      imageColors: Object.prototype.hasOwnProperty.call(req.body, 'imageColors') ? req.body.imageColors : existingFull?.imageColors,
+      relatedProductIds: Object.prototype.hasOwnProperty.call(req.body, 'relatedProductIds')
+        ? req.body.relatedProductIds
+        : existingFull?.relatedProductIds,
     };
+
+    const errors = validateProduct(payload);
+    if (errors.length > 0) {
+      await client.query('ROLLBACK');
+      return validationError(res, errors);
+    }
 
     const saved = await upsertProduct(client, tenant, payload, { actorUserId: req.user?.id || null });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
@@ -991,6 +1032,9 @@ router.post('/bulk-delete', asyncHandler(async (req, res) => {
       'DELETE FROM products WHERE tenant_id = $1 AND id = ANY($2::uuid[]) RETURNING id',
       [tenant.id, ids],
     );
+    for (const row of result.rows) {
+      await publishCatalogEvent(client, tenant.id, row.id, 'deleted');
+    }
 
     await client.query('COMMIT');
     ok(res, { deleted: result.rowCount }, `${result.rowCount} product(s) deleted.`);
@@ -1006,6 +1050,7 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
     const result = await client.query(
       `
         UPDATE products
@@ -1016,8 +1061,16 @@ router.delete('/:id', asyncHandler(async (req, res) => {
       [tenant.id, req.params.id],
     );
 
-    if (result.rowCount === 0) return notFound(res, 'Product not found.');
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return notFound(res, 'Product not found.');
+    }
+    await publishCatalogEvent(client, tenant.id, result.rows[0].id, 'archived');
+    await client.query('COMMIT');
     ok(res, { id: result.rows[0].id }, 'Product archived.');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw err;
   } finally {
     client.release();
   }
@@ -1106,6 +1159,7 @@ router.post(
       // show the catalog upload immediately instead of an older seed image.
       if (newMediaIds.length > 0) {
         await client.query('UPDATE products SET primary_media_id = $1 WHERE id = $2', [newMediaIds[0], productId]);
+        await publishCatalogEvent(client, tenant.id, productId, 'images_changed');
       }
 
       // Compose the returned `images[]` so the client can patch in place.
@@ -1188,3 +1242,4 @@ router.post('/:id/duplicate', asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports._test = { validateProduct, mapAdminProduct };

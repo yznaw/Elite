@@ -31,7 +31,8 @@ export class I18nService {
     return locale === 'ar' ? `${formatted} ${currency}` : `${currency} ${formatted}`;
   };
 
-  readonly productName = (product: Pick<Product, 'id' | 'name'>): string => {
+  readonly productName = (product: Pick<Product, 'id' | 'name' | 'nameAr'>): string => {
+    if (this.locale.locale() === 'ar' && product.nameAr?.trim()) return product.nameAr.trim();
     const translated = this.t(`productData.${product.id}.name`);
     if (translated !== `productData.${product.id}.name`) return translated;
     return CATALOG_NAME_CORRECTIONS[product.name.trim().toLowerCase()] || product.name;

@@ -25,7 +25,7 @@ import { Collection, ME, Product, ProductVariant } from '../../models';
 interface FormShape {
   name: string; nameAr: string; sku: string; brand: string; collectionIds: string[];
   relatedProductIds: string[];
-  price: number; stock: number; hidden: boolean;
+  price: number; stock: number; hidden: boolean; posHidden: boolean;
   enDesc: string; arDesc: string;
   shortEn: string; shortAr: string;
   teaserEn: string; teaserAr: string;
@@ -162,6 +162,17 @@ function readPreview(file: File): Promise<string> {
             </div>
           </div>
           <button class="toggle" [class.on]="!form().hidden" (click)="toggle('hidden')" [attr.aria-label]="form().hidden ? t('product.show') : t('product.hide')"></button>
+        </div>
+        <div class="vis-block mb-24" [class.hidden-state]="form().posHidden">
+          <div>
+            <div class="strong" style="font-size:13px;margin-bottom:2px;" [style.color]="form().posHidden ? 'var(--danger)' : 'var(--ink)'">
+              {{ form().posHidden ? t('product.posVisibility.hiddenTitle') : t('product.posVisibility.visibleTitle') }}
+            </div>
+            <div class="muted small">
+              {{ form().posHidden ? t('product.posVisibility.hiddenSub') : t('product.posVisibility.visibleSub') }}
+            </div>
+          </div>
+          <button class="toggle" [class.on]="!form().posHidden" (click)="toggle('posHidden')"></button>
         </div>
 
         <!-- Image preview + key facts -->
@@ -2132,7 +2143,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private makeEmptyForm(): FormShape {
     return {
       name: '', nameAr: '', sku: '', brand: '', collectionIds: [],
-      price: 0, stock: 0, hidden: false,
+      price: 0, stock: 0, hidden: false, posHidden: false,
       enDesc: '', arDesc: '',
       shortEn: '', shortAr: '',
       teaserEn: '', teaserAr: '',
@@ -2156,6 +2167,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       price: p.price,
       stock: p.stock,
       hidden: p.hidden,
+      posHidden: p.posHidden ?? false,
       enDesc: p.enDesc ?? '',
       arDesc: p.arDesc ?? '',
       shortEn: p.shortEn ?? '',
@@ -2800,7 +2812,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.set(k, n);
   }
 
-  toggle(k: 'hidden'): void {
+  toggle(k: 'hidden' | 'posHidden'): void {
     this.set(k, !this.form()[k] as never);
   }
 
@@ -2850,6 +2862,11 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   async save(): Promise<void> {
     if (!this.dirty() || this.saveState() === 'saving') return;
+    if (this.form().variants.length === 0) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.variants.required.title'), this.t('product.variants.required.sub'));
+      return;
+    }
     this.saveState.set('saving');
 
     try {
@@ -2880,6 +2897,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.product.price = saved.price;
       this.product.stock = saved.stock;
       this.product.hidden = saved.hidden;
+      this.product.posHidden = saved.posHidden;
       this.product.enDesc = saved.enDesc ?? f.enDesc;
       this.product.arDesc = saved.arDesc ?? f.arDesc;
       this.product.shortEn = saved.shortEn ?? f.shortEn;

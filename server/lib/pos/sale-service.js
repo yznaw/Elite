@@ -27,10 +27,9 @@ function mapCatalogRow(row) {
     priceCents: Number(row.price_cents),
     stock: Number(row.stock_quantity),
     imageUrl: row.image_url || '',
-    // 'archived' is the only status that means gone-for-good; 'hidden' only
-    // controls storefront visibility (server/routes/products.route.js uses
-    // the stricter status = 'active'), so it must not also block a sale here.
-    isActive: row.product_status !== 'archived' && row.is_active,
+    // Storefront status and POS status are independent. A hidden storefront
+    // product can be sold in-store, but pos_status='hidden' cannot.
+    isActive: row.product_status !== 'archived' && row.product_pos_status === 'active' && row.is_active,
   };
 }
 
@@ -56,6 +55,7 @@ async function searchProducts(context, query) {
   const matchClause = `
     p2.tenant_id = $1
     AND p2.status <> 'archived'
+    AND p2.pos_status = 'active'
     AND pv2.is_active = true
     AND ($2 = '%%' OR p2.name ILIKE $2 OR pv2.sku ILIKE $2 OR pv2.barcode ILIKE $2)
     AND ($3::boolean OR pv2.stock_quantity > 0)
@@ -77,6 +77,7 @@ async function searchProducts(context, query) {
     const result = await client.query(
       `SELECT
          p.id AS product_id, p.name AS product_name, p.status AS product_status,
+         p.pos_status AS product_pos_status,
          pt.name AS product_name_ar,
          pv.id AS variant_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
          pv.price_cents, pv.stock_quantity, pv.is_active,
@@ -87,6 +88,7 @@ async function searchProducts(context, query) {
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE pv.tenant_id = $1
          AND p.status <> 'archived'
+         AND p.pos_status = 'active'
          AND pv.is_active = true
          AND ($2 = '%%' OR p.name ILIKE $2 OR pv.sku ILIKE $2 OR pv.barcode ILIKE $2)
          AND ($3::boolean OR pv.stock_quantity > 0)
@@ -125,7 +127,7 @@ async function listProductFilters(context) {
          COALESCE(array_agg(DISTINCT pv.color) FILTER (WHERE pv.color IS NOT NULL AND pv.color <> ''), ARRAY[]::text[]) AS colors
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
-       WHERE pv.tenant_id = $1 AND p.status <> 'archived' AND pv.is_active = true`,
+       WHERE pv.tenant_id = $1 AND p.status <> 'archived' AND p.pos_status = 'active' AND pv.is_active = true`,
       [context.tenantId],
     );
     const row = result.rows[0];
@@ -142,6 +144,7 @@ async function findByBarcode(context, barcodeValue) {
     const result = await client.query(
       `SELECT
          p.id AS product_id, p.name AS product_name, p.status AS product_status,
+         p.pos_status AS product_pos_status,
          pt.name AS product_name_ar,
          pv.id AS variant_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
          pv.price_cents, pv.stock_quantity, pv.is_active,
@@ -151,7 +154,7 @@ async function findByBarcode(context, barcodeValue) {
        LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.locale = 'ar'
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
        WHERE pv.tenant_id = $1 AND lower(pv.barcode) = lower($2)
-         AND p.status <> 'archived' AND pv.is_active = true`,
+         AND p.status <> 'archived' AND p.pos_status = 'active' AND pv.is_active = true`,
       [context.tenantId, barcode],
     );
     assertPos(result.rowCount === 1, 404, 'BARCODE_NOT_FOUND', `No active product uses barcode ${barcode}.`);
@@ -388,7 +391,7 @@ async function createSale(context, body, options = {}) {
     const variantsResult = await client.query(
       `SELECT pv.id, pv.product_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
          pv.price_cents, pv.stock_quantity, pv.is_active,
-         p.name AS product_name, p.status AS product_status,
+         p.name AS product_name, p.status AS product_status, p.pos_status AS product_pos_status,
          -- Snapshotted onto the sale below, not joined at print time: a receipt
          -- reprinted later must show what was sold, not what the catalogue says
          -- now (owner decision 2026-08-01 — item lines are bilingual, the rest
@@ -415,7 +418,12 @@ async function createSale(context, body, options = {}) {
     const pendingConflicts = [];
     const saleLines = sale.items.map((item) => {
       const variant = variants.get(item.variantId);
-      assertPos(variant.is_active && variant.product_status !== 'archived', 422, 'VARIANT_INACTIVE', `${variant.sku} is not available for sale.`);
+      assertPos(
+        variant.is_active && variant.product_status !== 'archived' && variant.product_pos_status === 'active',
+        422,
+        'VARIANT_INACTIVE',
+        `${variant.sku} is not available for sale.`,
+      );
       const availableStock = Number(variant.stock_quantity);
       const catalogPriceCents = Number(variant.price_cents);
       if (availableStock < item.quantity) {

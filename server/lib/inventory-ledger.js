@@ -100,4 +100,18 @@ async function publishStockEvent(client, tenantId, variantId, stock) {
   );
 }
 
-module.exports = { recordMovement, publishStockEvent };
+/**
+ * Invalidates the POS catalogue cache after a product identity, price, image,
+ * variant set, Arabic name, or POS visibility change. Stock retains its small
+ * targeted event; catalogue changes intentionally trigger an authoritative
+ * REST refresh because one product can expand to many cached variant rows.
+ */
+async function publishCatalogEvent(client, tenantId, productId, action = 'updated') {
+  await client.query(
+    `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
+     VALUES ($1, NULL, 'catalog.changed', $2::jsonb)`,
+    [tenantId, JSON.stringify({ productId, action })],
+  );
+}
+
+module.exports = { recordMovement, publishStockEvent, publishCatalogEvent };

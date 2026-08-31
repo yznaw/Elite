@@ -25,6 +25,9 @@ export interface Product {
   price: number;
   stock: number;
   hidden: boolean;
+  /** Independent POS visibility. Storefront-hidden products may still be sold
+      unless this flag is also enabled. */
+  posHidden?: boolean;
   /** Primary thumbnail used everywhere except the editor gallery.
       Mirrors `images[0]` whenever a gallery is present. */
   image: string;

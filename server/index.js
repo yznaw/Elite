@@ -316,8 +316,11 @@ async function prepareDatabase() {
       await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_LOCK_KEY]);
       try {
         const tenant = await ensureDefaultTenant(client);
-        await ensureAllMigrations(client);           // migrations 002 – 015
+        // Migration 010 adds columns/FKs to ref_* tables, so the reference
+        // tables must exist first on a genuinely fresh database. Production
+        // already had them, which hid this ordering bug from normal deploys.
         await ensureReferenceSchema(client, tenant.id);
+        await ensureAllMigrations(client);
         await ensureProductRecommendationsSchema(client);
         await ensureRestockNotificationsSchema(client);
         await ensurePosSchema(client);

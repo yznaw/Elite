@@ -127,6 +127,7 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   return {
     id: row.id,
     name: row.name,
+    nameAr: row.name_ar || '',
     brand: row.brand || '',
     descriptionEn: desc.en || '',
     descriptionAr: desc.ar || '',
@@ -204,6 +205,7 @@ router.get('/', async (_req, res, next) => {
         SELECT
           p.id,
           p.name,
+          pt_ar.name AS name_ar,
           p.brand,
           p.description,
           p.care_instructions,
@@ -300,8 +302,9 @@ router.get('/', async (_req, res, next) => {
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
+        LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.status = 'active'
-        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
+        GROUP BY p.id, pt_ar.name, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
         ORDER BY p.created_at DESC
       `,
       [tenant.id],
@@ -331,6 +334,7 @@ router.get('/:id', async (req, res, next) => {
         SELECT
           p.id,
           p.name,
+          pt_ar.name AS name_ar,
           p.brand,
           p.description,
           p.care_instructions,
@@ -427,8 +431,9 @@ router.get('/:id', async (req, res, next) => {
         FROM products p
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
+        LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status = 'active'
-        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
+        GROUP BY p.id, pt_ar.name, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
         LIMIT 1
       `,
       [tenant.id, req.params.id],
@@ -520,3 +525,4 @@ router.post('/:id/restock-notifications', async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports._test = { mapRow };

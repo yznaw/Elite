@@ -10,6 +10,7 @@ export interface SaveProductPayload {
   price: number;
   stock: number;
   hidden: boolean;
+  posHidden: boolean;
   enDesc: string;
   arDesc: string;
   shortEn: string;

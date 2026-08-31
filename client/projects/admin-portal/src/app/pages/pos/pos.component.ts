@@ -2040,11 +2040,32 @@ export class PosComponent implements OnInit, OnDestroy {
         // A malformed event is ignored; the next catalog refresh remains authoritative.
       }
     });
+    this.eventSource.addEventListener('catalog.changed', () => {
+      // Names, prices, images, variants and POS visibility can all affect many
+      // cached rows. Reload the active query and refresh the offline catalogue
+      // instead of trying to patch an incomplete event payload.
+      void this.loadProducts(this.searchQuery, this.productPage());
+      if (this.searchQuery || this.productPage() !== 0 || this.filterSize() || this.filterColor()) {
+        void this.refreshOfflineCatalog();
+      }
+    });
     // The server emits this when our reconnect position predates the retained
     // replay buffer; the only safe recovery is a full REST catalog refresh.
     this.eventSource.addEventListener('catalog.refresh-required', () => {
       void this.loadProducts();
     });
+  }
+
+  private async refreshOfflineCatalog(): Promise<void> {
+    if (!this.online()) return;
+    try {
+      const result = await this.pos.searchProducts('', { page: 0 });
+      const cachedAt = new Date().toISOString();
+      await this.local.setCatalog({ products: result.products, cachedAt });
+      this.catalogCachedAt.set(cachedAt);
+    } catch {
+      // The visible load reports actionable errors; cache refresh is best effort.
+    }
   }
 
   private applyStockUpdates(updates: Array<{ variantId: string; stock: number }>): void {

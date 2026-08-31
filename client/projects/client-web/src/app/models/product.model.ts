@@ -16,6 +16,7 @@ export interface ProductVariant {
 export interface Product {
   id: string;
   name: string;
+  nameAr?: string;
   brand?: string;
   /** Legacy long copy. No longer editable in the admin; kept only as a
    *  fallback for the Material & Care section on products saved before it

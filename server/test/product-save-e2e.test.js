@@ -72,6 +72,9 @@ test('product create + read still works after the has_3d/views_3d column removal
         brand: 'Elite Test',
         price: 450,
         stock: 5,
+        variants: [
+          { sku: `E2E-${runId}-DEFAULT`, barcode: `E2E-${runId}-DEFAULT`, price: 450, stock: 5 },
+        ],
       }),
     });
     assert.equal(created.name, 'E2E Test Loafer');

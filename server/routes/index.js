@@ -77,7 +77,10 @@ admin.use('/media', adminMediaRouter);
 admin.use('/storefront', adminStorefrontRouter);
 admin.use('/storefront-content', storefrontContentRouter.adminRouter);
 admin.use('/analytics', adminAnalyticsRouter);
-admin.use('/bulk-import', adminBulkImportRouter);
+// Product/stock bulk import can overwrite the entire catalog and every
+// variant's stock in one request — owner/admin only, same scope as
+// /inventory and /expenses below (docs/34 Phase 3).
+admin.use('/bulk-import', requireAuth({ roles: ['owner', 'admin'] }), adminBulkImportRouter);
 admin.use('/ref', adminRefRouter);
 // Settings includes role-sensitive endpoints (team management). Owners and
 // admins can manage everything; viewers/managers can read store settings.
