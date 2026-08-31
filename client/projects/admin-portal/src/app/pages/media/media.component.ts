@@ -125,16 +125,52 @@ interface PendingUpload {
           </button>
         </div>
 
-        @if (counts().unlinked > 0) {
-          <button class="btn btn-danger-outline btn-sm" [disabled]="cleaningUp()" (click)="cleanupOrphaned()">
-            @if (cleaningUp()) {
-              <span class="pg-spinner"></span> {{ t('media.cleanup.btn.loading') }}
-            } @else {
-              🗑 {{ counts().unlinked }} {{ t('media.cleanup.btn.unlinked') }} {{ counts().unlinked === 1 ? t('media.cleanup.btn.file') : t('media.cleanup.btn.files') }} ({{ orphanedSize() }})
-            }
+        <div class="row gap-sm" style="flex-wrap:wrap;">
+          <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
+                  (click)="toggleSelectionMode()" [title]="t('media.btn.select')">
+            <ap-icon name="check" [size]="13"/> {{ selectionMode() ? t('common.cancel') : t('media.btn.select') }}
           </button>
-        }
+          @if (counts().unlinked > 0) {
+            <button class="btn btn-danger-outline btn-sm" [disabled]="cleaningUp()" (click)="cleanupOrphaned()">
+              @if (cleaningUp()) {
+                <span class="pg-spinner"></span> {{ t('media.cleanup.btn.loading') }}
+              } @else {
+                🗑 {{ counts().unlinked }} {{ t('media.cleanup.btn.unlinked') }} {{ counts().unlinked === 1 ? t('media.cleanup.btn.file') : t('media.cleanup.btn.files') }} ({{ orphanedSize() }})
+              }
+            </button>
+          }
+        </div>
       </div>
+
+      @if (selectionMode()) {
+        <div class="sel-bar mb-16">
+          <div class="sel-count">
+            @if (selectedIds().size === 0) {
+              <span class="muted">{{ t('media.selection.tap') }}</span>
+            } @else {
+              <strong>{{ selectedIds().size }}</strong> {{ t('media.selection.of') }} {{ pagedMedia().length }} {{ t('media.selection.selected') }}
+            }
+          </div>
+          <div class="sel-actions">
+            <button class="btn btn-sm btn-outline" (click)="selectAll()">{{ t('media.selection.selectAll') }} ({{ pagedMedia().length }})</button>
+            @if (selectedIds().size > 0) {
+              <button class="btn btn-sm btn-outline" (click)="clearSelection()">{{ t('media.selection.clear') }}</button>
+
+              @if (confirmingDelete()) {
+                <div class="del-confirm">
+                  <span class="del-warn">{{ t('common.delete') }} {{ selectedIds().size }} {{ selectedIds().size === 1 ? t('media.cleanup.btn.file') : t('media.cleanup.btn.files') }}?</span>
+                  <button class="btn btn-sm btn-danger" (click)="confirmBulkDelete()">{{ t('media.bulk.confirmDelete') }}</button>
+                  <button class="btn btn-sm btn-outline" (click)="confirmingDelete.set(false)">{{ t('common.cancel') }}</button>
+                </div>
+              } @else {
+                <button class="btn btn-sm btn-danger" (click)="confirmingDelete.set(true)">
+                  <ap-icon name="trash" [size]="13"/> {{ t('common.delete') }} ({{ selectedIds().size }})
+                </button>
+              }
+            }
+          </div>
+        </div>
+      }
 
       @if (filtered().length === 0) {
         <div class="card">
@@ -145,7 +181,10 @@ interface PendingUpload {
       } @else {
         <div class="media-grid">
           @for (m of pagedMedia(); track m.id) {
-            <ap-media-card [media]="m" [products]="products()" [selected]="active()?.id === m.id" (clicked)="active.set(m)"/>
+            <ap-media-card [media]="m" [products]="products()"
+              [selectionMode]="selectionMode()"
+              [selected]="selectionMode() ? selectedIds().has(m.id) : active()?.id === m.id"
+              (clicked)="selectionMode() ? toggleSelect(m.id) : active.set(m)"/>
           }
         </div>
 
@@ -341,6 +380,26 @@ interface PendingUpload {
       .upload-row { grid-template-columns: 32px 1fr auto; padding: 8px; }
       .upload-thumb { width: 32px; height: 32px; }
     }
+
+    /* ── Selection toolbar ── */
+    .sel-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 10px 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; flex-wrap: wrap;
+    }
+    .sel-count { font-size: 13px; flex-shrink: 0; }
+    .sel-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .del-confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .del-warn { font-size: 12px; color: #dc2626; font-weight: 600; }
+    .btn-active { background: #c9a84c22; border-color: #c9a84c; color: #a07830; }
+    .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+
+    @media (max-width: 640px) {
+      .sel-bar { flex-direction: column; align-items: flex-start; }
+      .sel-actions { width: 100%; flex-wrap: wrap; }
+    }
   `]
 })
 export class MediaComponent implements OnInit {
@@ -365,6 +424,10 @@ export class MediaComponent implements OnInit {
   readonly cleaningUp = signal(false);
   readonly page = signal(0);
   readonly pageSize = signal(48);
+
+  readonly selectionMode = signal(false);
+  readonly selectedIds = signal(new Set<string>());
+  readonly confirmingDelete = signal(false);
 
   // ── Default fallback image ───────────────────────────────────────────────
 
@@ -617,6 +680,45 @@ export class MediaComponent implements OnInit {
       label: this.t('media.toast.undo'),
       run: () => this.media.update((all) => [...all, removed]),
     } : undefined);
+  }
+
+  // ── Bulk selection ────────────────────────────────────────────────────────
+
+  toggleSelectionMode(): void {
+    this.selectionMode.update((v) => !v);
+    this.selectedIds.set(new Set());
+    this.confirmingDelete.set(false);
+    this.active.set(null);
+  }
+
+  toggleSelect(id: string): void {
+    this.selectedIds.update((set) => {
+      const next = new Set(set);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  selectAll(): void { this.selectedIds.set(new Set(this.pagedMedia().map((m) => m.id))); }
+  clearSelection(): void { this.selectedIds.set(new Set()); }
+
+  async confirmBulkDelete(): Promise<void> {
+    const ids = [...this.selectedIds()];
+    if (!ids.length) return;
+    this.confirmingDelete.set(false);
+    const removed = this.media().filter((m) => ids.includes(m.id));
+    this.media.update((all) => all.filter((m) => !ids.includes(m.id)));
+    this.selectedIds.set(new Set());
+    this.selectionMode.set(false);
+    try {
+      const { deleted } = await this.mediaApi.bulkDelete(ids);
+      this.toast.success(
+        `${deleted} ${deleted === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')} — ${this.t('common.delete').toLowerCase()}`,
+      );
+    } catch {
+      this.media.update((all) => [...removed, ...all]);
+      this.toast.error(this.t('media.toast.bulkDeleteError'));
+    }
   }
 
   applyAutoLink(pairs: LinkPair[]): void {

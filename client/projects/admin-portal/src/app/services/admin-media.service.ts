@@ -27,6 +27,10 @@ export class AdminMediaService {
     return firstValueFrom(this.api.delete<{ deleted: number }>('/admin/media/orphaned'));
   }
 
+  bulkDelete(ids: string[]): Promise<{ deleted: number }> {
+    return firstValueFrom(this.api.post<{ deleted: number }>('/admin/media/bulk-delete', { ids }));
+  }
+
   /** Import image files from a publicly-shared Google Drive file or folder URL. */
   importFromGDrive(driveUrl: string): Promise<MediaFile[]> {
     return firstValueFrom(

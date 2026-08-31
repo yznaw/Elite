@@ -16,6 +16,11 @@ interface Suggestion {
     changeDetection: ChangeDetectionStrategy.Eager,
     template: `
     <div class="media-card" [class.selected]="selected" (click)="clicked.emit()">
+      @if (selectionMode) {
+        <div class="sel-check" [class.checked]="selected">
+          @if (selected) { <ap-icon name="check" [size]="12"/> }
+        </div>
+      }
       <div class="media-thumb">
         <img [src]="media.preview" [alt]="media.name" (error)="onImgError($event)"/>
         <span class="type-badge">{{ extension(media.name) }}</span>
@@ -41,7 +46,17 @@ interface Suggestion {
         }
       </div>
     </div>
-  `
+  `,
+    styles: [`
+    .sel-check {
+      position: absolute; top: 8px; left: 8px; z-index: 2;
+      width: 22px; height: 22px; border-radius: 6px;
+      background: rgba(255,255,255,0.92); border: 2px solid #d4d4d8;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,.12);
+    }
+    .sel-check.checked { background: var(--gold, #c9a84c); border-color: var(--gold, #c9a84c); color: #fff; }
+  `]
 })
 export class MediaCardComponent {
   private readonly i18n = inject(I18nService);
@@ -50,6 +65,7 @@ export class MediaCardComponent {
   @Input({ required: true }) media!: MediaFile;
   @Input() products: Product[] = [];
   @Input() selected = false;
+  @Input() selectionMode = false;
   @Output() clicked = new EventEmitter<void>();
 
   get linkedProduct() { return this.products.find((p) => p.id === this.media.linkedTo); }

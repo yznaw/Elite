@@ -246,6 +246,45 @@ router.delete(
   }),
 );
 
+router.post(
+  '/bulk-delete',
+  asyncHandler(async (req, res) => {
+    const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.filter(Boolean))] : [];
+    if (ids.length === 0) return validationError(res, ['ids must be a non-empty array.']);
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const tenant = await ensureDefaultTenant(client);
+
+      const lookup = await client.query(
+        'SELECT id, metadata FROM media_assets WHERE tenant_id = $1 AND id = ANY($2::uuid[])',
+        [tenant.id, ids],
+      );
+      await client.query(
+        'DELETE FROM media_assets WHERE tenant_id = $1 AND id = ANY($2::uuid[])',
+        [tenant.id, ids],
+      );
+
+      await client.query('COMMIT');
+
+      // Best-effort: physical file cleanup happens after the transaction
+      // commits so a storage hiccup never rolls back the DB deletion.
+      for (const row of lookup.rows) {
+        await removeAssetFiles(row.metadata).catch(() => undefined);
+      }
+
+      const deleted = lookup.rowCount;
+      ok(res, { deleted, ids: lookup.rows.map((r) => r.id) }, `${deleted} media asset${deleted === 1 ? '' : 's'} deleted.`);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
