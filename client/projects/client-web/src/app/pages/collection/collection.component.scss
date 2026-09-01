@@ -752,6 +752,10 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 241, 229, 0.86));
 }
 
+.purchase-panel--disabled {
+  opacity: 0.58;
+}
+
 .size-picker {
   display: grid;
   gap: 9px;
@@ -832,6 +836,29 @@
   background: #242424;
   color: #f3efe4;
   transform: translateY(-1px);
+}
+
+.purchase-panel .quick-add:disabled,
+.purchase-panel .buy-now:disabled,
+.purchase-panel .size-select:disabled {
+  cursor: not-allowed;
+}
+
+.purchase-panel .quick-add:disabled,
+.purchase-panel .buy-now:disabled {
+  border-color: rgba(31, 28, 23, 0.12);
+  background: rgba(225, 220, 211, 0.74);
+  color: #8c8376;
+  box-shadow: none;
+  transform: none;
+}
+
+.purchase-panel .quick-add:disabled:hover,
+.purchase-panel .buy-now:disabled:hover {
+  border-color: rgba(31, 28, 23, 0.12);
+  background: rgba(225, 220, 211, 0.74);
+  color: #8c8376;
+  transform: none;
 }
 
 .quick-add,

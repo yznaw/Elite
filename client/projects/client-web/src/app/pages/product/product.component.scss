@@ -152,11 +152,12 @@
   inset: 0;
   z-index: 0;
   content: "";
-  background:
-    linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.68) 48%, transparent 66%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(239, 235, 226, 0.9));
+  // background:
+  //   linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.68) 48%, transparent 66%),
+  //   linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(239, 235, 226, 0.9));
+  background:#faf8f9;
   background-size: 220% 100%, 100% 100%;
-  animation: productGalleryShimmer 1.45s ease-in-out infinite;
+  // animation: productGalleryShimmer 1.45s ease-in-out infinite;
 }
 
 .gallery-frame::after {

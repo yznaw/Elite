@@ -446,6 +446,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   addToCart(product: Product): void {
+    if (this.availableSizes(product).length === 0) return;
     this.cart.add(this.cartItem(product));
 
     this.addedProductId.set(product.id);
@@ -454,6 +455,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   buyNow(product: Product): void {
+    if (this.availableSizes(product).length === 0) return;
     this.cart.add(this.cartItem(product));
     this.cart.closeDrawer();
     void this.router.navigate(['/checkout']);

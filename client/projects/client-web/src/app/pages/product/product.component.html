@@ -4,7 +4,9 @@
       <nav class="breadcrumb" aria-label="Breadcrumb">
         @if (fromParentCollectionHandle()) {
           <button type="button" (click)="goParentCollection()">
-            {{ fromParentCollectionName() || t("product.breadcrumb.collection") }}
+            {{
+              fromParentCollectionName() || t("product.breadcrumb.collection")
+            }}
           </button>
           <span>/</span>
         }
@@ -78,7 +80,9 @@
             @if (productNote() || selectedSizeNote() || gallery().length > 1) {
               <div
                 class="gallery-bar"
-                [class.gallery-bar--noted]="!!(productNote() || selectedSizeNote())"
+                [class.gallery-bar--noted]="
+                  !!(productNote() || selectedSizeNote())
+                "
               >
                 @if (productNote() || selectedSizeNote()) {
                   <div class="gallery-note" aria-live="polite">
@@ -87,7 +91,9 @@
                     }
                     @if (selectedSizeNote(); as note) {
                       <p class="gallery-note-row gallery-note-row--size">
-                        <span class="gallery-note-size">{{ selectedSize() }}</span>
+                        <span class="gallery-note-size">{{
+                          selectedSize()
+                        }}</span>
                         <span>{{ note }}</span>
                       </p>
                     }
@@ -123,14 +129,14 @@
                   >
                     <img
                       [src]="src"
-                    [attr.srcset]="imageSrcset(src, p)"
-                    sizes="96px"
-                    alt=""
-                    [class.is-loaded]="isGalleryImageLoaded(src)"
-                    loading="lazy"
-                    decoding="async"
-                    (load)="markGalleryImageLoaded(src)"
-                    (error)="onImgError($event)"
+                      [attr.srcset]="imageSrcset(src, p)"
+                      sizes="96px"
+                      alt=""
+                      [class.is-loaded]="isGalleryImageLoaded(src)"
+                      loading="lazy"
+                      decoding="async"
+                      (load)="markGalleryImageLoaded(src)"
+                      (error)="onImgError($event)"
                     />
                   </button>
                 }
@@ -141,7 +147,7 @@
                   type="button"
                   class="thumb-scroll-cue thumb-scroll-cue--start"
                   (click)="scrollThumbnails('start')"
-                [attr.aria-label]="t('product.aria.previousImage')"
+                  [attr.aria-label]="t('product.aria.previousImage')"
                 >
                   <span aria-hidden="true">‹</span>
                 </button>
@@ -179,15 +185,24 @@
                     class="color-swatch"
                     [class.is-selected]="colorSelected(color)"
                     [class.has-image]="colorSwatchImage(color)"
-                    [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
+                    [style.background]="
+                      colorSwatchImage(color) ? null : colorHex(color)
+                    "
                     [attr.title]="colorLabel(color)"
-                    [attr.aria-label]="t('product.color.choose', { color: colorLabel(color) })"
+                    [attr.aria-label]="
+                      t('product.color.choose', { color: colorLabel(color) })
+                    "
                     [attr.aria-pressed]="colorSelected(color)"
                     (click)="selectProductColor(color)"
                     (keydown)="onProductColorKeydown(color, $event)"
                   >
                     @if (colorSwatchImage(color); as swatchImage) {
-                      <img [src]="swatchImage" [alt]="colorLabel(color)" loading="lazy" decoding="async" />
+                      <img
+                        [src]="swatchImage"
+                        [alt]="colorLabel(color)"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     }
                     <span class="sr-only">{{ colorLabel(color) }}</span>
                   </button>
@@ -222,7 +237,9 @@
             <div id="size-section" class="size-section">
               <div class="section-label">
                 <span>{{ t("product.size.label") }}</span>
-                <button type="button" (click)="openSizeGuide()">{{ t("product.size.guide") }}</button>
+                <button type="button" (click)="openSizeGuide()">
+                  {{ t("product.size.guide") }}
+                </button>
               </div>
 
               <button
@@ -346,7 +363,13 @@
 
           <div class="cta-stack">
             @if (canPurchaseProduct()) {
-              <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart" [attr.data-track-product]="p.id">
+              <button
+                type="button"
+                class="add-cart-btn"
+                (click)="add()"
+                data-track="add-to-cart"
+                [attr.data-track-product]="p.id"
+              >
                 @if (addedFeedback()) {
                   <span>✓ {{ t("product.cta.added") }}</span>
                 } @else {
@@ -354,7 +377,13 @@
                   <small>{{ price(p.price * qty()) }}</small>
                 }
               </button>
-              <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now" [attr.data-track-product]="p.id">
+              <button
+                type="button"
+                class="buy-now-btn"
+                (click)="buyNow()"
+                data-track="buy-now"
+                [attr.data-track-product]="p.id"
+              >
                 <span>{{ t("product.cta.buyNow") }}</span>
                 <small>{{ price(p.price * qty()) }}</small>
               </button>
@@ -366,7 +395,7 @@
               >
                 <span>{{ t("product.restock.notify") }}</span>
                 <small>{{
-                  t("product.restock.size", { size: selectedSize() ?? "—" })
+                  t("product.restock.size", { size: selectedSize() ?? " " })
                 }}</small>
               </button>
             }
@@ -449,11 +478,16 @@
                   class="accordion-content"
                   [class.open]="openAccordion() === acc.id"
                 >
-                  @if (acc.id === 'material') {
+                  @if (acc.id === "material") {
                     <!-- Per-product Material & Care copy from the admin editor,
                          falling back to the generic static text when a product
                          has none. Angular sanitizes innerHTML. -->
-                    <div class="description" [innerHTML]="productCareInstructions(p) || t(acc.contentKey)"></div>
+                    <div
+                      class="description"
+                      [innerHTML]="
+                        productCareInstructions(p) || t(acc.contentKey)
+                      "
+                    ></div>
                   } @else {
                     <p>{{ t(acc.contentKey) }}</p>
                   }
@@ -495,14 +529,15 @@
             </div>
 
             @if (sizeGuideLoading()) {
-              <p class="size-guide-state">{{ t("product.size.guideLoading") }}</p>
+              <p class="size-guide-state">
+                {{ t("product.size.guideLoading") }}
+              </p>
             } @else if (sizeGuideError()) {
               <p class="size-guide-state">{{ sizeGuideError() }}</p>
             } @else {
               <div class="size-guide-body">
                 @for (set of sizeSets(); track set.id) {
                   <div class="size-guide-set">
-
                     @if (set.size_chart && set.size_chart.length > 0) {
                       <!-- Conversion table -->
                       <div class="sg-table-wrap">
@@ -536,7 +571,6 @@
                         }
                       </div>
                     }
-
                   </div>
                 }
               </div>
@@ -574,13 +608,23 @@
               <div class="review-success" aria-live="polite">
                 <span class="review-success__mark" aria-hidden="true">✓</span>
                 <p>{{ t("product.review.successKicker") }}</p>
-                <h2 id="review-title">{{ t("product.review.successTitle") }}</h2>
+                <h2 id="review-title">
+                  {{ t("product.review.successTitle") }}
+                </h2>
                 <span>{{ t("product.review.successBody") }}</span>
                 <div class="review-success__actions">
-                  <button type="button" class="review-submit" (click)="closeReview()">
+                  <button
+                    type="button"
+                    class="review-submit"
+                    (click)="closeReview()"
+                  >
                     {{ t("common.close") }}
                   </button>
-                  <button type="button" class="review-secondary" (click)="startAnotherReview()">
+                  <button
+                    type="button"
+                    class="review-secondary"
+                    (click)="startAnotherReview()"
+                  >
                     {{ t("product.review.another") }}
                   </button>
                 </div>
@@ -592,7 +636,11 @@
                 <span>{{ t("product.review.subtitle") }}</span>
               </header>
 
-              <form class="review-form" (submit)="submitReview($event)" novalidate>
+              <form
+                class="review-form"
+                (submit)="submitReview($event)"
+                novalidate
+              >
                 <fieldset class="review-rating">
                   <legend>
                     {{ t("product.review.rating") }}
@@ -600,8 +648,12 @@
                   </legend>
                   <div
                     class="review-stars"
-                    [attr.aria-invalid]="reviewFieldErrors().rating ? true : null"
-                    [attr.aria-describedby]="reviewFieldErrors().rating ? 'review-rating-error' : null"
+                    [attr.aria-invalid]="
+                      reviewFieldErrors().rating ? true : null
+                    "
+                    [attr.aria-describedby]="
+                      reviewFieldErrors().rating ? 'review-rating-error' : null
+                    "
                   >
                     @for (star of [1, 2, 3, 4, 5]; track star) {
                       <button
@@ -609,7 +661,9 @@
                         type="button"
                         [class.is-selected]="star <= (reviewRating() || 0)"
                         [attr.aria-pressed]="reviewRating() === star"
-                        [attr.aria-label]="t('product.review.starLabel', { rating: star })"
+                        [attr.aria-label]="
+                          t('product.review.starLabel', { rating: star })
+                        "
                         (click)="selectReviewRating(star)"
                       >
                         ★
@@ -623,14 +677,19 @@
                   }
                 </fieldset>
 
-                <label class="review-field review-field--message" for="review-description">
+                <label
+                  class="review-field review-field--message"
+                  for="review-description"
+                >
                   <span>
                     {{ t("product.review.description") }}
                     <small>{{ t("product.review.optional") }}</small>
                     <small class="review-character-count">
-                      {{ t("product.review.charactersRemaining", {
-                        count: 1200 - reviewDescription().length
-                      }) }}
+                      {{
+                        t("product.review.charactersRemaining", {
+                          count: 1200 - reviewDescription().length,
+                        })
+                      }}
                     </small>
                   </span>
                   <textarea
@@ -667,11 +726,17 @@
                       type="checkbox"
                       [checked]="reviewContactConsent()"
                       (change)="onReviewContactConsentChange($event)"
-                      [attr.aria-describedby]="reviewFieldErrors().contact ? 'review-contact-error' : 'review-contact-help'"
+                      [attr.aria-describedby]="
+                        reviewFieldErrors().contact
+                          ? 'review-contact-error'
+                          : 'review-contact-help'
+                      "
                     />
                     <span>
                       <strong>{{ t("product.review.contactConsent") }}</strong>
-                      <small id="review-contact-help">{{ t("product.review.contactHelp") }}</small>
+                      <small id="review-contact-help">{{
+                        t("product.review.contactHelp")
+                      }}</small>
                     </span>
                   </label>
                   @if (reviewFieldErrors().contact) {
@@ -696,8 +761,14 @@
                           [value]="reviewPhone()"
                           (input)="onReviewPhoneInput($event)"
                           [placeholder]="t('product.review.mobilePlaceholder')"
-                          [attr.aria-invalid]="reviewFieldErrors().phone ? true : null"
-                          [attr.aria-describedby]="reviewFieldErrors().phone ? 'review-phone-error' : null"
+                          [attr.aria-invalid]="
+                            reviewFieldErrors().phone ? true : null
+                          "
+                          [attr.aria-describedby]="
+                            reviewFieldErrors().phone
+                              ? 'review-phone-error'
+                              : null
+                          "
                         />
                         @if (reviewFieldErrors().phone) {
                           <p id="review-phone-error" class="review-field-error">
@@ -717,8 +788,14 @@
                           [value]="reviewEmail()"
                           (input)="onReviewEmailInput($event)"
                           [placeholder]="t('product.review.emailPlaceholder')"
-                          [attr.aria-invalid]="reviewFieldErrors().email ? true : null"
-                          [attr.aria-describedby]="reviewFieldErrors().email ? 'review-email-error' : null"
+                          [attr.aria-invalid]="
+                            reviewFieldErrors().email ? true : null
+                          "
+                          [attr.aria-describedby]="
+                            reviewFieldErrors().email
+                              ? 'review-email-error'
+                              : null
+                          "
                         />
                         @if (reviewFieldErrors().email) {
                           <p id="review-email-error" class="review-field-error">
@@ -742,7 +819,11 @@
                   data-testid="submit-review"
                   [disabled]="reviewSubmitting()"
                 >
-                  {{ reviewSubmitting() ? t("product.review.submitting") : t("product.review.submit") }}
+                  {{
+                    reviewSubmitting()
+                      ? t("product.review.submitting")
+                      : t("product.review.submit")
+                  }}
                 </button>
               </form>
             }
@@ -793,14 +874,26 @@
 
     <div class="sticky-atc" id="sticky-atc">
       @if (canPurchaseProduct()) {
-        <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart-sticky" [attr.data-track-product]="p.id">
+        <button
+          type="button"
+          class="add-cart-btn"
+          (click)="add()"
+          data-track="add-to-cart-sticky"
+          [attr.data-track-product]="p.id"
+        >
           @if (addedFeedback()) {
             <ng-container>{{ t("product.sticky.added") }}</ng-container>
           } @else {
             <ng-container>{{ t("product.sticky.addToCart") }}</ng-container>
           }
         </button>
-        <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now-sticky" [attr.data-track-product]="p.id">
+        <button
+          type="button"
+          class="buy-now-btn"
+          (click)="buyNow()"
+          data-track="buy-now-sticky"
+          [attr.data-track-product]="p.id"
+        >
           {{ t("product.sticky.buyNow") }}
         </button>
       } @else {
