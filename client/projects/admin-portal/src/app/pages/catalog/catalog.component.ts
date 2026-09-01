@@ -187,9 +187,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             <div class="fp-group fp-page">
               <label class="fp-label">{{ t('common.perPage') }}</label>
               <select class="inp inp-sm" [ngModel]="pageSize()" (ngModelChange)="pageSize.set(+$event)">
-                <option [value]="25">25</option>
-                <option [value]="50">50</option>
-                <option [value]="100">100</option>
+                <option [value]="24">24</option>
+                <option [value]="48">48</option>
+                <option [value]="96">96</option>
                 <option [value]="0">{{ t('catalog.filter.all') }}</option>
               </select>
             </div>
@@ -774,7 +774,11 @@ export class CatalogComponent implements OnInit {
     this.isMobile() ? 'grid' : this.viewMode()
   );
   readonly page          = signal(0);
-  readonly pageSize      = signal(25);
+  // 24 (not 25) so a full page divides evenly across the common column
+  // counts the responsive grid actually renders (3/4/6/8/12) instead of
+  // leaving a single card stranded alone on the last row — see the
+  // grid-cards CSS below (auto-fill, minmax(160px,1fr)).
+  readonly pageSize      = signal(24);
   readonly refColors        = signal<RefColor[]>([]);
   readonly colorFilterOpen  = signal(false);
 
