@@ -163,17 +163,25 @@ function readPreview(file: File): Promise<string> {
           </div>
           <button class="toggle" [class.on]="!form().hidden" (click)="toggle('hidden')" [attr.aria-label]="form().hidden ? t('product.show') : t('product.hide')"></button>
         </div>
-        <div class="vis-block mb-24" [class.hidden-state]="form().posHidden">
-          <div>
-            <div class="strong" style="font-size:13px;margin-bottom:2px;" [style.color]="form().posHidden ? 'var(--danger)' : 'var(--ink)'">
-              {{ form().posHidden ? t('product.posVisibility.hiddenTitle') : t('product.posVisibility.visibleTitle') }}
+        <!-- HIDDEN-POS-TOGGLE: "Available on POS" hidden at the client's request
+             (2026-09-01) — every product is forced available on POS (posHidden
+             always false, see makeEmptyForm/makeFormFromProduct below) until
+             they ask for this control back. Search "HIDDEN-POS-TOGGLE" to
+             restore: un-comment this block and remove the two forced-false
+             overrides. -->
+        @if (false) {
+          <div class="vis-block mb-24" [class.hidden-state]="form().posHidden">
+            <div>
+              <div class="strong" style="font-size:13px;margin-bottom:2px;" [style.color]="form().posHidden ? 'var(--danger)' : 'var(--ink)'">
+                {{ form().posHidden ? t('product.posVisibility.hiddenTitle') : t('product.posVisibility.visibleTitle') }}
+              </div>
+              <div class="muted small">
+                {{ form().posHidden ? t('product.posVisibility.hiddenSub') : t('product.posVisibility.visibleSub') }}
+              </div>
             </div>
-            <div class="muted small">
-              {{ form().posHidden ? t('product.posVisibility.hiddenSub') : t('product.posVisibility.visibleSub') }}
-            </div>
+            <button class="toggle" [class.on]="!form().posHidden" (click)="toggle('posHidden')"></button>
           </div>
-          <button class="toggle" [class.on]="!form().posHidden" (click)="toggle('posHidden')"></button>
-        </div>
+        }
 
         <!-- Image preview + key facts -->
         <div class="mb-24" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
@@ -2214,6 +2222,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private makeEmptyForm(): FormShape {
     return {
       name: '', nameAr: '', sku: '', brand: '', collectionIds: [],
+      // HIDDEN-POS-TOGGLE: forced false while the toggle is hidden (see template).
       price: 0, stock: 0, hidden: false, posHidden: false,
       enDesc: '', arDesc: '',
       shortEn: '', shortAr: '',
@@ -2238,7 +2247,12 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       price: p.price,
       stock: p.stock,
       hidden: p.hidden,
-      posHidden: p.posHidden ?? false,
+      // HIDDEN-POS-TOGGLE: ignore the stored value and force every product
+      // available on POS while the toggle is hidden — otherwise a product
+      // that already had posHidden=true would stay stuck hidden from POS
+      // with no visible control left to fix it. Restore `p.posHidden ?? false`
+      // when un-hiding the toggle above.
+      posHidden: false,
       enDesc: p.enDesc ?? '',
       arDesc: p.arDesc ?? '',
       shortEn: p.shortEn ?? '',
