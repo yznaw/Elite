@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+require('dotenv').config();
+
 const router = require('../routes/admin-bulk-import.route');
 const { _test } = router;
 
@@ -180,4 +182,33 @@ test('new imports default to hidden and only explicit active is accepted', () =>
   assert.equal(_test.importStatus('', 'hidden'), 'hidden');
   assert.equal(_test.importStatus('ACTIVE', 'hidden'), 'active');
   assert.equal(_test.importStatus('published', 'hidden'), 'hidden');
+});
+
+test('extractDriveId reads the id out of every Drive share-link shape', () => {
+  assert.equal(_test.extractDriveId('https://drive.google.com/drive/folders/1AbC-XyZ?usp=drive_link'), '1AbC-XyZ');
+  assert.equal(_test.extractDriveId('https://drive.google.com/file/d/1AbC-XyZ/view'), '1AbC-XyZ');
+  assert.equal(_test.extractDriveId('https://drive.google.com/open?id=1AbC-XyZ&usp=drive_copy'), '1AbC-XyZ');
+  assert.equal(_test.extractDriveId('https://example.com/not-drive.jpg'), null);
+});
+
+test('isDriveFolder skips the network call and reports false when no API key is configured', async () => {
+  // No apiKey → must resolve false without attempting a request at all, so a
+  // deployment missing GOOGLE_API_KEY degrades to "treat as a file" instead
+  // of hanging or throwing.
+  assert.equal(await _test.isDriveFolder('anything', null), false);
+  assert.equal(await _test.isDriveFolder('anything', ''), false);
+});
+
+test('resolveImageUrls treats a bare URL with no recognizable Drive id as a direct image link', async () => {
+  const resolved = await _test.resolveImageUrls('https://example.com/photo.jpg', null);
+  assert.deepEqual(resolved, ['https://example.com/photo.jpg']);
+});
+
+test('resolveImageUrls falls back to single-file handling for an ambiguous "open?id=" link when no API key is set', async () => {
+  // Without an API key there is no way to ask Drive whether the id is a
+  // folder, so this must not hang or throw — it degrades to the pre-existing
+  // "treat as one file" behavior (see the reported bug: an "open?id="
+  // link that is actually a folder needs GOOGLE_API_KEY to be told apart).
+  const resolved = await _test.resolveImageUrls('https://drive.google.com/open?id=SOME_ID&usp=drive_copy', null);
+  assert.deepEqual(resolved, ['https://drive.google.com/uc?export=download&id=SOME_ID']);
 });

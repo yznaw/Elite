@@ -652,6 +652,33 @@ function filenameFromMime(ct, url) {
   return m ? `image.${m[1].toLowerCase()}` : 'image.jpg';
 }
 
+// "/open?id=..." (and the bare "?id=..." fallback) is Google's generic
+// share-link shape — it's used for both single files AND folders, so the URL
+// text alone can't tell them apart the way "/drive/folders/" reliably can.
+// Getting this wrong means downloadBuffer() tries to fetch a folder as if it
+// were an image, which fails with a misleading "not public" error even
+// though the link is shared correctly. Ask Drive what the id actually is.
+function isDriveFolder(id, apiKey) {
+  if (!apiKey) return Promise.resolve(false);
+  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=mimeType&key=${encodeURIComponent(apiKey)}`;
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'EliteImporter/1.0' } }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString());
+          if (res.statusCode !== 200 || body.error) return reject(new Error(body.error?.message || `Google Drive HTTP ${res.statusCode}`));
+          resolve(body.mimeType === 'application/vnd.google-apps.folder');
+        } catch (error) { reject(error); }
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(10_000, () => { req.destroy(); reject(new Error('Google Drive metadata request timed out')); });
+  });
+}
+
 async function resolveImageUrls(rawUrl, apiKey) {
   if (!rawUrl) return [];
   const parts = rawUrl.split('|').map(u => u.trim()).filter(Boolean);
@@ -659,7 +686,17 @@ async function resolveImageUrls(rawUrl, apiKey) {
   for (const part of parts) {
     const id = extractDriveId(part);
     if (!id) { resolved.push(part); continue; }
-    if (part.includes('/drive/folders/')) {
+    let isFolder = part.includes('/drive/folders/');
+    if (!isFolder && apiKey) {
+      try {
+        isFolder = await isDriveFolder(id, apiKey);
+      } catch {
+        // Metadata lookup failed (bad key, transient network error) — fall
+        // back to treating it as a single file rather than blocking the
+        // whole product on an ambiguous id.
+      }
+    }
+    if (isFolder) {
       const files = await listFolderImages(id, apiKey);
       for (const f of files) resolved.push(`https://drive.google.com/uc?export=download&id=${f.id}`);
     } else {
@@ -1386,4 +1423,5 @@ module.exports = router;
 module.exports._test = {
   parseCSV, csvToObjects, parseStockCSV, splitPipeList, importStatus, csvCell, normalizeImageMode,
   isPrivateIp, assertPublicHost, buildGroups, findStaleGroups,
+  extractDriveId, isDriveFolder, resolveImageUrls,
 };
