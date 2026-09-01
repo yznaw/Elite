@@ -185,6 +185,40 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                     </div>
                   } @else {
                     <div class="card-pad muted small">{{ b.tradeNameEn }} · {{ b.addressEn || '—' }} · {{ b.phone || '—' }}</div>
+
+                    @if (canEditBranches()) {
+                      <div class="card-pad setup-checklist" style="border-top:1px solid var(--border);">
+                        <div class="strong small mb-8">{{ t('settings.branches.setup.title') }}</div>
+                        <div class="col gap-sm">
+                          <div class="row gap-sm" style="align-items:flex-start;">
+                            <span class="setup-step-badge" [class.done]="branchHasRegister(b.id)">
+                              @if (branchHasRegister(b.id)) { <ap-icon name="check" [size]="10"/> } @else { 1 }
+                            </span>
+                            <div class="grow">
+                              <div class="small">{{ t('settings.branches.setup.step1') }}</div>
+                              @if (!branchHasRegister(b.id)) {
+                                <button class="btn btn-ghost btn-sm" style="padding:2px 0;" (click)="tab.set('security')">
+                                  {{ t('settings.branches.setup.goToDevices') }} →
+                                </button>
+                              }
+                            </div>
+                          </div>
+                          <div class="row gap-sm" style="align-items:flex-start;">
+                            <span class="setup-step-badge" [class.done]="hasAnyTeammate()">
+                              @if (hasAnyTeammate()) { <ap-icon name="check" [size]="10"/> } @else { 2 }
+                            </span>
+                            <div class="grow">
+                              <div class="small">{{ t('settings.branches.setup.step2') }}</div>
+                              @if (!hasAnyTeammate()) {
+                                <button class="btn btn-ghost btn-sm" style="padding:2px 0;" (click)="tab.set('team')">
+                                  {{ t('settings.branches.setup.goToTeam') }} →
+                                </button>
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    }
                   }
                 </div>
               }
@@ -695,6 +729,9 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
     .inv-link-input { flex: 1; min-width: 180px; border: none; background: transparent; font-size: 12px; font-family: monospace; color: var(--ink-2); cursor: pointer; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .inv-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border,#e4e4e7); }
     .inv-info { flex: 1; }
+    .setup-checklist { background: var(--bg); }
+    .setup-step-badge { flex-shrink: 0; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--ink-2); margin-top: 1px; }
+    .setup-step-badge.done { background: var(--green); border-color: var(--green); color: #fff; }
     /* Mobile: tabs scroll horizontally so they never wrap or truncate */
     @media (max-width: 640px) {
       .tabs { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
@@ -769,6 +806,17 @@ export class SettingsComponent implements OnInit {
       phone: '', crLicenseNumber: '', returnPolicyAr: '', returnPolicyEn: '',
     };
   }
+
+  /** Drives the setup checklist under each branch card: has any active register
+      actually been assigned to this branch yet? */
+  branchHasRegister(branchId: string): boolean {
+    return this.registers().some((r) => r.branchId === branchId && r.status !== 'revoked');
+  }
+
+  /** Weaker signal for the checklist's staff step — any teammate besides the
+      owner exists. Not branch-specific (staff aren't tied to a branch; any
+      account can work any register), just "is there anyone to staff it with". */
+  readonly hasAnyTeammate = computed(() => this.team().length > 1);
 
   private draftFromBranch(b: PosBranchRow): PosBranchInput {
     return {

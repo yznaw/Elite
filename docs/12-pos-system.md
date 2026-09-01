@@ -509,6 +509,10 @@ Managed from Settings → General (owner/admin only): add/edit/delete a branch, 
 
 The old single-profile table (`pos_business_profile`, one row per tenant) is superseded but left in place, untouched, as the migration's backfill source and a rollback path — not read or written by anything anymore. `footerStampEn`/`footerStampAr` exist as columns on `pos_branches` for schema parity but are not exposed in the API or UI; they've had no template field, no i18n key and no renderer usage since the original table (migration 017).
 
+**Resolved 2026-09-01** — two onboarding gaps closed. First, `currentRegister()` (`server/lib/pos/register-service.js`) now resolves the same register → default → oldest branch chain as `getEffectiveBranchProfile()` and returns `branchName` on `GET /pos/registers/current`, so the till header shows "*register name* · *branch name*" instead of just the register name — a cashier working a shift at a second branch can now tell which branch they're on at a glance, matching what actually prints on the receipt. The offline-resume path (`pos.component.ts`, resuming from locally cached identity after a lost connection) sets `branchName: null` since that identity is never cached with a branch; it re-populates once `currentRegister()` succeeds online again.
+
+Second, each branch card under Settings → General → Branches now shows a small setup checklist: whether any active register is assigned to that branch (linking to Devices & Security when not), and whether the tenant has more than one team member (linking to Team Members when not — a weak, tenant-wide signal, since staff accounts aren't branch-scoped and any account can sign into any register). Both checkmarks are computed client-side from data already loaded on the page (`registers()`, `team()`); no new endpoints.
+
 ## 14. Hardware Integration Summary
 
 Elite uses QZ Tray instead of direct browser USB/TCP access:

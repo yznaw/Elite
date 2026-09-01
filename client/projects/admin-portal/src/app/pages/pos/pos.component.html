@@ -6,7 +6,10 @@
       </span>
       <div>
         <strong>Elite POS</strong>
-        <span>{{ register()?.displayName || 'Terminal setup' }}</span>
+        <span>
+          {{ register()?.displayName || 'Terminal setup' }}
+          @if (register()?.branchName) { · {{ register()?.branchName }} }
+        </span>
       </div>
     </div>
     <div class="header-status">
