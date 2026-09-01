@@ -79,6 +79,9 @@ export interface MediaFile {
   h?: number;
   uploaded: string;
   linkedTo: string | null;
+  /** True when referenced by homepage hero/story content, which has no
+   *  media_links row of its own (see server/routes/admin-media.route.js). */
+  usedInContent?: boolean;
   uploader: string;
   initials: string;
   /** Small card-sized variant (~640px). For thumbnails and grids only. */

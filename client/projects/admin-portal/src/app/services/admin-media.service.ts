@@ -23,8 +23,8 @@ export class AdminMediaService {
     return firstValueFrom(this.api.delete<{ id: string }>(`/admin/media/${id}`)).then(() => undefined);
   }
 
-  deleteOrphaned(): Promise<{ deleted: number }> {
-    return firstValueFrom(this.api.delete<{ deleted: number }>('/admin/media/orphaned'));
+  deleteOrphaned(): Promise<{ deleted: number; ids: string[] }> {
+    return firstValueFrom(this.api.delete<{ deleted: number; ids: string[] }>('/admin/media/orphaned'));
   }
 
   bulkDelete(ids: string[]): Promise<{ deleted: number }> {

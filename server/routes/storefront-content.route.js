@@ -385,6 +385,56 @@ async function loadHeroMediaVariants(client, tenantId, content) {
   return map;
 }
 
+// Walks the entire home-content tree (hero, heroSlider + its per-colour
+// images, story hero/chapters/atelier, and anything added later) collecting
+// every `imageUrl` string it finds. A plain recursive walk on the key name
+// rather than a hand-maintained list of paths, so a new content section
+// doesn't silently fall outside of "this image is in use" checks the way
+// loadHeroMediaVariants's hero-slider-only scope did.
+function collectContentImageUrls(node, urls = new Set()) {
+  if (!node || typeof node !== 'object') return urls;
+  if (Array.isArray(node)) {
+    for (const item of node) collectContentImageUrls(item, urls);
+    return urls;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'imageUrl' && typeof value === 'string' && value.trim()) {
+      urls.add(value.trim());
+    } else if (value && typeof value === 'object') {
+      collectContentImageUrls(value, urls);
+    }
+  }
+  return urls;
+}
+
+/**
+ * Media-asset basenames (e.g. "mq8mzu95-06808f73-card.webp") referenced
+ * anywhere in this tenant's home content — published AND draft, so a media
+ * item staged in an unpublished draft is never flagged as unused either.
+ *
+ * Matched on basename rather than the full stored URL for the same reason
+ * loadHeroMediaVariants is: home content can carry an `/api` prefix or an
+ * absolute host that the raw `media_assets.storage_url` value doesn't.
+ * Used by the admin Media library (server/routes/admin-media.route.js) to
+ * decide "linked" status and, more importantly, to keep the "delete
+ * orphaned media" cleanup from deleting a hero/story image that has no
+ * `media_links` row simply because home content links to it by URL instead.
+ */
+async function getContentReferencedBasenames(client, tenantId) {
+  await ensureColumn(client);
+  await ensureDraftColumn(client);
+  const result = await client.query(
+    'SELECT home_content, home_content_draft FROM store_settings WHERE tenant_id = $1',
+    [tenantId],
+  );
+  const row = result.rows[0] || {};
+  const urls = new Set([
+    ...collectContentImageUrls(row.home_content),
+    ...collectContentImageUrls(row.home_content_draft),
+  ]);
+  return new Set([...urls].map((url) => url.split('/').pop()).filter(Boolean));
+}
+
 async function saveContent(client, tenantId, content) {
   await ensureColumn(client);
   await client.query(
@@ -1102,4 +1152,6 @@ module.exports = {
   adminRouter,
   publicRouter,
   DEFAULT_HOME_CONTENT,
+  getContentReferencedBasenames,
+  _test: { collectContentImageUrls },
 };

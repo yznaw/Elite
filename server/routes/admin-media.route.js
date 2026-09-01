@@ -4,10 +4,18 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, validationError } = require('./lib');
 const { upload, MAX_SIZE_BYTES } = require('../middleware/upload');
 const { storage } = require('../lib/storage');
+const { getContentReferencedBasenames } = require('./storefront-content.route');
 
 const router = Router();
 
-function mapMedia(row) {
+// A media asset can be "in use" without a media_links row: the homepage
+// hero/story sections reference images by URL directly inside
+// store_settings.home_content, not through media_links. Without this check,
+// an image used only there reads as unlinked in the library and — worse —
+// is exactly what DELETE /orphaned considers safe to delete.
+function mapMedia(row, contentBasenames = new Set()) {
+  const basename = row.storage_url ? row.storage_url.split('/').pop() : null;
+  const usedInContent = basename ? contentBasenames.has(basename) : false;
   return {
     id: row.id,
     name: row.filename,
@@ -17,6 +25,7 @@ function mapMedia(row) {
     h: row.height || undefined,
     uploaded: row.uploaded_at,
     linkedTo: row.product_id || null,
+    usedInContent,
     uploader: row.uploader || 'System',
     initials: row.initials || 'SY',
     preview: row.preview_url || row.storage_url,
@@ -44,6 +53,8 @@ router.get(
     const client = await db.pool.connect();
     try {
       const tenant = await ensureDefaultTenant(client);
+      // Sequential, not Promise.all: both queries run on this one pg client,
+      // and node-postgres serializes commands on a single connection anyway.
       const result = await client.query(
         `
           SELECT m.*, ml.product_id, u.full_name AS uploader, u.initials
@@ -55,7 +66,8 @@ router.get(
         `,
         [tenant.id],
       );
-      ok(res, result.rows.map(mapMedia));
+      const contentBasenames = await getContentReferencedBasenames(client, tenant.id);
+      ok(res, result.rows.map((row) => mapMedia(row, contentBasenames)));
     } finally {
       client.release();
     }
@@ -215,10 +227,15 @@ router.delete(
       await client.query('BEGIN');
       const tenant = await ensureDefaultTenant(client);
 
-      // Find all unlinked assets (no entry in media_links for this tenant)
+      // Find all unlinked assets (no entry in media_links for this tenant).
+      // "Unlinked" here means no product gallery link — it does NOT yet
+      // account for an asset the homepage hero/story sections reference
+      // directly by URL (store_settings.home_content), which carries no
+      // media_links row at all. Filtered out below before anything is
+      // deleted, or "clean up orphaned media" would delete a live hero image.
       const lookup = await client.query(
         `
-          SELECT m.id, m.metadata
+          SELECT m.id, m.metadata, m.storage_url
           FROM media_assets m
           LEFT JOIN media_links ml ON ml.media_id = m.id
           WHERE m.tenant_id = $1 AND ml.media_id IS NULL
@@ -226,10 +243,16 @@ router.delete(
         [tenant.id],
       );
 
-      const ids = lookup.rows.map((r) => r.id);
+      const contentBasenames = await getContentReferencedBasenames(client, tenant.id);
+      const trulyOrphaned = lookup.rows.filter((row) => {
+        const basename = row.storage_url ? row.storage_url.split('/').pop() : null;
+        return !basename || !contentBasenames.has(basename);
+      });
+
+      const ids = trulyOrphaned.map((r) => r.id);
       let deleted = 0;
 
-      for (const row of lookup.rows) {
+      for (const row of trulyOrphaned) {
         await client.query('DELETE FROM media_assets WHERE tenant_id = $1 AND id = $2', [tenant.id, row.id]);
         await removeAssetFiles(row.metadata).catch(() => undefined);
         deleted++;

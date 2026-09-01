@@ -509,7 +509,11 @@ export class MediaComponent implements OnInit {
     return {
       all: m.length,
       image: m.filter((x) => x.kind === 'image').length,
-      unlinked: m.filter((x) => !x.linkedTo).length,
+      // "Unlinked" here means eligible for the orphan-cleanup delete, so an
+      // asset the homepage hero/story content uses directly (no media_links
+      // row, see server/routes/admin-media.route.js) must not count as
+      // unlinked even though it has no linkedTo product.
+      unlinked: m.filter((x) => !x.linkedTo && !x.usedInContent).length,
     };
   });
 
@@ -525,7 +529,7 @@ export class MediaComponent implements OnInit {
     const m = this.media();
     if (f === 'all') return m;
     if (f === 'image') return m.filter((x) => x.kind === 'image');
-    return m.filter((x) => !x.linkedTo);
+    return m.filter((x) => !x.linkedTo && !x.usedInContent);
   });
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
@@ -537,7 +541,7 @@ export class MediaComponent implements OnInit {
   });
 
   readonly orphanedSize = computed(() =>
-    fmtBytes(this.media().filter((m) => !m.linkedTo).reduce((s, m) => s + m.size, 0)),
+    fmtBytes(this.media().filter((m) => !m.linkedTo && !m.usedInContent).reduce((s, m) => s + m.size, 0)),
   );
 
   onPageSizeChange(size: number): void {
@@ -558,8 +562,14 @@ export class MediaComponent implements OnInit {
     if (!ok) return;
     this.cleaningUp.set(true);
     try {
-      const { deleted } = await this.mediaApi.deleteOrphaned();
-      this.media.update((all) => all.filter((m) => m.linkedTo));
+      const { deleted, ids } = await this.mediaApi.deleteOrphaned();
+      // Filter by the ids the server actually deleted, not by `linkedTo` —
+      // an asset used only by the homepage hero/story content has no
+      // linkedTo product either, but the server correctly leaves it alone.
+      // Filtering on `linkedTo` here would drop it from the local list even
+      // though it still exists, out of sync until the next reload.
+      const deletedIds = new Set(ids ?? []);
+      this.media.update((all) => all.filter((m) => !deletedIds.has(m.id)));
       this.page.set(0);
       this.toast.success(
         `${deleted} ${deleted === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')} ${this.t('media.toast.deleted').toLowerCase()}`,
