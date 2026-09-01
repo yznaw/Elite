@@ -25,6 +25,7 @@ const { startServer } = require('../index');
 test('register picker: list, claim, credential rotation, and role limits', { timeout: 60000 }, async (t) => {
   if (!process.env.DATABASE_URL) return t.skip('DATABASE_URL is required for POS E2E.');
 
+  let tenantId = '';
   const server = await startServer(0);
   const base = `http://127.0.0.1:${server.address().port}/api`;
 
@@ -62,6 +63,7 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
       method: 'POST',
       body: JSON.stringify({ email: process.env.DEFAULT_ADMIN_EMAIL, password: process.env.DEFAULT_ADMIN_PASSWORD }),
     });
+    tenantId = ownerUser.tenantId;
 
     const cashierPassword = 'pos-pick-cashier-password';
     await db.query(
@@ -146,6 +148,7 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);
     await db.pool.end();
   }
 });
