@@ -703,7 +703,9 @@ export class PosComponent implements OnInit, OnDestroy {
     };
     // Unknown offline — default to requiring a PIN (fail safe) rather than
     // silently skipping approval because the real answer can't be fetched.
-    this.register.set({ registerId: identity.registerId, displayName: identity.displayName, status: 'offline', managerPinConfigured: true, shift });
+    // Offline-cached identity doesn't carry the branch name — it'll show up
+    // once currentRegister() succeeds again over the network.
+    this.register.set({ registerId: identity.registerId, displayName: identity.displayName, status: 'offline', branchName: null, managerPinConfigured: true, shift });
     this.shiftId.set(storedShift.shiftId);
     this.products.set(cachedCatalog.products);
     this.catalogCachedAt.set(cachedCatalog.cachedAt);

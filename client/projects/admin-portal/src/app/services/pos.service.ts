@@ -48,6 +48,9 @@ export interface PosCurrentRegister {
   registerId: string;
   displayName: string;
   status: string;
+  /** Same register → default → oldest fallback used for receipt printing,
+      so this always matches the branch identity on a printed receipt. */
+  branchName: string | null;
   /** False when no owner/admin/manager has ever set a manager PIN for this
       tenant — protected actions (void/refund/drawer-open/z-report/
       sync-conflict) then skip asking for one and auto-approve. */

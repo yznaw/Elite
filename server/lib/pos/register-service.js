@@ -254,6 +254,20 @@ async function checkInRegister(context, body) {
 async function currentRegister(context) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context);
+    // Same register → default → oldest fallback as branch-service.js's
+    // getEffectiveBranchProfile, so the name shown on the till always
+    // matches whichever branch actually prints on the receipt.
+    const branchResult = await client.query(
+      `SELECT b.name
+         FROM pos_branches b
+        WHERE b.tenant_id = $1
+          AND b.id = COALESCE(
+            $2::uuid,
+            (SELECT bb.id FROM pos_branches bb WHERE bb.tenant_id = $1 AND bb.is_default = true),
+            (SELECT bb.id FROM pos_branches bb WHERE bb.tenant_id = $1 ORDER BY bb.created_at ASC LIMIT 1)
+          )`,
+      [context.tenantId, register.branch_id],
+    );
     const shiftResult = await client.query(
       `SELECT s.id, s.state, s.cashier_id, s.opening_float_cents, s.opened_at,
               u.full_name AS cashier_name
@@ -280,6 +294,7 @@ async function currentRegister(context) {
       registerId: register.id,
       displayName: register.display_name,
       status: register.status,
+      branchName: branchResult.rows[0]?.name || null,
       managerPinConfigured: Boolean(pinResult.rows[0]?.configured),
       shift: shiftResult.rowCount
         ? {
