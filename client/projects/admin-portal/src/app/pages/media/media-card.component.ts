@@ -26,6 +26,10 @@ interface Suggestion {
         <span class="type-badge">{{ extension(media.name) }}</span>
         @if (linkedProduct) {
           <span class="link-pill linked"><ap-icon name="check" [size]="9"/> {{ t('media.thumb.linked') }}</span>
+        } @else if (media.usedInContent) {
+          <span class="link-pill content" title="Referenced by the homepage hero or story content">
+            <ap-icon name="check" [size]="9"/> {{ t('media.thumb.usedInContent') }}
+          </span>
         } @else if (suggestion) {
           <span class="link-pill suggest" [attr.title]="suggestion.why">{{ t('media.thumb.match') }}</span>
         } @else {

@@ -63,6 +63,14 @@ interface Suggestion {
                 <ap-icon name="link" [size]="12"/> {{ t('media.detail.acceptMatch') }}
               </button>
             </div>
+          } @else if (media.usedInContent) {
+            <div class="ms-block" style="margin-bottom:10px;">
+              <div class="row gap-sm">
+                <ap-icon name="info" [size]="16" style="flex-shrink:0;color:var(--muted);"/>
+                <div class="muted small">{{ t('media.detail.usedInContent') }}</div>
+                <ap-pill kind="blue"><ap-icon name="check" [size]="10"/> {{ t('media.thumb.usedInContent') }}</ap-pill>
+              </div>
+            </div>
           } @else {
             <div class="muted small mb-16" style="padding:10px 12px;background:var(--bg);border-radius:8px;">
               {{ t('media.detail.noMatch') }}

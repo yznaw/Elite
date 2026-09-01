@@ -2077,6 +2077,15 @@ textarea.inp {
   color: var(--green);
 }
 
+/* Referenced by homepage hero/story content (no product link, but not
+   orphaned either — see server/routes/storefront-content.route.js's
+   getContentReferencedBasenames()). Deliberately distinct from .linked so
+   it doesn't read as "linked to a product". */
+.link-pill.content {
+  background: rgba(59, 130, 246, 0.94);
+  color: #fff;
+}
+
 .media-info {
   padding: 10px 12px;
 }
