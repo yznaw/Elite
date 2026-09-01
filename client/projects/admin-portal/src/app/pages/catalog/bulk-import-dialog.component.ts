@@ -448,6 +448,11 @@ interface StockResult {
     /* Dry-run */
     .dry-run-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted,#888);}
     .dry-run-toggle input{accent-color:#c9a84c;cursor:pointer;}
+    /* .inp sets width:100%, which collapses to min-content inside this
+       auto-sized flex label (only enough to show "I" of "Ignore") instead of
+       the full option text. This is a compact dropdown, not a full-width
+       field, so it needs an explicit width here. */
+    .dry-run-toggle select.inp-sm{width:auto;min-width:96px;flex-shrink:0;}
     .dry-run-banner{display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.08);border-top:2px solid rgba(245,158,11,.35);padding:9px 20px;font-size:12px;color:#92400e;flex-shrink:0;}
 
     /* Progress */

@@ -1255,6 +1255,13 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
                   imagesUploaded++;
                 } catch (error) {
                   imagesFailed++;
+                  // Previously swallowed silently — a failed image download left
+                  // no trace anywhere, not even server logs, making "images
+                  // didn't arrive" unanswerable after the fact.
+                  (req.log || console).warn(
+                    { err: { message: error.message, code: error.code }, imgUrl, sku: row.variantSku },
+                    'bulk-import: image download/store failed',
+                  );
                   if (error?.code) throw error; // database/storage failure: rollback product atomically
                 }
               }

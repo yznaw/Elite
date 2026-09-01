@@ -313,7 +313,7 @@ function readPreview(file: File): Promise<string> {
         <div class="mb-24" [style.display]="isMobile() && !openSections().has('pricing') ? 'none' : ''"  >
           <div class="grid-2">
             <div>
-              <label class="lbl">{{ t('product.field.price') }} (QAR)</label>
+              <label class="lbl">{{ t('product.field.price') }}</label>
               <input class="inp mono" type="number" min="0" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
             </div>
             <div>
