@@ -273,11 +273,46 @@ function readPreview(file: File): Promise<string> {
             <button class="btn btn-outline btn-sm" type="button" (click)="openMediaPicker()">
               <ap-icon name="media" [size]="12"/> {{ t('product.gallery.pickFromMedia') }}
             </button>
-            <button class="btn btn-outline btn-sm" type="button" (click)="addImageUrl()">
-              <ap-icon name="link" [size]="12"/> {{ t('product.gallery.addUrl') }}
+            <button class="btn btn-outline btn-sm" type="button" (click)="openGDrive()">
+              <ap-icon name="link" [size]="12"/> {{ t('product.gallery.addGDrive') }}
             </button>
           </div>
         </div>
+
+        <!-- ── Google Drive import modal ── -->
+        @if (gdriveOpen()) {
+          <div class="overlay" (click)="gdriveOpen.set(false)"></div>
+          <div class="modal gdrive-modal">
+            <div class="modal-head">
+              <div>
+                <p class="gdrive-eyebrow">{{ t('media.gdrive.eyebrow') }}</p>
+                <div class="card-title">{{ t('media.gdrive.title') }}</div>
+              </div>
+              <button class="x-btn" type="button" (click)="gdriveOpen.set(false)"><ap-icon name="x" [size]="14"/></button>
+            </div>
+            <div class="modal-body">
+              <div class="gdrive-info">
+                <ap-icon name="info" [size]="14"/>
+                <span>{{ t('media.gdrive.info') }}</span>
+              </div>
+              <label class="lbl mb-8">{{ t('media.gdrive.label') }}</label>
+              <input class="inp mb-6" [placeholder]="t('media.gdrive.placeholder')"
+                     [ngModel]="gdriveUrl()" (ngModelChange)="gdriveUrl.set($event)"
+                     (keydown.enter)="importGDrive()" [disabled]="gdriveLoading()"/>
+              <div class="muted small mb-16">{{ t('media.gdrive.hint') }}</div>
+
+              @if (gdriveError()) {
+                <div class="gdrive-error">{{ gdriveError() }}</div>
+              }
+            </div>
+            <div class="drawer-foot">
+              <button class="btn btn-outline" type="button" (click)="gdriveOpen.set(false)" [disabled]="gdriveLoading()">{{ t('common.cancel') }}</button>
+              <button class="btn btn-gold" type="button" (click)="importGDrive()" [disabled]="gdriveLoading() || !gdriveUrl().trim()">
+                @if (gdriveLoading()) { <ap-spinner [size]="13"/> {{ t('media.gdrive.importing') }} } @else { {{ t('media.gdrive.import') }} }
+              </button>
+            </div>
+          </div>
+        }
 
         <!-- ② Section: Basics — title + identity fields -->
         <div class="section-title">
@@ -1014,6 +1049,42 @@ function readPreview(file: File): Promise<string> {
     .short-desc-count { float: inline-end; font-size: 11px; color: var(--muted); font-weight: 400; }
     .short-desc-count.over { color: var(--warning, #b8860b); font-weight: 600; }
     .short-desc-hint { margin: -16px 0 24px; font-size: 12px; color: var(--muted); }
+
+    /* Google Drive import modal — mirrors media.component.ts's own gdrive-*
+       styles; component-scoped styles don't cross component boundaries, so
+       this small block is duplicated rather than shared. */
+    .gdrive-modal { width: min(520px, 96vw); }
+    .gdrive-eyebrow {
+      margin: 0 0 4px;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .gdrive-info {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border-2);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .gdrive-info ap-icon { flex-shrink: 0; margin-top: 1px; }
+    .gdrive-error {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #dc2626;
+      font-size: 12px;
+      font-weight: 600;
+    }
 
     /* Wider drawer for the editor — full screen on phones */
     .drawer-wide { width: min(800px, 100vw); }
@@ -2192,10 +2263,45 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // Image gallery
   // ────────────────────────────────────────────────────────────────────
 
-  addImageUrl(): void {
-    const url = window.prompt(this.t('product.gallery.urlPrompt'), 'https://');
-    if (url && url.trim()) {
-      this.set('images', [...this.form().images, url.trim()]);
+  readonly gdriveOpen = signal(false);
+  readonly gdriveUrl = signal('');
+  readonly gdriveLoading = signal(false);
+  readonly gdriveError = signal('');
+
+  openGDrive(): void {
+    this.gdriveUrl.set('');
+    this.gdriveError.set('');
+    this.gdriveOpen.set(true);
+  }
+
+  async importGDrive(): Promise<void> {
+    const url = this.gdriveUrl().trim();
+    if (!url || this.gdriveLoading()) return;
+    this.gdriveError.set('');
+    this.gdriveLoading.set(true);
+    try {
+      const imported = await this.mediaApi.importFromGDrive(url);
+      if (imported.length === 0) {
+        this.gdriveError.set('No images were found at that URL. Make sure the file/folder is publicly shared.');
+        return;
+      }
+      const existing = new Set(this.form().images);
+      const newUrls = imported
+        .map(f => f.preview || f.storageUrl)
+        .filter((u): u is string => !!u && !existing.has(u));
+      if (newUrls.length > 0) {
+        this.set('images', [...this.form().images, ...newUrls]);
+      }
+      this.gdriveOpen.set(false);
+      this.toast.success(
+        `${imported.length} image${imported.length === 1 ? '' : 's'} added`,
+        this.t('product.gallery.upload'),
+      );
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || this.t('media.toast.importFailed');
+      this.gdriveError.set(msg);
+    } finally {
+      this.gdriveLoading.set(false);
     }
   }
 
