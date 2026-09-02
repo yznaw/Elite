@@ -635,7 +635,10 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
             <div class="card-header">
               <div>
                 <div class="card-title">{{ t('settings.team.membersTitle') }}</div>
-                <div class="card-sub">{{ team().length }} {{ team().length === 1 ? t('settings.team.memberCount.one') : t('settings.team.memberCount.many') }}</div>
+                <div class="card-sub">
+                  {{ team().length }} {{ team().length === 1 ? t('settings.team.memberCount.one') : t('settings.team.memberCount.many') }}
+                  @if (branches().length > 1) { <span class="muted"> · {{ t('settings.team.branch.hint') }}</span> }
+                </div>
               </div>
             </div>
 
@@ -669,6 +672,19 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                       </select>
                     }
                   </div>
+                </ng-template>
+                <ng-template apCellTpl="branch" let-r>
+                  @if (branches().length > 1) {
+                    <select class="inp" style="width:150px;padding:4px 8px;font-size:11px;"
+                            [ngModel]="r.posBranchId || ''" (ngModelChange)="updateMemberBranch(r.id, $event)">
+                      <option value="">{{ t('settings.team.branch.all') }}</option>
+                      @for (b of branches(); track b.id) {
+                        <option [value]="b.id">{{ b.name }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <span class="muted small">{{ t('settings.team.branch.all') }}</span>
+                  }
                 </ng-template>
                 <ng-template apCellTpl="status" let-r>
                   <ap-pill [kind]="statusPill(r.status).kind">{{ t(statusPill(r.status).labelKey) }}</ap-pill>
@@ -916,6 +932,7 @@ export class SettingsComponent implements OnInit {
     { key: 'name',       label: 'Name',        labelKey: 'settings.col.name' },
     { key: 'email',      label: 'Email',       labelKey: 'settings.col.email' },
     { key: 'role',       label: 'Role',        labelKey: 'settings.col.role',       noSort: true },
+    { key: 'branch',     label: 'Branch',      labelKey: 'settings.col.branch',     noSort: true },
     { key: 'status',     label: 'Status',      labelKey: 'settings.col.status',     noSort: true },
     { key: 'lastActive', label: 'Last active', labelKey: 'settings.col.lastActive', noSort: true },
     { key: 'actions',    label: '',                                                 noSort: true, align: 'right' },
@@ -1524,6 +1541,31 @@ export class SettingsComponent implements OnInit {
       });
     } catch {
       this.team.update((t) => t.map((m) => (m.id === id ? { ...m, role: previous } : m)));
+    }
+  }
+
+  /**
+   * Scope a staff member to one branch, which is what the POS picker filters
+   * on. Empty means every branch — the default, and the right one for owners
+   * and admins who move between counters.
+   */
+  async updateMemberBranch(id: string, branchId: string): Promise<void> {
+    const member = this.team().find((m) => m.id === id);
+    if (!member) return;
+    const next = branchId || null;
+    const previous = member.posBranchId ?? null;
+    if (next === previous) return;
+    const branchName = next ? (this.branches().find((b) => b.id === next)?.name ?? null) : null;
+    this.team.update((t) => t.map((m) => (m.id === id ? { ...m, posBranchId: next, posBranchName: branchName } : m)));
+    try {
+      await this.settingsApi.patchTeam(id, { posBranchId: next });
+      this.toast.success(
+        this.t('settings.toast.branchUpdated'),
+        `${member.name} · ${branchName || this.t('settings.team.branch.all')}`,
+      );
+    } catch {
+      const previousName = previous ? (this.branches().find((b) => b.id === previous)?.name ?? null) : null;
+      this.team.update((t) => t.map((m) => (m.id === id ? { ...m, posBranchId: previous, posBranchName: previousName } : m)));
     }
   }
 

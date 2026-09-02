@@ -10,6 +10,7 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { RichTextComponent } from '../../shared/rich-text/rich-text.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
+import { BarcodeComponent } from '../../shared/barcode/barcode.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
@@ -19,7 +20,7 @@ import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../servic
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
 import { AdminMediaService } from '../../services/admin-media.service';
 import { StorageService } from '../../services/storage.service';
-import { LabelPrinterService } from '../../services/label-printer.service';
+import { LabelPrinterService, arabicPrice } from '../../services/label-printer.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
 
 interface FormShape {
@@ -64,7 +65,7 @@ function readPreview(file: File): Promise<string> {
 
 @Component({
     selector: 'ap-product-drawer',
-    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent],
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent, BarcodeComponent],
     template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
@@ -624,6 +625,11 @@ function readPreview(file: File): Promise<string> {
                               <input class="inp inp-sm mono" [placeholder]="variantBarcodePreview(item.v)"
                                      [ngModel]="item.v.barcode"
                                      (ngModelChange)="updateVariant(item.globalIndex, { barcode: $event })"/>
+                              <!-- What the printer will actually put on the
+                                   label, live as the code is typed. -->
+                              @if (variantBarcodePreview(item.v)) {
+                                <ap-barcode class="vc-barcode" [value]="variantBarcodePreview(item.v)" [height]="26" [width]="1.3"/>
+                              }
                             </div>
                             <div class="vc-field">
                               <label class="vc-lbl">{{ t('product.variants.col.cost') }} (QAR)</label>
@@ -699,6 +705,10 @@ function readPreview(file: File): Promise<string> {
                   <button class="btn btn-outline btn-sm" (click)="openBulkStock()">
                     <ap-icon name="chart" [size]="12"/> {{ t('product.variants.bulkStock') }}
                   </button>
+                  <button class="btn btn-outline btn-sm" [class.is-active]="barcodeSheetOpen()" (click)="toggleBarcodeSheet()">
+                    <ap-icon name="barcode" [size]="12"/>
+                    {{ barcodeSheetOpen() ? t('product.variants.hideBarcodes') : t('product.variants.showBarcodes') }}
+                  </button>
                   <button class="btn btn-outline btn-sm" (click)="printAllVariantLabels()">
                     <ap-icon name="barcode" [size]="12"/> {{ t('product.variants.printAllLabels') }}
                   </button>
@@ -707,6 +717,42 @@ function readPreview(file: File): Promise<string> {
                   </button>
                 </div>
               </div>
+
+              <!-- Every variant's barcode, on the page. The same JsBarcode
+                   render and the same four lines the label printer emits, so
+                   the codes can be checked (and scan-tested off the screen)
+                   without burning a roll of labels first. -->
+              @if (barcodeSheetOpen()) {
+                <div class="barcode-sheet">
+                  <div class="barcode-sheet-head">
+                    <div>
+                      <div class="strong small">{{ t('product.variants.barcodeSheet.title') }}</div>
+                      <div class="muted small">{{ t('product.variants.barcodeSheet.sub') }}</div>
+                    </div>
+                    <button class="btn btn-outline btn-sm" (click)="printAllVariantLabels()">
+                      <ap-icon name="barcode" [size]="12"/> {{ t('product.variants.printAllLabels') }}
+                    </button>
+                  </div>
+                  <div class="barcode-grid">
+                    @for (v of form().variants; track v.id) {
+                      <div class="barcode-card">
+                        <div class="bc-brand">{{ product?.brand || 'Elite' }}</div>
+                        <div class="bc-name">{{ form().name }}</div>
+                        @if (variantLabelText(v)) { <div class="bc-variant">{{ variantLabelText(v) }}</div> }
+                        <ap-barcode [value]="variantBarcodePreview(v)" [height]="40"/>
+                        <div class="bc-code mono">{{ variantBarcodePreview(v) || '—' }}</div>
+                        <div class="bc-price-row">
+                          <span class="bc-price">QAR {{ (+v.price || 0).toFixed(2) }}</span>
+                          <span class="bc-price-ar" dir="rtl">{{ arabicPrice(+v.price || 0) }}</span>
+                        </div>
+                        <button class="btn btn-ghost btn-sm bc-print" (click)="printVariantLabel(v)">
+                          <ap-icon name="barcode" [size]="11"/> {{ t('product.variants.printLabel') }}
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
             </div>
           }
         </div>
@@ -1805,6 +1851,54 @@ function readPreview(file: File): Promise<string> {
       color: var(--muted);
     }
 
+    /* Live barcode under the code field, so a typo is visible where it is
+       made rather than on the printed sticker. */
+    .vc-barcode { margin-top: 4px; }
+
+    /* Every variant's barcode, on the page. Cards mirror the printed label's
+       stacking order: brand, name, Arabic name, variant, bars, code, price,
+       Arabic price. */
+    .barcode-sheet {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .barcode-sheet-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .barcode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 12px;
+    }
+    .barcode-card {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 12px 10px 8px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-align: center;
+    }
+    .bc-brand {
+      font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--muted);
+    }
+    .bc-name { font-size: 11px; font-weight: 700; line-height: 1.2; }
+    .bc-variant { font-size: 9.5px; color: var(--muted); margin-bottom: 4px; }
+    .bc-code { font-size: 8.5px; letter-spacing: 0.03em; color: #333; }
+    /* Both prices on one line, at the two edges — same as the printed label. */
+    .bc-price-row {
+      display: flex; align-items: baseline; justify-content: space-between;
+      width: 100%; gap: 6px; margin-top: 2px;
+    }
+    .bc-price, .bc-price-ar { font-size: 11px; font-weight: 700; }
+    .bc-print { margin-top: 6px; }
+
+    @media (max-width: 640px) {
+      .barcode-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    }
+
     /* Expand button */
     .vt-expand {
       width: 28px; height: 28px;
@@ -2139,6 +2233,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly duplicating = signal(false);
   readonly expandedVariants = signal(new Set<string>());
+  readonly barcodeSheetOpen = signal(false);
 
   // ── Bulk Stock Update ─────────────────────────────────────────────────
   readonly bulkStockOpen = signal(false);
@@ -2836,16 +2931,30 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return (v.barcode || '').trim() || (v.sku || '').trim();
   }
 
+  /** Colour and size as one line, shared by the label and the on-page sheet. */
+  variantLabelText(v: ProductVariant): string {
+    return [v.color, v.size].filter(Boolean).join(' · ');
+  }
+
+  /** Same formatter the printed label uses, so screen and paper never drift. */
+  readonly arabicPrice = arabicPrice;
+
   private variantLabelData(v: ProductVariant) {
     return {
       brand: this.product?.brand || 'Elite',
       productName: this.form().name || '',
-      variantLabel: [v.color, v.size].filter(Boolean).join(' · '),
+      variantLabel: this.variantLabelText(v),
       sku: v.sku || '',
       barcode: this.variantBarcodePreview(v),
       price: Number(v.price) || 0,
       currency: 'QAR',
     };
+  }
+
+  /** The on-page barcode sheet: every variant's code, checkable without
+      printing anything. Collapsed by default so the drawer stays short. */
+  toggleBarcodeSheet(): void {
+    this.barcodeSheetOpen.update((open) => !open);
   }
 
   printVariantLabel(v: ProductVariant): void {

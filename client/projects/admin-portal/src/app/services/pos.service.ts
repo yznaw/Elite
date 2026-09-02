@@ -40,6 +40,10 @@ export interface PosSelectableRegister {
   registerId: string;
   displayName: string;
   lastSeenAt: string | null;
+  /** The branch whose details print on this till's receipts — its own, or the
+      tenant's default when it has none. Shown in the picker so a name like
+      "Counter 2" is not ambiguous across shops. */
+  branchName: string | null;
   openShiftId: string | null;
   openShiftCashier: string | null;
 }
@@ -285,9 +289,30 @@ export class PosService {
       .then((response) => response.registers);
   }
 
-  /** Pick an existing till, or (owner/admin) name a new one. */
-  claimRegister(body: { registerId?: string; displayName?: string }): Promise<PosRegisterIdentity> {
+  /**
+   * Pick an existing till, or (owner/admin) name a new one.
+   *
+   * Claiming a till that somebody else has an open shift on re-mints its
+   * credential and signs that terminal out, so the server answers
+   * 409 REGISTER_TAKEOVER_CONFIRM until the caller resends with
+   * `confirmTakeover` and a manager PIN.
+   */
+  claimRegister(body: {
+    registerId?: string;
+    displayName?: string;
+    confirmTakeover?: boolean;
+    managerPin?: string;
+  }): Promise<PosRegisterIdentity> {
     return firstValueFrom(this.api.post<PosRegisterIdentity>('/pos/registers/claim', body));
+  }
+
+  /**
+   * Forget whatever till this machine is bound to, on the server and in the
+   * cookie, so the next load starts at the picker. The manual way out of a
+   * terminal wedged against a register that was deleted or taken over.
+   */
+  releaseRegister(): Promise<void> {
+    return firstValueFrom(this.api.post('/pos/registers/release', {})).then(() => undefined);
   }
 
   enroll(enrollmentToken: string): Promise<PosRegisterIdentity> {

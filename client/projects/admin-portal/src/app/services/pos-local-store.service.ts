@@ -105,6 +105,13 @@ export class PosLocalStore {
     return this.put('register', register);
   }
 
+  /** Part of "reset this terminal": drop the identity so the next load asks
+      which till this is, instead of retrying a credential the server has
+      already rejected. The shift and the queued sales are left alone. */
+  clearRegister(): Promise<void> {
+    return this.remove('register');
+  }
+
   getReceiptBlock(): Promise<PosReceiptBlock | null> {
     return this.get<PosReceiptBlock>('receipt-block');
   }

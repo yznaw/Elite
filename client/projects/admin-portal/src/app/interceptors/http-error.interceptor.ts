@@ -21,6 +21,19 @@ import { ClientLoggerService } from '../services/client-logger.service';
  *   429 → Rate limited
  *   500+ → Server error
  */
+/**
+ * Loop breaker. A redirect to /login only helps if signing in changes the
+ * outcome; when it does not, the login page's own "already signed in" check
+ * sends the operator straight back and the 401 fires again. One redirect per
+ * window is enough to get a genuinely signed-out user to the form, and caps a
+ * misclassified 401 at a single bounce instead of an endless one.
+ */
+let lastLoginRedirectAt = 0;
+const LOGIN_REDIRECT_COOLDOWN_MS = 10_000;
+function recentlyRedirectedToLogin(): boolean {
+  return Date.now() - lastLoginRedirectAt < LOGIN_REDIRECT_COOLDOWN_MS;
+}
+
 export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const i18n = inject(I18nService);
@@ -44,6 +57,12 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   // to /login and showed "Session expired," even though the session was
   // completely intact — confirmed during 2026-07-19 remote QA.
   const isManagerPinVerify = /\/api\/pos\/manager\/verify-pin$/.test(req.url);
+  // Binding a browser to a till is about the *register's* credentials, never
+  // the operator's login. A 401 from these routes must not be read as an
+  // expired session: /login bounces straight back to /pos while the session is
+  // valid, so the pair looped forever and only clearing cookies escaped it.
+  // The server now answers 409/403 here, and this is the second belt.
+  const isRegisterBinding = /\/api\/pos\/registers\/(check-in|claim|enroll|release)$/.test(req.url);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
@@ -53,6 +72,9 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
       // before enrollment) so the error list stays signal, not noise.
       const isExpectedRejection = isAuthProbe || isManagerPinVerify
         || (err.status === 428 && isRegisterProbe)
+        // A stale register credential and a refused till takeover are both
+        // normal outcomes of the picker, not incidents worth an error row.
+        || (err.status === 409 && isRegisterBinding)
         || err.status === 401 || err.status === 403 || err.status === 404;
       if (!isClientLogRequest && !isExpectedRejection && !clientLogger.isSuspended()) {
         clientLogger.log({
@@ -83,11 +105,15 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           // Let pos.component.ts's own catch block show the specific
           // "Manager PIN is incorrect" / "temporarily locked" message instead
           // of the generic session-expired toast, and do not redirect.
-        } else if (!isAuthProbe && !onLogin) {
+        } else if (isRegisterBinding) {
+          // Handled by pos.component.ts, which sends the cashier to the till
+          // picker — the actual fix for a register that no longer matches.
+        } else if (!isAuthProbe && !onLogin && !recentlyRedirectedToLogin()) {
           // Use error (not warning) so the banner is clearly visible.
           // The redirect to login carries the returnUrl so the admin
           // lands back on the same page after re-authenticating.
           toast.error(t('error.401.title'), t('error.401.sub'));
+          lastLoginRedirectAt = Date.now();
           router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
         }
       } else if (err.status === 403) {

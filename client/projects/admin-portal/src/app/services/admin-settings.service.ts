@@ -44,7 +44,9 @@ export class AdminSettingsService {
     return firstValueFrom(this.api.post<TeamMember>('/admin/settings/team', payload));
   }
 
-  patchTeam(id: string, payload: { name?: string; email?: string; role?: string; status?: string }): Promise<TeamMember> {
+  /** `posBranchId: null` clears the branch scope, so they see every till
+      again; omitting the key entirely leaves the current scope untouched. */
+  patchTeam(id: string, payload: { name?: string; email?: string; role?: string; status?: string; posBranchId?: string | null }): Promise<TeamMember> {
     return firstValueFrom(this.api.patch<TeamMember>(`/admin/settings/team/${id}`, payload));
   }
 

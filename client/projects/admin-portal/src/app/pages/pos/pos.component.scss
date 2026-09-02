@@ -220,7 +220,55 @@ button {
   font-size: 12px;
   color: #79817e;
 }
-.resume-actions { margin-top: 18px; }
+.resume-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+// Taking a till off another cashier mid-shift. Styled as a stop, not as a
+// step: it sits over the picker rather than replacing it, so cancelling puts
+// the cashier back on the list they were reading a second ago.
+.takeover-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(16, 24, 22, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.takeover-dialog {
+  width: min(100%, 420px);
+  padding: 30px;
+  background: var(--pos-paper);
+  border: 1px solid var(--pos-line);
+  box-shadow: 0 24px 80px rgba(23, 34, 31, 0.18);
+  animation: sheetIn 0.2s ease-out both;
+
+  h2 { margin: 0 0 10px; }
+  p { margin: 0 0 18px; color: #5c6663; }
+  label { display: block; margin-bottom: 14px; }
+  input { width: 100%; }
+}
+
+.takeover-error {
+  margin: -8px 0 14px !important;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pos-danger, #a8322a) !important;
+}
+
+.takeover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+}
 
 .center-stage h1,
 .setup-intro h1,
@@ -392,6 +440,15 @@ label input:focus {
 .register-meta {
   color: #69736f;
   font-size: 11px;
+}
+
+/* Which shop this till stands in. Only meaningful once a tenant runs more
+   than one branch, but "Counter 2" is ambiguous the moment they do. */
+.register-branch {
+  margin-right: 8px;
+  color: #3d4744;
+  font-style: normal;
+  font-weight: 700;
 }
 
 /* Marks a till someone else already has a shift open on, so the cashier

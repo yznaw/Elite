@@ -96,6 +96,12 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly justEnrolled = signal(false);
   readonly availableRegisters = signal<PosSelectableRegister[]>([]);
   readonly registersLoading = signal(false);
+  /** The till the cashier picked that turned out to be in use by someone else,
+      held while they confirm the takeover. Null means no dialog. */
+  readonly takeoverTarget = signal<PosSelectableRegister | null>(null);
+  readonly takeoverWarning = signal('');
+  readonly takeoverError = signal('');
+  readonly resetting = signal(false);
   readonly register = signal<PosCurrentRegister | null>(null);
   readonly shiftId = signal<string | null>(null);
   readonly shiftRecovery = signal<{
@@ -288,6 +294,7 @@ export class PosComponent implements OnInit, OnDestroy {
       the sole proof the refund was actually run on it (docs/12, "Card"). */
   refundTerminalReference = '';
   managerPin = '';
+  takeoverPin = '';
   physicalCash = '';
   refundQuantities: Record<string, number> = {};
   refundRestock: Record<string, boolean> = {};
@@ -613,6 +620,11 @@ export class PosComponent implements OnInit, OnDestroy {
         return;
       }
       this.toast.warning('Could not resume this register', this.errorMessage(error));
+      // The server has disowned this register, so the stored identity and the
+      // device cookie now point at nothing. Drop both, or every reload repeats
+      // this same round trip before landing on the picker anyway.
+      await this.local.clearRegister().catch(() => undefined);
+      await this.pos.releaseRegister().catch(() => undefined);
       this.enterEnrollment();
     } finally {
       this.busy.set(false);
@@ -778,9 +790,89 @@ export class PosComponent implements OnInit, OnDestroy {
       const identity = await this.pos.claimRegister(registerId ? { registerId } : { displayName });
       await this.finishRegisterSetup(identity);
     } catch (error) {
+      // Claiming a till that is mid-shift for somebody else signs their
+      // terminal out and hands over their drawer, so the server refuses the
+      // first attempt and names who is on it. Ask here rather than surfacing
+      // a bare conflict toast the cashier cannot act on.
+      if (this.errorCode(error) === 'REGISTER_TAKEOVER_CONFIRM' && registerId) {
+        this.openTakeover(registerId, this.errorMessage(error));
+        return;
+      }
       this.toast.warning(...this.enrollmentErrorMessage(error));
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  private openTakeover(registerId: string, warning: string): void {
+    const target = this.availableRegisters().find((item) => item.registerId === registerId) || null;
+    this.takeoverTarget.set(target);
+    this.takeoverWarning.set(warning);
+    this.takeoverError.set('');
+    this.takeoverPin = '';
+  }
+
+  closeTakeover(): void {
+    this.takeoverTarget.set(null);
+    this.takeoverWarning.set('');
+    this.takeoverError.set('');
+    this.takeoverPin = '';
+  }
+
+  /** Second step of a takeover: explicit confirmation plus a manager PIN. */
+  async confirmTakeover(): Promise<void> {
+    const target = this.takeoverTarget();
+    if (!target || this.busy()) return;
+    this.busy.set(true);
+    this.takeoverError.set('');
+    try {
+      const identity = await this.pos.claimRegister({
+        registerId: target.registerId,
+        confirmTakeover: true,
+        managerPin: this.takeoverPin.trim(),
+      });
+      this.closeTakeover();
+      await this.finishRegisterSetup(identity);
+    } catch (error) {
+      const code = this.errorCode(error);
+      if (code === 'MANAGER_PIN_REQUIRED' || code === 'MANAGER_PIN_INVALID') {
+        // Keep the dialog up: the cashier has a manager standing next to them
+        // and one mistyped digit should not send them back to the list.
+        this.takeoverError.set(this.errorMessage(error));
+        this.takeoverPin = '';
+        return;
+      }
+      this.closeTakeover();
+      this.toast.warning(...this.enrollmentErrorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /**
+   * The manual way out of a wedged terminal, reachable from both the setup and
+   * the "could not open this register" screens.
+   *
+   * Everything that binds this browser to a till is dropped: the stored
+   * identity, the server session's register and the device cookie. Queued
+   * sales and the cached catalog stay, because they belong to the shop, not to
+   * the binding. Nothing here is allowed to throw — this is the button an
+   * operator reaches for precisely when the rest of the till is failing.
+   */
+  async resetTerminal(): Promise<void> {
+    if (this.resetting()) return;
+    this.resetting.set(true);
+    try {
+      await this.pos.releaseRegister().catch(() => undefined);
+      await this.local.clearRegister().catch(() => undefined);
+      this.register.set(null);
+      this.shiftId.set(null);
+      this.resumeError.set(null);
+      this.closeTakeover();
+      this.toast.success('Terminal reset', 'Pick which till this computer is.');
+      this.enterEnrollment();
+    } finally {
+      this.resetting.set(false);
     }
   }
 

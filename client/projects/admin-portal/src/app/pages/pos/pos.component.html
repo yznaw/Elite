@@ -49,6 +49,9 @@
         <button class="primary-action" type="button" [disabled]="busy()" (click)="retryResume()">
           {{ busy() ? 'Trying again...' : 'Try again' }}
         </button>
+        <button class="link-action" type="button" [disabled]="resetting()" (click)="resetTerminal()">
+          {{ resetting() ? 'Resetting...' : 'Reset this terminal and pick a till' }}
+        </button>
       </div>
     </section>
   }
@@ -80,6 +83,7 @@
                   <button type="button" [disabled]="busy()" (click)="claimRegister(item.registerId)">
                     <span class="register-name">{{ item.displayName }}</span>
                     <span class="register-meta">
+                      @if (item.branchName) { <i class="register-branch">{{ item.branchName }}</i> }
                       {{ registerLastSeen(item) }}
                       @if (item.openShiftId) {
                         <b>Shift open{{ item.openShiftCashier ? ' - ' + item.openShiftCashier : '' }}</b>
@@ -107,6 +111,9 @@
               <button type="button" class="link-action" (click)="setEnrollMode('create')">Add a new register</button>
             }
             <button type="button" class="link-action" (click)="setEnrollMode('token')">Use a setup token instead</button>
+            <button type="button" class="link-action" [disabled]="resetting()" (click)="resetTerminal()">
+              {{ resetting() ? 'Resetting...' : 'Start over' }}
+            </button>
           </div>
         } @else if (enrollMode() === 'create') {
           <h2>Add a new register</h2>
@@ -136,6 +143,33 @@
           </div>
         }
       </div>
+
+      @if (takeoverTarget(); as target) {
+        <div class="takeover-backdrop" role="dialog" aria-modal="true" aria-labelledby="takeover-title">
+          <div class="takeover-dialog">
+            <h2 id="takeover-title">{{ target.displayName }} is in use</h2>
+            <p>{{ takeoverWarning() }}</p>
+            <label>
+              Manager PIN
+              <input
+                [(ngModel)]="takeoverPin"
+                type="password"
+                inputmode="numeric"
+                autocomplete="off"
+                maxlength="12"
+                placeholder="Ask a manager to enter it"
+              />
+            </label>
+            @if (takeoverError()) { <p class="takeover-error" role="alert">{{ takeoverError() }}</p> }
+            <div class="takeover-actions">
+              <button class="link-action" type="button" [disabled]="busy()" (click)="closeTakeover()">Cancel</button>
+              <button class="primary-action" type="button" [disabled]="busy()" (click)="confirmTakeover()">
+                {{ busy() ? 'Taking over...' : 'Take over this till' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
     </section>
   }
 

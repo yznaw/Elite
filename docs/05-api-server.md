@@ -454,15 +454,20 @@ Owner/admin only. See `server/routes/admin-diagnostics.route.js` and `server/lib
 
 ### POS (`/api/pos/*`)
 
-See `server/routes/pos.route.js`. All endpoints require an authenticated owner/admin/manager session; operational endpoints also require an active enrolled register bound to that session.
+See `server/routes/pos.route.js`. All endpoints require an authenticated owner/admin/manager/cashier session; operational endpoints also require an active enrolled register.
+
+The register binding is resolved from `req.session.posRegisterId` first and then from the long-lived, httpOnly, HMAC-signed `elite.pos_device` cookie (`lib/pos/device-cookie.js`), so a till stays bound to its counter across logouts, session expiry, and a different admin signing in on the same machine. The cookie only names a register; `requireRegister()` still checks it exists, belongs to the tenant, and is active.
+
+**No POS route may answer 401 for anything other than a missing login.** The admin portal turns a 401 into "Session expired" and redirects to `/login`, which redirects back to `/pos` when the session is valid — an infinite loop. A stale register credential is `409 REGISTER_CREDENTIAL_INVALID`; a failed takeover PIN is `403 MANAGER_PIN_REQUIRED` / `403 MANAGER_PIN_INVALID`.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/pos/registers` | List active registers for the "which till is this?" picker |
-| `POST` | `/api/pos/registers/claim` | Bind this browser to a register, or create one by name (owner/admin) |
+| `GET` | `/api/pos/registers` | List active registers for the "which till is this?" picker, scoped to the caller's `admin_users.pos_branch_id` when set |
+| `POST` | `/api/pos/registers/claim` | Bind this browser to a register, or create one by name (owner/admin); a till with someone else's open shift needs `confirmTakeover` + `managerPin` |
 | `POST` | `/api/pos/registers/enrollment-tokens` | Create one-time terminal enrollment token |
 | `POST` | `/api/pos/registers/enroll` | Enroll and bind a physical register |
 | `POST` | `/api/pos/registers/check-in` | Validate stored register credentials |
+| `POST` | `/api/pos/registers/release` | Forget this machine's register binding (session + `elite.pos_device` cookie) |
 | `POST` | `/api/pos/registers/receipt-number-blocks` | Reserve 100 tenant-wide receipt numbers |
 | `GET` | `/api/pos/products/search?q=` | Search active variants by name, SKU, or barcode |
 | `GET` | `/api/pos/products/barcode/:barcode` | Exact active barcode lookup |

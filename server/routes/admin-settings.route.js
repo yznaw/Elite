@@ -94,7 +94,13 @@ router.get('/team', asyncHandler(async (_req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
-      'SELECT id, full_name AS name, email, role, initials, created_at AS joined, status, last_login_at FROM admin_users WHERE tenant_id = $1 AND status != \'removed\' ORDER BY created_at',
+      `SELECT u.id, u.full_name AS name, u.email, u.role, u.initials, u.created_at AS joined,
+              u.status, u.last_login_at,
+              u.pos_branch_id AS "posBranchId", b.name AS "posBranchName"
+         FROM admin_users u
+         LEFT JOIN pos_branches b ON b.id = u.pos_branch_id AND b.tenant_id = u.tenant_id
+        WHERE u.tenant_id = $1 AND u.status != 'removed'
+        ORDER BY u.created_at`,
       [tenant.id],
     );
     ok(res, result.rows);
@@ -134,23 +140,45 @@ router.patch('/team/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
     if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
     if (!canAssignRole(req.user.role, role)) return validationError(res, ['Only the owner can grant the owner role.']);
   }
+  // Which branch this person works at, and so which tills the POS picker
+  // offers them (migration 035). Three states, hence the explicit flag: absent
+  // from the body means "leave it alone", null means "clear it, they work
+  // across all branches", an id means "scope them to that branch".
+  const branchProvided = Object.prototype.hasOwnProperty.call(req.body, 'posBranchId');
+  const posBranchId = branchProvided ? (req.body.posBranchId || null) : null;
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    if (branchProvided && posBranchId) {
+      const branch = await client.query(
+        'SELECT 1 FROM pos_branches WHERE tenant_id = $1 AND id = $2',
+        [tenant.id, posBranchId],
+      );
+      if (branch.rowCount === 0) return validationError(res, ['That branch does not exist.']);
+    }
     const result = await client.query(
       `
-        UPDATE admin_users
-        SET full_name = COALESCE($3, full_name),
-            email = COALESCE($4, email),
-            role = COALESCE($5, role),
-            status = COALESCE($6, status)
-        WHERE tenant_id = $1 AND id = $2
-        RETURNING id, full_name AS name, email, role, initials, created_at AS joined, status
+        UPDATE admin_users u
+        SET full_name = COALESCE($3, u.full_name),
+            email = COALESCE($4, u.email),
+            role = COALESCE($5, u.role),
+            status = COALESCE($6, u.status),
+            pos_branch_id = CASE WHEN $7 THEN $8::uuid ELSE u.pos_branch_id END
+        WHERE u.tenant_id = $1 AND u.id = $2
+        RETURNING u.id, u.full_name AS name, u.email, u.role, u.initials,
+                  u.created_at AS joined, u.status, u.pos_branch_id AS "posBranchId"
       `,
-      [tenant.id, req.params.id, req.body.name, req.body.email, role, req.body.status],
+      [tenant.id, req.params.id, req.body.name, req.body.email, role, req.body.status, branchProvided, posBranchId],
     );
     if (result.rowCount === 0) return notFound(res, 'Team member not found.');
-    ok(res, result.rows[0], 'Team member updated.');
+    const row = result.rows[0];
+    if (row.posBranchId) {
+      const branch = await client.query('SELECT name FROM pos_branches WHERE id = $1', [row.posBranchId]);
+      row.posBranchName = branch.rows[0]?.name || null;
+    } else {
+      row.posBranchName = null;
+    }
+    ok(res, row, 'Team member updated.');
   } finally {
     client.release();
   }
