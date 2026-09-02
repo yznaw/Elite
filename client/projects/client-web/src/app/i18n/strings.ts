@@ -145,6 +145,7 @@ const EN = {
   'collection.quickAdd': 'Add to Cart',
   'collection.quickAdd.added': 'Added',
   'collection.quickAdd.size': 'Size',
+  'collection.quickAdd.noSizes': 'No available sizes',
   'collection.buyNow': 'Buy Now',
 
   'collection.style.all': 'All',
@@ -618,6 +619,7 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.quickAdd': 'أضف إلى السلة',
   'collection.quickAdd.added': 'أُضيف',
   'collection.quickAdd.size': 'المقاس',
+  'collection.quickAdd.noSizes': 'لا توجد مقاسات متاحة',
   'collection.buyNow': 'اشترِ الآن',
 
   'collection.style.all': 'الكل',

@@ -11,17 +11,28 @@
           <p>Loading collections...</p>
         </div>
       } @else if (collections().length > 0) {
-        <div class="collection-picker collection-picker--landing" aria-label="Collections">
+        <div
+          class="collection-picker collection-picker--landing"
+          aria-label="Collections"
+        >
           @for (collection of collections(); track collection.id) {
             <button
               type="button"
               class="collection-card"
-              [class.collection-card--all]="collection.handle === 'all-products'"
-              [class.collection-card--full]="collection.handle === 'all-products'"
+              [class.collection-card--all]="
+                collection.handle === 'all-products'
+              "
+              [class.collection-card--full]="
+                collection.handle === 'all-products'
+              "
               (click)="selectCollection(collection)"
             >
               @if (collection.imageUrl) {
-                <img [src]="collection.imageUrl" [alt]="collection.title" (error)="onImgError($event)" />
+                <img
+                  [src]="collection.imageUrl"
+                  [alt]="collection.title"
+                  (error)="onImgError($event)"
+                />
               }
               <span>{{ collection.productIds.length }} pieces</span>
               <strong>{{ collection.title }}</strong>
@@ -38,18 +49,24 @@
     @if (activeCollection(); as collection) {
       <div class="collection-detail-head">
         <nav class="back-to-collections" aria-label="Breadcrumb">
-          <button type="button" (click)="showAllCollections()">Collections</button>
+          <button type="button" (click)="showAllCollections()">
+            Collections
+          </button>
           <span aria-hidden="true">/</span>
           @if (activeSubCollectionKey() !== null) {
-            <button type="button" (click)="selectCollection(collection)">{{ collection.title }}</button>
+            <button type="button" (click)="selectCollection(collection)">
+              {{ collection.title }}
+            </button>
             <span aria-hidden="true">/</span>
-            <strong>{{ activeSubCollection()?.title ?? 'All' }}</strong>
+            <strong>{{ activeSubCollection()?.title ?? "All" }}</strong>
           } @else {
             <strong>{{ collection.title }}</strong>
           }
         </nav>
         <h1>
-          @if (collection.children.length > 0 && activeSubCollectionKey() === null) {
+          @if (
+            collection.children.length > 0 && activeSubCollectionKey() === null
+          ) {
             Shop {{ collection.title }}
           } @else {
             {{ activeCollectionDisplayTitle() }}
@@ -63,8 +80,14 @@
         }
       </div>
 
-      @if (activeCollection()!.children.length > 0 && activeSubCollectionKey() === null) {
-        <div class="collection-picker collection-picker--sub" aria-label="Sub-collections">
+      @if (
+        activeCollection()!.children.length > 0 &&
+        activeSubCollectionKey() === null
+      ) {
+        <div
+          class="collection-picker collection-picker--sub"
+          aria-label="Sub-collections"
+        >
           <button
             type="button"
             class="collection-card collection-card--sub collection-card--all"
@@ -72,7 +95,11 @@
             (click)="selectSubCollection(null)"
           >
             @if (collection.imageUrl) {
-              <img [src]="collection.imageUrl" [alt]="'All ' + collection.title" (error)="onImgError($event)" />
+              <img
+                [src]="collection.imageUrl"
+                [alt]="'All ' + collection.title"
+                (error)="onImgError($event)"
+              />
             }
             <span>{{ activeCollectionTotalCount() }} pieces</span>
             <strong>All {{ collection.title }}</strong>
@@ -85,7 +112,12 @@
               (click)="selectSubCollection(child)"
             >
               @if (child.imageUrl) {
-                <img [src]="child.imageUrl" [alt]="child.title" loading="lazy" (error)="onImgError($event)" />
+                <img
+                  [src]="child.imageUrl"
+                  [alt]="child.title"
+                  loading="lazy"
+                  (error)="onImgError($event)"
+                />
               }
               <span>{{ child.productIds.length }} pieces</span>
               <strong>{{ child.title }}</strong>
@@ -96,275 +128,354 @@
 
       @if (showCollectionCatalog()) {
         <div class="collection-shell">
-        @if (filtersOpen()) {
-          <button
-            type="button"
-            class="filter-backdrop"
-            aria-label="Close filters"
-            (click)="closeFilters()"
-          ></button>
-        }
+          @if (filtersOpen()) {
+            <button
+              type="button"
+              class="filter-backdrop"
+              aria-label="Close filters"
+              (click)="closeFilters()"
+            ></button>
+          }
 
-        <aside class="filter-panel" [class.is-open]="filtersOpen()" aria-label="Collection filters">
-          <h1>
-            Filters
-            @if (activeFilterCount() > 0) {
-              <span>{{ activeFilterCount() }}</span>
+          <aside
+            class="filter-panel"
+            [class.is-open]="filtersOpen()"
+            aria-label="Collection filters"
+          >
+            <h1>
+              Filters
+              @if (activeFilterCount() > 0) {
+                <span>{{ activeFilterCount() }}</span>
+              }
+            </h1>
+            <div class="filter-bulk-actions" aria-label="Filter group controls">
+              <button
+                type="button"
+                class="filter-icon-action"
+                (click)="expandAllFilters()"
+                aria-label="Expand all filters"
+                title="Expand all"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M7 8l5 5 5-5" />
+                  <path d="M7 13l5 5 5-5" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="filter-icon-action"
+                (click)="collapseAllFilters()"
+                aria-label="Collapse all filters"
+                title="Collapse all"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M7 16l5-5 5 5" />
+                  <path d="M7 11l5-5 5 5" />
+                </svg>
+              </button>
+            </div>
+            <button type="button" class="filter-close" (click)="closeFilters()">
+              Done
+            </button>
+
+            @for (group of filterGroups(); track group.id) {
+              <div
+                class="filter-group"
+                [class.is-collapsed]="!isFilterGroupExpanded(group.id)"
+              >
+                <button
+                  type="button"
+                  class="filter-group-toggle"
+                  (click)="toggleFilterGroup(group.id)"
+                  [attr.aria-expanded]="isFilterGroupExpanded(group.id)"
+                  [attr.aria-controls]="filterGroupPanelId(group.id)"
+                >
+                  <span>{{ group.title }}</span>
+                  @if (selectedFilterCount(group.id) > 0) {
+                    <small>{{ selectedFilterCount(group.id) }}</small>
+                  }
+                  <span class="filter-group-chevron" aria-hidden="true">⌄</span>
+                </button>
+
+                @if (isFilterGroupExpanded(group.id)) {
+                  <div
+                    class="filter-options"
+                    [id]="filterGroupPanelId(group.id)"
+                  >
+                    @for (option of group.options; track option.value) {
+                      <label class="filter-option">
+                        <input
+                          type="checkbox"
+                          [checked]="isFilterSelected(group.id, option.value)"
+                          (change)="toggleFilter(group.id, option.value)"
+                        />
+                        <span>{{ option.label }}</span>
+                        <small>{{ option.count }}</small>
+                      </label>
+                    }
+                  </div>
+                }
+              </div>
             }
-          </h1>
-          <div class="filter-bulk-actions" aria-label="Filter group controls">
-            <button
-              type="button"
-              class="filter-icon-action"
-              (click)="expandAllFilters()"
-              aria-label="Expand all filters"
-              title="Expand all"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7 8l5 5 5-5" />
-                <path d="M7 13l5 5 5-5" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="filter-icon-action"
-              (click)="collapseAllFilters()"
-              aria-label="Collapse all filters"
-              title="Collapse all"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7 16l5-5 5 5" />
-                <path d="M7 11l5-5 5 5" />
-              </svg>
-            </button>
-          </div>
-          <button type="button" class="filter-close" (click)="closeFilters()">
-            Done
-          </button>
 
-          @for (group of filterGroups(); track group.id) {
-            <div class="filter-group" [class.is-collapsed]="!isFilterGroupExpanded(group.id)">
+            <div
+              class="filter-group"
+              [class.is-collapsed]="!isFilterGroupExpanded('sort')"
+            >
               <button
                 type="button"
                 class="filter-group-toggle"
-                (click)="toggleFilterGroup(group.id)"
-                [attr.aria-expanded]="isFilterGroupExpanded(group.id)"
-                [attr.aria-controls]="filterGroupPanelId(group.id)"
+                (click)="toggleFilterGroup('sort')"
+                [attr.aria-expanded]="isFilterGroupExpanded('sort')"
+                [attr.aria-controls]="filterGroupPanelId('sort')"
               >
-                <span>{{ group.title }}</span>
-                @if (selectedFilterCount(group.id) > 0) {
-                  <small>{{ selectedFilterCount(group.id) }}</small>
+                <span>Sort</span>
+                @if (sort() !== "Featured") {
+                  <small>1</small>
                 }
                 <span class="filter-group-chevron" aria-hidden="true">⌄</span>
               </button>
 
-              @if (isFilterGroupExpanded(group.id)) {
-                <div class="filter-options" [id]="filterGroupPanelId(group.id)">
-                  @for (option of group.options; track option.value) {
-                    <label class="filter-option">
+              @if (isFilterGroupExpanded("sort")) {
+                <div class="filter-options" [id]="filterGroupPanelId('sort')">
+                  @for (o of sortOptions; track o) {
+                    <label class="filter-option filter-option-sort">
                       <input
                         type="checkbox"
-                        [checked]="isFilterSelected(group.id, option.value)"
-                        (change)="toggleFilter(group.id, option.value)"
+                        [checked]="sort() === o"
+                        (change)="setSort(o)"
                       />
-                      <span>{{ option.label }}</span>
-                      <small>{{ option.count }}</small>
+                      <span>{{ sortLabel(o) }}</span>
                     </label>
                   }
                 </div>
               }
             </div>
-          }
 
-          <div class="filter-group" [class.is-collapsed]="!isFilterGroupExpanded('sort')">
             <button
               type="button"
-              class="filter-group-toggle"
-              (click)="toggleFilterGroup('sort')"
-              [attr.aria-expanded]="isFilterGroupExpanded('sort')"
-              [attr.aria-controls]="filterGroupPanelId('sort')"
+              class="clear-filters"
+              (click)="clearFilters()"
             >
-              <span>Sort</span>
-              @if (sort() !== 'Featured') {
-                <small>1</small>
-              }
-              <span class="filter-group-chevron" aria-hidden="true">⌄</span>
+              Clear
             </button>
+          </aside>
 
-            @if (isFilterGroupExpanded('sort')) {
-              <div class="filter-options" [id]="filterGroupPanelId('sort')">
-                @for (o of sortOptions; track o) {
-                  <label class="filter-option filter-option-sort">
-                    <input
-                      type="checkbox"
-                      [checked]="sort() === o"
-                      (change)="setSort(o)"
-                    />
-                    <span>{{ sortLabel(o) }}</span>
-                  </label>
+          <div class="catalog-area">
+            <div class="catalog-topline">
+              <span
+                >{{ filtered().length }} {{ t("collection.worksSuffix") }}</span
+              >
+              <button
+                type="button"
+                class="filter-toggle"
+                (click)="openFilters()"
+              >
+                Filters
+                @if (activeFilterCount() > 0) {
+                  <span>{{ activeFilterCount() }}</span>
+                }
+              </button>
+            </div>
+
+            @if (productsLoading() && !productsLoaded()) {
+              <div class="empty-state">
+                <p>Loading products...</p>
+              </div>
+            } @else if (productsError() && filtered().length === 0) {
+              <div class="empty-state">
+                <p>Products could not be loaded.</p>
+                <button type="button" (click)="retryProducts()">
+                  Try again
+                </button>
+              </div>
+            } @else if (filtered().length === 0) {
+              <div class="empty-state">
+                <p>{{ t("collection.empty") }}</p>
+                <button type="button" (click)="clearFilters()">
+                  Reset filters
+                </button>
+              </div>
+            } @else {
+              <div class="product-grid">
+                @for (p of visibleProducts(); track p.id; let i = $index) {
+                  <article
+                    class="product-tile"
+                    (mouseenter)="hovered.set(p.id)"
+                    (mouseleave)="onProductTileLeave(p)"
+                    [style.animation-delay]="i * 0.035 + 's'"
+                  >
+                    <button
+                      type="button"
+                      class="product-link"
+                      (click)="goToProduct(p)"
+                      data-track="product-card"
+                      [attr.data-track-product]="p.id"
+                    >
+                      <span
+                        class="product-image-wrap"
+                        [class.is-loaded]="isProductImageLoaded(p)"
+                        [attr.aria-busy]="!isProductImageLoaded(p)"
+                      >
+                        <img
+                          [src]="selectedProductImage(p)"
+                          [attr.srcset]="productImageSrcset(p)"
+                          sizes="(min-width: 960px) 25vw, (min-width: 560px) 50vw, 100vw"
+                          [alt]="productName(p)"
+                          [attr.loading]="i < 4 ? 'eager' : 'lazy'"
+                          [attr.fetchpriority]="i < 2 ? 'high' : 'auto'"
+                          [class.is-loaded]="isProductImageLoaded(p)"
+                          decoding="async"
+                          (load)="markProductImageLoaded(p)"
+                          (error)="onImgError($event)"
+                        />
+                      </span>
+                      <span class="product-copy">
+                        <span class="product-name">{{ productName(p) }}</span>
+                        <span class="product-meta">{{ productType(p) }}</span>
+                        <span class="product-price">{{ price(p.price) }}</span>
+                      </span>
+                    </button>
+
+                    @if (productColorNames(p).length > 0) {
+                      <div class="product-colors" aria-label="Available colors">
+                        @for (color of productColorNames(p); track color) {
+                          <button
+                            type="button"
+                            class="product-color-swatch"
+                            [class.is-selected]="colorSelected(p, color)"
+                            [class.has-image]="colorSwatchImage(color)"
+                            [style.background]="
+                              colorSwatchImage(color) ? null : colorHex(color)
+                            "
+                            [attr.title]="colorLabel(color)"
+                            [attr.aria-label]="colorLabel(color)"
+                            [attr.aria-pressed]="colorSelected(p, color)"
+                            (mouseenter)="previewProductColor(p, color, $event)"
+                            (focus)="previewProductColor(p, color, $event)"
+                            (click)="selectProductColor(p, color, $event)"
+                          >
+                            @if (colorSwatchImage(color); as swatchImage) {
+                              <img
+                                [src]="swatchImage"
+                                [alt]="colorLabel(color)"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            }
+                          </button>
+                        }
+                      </div>
+                    }
+
+                    <div
+                      class="purchase-panel"
+                      [class.purchase-panel--disabled]="availableSizes(p).length === 0"
+                      [attr.aria-disabled]="availableSizes(p).length === 0"
+                    >
+                      <div
+                        class="size-picker"
+                        [attr.aria-label]="t('collection.quickAdd.size')"
+                      >
+                        <label
+                          class="size-label"
+                          [attr.for]="'size-select-' + p.id"
+                        >
+                          {{ t("collection.quickAdd.size") }}
+                        </label>
+                        <div class="size-select-wrap">
+                          <select
+                            class="size-select"
+                            [id]="'size-select-' + p.id"
+                            [value]="availableSizes(p).length ? selectedSize(p) : ''"
+                            [disabled]="availableSizes(p).length === 0"
+                            (change)="selectSize(p, sizeSelectValue($event))"
+                            [attr.aria-label]="t('collection.quickAdd.size')"
+                          >
+                            @if (availableSizes(p).length === 0) {
+                              <option value="">{{ t("collection.quickAdd.noSizes") }}</option>
+                            } @else {
+                              @for (size of availableSizes(p); track size) {
+                                <option [value]="size">EU {{ size }}</option>
+                              }
+                            }
+                          </select>
+                          <span class="size-select-arrow" aria-hidden="true"
+                            >⌄</span
+                          >
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="quick-add"
+                        [disabled]="availableSizes(p).length === 0"
+                        (click)="addToCart(p)"
+                        data-track="quick-add"
+                        [attr.data-track-product]="p.id"
+                      >
+                        @if (addedProductId() === p.id) {
+                          <span>{{ t("collection.quickAdd.added") }}</span>
+                          <span class="quick-add-icon">✓</span>
+                        } @else {
+                          <span>{{ t("collection.quickAdd") }}</span>
+                          <span class="quick-add-arrow">→</span>
+                        }
+                      </button>
+
+                      <button
+                        type="button"
+                        class="buy-now"
+                        [disabled]="availableSizes(p).length === 0"
+                        (click)="buyNow(p)"
+                      >
+                        <span>{{ t("collection.buyNow") }}</span>
+                        <span class="quick-add-arrow">→</span>
+                      </button>
+                    </div>
+                  </article>
                 }
               </div>
-            }
-          </div>
 
-          <button type="button" class="clear-filters" (click)="clearFilters()">
-            Clear
-          </button>
-        </aside>
-
-        <div class="catalog-area">
-          <div class="catalog-topline">
-            <span>{{ filtered().length }} {{ t("collection.worksSuffix") }}</span>
-            <button type="button" class="filter-toggle" (click)="openFilters()">
-              Filters
-              @if (activeFilterCount() > 0) {
-                <span>{{ activeFilterCount() }}</span>
-              }
-            </button>
-          </div>
-
-          @if (productsLoading() && !productsLoaded()) {
-            <div class="empty-state">
-              <p>Loading products...</p>
-            </div>
-          } @else if (productsError() && filtered().length === 0) {
-            <div class="empty-state">
-              <p>Products could not be loaded.</p>
-              <button type="button" (click)="retryProducts()">Try again</button>
-            </div>
-          } @else if (filtered().length === 0) {
-            <div class="empty-state">
-              <p>{{ t("collection.empty") }}</p>
-              <button type="button" (click)="clearFilters()">Reset filters</button>
-            </div>
-          } @else {
-            <div class="product-grid">
-              @for (p of visibleProducts(); track p.id; let i = $index) {
-                <article
-                  class="product-tile"
-                  (mouseenter)="hovered.set(p.id)"
-                  (mouseleave)="onProductTileLeave(p)"
-                  [style.animation-delay]="i * 0.035 + 's'"
-                >
-                  <button type="button" class="product-link" (click)="goToProduct(p)" data-track="product-card" [attr.data-track-product]="p.id">
-                    <span
-                      class="product-image-wrap"
-                      [class.is-loaded]="isProductImageLoaded(p)"
-                      [attr.aria-busy]="!isProductImageLoaded(p)"
-                    >
-                      <img
-                        [src]="selectedProductImage(p)"
-                        [attr.srcset]="productImageSrcset(p)"
-                        sizes="(min-width: 960px) 25vw, (min-width: 560px) 50vw, 100vw"
-                        [alt]="productName(p)"
-                        [attr.loading]="i < 4 ? 'eager' : 'lazy'"
-                        [attr.fetchpriority]="i < 2 ? 'high' : 'auto'"
-                        [class.is-loaded]="isProductImageLoaded(p)"
-                        decoding="async"
-                        (load)="markProductImageLoaded(p)"
-                        (error)="onImgError($event)"
-                      />
-                    </span>
-                    <span class="product-copy">
-                      <span class="product-name">{{ productName(p) }}</span>
-                      <span class="product-meta"
-                        >{{ productType(p) }}</span
-                      >
-                      <span class="product-price">{{ price(p.price) }}</span>
-                    </span>
+              @if (showMobilePagination()) {
+                <div class="mobile-pagination" aria-label="Collection pages">
+                  <button
+                    type="button"
+                    class="mobile-page-btn"
+                    (click)="prevMobilePage()"
+                    [disabled]="mobilePage() === 0"
+                    aria-label="Previous page"
+                  >
+                    ←
                   </button>
-
-                  @if (productColorNames(p).length > 0) {
-                    <div class="product-colors" aria-label="Available colors">
-                      @for (color of productColorNames(p); track color) {
-                        <button
-                          type="button"
-                          class="product-color-swatch"
-                          [class.is-selected]="colorSelected(p, color)"
-                          [class.has-image]="colorSwatchImage(color)"
-                          [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
-                          [attr.title]="colorLabel(color)"
-                          [attr.aria-label]="colorLabel(color)"
-                          [attr.aria-pressed]="colorSelected(p, color)"
-                          (mouseenter)="previewProductColor(p, color, $event)"
-                          (focus)="previewProductColor(p, color, $event)"
-                          (click)="selectProductColor(p, color, $event)"
-                        >
-                          @if (colorSwatchImage(color); as swatchImage) {
-                            <img [src]="swatchImage" [alt]="colorLabel(color)" loading="lazy" decoding="async" />
-                          }
-                        </button>
-                      }
-                    </div>
-                  }
-
-                  <div class="purchase-panel">
-                    <div class="size-picker" [attr.aria-label]="t('collection.quickAdd.size')">
-                      <label class="size-label" [attr.for]="'size-select-' + p.id">
-                        {{ t("collection.quickAdd.size") }}
-                      </label>
-                      <div class="size-select-wrap">
-                        <select
-                          class="size-select"
-                          [id]="'size-select-' + p.id"
-                          [value]="selectedSize(p)"
-                          (change)="selectSize(p, sizeSelectValue($event))"
-                          [attr.aria-label]="t('collection.quickAdd.size')"
-                        >
-                          @for (size of availableSizes(p); track size) {
-                            <option [value]="size">EU {{ size }}</option>
-                          }
-                        </select>
-                        <span class="size-select-arrow" aria-hidden="true">⌄</span>
-                      </div>
-                    </div>
-
-                    <button type="button" class="quick-add" (click)="addToCart(p)" data-track="quick-add" [attr.data-track-product]="p.id">
-                      @if (addedProductId() === p.id) {
-                        <span>{{ t("collection.quickAdd.added") }}</span>
-                        <span class="quick-add-icon">✓</span>
-                      } @else {
-                        <span>{{ t("collection.quickAdd") }}</span>
-                        <span class="quick-add-arrow">→</span>
-                      }
-                    </button>
-
-                    <button type="button" class="buy-now" (click)="buyNow(p)">
-                      <span>{{ t("collection.buyNow") }}</span>
-                      <span class="quick-add-arrow">→</span>
-                    </button>
-                  </div>
-                </article>
+                  <span class="mobile-page-status">
+                    {{ mobilePage() + 1 }} / {{ mobileTotalPages() }}
+                  </span>
+                  <button
+                    type="button"
+                    class="mobile-page-btn"
+                    (click)="nextMobilePage()"
+                    [disabled]="mobilePage() >= mobileTotalPages() - 1"
+                    aria-label="Next page"
+                  >
+                    →
+                  </button>
+                </div>
               }
-            </div>
-
-            @if (showMobilePagination()) {
-              <div class="mobile-pagination" aria-label="Collection pages">
-                <button
-                  type="button"
-                  class="mobile-page-btn"
-                  (click)="prevMobilePage()"
-                  [disabled]="mobilePage() === 0"
-                  aria-label="Previous page"
-                >
-                  ←
-                </button>
-                <span class="mobile-page-status">
-                  {{ mobilePage() + 1 }} / {{ mobileTotalPages() }}
-                </span>
-                <button
-                  type="button"
-                  class="mobile-page-btn"
-                  (click)="nextMobilePage()"
-                  [disabled]="mobilePage() >= mobileTotalPages() - 1"
-                  aria-label="Next page"
-                >
-                  →
-                </button>
-              </div>
             }
-          }
-        </div>
+          </div>
         </div>
       }
     } @else if (!collectionsLoaded()) {
@@ -374,7 +485,9 @@
     } @else {
       <div class="empty-state empty-state--collections">
         <p>Collection not found.</p>
-        <button type="button" (click)="showAllCollections()">Back to collections</button>
+        <button type="button" (click)="showAllCollections()">
+          Back to collections
+        </button>
       </div>
     }
   }
