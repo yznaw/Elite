@@ -11,6 +11,29 @@ export interface VariantLabelData {
   currency: string;
 }
 
+/**
+ * The price as it is written in Arabic: Arabic-Indic digits, the Arabic
+ * decimal separator, and ر.ق after the number.
+ *
+ * `Intl` already knows all of this — `ar-QA` with `latn` numbering would give
+ * Western digits, so the `-u-nu-arab` extension asks for the Arabic-Indic set
+ * explicitly rather than transliterating digits by hand.
+ */
+export function arabicPrice(amount: number): string {
+  try {
+    return new Intl.NumberFormat('ar-QA-u-nu-arab', {
+      style: 'currency',
+      currency: 'QAR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    // Old engines without the Arabic numbering extension still get a readable
+    // label rather than an empty line.
+    return `${amount.toFixed(2)} ر.ق`;
+  }
+}
+
 function escapeHtml(value: string): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -55,7 +78,7 @@ export class LabelPrinterService {
 
     const cards = labels.map((l, i) => this.labelCard(l, i === labels.length - 1)).join('');
     const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <title>Product Labels</title>
@@ -79,7 +102,13 @@ export class LabelPrinterService {
   .label-variant{font-size:9.5px;color:#444;}
   .label-barcode svg{width:100%;height:auto;max-height:14mm;}
   .label-code{font-size:8.5px;font-family:'SFMono-Regular',Consolas,monospace;letter-spacing:.03em;color:#333;}
-  .label-price{font-size:11px;font-weight:700;margin-top:2px;}
+  /* Both prices on one line: QAR on the left, the Arabic reading of the same
+     number on the right. Full label width so they sit at the two edges. */
+  .label-price-row{display:flex;align-items:baseline;justify-content:space-between;width:100%;gap:6px;margin-top:2px;padding:0 1mm;}
+  .label-price{font-size:11px;font-weight:700;}
+  /* Its own direction, and a font stack that actually has Arabic glyphs —
+     Helvetica alone renders these as boxes on a Windows till. */
+  .label-price-ar{direction:rtl;font-family:'Segoe UI','Tahoma','Arial Unicode MS',sans-serif;font-size:11px;font-weight:700;}
   .feed-tail{height:12mm;}
   @media print{
     /* Fixed 80mm width, auto height — without this, the browser falls
@@ -112,7 +141,10 @@ export class LabelPrinterService {
         ${l.variantLabel ? `<div class="label-variant">${escapeHtml(l.variantLabel)}</div>` : ''}
         <div class="label-barcode">${this.renderBarcodeSvg(l.barcode)}</div>
         <div class="label-code">${escapeHtml(l.barcode)}</div>
-        <div class="label-price">${escapeHtml(l.currency)} ${l.price.toFixed(2)}</div>
+        <div class="label-price-row">
+          <span class="label-price">${escapeHtml(l.currency)} ${l.price.toFixed(2)}</span>
+          <span class="label-price-ar">${escapeHtml(arabicPrice(l.price))}</span>
+        </div>
       </div>${isLast ? '' : '<div class="cut-line"></div>'}`;
   }
 }

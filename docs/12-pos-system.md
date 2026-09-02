@@ -212,7 +212,18 @@ A browser with no stored register identity shows **"Which till is this?"** — a
 
 Owners and admins also get **Add a new register**, which posts `displayName` to the same `claim` endpoint and creates the `pos_registers` row inline. A cashier who tries this gets `INSUFFICIENT_PERMISSIONS` and is pointed back at the list.
 
-**Claiming rotates the credential.** A register stays one physical terminal: the previously bound machine fails its next check-in with `REGISTER_CREDENTIAL_INVALID` and is sent back to the picker. This is deliberate — two browsers ringing sales into one drawer makes the Z-report cash count meaningless.
+**The picker is scoped to the staff member's branch.** `admin_users.pos_branch_id` (migration 035) says which branch a person works at; `listSelectableRegisters` filters to it, and `claimRegister` refuses an out-of-branch till with `403 REGISTER_OUT_OF_BRANCH` — hiding a row is presentation, refusing the bind is the rule, and `registerId` is a body field the client controls. `NULL` means unscoped, which is the previous behaviour and the right default for owners and admins who move between counters. A register with no branch of its own is matched against the tenant's default branch, the same one that prints on its receipts. Assign it under Settings, Team, Branch. Shopify POS scopes the same picker by the retail locations assigned to a staff member; this is that, with one branch per person.
+
+**Claiming rotates the credential.** A register stays one physical terminal: the previously bound machine fails its next check-in with `409 REGISTER_CREDENTIAL_INVALID` and is sent back to the picker. This is deliberate — two browsers ringing sales into one drawer makes the Z-report cash count meaningless.
+
+**Taking over a till that is in use needs a manager.** Because claiming signs the other terminal out and hands over its open drawer, `claim` refuses the first attempt on a register with an open (or closing) shift belonging to somebody else, answering `409 REGISTER_TAKEOVER_CONFIRM` with the holder's name. The client shows that as a dialog and resends with `confirmTakeover: true` plus a manager PIN, which is checked against every active owner/admin/manager PIN (`403 MANAGER_PIN_REQUIRED` / `403 MANAGER_PIN_INVALID`). Two deliberate exceptions:
+
+- The cashier who **owns** the open shift is let straight through with no confirmation. "My browser storage was wiped mid-shift" is the everyday case the picker exists for, and adding friction there pushes staff back to hunting for an owner mid-queue.
+- A shop with **no manager PIN configured anywhere** only needs the explicit confirmation — the same rule `verifyManagerPin()` applies, so a setup gap cannot lock a counter.
+
+Self-approval is *not* blocked here, unlike void/refund overrides: the person claiming the till is standing at it, and demanding a second manager just to move a register between counters would strand the shop. The `pos.register.claimed` audit entry records `takeover`, `takenFromCashierName`, `shiftId` and `approvedByManagerId`.
+
+Brute force on this path is capped by `posPinLimiter` (8 attempts per 5 minutes per IP), which already guards `/registers/claim`.
 
 **Why this replaced the token as the default path.** Enrollment tokens are owner-only to mint and expire in 15 minutes, so a cleared IndexedDB, a re-imaged counter machine, or a new browser profile stranded a cashier mid-shift waiting for an owner to walk over. Picking from a list removes that dependency without weakening anything real: the picker is already behind an authenticated POS-role session, and the token never protected sale integrity anyway (anyone with a valid session could always ring sales). What register binding actually buys is drawer accountability, and the `pos.register.claimed` audit entry preserves that.
 
@@ -220,7 +231,13 @@ Owners and admins also get **Add a new register**, which posts `displayName` to 
 
 Clearing the browser profile removes the local credential. The cashier simply picks the same register again; no administrative action is needed. Revoke a register record only when the terminal is genuinely retired.
 
-**Logging out does not un-enroll a register.** The identity lives in IndexedDB and survives logout; only the session's `posRegisterId` binding is lost, and `initialize()` re-binds it automatically by calling `/registers/check-in` with the stored credential after `/registers/current` answers `428`.
+**The device binding is a cookie, not a login session.** `req.session.posRegisterId` alone tied the register to *who was signed in*, so every logout, every 12-hour session expiry, and every second admin who signed in on the same counter machine landed on "Which till is this?" for a terminal enrolled weeks earlier. A long-lived, httpOnly, HMAC-signed `elite.pos_device` cookie (`server/lib/pos/device-cookie.js`) now carries it, and `context(req)` reads the session first and that cookie second. This matches how Square and Shopify treat device pairing: a property of the machine, independent of the operator. The cookie only names a register — `requireRegister()` still verifies it exists, belongs to this tenant and is active on every request.
+
+**Logging out does not un-enroll a register.** The identity also lives in IndexedDB and survives logout, so `initialize()` re-binds by calling `/registers/check-in` with the stored credential when `/registers/current` answers `428`.
+
+**`POST /registers/release` is the escape hatch.** It drops the session binding and expires the device cookie, and never fails. The POS surfaces it as **Start over** on the setup screen and **Reset this terminal and pick a till** on the "could not open this register" screen; the client also clears the IndexedDB identity and calls it automatically whenever the server disowns a register, so a reload does not repeat the same dead round trip.
+
+**Never answer a POS request with 401 unless the login is genuinely gone.** The admin-portal interceptor turns any 401 into "Session expired" plus a redirect to `/login`, and `/login` redirects straight back whenever the session is in fact valid. A stale register credential returning 401 therefore produced an infinite bounce between the two screens that only clearing cookies escaped. Three defences now: check-in answers `409`, takeover-PIN failures answer `403`, and the interceptor both skips the redirect for `/pos/registers/(check-in|claim|enroll|release)` and refuses to redirect to `/login` more than once per 10 seconds.
 
 That recovery existed but was masked: the outer `catch` in `initialize()` sent *any* failure to the enrollment phase, so a slow catalog load or a stumble in hardware setup showed "paste a one-time token" on a counter that was perfectly enrolled — a dead end for a cashier, since issuing a token is owner-only. The phase is now chosen by cause: `resume-failed` (a retry screen that leaves the identity alone) when a stored identity exists, and `enrollment` only when there is no identity or the server actively disowned this register (`REGISTER_CREDENTIAL_INVALID`, `REGISTER_NOT_FOUND`, `REGISTER_DISABLED`).
 
@@ -370,11 +387,12 @@ All paths below are under `/api/pos` and require an authenticated allowed role. 
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/registers` | List active registers for the picker; any POS role |
-| `POST` | `/registers/claim` | Bind this browser to a register by `registerId`, or create one by `displayName` (owner/admin); rotates the credential |
+| `GET` | `/registers` | List active registers for the picker, scoped to the caller's branch; any POS role |
+| `POST` | `/registers/claim` | Bind this browser to a register by `registerId`, or create one by `displayName` (owner/admin); rotates the credential. Taking over someone else's open shift needs `confirmTakeover` + `managerPin` |
 | `POST` | `/registers/enrollment-tokens` | Create a 15-minute one-time token; owner/admin only |
 | `POST` | `/registers/enroll` | Consume a token and create register identity |
-| `POST` | `/registers/check-in` | Validate stored register credentials and bind the session |
+| `POST` | `/registers/check-in` | Validate stored register credentials and bind the session and device cookie |
+| `POST` | `/registers/release` | Forget this machine's register binding (session + device cookie) and return to the picker |
 | `GET` | `/registers/current` | Return active register and current shift |
 | `POST` | `/registers/receipt-number-blocks` | Reserve the next 100 tenant receipt numbers |
 | `PUT` | `/manager-pin` | Configure a manager PIN |
@@ -756,7 +774,7 @@ Audit-sensitive actions include enrollment, receipt allocation, shift open/close
 
 - [ ] Migrations `015`–`025` apply without changing unrelated Elite data; verify observability, customer link, Arabic item snapshot, inventory ledger, and stocktake schema.
 - [ ] POS routes require authenticated allowed roles.
-- [ ] Register selection, claim/credential rotation, check-in, and disable/revoke behavior is tested (`server/test/pos-register-picker-e2e.test.js`).
+- [ ] Register selection, claim/credential rotation, check-in, takeover confirmation and manager PIN, device-cookie survival across logout, release, and disable/revoke behavior is tested (`server/test/pos-register-picker-e2e.test.js`).
 - [ ] Two-register receipt blocks do not overlap.
 - [ ] Online concurrent last-unit sale behavior is tested.
 - [ ] Offline sale survives refresh/restart and synchronizes once.

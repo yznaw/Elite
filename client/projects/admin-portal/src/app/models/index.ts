@@ -179,6 +179,11 @@ export interface TeamMember {
   initials: string;
   status: TeamMemberStatus;
   last_login_at: string | null;
+  /** Which branch this person works at, scoping the POS "which till is this?"
+      picker to that branch's registers. `null` means every branch, which is
+      the default and the right one for owners and admins. */
+  posBranchId?: string | null;
+  posBranchName?: string | null;
 }
 
 export interface Integration {

@@ -419,6 +419,21 @@ async function ensureAllMigrations(client) {
     CREATE INDEX IF NOT EXISTS catalog_import_items_job_idx
       ON catalog_import_items (job_id, created_at)
   `);
+  // ── Migration 035: staff branch scope ──────────────────────────────────
+  // Which branch a staff member works at, and so which tills the POS picker
+  // offers them. NULL means "not scoped" and keeps the previous behaviour
+  // (every active register in the tenant), which is the right default for
+  // owners and admins.
+  await client.query(`
+    ALTER TABLE admin_users
+      ADD COLUMN IF NOT EXISTS pos_branch_id uuid REFERENCES pos_branches(id) ON DELETE SET NULL
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS admin_users_pos_branch_idx
+      ON admin_users (tenant_id, pos_branch_id)
+      WHERE pos_branch_id IS NOT NULL
+  `);
+
   await client.query('DROP TRIGGER IF EXISTS products_require_variant ON products');
   await client.query('DROP TRIGGER IF EXISTS variants_keep_product_nonempty ON product_variants');
   await client.query('DROP FUNCTION IF EXISTS enforce_product_has_variant()');

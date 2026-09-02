@@ -31,13 +31,16 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
 
   /** Each session is its own cookie jar so owner and cashier can be driven side by side. */
   function agent() {
-    const jar = { cookie: '', csrf: '' };
+    const jar = { cookie: '', csrf: '', device: '' };
     return async function api(path, options = {}) {
       const response = await fetch(`${base}${path}`, {
         ...options,
         headers: {
           ...(options.body ? { 'content-type': 'application/json' } : {}),
-          ...(jar.cookie ? { cookie: jar.csrf ? `${jar.cookie}; elite.csrf=${jar.csrf}` : jar.cookie } : {}),
+          ...(() => {
+            const parts = [jar.cookie, jar.csrf && `elite.csrf=${jar.csrf}`, jar.device].filter(Boolean);
+            return parts.length ? { cookie: parts.join('; ') } : {};
+          })(),
           ...(jar.csrf ? { 'x-csrf-token': jar.csrf } : {}),
           ...(options.headers || {}),
         },
@@ -50,6 +53,9 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
         const [name, value] = pair.split('=');
         if (name === 'elite.sid') jar.cookie = pair;
         if (name === 'elite.csrf') jar.csrf = decodeURIComponent(value);
+        // The device binding lives here, deliberately outside the session —
+        // see lib/pos/device-cookie.js. An expired maxAge means "forget it".
+        if (name === 'elite.pos_device') jar.device = /Max-Age=0|Expires=Thu, 01 Jan 1970/i.test(raw) ? '' : pair;
       }
       const body = await response.json();
       if (!response.ok) throw Object.assign(new Error(`${response.status}: ${body.message}`), { status: response.status, body });
@@ -122,12 +128,17 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
     // One register stays one terminal: the superseded credential is dead, so
     // the machine that held it is sent back to the picker rather than quietly
     // ringing sales into a drawer someone else is now counting.
+    //
+    // 409 and not 401 on purpose. The admin portal turns any 401 into "session
+    // expired" and redirects to /login, which bounces straight back to /pos
+    // while the login is in fact valid — a till whose register had been deleted
+    // ping-ponged between the two until its cookies were cleared by hand.
     await assert.rejects(
       () => owner('/pos/registers/check-in', {
         method: 'POST',
         body: JSON.stringify({ registerId: created.registerId, registerCredential: created.registerCredential }),
       }),
-      (error) => error.status === 401 && error.body.code === 'REGISTER_CREDENTIAL_INVALID',
+      (error) => error.status === 409 && error.body.code === 'REGISTER_CREDENTIAL_INVALID',
     );
 
     // An open shift is surfaced in the list so the next person sees it before
@@ -137,6 +148,133 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
     const busy = withShift.registers.find((item) => item.registerId === created.registerId);
     assert.ok(busy.openShiftId);
     assert.equal(busy.openShiftCashier, 'Picker Cashier');
+
+    // Branch scope. Every POS user used to see every register in the tenant,
+    // so a cashier standing in one shop could bind their browser to a till in
+    // another and rotate its credential from across town (migration 035).
+    //
+    // Both branches are explicit and the register is pinned to one of them: a
+    // register with no branch of its own resolves to the tenant's default (or
+    // oldest) branch, which would otherwise make what is being tested depend
+    // on which branch row happened to be created first.
+    const branchA = await db.query(
+      `INSERT INTO pos_branches (tenant_id, name, trade_name_en)
+       VALUES ($1, $2, 'Main Shop') RETURNING id`,
+      [tenantId, `Main Shop ${runId}`],
+    );
+    const branchB = await db.query(
+      `INSERT INTO pos_branches (tenant_id, name, trade_name_en)
+       VALUES ($1, $2, 'Second Shop') RETURNING id`,
+      [tenantId, `Second Shop ${runId}`],
+    );
+    await db.query('UPDATE pos_registers SET branch_id = $1 WHERE id = $2', [branchA.rows[0].id, created.registerId]);
+    await db.query(
+      `UPDATE admin_users SET pos_branch_id = $1 WHERE tenant_id = $2 AND role = 'cashier'`,
+      [branchB.rows[0].id, tenantId],
+    );
+
+    // The till stands in branch A, the cashier works at branch B, so it drops
+    // out of their picker entirely.
+    const scopedList = await cashier('/pos/registers');
+    assert.equal(scopedList.registers.some((item) => item.registerId === created.registerId), false);
+
+    // Hiding it is not the rule — claiming it by id is refused too, since
+    // registerId is just a body field the client controls.
+    await assert.rejects(
+      () => cashier('/pos/registers/claim', { method: 'POST', body: JSON.stringify({ registerId: created.registerId }) }),
+      (error) => error.status === 403 && error.body.code === 'REGISTER_OUT_OF_BRANCH',
+    );
+
+    // Owners and admins stay unscoped, and the row now names its branch so a
+    // till called "Counter 2" is not ambiguous across shops.
+    const ownerList = await owner('/pos/registers');
+    const ownerRow = ownerList.registers.find((item) => item.registerId === created.registerId);
+    assert.ok(ownerRow, 'an unscoped owner still sees every till');
+    assert.equal(ownerRow.branchName, `Main Shop ${runId}`);
+
+    // Move the cashier to the till's own branch and it comes back.
+    await db.query(
+      `UPDATE admin_users SET pos_branch_id = $1 WHERE tenant_id = $2 AND role = 'cashier'`,
+      [branchA.rows[0].id, tenantId],
+    );
+    const rescopedList = await cashier('/pos/registers');
+    assert.ok(rescopedList.registers.some((item) => item.registerId === created.registerId));
+
+    // Taking a till off the cashier who is mid-shift on it is a two-step act:
+    // claiming re-mints the credential, so the machine at that counter is
+    // signed out and whoever claims inherits the open drawer. The first attempt
+    // is refused and names the holder.
+    await assert.rejects(
+      () => owner('/pos/registers/claim', { method: 'POST', body: JSON.stringify({ registerId: created.registerId }) }),
+      (error) => error.status === 409
+        && error.body.code === 'REGISTER_TAKEOVER_CONFIRM'
+        && error.body.message.includes('Picker Cashier'),
+    );
+
+    // With no manager PIN configured anywhere in the shop there is nothing to
+    // check one against, so an explicit confirmation is enough — same rule
+    // verifyManagerPin() applies, and the audit event still records the
+    // takeover and who it was taken from.
+    const takenOver = await owner('/pos/registers/claim', {
+      method: 'POST', body: JSON.stringify({ registerId: created.registerId, confirmTakeover: true }),
+    });
+    assert.equal(takenOver.registerId, created.registerId);
+    const takeoverAudit = await db.query(
+      `SELECT after_state FROM audit_events
+        WHERE tenant_id = $1 AND action = 'pos.register.claimed' AND entity_id = $2
+        ORDER BY occurred_at DESC LIMIT 1`,
+      [tenantId, created.registerId],
+    );
+    assert.equal(takeoverAudit.rows[0].after_state.takeover, true);
+    assert.equal(takeoverAudit.rows[0].after_state.takenFromCashierName, 'Picker Cashier');
+
+    // Once a manager PIN exists, the confirmation alone is not enough.
+    await db.query(
+      `UPDATE admin_users SET pos_pin_hash = $1 WHERE tenant_id = $2 AND role = 'owner'`,
+      [await bcrypt.hash('4821', 12), tenantId],
+    );
+    // The cashier takes their own till back (their shift, no friction), then
+    // the owner has to clear the PIN to take it again.
+    await cashier('/pos/registers/claim', { method: 'POST', body: JSON.stringify({ registerId: created.registerId }) });
+    await assert.rejects(
+      () => owner('/pos/registers/claim', {
+        method: 'POST', body: JSON.stringify({ registerId: created.registerId, confirmTakeover: true }),
+      }),
+      (error) => error.status === 403 && error.body.code === 'MANAGER_PIN_REQUIRED',
+    );
+    await assert.rejects(
+      () => owner('/pos/registers/claim', {
+        method: 'POST',
+        body: JSON.stringify({ registerId: created.registerId, confirmTakeover: true, managerPin: '0000' }),
+      }),
+      (error) => error.status === 403 && error.body.code === 'MANAGER_PIN_INVALID',
+    );
+    const approved = await owner('/pos/registers/claim', {
+      method: 'POST',
+      body: JSON.stringify({ registerId: created.registerId, confirmTakeover: true, managerPin: '4821' }),
+    });
+    assert.equal(approved.registerId, created.registerId);
+
+    // The binding belongs to the machine, not to the login. Signing out and
+    // back in — or a second admin signing in on the same counter PC — used to
+    // land on the "Which till is this?" picker for a terminal that had been
+    // enrolled for weeks, because the register only lived in the session.
+    await owner('/auth/logout', { method: 'POST', body: '{}' });
+    await owner('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: process.env.DEFAULT_ADMIN_EMAIL, password: process.env.DEFAULT_ADMIN_PASSWORD }),
+    });
+    const afterRelogin = await owner('/pos/registers/current');
+    assert.equal(afterRelogin.registerId, created.registerId);
+
+    // The escape hatch out of a wedged terminal: forget the binding entirely,
+    // in the session and in the cookie, so the next load starts at the picker.
+    const released = await owner('/pos/registers/release', { method: 'POST', body: '{}' });
+    assert.equal(released.released, true);
+    await assert.rejects(
+      () => owner('/pos/registers/current'),
+      (error) => error.status === 428 && error.body.code === 'REGISTER_REQUIRED',
+    );
 
     // A revoked register drops out of the picker and cannot be claimed.
     await owner(`/admin/pos-security/registers/${created.registerId}/revoke`, { method: 'POST', body: '{}' });

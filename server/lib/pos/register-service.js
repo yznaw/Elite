@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const bcrypt = require('bcryptjs');
 const db = require('../../db/client');
 const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, nonEmpty, uuid } = require('./errors');
@@ -100,14 +101,42 @@ async function enrollRegister(context, body) {
  * are standing at is not a privileged act, and gating it behind owner/admin
  * (as `listAllRegisters` does for the Settings device table) is what used to
  * strand a cashier mid-shift after an IndexedDB wipe.
+ *
+ * Scoped to the caller's branch when they have one (`admin_users.pos_branch_id`,
+ * migration 035). Without it the list was every register in the tenant, so a
+ * cashier in one shop could bind their browser to a till standing in another,
+ * rotate its credential, and sign that terminal out from across town. Shopify
+ * POS scopes the same picker by the retail locations assigned to the staff
+ * member; this is that, with one branch per person.
+ *
+ * A staff member with no branch assigned sees everything, which is both the
+ * pre-migration behaviour and the right default for owners and admins who move
+ * between counters. Registers with no branch of their own belong to the
+ * tenant's default branch (branch-service.js's getEffectiveBranchProfile), so
+ * they are matched against it rather than silently disappearing from the list
+ * of the branch that actually prints on their receipts.
  */
 async function listSelectableRegisters(context) {
   const client = await db.pool.connect();
   try {
     const result = await client.query(
-      `SELECT r.id, r.display_name, r.last_seen_at,
+      `WITH scope AS (
+         SELECT u.pos_branch_id AS branch_id
+           FROM admin_users u
+          WHERE u.tenant_id = $1 AND u.id = $2
+       ), fallback AS (
+         SELECT COALESCE(
+           (SELECT b.id FROM pos_branches b WHERE b.tenant_id = $1 AND b.is_default = true),
+           (SELECT b.id FROM pos_branches b WHERE b.tenant_id = $1 ORDER BY b.created_at ASC LIMIT 1)
+         ) AS branch_id
+       )
+       SELECT r.id, r.display_name, r.last_seen_at,
+              COALESCE(r.branch_id, (SELECT branch_id FROM fallback)) AS branch_id,
+              b.name AS branch_name,
               s.id AS open_shift_id, u.full_name AS open_shift_cashier
        FROM pos_registers r
+       LEFT JOIN pos_branches b
+         ON b.id = COALESCE(r.branch_id, (SELECT branch_id FROM fallback)) AND b.tenant_id = r.tenant_id
        LEFT JOIN LATERAL (
          SELECT id, cashier_id FROM pos_shifts
          WHERE tenant_id = r.tenant_id AND register_id = r.id AND state IN ('open', 'closing')
@@ -115,13 +144,18 @@ async function listSelectableRegisters(context) {
        ) s ON true
        LEFT JOIN admin_users u ON u.id = s.cashier_id
        WHERE r.tenant_id = $1 AND r.status = 'active'
+         AND (
+           (SELECT branch_id FROM scope) IS NULL
+           OR COALESCE(r.branch_id, (SELECT branch_id FROM fallback)) = (SELECT branch_id FROM scope)
+         )
        ORDER BY r.last_seen_at DESC NULLS LAST, r.display_name ASC`,
-      [context.tenantId],
+      [context.tenantId, context.userId],
     );
     return result.rows.map((row) => ({
       registerId: row.id,
       displayName: row.display_name,
       lastSeenAt: row.last_seen_at,
+      branchName: row.branch_name,
       openShiftId: row.open_shift_id,
       openShiftCashier: row.open_shift_cashier,
     }));
@@ -143,6 +177,110 @@ async function listSelectableRegisters(context) {
  * `createEnrollmentToken`/`enrollRegister` remain for the case this cannot
  * cover: handing setup to someone at a counter you are not standing at.
  */
+/**
+ * The guard on taking over a till that somebody else is currently selling on.
+ *
+ * Claiming re-mints the credential, so the machine physically standing at that
+ * counter is bounced to the picker on its next check-in — and whoever claimed
+ * inherits the open shift, its float and its drawer. Doing that silently is not
+ * something any mainstream POS allows: Odoo refuses a second session on the
+ * same point of sale outright, Lightspeed warns against selling on one register
+ * from two devices, and Square never exposes the pairing to a cashier at all.
+ *
+ * The cashier who *owns* the open shift is let straight through: "my browser
+ * storage was wiped mid-shift, let me back onto my own till" is the everyday
+ * case the picker exists for, and adding friction there would just push staff
+ * back to hunting for an owner mid-queue. Everyone else has to say so
+ * explicitly and clear a manager PIN.
+ */
+/**
+ * The branch scope, enforced on the write and not only on the list.
+ *
+ * Hiding an out-of-branch till from the picker is presentation; refusing to
+ * bind to one is the actual rule. `registerId` is a plain body field, so a
+ * cashier scoped to one branch could otherwise post a register id belonging to
+ * another and claim it anyway — rotating its credential and signing that
+ * counter's terminal out. See migration 035 and listSelectableRegisters().
+ */
+async function assertBranchAllowed(client, context, register) {
+  const scope = await client.query(
+    'SELECT pos_branch_id FROM admin_users WHERE tenant_id = $1 AND id = $2',
+    [context.tenantId, context.userId],
+  );
+  const scopedBranchId = scope.rows[0]?.pos_branch_id || null;
+  if (!scopedBranchId) return;
+
+  // A register with no branch of its own prints the tenant's default branch on
+  // its receipts, so that is the branch it belongs to for this check too.
+  const fallback = await client.query(
+    `SELECT COALESCE(
+       (SELECT id FROM pos_branches WHERE tenant_id = $1 AND is_default = true),
+       (SELECT id FROM pos_branches WHERE tenant_id = $1 ORDER BY created_at ASC LIMIT 1)
+     ) AS branch_id`,
+    [context.tenantId],
+  );
+  const effectiveBranchId = register.branch_id || fallback.rows[0]?.branch_id || null;
+  assertPos(
+    effectiveBranchId === scopedBranchId,
+    403,
+    'REGISTER_OUT_OF_BRANCH',
+    'That till belongs to another branch. Pick one from your own branch, or ask an owner to move you.',
+  );
+}
+
+async function assertTakeoverAllowed(client, context, register, body) {
+  const openShift = await client.query(
+    `SELECT s.id, s.cashier_id, u.full_name AS cashier_name
+       FROM pos_shifts s
+       LEFT JOIN admin_users u ON u.id = s.cashier_id AND u.tenant_id = s.tenant_id
+      WHERE s.tenant_id = $1 AND s.register_id = $2 AND s.state IN ('open', 'closing')
+      ORDER BY s.opened_at DESC LIMIT 1`,
+    [context.tenantId, register.id],
+  );
+  const shift = openShift.rows[0];
+  if (!shift || shift.cashier_id === context.userId) return null;
+
+  const holder = shift.cashier_name || 'another cashier';
+  assertPos(
+    body?.confirmTakeover === true,
+    409,
+    'REGISTER_TAKEOVER_CONFIRM',
+    `${register.display_name} has an open shift belonging to ${holder}. Taking it over will sign that terminal out and hand you their shift.`,
+  );
+
+  // Same rule verifyManagerPin() applies: a shop that has never configured a
+  // manager PIN has nothing to check a typed one against, so requiring one
+  // would only lock the counter over a setup gap. The audit event still names
+  // who took the till and from whom.
+  const managers = await client.query(
+    `SELECT id, pos_pin_hash FROM admin_users
+      WHERE tenant_id = $1 AND status = 'active'
+        AND role IN ('owner', 'admin', 'manager') AND pos_pin_hash IS NOT NULL`,
+    [context.tenantId],
+  );
+  if (managers.rowCount === 0) return { shift, holder, managerId: null };
+
+  // 403, not 401 — see the check-in comment above: a 401 from any POS route is
+  // read by the client as an expired login. Brute force is already capped by
+  // posPinLimiter on this route (8 attempts per 5 minutes per IP).
+  // Unlike verifyManagerPin(), self-approval is not blocked here. That rule
+  // exists so a manager-role cashier cannot rubber-stamp their own void or
+  // refund; a takeover is the opposite shape — the person claiming the till is
+  // standing at it, and requiring a *second* manager to be present just to move
+  // a register between counters would strand the shop.
+  const pin = String(body?.managerPin || '');
+  assertPos(pin, 403, 'MANAGER_PIN_REQUIRED', 'A manager PIN is needed to take over a till that is in use.');
+  let managerId = null;
+  for (const manager of managers.rows) {
+    if (await bcrypt.compare(pin, manager.pos_pin_hash)) {
+      managerId = manager.id;
+      break;
+    }
+  }
+  assertPos(managerId, 403, 'MANAGER_PIN_INVALID', 'Manager PIN is incorrect.');
+  return { shift, holder, managerId };
+}
+
 async function claimRegister(context, body) {
   const registerId = body?.registerId ? nonEmpty(body.registerId, 'registerId', 50) : null;
   const displayName = body?.displayName ? nonEmpty(body.displayName, 'displayName', 80) : null;
@@ -153,13 +291,15 @@ async function claimRegister(context, body) {
 
     if (registerId) {
       const existing = await client.query(
-        `SELECT id, display_name, status FROM pos_registers
+        `SELECT id, display_name, status, branch_id FROM pos_registers
          WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
         [context.tenantId, registerId],
       );
       const register = existing.rows[0];
       assertPos(register, 404, 'REGISTER_NOT_FOUND', 'That register no longer exists. Pick another one.');
       assertPos(register.status === 'active', 403, 'REGISTER_DISABLED', 'This POS register is disabled or revoked.');
+      await assertBranchAllowed(client, context, register);
+      const takeover = await assertTakeoverAllowed(client, context, register, body);
 
       await client.query(
         'UPDATE pos_registers SET credential_hash = $1, last_seen_at = now() WHERE id = $2',
@@ -167,6 +307,13 @@ async function claimRegister(context, body) {
       );
       await audit(client, context, 'pos.register.claimed', 'pos_register', register.id, {
         displayName: register.display_name,
+        ...(takeover ? {
+          takeover: true,
+          takenFromCashierId: takeover.shift.cashier_id,
+          takenFromCashierName: takeover.holder,
+          shiftId: takeover.shift.id,
+          approvedByManagerId: takeover.managerId,
+        } : {}),
       });
       return { registerId: register.id, displayName: register.display_name, registerCredential: rawCredential };
     }
@@ -214,7 +361,15 @@ async function checkInRegister(context, body) {
       [context.tenantId, registerId],
     );
     const register = result.rows[0];
-    assertPos(register && credentialMatches(register.credential_hash, credential), 401, 'REGISTER_CREDENTIAL_INVALID', 'Register credentials are invalid.');
+    // 409, deliberately not 401. A stale register credential is not an expired
+    // login: the admin-portal interceptor turns every 401 into "Session
+    // expired" plus a redirect to /login, and /login bounces straight back to
+    // /pos whenever the session is in fact valid — so a till whose register had
+    // been deleted ping-ponged between the two forever, and only clearing the
+    // cookies broke the loop. The client already classifies this code as
+    // "register rejected" and sends the cashier to the picker, which is the
+    // correct destination.
+    assertPos(register && credentialMatches(register.credential_hash, credential), 409, 'REGISTER_CREDENTIAL_INVALID', 'Register credentials are invalid.');
     assertPos(register.status === 'active', 403, 'REGISTER_DISABLED', 'This POS register is disabled or revoked.');
 
     await client.query('UPDATE pos_registers SET last_seen_at = now() WHERE id = $1', [register.id]);

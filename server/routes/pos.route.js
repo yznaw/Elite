@@ -13,6 +13,11 @@ const {
   enrollRegister,
   listSelectableRegisters,
 } = require('../lib/pos/register-service');
+const {
+  clearDeviceRegisterCookie,
+  readDeviceRegisterId,
+  setDeviceRegisterCookie,
+} = require('../lib/pos/device-cookie');
 const { setManagerPin, verifyManagerPin } = require('../lib/pos/manager-service');
 const { closeShift, currentSummary, getZReport, listZReports, openShift } = require('../lib/pos/shift-service');
 const { listCashMovements, recordCashMovement } = require('../lib/pos/cash-movement-service');
@@ -58,7 +63,12 @@ function context(req) {
     tenantId: req.user.tenantId,
     userId: req.user.id,
     role: req.user.role,
-    registerId: req.session.posRegisterId || null,
+    // Session first, then the long-lived device cookie. Keeping the binding
+    // only in the session meant a logout, a 12-hour expiry, or a second admin
+    // signing in on the same counter machine all landed on the "Which till is
+    // this?" picker for a terminal that had been enrolled for weeks — see
+    // lib/pos/device-cookie.js.
+    registerId: req.session.posRegisterId || readDeviceRegisterId(req) || null,
     ip: req.ip,
     userAgent: req.headers['user-agent'] || null,
     // Ties every audit_events row this request writes to the same id carried
@@ -76,10 +86,16 @@ router.post('/registers/enrollment-tokens', posPinLimiter, asyncHandler(async (r
   created(res, await createEnrollmentToken(context(req), req.body));
 }));
 
+/** Bind this browser to a till: session (this login) + cookie (this machine). */
+async function bindRegister(req, res, registerId) {
+  req.session.posRegisterId = registerId;
+  await saveSession(req);
+  setDeviceRegisterCookie(req, res, registerId);
+}
+
 router.post('/registers/enroll', posPinLimiter, asyncHandler(async (req, res) => {
   const register = await enrollRegister(context(req), req.body);
-  req.session.posRegisterId = register.registerId;
-  await saveSession(req);
+  await bindRegister(req, res, register.registerId);
   created(res, register);
 }));
 
@@ -90,16 +106,26 @@ router.get('/registers', asyncHandler(async (req, res) => {
 // The everyday path onto a counter: pick your till, no token to mint or paste.
 router.post('/registers/claim', posPinLimiter, asyncHandler(async (req, res) => {
   const register = await claimRegister(context(req), req.body);
-  req.session.posRegisterId = register.registerId;
-  await saveSession(req);
+  await bindRegister(req, res, register.registerId);
   created(res, register);
 }));
 
 router.post('/registers/check-in', asyncHandler(async (req, res) => {
   const register = await checkInRegister(context(req), req.body);
-  req.session.posRegisterId = register.registerId;
-  await saveSession(req);
+  await bindRegister(req, res, register.registerId);
   ok(res, register);
+}));
+
+// The escape hatch. Whatever this machine thinks it is bound to, forget it and
+// go back to the picker — for a terminal stuck against a register that was
+// deleted, re-created, or claimed by someone else. Deliberately never fails:
+// "let me start over" has to work even when nothing else on this till does.
+router.post('/registers/release', asyncHandler(async (req, res) => {
+  const releasedRegisterId = req.session.posRegisterId || readDeviceRegisterId(req) || null;
+  req.session.posRegisterId = null;
+  await saveSession(req).catch(() => undefined);
+  clearDeviceRegisterCookie(req, res);
+  ok(res, { released: true, registerId: releasedRegisterId });
 }));
 
 // Independent of the browser's online/offline events — the client polls this
