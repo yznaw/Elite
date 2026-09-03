@@ -98,18 +98,25 @@ export class LabelPrinterService {
     break-inside:avoid; page-break-inside:avoid;
   }
   .cut-line{border-top:1px dashed #999; margin:0 2mm;}
-  .label-brand{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#666;}
+  /* Thermal print heads reproduce solid black reliably but under-ink light
+     grays and thin strokes, so anything meant to stay legible on the roll
+     (brand, SKU code) is pure black and bold rather than a "subtle" gray —
+     #666/#333 at normal weight came out faded to the point of being
+     unreadable on an actual print. */
+  .label-brand{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#000;}
   .label-name{font-size:11px;font-weight:700;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .label-variant{font-size:9.5px;color:#444;}
+  .label-variant{font-size:9.5px;font-weight:600;color:#000;}
   .label-barcode svg{width:100%;height:auto;max-height:14mm;}
-  .label-code{font-size:8.5px;font-family:'SFMono-Regular',Consolas,monospace;letter-spacing:.03em;color:#333;}
+  .label-code{font-size:10px;font-weight:700;font-family:'SFMono-Regular',Consolas,monospace;letter-spacing:.03em;color:#000;}
   /* Both prices on one line: QAR on the left, the Arabic reading of the same
-     number on the right. Full label width so they sit at the two edges. */
-  .label-price-row{display:flex;align-items:baseline;justify-content:space-between;width:100%;gap:6px;margin-top:2px;padding:0 1mm;}
-  .label-price{font-size:11px;font-weight:700;}
+     number on the right. Full label width so they sit at the two edges.
+     Sized up from the rest of the label since the price is the one line a
+     cashier actually reads off the label at a glance. */
+  .label-price-row{display:flex;align-items:baseline;justify-content:space-between;width:100%;gap:6px;margin-top:3px;padding:0 1mm;}
+  .label-price{font-size:15px;font-weight:700;color:#000;}
   /* Its own direction, and a font stack that actually has Arabic glyphs —
      Helvetica alone renders these as boxes on a Windows till. */
-  .label-price-ar{direction:rtl;font-family:'Segoe UI','Tahoma','Arial Unicode MS',sans-serif;font-size:11px;font-weight:700;}
+  .label-price-ar{direction:rtl;font-family:'Segoe UI','Tahoma','Arial Unicode MS',sans-serif;font-size:15px;font-weight:700;color:#000;}
   .feed-tail{height:12mm;}
   @media print{
     /* Fixed 80mm width. "auto" height alone isn't reliable across printer
