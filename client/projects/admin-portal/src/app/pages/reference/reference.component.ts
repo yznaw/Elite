@@ -196,72 +196,18 @@ type Tab = 'colors' | 'materials' | 'sizes';
             <div class="ref-empty">{{ t('reference.sizeSets.empty') }}</div>
           } @else {
             <div class="size-list">
+
+              <!-- NEW SIZE SET form card -->
+              @if (editingId() === '__new_sizeset__') {
+                <div class="size-card editing">
+                  <ng-container *ngTemplateOutlet="sizeEditForm; context: { $implicit: null }"/>
+                </div>
+              }
+
               @for (s of sizeSets(); track s.id) {
                 <div class="size-card" [class.editing]="editingId() === s.id">
                   @if (editingId() === s.id) {
-                    <div class="size-edit">
-
-                      <!-- Name + order row -->
-                      <div class="ef-row" style="margin-bottom:12px;">
-                        <input class="inp inp-sm" [placeholder]="t('reference.field.sizeName')" [(ngModel)]="editSizeSet.name" style="flex:1;"/>
-                        <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editSizeSet.sort_order"/>
-                      </div>
-
-                      <!-- Size Conversion Chart -->
-                      <label class="lbl">{{ t('reference.field.sizeChart') }}</label>
-                      <div class="chart-editor">
-                        <div class="chart-head">
-                          <span class="chart-col-label">{{ t('reference.field.sizeChart.uk') }}</span>
-                          <span class="chart-col-label">{{ t('reference.field.sizeChart.eu') }}</span>
-                          <span class="chart-col-label">{{ t('reference.field.sizeChart.us') }}</span>
-                          <span class="chart-col-label chart-col-del"></span>
-                        </div>
-                        @for (row of editSizeSet.size_chart; track row; let ri = $index) {
-                          <div class="chart-row">
-                            <input class="inp inp-xs mono" [(ngModel)]="row.uk" placeholder="UK"/>
-                            <input class="inp inp-xs mono" [(ngModel)]="row.eu" placeholder="EU"/>
-                            <input class="inp inp-xs mono" [(ngModel)]="row.us" placeholder="US"/>
-                            <button class="chart-del-btn" (click)="removeChartRow(ri)" title="Remove row">
-                              <ap-icon name="trash" [size]="12"/>
-                            </button>
-                          </div>
-                        }
-                        <button class="btn btn-sm btn-outline chart-add-btn" (click)="addChartRow()">
-                          <ap-icon name="plus" [size]="12"/> {{ t('reference.field.sizeChart.addRow') }}
-                        </button>
-                      </div>
-
-                      <!-- Tip -->
-                      <div style="margin-top:10px;">
-                        <label class="lbl">{{ t('reference.field.sizeChart.tip') }}</label>
-                        <input class="inp inp-sm" [placeholder]="t('reference.field.sizeChart.tipPlaceholder')" [(ngModel)]="editSizeSet.tip" style="width:100%;"/>
-                      </div>
-
-                      <!-- Fallback sizes (hidden if chart is populated) -->
-                      @if (editSizeSet.size_chart.length === 0) {
-                        <div style="margin-top:10px;">
-                          <label class="lbl">{{ t('reference.field.sizes') }}</label>
-                          <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
-                          <div class="size-preview">
-                            @for (sz of editSizeSet.sizes; track sz; let si = $index) {
-                              <span class="size-chip size-chip--reorder">
-                                {{ sz }}
-                                <button class="chip-btn" (click)="moveSizeChip(si, -1)" [disabled]="si === 0">‹</button>
-                                <button class="chip-btn" (click)="moveSizeChip(si, 1)" [disabled]="si === editSizeSet.sizes.length - 1">›</button>
-                                <button class="chip-btn chip-btn--rm" (click)="removeSizeChip(si)">×</button>
-                              </span>
-                            }
-                          </div>
-                        </div>
-                      }
-
-                      <div class="edit-actions" style="margin-top:14px;">
-                        <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveSizeSet(s.id)">
-                          @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
-                        </button>
-                        <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
-                      </div>
-                    </div>
+                    <ng-container *ngTemplateOutlet="sizeEditForm; context: { $implicit: s }"/>
                   } @else {
                     <div class="size-head">
                       <div class="size-name-wrap">
@@ -366,6 +312,73 @@ type Tab = 'colors' | 'materials' | 'sizes';
             @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
           </button>
           <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
+        </div>
+      </ng-template>
+
+      <!-- ════ Size set edit form template ════ -->
+      <ng-template #sizeEditForm let-s>
+        <div class="size-edit">
+
+          <!-- Name + order row -->
+          <div class="ef-row" style="margin-bottom:12px;">
+            <input class="inp inp-sm" [placeholder]="t('reference.field.sizeName')" [(ngModel)]="editSizeSet.name" style="flex:1;"/>
+            <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editSizeSet.sort_order"/>
+          </div>
+
+          <!-- Size Conversion Chart -->
+          <label class="lbl">{{ t('reference.field.sizeChart') }}</label>
+          <div class="chart-editor">
+            <div class="chart-head">
+              <span class="chart-col-label">{{ t('reference.field.sizeChart.uk') }}</span>
+              <span class="chart-col-label">{{ t('reference.field.sizeChart.eu') }}</span>
+              <span class="chart-col-label">{{ t('reference.field.sizeChart.us') }}</span>
+              <span class="chart-col-label chart-col-del"></span>
+            </div>
+            @for (row of editSizeSet.size_chart; track row; let ri = $index) {
+              <div class="chart-row">
+                <input class="inp inp-xs mono" [(ngModel)]="row.uk" placeholder="UK"/>
+                <input class="inp inp-xs mono" [(ngModel)]="row.eu" placeholder="EU"/>
+                <input class="inp inp-xs mono" [(ngModel)]="row.us" placeholder="US"/>
+                <button class="chart-del-btn" (click)="removeChartRow(ri)" title="Remove row">
+                  <ap-icon name="trash" [size]="12"/>
+                </button>
+              </div>
+            }
+            <button class="btn btn-sm btn-outline chart-add-btn" (click)="addChartRow()">
+              <ap-icon name="plus" [size]="12"/> {{ t('reference.field.sizeChart.addRow') }}
+            </button>
+          </div>
+
+          <!-- Tip -->
+          <div style="margin-top:10px;">
+            <label class="lbl">{{ t('reference.field.sizeChart.tip') }}</label>
+            <input class="inp inp-sm" [placeholder]="t('reference.field.sizeChart.tipPlaceholder')" [(ngModel)]="editSizeSet.tip" style="width:100%;"/>
+          </div>
+
+          <!-- Fallback sizes (hidden if chart is populated) -->
+          @if (editSizeSet.size_chart.length === 0) {
+            <div style="margin-top:10px;">
+              <label class="lbl">{{ t('reference.field.sizes') }}</label>
+              <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
+              <div class="size-preview">
+                @for (sz of editSizeSet.sizes; track sz; let si = $index) {
+                  <span class="size-chip size-chip--reorder">
+                    {{ sz }}
+                    <button class="chip-btn" (click)="moveSizeChip(si, -1)" [disabled]="si === 0">‹</button>
+                    <button class="chip-btn" (click)="moveSizeChip(si, 1)" [disabled]="si === editSizeSet.sizes.length - 1">›</button>
+                    <button class="chip-btn chip-btn--rm" (click)="removeSizeChip(si)">×</button>
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="edit-actions" style="margin-top:14px;">
+            <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveSizeSet($safeNavigationMigration(s?.id))">
+              @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
+            </button>
+            <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
+          </div>
         </div>
       </ng-template>
 
