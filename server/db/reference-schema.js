@@ -135,44 +135,48 @@ async function ensureUpdatedAtTrigger(client, tableName) {
   `);
 }
 
+/**
+ * Seed each reference table only the first time it is ever empty for this
+ * tenant — not "whenever a specific default name is missing". The latter
+ * silently resurrected any default color/material/size set an admin had
+ * deliberately deleted, because this runs on every server boot (a deploy
+ * restart included) and treated "row absent" as "never seeded" forever.
+ */
 async function seedDefaults(client, tenantId) {
-  for (const [nameEn, nameAr, hex, sortOrder] of DEFAULT_COLORS) {
-    await client.query(
-      `
-        INSERT INTO ref_colors (tenant_id, name_en, name_ar, hex, sort_order)
-        SELECT $1, $2, $3, $4, $5
-        WHERE NOT EXISTS (
-          SELECT 1 FROM ref_colors WHERE tenant_id = $1 AND lower(name_en) = lower($2)
-        )
-      `,
-      [tenantId, nameEn, nameAr, hex, sortOrder],
-    );
+  const [{ count: colorCount }] = (await client.query(
+    'SELECT count(*)::int FROM ref_colors WHERE tenant_id = $1', [tenantId],
+  )).rows;
+  if (colorCount === 0) {
+    for (const [nameEn, nameAr, hex, sortOrder] of DEFAULT_COLORS) {
+      await client.query(
+        `INSERT INTO ref_colors (tenant_id, name_en, name_ar, hex, sort_order) VALUES ($1,$2,$3,$4,$5)`,
+        [tenantId, nameEn, nameAr, hex, sortOrder],
+      );
+    }
   }
 
-  for (const [nameEn, nameAr, sortOrder] of DEFAULT_MATERIALS) {
-    await client.query(
-      `
-        INSERT INTO ref_materials (tenant_id, name_en, name_ar, sort_order)
-        SELECT $1, $2, $3, $4
-        WHERE NOT EXISTS (
-          SELECT 1 FROM ref_materials WHERE tenant_id = $1 AND lower(name_en) = lower($2)
-        )
-      `,
-      [tenantId, nameEn, nameAr, sortOrder],
-    );
+  const [{ count: materialCount }] = (await client.query(
+    'SELECT count(*)::int FROM ref_materials WHERE tenant_id = $1', [tenantId],
+  )).rows;
+  if (materialCount === 0) {
+    for (const [nameEn, nameAr, sortOrder] of DEFAULT_MATERIALS) {
+      await client.query(
+        `INSERT INTO ref_materials (tenant_id, name_en, name_ar, sort_order) VALUES ($1,$2,$3,$4)`,
+        [tenantId, nameEn, nameAr, sortOrder],
+      );
+    }
   }
 
-  for (const [name, sizes, sizeChart, tip, sortOrder] of DEFAULT_SIZE_SETS) {
-    await client.query(
-      `
-        INSERT INTO ref_size_sets (tenant_id, name, sizes, size_chart, tip, sort_order)
-        SELECT $1, $2, $3::jsonb, $4::jsonb, $5, $6
-        WHERE NOT EXISTS (
-          SELECT 1 FROM ref_size_sets WHERE tenant_id = $1 AND lower(name) = lower($2)
-        )
-      `,
-      [tenantId, name, JSON.stringify(sizes), JSON.stringify(sizeChart ?? []), tip ?? null, sortOrder],
-    );
+  const [{ count: sizeSetCount }] = (await client.query(
+    'SELECT count(*)::int FROM ref_size_sets WHERE tenant_id = $1', [tenantId],
+  )).rows;
+  if (sizeSetCount === 0) {
+    for (const [name, sizes, sizeChart, tip, sortOrder] of DEFAULT_SIZE_SETS) {
+      await client.query(
+        `INSERT INTO ref_size_sets (tenant_id, name, sizes, size_chart, tip, sort_order) VALUES ($1,$2,$3::jsonb,$4::jsonb,$5,$6)`,
+        [tenantId, name, JSON.stringify(sizes), JSON.stringify(sizeChart ?? []), tip ?? null, sortOrder],
+      );
+    }
   }
 }
 
