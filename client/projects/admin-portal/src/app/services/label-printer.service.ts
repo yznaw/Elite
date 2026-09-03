@@ -95,6 +95,7 @@ export class LabelPrinterService {
   .label{
     width:100%; padding:3mm 2mm; display:flex; flex-direction:column;
     align-items:center; justify-content:center; text-align:center; gap:2px;
+    break-inside:avoid; page-break-inside:avoid;
   }
   .cut-line{border-top:1px dashed #999; margin:0 2mm;}
   .label-brand{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#666;}
@@ -111,12 +112,13 @@ export class LabelPrinterService {
   .label-price-ar{direction:rtl;font-family:'Segoe UI','Tahoma','Arial Unicode MS',sans-serif;font-size:11px;font-weight:700;}
   .feed-tail{height:12mm;}
   @media print{
-    /* Fixed 80mm width, auto height — without this, the browser falls
-       back to the printer driver's own reported page size, which for a
-       continuous-roll receipt printer is an enormous fixed virtual length
-       (e.g. 3276mm). That mismatch is what fed through a long blank strip
-       last time: the labels rendered at the top of a page the printer
-       thought was several metres long. */
+    /* Fixed 80mm width. "auto" height alone isn't reliable across printer
+       drivers: it once fed through a driver-reported page several metres
+       long (a blank strip), and on other drivers it under-measures
+       instead, silently pushing the last row (the price line) past the
+       computed page boundary so it never physically prints. This is the
+       fallback; printLabels() below measures the real rendered content
+       and appends a <style> overriding it with a concrete mm value. */
     @page{size:80mm auto; margin:0;}
     body{background:#fff;padding:0;}
     .toolbar{display:none;}
@@ -131,6 +133,19 @@ export class LabelPrinterService {
 
     win.document.write(html);
     win.document.close();
+
+    // Override the "auto" fallback with the sheet's real rendered height,
+    // converted from px to mm (96 CSS px per inch, 25.4mm per inch). A few
+    // mm of buffer absorbs sub-pixel rounding differences between the
+    // on-screen layout pass and the print rasterizer, so the price row
+    // (always the last thing in a label) doesn't land just past the edge.
+    const sheet = win.document.querySelector('.sheet') as HTMLElement | null;
+    if (sheet) {
+      const heightMm = (sheet.getBoundingClientRect().height / 96) * 25.4 + 4;
+      const pageStyle = win.document.createElement('style');
+      pageStyle.textContent = `@media print{@page{size:80mm ${heightMm.toFixed(1)}mm; margin:0;}}`;
+      win.document.head.appendChild(pageStyle);
+    }
   }
 
   private labelCard(l: VariantLabelData, isLast: boolean): string {
