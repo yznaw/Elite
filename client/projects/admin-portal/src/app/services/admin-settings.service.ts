@@ -74,6 +74,22 @@ export class AdminSettingsService {
     return firstValueFrom(this.api.post<{ registerId: string; status: string }>(`/admin/pos-security/registers/${registerId}/revoke`, {}));
   }
 
+  createReplacementToken(registerId: string): Promise<{ token: string; displayName: string; expiresAt: string; registerId: string }> {
+    return firstValueFrom(this.api.post<{ token: string; displayName: string; expiresAt: string; registerId: string }>(
+      `/admin/pos-security/registers/${registerId}/replacement-token`, {},
+    ));
+  }
+
+  listActiveSessions(): Promise<PosActiveSession[]> {
+    return firstValueFrom(this.api.get<PosActiveSession[]>('/admin/pos-security/sessions'));
+  }
+
+  revokeSession(sessionId: string): Promise<{ sessionId: string; revoked: boolean }> {
+    return firstValueFrom(this.api.post<{ sessionId: string; revoked: boolean }>(
+      `/admin/pos-security/sessions/${encodeURIComponent(sessionId)}/revoke`, {},
+    ));
+  }
+
   /** `branchId: null` unassigns the register — it falls back to the tenant's default branch. */
   setRegisterBranch(registerId: string, branchId: string | null): Promise<{ registerId: string; branchId: string | null }> {
     return firstValueFrom(this.api.put<{ registerId: string; branchId: string | null }>(`/admin/pos-security/registers/${registerId}/branch`, { branchId }));
@@ -138,6 +154,26 @@ export interface PosRegisterRow {
   /** null = not explicitly assigned; the register still prints the tenant's default branch. */
   branchId: string | null;
   branchName: string | null;
+  deviceLeaseClaimedAt: string | null;
+  deviceLeaseClaimedBy: string | null;
+  activeShiftId: string | null;
+  activeShiftState: 'open' | 'closing' | null;
+  activeShiftCashier: string | null;
+  pendingCount: number;
+  rejectedCount: number;
+}
+
+export interface PosActiveSession {
+  sessionId: string;
+  userId: string;
+  userName: string;
+  role: string;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  expiresAt: string;
+  ip: string | null;
+  userAgent: string | null;
+  registerId: string | null;
 }
 
 /** A physical shop location: its own printable receipt identity. */

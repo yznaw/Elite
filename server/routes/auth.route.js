@@ -5,6 +5,7 @@ const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, ok, validationError } = require('./lib');
 const { authAttemptLimiter } = require('../middleware/rate-limit');
+const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
 
@@ -70,6 +71,12 @@ router.post(
 
       const session = req.session;
       session.user = publicUser(user, tenant.slug);
+      session.sessionMeta = {
+        createdAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
+        ip: req.ip || null,
+        userAgent: req.headers['user-agent'] || null,
+      };
       session.save((err) => {
         if (err) {
           return res.status(500).json({ success: false, message: 'Failed to start session.' });
@@ -84,11 +91,9 @@ router.post(
 
 router.get(
   '/me',
+  requireAuth(),
   asyncHandler(async (req, res) => {
-    if (!req.session || !req.session.user) {
-      return res.status(401).json({ success: false, message: 'Not authenticated.' });
-    }
-    ok(res, req.session.user);
+    ok(res, req.user);
   }),
 );
 

@@ -99,6 +99,7 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
     });
     assert.ok(register.registerCredential);
     const block = await api('/pos/registers/receipt-number-blocks', { method: 'POST', body: '{}' });
+    assert.equal(block.registerId, register.registerId);
     const shift = await api('/pos/shifts/open', { method: 'POST', body: JSON.stringify({ openingFloatCents: 5000 }) });
     const currentRegister = await api('/pos/registers/current');
     assert.equal(currentRegister.shift.id, shift.shiftId);
@@ -387,11 +388,17 @@ test('authenticated checkout, idempotency, parked cart, void, refund, offline co
     assert.equal(zReport.varianceCents, 0);
     assert.equal(zReport.cashInCents, 500);
     assert.equal(zReport.cashOutCents, 300);
+    assert.equal(zReport.registerName, `E2E Register ${runId}`);
+    assert.equal(zReport.cashierName, user.name);
 
     const zHistory = await api('/pos/shifts/z-reports');
-    assert.ok(zHistory.some((r) => r.zReportId === zReport.zReportId));
+    const historyReport = zHistory.find((r) => r.zReportId === zReport.zReportId);
+    assert.equal(historyReport.registerName, zReport.registerName);
+    assert.equal(historyReport.cashierName, zReport.cashierName);
     const zDetail = await api(`/pos/shifts/z-reports/${zReport.zReportId}`);
     assert.equal(zDetail.zReportId, zReport.zReportId);
+    assert.equal(zDetail.registerName, zReport.registerName);
+    assert.equal(zDetail.cashierName, zReport.cashierName);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

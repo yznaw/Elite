@@ -70,6 +70,17 @@ test('customer identity is shared between POS and website', { timeout: 60000 }, 
     });
     tenantId = user.tenantId;
 
+    // Customer work is a register-bound POS operation. Pair this test session
+    // exactly as a production till would be paired before using that API.
+    const enrollment = await api('/pos/registers/enrollment-tokens', {
+      method: 'POST',
+      body: JSON.stringify({ displayName: `Customer Test Register ${runId}` }),
+    });
+    await api('/pos/registers/enroll', {
+      method: 'POST',
+      body: JSON.stringify({ enrollmentToken: enrollment.token }),
+    });
+
     const phone = `+974 5${runId.slice(-7).replace(/\D/g, '').padEnd(7, '0')}`;
     const digits = normalizePhone(phone);
 

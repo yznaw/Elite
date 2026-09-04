@@ -212,6 +212,8 @@ export interface PosZReport {
   zReportId: string;
   shiftId: string;
   registerId: string;
+  registerName: string | null;
+  cashierName: string | null;
   openingFloatCents: number;
   grossSalesCents: number;
   cashSalesCents: number;
@@ -319,8 +321,8 @@ export class PosService {
     return firstValueFrom(this.api.post<PosRegisterIdentity>('/pos/registers/enroll', { enrollmentToken }));
   }
 
-  checkIn(identity: PosRegisterIdentity): Promise<void> {
-    return firstValueFrom(this.api.post('/pos/registers/check-in', identity)).then(() => undefined);
+  checkIn(identity: PosRegisterIdentity): Promise<PosRegisterIdentity> {
+    return firstValueFrom(this.api.post<PosRegisterIdentity>('/pos/registers/check-in', identity));
   }
 
   currentRegister(): Promise<PosCurrentRegister> {
@@ -488,8 +490,8 @@ export class PosService {
     // without a second manager's PIN when the shop allows that.
     managerOverrideId?: string;
     managerOverrideToken?: string;
-  }): Promise<PosShiftSummary & { zReportId: string; varianceCents: number }> {
-    return firstValueFrom(this.api.post('/pos/shifts/z-report', input));
+  }): Promise<PosZReport> {
+    return firstValueFrom(this.api.post<PosZReport>('/pos/shifts/z-report', input));
   }
 
   recordCashMovement(input: {

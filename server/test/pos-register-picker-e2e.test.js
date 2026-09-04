@@ -72,10 +72,11 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
     tenantId = ownerUser.tenantId;
 
     const cashierPassword = 'pos-pick-cashier-password';
-    await db.query(
+    const cashierUser = await db.query(
       `INSERT INTO admin_users
         (tenant_id, email, password_hash, full_name, initials, role, status)
-       VALUES ($1,$2,$3,$4,'PC','cashier','active')`,
+       VALUES ($1,$2,$3,$4,'PC','cashier','active')
+       RETURNING id`,
       [ownerUser.tenantId, `pos-pick-cashier-${runId}@elite.local`, await bcrypt.hash(cashierPassword, 12), 'Picker Cashier'],
     );
 
@@ -113,10 +114,17 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
       (error) => error.status === 403 && error.body.code === 'INSUFFICIENT_PERMISSIONS',
     );
 
-    // This is the wiped-IndexedDB case: the cashier picks the same till and
-    // gets a working credential, without an owner walking over with a token.
+    // A different browser taking an already-paired till is explicit, even
+    // before a shift opens. With no manager PIN configured, confirmation is
+    // sufficient; the new lease invalidates the old browser immediately.
+    await assert.rejects(
+      () => cashier('/pos/registers/claim', {
+        method: 'POST', body: JSON.stringify({ registerId: created.registerId }),
+      }),
+      (error) => error.status === 409 && error.body.code === 'REGISTER_TAKEOVER_CONFIRM',
+    );
     const reclaimed = await cashier('/pos/registers/claim', {
-      method: 'POST', body: JSON.stringify({ registerId: created.registerId }),
+      method: 'POST', body: JSON.stringify({ registerId: created.registerId, confirmTakeover: true }),
     });
     assert.equal(reclaimed.registerId, created.registerId);
     assert.notEqual(reclaimed.registerCredential, created.registerCredential);
@@ -124,6 +132,10 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
       method: 'POST',
       body: JSON.stringify({ registerId: reclaimed.registerId, registerCredential: reclaimed.registerCredential }),
     });
+    await assert.rejects(
+      () => owner('/pos/registers/current'),
+      (error) => error.status === 409 && error.body.code === 'REGISTER_LEASE_INVALID',
+    );
 
     // One register stays one terminal: the superseded credential is dead, so
     // the machine that held it is sent back to the picker rather than quietly
@@ -143,7 +155,34 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
 
     // An open shift is surfaced in the list so the next person sees it before
     // taking the till over.
-    await cashier('/pos/shifts/open', { method: 'POST', body: JSON.stringify({ openingFloatCents: 2500 }) });
+    const openedShift = await cashier('/pos/shifts/open', { method: 'POST', body: JSON.stringify({ openingFloatCents: 2500 }) });
+    await assert.rejects(
+      () => owner(`/admin/settings/team/${cashierUser.rows[0].id}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'disabled' }),
+      }),
+      (error) => error.status === 409 && error.body.code === 'USER_HAS_ACTIVE_SHIFT',
+    );
+    await assert.rejects(
+      () => owner('/pos/sync-state', {
+        method: 'PUT',
+        body: JSON.stringify({ shiftId: openedShift.shiftId, pendingCount: 0, rejectedCount: 0 }),
+      }),
+      (error) => error.status === 409 && error.body.code === 'REGISTER_LEASE_INVALID',
+    );
+
+    // Two people sharing the same cashier login are still two physical
+    // devices. The matching user id does not bypass takeover confirmation.
+    const cashierClone = agent();
+    await cashierClone('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: `pos-pick-cashier-${runId}@elite.local`, password: cashierPassword }),
+    });
+    await assert.rejects(
+      () => cashierClone('/pos/registers/claim', {
+        method: 'POST', body: JSON.stringify({ registerId: created.registerId }),
+      }),
+      (error) => error.status === 409 && error.body.code === 'REGISTER_TAKEOVER_CONFIRM',
+    );
     const withShift = await cashier('/pos/registers');
     const busy = withShift.registers.find((item) => item.registerId === created.registerId);
     assert.ok(busy.openShiftId);
@@ -177,6 +216,10 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
     // out of their picker entirely.
     const scopedList = await cashier('/pos/registers');
     assert.equal(scopedList.registers.some((item) => item.registerId === created.registerId), false);
+    await assert.rejects(
+      () => cashier('/pos/registers/current'),
+      (error) => error.status === 403 && error.body.code === 'REGISTER_OUT_OF_BRANCH',
+    );
 
     // Hiding it is not the rule — claiming it by id is refused too, since
     // registerId is just a body field the client controls.
@@ -233,9 +276,16 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
       `UPDATE admin_users SET pos_pin_hash = $1 WHERE tenant_id = $2 AND role = 'owner'`,
       [await bcrypt.hash('4821', 12), tenantId],
     );
-    // The cashier takes their own till back (their shift, no friction), then
-    // the owner has to clear the PIN to take it again.
-    await cashier('/pos/registers/claim', { method: 'POST', body: JSON.stringify({ registerId: created.registerId }) });
+    // The same account on a different physical browser is still a takeover;
+    // sharing a login must not bypass the device lease.
+    await assert.rejects(
+      () => cashier('/pos/registers/claim', { method: 'POST', body: JSON.stringify({ registerId: created.registerId }) }),
+      (error) => error.status === 409 && error.body.code === 'REGISTER_TAKEOVER_CONFIRM',
+    );
+    await cashier('/pos/registers/claim', {
+      method: 'POST',
+      body: JSON.stringify({ registerId: created.registerId, confirmTakeover: true, managerPin: '4821' }),
+    });
     await assert.rejects(
       () => owner('/pos/registers/claim', {
         method: 'POST', body: JSON.stringify({ registerId: created.registerId, confirmTakeover: true }),
@@ -276,7 +326,17 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
       (error) => error.status === 428 && error.body.code === 'REGISTER_REQUIRED',
     );
 
-    // A revoked register drops out of the picker and cannot be claimed.
+    // Revocation cannot strand money state. Settle the fixture's shift first,
+    // then the retired register drops out of the picker and cannot be claimed.
+    await assert.rejects(
+      () => owner(`/admin/pos-security/registers/${created.registerId}/revoke`, { method: 'POST', body: '{}' }),
+      (error) => error.status === 409 && error.body.code === 'REGISTER_HAS_ACTIVE_SHIFT',
+    );
+    await db.query(
+      `UPDATE pos_shifts SET state = 'closed', closed_at = now()
+        WHERE tenant_id = $1 AND register_id = $2 AND state IN ('open', 'closing')`,
+      [tenantId, created.registerId],
+    );
     await owner(`/admin/pos-security/registers/${created.registerId}/revoke`, { method: 'POST', body: '{}' });
     const afterRevoke = await cashier('/pos/registers');
     assert.equal(afterRevoke.registers.some((item) => item.registerId === created.registerId), false);
@@ -284,6 +344,21 @@ test('register picker: list, claim, credential rotation, and role limits', { tim
       () => cashier('/pos/registers/claim', { method: 'POST', body: JSON.stringify({ registerId: created.registerId }) }),
       (error) => error.status === 403 && error.body.code === 'REGISTER_DISABLED',
     );
+
+    // Replacement preserves the logical register id/name and its audit
+    // history. It does not create a duplicate till just because the physical
+    // computer was retired.
+    const replacement = await owner(`/admin/pos-security/registers/${created.registerId}/replacement-token`, {
+      method: 'POST', body: '{}',
+    });
+    assert.ok(replacement.token);
+    const replaced = await owner('/pos/registers/enroll', {
+      method: 'POST', body: JSON.stringify({ enrollmentToken: replacement.token }),
+    });
+    assert.equal(replaced.registerId, created.registerId);
+    assert.equal(replaced.displayName, created.displayName);
+    const replacedCurrent = await owner('/pos/registers/current');
+    assert.equal(replacedCurrent.registerId, created.registerId);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

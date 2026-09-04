@@ -16,6 +16,15 @@ import { ClientLoggerService, ClientLogSeverity } from './client-logger.service'
  */
 const LOG_PREFIX = '[pos-hardware]';
 
+interface PosPrintJobOptions {
+  /** Reset inherited ESC/POS modes before this job. */
+  initializePrinter?: boolean;
+  /** Override QZ's default image command for this job only. */
+  imageEncoding?: 'esc_asterisk' | 'gs_l' | 'gs_v_0';
+  /** Ephemeral QZ job options; never written to the device's saved settings. */
+  qzConfig?: Record<string, unknown>;
+}
+
 function logStage(stage: string, detail?: Record<string, unknown>): void {
   console.log(`${LOG_PREFIX} ${stage}`, detail ?? '');
 }
@@ -375,13 +384,25 @@ export class PosHardwareService {
     });
     const profile = await this.getBusinessProfile();
     const rendered = await this.renderer.renderZReport(report as Parameters<PosReceiptRenderer['renderZReport']>[0], profile);
-    await this.printRendered('printZReport', rendered, false);
+    await this.printRendered('printZReport', rendered, false, {
+      initializePrinter: true,
+      // Raster mode is a better fit for this single tall bitmap than QZ's
+      // default banded ESC * encoding, and avoids driver page-band boundaries.
+      // This override applies only to Z reports.
+      imageEncoding: 'gs_v_0',
+      qzConfig: {
+        jobName: 'Elite POS Z Report',
+        margins: 0,
+        scaleContent: false,
+      },
+    });
   }
 
   private async printRendered(
     stage: string,
     rendered: { imageDataUrl: string; footerCommands: string },
     openDrawer: boolean,
+    jobOptions: PosPrintJobOptions = {},
   ): Promise<void> {
     if (!this.settings?.printerName) {
       const error = new Error('No receipt printer is configured.');
@@ -394,7 +415,15 @@ export class PosHardwareService {
     // which raw ESC/POS text mode cannot do — see pos-receipt-renderer.service.ts)
     // printed through QZ's escpos image path; the QR/cut footer is still sent
     // as raw ESC/POS commands since it's not text.
-    const data: Array<{ type: string; format: string; flavor?: string; data: string; options?: Record<string, unknown> } | string> = [
+    const imageOptions: Record<string, unknown> = {
+      language: 'escpos',
+      dotDensity: 'double',
+      quantization: 'luma',
+      ...(jobOptions.imageEncoding ? { imageEncoding: jobOptions.imageEncoding } : {}),
+    };
+    const data: Array<{ type: string; format: string; flavor?: string; data: string; options?: Record<string, unknown> } | string> = [];
+    if (jobOptions.initializePrinter) data.push('\x1b' + '@');
+    data.push(
       {
         type: 'raw',
         format: 'image',
@@ -418,14 +447,14 @@ export class PosHardwareService {
         //
         // "luma" thresholds on luminance, which is what black-on-white text
         // actually needs, and is supported.
-        options: { language: 'escpos', dotDensity: 'double', quantization: 'luma' },
+        options: imageOptions,
       },
       rendered.footerCommands,
-    ];
+    );
     if (openDrawer && this.settings.drawerPulse !== 'disabled') {
       data.push(this.renderer.drawerCommand(this.settings.drawerPulse));
     }
-    const config = qz.configs.create(this.settings.printerName);
+    const config = qz.configs.create(this.settings.printerName, jobOptions.qzConfig);
     try {
       await this.withTimeout(qz.print(config, data), this.PRINT_TIMEOUT_MS, 'Receipt printing');
       this.connected.set(true);

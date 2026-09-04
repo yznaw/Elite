@@ -74,17 +74,18 @@ function mockCloseShiftPool({ selfCloseEnabled, shiftCashierId }) {
     async query(text, params) {
       const sql = String(text).replace(/\s+/g, ' ').trim();
       statements.push(sql);
-      if (sql.startsWith('SELECT * FROM pos_z_reports')) return { rowCount: 0, rows: [] };
+      if (sql.startsWith('SELECT z.*, pr.display_name AS register_name')) return { rowCount: 0, rows: [] };
       if (sql.startsWith('SELECT * FROM pos_registers')) {
-        return { rowCount: 1, rows: [{ id: closeContext.registerId, status: 'active' }] };
+        return { rowCount: 1, rows: [{ id: closeContext.registerId, display_name: 'Main Till', status: 'active' }] };
       }
-      if (sql.startsWith('SELECT * FROM pos_shifts')) {
+      if (sql.startsWith('SELECT s.*, cashier.full_name AS cashier_name')) {
         return {
           rowCount: 1,
           rows: [{
             id: '11111111-1111-4111-8111-111111111111',
             register_id: closeContext.registerId,
             cashier_id: shiftCashierId,
+            cashier_name: 'Test Cashier',
             state: 'open',
           }],
         };
@@ -145,6 +146,8 @@ test('the cashier who opened the shift closes it without a manager override', as
       // No managerOverrideId / managerOverrideToken at all.
     });
     assert.equal(report.zReportId, 'z-1');
+    assert.equal(report.registerName, 'Main Till');
+    assert.equal(report.cashierName, 'Test Cashier');
     assert.ok(!statements.some((sql) => sql.startsWith('SELECT * FROM pos_manager_overrides')));
     // manager_id is the 4th column of the insert: the operator approved it.
     assert.equal(zReportParams[0][3], OWNER_ID);

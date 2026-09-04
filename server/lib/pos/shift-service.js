@@ -152,14 +152,23 @@ async function closeShift(context, body) {
 
   return inTransaction(async (client) => {
     const existing = await client.query(
-      'SELECT * FROM pos_z_reports WHERE tenant_id = $1 AND idempotency_key = $2',
+      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name
+       FROM pos_z_reports z
+       JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
+       JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
+       LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
+       WHERE z.tenant_id = $1 AND z.idempotency_key = $2`,
       [context.tenantId, idempotencyKey],
     );
     if (existing.rowCount) return mapZReport(existing.rows[0]);
 
     const register = await requireRegister(client, context, { lock: true });
     const shiftResult = await client.query(
-      `SELECT * FROM pos_shifts WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+      `SELECT s.*, cashier.full_name AS cashier_name
+       FROM pos_shifts s
+       LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = s.tenant_id
+       WHERE s.tenant_id = $1 AND s.id = $2
+       FOR UPDATE OF s`,
       [context.tenantId, shiftId],
     );
     const shift = shiftResult.rows[0];
@@ -250,7 +259,11 @@ async function closeShift(context, body) {
        VALUES ($1, $2, 'shift.closed', $3::jsonb)`,
       [context.tenantId, register.id, JSON.stringify({ shiftId: shift.id, zReportId: report.rows[0].id })],
     );
-    return mapZReport(report.rows[0]);
+    return mapZReport({
+      ...report.rows[0],
+      register_name: register.display_name,
+      cashier_name: shift.cashier_name,
+    });
   });
 }
 
@@ -259,6 +272,8 @@ function mapZReport(row) {
     zReportId: row.id,
     shiftId: row.shift_id,
     registerId: row.register_id,
+    registerName: row.register_name || null,
+    cashierName: row.cashier_name || null,
     openingFloatCents: Number(row.opening_float_cents),
     grossSalesCents: Number(row.gross_sales_cents),
     cashSalesCents: Number(row.cash_sales_cents),
@@ -283,9 +298,13 @@ async function listZReports(context, { limit = 30 } = {}) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context);
     const result = await client.query(
-      `SELECT * FROM pos_z_reports
-       WHERE tenant_id = $1 AND register_id = $2
-       ORDER BY created_at DESC
+      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name
+       FROM pos_z_reports z
+       JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
+       JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
+       LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
+       WHERE z.tenant_id = $1 AND z.register_id = $2
+       ORDER BY z.created_at DESC
        LIMIT $3`,
       [context.tenantId, register.id, boundedLimit],
     );
@@ -298,7 +317,12 @@ async function getZReport(context, zReportId) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context);
     const result = await client.query(
-      `SELECT * FROM pos_z_reports WHERE tenant_id = $1 AND id = $2`,
+      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name
+       FROM pos_z_reports z
+       JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
+       JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
+       LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
+       WHERE z.tenant_id = $1 AND z.id = $2`,
       [context.tenantId, zReportId],
     );
     const row = result.rows[0];

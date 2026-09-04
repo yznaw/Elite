@@ -252,6 +252,14 @@ test('observability: correlation id, error grouping, client logs, health, respon
 
     // ── Phase A: audit rows carry the same correlation id ────────────────────
     // setManagerPin writes an audit event through the POS context builder.
+    // Unlike the intentional REGISTER_REQUIRED probes above, this is a real
+    // POS write and must run from an enrolled register.
+    const enrollment = await api('/pos/registers/enrollment-tokens', {
+      method: 'POST', body: JSON.stringify({ displayName: `Observability Register ${runId}` }),
+    });
+    await api('/pos/registers/enroll', {
+      method: 'POST', body: JSON.stringify({ enrollmentToken: enrollment.token }),
+    });
     const pinResponse = await raw('/pos/manager-pin', { method: 'PUT', body: JSON.stringify({ pin: '4821' }) });
     assert.equal(pinResponse.response.ok, true);
     const auditRow = await db.query(

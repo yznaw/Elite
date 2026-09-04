@@ -15,7 +15,7 @@ const {
 } = require('../lib/pos/register-service');
 const {
   clearDeviceRegisterCookie,
-  readDeviceRegisterId,
+  readDeviceBinding,
   setDeviceRegisterCookie,
 } = require('../lib/pos/device-cookie');
 const { setManagerPin, verifyManagerPin } = require('../lib/pos/manager-service');
@@ -29,7 +29,7 @@ const { listConflicts, resolveConflict } = require('../lib/pos/conflict-service'
 const { getQzCertificate, signQzRequest } = require('../lib/pos/qz-service');
 const { getEffectiveBranchProfile } = require('../lib/pos/branch-service');
 const { resolveCustomer } = require('../lib/customer-identity');
-const { audit, inTransaction } = require('../lib/pos/db');
+const { audit, inTransaction, requireRegister } = require('../lib/pos/db');
 
 const router = Router();
 // Cashier is POS-only and lowest privilege; manager-scoped actions (e.g.
@@ -59,7 +59,24 @@ async function pruneEventBuffer() {
 router.use(requireAuth({ roles: POS_ROLES }));
 
 function context(req) {
-  return {
+  if (req.posContext) return req.posContext;
+  const cookieBinding = readDeviceBinding(req);
+  const sessionBinding = req.session.posRegisterId
+    ? { registerId: req.session.posRegisterId, leaseId: req.session.posRegisterLeaseId || null }
+    : null;
+  // The cookie represents the physical browser and is shared by its login
+  // sessions. Prefer it when present so a re-pair in one tab updates the other
+  // tabs on that same terminal, while a different machine keeps its stale
+  // lease and is rejected.
+  const binding = cookieBinding || sessionBinding;
+  if (cookieBinding && (
+    req.session.posRegisterId !== cookieBinding.registerId
+    || req.session.posRegisterLeaseId !== cookieBinding.leaseId
+  )) {
+    req.session.posRegisterId = cookieBinding.registerId;
+    req.session.posRegisterLeaseId = cookieBinding.leaseId;
+  }
+  req.posContext = {
     tenantId: req.user.tenantId,
     userId: req.user.id,
     role: req.user.role,
@@ -68,7 +85,9 @@ function context(req) {
     // signing in on the same counter machine all landed on the "Which till is
     // this?" picker for a terminal that had been enrolled for weeks — see
     // lib/pos/device-cookie.js.
-    registerId: req.session.posRegisterId || readDeviceRegisterId(req) || null,
+    registerId: binding?.registerId || null,
+    registerLeaseId: binding?.leaseId || null,
+    enforceBranchScope: true,
     ip: req.ip,
     userAgent: req.headers['user-agent'] || null,
     // Ties every audit_events row this request writes to the same id carried
@@ -76,6 +95,7 @@ function context(req) {
     // to the cashier (docs/24, Phase A).
     requestId: req.requestId || null,
   };
+  return req.posContext;
 }
 
 function saveSession(req) {
@@ -87,15 +107,16 @@ router.post('/registers/enrollment-tokens', posPinLimiter, asyncHandler(async (r
 }));
 
 /** Bind this browser to a till: session (this login) + cookie (this machine). */
-async function bindRegister(req, res, registerId) {
+async function bindRegister(req, res, registerId, leaseId) {
   req.session.posRegisterId = registerId;
+  req.session.posRegisterLeaseId = leaseId;
   await saveSession(req);
-  setDeviceRegisterCookie(req, res, registerId);
+  setDeviceRegisterCookie(req, res, registerId, leaseId);
 }
 
 router.post('/registers/enroll', posPinLimiter, asyncHandler(async (req, res) => {
   const register = await enrollRegister(context(req), req.body);
-  await bindRegister(req, res, register.registerId);
+  await bindRegister(req, res, register.registerId, register.deviceLeaseId);
   created(res, register);
 }));
 
@@ -106,13 +127,13 @@ router.get('/registers', asyncHandler(async (req, res) => {
 // The everyday path onto a counter: pick your till, no token to mint or paste.
 router.post('/registers/claim', posPinLimiter, asyncHandler(async (req, res) => {
   const register = await claimRegister(context(req), req.body);
-  await bindRegister(req, res, register.registerId);
+  await bindRegister(req, res, register.registerId, register.deviceLeaseId);
   created(res, register);
 }));
 
 router.post('/registers/check-in', asyncHandler(async (req, res) => {
   const register = await checkInRegister(context(req), req.body);
-  await bindRegister(req, res, register.registerId);
+  await bindRegister(req, res, register.registerId, register.deviceLeaseId);
   ok(res, register);
 }));
 
@@ -121,8 +142,9 @@ router.post('/registers/check-in', asyncHandler(async (req, res) => {
 // deleted, re-created, or claimed by someone else. Deliberately never fails:
 // "let me start over" has to work even when nothing else on this till does.
 router.post('/registers/release', asyncHandler(async (req, res) => {
-  const releasedRegisterId = req.session.posRegisterId || readDeviceRegisterId(req) || null;
+  const releasedRegisterId = req.session.posRegisterId || readDeviceBinding(req)?.registerId || null;
   req.session.posRegisterId = null;
+  req.session.posRegisterLeaseId = null;
   await saveSession(req).catch(() => undefined);
   clearDeviceRegisterCookie(req, res);
   ok(res, { released: true, registerId: releasedRegisterId });
@@ -135,6 +157,19 @@ router.post('/registers/release', asyncHandler(async (req, res) => {
 // actually reachable).
 router.get('/health-check', asyncHandler(async (req, res) => {
   ok(res, { ok: true, serverTime: new Date().toISOString() });
+}));
+
+// Everything below this point is an operation by a physical till, not setup.
+// Validate the live device lease and the user's current branch centrally so a
+// new read/write endpoint cannot accidentally omit the security boundary.
+router.use(asyncHandler(async (req, _res, next) => {
+  const client = await db.pool.connect();
+  try {
+    await requireRegister(client, context(req));
+    next();
+  } finally {
+    client.release();
+  }
 }));
 
 router.get('/registers/current', asyncHandler(async (req, res) => {

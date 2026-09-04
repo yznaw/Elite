@@ -5,6 +5,7 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, validationError } = require('./lib');
 const { sendInvitationEmail } = require('../lib/invitation-email');
 const { requireAuth } = require('../middleware/require-auth');
+const { PosError } = require('../lib/pos/errors');
 
 const router = Router();
 
@@ -122,7 +123,10 @@ router.post('/team', ownerOrAdmin, asyncHandler(async (req, res) => {
         INSERT INTO admin_users (tenant_id, email, full_name, initials, role, status)
         VALUES ($1, $2, $3, $4, $5, 'active')
         ON CONFLICT (tenant_id, email) DO UPDATE
-        SET full_name = EXCLUDED.full_name, initials = EXCLUDED.initials, role = EXCLUDED.role
+        SET full_name = EXCLUDED.full_name,
+            initials = EXCLUDED.initials,
+            role = EXCLUDED.role,
+            status = 'active'
         RETURNING id, full_name AS name, email, role, initials, created_at AS joined, status
       `,
       [tenant.id, req.body.email, req.body.name, req.body.initials || initials(req.body.name), role],
@@ -149,6 +153,25 @@ router.patch('/team/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    const removesPosAccess = req.body.status === 'disabled'
+      || req.body.status === 'removed'
+      || role === 'viewer';
+    if (removesPosAccess || branchProvided) {
+      const activeShift = await client.query(
+        `SELECT id, state FROM pos_shifts
+          WHERE tenant_id = $1 AND cashier_id = $2 AND state IN ('open', 'closing')
+          LIMIT 1`,
+        [tenant.id, req.params.id],
+      );
+      if (activeShift.rowCount) {
+        throw new PosError(
+          409,
+          'USER_HAS_ACTIVE_SHIFT',
+          'Close and reconcile this user\'s active POS shift before disabling, removing, moving branches, or removing POS access.',
+          { shiftId: activeShift.rows[0].id, shiftState: activeShift.rows[0].state },
+        );
+      }
+    }
     if (branchProvided && posBranchId) {
       const branch = await client.query(
         'SELECT 1 FROM pos_branches WHERE tenant_id = $1 AND id = $2',
@@ -172,6 +195,18 @@ router.patch('/team/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
     );
     if (result.rowCount === 0) return notFound(res, 'Team member not found.');
     const row = result.rows[0];
+    if (req.body.status === 'disabled' || req.body.status === 'removed') {
+      // Defense in depth with requireAuth's live status check: remove every
+      // existing browser session now so the account disappears immediately,
+      // including from idle tabs that would otherwise wait for their next API
+      // request to discover the status change.
+      await client.query(
+        `DELETE FROM admin_sessions
+          WHERE sess::jsonb -> 'user' ->> 'id' = $1`,
+        [row.id],
+      );
+      if (row.id === req.user.id) req.session.destroy(() => undefined);
+    }
     if (row.posBranchId) {
       const branch = await client.query('SELECT name FROM pos_branches WHERE id = $1', [row.posBranchId]);
       row.posBranchName = branch.rows[0]?.name || null;

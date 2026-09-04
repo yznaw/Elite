@@ -28,16 +28,45 @@ function mapDatabaseError(error) {
 }
 
 async function requireRegister(client, context, { lock = false } = {}) {
+  if (!lock && context.validatedRegister) return context.validatedRegister;
   assertPos(context.registerId, 428, 'REGISTER_REQUIRED', 'This terminal must be enrolled and checked in.');
   const result = await client.query(
     `SELECT * FROM pos_registers
-     WHERE tenant_id = $1 AND id = $2
+      WHERE tenant_id = $1 AND id = $2
      ${lock ? 'FOR UPDATE' : ''}`,
     [context.tenantId, context.registerId],
   );
   const register = result.rows[0];
   assertPos(register, 404, 'REGISTER_NOT_FOUND', 'POS register not found.');
   assertPos(register.status === 'active', 403, 'REGISTER_DISABLED', 'This POS register is disabled or revoked.');
+  assertPos(
+    !register.device_lease_id || (context.registerLeaseId && register.device_lease_id === context.registerLeaseId),
+    409,
+    'REGISTER_LEASE_INVALID',
+    'This register was connected to another device. Reconnect this terminal before continuing.',
+  );
+  if (context.enforceBranchScope) {
+    const branch = await client.query(
+      `SELECT u.pos_branch_id AS user_branch_id,
+              COALESCE(
+                $3::uuid,
+                (SELECT b.id FROM pos_branches b WHERE b.tenant_id = $1 AND b.is_default = true),
+                (SELECT b.id FROM pos_branches b WHERE b.tenant_id = $1 ORDER BY b.created_at ASC LIMIT 1)
+              ) AS effective_branch_id
+         FROM admin_users u
+        WHERE u.tenant_id = $1 AND u.id = $2`,
+      [context.tenantId, context.userId, register.branch_id],
+    );
+    const scope = branch.rows[0];
+    assertPos(scope, 401, 'ACCOUNT_INACTIVE', 'The current POS user no longer exists.');
+    assertPos(
+      !scope.user_branch_id || scope.user_branch_id === scope.effective_branch_id,
+      403,
+      'REGISTER_OUT_OF_BRANCH',
+      'This till belongs to another branch. Pick one from your own branch, or ask an owner to move you.',
+    );
+  }
+  if (!lock) context.validatedRegister = register;
   return register;
 }
 

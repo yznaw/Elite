@@ -9,6 +9,7 @@ export interface PosRegisterIdentity {
 
 export interface PosReceiptBlock {
   blockId: string;
+  registerId: string;
   start: number;
   end: number;
   next: number;
@@ -24,6 +25,7 @@ export interface PosStoredShift {
 }
 
 export interface PosQueuedSale {
+  registerId: string;
   idempotencyKey: string;
   receiptNumber: number;
   clientCreatedAt: string;
@@ -120,6 +122,10 @@ export class PosLocalStore {
     return this.put('receipt-block', block);
   }
 
+  clearReceiptBlock(): Promise<void> {
+    return this.remove('receipt-block');
+  }
+
   getShift(): Promise<PosStoredShift | null> {
     return this.get<PosStoredShift>('shift');
   }
@@ -163,7 +169,7 @@ export class PosLocalStore {
       const blockRequest = settings.get('receipt-block');
       blockRequest.onsuccess = () => {
         const block = blockRequest.result as PosReceiptBlock | undefined;
-        if (!block || block.next !== sale.receiptNumber || block.next > block.end) {
+        if (!block || block.registerId !== sale.registerId || block.next !== sale.receiptNumber || block.next > block.end) {
           transaction.abort();
           reject(new Error('The reserved receipt number is no longer available.'));
           return;

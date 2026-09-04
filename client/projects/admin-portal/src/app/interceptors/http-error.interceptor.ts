@@ -30,6 +30,7 @@ import { ClientLoggerService } from '../services/client-logger.service';
  */
 let lastLoginRedirectAt = 0;
 const LOGIN_REDIRECT_COOLDOWN_MS = 10_000;
+const POS_REGISTER_REJECTED_EVENT = 'elite:pos-register-rejected';
 function recentlyRedirectedToLogin(): boolean {
   return Date.now() - lastLoginRedirectAt < LOGIN_REDIRECT_COOLDOWN_MS;
 }
@@ -88,6 +89,31 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           // means the client entry and the server entry share one id.
           requestId: err.error?.requestId ?? null,
         });
+      }
+
+      // A register lease can be replaced while this tab is already on the
+      // selling screen (for example, an owner deliberately moves the till to
+      // another tablet). Initialization handles this case, but an already-open
+      // tab also needs an immediate signal: stop accepting work and revalidate
+      // its local identity. Register setup calls are excluded because their
+      // component-level handlers already drive the picker and including them
+      // here would create a recovery loop.
+      const registerCode = err.error?.code;
+      if (
+        isPosRequest
+        && !isRegisterProbe
+        && !isRegisterBinding
+        && [
+          'REGISTER_CREDENTIAL_INVALID',
+          'REGISTER_LEASE_INVALID',
+          'REGISTER_NOT_FOUND',
+          'REGISTER_DISABLED',
+          'REGISTER_OUT_OF_BRANCH',
+        ].includes(registerCode)
+      ) {
+        window.dispatchEvent(new CustomEvent(POS_REGISTER_REJECTED_EVENT, {
+          detail: { code: registerCode, message: err.error?.message || '' },
+        }));
       }
 
       // status 0 covers network failures, CORS blocks, DNS errors, and timeouts

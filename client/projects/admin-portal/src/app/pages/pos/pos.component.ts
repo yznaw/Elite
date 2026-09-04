@@ -55,6 +55,7 @@ type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift
 
 const OFFLINE_CATALOG_WARN_AFTER_MS = 8 * 60 * 60 * 1000;
 const OFFLINE_CATALOG_BLOCK_AFTER_MS = 12 * 60 * 60 * 1000;
+const POS_REGISTER_REJECTED_EVENT = 'elite:pos-register-rejected';
 
 @Component({
     selector: 'ap-pos',
@@ -176,6 +177,7 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly cashMovements = signal<PosCashMovement[]>([]);
   readonly zReportHistory = signal<PosZReport[]>([]);
   readonly loadingZHistory = signal(false);
+  readonly printingZReportId = signal<string | null>(null);
   readonly posBuildRunning = signal<string | null>(null);
   readonly posBuildDeployed = signal<string | null>(null);
   readonly checkingPosUpdate = signal(false);
@@ -327,6 +329,7 @@ export class PosComponent implements OnInit, OnDestroy {
   private storageEstimateTimer: ReturnType<typeof setInterval> | null = null;
   private freshnessClockTimer: ReturnType<typeof setInterval> | null = null;
   private posBuildCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private registerRecoveryInProgress = false;
   private readonly onOnline = () => {
     this.online.set(true);
     void this.syncPendingSales();
@@ -339,12 +342,14 @@ export class PosComponent implements OnInit, OnDestroy {
     if (document.visibilityState === 'visible') void this.syncPendingSales();
   };
   private readonly onFocus = () => void this.syncPendingSales();
+  private readonly onRegisterRejected = () => void this.recoverRejectedRegister();
 
   async ngOnInit(): Promise<void> {
     window.addEventListener('online', this.onOnline);
     window.addEventListener('offline', this.onOffline);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     window.addEventListener('focus', this.onFocus);
+    window.addEventListener(POS_REGISTER_REJECTED_EVENT, this.onRegisterRejected);
     // Service worker is registered once at app bootstrap (main.ts), not here.
     await this.initialize();
     // Do not allow a waiting build to activate from the signals' initial zero
@@ -369,6 +374,7 @@ export class PosComponent implements OnInit, OnDestroy {
     window.removeEventListener('offline', this.onOffline);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     window.removeEventListener('focus', this.onFocus);
+    window.removeEventListener(POS_REGISTER_REJECTED_EVENT, this.onRegisterRejected);
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
     if (this.healthCheckTimer) clearTimeout(this.healthCheckTimer);
@@ -593,7 +599,8 @@ export class PosComponent implements OnInit, OnDestroy {
           return;
         }
         try {
-          await this.pos.checkIn(identity);
+          const refreshedIdentity = await this.pos.checkIn(identity);
+          await this.local.setRegister(refreshedIdentity);
         } catch (checkInError) {
           if (this.isNetworkError(checkInError)) {
             await this.resumeOffline(identity);
@@ -632,6 +639,30 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Revalidate a live POS immediately when the API says this browser no longer
+   * owns its register. This closes the short window where a stale tablet could
+   * keep showing an apparently usable selling screen after another device took
+   * over. `initialize()` preserves queued sales and the local shift; it only
+   * clears the rejected device identity when the server has disowned it.
+   */
+  private async recoverRejectedRegister(): Promise<void> {
+    if (this.registerRecoveryInProgress) return;
+    this.registerRecoveryInProgress = true;
+    this.eventSource?.close();
+    this.eventSource = null;
+    if (this.syncTimer) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = null;
+    }
+    this.phase.set('loading');
+    try {
+      await this.initialize();
+    } finally {
+      this.registerRecoveryInProgress = false;
+    }
+  }
+
+  /**
    * True only when the server has actively disowned this register, which is
    * the one case where re-enrolling is the real fix. A revoked or deleted
    * register, or a credential that no longer matches.
@@ -640,7 +671,8 @@ export class PosComponent implements OnInit, OnDestroy {
     const code = (error as { error?: { code?: string } })?.error?.code;
     return code === 'REGISTER_CREDENTIAL_INVALID'
       || code === 'REGISTER_NOT_FOUND'
-      || code === 'REGISTER_DISABLED';
+      || code === 'REGISTER_DISABLED'
+      || code === 'REGISTER_LEASE_INVALID';
   }
 
   /**
@@ -787,6 +819,7 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     this.busy.set(true);
     try {
+      if (!await this.registerSwitchIsSafe(registerId || null)) return;
       const identity = await this.pos.claimRegister(registerId ? { registerId } : { displayName });
       await this.finishRegisterSetup(identity);
     } catch (error) {
@@ -802,6 +835,39 @@ export class PosComponent implements OnInit, OnDestroy {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Never carry a shift, offline queue or receipt-number reservation from one
+      logical till to another. Same-register recovery remains safe. */
+  private async registerSwitchIsSafe(targetRegisterId: string | null): Promise<boolean> {
+    const current = await this.local.getRegister().catch(() => null);
+    const localShift = await this.local.getShift().catch(() => null);
+    const unresolved = (await this.local.listQueuedSales().catch(() => []))
+      .filter((sale) => !sale.synced);
+    const sourceRegisterIds = new Set([
+      current?.registerId,
+      localShift?.registerId,
+      ...unresolved.map((sale) => sale.registerId || localShift?.registerId || current?.registerId),
+    ].filter((value): value is string => Boolean(value)));
+    const carriesOperationalState = Boolean(localShift || unresolved.length);
+    const returningToSameRegister = Boolean(
+      targetRegisterId
+      && sourceRegisterIds.size === 1
+      && sourceRegisterIds.has(targetRegisterId),
+    );
+    if (carriesOperationalState && !returningToSameRegister) {
+      this.toast.warning(
+        'Cannot switch tills',
+        'Close the current shift and resolve all pending or rejected offline sales first.',
+      );
+      return false;
+    }
+    if (current && targetRegisterId && current.registerId === targetRegisterId) return true;
+    if (!carriesOperationalState) {
+      await this.local.clearReceiptBlock().catch(() => undefined);
+      await this.local.clearShift().catch(() => undefined);
+    }
+    return true;
   }
 
   private openTakeover(registerId: string, warning: string): void {
@@ -863,8 +929,20 @@ export class PosComponent implements OnInit, OnDestroy {
     if (this.resetting()) return;
     this.resetting.set(true);
     try {
+      const localShift = await this.local.getShift().catch(() => null);
+      const unresolved = (await this.local.listQueuedSales().catch(() => []))
+        .filter((sale) => !sale.synced).length;
+      if (localShift || unresolved > 0) {
+        this.toast.warning(
+          'Terminal reset blocked',
+          'Close the current shift and resolve all pending or rejected offline sales before switching tills.',
+        );
+        return;
+      }
       await this.pos.releaseRegister().catch(() => undefined);
       await this.local.clearRegister().catch(() => undefined);
+      await this.local.clearReceiptBlock().catch(() => undefined);
+      await this.local.clearShift().catch(() => undefined);
       this.register.set(null);
       this.shiftId.set(null);
       this.resumeError.set(null);
@@ -878,6 +956,11 @@ export class PosComponent implements OnInit, OnDestroy {
 
   /** Shared tail of every path that binds this browser to a till. */
   private async finishRegisterSetup(identity: { registerId: string; displayName: string; registerCredential: string }): Promise<void> {
+    const previous = await this.local.getRegister().catch(() => null);
+    if (previous && previous.registerId !== identity.registerId) {
+      await this.local.clearReceiptBlock();
+      await this.local.clearShift();
+    }
     await this.local.setRegister(identity);
     const current = await this.pos.currentRegister();
     this.toast.success('Register connected', identity.displayName);
@@ -1649,31 +1732,61 @@ export class PosComponent implements OnInit, OnDestroy {
       this.toast.warning('Resolve all pending and rejected offline sales before closing the shift.');
       return;
     }
+    let completedReport: PosZReport | null = null;
+    let recoveringPreviousShift = false;
     this.busy.set(true);
     try {
       await this.reportSyncState();
       const override = selfClose ? null : await this.pos.verifyManagerPin(this.managerPin, 'z-report');
-      await this.pos.closeShift({
+      completedReport = await this.pos.closeShift({
         shiftId: summary.shiftId,
         physicalCashCents,
         idempotencyKey: crypto.randomUUID(),
         ...(override ? { managerOverrideId: override.overrideId, managerOverrideToken: override.token } : {}),
       });
       this.dialog.set('none');
-      this.toast.success('Shift closed', 'Z report generated.');
       await this.local.clearShift();
       this.shiftId.set(null);
-      if (this.phase() === 'shift-recovery') {
+      recoveringPreviousShift = this.phase() === 'shift-recovery';
+      if (recoveringPreviousShift) {
         this.shiftRecovery.set(null);
         this.register.update((register) => register ? { ...register, shift: null } : register);
         this.phase.set('shift');
-        return;
       }
-      await this.router.navigate(['/dashboard']);
     } catch (error) {
       this.toast.error("Couldn't close shift", this.errorMessage(error));
     } finally {
       this.busy.set(false);
+    }
+
+    const report = completedReport;
+    if (!report) return;
+    // Leave the selling screen as soon as the committed shift is cleared. The
+    // print runs from a root-scoped service and can finish on the dashboard;
+    // keeping a closed till visible for up to the print timeout would invite
+    // the cashier to start another sale against a shift that no longer exists.
+    if (!recoveringPreviousShift) await this.router.navigate(['/dashboard']);
+    try {
+      await this.hardware.printZReport(report);
+      this.toast.success('Shift closed', 'Z report generated and printed.');
+    } catch (printError) {
+      // The financial close is already committed. A printer failure must never
+      // reopen it or present the whole close as failed; history remains the
+      // durable source for reprinting.
+      this.toast.warning(
+        'Shift closed, Z report not printed',
+        this.errorMessage(printError),
+        { label: 'Retry print', run: () => { void this.reprintZReport(report); } },
+      );
+      this.clientLogger.logError('pos-client', printError, {
+        code: 'PRINT_FAILED',
+        severity: 'warn',
+        context: {
+          receiptKind: 'z-report',
+          zReportId: report.zReportId,
+          printerName: this.hardware.printerName(),
+        },
+      });
     }
   }
 
@@ -1764,11 +1877,15 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   async reprintZReport(report: PosZReport): Promise<void> {
+    if (this.printingZReportId()) return;
+    this.printingZReportId.set(report.zReportId);
     try {
       await this.hardware.printZReport(report);
       this.toast.success('Z-report reprinted');
     } catch (error) {
       this.toast.warning("Couldn't print Z-report", this.errorMessage(error));
+    } finally {
+      this.printingZReportId.set(null);
     }
   }
 
@@ -2111,10 +2228,12 @@ export class PosComponent implements OnInit, OnDestroy {
 
   private async ensureReceiptBlock(): Promise<void> {
     const cached = await this.local.getReceiptBlock();
-    if (cached && cached.next <= cached.end) {
+    const registerId = this.register()?.registerId;
+    if (cached && registerId && cached.registerId === registerId && cached.next <= cached.end) {
       this.receiptBlock.set(cached);
       return;
     }
+    if (cached) await this.local.clearReceiptBlock();
     if (!this.online()) throw new Error('Offline checkout is blocked because this register has no reserved receipt numbers.');
     const allocated = await this.pos.allocateReceiptBlock();
     await this.local.setReceiptBlock(allocated);
@@ -2227,6 +2346,7 @@ export class PosComponent implements OnInit, OnDestroy {
     receiptData: unknown,
   ): Promise<PosSaleResult> {
     const queued: PosQueuedSale = {
+      registerId: this.register()?.registerId || '',
       idempotencyKey: payload.idempotencyKey,
       receiptNumber: payload.receiptNumber,
       clientCreatedAt: payload.clientCreatedAt,

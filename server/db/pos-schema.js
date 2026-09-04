@@ -21,6 +21,7 @@ const migrationPaths = [
   path.join(__dirname, 'migrations', '028_team_member_lifecycle.sql'),
   path.join(__dirname, 'migrations', '029_remove_3d_fields.sql'),
   path.join(__dirname, 'migrations', '030_pos_refund_terminal_reference.sql'),
+  path.join(__dirname, 'migrations', '036_pos_device_leases.sql'),
 ];
 
 async function ensurePosSchema(client) {

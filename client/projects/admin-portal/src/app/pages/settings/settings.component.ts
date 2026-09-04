@@ -11,7 +11,7 @@ import { SortableTableComponent, CellTplDirective, TableColumn } from '../../sha
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminSettingsService, Invitation, PosRegisterRow, PosBranchRow, PosBranchInput, PosEnrollmentTokenRow, ManagerPinRow, PosPolicy } from '../../services/admin-settings.service';
+import { AdminSettingsService, Invitation, PosRegisterRow, PosActiveSession, PosBranchRow, PosBranchInput, PosEnrollmentTokenRow, ManagerPinRow, PosPolicy } from '../../services/admin-settings.service';
 import { AuthService } from '../../services/auth.service';
 import { StoreConfigService } from '../../services/store-config.service';
 import { PosService } from '../../services/pos.service';
@@ -361,14 +361,46 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
                 <ng-template apCellTpl="lastSeenAt" let-r>
                   <span class="muted small">{{ r.lastSeenAt ? (r.lastSeenAt | date:'MMM d, HH:mm') : t('common.never') }}</span>
                 </ng-template>
+                <ng-template apCellTpl="activity" let-r>
+                  <div class="col" style="gap:2px;">
+                    <span class="small">{{ r.activeShiftCashier || r.deviceLeaseClaimedBy || '—' }}</span>
+                    @if (r.activeShiftState) { <span class="muted small">{{ t('settings.security.devices.shift') }} {{ r.activeShiftState }}</span> }
+                    @if (r.pendingCount || r.rejectedCount) {
+                      <span class="small" style="color:var(--danger);">{{ r.pendingCount }} pending · {{ r.rejectedCount }} rejected</span>
+                    }
+                  </div>
+                </ng-template>
                 <ng-template apCellTpl="createdAt" let-r>
                   <span class="muted small">{{ r.createdAt | date:'MMM d, y' }}</span>
                 </ng-template>
                 <ng-template apCellTpl="actions" let-r>
-                  @if (r.status !== 'revoked') {
+                  @if (r.status === 'revoked') {
+                    <button class="btn btn-outline btn-sm" (click)="replaceRegister(r)">{{ t('settings.security.devices.replace') }}</button>
+                  } @else {
+                    <button class="btn btn-outline btn-sm" (click)="replaceRegister(r)">{{ t('settings.security.devices.repair') }}</button>
                     <button class="btn btn-danger btn-sm" (click)="revokeRegister(r)"><ap-icon name="trash" [size]="12"/> {{ t('settings.security.devices.revoke') }}</button>
                   }
                 </ng-template>
+              </ap-sortable-table>
+            }
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.sessions.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.sessions.sub') }}</div>
+              </div>
+            </div>
+            @if (loadingSessions()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;"><ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span></div>
+            } @else {
+              <ap-sortable-table [columns]="sessionColumns" [rows]="activeSessions()">
+                <ng-template apCellTpl="userName" let-s><span class="strong">{{ s.userName }}</span></ng-template>
+                <ng-template apCellTpl="register" let-s><span class="muted small">{{ sessionRegisterName(s) }}</span></ng-template>
+                <ng-template apCellTpl="lastSeenAt" let-s><span class="muted small">{{ s.lastSeenAt ? (s.lastSeenAt | date:'MMM d, HH:mm') : '—' }}</span></ng-template>
+                <ng-template apCellTpl="expiresAt" let-s><span class="muted small">{{ s.expiresAt | date:'MMM d, HH:mm' }}</span></ng-template>
+                <ng-template apCellTpl="actions" let-s><button class="btn btn-danger btn-sm" (click)="revokeSession(s)">{{ t('settings.security.sessions.signOut') }}</button></ng-template>
               </ap-sortable-table>
             }
           </div>
@@ -859,14 +891,15 @@ export class SettingsComponent implements OnInit {
   // ── Devices & Security tab ──────────────────────────────────────────────
   readonly loadingRegisters = signal(true);
   readonly registers = signal<PosRegisterRow[]>([]);
+  readonly activeSessions = signal<PosActiveSession[]>([]);
+  readonly loadingSessions = signal(true);
   readonly loadingTokens = signal(true);
   readonly tokens = signal<PosEnrollmentTokenRow[]>([]);
 
-  // A revoked register and a used or expired setup code are finished business:
-  // nothing on this page can act on them, so listing them only makes the real
-  // devices harder to find. The rows stay in the database for the audit trail;
-  // this hides them from the page.
-  readonly visibleRegisters = computed(() => this.registers().filter((r) => r.status !== 'revoked'));
+  // Revoked registers stay visible because Replace / re-pair safely restores
+  // that same logical till and its audit history. Finished setup codes remain
+  // hidden because they have no further action.
+  readonly visibleRegisters = computed(() => this.registers());
   readonly visibleTokens = computed(() => this.tokens().filter((tk) => tk.status === 'active'));
   readonly loadingManagerPins = signal(true);
   readonly managerPins = signal<ManagerPinRow[]>([]);
@@ -887,8 +920,18 @@ export class SettingsComponent implements OnInit {
     { key: 'status',      label: 'Status',    labelKey: 'settings.col.status', noSort: true },
     { key: 'branchName',  label: 'Branch',    labelKey: 'settings.security.devices.col.branch', noSort: true },
     { key: 'lastSeenAt',  label: 'Last seen', labelKey: 'settings.security.devices.col.lastSeen' },
+    { key: 'activity',    label: 'Current use', labelKey: 'settings.security.devices.col.currentUse', noSort: true },
     { key: 'createdAt',   label: 'Created',   labelKey: 'settings.security.devices.col.created' },
     { key: 'actions',     label: '',                                          noSort: true, align: 'right' },
+  ];
+
+  readonly sessionColumns: TableColumn<PosActiveSession>[] = [
+    { key: 'userName', label: 'User', labelKey: 'settings.security.sessions.col.user' },
+    { key: 'role', label: 'Role', labelKey: 'settings.col.role' },
+    { key: 'register', label: 'Register', labelKey: 'settings.security.sessions.col.register', noSort: true },
+    { key: 'lastSeenAt', label: 'Last seen', labelKey: 'settings.security.devices.col.lastSeen' },
+    { key: 'expiresAt', label: 'Expires', labelKey: 'settings.security.sessions.col.expires' },
+    { key: 'actions', label: '', noSort: true, align: 'right' },
   ];
 
   readonly tokenColumns: TableColumn<PosEnrollmentTokenRow>[] = [
@@ -944,7 +987,7 @@ export class SettingsComponent implements OnInit {
       // Branches share the same owner/admin gate as everything else here —
       // GET /admin/pos-branches 403s for any other role, and the registers
       // table's branch-picker column needs the branch list loaded too.
-      tasks.push(this.loadBranches(), this.loadRegisters(), this.loadTokens(), this.loadManagerPins(), this.loadPosPolicy());
+      tasks.push(this.loadBranches(), this.loadRegisters(), this.loadSessions(), this.loadTokens(), this.loadManagerPins(), this.loadPosPolicy());
     }
     await Promise.all(tasks);
   }
@@ -1137,6 +1180,22 @@ export class SettingsComponent implements OnInit {
     }
   }
 
+  private async loadSessions(): Promise<void> {
+    try {
+      this.activeSessions.set(await this.settingsApi.listActiveSessions());
+    } catch {
+      this.activeSessions.set([]);
+    } finally {
+      this.loadingSessions.set(false);
+    }
+  }
+
+  sessionRegisterName(session: PosActiveSession): string {
+    if (!session.registerId) return this.t('settings.security.sessions.notConnected');
+    return this.registers().find((register) => register.registerId === session.registerId)?.displayName
+      || this.t('settings.security.sessions.unknownRegister');
+  }
+
   private async loadTokens(): Promise<void> {
     try {
       this.tokens.set(await this.settingsApi.listEnrollmentTokens());
@@ -1233,6 +1292,35 @@ export class SettingsComponent implements OnInit {
       this.toast.success(this.t('settings.toast.registerRevoked'));
     } catch {
       this.registers.set(previous);
+    }
+  }
+
+  async replaceRegister(r: PosRegisterRow): Promise<void> {
+    try {
+      const replacement = await this.settingsApi.createReplacementToken(r.registerId);
+      this.registerToken.set(replacement.token);
+      await this.loadTokens();
+      this.toast.success(this.t('settings.toast.replacementCreated'), this.t('settings.toast.replacementCreated.sub'));
+    } catch {
+      // The global API handler shows the active-shift/offline-queue guard.
+    }
+  }
+
+  async revokeSession(session: PosActiveSession): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.revokeSession.title').replace('{name}', session.userName),
+      message: this.t('settings.confirm.revokeSession.message'),
+      confirmLabel: this.t('settings.security.sessions.signOut'),
+      cancelLabel: this.t('settings.confirm.revokeSession.cancel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await this.settingsApi.revokeSession(session.sessionId);
+      this.activeSessions.update((sessions) => sessions.filter((item) => item.sessionId !== session.sessionId));
+      this.toast.success(this.t('settings.toast.sessionRevoked'));
+    } catch {
+      // Global interceptor surfaces the error.
     }
   }
 

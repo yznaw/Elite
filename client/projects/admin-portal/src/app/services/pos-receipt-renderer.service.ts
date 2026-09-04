@@ -46,8 +46,8 @@ export interface PosRenderedReceipt {
 /** Z-report print data — a cash/sales summary, not a per-item receipt. */
 export interface PosZReportPrintData {
   zReportId: string;
-  registerName?: string;
-  cashierName?: string;
+  registerName?: string | null;
+  cashierName?: string | null;
   createdAt: string;
   openingFloatCents: number;
   grossSalesCents: number;
@@ -195,7 +195,12 @@ export class PosReceiptRenderer {
 
     return {
       imageDataUrl: finalCanvas.toDataURL('image/png'),
-      footerCommands: '\x1d' + 'V' + '\x01', // plain cut, no QR — a Z-report has nothing to look up
+      // The cutter sits downstream from the thermal head. Cutting immediately
+      // after the raster can physically slice through its final rows even
+      // though every pixel reached the printer. Feed roughly 25mm first (six
+      // default lines at 180dpi), then partial-cut. This is deliberately scoped
+      // to Z reports; customer receipt QR/cut handling remains unchanged.
+      footerCommands: '\x1b' + 'a' + '\x00' + '\x1b' + 'd' + '\x06' + '\x1d' + 'V' + '\x01',
     };
   }
 
@@ -281,6 +286,20 @@ export class PosReceiptRenderer {
     y = this.columns(ctx, 'Refunds', String(report.refundCount), y);
     y = this.columns(ctx, 'Voids', String(report.voidCount), y);
     ctx.fillStyle = '#000';
+    y += 6;
+    y = this.rule(ctx, y);
+    y += 14;
+
+    // A positive end marker makes a complete report obvious at a glance. If
+    // the printer/driver ever truncates a job, staff can immediately tell that
+    // the paper is incomplete instead of treating a partial financial report
+    // as valid. The immutable report id ties the paper back to history.
+    ctx.font = `600 12px ${this.bodyFont}`;
+    ctx.textAlign = 'center';
+    this.fillTextTracked(ctx, 'END OF Z REPORT', centerX, y, 1.2);
+    y += 20;
+    ctx.font = `12px ${this.bodyFont}`;
+    ctx.fillText(`ID ${report.zReportId}`, centerX, y);
     y += 20;
 
     return y;

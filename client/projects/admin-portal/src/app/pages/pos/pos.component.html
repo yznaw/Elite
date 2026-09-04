@@ -936,7 +936,9 @@
                   <b>{{ report.createdAt | date:'MMM d, y · HH:mm' }}</b>
                   <small>Net {{ formatMoney(report.netSalesCents) }} · Variance {{ formatMoney(report.varianceCents) }}</small>
                 </span>
-                <button type="button" (click)="reprintZReport(report)">Reprint</button>
+                <button type="button" [disabled]="printingZReportId() !== null" (click)="reprintZReport(report)">
+                  {{ printingZReportId() === report.zReportId ? 'Printing…' : 'Reprint' }}
+                </button>
               </div>
             }
           </div>

@@ -24,12 +24,12 @@ function secret() {
   return process.env.SESSION_SECRET || 'elite-dev-session-secret';
 }
 
-function sign(registerId) {
-  return crypto.createHmac('sha256', secret()).update(String(registerId)).digest('base64url');
+function sign(registerId, leaseId) {
+  return crypto.createHmac('sha256', secret()).update(`${registerId}.${leaseId}`).digest('base64url');
 }
 
-function serialize(registerId) {
-  return `${registerId}.${sign(registerId)}`;
+function serialize(registerId, leaseId) {
+  return `${registerId}.${leaseId}.${sign(registerId, leaseId)}`;
 }
 
 // This app deliberately runs without cookie-parser (see middleware/csrf.js,
@@ -41,18 +41,21 @@ function readCookie(req, name) {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-/** The register named by a valid, untampered cookie — or null. */
-function readDeviceRegisterId(req) {
+/** The register + current lease named by a valid, untampered cookie — or null. */
+function readDeviceBinding(req) {
   const raw = readCookie(req, COOKIE_NAME);
   if (!raw) return null;
-  const separator = raw.lastIndexOf('.');
-  if (separator <= 0) return null;
-  const registerId = raw.slice(0, separator);
-  const signature = raw.slice(separator + 1);
-  const expected = Buffer.from(sign(registerId));
+  const parts = raw.split('.');
+  // Register-id-only cookies from releases before migration 036 are not
+  // accepted. The client will fall back to credential check-in and be issued a
+  // current lease without forcing the operator to create a new register.
+  if (parts.length !== 3) return null;
+  const [registerId, leaseId, signature] = parts;
+  if (!registerId || !leaseId || !signature) return null;
+  const expected = Buffer.from(sign(registerId, leaseId));
   const actual = Buffer.from(signature);
   if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return null;
-  return registerId;
+  return { registerId, leaseId };
 }
 
 function cookieOptions(req) {
@@ -64,8 +67,8 @@ function cookieOptions(req) {
   };
 }
 
-function setDeviceRegisterCookie(req, res, registerId) {
-  res.cookie(COOKIE_NAME, serialize(registerId), { ...cookieOptions(req), maxAge: MAX_AGE_MS });
+function setDeviceRegisterCookie(req, res, registerId, leaseId) {
+  res.cookie(COOKIE_NAME, serialize(registerId, leaseId), { ...cookieOptions(req), maxAge: MAX_AGE_MS });
 }
 
 function clearDeviceRegisterCookie(req, res) {
@@ -74,7 +77,7 @@ function clearDeviceRegisterCookie(req, res) {
 
 module.exports = {
   COOKIE_NAME,
-  readDeviceRegisterId,
+  readDeviceBinding,
   setDeviceRegisterCookie,
   clearDeviceRegisterCookie,
 };

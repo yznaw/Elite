@@ -12,6 +12,7 @@ process.env.DEFAULT_ADMIN_NAME = 'Lifecycle Test Owner';
 process.env.SESSION_SECRET = `team-lifecycle-e2e-session-${runId}`;
 
 const db = require('../db/client');
+const bcrypt = require('bcryptjs');
 const { startServer } = require('../index');
 
 // Covers the team-member lifecycle gaps found in the "هل خاصية اضافة اعضاء
@@ -104,12 +105,52 @@ test('team member lifecycle: resend, duplicate-invite flag, disable/reactivate, 
       body: JSON.stringify({ name: 'Lifecycle Cashier', email: `cashier-${runId}@elite.local`, role: 'cashier' }),
     });
     assert.equal(member.status, 'active');
+    const memberPassword = 'lifecycle-cashier-password';
+    await db.query('UPDATE admin_users SET password_hash = $1 WHERE id = $2', [await bcrypt.hash(memberPassword, 12), member.id]);
+
+    const memberJar = { cookie: '', csrf: '' };
+    async function memberApi(path, options = {}) {
+      const response = await fetch(`${base}${path}`, {
+        ...options,
+        headers: {
+          ...(options.body ? { 'content-type': 'application/json' } : {}),
+          ...(memberJar.cookie ? { cookie: `${memberJar.cookie}${memberJar.csrf ? `; elite.csrf=${memberJar.csrf}` : ''}` } : {}),
+          ...(memberJar.csrf ? { 'x-csrf-token': memberJar.csrf } : {}),
+        },
+      });
+      const setCookies = typeof response.headers.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : [response.headers.get('set-cookie')].filter(Boolean);
+      for (const raw of setCookies) {
+        const [pair] = raw.split(';');
+        const [name, value] = pair.split('=');
+        if (name === 'elite.sid') memberJar.cookie = pair;
+        if (name === 'elite.csrf') memberJar.csrf = decodeURIComponent(value);
+      }
+      const body = await response.json();
+      if (!response.ok) throw Object.assign(new Error(`${response.status}: ${body.message}`), { status: response.status, body });
+      return body.data;
+    }
+
+    await memberApi('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: `cashier-${runId}@elite.local`, password: memberPassword }),
+    });
+    await memberApi('/auth/me');
+    const sessionsBeforeDisable = await api('/admin/pos-security/sessions');
+    assert.ok(sessionsBeforeDisable.some((session) => session.userId === member.id));
 
     const disabled = await api(`/admin/settings/team/${member.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'disabled' }),
     });
     assert.equal(disabled.status, 'disabled');
+    await assert.rejects(
+      () => memberApi('/auth/me'),
+      (error) => error.status === 401,
+    );
+    const sessionsAfterDisable = await api('/admin/pos-security/sessions');
+    assert.ok(!sessionsAfterDisable.some((session) => session.userId === member.id));
 
     const reactivated = await api(`/admin/settings/team/${member.id}`, {
       method: 'PATCH',
@@ -128,6 +169,33 @@ test('team member lifecycle: resend, duplicate-invite flag, disable/reactivate, 
 
     const teamAfterRemove = await api('/admin/settings/team');
     assert.ok(!teamAfterRemove.some((m) => m.id === member.id), 'a removed member must not appear in the team list');
+
+    // Re-adding the same email intentionally reactivates the audit-preserved
+    // row instead of leaving an invisible status='removed' account that still
+    // cannot sign in.
+    const readded = await api('/admin/settings/team', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Lifecycle Cashier Again', email: `cashier-${runId}@elite.local`, role: 'cashier' }),
+    });
+    assert.equal(readded.id, member.id);
+    assert.equal(readded.status, 'active');
+    await memberApi('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: `cashier-${runId}@elite.local`, password: memberPassword }),
+    });
+    const sessionsAfterReadd = await api('/admin/pos-security/sessions');
+    const readdedSession = sessionsAfterReadd.find((session) => session.userId === member.id);
+    assert.ok(readdedSession);
+    const signedCookie = decodeURIComponent(memberJar.cookie.split('=').slice(1).join('='));
+    const rawSessionId = signedCookie.replace(/^s:/, '').split('.')[0];
+    assert.notEqual(
+      readdedSession.sessionId,
+      rawSessionId,
+      'the admin API exposes a non-replayable session handle rather than the bearer cookie',
+    );
+    const sessionRevoked = await api(`/admin/pos-security/sessions/${readdedSession.sessionId}/revoke`, { method: 'POST', body: '{}' });
+    assert.equal(sessionRevoked.revoked, true);
+    await assert.rejects(() => memberApi('/auth/me'), (error) => error.status === 401);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

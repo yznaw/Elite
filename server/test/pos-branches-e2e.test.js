@@ -84,6 +84,16 @@ test('branch CRUD, default-invariant guards, and per-register receipt resolution
     });
     tenantId = owner.tenantId;
 
+    // Business-profile reads are POS operations and therefore require a
+    // checked-in register even while the tenant has no branches configured.
+    const enrollment = await api('/pos/registers/enrollment-tokens', {
+      method: 'POST', body: JSON.stringify({ displayName: `Branch Test Register ${runId}` }),
+    });
+    const enrolled = await api('/pos/registers/enroll', {
+      method: 'POST', body: JSON.stringify({ enrollmentToken: enrollment.token }),
+    });
+    assert.ok(enrolled.registerCredential);
+
     // ── A brand-new tenant starts with no branches at all ──────────────────
     // Migration 027's backfill only covers tenants that already existed at
     // the moment the server booted; this tenant was created after that, so
@@ -135,18 +145,6 @@ test('branch CRUD, default-invariant guards, and per-register receipt resolution
     assert.equal(profileAfterDefaultFlip.addressEn, 'Branch B Street, Lusail');
 
     // ── A register explicitly assigned to A overrides the tenant default (B) ──
-    // Enrolling checks this same session in as a register too (the server
-    // sets req.session.posRegisterId on it), which is exactly what lets the
-    // assertions below prove per-register resolution: the *only* thing that
-    // changes between them is which branch this one register is assigned to.
-    const enrollment = await api('/pos/registers/enrollment-tokens', {
-      method: 'POST', body: JSON.stringify({ displayName: `Branch Test Register ${runId}` }),
-    });
-    const enrolled = await api('/pos/registers/enroll', {
-      method: 'POST', body: JSON.stringify({ enrollmentToken: enrollment.token }),
-    });
-    assert.ok(enrolled.registerCredential);
-
     // Before assignment: this register is unassigned, so it sees the tenant
     // default (B), same as any other unassigned register would.
     assert.equal((await api('/pos/business-profile')).addressEn, 'Branch B Street, Lusail');
