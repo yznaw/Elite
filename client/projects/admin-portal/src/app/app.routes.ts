@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard } from './guards/auth.guard';
+import { authGuard, authenticatedRoleGuard } from './guards/auth.guard';
 import { roleGuard } from './guards/role.guard';
 
 export const routes: Routes = [
@@ -25,7 +25,7 @@ export const routes: Routes = [
   },
   {
     path: 'pos',
-    canMatch: [authGuard, roleGuard(['owner', 'admin', 'manager', 'cashier'])],
+    canMatch: [authenticatedRoleGuard(['owner', 'admin', 'manager', 'cashier'])],
     loadComponent: () =>
       import('./pages/pos/pos.component').then((m) => m.PosComponent),
   },

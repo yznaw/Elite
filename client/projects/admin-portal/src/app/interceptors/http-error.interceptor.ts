@@ -14,7 +14,7 @@ import { ClientLoggerService } from '../services/client-logger.service';
  *
  * Status mapping:
  *   0   → Network / CORS issue
- *   401 → Session expired (redirect to login when auth is added)
+ *   401 → Session expired, except locally handled PIN/device rejections
  *   403 → Permission denied
  *   404 → Resource not found
  *   422 → Validation error

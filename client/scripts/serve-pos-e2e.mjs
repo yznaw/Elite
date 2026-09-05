@@ -2,12 +2,12 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 
-const root = resolve(process.cwd(), 'dist', 'admin-portal', 'browser');
+const root = resolve(process.cwd(), process.env.E2E_ADMIN_ROOT || 'dist/admin-portal/browser');
 const port = Number.parseInt(process.env.E2E_ADMIN_PORT || '4300', 10);
 const apiOrigin = new URL(process.env.E2E_API_ORIGIN || 'http://127.0.0.1:3000');
 
 if (!existsSync(join(root, 'index.html'))) {
-  throw new Error(`Production admin build not found at ${root}. Run npm run build:admin first.`);
+  throw new Error(`Admin build not found at ${root}. Build the admin portal before serving it.`);
 }
 
 const contentTypes = {
@@ -80,4 +80,3 @@ const server = http.createServer((req, res) => {
 server.listen(port, '127.0.0.1', () => {
   console.log(`[pos-e2e-static] ${root} at http://127.0.0.1:${port}, API ${apiOrigin.origin}`);
 });
-

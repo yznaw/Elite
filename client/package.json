@@ -8,6 +8,7 @@
     "build:admin": "ng build admin-portal --configuration production && node scripts/generate-pos-precache.mjs",
     "build:all": "npm run build:web && npm run build:admin",
     "test:e2e": "playwright test",
+    "test:e2e:auth": "playwright test --config=playwright.auth.config.ts",
     "lint": "ng lint",
     "test": "ng test",
     "test:hero": "playwright test --config=playwright.hero.config.ts"
