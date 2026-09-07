@@ -2962,9 +2962,17 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   printAllVariantLabels(): void {
-    const variants = this.form().variants;
-    if (variants.length === 0) return;
-    this.labelPrinter.printLabels(variants.map((v) => this.variantLabelData(v)));
+    const labels = this.form().variants.flatMap((variant) => {
+      // A stock label represents one physical unit. Printing one label per
+      // variant was misleading for a variant with ten pieces in stock.
+      const quantity = Math.max(0, Math.floor(Number(variant.stock) || 0));
+      return Array.from({ length: quantity }, () => this.variantLabelData(variant));
+    });
+    if (labels.length === 0) {
+      this.toast.warning('No labels to print', 'The current variants have zero stock.');
+      return;
+    }
+    this.labelPrinter.printLabels(labels);
   }
 
   toggleVariantExpand(id: string): void {

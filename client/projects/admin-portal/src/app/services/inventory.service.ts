@@ -40,7 +40,10 @@ export interface StocktakeSummary {
 export interface StocktakeLine {
   variantId: string;
   sku: string;
+  barcode: string;
   productName: string;
+  color: string;
+  size: string;
   variant: string;
   /** Withheld while a blind count is still open — that is the point of blind. */
   expectedQuantity: number | null;

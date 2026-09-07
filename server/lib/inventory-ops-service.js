@@ -452,7 +452,7 @@ async function getStocktake(context, stocktakeId) {
 
   const lines = await db.pool.query(
     `SELECT l.id, l.variant_id, l.expected_quantity, l.counted_quantity, l.recount_quantity,
-            l.counted_at, l.note, pv.sku, pv.size, pv.color, p.name AS product_name,
+            l.counted_at, l.note, pv.sku, pv.barcode, pv.size, pv.color, p.name AS product_name,
             pv.stock_quantity AS current_stock
        FROM stocktake_lines l
        JOIN product_variants pv ON pv.id = l.variant_id
@@ -469,7 +469,10 @@ async function getStocktake(context, stocktakeId) {
     lines: lines.rows.map((line) => ({
       variantId: line.variant_id,
       sku: line.sku,
+      barcode: line.barcode || line.sku,
       productName: line.product_name,
+      color: line.color || '',
+      size: line.size || '',
       variant: [line.color, line.size].filter(Boolean).join(' / '),
       expectedQuantity: hideExpected ? null : Number(line.expected_quantity),
       countedQuantity: line.counted_quantity === null ? null : Number(line.counted_quantity),

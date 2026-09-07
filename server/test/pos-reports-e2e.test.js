@@ -187,7 +187,9 @@ test('core reporting: daily sales, cash movements, card exceptions, inventory, r
     assert.equal(daily.totalCents, 4000);
     assert.equal(daily.transactionCount, 1);
     assert.ok(daily.byPaymentMethod.some((r) => r.paymentMethod === 'card' && r.totalCents === 4000));
-    assert.ok(daily.byItem.some((r) => r.sku === `POS-REPORTS-E2E-V-${runId}`));
+    assert.ok(daily.byItem.some((r) =>
+      r.sku === `POS-REPORTS-E2E-V-${runId}` && r.size === 'M' && r.color === null,
+    ));
     assert.ok(daily.byHour.length > 0);
 
     // --- Report 2: cash movements ---

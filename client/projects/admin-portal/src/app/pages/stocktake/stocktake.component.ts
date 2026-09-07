@@ -84,6 +84,23 @@ import {
             <button class="btn btn-outline" (click)="reload()">
               <ap-icon name="sync" [size]="14"/> {{ t('common.refresh') }}
             </button>
+            <button class="btn btn-outline" (click)="exportCsv()" [disabled]="!stocktake.lines.length">
+              <ap-icon name="download" [size]="14"/> Export CSV
+            </button>
+            <label class="btn btn-outline" [class.disabled]="importing()">
+              <ap-icon name="upload" [size]="14"/> Import counts
+              <input type="file" accept=".csv,text/csv" hidden [disabled]="importing()" (change)="importCounts($event)"/>
+            </label>
+          </div>
+
+          <div class="row gap-sm mt-16" style="align-items:center;flex-wrap:wrap;">
+            <input class="inp" style="max-width:300px;" [ngModel]="scanCode()"
+                   (ngModelChange)="scanCode.set($event)" (keydown.enter)="scanBarcode()"
+                   placeholder="Scan barcode or enter SKU" autocomplete="off"/>
+            <button class="btn btn-outline" [disabled]="!scanCode().trim() || scanning()" (click)="scanBarcode()">
+              {{ scanning() ? 'Saving…' : 'Scan +1' }}
+            </button>
+            <span class="muted small">Each scan increases the physical count by one.</span>
           </div>
 
           @if (disagreements().length) {
@@ -215,10 +232,13 @@ export class StocktakeComponent implements OnInit {
   readonly starting = signal(false);
   readonly posting = signal(false);
   readonly saving = signal<string | null>(null);
+  readonly scanning = signal(false);
+  readonly importing = signal(false);
 
   readonly newReference = signal('');
   readonly newBlind = signal(true);
   readonly filter = signal('');
+  readonly scanCode = signal('');
   readonly draft = signal<Record<string, string>>({});
 
   readonly countedCount = computed(() => this.active()?.lines.filter((l) => l.countedQuantity !== null).length ?? 0);
@@ -304,6 +324,133 @@ export class StocktakeComponent implements OnInit {
     } finally {
       this.saving.set(null);
     }
+  }
+
+  async scanBarcode(): Promise<void> {
+    const code = this.scanCode().trim().toLowerCase();
+    if (!code || this.scanning()) return;
+    const stocktake = this.active();
+    if (!stocktake) return;
+    const line = stocktake.lines.find((item) =>
+      item.barcode.toLowerCase() === code || item.sku.toLowerCase() === code,
+    );
+    if (!line) {
+      this.toast.warning('Barcode not found', `No stocktake line matches ${this.scanCode().trim()}.`);
+      return;
+    }
+
+    const current = Number.parseInt(this.draft()[line.variantId] ?? String(line.countedQuantity ?? 0), 10) || 0;
+    this.draft.set({ ...this.draft(), [line.variantId]: String(current + 1) });
+    this.scanning.set(true);
+    try {
+      await this.api.saveCount(stocktake.stocktakeId, line.variantId, current + 1);
+      this.draft.set({ ...this.draft(), [line.variantId]: '' });
+      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
+      this.scanCode.set('');
+    } catch {
+      /* reported by the interceptor */
+    } finally {
+      this.scanning.set(false);
+    }
+  }
+
+  exportCsv(): void {
+    const stocktake = this.active();
+    if (!stocktake) return;
+    const cell = (value: unknown): string => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['SKU', 'Barcode', 'Product', 'Color', 'Size', 'Expected', 'Counted', 'Difference'],
+      ...stocktake.lines.map((line) => [
+        line.sku,
+        line.barcode,
+        line.productName,
+        line.color,
+        line.size,
+        line.expectedQuantity ?? '',
+        line.countedQuantity ?? '',
+        line.discrepancy ?? '',
+      ]),
+    ];
+    const csv = '\uFEFF' + rows.map((row) => row.map(cell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `stocktake-${stocktake.reference}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async importCounts(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    const stocktake = this.active();
+    if (!file || !stocktake || this.importing()) return;
+
+    this.importing.set(true);
+    try {
+      const text = (await file.text()).replace(/^\uFEFF/, '');
+      const rows = this.parseCsv(text);
+      if (rows.length < 2) throw new Error('The file must contain a header and at least one count row.');
+      const headers = rows[0].map((header) => header.trim().toLowerCase());
+      const skuIndex = headers.indexOf('sku');
+      const barcodeIndex = headers.indexOf('barcode');
+      const countIndex = ['counted', 'count', 'quantity'].map((name) => headers.indexOf(name)).find((index) => index >= 0) ?? -1;
+      if ((skuIndex < 0 && barcodeIndex < 0) || countIndex < 0) {
+        throw new Error('Use columns SKU or Barcode and Counted (or Count/Quantity).');
+      }
+
+      const byKey = new Map<string, StocktakeDetail['lines'][number]>();
+      for (const line of stocktake.lines) {
+        byKey.set(line.sku.toLowerCase(), line);
+        byKey.set(line.barcode.toLowerCase(), line);
+      }
+      let updated = 0;
+      let skipped = 0;
+      for (const row of rows.slice(1)) {
+        const key = String(row[barcodeIndex >= 0 ? barcodeIndex : skuIndex] || '').trim().toLowerCase();
+        const quantity = Number.parseInt(String(row[countIndex] || ''), 10);
+        const line = byKey.get(key);
+        if (!line || !Number.isFinite(quantity) || quantity < 0) {
+          skipped++;
+          continue;
+        }
+        await this.api.saveCount(stocktake.stocktakeId, line.variantId, quantity);
+        updated++;
+      }
+      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
+      this.toast.success('Counts imported', `${updated} updated${skipped ? ` · ${skipped} skipped` : ''}`);
+    } catch (error) {
+      this.toast.warning('Could not import counts', error instanceof Error ? error.message : 'Use a CSV exported from this stocktake.');
+    } finally {
+      this.importing.set(false);
+    }
+  }
+
+  private parseCsv(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let cell = '';
+    let quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '"') {
+        if (quoted && text[i + 1] === '"') { cell += '"'; i++; }
+        else quoted = !quoted;
+      } else if (char === ',' && !quoted) {
+        row.push(cell); cell = '';
+      } else if ((char === '\n' || char === '\r') && !quoted) {
+        if (char === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); cell = '';
+        if (row.some((value) => value.trim())) rows.push(row);
+        row = [];
+      } else {
+        cell += char;
+      }
+    }
+    row.push(cell);
+    if (row.some((value) => value.trim())) rows.push(row);
+    return rows;
   }
 
   async post(): Promise<void> {

@@ -810,7 +810,7 @@ export class PosComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Take over an existing till, or create one by name (owner/admin). */
+  /** Switch to an existing till, or create one by name (owner/admin). */
   async claimRegister(registerId?: string): Promise<void> {
     const displayName = this.terminalName.trim();
     if (!registerId && !displayName) {
@@ -819,7 +819,7 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     this.busy.set(true);
     try {
-      if (!await this.registerSwitchIsSafe(registerId || null)) return;
+      await this.registerSwitchIsSafe(registerId || null);
       const identity = await this.pos.claimRegister(registerId ? { registerId } : { displayName });
       await this.finishRegisterSetup(identity);
     } catch (error) {
@@ -837,9 +837,10 @@ export class PosComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Never carry a shift, offline queue or receipt-number reservation from one
-      logical till to another. Same-register recovery remains safe. */
-  private async registerSwitchIsSafe(targetRegisterId: string | null): Promise<boolean> {
+  /** Warn before switching away from local POS state, but do not block the
+      operator. The shift and queued sales remain associated with their
+      original till and are not carried into the newly selected till. */
+  private async registerSwitchIsSafe(targetRegisterId: string | null): Promise<void> {
     const current = await this.local.getRegister().catch(() => null);
     const localShift = await this.local.getShift().catch(() => null);
     const unresolved = (await this.local.listQueuedSales().catch(() => []))
@@ -857,17 +858,14 @@ export class PosComponent implements OnInit, OnDestroy {
     );
     if (carriesOperationalState && !returningToSameRegister) {
       this.toast.warning(
-        'Cannot switch tills',
-        'Close the current shift and resolve all pending or rejected offline sales first.',
+        'Switching tills with unresolved local data',
+        `${localShift ? 'A local shift is still open' : ''}${localShift && unresolved.length ? ' and ' : ''}${unresolved.length ? `${unresolved.length} offline sale(s) are not synced or resolved` : ''}. You can continue, but this data remains tied to the previous till.`,
       );
-      return false;
     }
-    if (current && targetRegisterId && current.registerId === targetRegisterId) return true;
     if (!carriesOperationalState) {
       await this.local.clearReceiptBlock().catch(() => undefined);
       await this.local.clearShift().catch(() => undefined);
     }
-    return true;
   }
 
   private openTakeover(registerId: string, warning: string): void {
@@ -934,10 +932,9 @@ export class PosComponent implements OnInit, OnDestroy {
         .filter((sale) => !sale.synced).length;
       if (localShift || unresolved > 0) {
         this.toast.warning(
-          'Terminal reset blocked',
-          'Close the current shift and resolve all pending or rejected offline sales before switching tills.',
+          'Switching tills with unresolved local data',
+          `${localShift ? 'A local shift is still open' : ''}${localShift && unresolved > 0 ? ' and ' : ''}${unresolved > 0 ? `${unresolved} offline sale(s) are not synced or resolved` : ''}. You can continue, but this data remains tied to the previous till.`,
         );
-        return;
       }
       await this.pos.releaseRegister().catch(() => undefined);
       await this.local.clearRegister().catch(() => undefined);

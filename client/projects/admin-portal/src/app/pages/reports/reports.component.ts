@@ -108,7 +108,10 @@ type ReportTab = 'daily-sales' | 'cash-movements' | 'card-exceptions' | 'invento
         </div>
 
         <div class="card mt-16">
-          <div class="card-header"><div class="card-title">{{ t('reports.dailySales.byItem') }}</div></div>
+          <div class="card-header">
+            <div class="card-title">{{ t('reports.dailySales.byItem') }}</div>
+            <button class="btn btn-outline btn-sm" (click)="exportDailyItems(r)">{{ t('reports.exportCsv') }}</button>
+          </div>
           <ap-sortable-table [columns]="dailyByItemColumns" [rows]="r.byItem">
             <ng-template apCellTpl="totalCents" let-row>{{ formatMoney(row.totalCents) }}</ng-template>
           </ap-sortable-table>
@@ -279,6 +282,8 @@ export class ReportsComponent implements OnInit {
     { key: 'productName', label: 'Product' },
     { key: 'variantTitle', label: 'Variant' },
     { key: 'sku', label: 'SKU' },
+    { key: 'color', label: 'Color' },
+    { key: 'size', label: 'Size' },
     { key: 'quantity', label: 'Qty', align: 'right' },
     { key: 'totalCents', label: 'Total', align: 'right' },
   ];
@@ -480,6 +485,20 @@ export class ReportsComponent implements OnInit {
     this.downloadCsv(`daily-sales-${this.from()}-${this.to()}.csv`,
       ['Date', 'Total', 'Transactions'],
       r.byDay.map((row) => [this.formatDate(row.businessDate), this.formatMoney(row.totalCents), row.transactionCount]));
+  }
+
+  exportDailyItems(r: PosDailySalesReport): void {
+    this.downloadCsv(`daily-sales-items-${this.from()}-${this.to()}.csv`,
+      ['Product', 'Variant', 'SKU', 'Color', 'Size', 'Qty', 'Total'],
+      r.byItem.map((row) => [
+        row.productName,
+        row.variantTitle || '',
+        row.sku,
+        row.color || '',
+        row.size || '',
+        row.quantity,
+        this.formatMoney(row.totalCents),
+      ]));
   }
 
   exportCashMovements(r: PosCashMovementsReport): void {

@@ -18,7 +18,15 @@ export interface PosDailySalesReport {
   byCashier: Array<{ cashierId: string; cashierName: string; totalCents: number; transactionCount: number }>;
   byRegister: Array<{ registerId: string; registerName: string; totalCents: number; transactionCount: number }>;
   byHour: Array<{ hourOfDay: number; totalCents: number; transactionCount: number }>;
-  byItem: Array<{ sku: string; productName: string; variantTitle: string | null; quantity: number; totalCents: number }>;
+  byItem: Array<{
+    sku: string;
+    productName: string;
+    variantTitle: string | null;
+    color: string | null;
+    size: string | null;
+    quantity: number;
+    totalCents: number;
+  }>;
 }
 
 export interface PosCashMovementsReport {

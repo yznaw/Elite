@@ -24,6 +24,15 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
   note:       'orderModal.tl.note',
 };
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 @Component({
     selector: 'ap-order-drawer',
     imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent],
@@ -754,9 +763,9 @@ export class OrderDrawerComponent {
     const o = this.order();
     const itemRows = o.items.map(it =>
       `<tr>
-        <td>${it.n}</td>
-        <td style="text-align:center">EU ${it.s}</td>
-        <td style="text-align:center">${it.q}</td>
+        <td>${escapeHtml(it.n)}</td>
+        <td style="text-align:center">EU ${escapeHtml(it.s)}</td>
+        <td style="text-align:center">${escapeHtml(it.q)}</td>
         <td style="text-align:right">${QAR(it.p * it.q)}</td>
       </tr>`,
     ).join('');
@@ -765,7 +774,7 @@ export class OrderDrawerComponent {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${this.t('orders.invoice.label')} ${o.id}</title>
+  <title>${escapeHtml(this.t('orders.invoice.label'))} ${escapeHtml(o.id)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto;}
@@ -786,18 +795,18 @@ export class OrderDrawerComponent {
   <div class="hd">
     <div>
       <div class="brand">ELITE COLLECTION</div>
-      <div class="inv-meta">${this.t('orders.invoice.label')} ${o.id}</div>
+      <div class="inv-meta">${escapeHtml(this.t('orders.invoice.label'))} ${escapeHtml(o.id)}</div>
     </div>
     <div style="text-align:right;font-size:13px;color:#666;">
-      <div>${o.date}</div>
-      <div style="margin-top:4px;">${o.customer}</div>
-      ${o.customerEmail ? `<div style="margin-top:2px;">${o.customerEmail}</div>` : ''}
-      ${o.customerPhone ? `<div style="margin-top:2px;">${o.customerPhone}</div>` : ''}
+      <div>${escapeHtml(o.date)}</div>
+      <div style="margin-top:4px;">${escapeHtml(o.customer)}</div>
+      ${o.customerEmail ? `<div style="margin-top:2px;">${escapeHtml(o.customerEmail)}</div>` : ''}
+      ${o.customerPhone ? `<div style="margin-top:2px;">${escapeHtml(o.customerPhone)}</div>` : ''}
     </div>
   </div>
   <div class="section">
     <div class="label">${this.t('orders.invoice.shippingAddress')}</div>
-    <div style="font-size:13px;line-height:1.8;">${(o.address || '-').replace(/\n/g, '<br>')}</div>
+    <div style="font-size:13px;line-height:1.8;">${escapeHtml(o.address || '-').replace(/\n/g, '<br>')}</div>
   </div>
   <div class="section">
     <table>
@@ -824,6 +833,8 @@ export class OrderDrawerComponent {
     if (win) {
       win.document.write(html);
       win.document.close();
+    } else {
+      this.toast.warning('Could not open invoice', 'Allow pop-ups for the admin portal, then try printing again.');
     }
   }
 

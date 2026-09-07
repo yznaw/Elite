@@ -110,12 +110,15 @@ async function dailySales(context, query) {
     );
     const byItem = await client.query(
       `SELECT ti.sku, ti.product_name, ti.variant_title,
+              COALESCE(oi.metadata->>'color', '') AS color,
+              COALESCE(oi.size, '') AS size,
               COALESCE(sum(ti.quantity), 0)::integer AS quantity,
               COALESCE(sum(ti.line_total_cents), 0)::bigint AS total_cents
        FROM pos_transaction_items ti
        JOIN pos_transactions t ON t.id = ti.transaction_id
+       LEFT JOIN order_items oi ON oi.id = ti.order_item_id
        WHERE ${where}
-       GROUP BY ti.sku, ti.product_name, ti.variant_title
+       GROUP BY ti.sku, ti.product_name, ti.variant_title, oi.metadata->>'color', oi.size
        ORDER BY total_cents DESC
        LIMIT 100`,
       params,
@@ -135,7 +138,15 @@ async function dailySales(context, query) {
       byCashier: byCashier.rows.map((r) => ({ cashierId: r.cashier_id, cashierName: r.cashier_name, totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
       byRegister: byRegister.rows.map((r) => ({ registerId: r.register_id, registerName: r.register_name, totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
       byHour: byHour.rows.map((r) => ({ hourOfDay: Number(r.hour_of_day), totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
-      byItem: byItem.rows.map((r) => ({ sku: r.sku, productName: r.product_name, variantTitle: r.variant_title, quantity: Number(r.quantity), totalCents: Number(r.total_cents) })),
+      byItem: byItem.rows.map((r) => ({
+        sku: r.sku,
+        productName: r.product_name,
+        variantTitle: r.variant_title,
+        color: r.color || null,
+        size: r.size || null,
+        quantity: Number(r.quantity),
+        totalCents: Number(r.total_cents),
+      })),
     };
   });
 }
