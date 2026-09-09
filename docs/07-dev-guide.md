@@ -329,6 +329,23 @@ Uploads are stored with resized variants alongside the original (`-thumb` 240, `
 
 Saving `preview` into content is a silent quality bug — it renders fine in the editor thumbnail and soft on the storefront. Prefer `storageUrl` and let a `srcset` pick the variant per device, as `heroSrcset()` does on the home hero.
 
+Product saves are now defended against this server-side. `findOrCreateImageAsset`
+in `admin-products.route.js` resolves a URL ending in a variant suffix back to
+the asset it was derived from, checking the asset's own `imageVariants` map
+first and then the filename stem, before it will insert anything. The stem step
+is the one that matters in practice: the derivative is always `.webp` while the
+original may be a `.png`, so the two never match on the full URL.
+
+That guard exists because five assets on production were created this way, each
+carrying `metadata.source = 'admin-product-save'` and a `-card.webp`
+`storage_url`. A plain equality lookup covers a freshly uploaded asset, whose
+own `preview_url` is the card URL, which is why this went unnoticed. It misses
+for anything uploaded before the variant pipeline, where `preview_url` is still
+the original. `test/product-image-preview-url.test.js` reproduces that state and
+fails without the guard.
+
+The guard is a backstop, not a licence. Send `storageUrl`.
+
 ### Backfill missing image variants
 
 Handing the browser a `srcset` only helps when the variants exist. When an

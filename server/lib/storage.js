@@ -174,4 +174,7 @@ module.exports = {
   storage: instance,
   uploadsDir: instance.uploadsDir,
   publicBase: instance.publicBase,
+  // Exported so callers can recognise a generated derivative by its filename
+  // instead of keeping their own copy of the suffix list and drifting from it.
+  IMAGE_VARIANT_KEYS: IMAGE_VARIANTS.map((variant) => variant.key),
 };

@@ -3,13 +3,26 @@ const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, slugify, toCents, validationError } = require('./lib');
 const { upload } = require('../middleware/upload');
-const { storage } = require('../lib/storage');
+const { storage, IMAGE_VARIANT_KEYS } = require('../lib/storage');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 const { processRestockNotifications } = require('../lib/restock-notifications');
 // Every stock_quantity write in this file posts a matching ledger row in the
 // same transaction — see server/lib/inventory-ledger.js for why that invariant
 // exists and what breaks when a write skips it (docs/25 Phase 1b).
 const { recordMovement, publishStockEvent, publishCatalogEvent } = require('../lib/inventory-ledger');
+
+/**
+ * Matches the `-card` in `mq9eqaq9-6714c560-card.webp`: the suffix `storage.js`
+ * appends when it derives a resized copy. A URL carrying one is a derivative,
+ * never an original upload, so it must never become a media asset of its own.
+ */
+const VARIANT_SUFFIX = new RegExp(`-(${IMAGE_VARIANT_KEYS.join('|')})$`, 'i');
+
+/** Filename without its directory or extension. */
+function urlStem(url) {
+  const filename = String(url).split('/').pop()?.split('?')[0] || '';
+  return filename.replace(/\.[a-z0-9]+$/i, '');
+}
 
 const router = Router();
 
@@ -295,6 +308,24 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
   }
 }
 
+/**
+ * Resolve a product image URL to the media asset it belongs to, creating one
+ * only when the URL is genuinely new.
+ *
+ * The subtlety is that the URL arrives from the admin client, and the media API
+ * hands the client two URLs per asset: `storageUrl` (the original) and
+ * `preview` (the 640px `-card` derivative). When a save sends the preview, an
+ * exact-match lookup misses, and this function used to insert a second asset
+ * pointing at a downscaled copy. Production accumulated five of those. They are
+ * invisible in the admin, where the thumbnail looks the same, and soft on the
+ * storefront, where a 640px file is asked to fill a 1400px slot. See
+ * `docs/07-dev-guide.md`, "Pick the Right Image URL".
+ *
+ * So a variant URL is resolved back to its original rather than trusted: first
+ * against the variant map the asset itself records, then against the filename
+ * stem, since the derivative is always `.webp` while the original may be a
+ * `.png` or a `.jpg` and the two never match on the full URL.
+ */
 async function findOrCreateImageAsset(client, tenantId, url, index) {
   // The Angular client normalises /uploads/ paths to /api/uploads/ for proxy
   // routing, so strip that prefix before DB lookup to avoid duplicate assets.
@@ -314,6 +345,54 @@ async function findOrCreateImageAsset(client, tenantId, url, index) {
   );
   if (existing.rowCount > 0) return existing.rows[0].id;
 
+  const stem = urlStem(rawUrl);
+  if (VARIANT_SUFFIX.test(stem)) {
+    // The asset that declares this file as one of its own variants.
+    const byVariantMap = await client.query(
+      `
+        SELECT id
+        FROM media_assets
+        WHERE tenant_id = $1
+          AND kind = 'image'
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_each(COALESCE(metadata->'imageVariants', '{}'::jsonb)) AS variant
+            WHERE variant.value->>'url' IN ($2, $3)
+          )
+        ORDER BY created_at
+        LIMIT 1
+      `,
+      [tenantId, url, rawUrl],
+    );
+    if (byVariantMap.rowCount > 0) return byVariantMap.rows[0].id;
+
+    // Older assets have no variant map recorded. Fall back to the shared stem,
+    // matching on the filename so the differing extension does not matter.
+    const originalStem = stem.replace(VARIANT_SUFFIX, '');
+    const likeStem = `%/${originalStem.replace(/([%_\\])/g, '\\$1')}.%`;
+    const byStem = await client.query(
+      `
+        SELECT id
+        FROM media_assets
+        WHERE tenant_id = $1
+          AND kind = 'image'
+          AND (storage_url LIKE $2 ESCAPE '\\' OR preview_url LIKE $2 ESCAPE '\\')
+        ORDER BY created_at
+        LIMIT 1
+      `,
+      [tenantId, likeStem],
+    );
+    if (byStem.rowCount > 0) return byStem.rows[0].id;
+
+    // No original to point at. Inserting the derivative is still better than
+    // dropping the image out of the gallery, but it is a defect somewhere
+    // upstream, so it is logged and marked rather than stored silently.
+    console.warn(
+      `[admin-products] no original found for variant URL ${rawUrl}; storing the derivative. `
+      + 'Something is saving a preview URL instead of storageUrl.',
+    );
+  }
+
   const filename = String(url).split('/').pop()?.split('?')[0] || `product-image-${index + 1}`;
   const inserted = await client.query(
     `
@@ -326,7 +405,10 @@ async function findOrCreateImageAsset(client, tenantId, url, index) {
       filename,
       filename.startsWith('data:') ? 'image/preview' : null,
       url,
-      JSON.stringify({ source: 'admin-product-save' }),
+      JSON.stringify({
+        source: 'admin-product-save',
+        ...(VARIANT_SUFFIX.test(stem) ? { unresolvedVariantUrl: true } : {}),
+      }),
     ],
   );
   return inserted.rows[0].id;
