@@ -37,7 +37,9 @@ export interface RefSizeSet {
 export class ReferenceDataService {
   private readonly http = inject(HttpClient);
   private readonly apiBase = this.resolveApiBase();
-  private readonly cacheMs = 60 * 60_000;
+  // This endpoint is tiny and admin-managed. Revalidate on page navigation so
+  // a newly saved Arabic color name replaces the in-memory value promptly.
+  private readonly cacheMs = 0;
   private readonly _colorHexByName = signal<Record<string, string>>({});
   private readonly _colorSwatchImageByName = signal<Record<string, string>>({});
   /** Arabic display name per colour, keyed by the lowercased English name that

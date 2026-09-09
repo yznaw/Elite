@@ -57,7 +57,7 @@ router.put('/colors/:id', asyncHandler(async (req, res) => {
   const { name_en, name_ar = '', hex = '#000000', swatch_image_url = null, sort_order = 0 } = req.body ?? {};
   if (!String(name_en ?? '').trim()) return validationError(res, ['Color name (EN) is required.']);
 
-  const client = await db.connect();
+  const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
 
@@ -69,11 +69,11 @@ router.put('/colors/:id', asyncHandler(async (req, res) => {
     if (!prev.rowCount) { await client.query('ROLLBACK'); return notFound(res); }
     const oldName = prev.rows[0].name_en;
 
-    const { rows } = await client.query(
+    await client.query(
       `UPDATE ref_colors
        SET name_en=$3, name_ar=$4, hex=$5, swatch_image_url=$6, sort_order=$7
        WHERE id=$1 AND tenant_id=$2
-       RETURNING id, name_en, name_ar, hex, swatch_image_url, sort_order`,
+       RETURNING id`,
       [req.params.id, tenant.id, name_en.trim(), String(name_ar).trim(), hex, swatch_image_url || null, sort_order],
     );
 
@@ -87,8 +87,30 @@ router.put('/colors/:id', asyncHandler(async (req, res) => {
       );
     }
 
+    // Return the authoritative usage count. Returning a hard-coded zero made
+    // the admin treat an in-use color as unused immediately after editing it;
+    // its next delete then omitted ?force=true and failed with a hidden 409.
+    const updated = await client.query(
+      `SELECT
+         rc.id,
+         rc.name_en,
+         rc.name_ar,
+         rc.hex,
+         rc.swatch_image_url,
+         rc.sort_order,
+         COUNT(DISTINCT pv.id)::int AS variant_count
+       FROM ref_colors rc
+       LEFT JOIN product_variants pv
+         ON pv.tenant_id = rc.tenant_id
+        AND (pv.color_ref_id = rc.id
+             OR lower(trim(pv.color)) = lower(trim(rc.name_en)))
+       WHERE rc.id = $1 AND rc.tenant_id = $2
+       GROUP BY rc.id`,
+      [req.params.id, tenant.id],
+    );
+
     await client.query('COMMIT');
-    ok(res, { ...rows[0], variant_count: 0 });
+    ok(res, updated.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -137,7 +159,7 @@ router.delete('/colors/:id', asyncHandler(async (req, res) => {
     });
   }
 
-  const client = await db.connect();
+  const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
     if (variantCount > 0) {
@@ -249,7 +271,7 @@ router.delete('/materials/:id', asyncHandler(async (req, res) => {
     });
   }
 
-  const client = await db.connect();
+  const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
     if (variantCount > 0) {

@@ -749,26 +749,73 @@ export class ReferenceComponent implements OnInit {
       }
       this.editingId.set(null);
       this.toast.success(this.t('reference.toast.colorSaved'));
-    } catch { this.toast.error(this.t('reference.toast.colorSaveError')); }
+    } catch (error) { this.toast.error(this.apiErrorMessage(error, this.t('reference.toast.colorSaveError'))); }
     finally { this.saving.set(false); }
   }
 
   async deleteColor(c: RefColor): Promise<void> {
-    const count = c.variant_count ?? 0;
-    const confirmed = await this.confirm.ask({
-      title:        count > 0 ? this.t('reference.confirm.deleteColor.inUseTitle') : `${this.t('reference.confirm.deleteColor.title')} "${c.name_en}"`,
-      message:      this.t('reference.confirm.deleteColor.message'),
-      variant:      'danger',
-      confirmLabel: count > 0 ? this.t('reference.confirm.deleteColor.forceLabel') : this.t('reference.confirm.deleteColor.confirmLabel'),
-      cancelLabel:  this.t('common.cancel'),
-    });
+    let count = c.variant_count ?? 0;
+    let force = count > 0;
+    let confirmed = await this.confirmColorDelete(c, count);
     if (!confirmed) return;
 
     try {
-      await this.refApi.deleteColor(c.id, count > 0);
-      this.colors.update(list => list.filter(x => x.id !== c.id));
-      this.toast.success(this.t('reference.toast.colorDeleted'));
-    } catch { this.toast.error(this.t('reference.toast.colorDeleteError')); }
+      await this.refApi.deleteColor(c.id, force);
+    } catch (error) {
+      // The server is authoritative. A stale/missing client usage count must
+      // not strand the user at a generic 409; explain the impact and retry only
+      // after explicit confirmation.
+      const serverCount = this.variantCountFromError(error);
+      if (!force && serverCount > 0) {
+        count = serverCount;
+        confirmed = await this.confirmColorDelete(c, count);
+        if (!confirmed) return;
+        force = true;
+        try {
+          await this.refApi.deleteColor(c.id, true);
+        } catch (retryError) {
+          this.toast.error(this.apiErrorMessage(retryError, this.t('reference.toast.colorDeleteError')));
+          return;
+        }
+      } else {
+        this.toast.error(this.apiErrorMessage(error, this.t('reference.toast.colorDeleteError')));
+        return;
+      }
+    }
+
+    this.colors.update(list => list.filter(x => x.id !== c.id));
+    this.toast.success(this.t('reference.toast.colorDeleted'));
+  }
+
+  private confirmColorDelete(c: RefColor, variantCount: number): Promise<boolean> {
+    const inUse = variantCount > 0;
+    return this.confirm.ask({
+      title: inUse
+        ? this.t('reference.confirm.deleteColor.inUseTitle')
+        : `${this.t('reference.confirm.deleteColor.title')} "${c.name_en}"`,
+      message: inUse
+        ? `${variantCount} ${variantCount === 1 ? this.t('common.variant') : this.t('common.variants')}. ${this.t('reference.confirm.deleteColor.inUseMessage')}`
+        : this.t('reference.confirm.deleteColor.message'),
+      variant: 'danger',
+      confirmLabel: inUse
+        ? this.t('reference.confirm.deleteColor.forceLabel')
+        : this.t('reference.confirm.deleteColor.confirmLabel'),
+      cancelLabel: this.t('common.cancel'),
+    });
+  }
+
+  private variantCountFromError(error: unknown): number {
+    const value = (error as { error?: { variantCount?: unknown } })?.error?.variantCount;
+    const count = Number(value);
+    return Number.isFinite(count) && count > 0 ? count : 0;
+  }
+
+  private apiErrorMessage(error: unknown, fallback: string): string {
+    const body = (error as { error?: { message?: unknown; error?: unknown; errors?: unknown } })?.error;
+    if (Array.isArray(body?.errors) && body.errors.length > 0) return String(body.errors[0]);
+    if (typeof body?.message === 'string' && body.message.trim()) return body.message;
+    if (typeof body?.error === 'string' && body.error.trim()) return body.error;
+    return fallback;
   }
 
   // ── Color drag-to-reorder ─────────────────────────────────────────────────
