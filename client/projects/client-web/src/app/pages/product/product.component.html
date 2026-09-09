@@ -58,6 +58,7 @@
             @if (gallery().length > 1) {
               <button
                 type="button"
+                dir="ltr"
                 class="gallery-nav gallery-nav-prev"
                 (click)="navGallery(-1)"
                 [attr.aria-label]="t('product.aria.previousImage')"
@@ -66,6 +67,7 @@
               </button>
               <button
                 type="button"
+                dir="ltr"
                 class="gallery-nav gallery-nav-next"
                 (click)="navGallery(1)"
                 [attr.aria-label]="t('product.aria.nextImage')"
