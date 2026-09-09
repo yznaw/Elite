@@ -156,9 +156,9 @@ async function adjustStock(context, body) {
  * Opens a stocktake over a set of variants, snapshotting what the system
  * currently believes. Nothing is written to stock here.
  *
- * `scope` is either an explicit list of variant ids, or `all` for every active
- * variant. A stocktake of everything is the normal end-of-season case; a
- * partial one is a cycle count of a single shelf.
+ * `scope` is either an explicit list of variant ids, or `all` for every
+ * countable variant. Storefront-hidden products remain countable because they
+ * can still hold physical stock; only archived products are excluded.
  */
 async function startStocktake(context, body) {
   assertPos(
@@ -184,6 +184,11 @@ async function startStocktake(context, body) {
     // One at a time. Two overlapping counts of the same shelf produce two
     // different discrepancies for the same physical fact, and whichever posts
     // second silently overwrites the first's reasoning.
+    //
+    // TODO(inventory-locations): Per-store/warehouse stocktake is a separate
+    // development scope, not a selector on this shared-pool workflow. It needs
+    // location-level balances, movements, sales allocation and transfers before
+    // independent location counts can post safely (docs/25 Phase 15).
     assertPos(open.rowCount === 0, 409, 'STOCKTAKE_IN_PROGRESS', 'Finish or cancel the open stocktake first.');
 
     const created = await client.query(
@@ -200,12 +205,12 @@ async function startStocktake(context, body) {
          JOIN products p ON p.id = pv.product_id
         WHERE pv.tenant_id = $2
           AND pv.is_active = true
-          AND p.status = 'active'
+          AND p.status <> 'archived'
           AND ($3::uuid[] IS NULL OR pv.id = ANY($3::uuid[]))
        RETURNING id`,
       [stocktakeId, context.tenantId, variantIds],
     );
-    assertPos(lines.rowCount > 0, 422, 'NO_VARIANTS', 'That scope matched no active product variants.');
+    assertPos(lines.rowCount > 0, 422, 'NO_VARIANTS', 'That scope matched no countable product variants.');
 
     await writeAudit(client, context, 'inventory.stocktake.started', 'stocktake', stocktakeId, {
       reference, blind, lineCount: lines.rowCount,

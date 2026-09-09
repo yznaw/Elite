@@ -137,6 +137,10 @@ test('inventory operations: adjustments, blind stocktake, and sales during a cou
     assert.equal(tooMuch.body.code, 'INSUFFICIENT_STOCK');
     assert.equal(await stockOf(variantB), 10, 'a rejected adjustment must not move stock');
 
+    // A storefront-hidden product still holds physical stock and must remain
+    // countable. Hiding it must not turn its inventory invisible to operations.
+    await db.query("UPDATE products SET status = 'hidden' WHERE id = $1", [productId]);
+
     // ── Blind stocktake ─────────────────────────────────────────────────────
     const stocktake = await api('/admin/inventory/stocktakes', {
       method: 'POST',
@@ -148,6 +152,7 @@ test('inventory operations: adjustments, blind stocktake, and sales during a cou
     // Blind means the counter cannot see what the system expects. A count taken
     // while looking at the expected figure tends to agree with it.
     const blindView = await api(`/admin/inventory/stocktakes/${stocktake.stocktakeId}`);
+    assert.equal(blindView.lines.length, 2, 'hidden-product variants remain in the stocktake');
     assert.equal(blindView.lines[0].expectedQuantity, null);
     assert.equal(blindView.lines[0].currentStock, null);
 
@@ -198,6 +203,8 @@ test('inventory operations: adjustments, blind stocktake, and sales during a cou
       'the discrepancy is applied to current stock — sales made during the count must survive',
     );
     assert.equal(await stockOf(variantB), 10, 'a line that matched must not move');
+    const hiddenStatus = await db.query('SELECT status FROM products WHERE id = $1', [productId]);
+    assert.equal(hiddenStatus.rows[0].status, 'hidden', 'stocktake must not change storefront visibility');
 
     const stocktakeMovement = await db.query(
       `SELECT delta, reason, metadata FROM inventory_movements

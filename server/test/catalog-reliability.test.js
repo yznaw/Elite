@@ -14,6 +14,24 @@ test('product validation requires at least one variant', () => {
   }), []);
 });
 
+test('product validation rejects blank and duplicate variant SKUs', () => {
+  const base = { name: 'Test', sku: '1493-GF-', brand: 'Elite', price: 10, stock: 0 };
+  const blankErrors = adminProducts._test.validateProduct({
+    ...base,
+    variants: [{ sku: '', size: '5', price: 10, stock: 0 }],
+  });
+  assert.match(blankErrors.join(' '), /variant 1 sku is required/i);
+
+  const duplicateErrors = adminProducts._test.validateProduct({
+    ...base,
+    variants: [
+      { sku: '1493-GF-5', size: '5', color: 'Black', price: 10, stock: 0 },
+      { sku: '1493-GF-5', size: '5', color: 'Tan', price: 10, stock: 0 },
+    ],
+  });
+  assert.match(duplicateErrors.join(' '), /duplicate variant sku.*1493-GF-5/i);
+});
+
 test('public product mapping exposes the Arabic product name', () => {
   const mapped = publicProducts._test.mapRow({
     id: 'p1',

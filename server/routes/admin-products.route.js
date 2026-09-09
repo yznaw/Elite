@@ -84,6 +84,17 @@ function validateProduct(body) {
   if (Number(body.stock) < 0) errors.push('Stock cannot be negative.');
   if (!Array.isArray(body.variants) || body.variants.length === 0) {
     errors.push('At least one product variant is required.');
+  } else {
+    const seen = new Set();
+    body.variants.forEach((variant, index) => {
+      const sku = String(variant?.sku || '').trim();
+      if (!sku) {
+        errors.push(`Variant ${index + 1} SKU is required.`);
+      } else if (seen.has(sku)) {
+        errors.push(`Duplicate variant SKU "${sku}".`);
+      }
+      if (sku) seen.add(sku);
+    });
   }
 
   return errors;
@@ -91,14 +102,15 @@ function validateProduct(body) {
 
 async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true, actorUserId = null } = {}) {
   await ensureVariantNoteColumns(client);
-  // Resolve each variant's SKU up front. A variant saved without one (e.g. a
-  // manually-added row the admin never typed a SKU for) falls back to a
-  // generated-but-unique SKU instead of being silently dropped further down —
-  // product_variants.sku is NOT NULL + UNIQUE(tenant_id, sku), so every row
-  // needs one, and this list must match what's actually inserted below or the
-  // "removed" cleanup query would delete rows we're about to re-insert.
-  const resolved = variants.map((variant, index) => {
-    const sku = String(variant.sku || '').trim() || `${productId}-V${index}`;
+  // SKU generation belongs to the catalog editor. The API deliberately
+  // rejects blanks instead of inventing an unrelated productId-Vn identifier.
+  const resolved = variants.map((variant) => {
+    const sku = String(variant.sku || '').trim();
+    if (!sku) {
+      const err = new Error('Every product variant requires an SKU.');
+      err.status = 400;
+      throw err;
+    }
     // Barcode defaults to the variant's own SKU (printed as a Code128 label
     // and scanned back at POS) unless a real supplier-issued barcode was
     // entered — see docs/12-pos-system.md for the POS barcode lookup flow.

@@ -11,7 +11,8 @@
     "test:e2e:auth": "playwright test --config=playwright.auth.config.ts",
     "lint": "ng lint",
     "test": "ng test",
-    "test:hero": "playwright test --config=playwright.hero.config.ts"
+    "test:hero": "playwright test --config=playwright.hero.config.ts",
+    "test:sku": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/variant-sku.test.ts"
   },
   "private": true,
   "dependencies": {

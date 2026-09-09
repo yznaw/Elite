@@ -668,6 +668,12 @@ Beyond the runbook:
 
 **Status:** ⛔ deliberately skipped for the chosen operating model (2026-08-01).
 
+**Client feedback, 2026-09-09:** separate stocktakes for each store and the
+warehouse have been requested. This is recorded as a standalone development
+scope rather than part of the hidden-product stocktake fix. Independent counts
+cannot safely post until inventory balances, movements, POS sales allocation,
+website fulfilment and transfers all become location-aware.
+
 The two shops, stock room and website use one shared inventory pool. Moving a unit between physical places does not change that total and is intentionally not recorded as a sale, adjustment or transfer. The team handles the accepted limitation that the system answers “is this available anywhere?” rather than “which place currently holds it?”.
 
 If the business later needs branch-level availability, reserve-online-pickup by shop, or location stock valuation, that is a new scope decision. Only then add locations, per-location quantities and transfers. Registers and shifts are already separate for cash accountability and do not require splitting inventory.
