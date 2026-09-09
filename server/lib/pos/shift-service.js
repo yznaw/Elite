@@ -1,4 +1,4 @@
-const { audit, inTransaction, requireRegister } = require('./db');
+const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, cents, nonEmpty, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
 const { cashMovementTotals } = require('./cash-movement-service');
@@ -42,11 +42,21 @@ async function loadShiftSummary(client, tenantId, shiftId) {
          count(*) FILTER (WHERE status = 'completed')::integer AS refund_count
        FROM pos_refunds
        WHERE tenant_id = $1 AND shift_id = $2
+     ), sold_items AS (
+       SELECT COALESCE(sum(i.quantity), 0)::integer AS sold_item_quantity
+       FROM pos_transaction_items i
+       JOIN pos_transactions t ON t.id = i.transaction_id
+       WHERE t.tenant_id = $1 AND t.shift_id = $2 AND t.status = 'completed'
+     ), returned_items AS (
+       SELECT COALESCE(sum(ri.quantity), 0)::integer AS returned_item_quantity
+       FROM pos_refund_items ri
+       JOIN pos_refunds rf ON rf.id = ri.refund_id
+       WHERE rf.tenant_id = $1 AND rf.shift_id = $2 AND rf.status = 'completed'
      )
      SELECT s.id, s.register_id, s.cashier_id, s.state, s.opening_float_cents, s.opened_at,
-       tx.*, refunds.*,
+       tx.*, refunds.*, sold_items.sold_item_quantity, returned_items.returned_item_quantity,
        (tx.gross_sales_cents - tx.void_total_cents - refunds.refund_total_cents)::bigint AS net_sales_cents
-     FROM pos_shifts s CROSS JOIN tx CROSS JOIN refunds
+     FROM pos_shifts s CROSS JOIN tx CROSS JOIN refunds CROSS JOIN sold_items CROSS JOIN returned_items
      WHERE s.tenant_id = $1 AND s.id = $2`,
     [tenantId, shiftId],
   );
@@ -78,6 +88,9 @@ async function loadShiftSummary(client, tenantId, shiftId) {
     transactionCount: numeric(row, 'transaction_count'),
     refundCount: numeric(row, 'refund_count'),
     voidCount: numeric(row, 'void_count'),
+    soldItemQuantity: numeric(row, 'sold_item_quantity'),
+    returnedItemQuantity: numeric(row, 'returned_item_quantity'),
+    netItemQuantity: numeric(row, 'sold_item_quantity') - numeric(row, 'returned_item_quantity'),
   };
 }
 
@@ -152,11 +165,13 @@ async function closeShift(context, body) {
 
   return inTransaction(async (client) => {
     const existing = await client.query(
-      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name
+      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name,
+              b.name AS branch_name
        FROM pos_z_reports z
        JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
        JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
        LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
+       LEFT JOIN pos_branches b ON b.id = z.branch_id AND b.tenant_id = z.tenant_id
        WHERE z.tenant_id = $1 AND z.idempotency_key = $2`,
       [context.tenantId, idempotencyKey],
     );
@@ -207,22 +222,24 @@ async function closeShift(context, body) {
       [shift.id],
     );
     const summary = await loadShiftSummary(client, context.tenantId, shift.id);
+    const branch = await resolveRegisterBranch(client, context.tenantId, register);
     const reportData = { ...summary, physicalCashCents };
     const report = await client.query(
       `INSERT INTO pos_z_reports (
-         tenant_id, shift_id, register_id, manager_id, idempotency_key,
+         tenant_id, shift_id, register_id, branch_id, manager_id, idempotency_key,
          opening_float_cents, gross_sales_cents, cash_sales_cents, card_sales_cents,
          refund_total_cents, cash_refund_cents, void_total_cents, voided_cash_cents,
          net_sales_cents, expected_cash_cents, physical_cash_cents,
-         transaction_count, refund_count, void_count, report_data,
+         transaction_count, refund_count, void_count, sold_item_quantity, returned_item_quantity, report_data,
          cash_in_cents, cash_out_cents
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24,$25
        ) RETURNING *`,
       [
         context.tenantId,
         shift.id,
         register.id,
+        branch.id,
         approverId,
         idempotencyKey,
         summary.openingFloatCents,
@@ -239,6 +256,8 @@ async function closeShift(context, body) {
         summary.transactionCount,
         summary.refundCount,
         summary.voidCount,
+        summary.soldItemQuantity,
+        summary.returnedItemQuantity,
         JSON.stringify(reportData),
         summary.cashInCents,
         summary.cashOutCents,
@@ -262,6 +281,7 @@ async function closeShift(context, body) {
     return mapZReport({
       ...report.rows[0],
       register_name: register.display_name,
+      branch_name: branch.name,
       cashier_name: shift.cashier_name,
     });
   });
@@ -273,6 +293,8 @@ function mapZReport(row) {
     shiftId: row.shift_id,
     registerId: row.register_id,
     registerName: row.register_name || null,
+    branchId: row.branch_id || null,
+    branchName: row.branch_name || null,
     cashierName: row.cashier_name || null,
     openingFloatCents: Number(row.opening_float_cents),
     grossSalesCents: Number(row.gross_sales_cents),
@@ -289,6 +311,9 @@ function mapZReport(row) {
     transactionCount: Number(row.transaction_count),
     refundCount: Number(row.refund_count),
     voidCount: Number(row.void_count),
+    soldItemQuantity: Number(row.sold_item_quantity || 0),
+    returnedItemQuantity: Number(row.returned_item_quantity || 0),
+    netItemQuantity: Number(row.sold_item_quantity || 0) - Number(row.returned_item_quantity || 0),
     createdAt: row.created_at,
   };
 }
@@ -298,11 +323,13 @@ async function listZReports(context, { limit = 30 } = {}) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context);
     const result = await client.query(
-      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name
+      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name,
+              b.name AS branch_name
        FROM pos_z_reports z
        JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
        JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
        LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
+       LEFT JOIN pos_branches b ON b.id = z.branch_id AND b.tenant_id = z.tenant_id
        WHERE z.tenant_id = $1 AND z.register_id = $2
        ORDER BY z.created_at DESC
        LIMIT $3`,
@@ -317,11 +344,13 @@ async function getZReport(context, zReportId) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context);
     const result = await client.query(
-      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name
+      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name,
+              b.name AS branch_name
        FROM pos_z_reports z
        JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
        JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
        LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
+       LEFT JOIN pos_branches b ON b.id = z.branch_id AND b.tenant_id = z.tenant_id
        WHERE z.tenant_id = $1 AND z.id = $2`,
       [context.tenantId, zReportId],
     );

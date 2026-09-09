@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
@@ -15,14 +15,18 @@ import {
   PosInventoryReport,
   PosRefundVoidReport,
   PosZReportRow,
+  PosProductSalesReport,
+  PosReportLocation,
 } from '../../services/pos-reports.service';
+import { LocationSelectorComponent } from '../../shared/location-selector/location-selector.component';
+import { ReportKpiCardComponent } from '../../shared/report-kpi-card/report-kpi-card.component';
 
-type ReportTab = 'daily-sales' | 'cash-movements' | 'card-exceptions' | 'inventory' | 'refund-void' | 'z-history';
+type ReportTab = 'daily-sales' | 'product-sales' | 'cash-movements' | 'card-exceptions' | 'inventory' | 'refund-void' | 'z-history';
 
 @Component({
   selector: 'ap-reports',
   standalone: true,
-  imports: [CommonModule, DatePipe, FormsModule, SortableTableComponent, CellTplDirective, SpinnerComponent, PillComponent],
+  imports: [CommonModule, DatePipe, FormsModule, SortableTableComponent, CellTplDirective, SpinnerComponent, PillComponent, LocationSelectorComponent, ReportKpiCardComponent],
   template: `
     <div class="page-fade">
       <div class="card card-pad mb-16">
@@ -35,15 +39,24 @@ type ReportTab = 'daily-sales' | 'cash-movements' | 'card-exceptions' | 'invento
             <label class="lbl">{{ t('reports.to') }}</label>
             <input class="inp" type="date" [ngModel]="to()" (ngModelChange)="setTo($event)"/>
           </div>
-          <div>
-            <label class="lbl">{{ t('reports.register') }}</label>
-            <select class="inp" [ngModel]="registerId()" (ngModelChange)="setRegisterId($event)">
-              <option value="">{{ t('reports.allRegisters') }}</option>
-              @for (r of registers(); track r.registerId) {
-                <option [value]="r.registerId">{{ r.displayName }}</option>
-              }
-            </select>
-          </div>
+          @if (tab() === 'product-sales') {
+            <ap-location-selector
+              [label]="t('reports.location')"
+              [allLabel]="t('reports.allLocations')"
+              [options]="salesLocationOptions()"
+              [value]="salesLocationId()"
+              (valueChange)="setSalesLocation($event)"/>
+          } @else {
+            <div>
+              <label class="lbl">{{ t('reports.register') }}</label>
+              <select class="inp" [ngModel]="registerId()" (ngModelChange)="setRegisterId($event)">
+                <option value="">{{ t('reports.allRegisters') }}</option>
+                @for (r of registers(); track r.registerId) {
+                  <option [value]="r.registerId">{{ r.displayName }}</option>
+                }
+              </select>
+            </div>
+          }
           <button class="btn btn-outline" (click)="setQuickRange('today')">{{ t('reports.range.today') }}</button>
           <button class="btn btn-outline" (click)="setQuickRange('7d')">{{ t('reports.range.7d') }}</button>
           <button class="btn btn-outline" (click)="setQuickRange('30d')">{{ t('reports.range.30d') }}</button>
@@ -114,6 +127,27 @@ type ReportTab = 'daily-sales' | 'cash-movements' | 'card-exceptions' | 'invento
           </div>
           <ap-sortable-table [columns]="dailyByItemColumns" [rows]="r.byItem">
             <ng-template apCellTpl="totalCents" let-row>{{ formatMoney(row.totalCents) }}</ng-template>
+          </ap-sortable-table>
+        </div>
+      }
+
+      @if (tab() === 'product-sales' && productSales(); as r) {
+        <div class="kpi-row mb-16">
+          <ap-report-kpi-card [label]="t('reports.productSales.sold')" [value]="r.totals.soldQuantity"/>
+          <ap-report-kpi-card [label]="t('reports.productSales.returned')" [value]="r.totals.returnedQuantity"/>
+          <ap-report-kpi-card [label]="t('reports.productSales.netItems')" [value]="r.totals.netQuantity"/>
+          <ap-report-kpi-card [label]="t('reports.productSales.netSales')" [value]="formatMoney(r.totals.netSalesCents)"/>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">{{ t('reports.productSales.title') }}</div>
+              <div class="card-sub">{{ t('reports.productSales.sub') }}</div>
+            </div>
+            <button class="btn btn-outline btn-sm" (click)="exportProductSales(r)">{{ t('reports.exportCsv') }}</button>
+          </div>
+          <ap-sortable-table [columns]="productSalesColumns" [rows]="r.items">
+            <ng-template apCellTpl="netSalesCents" let-row>{{ formatMoney(row.netSalesCents) }}</ng-template>
           </ap-sortable-table>
         </div>
       }
@@ -232,6 +266,7 @@ export class ReportsComponent implements OnInit {
 
   readonly tabs: { key: ReportTab; labelKey: string }[] = [
     { key: 'daily-sales', labelKey: 'reports.tab.dailySales' },
+    { key: 'product-sales', labelKey: 'reports.tab.productSales' },
     { key: 'cash-movements', labelKey: 'reports.tab.cashMovements' },
     { key: 'card-exceptions', labelKey: 'reports.tab.cardExceptions' },
     { key: 'inventory', labelKey: 'reports.tab.inventory' },
@@ -242,11 +277,19 @@ export class ReportsComponent implements OnInit {
   readonly tab = signal<ReportTab>('daily-sales');
   readonly loading = signal(false);
   readonly registers = signal<PosReconciliationRegister[]>([]);
+  readonly reportLocations = signal<PosReportLocation[]>([]);
   readonly from = signal(this.daysAgo(7));
   readonly to = signal(this.daysAgo(0));
   readonly registerId = signal('');
+  readonly salesLocationId = signal('');
+  readonly salesLocationOptions = computed(() => this.reportLocations().map((location) => ({
+    id: location.id,
+    label: location.name,
+    kind: location.channel === 'website' ? 'website' as const : 'store' as const,
+  })));
 
   readonly dailySales = signal<PosDailySalesReport | null>(null);
+  readonly productSales = signal<PosProductSalesReport | null>(null);
   readonly cashMovementsReport = signal<PosCashMovementsReport | null>(null);
   readonly cardExceptions = signal<PosCardExceptionRow[] | null>(null);
   readonly inventoryReport = signal<PosInventoryReport | null>(null);
@@ -286,6 +329,18 @@ export class ReportsComponent implements OnInit {
     { key: 'size', label: 'Size' },
     { key: 'quantity', label: 'Qty', align: 'right' },
     { key: 'totalCents', label: 'Total', align: 'right' },
+  ];
+  readonly productSalesColumns: TableColumn[] = [
+    { key: 'locationName', label: 'Branch / Channel' },
+    { key: 'productName', label: 'Product' },
+    { key: 'variantTitle', label: 'Variant' },
+    { key: 'sku', label: 'SKU' },
+    { key: 'color', label: 'Color' },
+    { key: 'size', label: 'Size' },
+    { key: 'soldQuantity', label: 'Sold', align: 'right' },
+    { key: 'returnedQuantity', label: 'Returned', align: 'right' },
+    { key: 'netQuantity', label: 'Net', align: 'right' },
+    { key: 'netSalesCents', label: 'Net Sales', align: 'right' },
   ];
   readonly cashMovementColumns: TableColumn[] = [
     { key: 'createdAt', label: 'When' },
@@ -349,7 +404,11 @@ export class ReportsComponent implements OnInit {
   ];
   readonly zHistoryColumns: TableColumn[] = [
     { key: 'createdAt', label: 'Closed' },
+    { key: 'branchName', label: 'Branch' },
     { key: 'registerName', label: 'Register' },
+    { key: 'soldItemQuantity', label: 'Sold Items', align: 'right' },
+    { key: 'returnedItemQuantity', label: 'Returned', align: 'right' },
+    { key: 'netItemQuantity', label: 'Net Items', align: 'right' },
     { key: 'netSalesCents', label: 'Net Sales', align: 'right' },
     { key: 'expectedCashCents', label: 'Expected', align: 'right' },
     { key: 'physicalCashCents', label: 'Physical', align: 'right' },
@@ -359,6 +418,7 @@ export class ReportsComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       this.registers.set(await this.reconciliationApi.listRegisters());
+      this.reportLocations.set(await this.reportsApi.locations());
     } catch {
       // Global interceptor surfaces the error.
     }
@@ -373,6 +433,7 @@ export class ReportsComponent implements OnInit {
   setFrom(value: string): void { this.from.set(value); void this.loadActiveTab(); }
   setTo(value: string): void { this.to.set(value); void this.loadActiveTab(); }
   setRegisterId(value: string): void { this.registerId.set(value); void this.loadActiveTab(); }
+  setSalesLocation(value: string): void { this.salesLocationId.set(value); void this.loadActiveTab(); }
 
   setQuickRange(range: 'today' | '7d' | '30d'): void {
     const days = range === 'today' ? 0 : range === '7d' ? 7 : 30;
@@ -388,7 +449,15 @@ export class ReportsComponent implements OnInit {
   }
 
   private filter() {
-    return { from: this.from(), to: this.to(), registerId: this.registerId() || undefined };
+    const selectedLocation = this.salesLocationId();
+    return {
+      from: this.from(),
+      to: this.to(),
+      registerId: this.registerId() || undefined,
+      ...(selectedLocation === 'website'
+        ? { channel: 'website' as const }
+        : selectedLocation ? { branchId: selectedLocation, channel: 'pos' as const } : {}),
+    };
   }
 
   async loadActiveTab(): Promise<void> {
@@ -398,6 +467,9 @@ export class ReportsComponent implements OnInit {
       switch (this.tab()) {
         case 'daily-sales':
           this.dailySales.set(await this.reportsApi.dailySales(filter));
+          break;
+        case 'product-sales':
+          this.productSales.set(await this.reportsApi.productSales(filter));
           break;
         case 'cash-movements':
           this.cashMovementsReport.set(await this.reportsApi.cashMovements(filter));
@@ -501,6 +573,15 @@ export class ReportsComponent implements OnInit {
       ]));
   }
 
+  exportProductSales(r: PosProductSalesReport): void {
+    this.downloadCsv(`products-sold-${this.from()}-${this.to()}.csv`,
+      ['Branch / Channel', 'Product', 'Variant', 'SKU', 'Color', 'Size', 'Sold', 'Returned', 'Net', 'Net Sales'],
+      r.items.map((row) => [
+        row.locationName, row.productName, row.variantTitle || '', row.sku, row.color || '', row.size || '',
+        row.soldQuantity, row.returnedQuantity, row.netQuantity, this.formatMoney(row.netSalesCents),
+      ]));
+  }
+
   exportCashMovements(r: PosCashMovementsReport): void {
     this.downloadCsv(`cash-movements-${this.from()}-${this.to()}.csv`,
       ['When', 'Type', 'Amount', 'Reason', 'Cashier', 'Manager', 'Register'],
@@ -530,8 +611,8 @@ export class ReportsComponent implements OnInit {
 
   exportZHistory(rows: PosZReportRow[]): void {
     this.downloadCsv(`z-report-history-${this.from()}-${this.to()}.csv`,
-      ['Closed', 'Register', 'Net Sales', 'Expected Cash', 'Physical Cash', 'Variance'],
-      rows.map((r) => [this.formatDateTime(r.createdAt), r.registerName, this.formatMoney(r.netSalesCents), this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents)]));
+      ['Closed', 'Branch', 'Register', 'Sold Items', 'Returned Items', 'Net Items', 'Net Sales', 'Expected Cash', 'Physical Cash', 'Variance'],
+      rows.map((r) => [this.formatDateTime(r.createdAt), r.branchName || '', r.registerName, r.soldItemQuantity, r.returnedItemQuantity, r.netItemQuantity, this.formatMoney(r.netSalesCents), this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents)]));
   }
 
   private errorMessage(error: unknown): string {

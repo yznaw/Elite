@@ -47,6 +47,7 @@ export interface PosRenderedReceipt {
 export interface PosZReportPrintData {
   zReportId: string;
   registerName?: string | null;
+  branchName?: string | null;
   cashierName?: string | null;
   createdAt: string;
   openingFloatCents: number;
@@ -64,6 +65,9 @@ export interface PosZReportPrintData {
   transactionCount: number;
   refundCount: number;
   voidCount: number;
+  soldItemQuantity: number;
+  returnedItemQuantity: number;
+  netItemQuantity: number;
 }
 
 const QATAR_TIME_ZONE = 'Asia/Qatar';
@@ -238,10 +242,10 @@ export class PosReceiptRenderer {
     ctx.fillText(this.formatQatarDateTime(report.createdAt), centerX, y);
     ctx.fillStyle = '#000';
     y += 22;
-    if (report.registerName || report.cashierName) {
+    if (report.branchName || report.registerName || report.cashierName) {
       ctx.font = `13px ${this.bodyFont}`;
       ctx.fillStyle = this.inkMuted;
-      ctx.fillText([report.cashierName, report.registerName].filter(Boolean).join('  ·  '), centerX, y);
+      ctx.fillText([report.branchName, report.cashierName, report.registerName].filter(Boolean).join('  ·  '), centerX, y);
       ctx.fillStyle = '#000';
       y += 22;
     }
@@ -281,6 +285,9 @@ export class PosReceiptRenderer {
     ctx.font = `13px ${this.bodyFont}`;
     ctx.fillStyle = this.inkMuted;
     y = this.columns(ctx, 'Transactions', String(report.transactionCount), y);
+    y = this.columns(ctx, 'Items sold', String(report.soldItemQuantity), y);
+    y = this.columns(ctx, 'Items returned', String(report.returnedItemQuantity), y);
+    y = this.columns(ctx, 'Net items', String(report.netItemQuantity), y);
     y = this.columns(ctx, 'Refunds', String(report.refundCount), y);
     y = this.columns(ctx, 'Voids', String(report.voidCount), y);
     ctx.fillStyle = '#000';

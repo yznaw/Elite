@@ -59,6 +59,10 @@ test('core reporting: daily sales, cash movements, card exceptions, inventory, r
       body: JSON.stringify({ email: process.env.DEFAULT_ADMIN_EMAIL, password: process.env.DEFAULT_ADMIN_PASSWORD }),
     });
     tenantId = user.tenantId;
+    await db.query(
+      `INSERT INTO pos_branches (tenant_id, name, is_default) VALUES ($1, 'Reports Shop', true)`,
+      [tenantId],
+    );
 
     const product = await db.query(
       `INSERT INTO products
@@ -181,6 +185,22 @@ test('core reporting: daily sales, cash movements, card exceptions, inventory, r
       }),
     });
 
+    // A paid storefront order proves the comprehensive report combines the
+    // website channel with POS branches without changing POS-only reports.
+    const webOrder = await db.query(
+      `INSERT INTO orders
+        (tenant_id, public_number, customer_name, status, payment_status, subtotal_cents, total_cents, metadata)
+       VALUES ($1,$2,'Website Customer','placed','paid',2000,2000,$3::jsonb)
+       RETURNING id`,
+      [tenantId, `WEB-REPORT-${runId}`, JSON.stringify({ source: 'client-web-checkout' })],
+    );
+    await db.query(
+      `INSERT INTO order_items
+        (tenant_id, order_id, product_id, variant_id, sku, product_name, variant_title, size, quantity, unit_price_cents, total_cents)
+       VALUES ($1,$2,$3,$4,$5,'POS Reports E2E Product','M','M',1,2000,2000)`,
+      [tenantId, webOrder.rows[0].id, product.rows[0].id, variantId, `POS-REPORTS-E2E-V-${runId}`],
+    );
+
     // --- Report 1: daily sales ---
     const daily = await api(`/admin/pos-reports/daily-sales?registerId=${registerId}&from=${businessDate}&to=${businessDate}`);
     // sale1 (voided, excluded) + sale2 (completed, 4000) = 4000 total from 'completed' transactions.
@@ -191,6 +211,25 @@ test('core reporting: daily sales, cash movements, card exceptions, inventory, r
       r.sku === `POS-REPORTS-E2E-V-${runId}` && r.size === 'M' && r.color === null,
     ));
     assert.ok(daily.byHour.length > 0);
+    assert.equal(daily.byBranch.length, 1);
+    assert.ok(daily.byBranch[0].branchId, 'new POS sales snapshot their branch');
+
+    // --- Comprehensive product sales: every branch plus website channel ---
+    const productSales = await api(`/admin/pos-reports/product-sales?from=${businessDate}&to=${businessDate}`);
+    assert.equal(productSales.totals.soldQuantity, 3);
+    assert.equal(productSales.totals.returnedQuantity, 1);
+    assert.equal(productSales.totals.netQuantity, 2);
+    assert.equal(productSales.totals.netSalesCents, 4000);
+    assert.equal(productSales.items.length, 2);
+    const posItem = productSales.items.find((item) => item.channel === 'pos');
+    assert.equal(posItem.branchId, daily.byBranch[0].branchId);
+    assert.equal(posItem.sku, `POS-REPORTS-E2E-V-${runId}`);
+
+    const branchOnly = await api(`/admin/pos-reports/product-sales?branchId=${daily.byBranch[0].branchId}&from=${businessDate}&to=${businessDate}`);
+    assert.equal(branchOnly.totals.netQuantity, 1);
+    const websiteOnly = await api(`/admin/pos-reports/product-sales?channel=website&from=${businessDate}&to=${businessDate}`);
+    assert.equal(websiteOnly.totals.soldQuantity, 1);
+    assert.equal(websiteOnly.items[0].locationName, 'Website');
 
     // --- Report 2: cash movements ---
     const cashReport = await api(`/admin/pos-reports/cash-movements?registerId=${registerId}&from=${businessDate}&to=${businessDate}`);
@@ -233,6 +272,11 @@ test('core reporting: daily sales, cash movements, card exceptions, inventory, r
     assert.equal(zHistory[0].cashInCents, 500);
     assert.equal(zHistory[0].cashOutCents, 300);
     assert.equal(zHistory[0].varianceCents, 0);
+    assert.equal(zHistory[0].branchId, daily.byBranch[0].branchId);
+    assert.ok(zHistory[0].branchName);
+    assert.equal(zHistory[0].soldItemQuantity, 2);
+    assert.equal(zHistory[0].returnedItemQuantity, 1);
+    assert.equal(zHistory[0].netItemQuantity, 1);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

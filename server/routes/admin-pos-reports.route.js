@@ -2,6 +2,8 @@ const { Router } = require('express');
 const { asyncHandler, ok } = require('./lib');
 const {
   dailySales,
+  productSales,
+  reportLocations,
   cashMovements,
   cardSettlementExceptions,
   inventoryMovements,
@@ -17,6 +19,14 @@ function context(req) {
 
 router.get('/daily-sales', asyncHandler(async (req, res) => {
   ok(res, await dailySales(context(req), req.query));
+}));
+
+router.get('/product-sales', asyncHandler(async (req, res) => {
+  ok(res, await productSales(context(req), req.query));
+}));
+
+router.get('/locations', asyncHandler(async (req, res) => {
+  ok(res, await reportLocations(context(req)));
 }));
 
 router.get('/cash-movements', asyncHandler(async (req, res) => {

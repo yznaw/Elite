@@ -70,6 +70,24 @@ async function requireRegister(client, context, { lock = false } = {}) {
   return register;
 }
 
+/** Resolve the physical branch used for immutable sale/refund/Z snapshots.
+ * Registers may be left unassigned, in which case the same default/oldest
+ * fallback used by receipt printing is applied. */
+async function resolveRegisterBranch(client, tenantId, register) {
+  const result = await client.query(
+    `SELECT b.id, b.name
+       FROM pos_branches b
+      WHERE b.tenant_id = $1
+        AND b.id = COALESCE(
+          $2::uuid,
+          (SELECT d.id FROM pos_branches d WHERE d.tenant_id = $1 AND d.is_default = true),
+          (SELECT f.id FROM pos_branches f WHERE f.tenant_id = $1 ORDER BY f.created_at LIMIT 1)
+        )`,
+    [tenantId, register?.branch_id || null],
+  );
+  return result.rows[0] || { id: null, name: null };
+}
+
 async function audit(client, context, action, entityType, entityId, afterState = undefined, beforeState = undefined) {
   await client.query(
     `INSERT INTO audit_events
@@ -92,4 +110,4 @@ async function audit(client, context, action, entityType, entityId, afterState =
   );
 }
 
-module.exports = { audit, inTransaction, requireRegister };
+module.exports = { audit, inTransaction, requireRegister, resolveRegisterBranch };

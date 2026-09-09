@@ -35,6 +35,64 @@ const ADJUSTMENT_REASONS = new Set([
 /** Reasons that always remove stock, used to sanity-check the sign. */
 const NEGATIVE_ONLY = new Set(['damaged', 'lost', 'returned_to_supplier', 'sample']);
 
+/** Keep count locations aligned with configured shops and guarantee one
+ * warehouse row. These locations label a count only; they do not own stock. */
+async function syncStocktakeLocations(client, tenantId) {
+  await client.query(
+    `INSERT INTO stocktake_locations (tenant_id, branch_id, name, location_type, sort_order)
+     SELECT b.tenant_id, b.id, b.name, 'store',
+            row_number() OVER (ORDER BY b.is_default DESC, b.created_at)::integer - 1
+       FROM pos_branches b
+      WHERE b.tenant_id = $1
+     ON CONFLICT DO NOTHING`,
+    [tenantId],
+  );
+  await client.query(
+    `INSERT INTO stocktake_locations (tenant_id, name, location_type, sort_order)
+     SELECT $1, 'Warehouse', 'warehouse', 100
+      WHERE NOT EXISTS (
+        SELECT 1 FROM stocktake_locations WHERE tenant_id = $1 AND location_type = 'warehouse'
+      )`,
+    [tenantId],
+  );
+  // A branch rename should be reflected wherever the next count is shown.
+  await client.query(
+    `UPDATE stocktake_locations l SET name = b.name
+       FROM pos_branches b
+      WHERE l.tenant_id = $1 AND l.branch_id = b.id AND l.name <> b.name`,
+    [tenantId],
+  );
+}
+
+async function listStocktakeLocations(context) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await syncStocktakeLocations(client, context.tenantId);
+    const result = await client.query(
+      `SELECT id, branch_id, name, location_type, is_active, sort_order
+         FROM stocktake_locations
+        WHERE tenant_id = $1 AND is_active = true
+        ORDER BY sort_order, name`,
+      [context.tenantId],
+    );
+    await client.query('COMMIT');
+    return result.rows.map((row) => ({
+      locationId: row.id,
+      branchId: row.branch_id,
+      name: row.name,
+      type: row.location_type,
+      active: row.is_active,
+      sortOrder: Number(row.sort_order),
+    }));
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 function parseQuantity(value, field) {
   const quantity = Number.parseInt(value, 10);
   assertPos(Number.isSafeInteger(quantity), 422, 'INVALID_QUANTITY', `${field} must be a whole number.`);
@@ -172,10 +230,14 @@ async function startStocktake(context, body) {
   const blind = body?.blind !== false;
   const note = body?.note ? nonEmpty(body.note, 'note', 300) : null;
   const variantIds = Array.isArray(body?.variantIds) ? body.variantIds.map((id) => uuid(id, 'variantIds[]')) : null;
+  const requestedLocationIds = Array.isArray(body?.locationIds)
+    ? [...new Set(body.locationIds.map((id) => uuid(id, 'locationIds[]')))]
+    : null;
 
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
+    await syncStocktakeLocations(client, context.tenantId);
 
     const open = await client.query(
       `SELECT id FROM stocktakes WHERE tenant_id = $1 AND status IN ('counting', 'review')`,
@@ -212,12 +274,44 @@ async function startStocktake(context, body) {
     );
     assertPos(lines.rowCount > 0, 422, 'NO_VARIANTS', 'That scope matched no countable product variants.');
 
+    // Location mode is opt-in at the API boundary. This keeps older clients
+    // and already-scripted global stocktakes working; the current admin UI
+    // explicitly sends its selected locations.
+    const locations = requestedLocationIds === null
+      ? { rows: [], rowCount: 0 }
+      : await client.query(
+        `SELECT id, name, location_type
+           FROM stocktake_locations
+          WHERE tenant_id = $1 AND is_active = true
+            AND id = ANY($2::uuid[])
+          ORDER BY sort_order, name`,
+        [context.tenantId, requestedLocationIds],
+      );
+    if (requestedLocationIds !== null) {
+      assertPos(locations.rowCount > 0, 422, 'NO_LOCATIONS', 'Select at least one stocktake location.');
+      assertPos(
+        locations.rowCount === requestedLocationIds.length,
+        422,
+        'INVALID_LOCATION',
+        'One or more stocktake locations are invalid or inactive.',
+      );
+    }
+    for (const location of locations.rows) {
+      // eslint-disable-next-line no-await-in-loop -- one master count owns a small fixed set of locations.
+      await client.query(
+        `INSERT INTO stocktake_location_runs (stocktake_id, tenant_id, location_id)
+         VALUES ($1,$2,$3)`,
+        [stocktakeId, context.tenantId, location.id],
+      );
+    }
+
     await writeAudit(client, context, 'inventory.stocktake.started', 'stocktake', stocktakeId, {
       reference, blind, lineCount: lines.rowCount,
+      locations: locations.rows.map((location) => location.name),
     });
     await client.query('COMMIT');
 
-    return { ...mapStocktake(created.rows[0]), lineCount: lines.rowCount };
+    return { ...mapStocktake(created.rows[0]), lineCount: lines.rowCount, locationCount: locations.rowCount };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;
@@ -229,6 +323,12 @@ async function startStocktake(context, body) {
 /** Records a counted quantity for one line. A second count on the same line is
  *  stored separately as a recount, so the disagreement stays visible. */
 async function saveCount(context, stocktakeId, body) {
+  assertPos(
+    ['owner', 'admin', 'manager'].includes(context.role),
+    403,
+    'INSUFFICIENT_PERMISSIONS',
+    'Only owners, admins and managers can enter stocktake counts.',
+  );
   const id = uuid(stocktakeId, 'stocktakeId');
   const variantId = uuid(body?.variantId, 'variantId');
   const counted = parseQuantity(body?.quantity, 'quantity');
@@ -255,6 +355,37 @@ async function saveCount(context, stocktakeId, body) {
     );
     assertPos(line.rowCount === 1, 404, 'LINE_NOT_FOUND', 'That variant is not part of this stocktake.');
 
+    const runs = await client.query(
+      'SELECT id FROM stocktake_location_runs WHERE stocktake_id = $1 LIMIT 1',
+      [id],
+    );
+    if (runs.rowCount) {
+      const locationId = uuid(body?.locationId, 'locationId');
+      const run = await client.query(
+        `SELECT id, status FROM stocktake_location_runs
+          WHERE stocktake_id = $1 AND tenant_id = $2 AND location_id = $3
+          FOR UPDATE`,
+        [id, context.tenantId, locationId],
+      );
+      assertPos(run.rowCount === 1, 404, 'LOCATION_NOT_FOUND', 'That location is not part of this stocktake.');
+      assertPos(run.rows[0].status === 'counting', 409, 'LOCATION_COMPLETED', 'Reopen this location before changing its counts.');
+      await client.query(
+        `INSERT INTO stocktake_location_counts
+           (stocktake_id, tenant_id, location_run_id, location_id, variant_id, quantity, counted_by_user_id, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT (location_run_id, variant_id)
+         DO UPDATE SET quantity = EXCLUDED.quantity,
+                       counted_by_user_id = EXCLUDED.counted_by_user_id,
+                       counted_at = now(), note = EXCLUDED.note`,
+        [
+          id, context.tenantId, run.rows[0].id, locationId, variantId, counted, context.userId,
+          body?.note ? String(body.note).slice(0, 300) : null,
+        ],
+      );
+      await client.query('COMMIT');
+      return { stocktakeId: id, variantId, locationId, quantity: counted, recount: false };
+    }
+
     // First number goes in `counted_quantity`; a later one is a recount and is
     // kept alongside rather than overwriting it. Overwriting would erase the
     // fact that two people counted the same shelf differently, which is the
@@ -275,6 +406,109 @@ async function saveCount(context, stocktakeId, body) {
   } finally {
     client.release();
   }
+}
+
+async function completeStocktakeLocation(context, stocktakeId, locationId) {
+  assertPos(
+    ['owner', 'admin', 'manager'].includes(context.role),
+    403,
+    'INSUFFICIENT_PERMISSIONS',
+    'Only owners, admins and managers can complete a stocktake location.',
+  );
+  const id = uuid(stocktakeId, 'stocktakeId');
+  const resolvedLocationId = uuid(locationId, 'locationId');
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const run = await client.query(
+      `SELECT r.id, r.status
+         FROM stocktake_location_runs r
+         JOIN stocktakes s ON s.id = r.stocktake_id
+        WHERE r.stocktake_id = $1 AND r.location_id = $2 AND r.tenant_id = $3
+          AND s.status IN ('counting', 'review')
+        FOR UPDATE OF r`,
+      [id, resolvedLocationId, context.tenantId],
+    );
+    assertPos(run.rowCount === 1, 404, 'LOCATION_NOT_FOUND', 'That location is not part of an open stocktake.');
+
+    const coverage = await client.query(
+      `SELECT
+         (SELECT count(*)::int FROM stocktake_lines WHERE stocktake_id = $1) AS required_count,
+         (SELECT count(*)::int FROM stocktake_location_counts WHERE location_run_id = $2) AS counted_count`,
+      [id, run.rows[0].id],
+    );
+    const required = Number(coverage.rows[0].required_count);
+    const counted = Number(coverage.rows[0].counted_count);
+    assertPos(
+      counted === required,
+      409,
+      'LOCATION_INCOMPLETE',
+      `${required - counted} product variant(s) still need a count for this location. Enter zero when none are present.`,
+      { requiredCount: required, countedCount: counted },
+    );
+
+    await client.query(
+      `UPDATE stocktake_location_runs
+          SET status = 'completed', completed_by_user_id = $2, completed_at = now()
+        WHERE id = $1`,
+      [run.rows[0].id, context.userId],
+    );
+    const remaining = await client.query(
+      `SELECT count(*)::int AS count FROM stocktake_location_runs
+        WHERE stocktake_id = $1 AND status <> 'completed'`,
+      [id],
+    );
+    if (Number(remaining.rows[0].count) === 0) {
+      // Location counts are evidence; stocktake_lines remains the posting
+      // contract. Aggregate only after every selected physical location is complete.
+      await client.query(
+        `UPDATE stocktake_lines l
+            SET counted_quantity = totals.quantity,
+                recount_quantity = NULL,
+                counted_by_user_id = $2,
+                counted_at = totals.counted_at
+           FROM (
+             SELECT variant_id, sum(quantity)::integer AS quantity, max(counted_at) AS counted_at
+               FROM stocktake_location_counts
+              WHERE stocktake_id = $1
+              GROUP BY variant_id
+           ) totals
+          WHERE l.stocktake_id = $1 AND l.variant_id = totals.variant_id`,
+        [id, context.userId],
+      );
+      await client.query("UPDATE stocktakes SET status = 'review' WHERE id = $1", [id]);
+    }
+    await client.query('COMMIT');
+    return {
+      stocktakeId: id,
+      locationId: resolvedLocationId,
+      status: 'completed',
+      allLocationsCompleted: Number(remaining.rows[0].count) === 0,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function reopenStocktakeLocation(context, stocktakeId, locationId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can reopen a location.');
+  const id = uuid(stocktakeId, 'stocktakeId');
+  const resolvedLocationId = uuid(locationId, 'locationId');
+  const result = await db.pool.query(
+    `UPDATE stocktake_location_runs r
+        SET status = 'counting', completed_by_user_id = NULL, completed_at = NULL
+       FROM stocktakes s
+      WHERE r.stocktake_id = s.id AND r.stocktake_id = $1 AND r.location_id = $2
+        AND r.tenant_id = $3 AND s.status IN ('counting', 'review')
+      RETURNING r.id`,
+    [id, resolvedLocationId, context.tenantId],
+  );
+  assertPos(result.rowCount === 1, 404, 'LOCATION_NOT_FOUND', 'That location is not part of an open stocktake.');
+  await db.pool.query("UPDATE stocktakes SET status = 'counting' WHERE id = $1", [id]);
+  return { stocktakeId: id, locationId: resolvedLocationId, status: 'counting' };
 }
 
 /**
@@ -327,6 +561,17 @@ async function postStocktake(context, stocktakeId, body = {}) {
       409,
       'STOCKTAKE_CANCELLED',
       'This stocktake was cancelled.',
+    );
+    const incompleteLocations = await client.query(
+      `SELECT count(*)::int AS count FROM stocktake_location_runs
+        WHERE stocktake_id = $1 AND status <> 'completed'`,
+      [id],
+    );
+    assertPos(
+      Number(incompleteLocations.rows[0].count) === 0,
+      409,
+      'LOCATIONS_INCOMPLETE',
+      'Complete every selected stocktake location before posting the combined total.',
     );
 
     // Ordered by variant id: the same lock order every other stock writer in
@@ -428,6 +673,7 @@ async function postStocktake(context, stocktakeId, body = {}) {
 }
 
 async function cancelStocktake(context, stocktakeId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can cancel a stocktake.');
   const id = uuid(stocktakeId, 'stocktakeId');
   const result = await db.pool.query(
     `UPDATE stocktakes SET status = 'cancelled'
@@ -467,6 +713,29 @@ async function getStocktake(context, stocktakeId) {
     [id],
   );
 
+  const locationRuns = await db.pool.query(
+    `SELECT r.location_id, l.branch_id, l.name, l.location_type, r.status,
+            r.completed_at, u.full_name AS completed_by_name,
+            (SELECT count(*)::int FROM stocktake_location_counts c WHERE c.location_run_id = r.id) AS counted_count
+       FROM stocktake_location_runs r
+       JOIN stocktake_locations l ON l.id = r.location_id
+       LEFT JOIN admin_users u ON u.id = r.completed_by_user_id
+      WHERE r.stocktake_id = $1
+      ORDER BY l.sort_order, l.name`,
+    [id],
+  );
+  const locationCounts = await db.pool.query(
+    `SELECT location_id, variant_id, quantity, counted_at
+       FROM stocktake_location_counts WHERE stocktake_id = $1`,
+    [id],
+  );
+  const countsByVariant = new Map();
+  for (const count of locationCounts.rows) {
+    const values = countsByVariant.get(count.variant_id) || {};
+    values[count.location_id] = Number(count.quantity);
+    countsByVariant.set(count.variant_id, values);
+  }
+
   return {
     ...mapStocktake(row),
     startedByName: row.started_by_name,
@@ -488,6 +757,17 @@ async function getStocktake(context, stocktakeId) {
         : (line.recount_quantity ?? line.counted_quantity) - Number(line.expected_quantity),
       countedAt: line.counted_at,
       note: line.note,
+      locationCounts: countsByVariant.get(line.variant_id) || {},
+    })),
+    locations: locationRuns.rows.map((location) => ({
+      locationId: location.location_id,
+      branchId: location.branch_id,
+      name: location.name,
+      type: location.location_type,
+      status: location.status,
+      countedCount: Number(location.counted_count),
+      completedAt: location.completed_at,
+      completedByName: location.completed_by_name,
     })),
   };
 }
@@ -497,7 +777,9 @@ async function listStocktakes(context, query = {}) {
   const { rows } = await db.pool.query(
     `SELECT s.*, u.full_name AS started_by_name,
             (SELECT count(*)::int FROM stocktake_lines l WHERE l.stocktake_id = s.id) AS line_count,
-            (SELECT count(*)::int FROM stocktake_lines l WHERE l.stocktake_id = s.id AND l.counted_quantity IS NOT NULL) AS counted_count
+            (SELECT count(*)::int FROM stocktake_lines l WHERE l.stocktake_id = s.id AND l.counted_quantity IS NOT NULL) AS counted_count,
+            (SELECT count(*)::int FROM stocktake_location_runs r WHERE r.stocktake_id = s.id) AS location_count,
+            (SELECT count(*)::int FROM stocktake_location_runs r WHERE r.stocktake_id = s.id AND r.status = 'completed') AS completed_location_count
        FROM stocktakes s
        LEFT JOIN admin_users u ON u.id = s.started_by_user_id
       WHERE s.tenant_id = $1
@@ -510,6 +792,8 @@ async function listStocktakes(context, query = {}) {
     startedByName: row.started_by_name,
     lineCount: Number(row.line_count),
     countedCount: Number(row.counted_count),
+    locationCount: Number(row.location_count),
+    completedLocationCount: Number(row.completed_location_count),
   }));
 }
 
@@ -563,5 +847,8 @@ module.exports = {
   cancelStocktake,
   getStocktake,
   listStocktakes,
+  listStocktakeLocations,
+  completeStocktakeLocation,
+  reopenStocktakeLocation,
   ADJUSTMENT_REASONS,
 };

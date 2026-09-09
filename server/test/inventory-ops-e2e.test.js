@@ -76,6 +76,10 @@ test('inventory operations: adjustments, blind stocktake, and sales during a cou
       body: JSON.stringify({ email: process.env.DEFAULT_ADMIN_EMAIL, password: process.env.DEFAULT_ADMIN_PASSWORD }),
     });
     tenantId = user.tenantId;
+    await db.query(
+      `INSERT INTO pos_branches (tenant_id, name, is_default) VALUES ($1, 'Test Shop', true)`,
+      [tenantId],
+    );
 
     const product = await db.query(
       `INSERT INTO products (tenant_id, sku, brand, name, slug, status, base_price_cents, stock_quantity)
@@ -259,6 +263,39 @@ test('inventory operations: adjustments, blind stocktake, and sales during a cou
       body: JSON.stringify({ acceptRecountDisagreement: true }),
     });
     assert.equal(await stockOf(variantB), 9);
+
+    // ── Quick multi-location count, still one shared stock balance ──────────
+    const locations = await api('/admin/inventory/stocktake-locations');
+    assert.ok(locations.some((location) => location.type === 'store'));
+    assert.ok(locations.some((location) => location.type === 'warehouse'));
+    const distributed = await api('/admin/inventory/stocktakes', {
+      method: 'POST',
+      body: JSON.stringify({
+        reference: `ST-${runId}-LOCATIONS`, blind: true, variantIds: [variantB],
+        locationIds: locations.map((location) => location.locationId),
+      }),
+    });
+    assert.equal(distributed.locationCount, locations.length);
+    for (let index = 0; index < locations.length; index++) {
+      const quantity = index === 0 ? 9 : 0;
+      await api(`/admin/inventory/stocktakes/${distributed.stocktakeId}/counts`, {
+        method: 'POST',
+        body: JSON.stringify({ variantId: variantB, locationId: locations[index].locationId, quantity }),
+      });
+      const completed = await api(`/admin/inventory/stocktakes/${distributed.stocktakeId}/locations/${locations[index].locationId}/complete`, {
+        method: 'POST', body: '{}',
+      });
+      assert.equal(completed.allLocationsCompleted, index === locations.length - 1);
+    }
+    const combined = await api(`/admin/inventory/stocktakes/${distributed.stocktakeId}`);
+    assert.equal(combined.status, 'review');
+    assert.equal(combined.lines[0].countedQuantity, 9, 'location counts are summed before posting');
+    assert.equal(Object.keys(combined.lines[0].locationCounts).length, locations.length);
+    const distributedPost = await api(`/admin/inventory/stocktakes/${distributed.stocktakeId}/post`, {
+      method: 'POST', body: '{}',
+    });
+    assert.equal(distributedPost.adjustedLines, 0);
+    assert.equal(await stockOf(variantB), 9, 'location labels do not create or mutate separate balances');
 
     // ── The ledger invariant still holds after all of it ────────────────────
     const drifted = await findDrift(tenantId);

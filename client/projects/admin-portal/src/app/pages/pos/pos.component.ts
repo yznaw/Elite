@@ -1914,18 +1914,18 @@ export class PosComponent implements OnInit, OnDestroy {
     const rows = this.zReportHistory();
     if (!rows.length) return;
     const header = [
-      'Z Report ID', 'Created At', 'Opening Float', 'Gross Sales', 'Cash Sales', 'Card Sales',
+      'Z Report ID', 'Created At', 'Branch', 'Register', 'Opening Float', 'Gross Sales', 'Cash Sales', 'Card Sales',
       'Refunds', 'Voids', 'Net Sales', 'Cash In', 'Cash Out', 'Expected Cash', 'Physical Cash',
-      'Variance', 'Transactions', 'Refund Count', 'Void Count',
+      'Variance', 'Transactions', 'Items Sold', 'Items Returned', 'Net Items', 'Refund Count', 'Void Count',
     ];
     const csvRows = rows.map((r) => [
-      r.zReportId, this.formatDateTime(r.createdAt),
+      r.zReportId, this.formatDateTime(r.createdAt), r.branchName || '', r.registerName || '',
       this.formatMoney(r.openingFloatCents), this.formatMoney(r.grossSalesCents),
       this.formatMoney(r.cashSalesCents), this.formatMoney(r.cardSalesCents),
       this.formatMoney(r.refundTotalCents), this.formatMoney(r.voidTotalCents),
       this.formatMoney(r.netSalesCents), this.formatMoney(r.cashInCents), this.formatMoney(r.cashOutCents),
       this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents),
-      String(r.transactionCount), String(r.refundCount), String(r.voidCount),
+      String(r.transactionCount), String(r.soldItemQuantity), String(r.returnedItemQuantity), String(r.netItemQuantity), String(r.refundCount), String(r.voidCount),
     ]);
     const csv = [header, ...csvRows]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))

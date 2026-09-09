@@ -119,10 +119,10 @@ export const routes: Routes = [
           import('./pages/reports/reports.component').then((m) => m.ReportsComponent),
       },
       {
-        // Counting the shelf and posting the difference. Owner/admin only —
-        // it writes stock (docs/25 Phase 8).
+        // Managers may enter physical counts; only owner/admin actions can
+        // start, cancel, reopen or post the final stock adjustment.
         path: 'stocktake',
-        canMatch: [roleGuard(['owner', 'admin'])],
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
         loadComponent: () =>
           import('./pages/stocktake/stocktake.component').then((m) => m.StocktakeComponent),
       },

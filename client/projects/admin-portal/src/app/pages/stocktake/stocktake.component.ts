@@ -9,9 +9,11 @@ import { ToastService } from '../../services/toast.service';
 import {
   InventoryService,
   StocktakeDetail,
+  StocktakeLocation,
   StocktakeStatus,
   StocktakeSummary,
 } from '../../services/inventory.service';
+import { LocationSelectorComponent, LocationOption } from '../../shared/location-selector/location-selector.component';
 
 /**
  * Stocktake: count the shelf, post the difference (docs/25 Phase 8).
@@ -28,7 +30,7 @@ import {
  */
 @Component({
     selector: 'ap-stocktake',
-    imports: [CommonModule, DatePipe, FormsModule, IconComponent, PillComponent, SpinnerComponent],
+    imports: [CommonModule, DatePipe, FormsModule, IconComponent, PillComponent, SpinnerComponent, LocationSelectorComponent],
     template: `
     <div class="page-fade">
       @if (!active(); as _) {
@@ -49,8 +51,22 @@ import {
               </select>
             </div>
           </div>
+          <div class="mt-16">
+            <label class="lbl">{{ t('stocktake.locations') }}</label>
+            <div class="location-checks">
+              @for (location of availableLocations(); track location.locationId) {
+                <label class="location-check">
+                  <input type="checkbox" [checked]="selectedStartLocations().includes(location.locationId)"
+                         (change)="toggleStartLocation(location.locationId, $any($event.target).checked)"/>
+                  <span>{{ location.name }}</span>
+                  <small class="muted">{{ t('stocktake.location.' + location.type) }}</small>
+                </label>
+              }
+            </div>
+            <div class="muted small mt-8">{{ t('stocktake.locations.hint') }}</div>
+          </div>
           <div class="muted small mt-8">{{ t('stocktake.mode.hint') }}</div>
-          <button class="btn btn-gold mt-16" [disabled]="starting() || !newReference().trim()" (click)="start()">
+          <button class="btn btn-gold mt-16" [disabled]="starting() || !newReference().trim() || !selectedStartLocations().length" (click)="start()">
             @if (starting()) { <ap-spinner [size]="12"/> }
             {{ t('stocktake.start.action') }}
           </button>
@@ -76,7 +92,12 @@ import {
           </div>
 
           <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
-            <button class="btn btn-gold" [disabled]="posting() || countedCount() === 0" (click)="post()">
+            @if (stocktake.locations.length && stocktake.status === 'counting') {
+              <button class="btn btn-gold" [disabled]="posting() || !selectedLocationCompleteReady()" (click)="completeLocation()">
+                {{ t('stocktake.location.complete') }}
+              </button>
+            }
+            <button class="btn btn-gold" [disabled]="posting() || stocktake.status !== 'review' || countedCount() === 0" (click)="post()">
               @if (posting()) { <ap-spinner [size]="12"/> }
               {{ t('stocktake.post') }}
             </button>
@@ -92,6 +113,22 @@ import {
               <input type="file" accept=".csv,text/csv" hidden [disabled]="importing()" (change)="importCounts($event)"/>
             </label>
           </div>
+
+          @if (stocktake.locations.length) {
+            <div class="location-toolbar mt-16">
+              <ap-location-selector
+                [label]="t('stocktake.location.active')"
+                [options]="activeLocationOptions()"
+                [value]="selectedLocationId()"
+                (valueChange)="selectLocation($event)"/>
+              <span class="muted small">
+                {{ completedLocationCount() }} / {{ stocktake.locations.length }} {{ t('stocktake.locations.completed') }}
+              </span>
+              @if (selectedLocation()?.status === 'completed' && stocktake.status !== 'posted') {
+                <button class="btn btn-outline btn-sm" (click)="reopenLocation()">{{ t('stocktake.location.reopen') }}</button>
+              }
+            </div>
+          }
 
           <div class="row gap-sm mt-16" style="align-items:center;flex-wrap:wrap;">
             <input class="inp" style="max-width:300px;" [ngModel]="scanCode()"
@@ -134,8 +171,8 @@ import {
                   @if (line.expectedQuantity !== null) {
                     <span class="muted small">{{ t('stocktake.expected') }} {{ line.expectedQuantity }}</span>
                   }
-                  @if (line.countedQuantity !== null) {
-                    <span class="small">{{ t('stocktake.count') }} {{ line.countedQuantity }}</span>
+                  @if (locationCount(line) !== null) {
+                    <span class="small">{{ t('stocktake.count') }} {{ locationCount(line) }}</span>
                   }
                   @if (line.recountQuantity !== null) {
                     <span class="small" [class.disagree]="line.recountQuantity !== line.countedQuantity">
@@ -152,9 +189,10 @@ import {
                   <input class="inp" type="number" min="0" inputmode="numeric"
                          [ngModel]="draft()[line.variantId] ?? ''"
                          (ngModelChange)="setDraft(line.variantId, $event)"
+                         [disabled]="!canEditSelectedLocation()"
                          [placeholder]="t('stocktake.enterCount')"/>
                   <button class="btn btn-outline btn-sm"
-                          [disabled]="saving() === line.variantId || draft()[line.variantId] === undefined || draft()[line.variantId] === ''"
+                          [disabled]="!canEditSelectedLocation() || saving() === line.variantId || draft()[line.variantId] === undefined || draft()[line.variantId] === ''"
                           (click)="saveCount(line.variantId)">
                     {{ line.countedQuantity === null ? t('stocktake.save') : t('stocktake.recount.action') }}
                   </button>
@@ -214,6 +252,9 @@ import {
     }
     .history-row:last-child { border-bottom: none; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .location-checks { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+    .location-check { display:flex; gap:7px; align-items:center; border:1px solid var(--border,#e5e7eb); border-radius:8px; padding:9px 11px; }
+    .location-toolbar { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
     @media (max-width: 900px) {
       .count-row { grid-template-columns: 1fr; }
     }
@@ -228,6 +269,9 @@ export class StocktakeComponent implements OnInit {
 
   readonly active = signal<StocktakeDetail | null>(null);
   readonly history = signal<StocktakeSummary[]>([]);
+  readonly availableLocations = signal<StocktakeLocation[]>([]);
+  readonly selectedStartLocations = signal<string[]>([]);
+  readonly selectedLocationId = signal('');
   readonly loading = signal(false);
   readonly starting = signal(false);
   readonly posting = signal(false);
@@ -241,7 +285,31 @@ export class StocktakeComponent implements OnInit {
   readonly scanCode = signal('');
   readonly draft = signal<Record<string, string>>({});
 
-  readonly countedCount = computed(() => this.active()?.lines.filter((l) => l.countedQuantity !== null).length ?? 0);
+  readonly countedCount = computed(() => {
+    const stocktake = this.active();
+    if (!stocktake) return 0;
+    const locationId = this.selectedLocationId();
+    return stocktake.locations.length && locationId
+      ? stocktake.lines.filter((line) => line.locationCounts[locationId] !== undefined).length
+      : stocktake.lines.filter((line) => line.countedQuantity !== null).length;
+  });
+  readonly activeLocationOptions = computed<LocationOption[]>(() =>
+    (this.active()?.locations ?? []).map((location) => ({
+      id: location.locationId,
+      label: `${location.name} · ${location.countedCount ?? 0}/${this.active()?.lines.length ?? 0}${location.status === 'completed' ? ' ✓' : ''}`,
+      kind: location.type,
+    })),
+  );
+  readonly selectedLocation = computed(() =>
+    this.active()?.locations.find((location) => location.locationId === this.selectedLocationId()) ?? null,
+  );
+  readonly completedLocationCount = computed(() =>
+    this.active()?.locations.filter((location) => location.status === 'completed').length ?? 0,
+  );
+  readonly selectedLocationCompleteReady = computed(() =>
+    !!this.selectedLocation() && this.selectedLocation()?.status === 'counting'
+      && this.countedCount() === (this.active()?.lines.length ?? -1),
+  );
 
   /** Lines where a recount contradicts the first count. Posting is blocked
    *  until they are resolved: two counts that disagree are a question, not a
@@ -262,7 +330,38 @@ export class StocktakeComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    try {
+      const locations = await this.api.listStocktakeLocations();
+      this.availableLocations.set(locations);
+      this.selectedStartLocations.set(locations.map((location) => location.locationId));
+    } catch {
+      // The interceptor already reported it.
+    }
     await this.reload();
+  }
+
+  toggleStartLocation(locationId: string, selected: boolean): void {
+    const next = new Set(this.selectedStartLocations());
+    if (selected) next.add(locationId); else next.delete(locationId);
+    this.selectedStartLocations.set([...next]);
+  }
+
+  selectLocation(locationId: string): void {
+    this.selectedLocationId.set(locationId);
+    this.draft.set({});
+  }
+
+  canEditSelectedLocation(): boolean {
+    const stocktake = this.active();
+    if (!stocktake) return false;
+    if (!stocktake.locations.length) return stocktake.status === 'counting' || stocktake.status === 'review';
+    return stocktake.status === 'counting' && this.selectedLocation()?.status === 'counting';
+  }
+
+  locationCount(line: StocktakeDetail['lines'][number]): number | null {
+    const locationId = this.selectedLocationId();
+    if (locationId && line.locationCounts[locationId] !== undefined) return line.locationCounts[locationId];
+    return line.countedQuantity;
   }
 
   statusKind(status: StocktakeStatus): 'green' | 'amber' | 'grey' | 'blue' {
@@ -282,7 +381,11 @@ export class StocktakeComponent implements OnInit {
       const list = await this.api.listStocktakes();
       this.history.set(list);
       const open = list.find((row) => row.status === 'counting' || row.status === 'review');
-      this.active.set(open ? await this.api.getStocktake(open.stocktakeId) : null);
+      const detail = open ? await this.api.getStocktake(open.stocktakeId) : null;
+      this.active.set(detail);
+      if (detail?.locations.length && !detail.locations.some((location) => location.locationId === this.selectedLocationId())) {
+        this.selectedLocationId.set(detail.locations.find((location) => location.status === 'counting')?.locationId ?? detail.locations[0].locationId);
+      }
     } catch {
       // The interceptor already reported it.
     } finally {
@@ -293,7 +396,11 @@ export class StocktakeComponent implements OnInit {
   async start(): Promise<void> {
     this.starting.set(true);
     try {
-      await this.api.startStocktake({ reference: this.newReference().trim(), blind: this.newBlind() });
+      await this.api.startStocktake({
+        reference: this.newReference().trim(),
+        blind: this.newBlind(),
+        locationIds: this.selectedStartLocations(),
+      });
       this.newReference.set('');
       await this.reload();
       this.toast.success(this.t('stocktake.started.toast'));
@@ -316,13 +423,49 @@ export class StocktakeComponent implements OnInit {
 
     this.saving.set(variantId);
     try {
-      await this.api.saveCount(stocktake.stocktakeId, variantId, quantity);
+      await this.api.saveCount(stocktake.stocktakeId, variantId, quantity, this.selectedLocationId() || undefined);
       this.draft.set({ ...this.draft(), [variantId]: '' });
       this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
     } catch {
       /* reported by the interceptor */
     } finally {
       this.saving.set(null);
+    }
+  }
+
+  async completeLocation(): Promise<void> {
+    const stocktake = this.active();
+    const location = this.selectedLocation();
+    if (!stocktake || !location) return;
+    this.posting.set(true);
+    try {
+      const result = await this.api.completeLocation(stocktake.stocktakeId, location.locationId);
+      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
+      this.toast.success(
+        this.t('stocktake.location.completed.toast'),
+        result.allLocationsCompleted ? this.t('stocktake.locations.ready') : undefined,
+      );
+      const next = this.active()?.locations.find((item) => item.status === 'counting');
+      if (next) this.selectLocation(next.locationId);
+    } catch {
+      /* reported by the interceptor */
+    } finally {
+      this.posting.set(false);
+    }
+  }
+
+  async reopenLocation(): Promise<void> {
+    const stocktake = this.active();
+    const location = this.selectedLocation();
+    if (!stocktake || !location) return;
+    this.posting.set(true);
+    try {
+      await this.api.reopenLocation(stocktake.stocktakeId, location.locationId);
+      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
+    } catch {
+      /* reported by the interceptor */
+    } finally {
+      this.posting.set(false);
     }
   }
 
@@ -339,11 +482,11 @@ export class StocktakeComponent implements OnInit {
       return;
     }
 
-    const current = Number.parseInt(this.draft()[line.variantId] ?? String(line.countedQuantity ?? 0), 10) || 0;
+    const current = Number.parseInt(this.draft()[line.variantId] ?? String(this.locationCount(line) ?? 0), 10) || 0;
     this.draft.set({ ...this.draft(), [line.variantId]: String(current + 1) });
     this.scanning.set(true);
     try {
-      await this.api.saveCount(stocktake.stocktakeId, line.variantId, current + 1);
+      await this.api.saveCount(stocktake.stocktakeId, line.variantId, current + 1, this.selectedLocationId() || undefined);
       this.draft.set({ ...this.draft(), [line.variantId]: '' });
       this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
       this.scanCode.set('');
@@ -358,14 +501,16 @@ export class StocktakeComponent implements OnInit {
     const stocktake = this.active();
     if (!stocktake) return;
     const cell = (value: unknown): string => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const locationHeaders = stocktake.locations.map((location) => location.name);
     const rows = [
-      ['SKU', 'Barcode', 'Product', 'Color', 'Size', 'Expected', 'Counted', 'Difference'],
+      ['SKU', 'Barcode', 'Product', 'Color', 'Size', ...locationHeaders, 'Expected', 'Combined Count', 'Difference'],
       ...stocktake.lines.map((line) => [
         line.sku,
         line.barcode,
         line.productName,
         line.color,
         line.size,
+        ...stocktake.locations.map((location) => line.locationCounts[location.locationId] ?? ''),
         line.expectedQuantity ?? '',
         line.countedQuantity ?? '',
         line.discrepancy ?? '',
@@ -415,7 +560,7 @@ export class StocktakeComponent implements OnInit {
           skipped++;
           continue;
         }
-        await this.api.saveCount(stocktake.stocktakeId, line.variantId, quantity);
+        await this.api.saveCount(stocktake.stocktakeId, line.variantId, quantity, this.selectedLocationId() || undefined);
         updated++;
       }
       this.active.set(await this.api.getStocktake(stocktake.stocktakeId));

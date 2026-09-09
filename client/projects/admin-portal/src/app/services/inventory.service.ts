@@ -35,6 +35,21 @@ export interface StocktakeSummary {
   startedByName?: string | null;
   lineCount?: number;
   countedCount?: number;
+  locationCount?: number;
+  completedLocationCount?: number;
+}
+
+export interface StocktakeLocation {
+  locationId: string;
+  branchId: string | null;
+  name: string;
+  type: 'store' | 'warehouse';
+  active?: boolean;
+  sortOrder?: number;
+  status?: 'counting' | 'completed';
+  countedCount?: number;
+  completedAt?: string | null;
+  completedByName?: string | null;
 }
 
 export interface StocktakeLine {
@@ -53,10 +68,12 @@ export interface StocktakeLine {
   discrepancy: number | null;
   countedAt: string | null;
   note: string | null;
+  locationCounts: Record<string, number>;
 }
 
 export interface StocktakeDetail extends StocktakeSummary {
   postedByName?: string | null;
+  locations: StocktakeLocation[];
   lines: StocktakeLine[];
 }
 
@@ -81,14 +98,30 @@ export class InventoryService {
     return firstValueFrom(this.api.get<StocktakeDetail>(`/admin/inventory/stocktakes/${stocktakeId}`));
   }
 
-  startStocktake(input: { reference: string; blind: boolean; note?: string; variantIds?: string[] }): Promise<StocktakeSummary> {
+  listStocktakeLocations(): Promise<StocktakeLocation[]> {
+    return firstValueFrom(this.api.get<StocktakeLocation[]>('/admin/inventory/stocktake-locations'));
+  }
+
+  startStocktake(input: { reference: string; blind: boolean; note?: string; variantIds?: string[]; locationIds?: string[] }): Promise<StocktakeSummary> {
     return firstValueFrom(this.api.post<StocktakeSummary>('/admin/inventory/stocktakes', input));
   }
 
-  saveCount(stocktakeId: string, variantId: string, quantity: number): Promise<{ recount: boolean }> {
+  saveCount(stocktakeId: string, variantId: string, quantity: number, locationId?: string): Promise<{ recount: boolean }> {
     return firstValueFrom(
-      this.api.post<{ recount: boolean }>(`/admin/inventory/stocktakes/${stocktakeId}/counts`, { variantId, quantity }),
+      this.api.post<{ recount: boolean }>(`/admin/inventory/stocktakes/${stocktakeId}/counts`, { variantId, quantity, locationId }),
     );
+  }
+
+  completeLocation(stocktakeId: string, locationId: string): Promise<{ allLocationsCompleted: boolean }> {
+    return firstValueFrom(this.api.post<{ allLocationsCompleted: boolean }>(
+      `/admin/inventory/stocktakes/${stocktakeId}/locations/${locationId}/complete`, {},
+    ));
+  }
+
+  reopenLocation(stocktakeId: string, locationId: string): Promise<void> {
+    return firstValueFrom(this.api.post<void>(
+      `/admin/inventory/stocktakes/${stocktakeId}/locations/${locationId}/reopen`, {},
+    ));
   }
 
   post(stocktakeId: string, acceptRecountDisagreement = false): Promise<{ countedLines: number; adjustedLines: number }> {
