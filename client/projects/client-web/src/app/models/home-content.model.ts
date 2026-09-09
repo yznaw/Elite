@@ -3,6 +3,10 @@ export interface HomeDiscountHeroContent {
   title: string;
   body: string;
   discountText: string;
+  kickerEn: string;
+  kickerAr: string;
+  discountLabelEn: string;
+  discountLabelAr: string;
   ctaText: string;
   ctaLink: string;
   titleEn: string;
@@ -180,6 +184,10 @@ export interface PromiseCard {
 }
 
 export interface PromiseContent {
+  kickerEn: string;
+  kickerAr: string;
+  titleEn: string;
+  titleAr: string;
   cards: PromiseCard[];
 }
 
@@ -260,6 +268,7 @@ export function createEmptyHomeContent(): HomeContentData {
       title: '',
       body: '',
       discountText: '',
+      kickerEn: '', kickerAr: '', discountLabelEn: '', discountLabelAr: '',
       ctaText: '',
       ctaLink: '',
       titleEn: '', titleAr: '', bodyEn: '', bodyAr: '', ctaTextEn: '', ctaTextAr: '',
@@ -271,6 +280,7 @@ export function createEmptyHomeContent(): HomeContentData {
       items: [],
     },
     promise: {
+      kickerEn: '', kickerAr: '', titleEn: '', titleAr: '',
       cards: [],
     },
     stats: [],

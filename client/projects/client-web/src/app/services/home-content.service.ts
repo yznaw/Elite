@@ -167,6 +167,8 @@ export class HomeContentService {
           : fallback.heroSlider.items,
       },
       promise: {
+        ...fallback.promise,
+        ...(content.promise || {}),
         cards: Array.isArray(content.promise?.cards) ? content.promise!.cards : fallback.promise.cards,
       },
       stats: Array.isArray(content.stats) ? content.stats : fallback.stats,

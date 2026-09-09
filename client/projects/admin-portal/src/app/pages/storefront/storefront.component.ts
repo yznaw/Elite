@@ -42,10 +42,10 @@ interface SocialLink    { id: string; platform: string; handle: string; enabled:
 interface HeroFact      { id: string; label: string; labelEn: string; labelAr: string; }
 
 interface StorefrontContent {
-  hero: { imageUrl: string; title: string; body: string; discountText: string; ctaText: string; ctaLink: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; ctaTextEn: string; ctaTextAr: string; };
+  hero: { imageUrl: string; title: string; body: string; discountText: string; kickerEn: string; kickerAr: string; discountLabelEn: string; discountLabelAr: string; ctaText: string; ctaLink: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; ctaTextEn: string; ctaTextAr: string; };
   collections: Array<{ id: string; collectionId?: string; title: string; imageUrl: string; link: string; ctaText?: string; titleEn: string; titleAr: string; ctaTextEn: string; ctaTextAr: string; }>;
   heroSlider: { ctaEn: string; ctaAr: string; items: HeroSliderItem[]; };
-  promise: { cards: PromiseCard[]; };
+  promise: { kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; cards: PromiseCard[]; };
   stats: StatItem[];
   contact: {
     kicker: string; headlineEn: string; headlineAccentEn: string;
@@ -653,6 +653,10 @@ interface StorefrontContent {
                   </div>
                 </label>
                 <div class="two-col">
+                  <label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().hero.kickerEn" (ngModelChange)="patchHero('kickerEn',$event)"/></label>
+                  <label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.kickerAr" (ngModelChange)="patchHero('kickerAr',$event)"/></label>
+                </div>
+                <div class="two-col">
                   <label><span class="lbl">Header (English)</span><input class="inp" [ngModel]="content().hero.titleEn" (ngModelChange)="patchHero('titleEn',$event)"/></label>
                   <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.titleAr" (ngModelChange)="patchHero('titleAr',$event)"/></label>
                 </div>
@@ -663,6 +667,10 @@ interface StorefrontContent {
                 <div class="two-col">
                   <label><span class="lbl">{{ t('storefront.editor.promotion.discount') }}</span><input class="inp" [ngModel]="content().hero.discountText" (ngModelChange)="patchHero('discountText',$event)"/></label>
                   <label><span class="lbl">CTA (English)</span><input class="inp" [ngModel]="content().hero.ctaTextEn" (ngModelChange)="patchHero('ctaTextEn',$event)"/></label>
+                </div>
+                <div class="two-col">
+                  <label><span class="lbl">Sale label (English)</span><input class="inp" [ngModel]="content().hero.discountLabelEn" (ngModelChange)="patchHero('discountLabelEn',$event)"/></label>
+                  <label><span class="lbl">تسمية الخصم (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.discountLabelAr" (ngModelChange)="patchHero('discountLabelAr',$event)"/></label>
                 </div>
                 <label><span class="lbl">CTA (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.ctaTextAr" (ngModelChange)="patchHero('ctaTextAr',$event)"/></label>
                 <label><span class="lbl">{{ t('storefront.editor.promotion.btnLink') }}</span><input class="inp" [ngModel]="content().hero.ctaLink" (ngModelChange)="patchHero('ctaLink',$event)"/></label>
@@ -691,6 +699,14 @@ interface StorefrontContent {
           <div class="card">
             <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.promise.title') }}</div><div class="card-sub">{{ t('storefront.editor.promise.sub') }}</div></div></div>
             <div class="card-pad">
+              <div class="two-col mb-4">
+                <label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().promise.kickerEn" (ngModelChange)="patchPromise('kickerEn',$event)"/></label>
+                <label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().promise.kickerAr" (ngModelChange)="patchPromise('kickerAr',$event)"/></label>
+              </div>
+              <div class="two-col mb-4">
+                <label><span class="lbl">Header (English)</span><input class="inp" [ngModel]="content().promise.titleEn" (ngModelChange)="patchPromise('titleEn',$event)"/></label>
+                <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().promise.titleAr" (ngModelChange)="patchPromise('titleAr',$event)"/></label>
+              </div>
               @for (card of content().promise.cards; track card.id; let i = $index) {
                 <div class="promise-card-editor">
                   <div class="promise-icon-wrap">
@@ -2502,6 +2518,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
 
   patchHeroSlider(key: string, value: string): void {
     this.content.update((c) => ({ ...c, heroSlider: { ...c.heroSlider, [key]: value } }));
+    this.markDirty();
+  }
+
+  patchPromise(key: string, value: string): void {
+    this.content.update((c) => ({ ...c, promise: { ...c.promise, [key]: value } }));
     this.markDirty();
   }
 

@@ -431,14 +431,14 @@
                 </div>
 
                 <div class="discount-copy">
-                  <p class="discount-kicker">Elite Collection</p>
+                  <p class="discount-kicker">{{ localized(contentData().hero.kickerEn, contentData().hero.kickerAr) }}</p>
                   <h2 id="home-discount-title">
                     {{ localized(contentData().hero.titleEn, contentData().hero.titleAr, contentData().hero.title) }}
                   </h2>
                   <p class="discount-body">{{ localized(contentData().hero.bodyEn, contentData().hero.bodyAr, contentData().hero.body) }}</p>
 
                   <div class="discount-callout">
-                    <span>Come and Enjoy Sale!</span>
+                    <span>{{ localized(contentData().hero.discountLabelEn, contentData().hero.discountLabelAr) }}</span>
                     <strong>{{ contentData().hero.discountText }}</strong>
                   </div>
 
@@ -458,9 +458,9 @@
             <section class="home-commerce" aria-labelledby="home-promise-title">
               <div class="promise-panel">
                 <div>
-                  <p class="discount-kicker">{{ t("home.promise.kicker") }}</p>
+                  <p class="discount-kicker">{{ localized(contentData().promise.kickerEn, contentData().promise.kickerAr) }}</p>
                   <h2 id="home-promise-title" class="serif">
-                    {{ t("home.promise.title") }}
+                    {{ localized(contentData().promise.titleEn, contentData().promise.titleAr) }}
                   </h2>
                 </div>
                 <div class="promise-grid">

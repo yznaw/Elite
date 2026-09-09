@@ -11,6 +11,10 @@ const DEFAULT_HOME_CONTENT = {
     title: "Find Your Perfect Look at Elite's New Collection",
     body: 'Step into a sharper wardrobe with curated footwear, outerwear, and everyday essentials selected for modern city style.',
     discountText: '50%',
+    kickerEn: 'Elite Collection',
+    kickerAr: 'إيليت كوليكشن',
+    discountLabelEn: 'Come and Enjoy Sale!',
+    discountLabelAr: 'استمتعوا بعروض التخفيضات!',
     ctaText: 'Shop Now',
     ctaLink: '/collection',
   },
@@ -199,6 +203,10 @@ const DEFAULT_HOME_CONTENT = {
     ],
   },
   promise: {
+    kickerEn: 'The Promise',
+    kickerAr: 'الوعد',
+    titleEn: 'Crafted for a Lifetime',
+    titleAr: 'صناعة تدوم مدى الحياة',
     cards: [
       { id: 'handStitched', icon: '◊', labelEn: 'Hand Stitched',     labelAr: 'خياطة يدوية',      subEn: 'Every stitch placed by a single artisan.',      subAr: 'كل غرزة تُوضع بيد حرفي واحد.' },
       { id: 'camelLeather', icon: '◆', labelEn: 'Camel Leather',     labelAr: 'جلد الإبل',        subEn: 'Full-grain hide selected for character.',        subAr: 'جلد طبيعي كامل الحبيبات.' },
@@ -497,6 +505,10 @@ function createEmptyHomeContent() {
       title: '',
       body: '',
       discountText: '',
+      kickerEn: '',
+      kickerAr: '',
+      discountLabelEn: '',
+      discountLabelAr: '',
       ctaText: '',
       ctaLink: '',
     },
@@ -537,6 +549,10 @@ function createEmptyHomeContent() {
       items: [],
     },
     promise: {
+      kickerEn: '',
+      kickerAr: '',
+      titleEn: '',
+      titleAr: '',
       cards: [],
     },
     stats: [],
@@ -568,6 +584,10 @@ function normalizeHero(hero = {}) {
     title: asText(hero.title, DEFAULT_HOME_CONTENT.hero.title),
     body: asText(hero.body, DEFAULT_HOME_CONTENT.hero.body),
     discountText: asText(hero.discountText, DEFAULT_HOME_CONTENT.hero.discountText),
+    kickerEn: asText(hero.kickerEn, DEFAULT_HOME_CONTENT.hero.kickerEn),
+    kickerAr: asText(hero.kickerAr, DEFAULT_HOME_CONTENT.hero.kickerAr),
+    discountLabelEn: asText(hero.discountLabelEn, DEFAULT_HOME_CONTENT.hero.discountLabelEn),
+    discountLabelAr: asText(hero.discountLabelAr, DEFAULT_HOME_CONTENT.hero.discountLabelAr),
     ctaText: asText(hero.ctaText, DEFAULT_HOME_CONTENT.hero.ctaText),
     ctaLink: asText(hero.ctaLink, DEFAULT_HOME_CONTENT.hero.ctaLink),
     titleEn: asText(hero.titleEn, asText(hero.title, DEFAULT_HOME_CONTENT.hero.title)),
@@ -888,7 +908,13 @@ function normalizePromise(promise = {}) {
       subAr:   asText(c.subAr,   fallback.subAr),
     };
   });
-  return { cards };
+  return {
+    kickerEn: asText(promise.kickerEn, fb.kickerEn),
+    kickerAr: asText(promise.kickerAr, fb.kickerAr),
+    titleEn: asText(promise.titleEn, fb.titleEn),
+    titleAr: asText(promise.titleAr, fb.titleAr),
+    cards,
+  };
 }
 
 function normalizeStats(stats = []) {
