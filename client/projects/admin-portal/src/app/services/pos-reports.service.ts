@@ -8,6 +8,8 @@ export interface PosReportFilter {
   registerId?: string;
   cashierId?: string;
   reason?: string;
+  branchId?: string;
+  channel?: 'pos' | 'website';
 }
 
 export interface PosDailySalesReport {
@@ -17,6 +19,7 @@ export interface PosDailySalesReport {
   byPaymentMethod: Array<{ paymentMethod: string; totalCents: number; transactionCount: number }>;
   byCashier: Array<{ cashierId: string; cashierName: string; totalCents: number; transactionCount: number }>;
   byRegister: Array<{ registerId: string; registerName: string; totalCents: number; transactionCount: number }>;
+  byBranch: Array<{ branchId: string | null; branchName: string; totalCents: number; transactionCount: number }>;
   byHour: Array<{ hourOfDay: number; totalCents: number; transactionCount: number }>;
   byItem: Array<{
     sku: string;
@@ -26,6 +29,31 @@ export interface PosDailySalesReport {
     size: string | null;
     quantity: number;
     totalCents: number;
+  }>;
+}
+
+export interface PosReportLocation {
+  id: string;
+  name: string;
+  channel: 'pos' | 'website';
+}
+
+export interface PosProductSalesReport {
+  locations: Array<{ branchId: string | null; name: string; channel: 'pos' | 'website' }>;
+  totals: { soldQuantity: number; returnedQuantity: number; netQuantity: number; netSalesCents: number };
+  items: Array<{
+    channel: 'pos' | 'website';
+    branchId: string | null;
+    locationName: string;
+    sku: string;
+    productName: string;
+    variantTitle: string | null;
+    color: string | null;
+    size: string | null;
+    soldQuantity: number;
+    returnedQuantity: number;
+    netQuantity: number;
+    netSalesCents: number;
   }>;
 }
 
@@ -47,6 +75,8 @@ export interface PosCardExceptionRow {
   businessDate: string;
   registerId: string;
   registerName: string;
+  branchId: string | null;
+  branchName: string | null;
   posTotalCents: number;
   settlementTotalCents: number | null;
   varianceCents: number | null;
@@ -82,6 +112,8 @@ export interface PosZReportRow {
   zReportId: string;
   registerId: string;
   registerName: string;
+  branchId: string | null;
+  branchName: string | null;
   openingFloatCents: number;
   grossSalesCents: number;
   cashSalesCents: number;
@@ -97,6 +129,9 @@ export interface PosZReportRow {
   transactionCount: number;
   refundCount: number;
   voidCount: number;
+  soldItemQuantity: number;
+  returnedItemQuantity: number;
+  netItemQuantity: number;
   createdAt: string;
 }
 
@@ -107,6 +142,8 @@ function toQuery(filter: PosReportFilter): string {
   if (filter.registerId) params.set('registerId', filter.registerId);
   if (filter.cashierId) params.set('cashierId', filter.cashierId);
   if (filter.reason) params.set('reason', filter.reason);
+  if (filter.branchId) params.set('branchId', filter.branchId);
+  if (filter.channel) params.set('channel', filter.channel);
   const query = params.toString();
   return query ? `?${query}` : '';
 }
@@ -117,6 +154,14 @@ export class PosReportsService {
 
   dailySales(filter: PosReportFilter): Promise<PosDailySalesReport> {
     return firstValueFrom(this.api.get<PosDailySalesReport>(`/admin/pos-reports/daily-sales${toQuery(filter)}`));
+  }
+
+  productSales(filter: PosReportFilter): Promise<PosProductSalesReport> {
+    return firstValueFrom(this.api.get<PosProductSalesReport>(`/admin/pos-reports/product-sales${toQuery(filter)}`));
+  }
+
+  locations(): Promise<PosReportLocation[]> {
+    return firstValueFrom(this.api.get<PosReportLocation[]>('/admin/pos-reports/locations'));
   }
 
   cashMovements(filter: PosReportFilter): Promise<PosCashMovementsReport> {

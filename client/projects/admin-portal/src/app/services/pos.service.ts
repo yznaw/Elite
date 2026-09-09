@@ -213,6 +213,8 @@ export interface PosZReport {
   shiftId: string;
   registerId: string;
   registerName: string | null;
+  branchId: string | null;
+  branchName: string | null;
   cashierName: string | null;
   openingFloatCents: number;
   grossSalesCents: number;
@@ -229,6 +231,9 @@ export interface PosZReport {
   transactionCount: number;
   refundCount: number;
   voidCount: number;
+  soldItemQuantity: number;
+  returnedItemQuantity: number;
+  netItemQuantity: number;
   createdAt: string;
 }
 

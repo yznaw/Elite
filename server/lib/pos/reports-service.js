@@ -50,12 +50,14 @@ function parseFilters(query) {
   const to = query?.to && /^\d{4}-\d{2}-\d{2}$/.test(query.to) ? query.to : null;
   const registerId = query?.registerId || null;
   const cashierId = query?.cashierId || null;
-  return { from, to, registerId, cashierId };
+  const branchId = query?.branchId || null;
+  const channel = ['pos', 'website'].includes(query?.channel) ? query.channel : null;
+  return { from, to, registerId, cashierId, branchId, channel };
 }
 
 /** Report 1: daily sales by payment method / cashier / register / item / hour. */
 async function dailySales(context, query) {
-  const { from, to, registerId, cashierId } = parseFilters(query);
+  const { from, to, registerId, cashierId, branchId } = parseFilters(query);
   return withClient(async (client) => {
     const base = [context.tenantId];
     let where = `t.tenant_id = $1 AND t.status = 'completed'`;
@@ -64,6 +66,7 @@ async function dailySales(context, query) {
     let params = bd.params;
     if (registerId) { params = [...params, registerId]; where += ` AND t.register_id = $${params.length}`; }
     if (cashierId) { params = [...params, cashierId]; where += ` AND t.cashier_id = $${params.length}`; }
+    if (branchId) { params = [...params, branchId]; where += ` AND t.branch_id = $${params.length}`; }
 
     // A single pg connection cannot run concurrent queries — Promise.all
     // here would fire all seven at once on the same client, which pg only
@@ -99,6 +102,15 @@ async function dailySales(context, query) {
        FROM pos_transactions t JOIN pos_registers pr ON pr.id = t.register_id
        WHERE ${where}
        GROUP BY t.register_id, pr.display_name ORDER BY total_cents DESC`,
+      params,
+    );
+    const byBranch = await client.query(
+      `SELECT t.branch_id, COALESCE(b.name, 'Unassigned') AS branch_name,
+              COALESCE(sum(t.total_cents), 0)::bigint AS total_cents, count(*)::integer AS transaction_count
+       FROM pos_transactions t
+       LEFT JOIN pos_branches b ON b.id = t.branch_id AND b.tenant_id = t.tenant_id
+       WHERE ${where}
+       GROUP BY t.branch_id, b.name ORDER BY total_cents DESC`,
       params,
     );
     const byHour = await client.query(
@@ -137,6 +149,7 @@ async function dailySales(context, query) {
       byPaymentMethod: byPayment.rows.map((r) => ({ paymentMethod: r.payment_method, totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
       byCashier: byCashier.rows.map((r) => ({ cashierId: r.cashier_id, cashierName: r.cashier_name, totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
       byRegister: byRegister.rows.map((r) => ({ registerId: r.register_id, registerName: r.register_name, totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
+      byBranch: byBranch.rows.map((r) => ({ branchId: r.branch_id, branchName: r.branch_name, totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
       byHour: byHour.rows.map((r) => ({ hourOfDay: Number(r.hour_of_day), totalCents: Number(r.total_cents), transactionCount: Number(r.transaction_count) })),
       byItem: byItem.rows.map((r) => ({
         sku: r.sku,
@@ -151,9 +164,125 @@ async function dailySales(context, query) {
   });
 }
 
+/** Comprehensive item sales across every POS branch plus the website channel.
+ * POS returns are allocated to their original item. Website sales are sourced
+ * from paid storefront orders; the current web flow has no item-level return
+ * rows, so its returned quantity remains zero until that workflow exists. */
+async function productSales(context, query) {
+  const { from, to, branchId, channel } = parseFilters(query);
+  return withClient(async (client) => {
+    const posParams = [context.tenantId];
+    let posWhere = `t.tenant_id = $1 AND t.status = 'completed'`;
+    const posDates = bindBusinessDate('t.server_received_at', from, to, posParams);
+    posWhere += ` AND ${posDates.sql}`;
+    let boundPos = posDates.params;
+    if (branchId) { boundPos.push(branchId); posWhere += ` AND t.branch_id = $${boundPos.length}`; }
+
+    const posItems = channel === 'website' ? { rows: [] } : await client.query(
+      `WITH returned AS (
+         SELECT ri.original_transaction_item_id AS item_id,
+                COALESCE(sum(ri.quantity) FILTER (WHERE rf.status = 'completed'), 0)::integer AS returned_quantity,
+                COALESCE(sum(ri.refund_amount_cents) FILTER (WHERE rf.status = 'completed'), 0)::bigint AS returned_cents
+           FROM pos_refund_items ri
+           JOIN pos_refunds rf ON rf.id = ri.refund_id
+          WHERE rf.tenant_id = $1
+          GROUP BY ri.original_transaction_item_id
+       )
+       SELECT 'pos' AS channel, t.branch_id, COALESCE(b.name, 'Unassigned') AS location_name,
+              ti.sku, ti.product_name, ti.variant_title,
+              COALESCE(oi.metadata->>'color', '') AS color, COALESCE(oi.size, '') AS size,
+              COALESCE(sum(ti.quantity), 0)::integer AS sold_quantity,
+              COALESCE(sum(r.returned_quantity), 0)::integer AS returned_quantity,
+              COALESCE(sum(ti.quantity - COALESCE(r.returned_quantity, 0)), 0)::integer AS net_quantity,
+              COALESCE(sum(ti.line_total_cents - COALESCE(r.returned_cents, 0)), 0)::bigint AS net_sales_cents
+         FROM pos_transaction_items ti
+         JOIN pos_transactions t ON t.id = ti.transaction_id
+         LEFT JOIN pos_branches b ON b.id = t.branch_id AND b.tenant_id = t.tenant_id
+         LEFT JOIN order_items oi ON oi.id = ti.order_item_id
+         LEFT JOIN returned r ON r.item_id = ti.id
+        WHERE ${posWhere}
+        GROUP BY t.branch_id, b.name, ti.sku, ti.product_name, ti.variant_title,
+                 oi.metadata->>'color', oi.size
+        ORDER BY ti.product_name, ti.sku, location_name`,
+      boundPos,
+    );
+
+    const webParams = [context.tenantId];
+    let webWhere = `o.tenant_id = $1
+      AND o.status <> 'cancelled'
+      AND o.payment_status IN ('paid', 'partially_refunded', 'refunded')
+      AND o.metadata->>'source' = 'client-web-checkout'`;
+    const webDates = bindBusinessDate('COALESCE(o.placed_at, o.created_at)', from, to, webParams);
+    webWhere += ` AND ${webDates.sql}`;
+    const webItems = (channel === 'pos' || branchId) ? { rows: [] } : await client.query(
+      `SELECT 'website' AS channel, NULL::uuid AS branch_id, 'Website' AS location_name,
+              oi.sku, oi.product_name, oi.variant_title,
+              COALESCE(oi.metadata->>'color', '') AS color, COALESCE(oi.size, '') AS size,
+              COALESCE(sum(oi.quantity), 0)::integer AS sold_quantity,
+              0::integer AS returned_quantity,
+              COALESCE(sum(oi.quantity), 0)::integer AS net_quantity,
+              COALESCE(sum(oi.total_cents), 0)::bigint AS net_sales_cents
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+        WHERE ${webWhere}
+        GROUP BY oi.sku, oi.product_name, oi.variant_title, oi.metadata->>'color', oi.size
+        ORDER BY oi.product_name, oi.sku`,
+      webDates.params,
+    );
+
+    const mapRow = (row) => ({
+      channel: row.channel,
+      branchId: row.branch_id,
+      locationName: row.location_name,
+      sku: row.sku,
+      productName: row.product_name,
+      variantTitle: row.variant_title,
+      color: row.color || null,
+      size: row.size || null,
+      soldQuantity: Number(row.sold_quantity),
+      returnedQuantity: Number(row.returned_quantity),
+      netQuantity: Number(row.net_quantity),
+      netSalesCents: Number(row.net_sales_cents),
+    });
+    const items = [...posItems.rows, ...webItems.rows].map(mapRow);
+    const locations = await client.query(
+      `SELECT id AS branch_id, name AS location_name, 'pos' AS channel
+         FROM pos_branches WHERE tenant_id = $1 ORDER BY is_default DESC, name`,
+      [context.tenantId],
+    );
+    return {
+      locations: [
+        ...locations.rows.map((row) => ({ branchId: row.branch_id, name: row.location_name, channel: 'pos' })),
+        { branchId: null, name: 'Website', channel: 'website' },
+      ],
+      totals: items.reduce((totals, item) => ({
+        soldQuantity: totals.soldQuantity + item.soldQuantity,
+        returnedQuantity: totals.returnedQuantity + item.returnedQuantity,
+        netQuantity: totals.netQuantity + item.netQuantity,
+        netSalesCents: totals.netSalesCents + item.netSalesCents,
+      }), { soldQuantity: 0, returnedQuantity: 0, netQuantity: 0, netSalesCents: 0 }),
+      items,
+    };
+  });
+}
+
+async function reportLocations(context) {
+  return withClient(async (client) => {
+    const result = await client.query(
+      `SELECT id, name FROM pos_branches
+        WHERE tenant_id = $1 ORDER BY is_default DESC, name`,
+      [context.tenantId],
+    );
+    return [
+      ...result.rows.map((row) => ({ id: row.id, name: row.name, channel: 'pos' })),
+      { id: 'website', name: 'Website', channel: 'website' },
+    ];
+  });
+}
+
 /** Report 2: cash drawer movements + variance (from pos_cash_movements + pos_z_reports). */
 async function cashMovements(context, query) {
-  const { from, to, registerId } = parseFilters(query);
+  const { from, to, registerId, branchId } = parseFilters(query);
   return withClient(async (client) => {
     const base = [context.tenantId];
     let where = `cm.tenant_id = $1`;
@@ -380,17 +509,19 @@ async function refundVoidExceptions(context, query) {
  *  listZReports); this just re-exposes it with date-range filtering for the
  *  reporting suite so it lives alongside the other five under one menu. */
 async function zReportHistory(context, query) {
-  const { from, to, registerId } = parseFilters(query);
+  const { from, to, registerId, branchId } = parseFilters(query);
   return withClient(async (client) => {
     const params = [context.tenantId];
     let where = `z.tenant_id = $1`;
     if (from) { params.push(from); where += ` AND ((z.created_at AT TIME ZONE 'UTC') AT TIME ZONE '${QATAR_TIME_ZONE}')::date >= $${params.length}::date`; }
     if (to) { params.push(to); where += ` AND ((z.created_at AT TIME ZONE 'UTC') AT TIME ZONE '${QATAR_TIME_ZONE}')::date <= $${params.length}::date`; }
     if (registerId) { params.push(registerId); where += ` AND z.register_id = $${params.length}`; }
+    if (branchId) { params.push(branchId); where += ` AND z.branch_id = $${params.length}`; }
     const result = await client.query(
-      `SELECT z.*, pr.display_name AS register_name
+      `SELECT z.*, pr.display_name AS register_name, b.name AS branch_name
        FROM pos_z_reports z
        JOIN pos_registers pr ON pr.id = z.register_id
+       LEFT JOIN pos_branches b ON b.id = z.branch_id AND b.tenant_id = z.tenant_id
        WHERE ${where}
        ORDER BY z.created_at DESC
        LIMIT 500`,
@@ -400,6 +531,8 @@ async function zReportHistory(context, query) {
       zReportId: row.id,
       registerId: row.register_id,
       registerName: row.register_name,
+      branchId: row.branch_id,
+      branchName: row.branch_name,
       openingFloatCents: Number(row.opening_float_cents),
       grossSalesCents: Number(row.gross_sales_cents),
       cashSalesCents: Number(row.cash_sales_cents),
@@ -415,6 +548,9 @@ async function zReportHistory(context, query) {
       transactionCount: Number(row.transaction_count),
       refundCount: Number(row.refund_count),
       voidCount: Number(row.void_count),
+      soldItemQuantity: Number(row.sold_item_quantity || 0),
+      returnedItemQuantity: Number(row.returned_item_quantity || 0),
+      netItemQuantity: Number(row.sold_item_quantity || 0) - Number(row.returned_item_quantity || 0),
       createdAt: row.created_at,
     }));
   });
@@ -422,6 +558,8 @@ async function zReportHistory(context, query) {
 
 module.exports = {
   dailySales,
+  productSales,
+  reportLocations,
   cashMovements,
   cardSettlementExceptions,
   inventoryMovements,

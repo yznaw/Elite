@@ -149,8 +149,8 @@ test('the cashier who opened the shift closes it without a manager override', as
     assert.equal(report.registerName, 'Main Till');
     assert.equal(report.cashierName, 'Test Cashier');
     assert.ok(!statements.some((sql) => sql.startsWith('SELECT * FROM pos_manager_overrides')));
-    // manager_id is the 4th column of the insert: the operator approved it.
-    assert.equal(zReportParams[0][3], OWNER_ID);
+    // manager_id follows the branch snapshot: the operator approved it.
+    assert.equal(zReportParams[0][4], OWNER_ID);
     assert.equal(statements.at(-1), 'COMMIT');
   } finally {
     db.pool.connect = originalConnect;

@@ -5,6 +5,9 @@ const {
   cancelStocktake,
   getStocktake,
   listStocktakes,
+  listStocktakeLocations,
+  completeStocktakeLocation,
+  reopenStocktakeLocation,
   postStocktake,
   saveCount,
   startStocktake,
@@ -37,6 +40,10 @@ router.get('/stocktakes', asyncHandler(async (req, res) => {
   ok(res, await listStocktakes(context(req), req.query));
 }));
 
+router.get('/stocktake-locations', asyncHandler(async (req, res) => {
+  ok(res, await listStocktakeLocations(context(req)));
+}));
+
 router.post('/stocktakes', asyncHandler(async (req, res) => {
   created(res, await startStocktake(context(req), req.body), 'Stocktake started.');
 }));
@@ -47,6 +54,14 @@ router.get('/stocktakes/:id', asyncHandler(async (req, res) => {
 
 router.post('/stocktakes/:id/counts', asyncHandler(async (req, res) => {
   ok(res, await saveCount(context(req), req.params.id, req.body));
+}));
+
+router.post('/stocktakes/:id/locations/:locationId/complete', asyncHandler(async (req, res) => {
+  ok(res, await completeStocktakeLocation(context(req), req.params.id, req.params.locationId));
+}));
+
+router.post('/stocktakes/:id/locations/:locationId/reopen', asyncHandler(async (req, res) => {
+  ok(res, await reopenStocktakeLocation(context(req), req.params.id, req.params.locationId));
 }));
 
 router.post('/stocktakes/:id/post', asyncHandler(async (req, res) => {

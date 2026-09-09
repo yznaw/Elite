@@ -1,4 +1,4 @@
-const { audit, inTransaction, requireRegister } = require('./db');
+const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
 const { claimReceipt, loadSale } = require('./sale-service');
@@ -309,6 +309,7 @@ async function createRefund(context, body) {
     }
 
     const register = await requireRegister(client, context, { lock: true });
+    const branch = await resolveRegisterBranch(client, context.tenantId, register);
     const shift = await client.query(
       `SELECT id FROM pos_shifts
        WHERE tenant_id = $1 AND id = $2 AND register_id = $3 AND cashier_id = $4 AND state = 'open'
@@ -369,9 +370,9 @@ async function createRefund(context, body) {
     const refundResult = await client.query(
       `INSERT INTO pos_refunds (
          tenant_id, original_transaction_id, original_order_id, original_payment_id,
-         receipt_id, register_id, shift_id, cashier_id, manager_id, idempotency_key,
+         receipt_id, register_id, branch_id, shift_id, cashier_id, manager_id, idempotency_key,
          method, amount_cents, status, reason, terminal_reference
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'completed',$13,$14)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'completed',$14,$15)
        RETURNING *`,
       [
         context.tenantId,
@@ -380,6 +381,7 @@ async function createRefund(context, body) {
         transaction.payment_id,
         receipt.id,
         register.id,
+        branch.id,
         shiftId,
         context.userId,
         override.manager_id,

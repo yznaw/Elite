@@ -107,7 +107,7 @@ admin.use('/diagnostics', requireAuth({ roles: ['owner', 'admin'] }), adminDiagn
 // Stock adjustments and stocktakes — the legitimate way to correct a stock
 // number, as opposed to editing it in the catalogue with no reason attached
 // (docs/25 Phase 8). Owner/admin only; the service enforces the same check.
-admin.use('/inventory', requireAuth({ roles: ['owner', 'admin'] }), adminInventoryRouter);
+admin.use('/inventory', requireAuth({ roles: ['owner', 'admin', 'manager'] }), adminInventoryRouter);
 // Operating expenses — rent, salaries, marketing and the rest of the money
 // leaving the business, which nothing tracked before this. Owner/admin only:
 // this is whole-business financial data, not per-shift till figures.

@@ -1,4 +1,4 @@
-const { audit, inTransaction, requireRegister } = require('./db');
+const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, cents, nonEmpty, positiveInt, uuid } = require('./errors');
 const { recordMovement } = require('../inventory-ledger');
 const db = require('../../db/client');
@@ -374,7 +374,8 @@ async function createSale(context, body, options = {}) {
       return result;
     }
 
-    await requireRegister(client, context, { lock: true });
+    const register = await requireRegister(client, context, { lock: true });
+    const branch = await resolveRegisterBranch(client, context.tenantId, register);
     const shiftResult = await client.query(
       `SELECT * FROM pos_shifts
        WHERE tenant_id = $1 AND id = $2
@@ -529,17 +530,18 @@ async function createSale(context, body, options = {}) {
     );
     const transactionResult = await client.query(
       `INSERT INTO pos_transactions (
-         tenant_id, order_id, receipt_id, register_id, shift_id, cashier_id, customer_id,
+         tenant_id, order_id, receipt_id, register_id, branch_id, shift_id, cashier_id, customer_id,
          idempotency_key, payment_method, subtotal_cents, tax_cents, total_cents,
          cash_amount_cents, card_amount_cents, amount_tendered_cents, change_given_cents,
          client_created_at, metadata
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$10,$11,$12,$13,$14,$15,$16::jsonb)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$11,$12,$13,$14,$15,$16,$17::jsonb)
        RETURNING id`,
       [
         context.tenantId,
         orderId,
         receipt.id,
         context.registerId,
+        branch.id,
         shift.id,
         context.userId,
         customer?.id || null,
