@@ -209,6 +209,23 @@ See `server/routes/admin-media.route.js`. All endpoints require an active admin 
 | `DELETE` | `/api/admin/media/orphaned` | Delete all unlinked media assets and their files. |
 | `DELETE` | `/api/admin/media/:id` | Delete one media asset and its file. |
 
+**Image variants and the empty-object trap.** Every upload is meant to store
+resized derivatives beside the original (`-thumb` 240, `-card` 640, `-grid` 900,
+`-pdp` 1400, `-zoom` 1800; see `server/lib/storage.js`) under
+`media_assets.metadata.imageVariants`. The storefront reads that map to build a
+`srcset` and lets the browser pick a size.
+
+Two states break it, and both fail silently because the page still renders:
+
+- **`imageVariants` is `{}`** — the key exists, so the row looks processed. This
+  is what an upload writes when `sharp` is unavailable or the derive step throws.
+- **`imageVariants` is absent** — the row was created before the pipeline.
+
+In either case `imageSrcset()` returns null on the client, `src` falls back to
+the full-size original, and phones download it. On this catalogue that meant
+single gallery images of 7 MB and 17 MB. Repair with
+`node scripts/backfill-image-variants.js` (see `07-dev-guide.md`).
+
 ### Admin — Orders (`/api/admin/orders`)
 
 See `server/routes/admin-orders.route.js`. All endpoints require an active admin session.

@@ -14,7 +14,20 @@ import { AnalyticsService } from './services/analytics.service';
     selector: 'cw-root',
     imports: [CommonModule, RouterOutlet, NavComponent, FooterComponent, CartDrawerComponent],
     templateUrl: './app.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    /**
+     * The root shell is switched last on purpose. It hosts the nav, the footer,
+     * the cart drawer and the router outlet, and an OnPush view that is not
+     * dirty is not descended into: had this been flipped while its children
+     * were still eager, they would have stopped updating even though nothing
+     * about them changed. With every child on OnPush, each one marks itself
+     * through the signals it reads and the traversal reaches it.
+     *
+     * Everything this template binds is reactive: `currentUrl` is a `toSignal`
+     * over the router's NavigationEnd stream, `isExperience` and `hideFooter`
+     * are computed from it, `bannerVisible` is a signal, and `isEmbedded` is a
+     * constant fixed at construction.
+     */
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './app.component.scss'
 })
 export class AppComponent {

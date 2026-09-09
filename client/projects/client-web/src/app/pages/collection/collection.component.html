@@ -2,18 +2,18 @@
   @if (isCollectionLanding()) {
     <div class="collection-landing">
       <div class="collection-landing__head">
-        <span>Collections</span>
-        <h1>Shop by collection</h1>
+        <span>{{ t("collection.landing.kicker") }}</span>
+        <h1>{{ t("collection.landing.title") }}</h1>
       </div>
 
       @if (!collectionsLoaded()) {
         <div class="empty-state empty-state--collections">
-          <p>Loading collections...</p>
+          <p>{{ t("collection.landing.loading") }}</p>
         </div>
       } @else if (collections().length > 0) {
         <div
           class="collection-picker collection-picker--landing"
-          aria-label="Collections"
+          [attr.aria-label]='t("collection.aria.collections")'
         >
           @for (collection of collections(); track collection.id) {
             <button
@@ -34,23 +34,23 @@
                   (error)="onImgError($event)"
                 />
               }
-              <span>{{ collection.productIds.length }} pieces</span>
+              <span>{{ pieceCount(collection.productIds.length) }}</span>
               <strong>{{ collection.title }}</strong>
             </button>
           }
         </div>
       } @else {
         <div class="empty-state empty-state--collections">
-          <p>No collections are published yet.</p>
+          <p>{{ t("collection.landing.empty") }}</p>
         </div>
       }
     </div>
   } @else {
     @if (activeCollection(); as collection) {
       <div class="collection-detail-head">
-        <nav class="back-to-collections" aria-label="Breadcrumb">
+        <nav class="back-to-collections" [attr.aria-label]='t("collection.aria.breadcrumb")'>
           <button type="button" (click)="showAllCollections()">
-            Collections
+            {{ t("collection.breadcrumb.collections") }}
           </button>
           <span aria-hidden="true">/</span>
           @if (activeSubCollectionKey() !== null) {
@@ -86,7 +86,7 @@
       ) {
         <div
           class="collection-picker collection-picker--sub"
-          aria-label="Sub-collections"
+          [attr.aria-label]='t("collection.aria.subCollections")'
         >
           <button
             type="button"
@@ -97,12 +97,12 @@
             @if (collection.imageUrl) {
               <img
                 [src]="collection.imageUrl"
-                [alt]="'All ' + collection.title"
+                [alt]='t("collection.allOf", { title: collection.title })'
                 (error)="onImgError($event)"
               />
             }
-            <span>{{ activeCollectionTotalCount() }} pieces</span>
-            <strong>All {{ collection.title }}</strong>
+            <span>{{ pieceCount(activeCollectionTotalCount()) }}</span>
+            <strong>{{ t("collection.allOf", { title: collection.title }) }}</strong>
           </button>
           @for (child of activeCollection()!.children; track child.id) {
             <button
@@ -119,7 +119,7 @@
                   (error)="onImgError($event)"
                 />
               }
-              <span>{{ child.productIds.length }} pieces</span>
+              <span>{{ pieceCount(child.productIds.length) }}</span>
               <strong>{{ child.title }}</strong>
             </button>
           }
@@ -132,7 +132,7 @@
             <button
               type="button"
               class="filter-backdrop"
-              aria-label="Close filters"
+              [attr.aria-label]='t("collection.aria.closeFilters")'
               (click)="closeFilters()"
             ></button>
           }
@@ -140,20 +140,20 @@
           <aside
             class="filter-panel"
             [class.is-open]="filtersOpen()"
-            aria-label="Collection filters"
+            [attr.aria-label]='t("collection.aria.filterPanel")'
           >
             <h1>
-              Filters
+              {{ t("collection.filters.title") }}
               @if (activeFilterCount() > 0) {
                 <span>{{ activeFilterCount() }}</span>
               }
             </h1>
-            <div class="filter-bulk-actions" aria-label="Filter group controls">
+            <div class="filter-bulk-actions" [attr.aria-label]='t("collection.aria.filterGroupControls")'>
               <button
                 type="button"
                 class="filter-icon-action"
                 (click)="expandAllFilters()"
-                aria-label="Expand all filters"
+                [attr.aria-label]='t("collection.aria.expandAll")'
                 title="Expand all"
               >
                 <svg
@@ -171,7 +171,7 @@
                 type="button"
                 class="filter-icon-action"
                 (click)="collapseAllFilters()"
-                aria-label="Collapse all filters"
+                [attr.aria-label]='t("collection.aria.collapseAll")'
                 title="Collapse all"
               >
                 <svg
@@ -187,7 +187,7 @@
               </button>
             </div>
             <button type="button" class="filter-close" (click)="closeFilters()">
-              Done
+              {{ t("collection.filters.done") }}
             </button>
 
             @for (group of filterGroups(); track group.id) {
@@ -241,7 +241,7 @@
                 [attr.aria-expanded]="isFilterGroupExpanded('sort')"
                 [attr.aria-controls]="filterGroupPanelId('sort')"
               >
-                <span>Sort</span>
+                <span>{{ t("collection.filters.sort") }}</span>
                 @if (sort() !== "Featured") {
                   <small>1</small>
                 }
@@ -269,7 +269,7 @@
               class="clear-filters"
               (click)="clearFilters()"
             >
-              Clear
+              {{ t("collection.filters.clear") }}
             </button>
           </aside>
 
@@ -283,7 +283,7 @@
                 class="filter-toggle"
                 (click)="openFilters()"
               >
-                Filters
+                {{ t("collection.filters.title") }}
                 @if (activeFilterCount() > 0) {
                   <span>{{ activeFilterCount() }}</span>
                 }
@@ -292,20 +292,20 @@
 
             @if (productsLoading() && !productsLoaded()) {
               <div class="empty-state">
-                <p>Loading products...</p>
+                <p>{{ t("collection.products.loading") }}</p>
               </div>
             } @else if (productsError() && filtered().length === 0) {
               <div class="empty-state">
-                <p>Products could not be loaded.</p>
+                <p>{{ t("collection.products.error") }}</p>
                 <button type="button" (click)="retryProducts()">
-                  Try again
+                  {{ t("collection.products.retry") }}
                 </button>
               </div>
             } @else if (filtered().length === 0) {
               <div class="empty-state">
                 <p>{{ t("collection.empty") }}</p>
                 <button type="button" (click)="clearFilters()">
-                  Reset filters
+                  {{ t("collection.filters.reset") }}
                 </button>
               </div>
             } @else {
@@ -350,7 +350,7 @@
                     </button>
 
                     @if (productColorNames(p).length > 0) {
-                      <div class="product-colors" aria-label="Available colors">
+                      <div class="product-colors" [attr.aria-label]='t("collection.aria.availableColors")'>
                         @for (color of productColorNames(p); track color) {
                           <button
                             type="button"
@@ -456,13 +456,13 @@
               </div>
 
               @if (showMobilePagination()) {
-                <div class="mobile-pagination" aria-label="Collection pages">
+                <div class="mobile-pagination" [attr.aria-label]='t("collection.aria.pages")'>
                   <button
                     type="button"
                     class="mobile-page-btn"
                     (click)="prevMobilePage()"
                     [disabled]="mobilePage() === 0"
-                    aria-label="Previous page"
+                    [attr.aria-label]='t("collection.aria.previousPage")'
                   >
                     ←
                   </button>
@@ -474,7 +474,7 @@
                     class="mobile-page-btn"
                     (click)="nextMobilePage()"
                     [disabled]="mobilePage() >= mobileTotalPages() - 1"
-                    aria-label="Next page"
+                    [attr.aria-label]='t("collection.aria.nextPage")'
                   >
                     →
                   </button>
@@ -486,13 +486,13 @@
       }
     } @else if (!collectionsLoaded()) {
       <div class="empty-state empty-state--collections">
-        <p>Loading collection...</p>
+        <p>{{ t("collection.detail.loading") }}</p>
       </div>
     } @else {
       <div class="empty-state empty-state--collections">
-        <p>Collection not found.</p>
+        <p>{{ t("collection.detail.notFound") }}</p>
         <button type="button" (click)="showAllCollections()">
-          Back to collections
+          {{ t("collection.detail.back") }}
         </button>
       </div>
     }

@@ -102,7 +102,7 @@ const HERO_HINT_SESSION_KEY = 'elite:hero-swipe-hint-shown';
     selector: 'cw-home',
     imports: [CommonModule],
     templateUrl: './home.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './home.component.scss'
 })
 export class HomeComponent implements OnInit, OnDestroy {

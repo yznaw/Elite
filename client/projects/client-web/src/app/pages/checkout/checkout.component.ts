@@ -41,7 +41,7 @@ type DeliveryField = 'zone' | 'street' | 'building' | 'city';
     selector: 'cw-checkout',
     imports: [CommonModule, RouterLink],
     templateUrl: './checkout.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './checkout.component.scss'
 })
 export class CheckoutComponent implements OnInit, OnDestroy {

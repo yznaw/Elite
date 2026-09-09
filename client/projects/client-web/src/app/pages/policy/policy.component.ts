@@ -78,7 +78,7 @@ interface PolicyPage {
       }
     </div>
   `,
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styles: [`
     .policy-page {
       max-width: 760px;

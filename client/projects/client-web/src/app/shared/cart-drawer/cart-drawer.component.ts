@@ -7,7 +7,7 @@ import { I18nService } from '../../services/i18n.service';
 @Component({
     selector: 'cw-cart-drawer',
     imports: [CommonModule],
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
     @if (cart.isOpen()) {
       <div class="cart-overlay" (click)="onOverlayClick($event)">

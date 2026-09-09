@@ -7,7 +7,7 @@ import { I18nService } from '../../services/i18n.service';
     selector: 'cw-checkout-result',
     imports: [CommonModule, RouterLink],
     templateUrl: './checkout-result.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './checkout-result.component.scss'
 })
 export class CheckoutResultComponent {

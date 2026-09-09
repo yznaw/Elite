@@ -8,7 +8,7 @@ import { CartService } from '../../services/cart.service';
     selector: 'cw-thank-you',
     imports: [CommonModule, RouterLink],
     templateUrl: './thank-you.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './thank-you.component.scss'
 })
 export class ThankYouComponent {

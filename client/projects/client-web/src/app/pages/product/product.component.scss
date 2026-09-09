@@ -170,6 +170,18 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
 }
 
+/* Every image in the gallery is stacked in the frame at once and the inactive
+   ones are faded out rather than removed, which is what makes the swipe a
+   cross-fade instead of a flash. The cost of that is paid per image, so the
+   two properties that promote an image to its own composited layer are kept off
+   the ones nobody is looking at: `visibility: hidden` takes them out of paint
+   entirely, and the colour `filter` only lands on the image on screen. A
+   product with eight photos was otherwise holding eight full-size layers live
+   in the viewport, which is where the phone's memory and its scroll frames go.
+
+   `visibility` is transitioned rather than set outright so the outgoing image
+   stays visible for the length of the fade and only then drops out; without the
+   delay it would disappear instantly and the cross-fade would become a cut. */
 .gallery-frame img {
   position: absolute;
   inset: 0;
@@ -179,14 +191,17 @@
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  filter: saturate(0.98) contrast(1.02);
+  visibility: hidden;
   transform: scale(1.04);
-  transition: opacity 0.55s ease, transform 6s ease, filter 0.55s ease;
+  transition: opacity 0.55s ease, transform 6s ease, filter 0.55s ease, visibility 0s linear 0.55s;
 }
 
 .gallery-frame img.is-active {
   opacity: 0;
+  visibility: visible;
+  filter: saturate(0.98) contrast(1.02);
   transform: scale(1);
+  transition: opacity 0.55s ease, transform 6s ease, filter 0.55s ease, visibility 0s;
 }
 
 .gallery-frame img.is-active.is-loaded {
@@ -2499,12 +2514,20 @@ button:focus-visible {
     font-size: 10px;
   }
 
+  /* The bar is fixed over the page for the whole scroll, so its backdrop blur
+     is not a one-off cost: the phone re-blurs a full-width strip on every
+     frame the page moves. At 97% opacity there is nothing left underneath for
+     the blur to show, so it was paying for an effect that could not be seen.
+     Opaque here, and the blur is dropped. Desktop, where the bar is hidden,
+     keeps the base rule untouched. */
   .sticky-atc {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
-    background: rgba(251, 249, 245, 0.97);
+    background: #fbf9f5;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .sticky-atc .add-cart-btn,

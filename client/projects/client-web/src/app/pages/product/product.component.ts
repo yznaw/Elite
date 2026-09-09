@@ -51,7 +51,21 @@ const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
     selector: 'cw-product',
     imports: [CommonModule],
     templateUrl: './product.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    /**
+     * `Eager` here was written by the v17 to v22 migration, which preserved the
+     * old framework default rather than making a choice about this component.
+     * It means the whole template is re-evaluated every time change detection
+     * reaches it, and with zone.js that is every touch, scroll and timer on the
+     * page: roughly a hundred translation lookups, the price formatter, the
+     * per-image srcset builders and every loop, on each one. On a phone that is
+     * what the delay between pressing a size and seeing it select is made of.
+     *
+     * Every value this template reads comes from a signal, so OnPush is safe:
+     * the signals read during rendering (including the ones read inside the
+     * methods the template calls) mark the view dirty on their own. Anything
+     * added later that the template must react to has to be a signal too.
+     */
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './product.component.scss'
 })
 export class ProductComponent implements OnInit, OnDestroy {

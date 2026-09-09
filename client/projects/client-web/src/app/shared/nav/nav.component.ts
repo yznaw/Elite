@@ -215,7 +215,7 @@ const FALLBACK_SEARCH_IMAGE =
       </div>
     }
   `,
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styles: [`
     :host {
       position: relative;

@@ -117,7 +117,7 @@ interface PolicyMeta {
       </div>
     </footer>
   `,
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styles: [`
     .site-footer {
       border-top: 1px solid var(--border);

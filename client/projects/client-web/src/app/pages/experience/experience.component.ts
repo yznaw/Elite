@@ -228,7 +228,7 @@ const STRINGS: Record<ExperienceLang, Record<string, any>> = {
 
     </div>
   `,
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styles: [`
     :host { display: block; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; }
 

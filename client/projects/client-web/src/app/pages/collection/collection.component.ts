@@ -14,15 +14,27 @@ import { SeoService } from '../../services/seo.service';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
-const FILTER_TITLES = {
-  category: 'Categories',
-  price: 'Price',
-  color: 'Colors',
-  leather: 'Leather',
-  material: 'Materials',
-  size: 'Sizes',
-  brand: 'Brand',
-  tag: 'Best For',
+/**
+ * Translation key per filter group.
+ *
+ * These were English literals rendered straight into the sidebar, so an Arabic
+ * visitor got a translated sort control sitting next to eight English group
+ * headings. The map still doubles as the source of `FilterGroupId`, which is
+ * why the shape is kept and only the values moved to keys.
+ *
+ * `filterGroups` is a computed that resolves them through `t()`, and `t()`
+ * reads the locale signal, so the sidebar re-labels itself on a locale switch
+ * without anything else being wired up.
+ */
+const FILTER_TITLE_KEYS = {
+  category: 'collection.filter.category',
+  price: 'collection.filter.price',
+  color: 'collection.filter.color',
+  leather: 'collection.filter.leather',
+  material: 'collection.filter.material',
+  size: 'collection.filter.size',
+  brand: 'collection.filter.brand',
+  tag: 'collection.filter.tag',
 } as const;
 
 const COLOR_LABELS: Record<string, string> = {
@@ -41,7 +53,7 @@ const COLOR_LABELS: Record<string, string> = {
 };
 
 type SortOption = (typeof SORT_OPTIONS)[number];
-type FilterGroupId = keyof typeof FILTER_TITLES;
+type FilterGroupId = keyof typeof FILTER_TITLE_KEYS;
 type CollapsibleFilterGroupId = FilterGroupId | 'sort';
 
 interface FilterOption {
@@ -87,7 +99,7 @@ interface StorefrontCollection {
     selector: 'cw-collection',
     imports: [CommonModule, FormsModule],
     templateUrl: './collection.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './collection.component.scss'
 })
 export class CollectionComponent implements OnInit, OnDestroy {
@@ -173,7 +185,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly selectedColors = signal<Record<string, string>>({});
   readonly selectedFilters = signal<SelectedFilters>(this.emptySelectedFilters());
 
-  readonly t = (key: string): string => this.i18n.t(key);
+  readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
   readonly productName = (product: Product): string => this.i18n.productName(product);
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
@@ -225,42 +237,42 @@ export class CollectionComponent implements OnInit, OnDestroy {
     const groups: FilterGroup[] = [
       {
         id: 'category',
-        title: FILTER_TITLES.category,
+        title: this.t(FILTER_TITLE_KEYS.category),
         options: this.optionsFromProducts(products, (p) => this.productCategories(p), (value) => this.categoryLabel(value)),
       },
       {
         id: 'price',
-        title: FILTER_TITLES.price,
+        title: this.t(FILTER_TITLE_KEYS.price),
         options: this.priceOptions(products),
       },
       {
         id: 'color',
-        title: FILTER_TITLES.color,
+        title: this.t(FILTER_TITLE_KEYS.color),
         options: this.optionsFromProducts(products, (p) => this.filterProductColors(p), (value) => this.colorLabel(value)),
       },
       {
         id: 'leather',
-        title: FILTER_TITLES.leather,
+        title: this.t(FILTER_TITLE_KEYS.leather),
         options: this.optionsFromProducts(products, (p) => this.productLeathers(p), (value) => this.productLeather(value)),
       },
       {
         id: 'material',
-        title: FILTER_TITLES.material,
+        title: this.t(FILTER_TITLE_KEYS.material),
         options: this.optionsFromProducts(products, (p) => this.productMaterials(p)),
       },
       {
         id: 'size',
-        title: FILTER_TITLES.size,
+        title: this.t(FILTER_TITLE_KEYS.size),
         options: this.optionsFromProducts(products, (p) => p.sizes.map(String), (value) => value, true),
       },
       {
         id: 'brand',
-        title: FILTER_TITLES.brand,
+        title: this.t(FILTER_TITLE_KEYS.brand),
         options: this.optionsFromProducts(products, (p) => this.compact([p.brand])),
       },
       {
         id: 'tag',
-        title: FILTER_TITLES.tag,
+        title: this.t(FILTER_TITLE_KEYS.tag),
         options: this.optionsFromProducts(products, (p) => this.compact([p.tag]), (value) => this.productTag(value)),
       },
     ];
@@ -580,6 +592,35 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   nextMobilePage(): void {
     this.mobilePage.update((page) => Math.min(this.mobileTotalPages() - 1, page + 1));
+  }
+
+  /**
+   * "3 pieces", and its Arabic equivalents.
+   *
+   * English needs two forms, Arabic needs four and picks between them by the
+   * number itself: one, two, a few (3 to 10), and everything else. Writing
+   * `{{ n }} pieces` in the template produced "3 قطعة" on the Arabic
+   * storefront, which reads the way "3 piece" does in English.
+   *
+   * `en` has no `few` key, so it falls through to `other` for 3 to 10, which is
+   * the correct English form anyway. The 11-and-above Arabic case is `other`
+   * too, and takes the singular noun by the same rule that makes "11 قطعة"
+   * right where "11 قطع" is not.
+   */
+  pieceCount(count: number): string {
+    const n = Math.abs(Math.trunc(count));
+    const remainder = n % 100;
+    let form: string;
+    if (n === 1) form = 'one';
+    else if (n === 2) form = 'two';
+    else if (remainder >= 3 && remainder <= 10) form = 'few';
+    else form = 'other';
+
+    const key = `collection.pieces.${form}`;
+    const label = this.t(key, { count: n });
+    // A locale that does not define the form falls back to `other` rather than
+    // rendering the raw key.
+    return label === key ? this.t('collection.pieces.other', { count: n }) : label;
   }
 
   sortLabel(value: SortOption): string {

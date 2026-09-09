@@ -92,6 +92,31 @@ textarea {
   }
 }
 
+/* ── Touch double-tap-zoom guard ────────────────────────────────────────────
+   The second half of the viewport policy described above. The focus-zoom floor
+   stops the caret from zooming the page; this stops the *double tap* from
+   doing it. On a shop the two taps are almost never a zoom request: they are a
+   size pill tapped twice, a quantity stepper hit in a hurry, an "add to cart"
+   pressed again because the first press looked like it did nothing. iOS then
+   zooms into whatever block was under the finger and does not zoom back out,
+   which is what the page feels like it is fighting.
+
+   `manipulation` disables double-tap zoom and the click delay that comes with
+   waiting for it, and it leaves pinch zoom and scrolling untouched. That is the
+   whole reason it is used here rather than another `maximum-scale` cap: pinch
+   zoom stays available to anyone who wants it, so this is not the accessibility
+   regression the viewport meta was.
+
+   Set on the root so it covers every page, including text blocks, which are the
+   other place a stray double tap lands. Elements that need the browser's own
+   gesture handling back (a pinch-zoom image viewer, a map) override it locally.
+   Pointer-coarse only, since none of this applies to a mouse. */
+@media (pointer: coarse) {
+  html {
+    touch-action: manipulation;
+  }
+}
+
 html[dir='rtl'] body {
   direction: rtl;
 }
@@ -415,6 +440,18 @@ body::before {
   pointer-events: none;
   z-index: 1000;
   opacity: 0.4;
+}
+
+/* The grain is a fixed, full-viewport layer sitting above every other element,
+   so on a phone it is a compositing surface the size of the screen that has to
+   be re-blended over whatever scrolls underneath it, for the whole session. It
+   costs that on every scroll frame and buys 1.2% of noise (0.03 in the SVG,
+   times the 0.4 opacity here) on a display held at arm's length, where it is
+   not visible. Desktop keeps the texture; touch keeps the frame rate. */
+@media (pointer: coarse) {
+  body::before {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {

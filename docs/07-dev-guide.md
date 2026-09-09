@@ -106,6 +106,7 @@ npm run admin    # admin-portal only
 - **Standalone only** — No `NgModule` declarations. Every component sets `standalone: true`
 - **Lazy-loaded pages** — All page components are loaded via `loadComponent()` in routes
 - **Signals for state** — Use `signal()`, `computed()`, `effect()` instead of `BehaviorSubject`
+- **`OnPush`, and signals are what make it work** — every `client-web` component is `OnPush`, which is also the Angular default from v22, so new components need no `changeDetection` line at all. The v17 to v22 migration wrote `ChangeDetectionStrategy.Eager` (the old `Default`) across the app to preserve prior behaviour; that was an artifact, and it has been removed from the storefront. The consequence for new code: anything a template must react to has to be a signal. A plain field mutated in a `setTimeout` or a promise callback will render once and then go stale, with no error and a passing build. Private plumbing that never reaches a template (timers, subscriptions, observers) can stay a plain field.
 - **Never use raw `localStorage`** — Always use `StorageService` so keys are tenant-scoped (`elite:{tenantId}:{base}`). Raw `localStorage` calls will bleed state across tenants if multiple users share a browser session.
 
 ```typescript
@@ -327,6 +328,43 @@ Uploads are stored with resized variants alongside the original (`-thumb` 240, `
 | `storageUrl` | The full-size original | Anything rendered large: hero art, PDP gallery, zoom |
 
 Saving `preview` into content is a silent quality bug — it renders fine in the editor thumbnail and soft on the storefront. Prefer `storageUrl` and let a `srcset` pick the variant per device, as `heroSrcset()` does on the home hero.
+
+### Backfill missing image variants
+
+Handing the browser a `srcset` only helps when the variants exist. When an
+asset's `metadata.imageVariants` is missing or empty, `imageSrcset()` returns
+null, the `src` fallback is the **full-size original**, and the page still looks
+correct while a phone downloads several megabytes per photo. It is invisible in
+review and it is the first thing to check when someone says the shop feels
+heavy on mobile.
+
+Find out whether you have it:
+
+```bash
+psql "$DATABASE_URL" -c "SELECT count(*) FROM media_links ml JOIN media_assets m ON m.id = ml.media_id WHERE ml.role IN ('gallery','primary') AND COALESCE(m.metadata->'imageVariants','{}'::jsonb) = '{}'::jsonb"
+```
+
+Repair:
+
+```bash
+cd server && node scripts/backfill-image-variants.js
+```
+
+The script re-derives all five sizes with `sharp`, writes them next to the
+original, and updates `preview_url`, `width`, `height` and
+`metadata.imageVariants`. It is idempotent — rows that already have variants are
+not selected — so it is safe to re-run, and safe to run against production once
+`sharp` is installed there. Rows it reports as skipped are images with no local
+file to derive from, which on this catalogue means the remote Unsplash seed URLs.
+
+Two things it has to get right, both learned the hard way:
+
+- A row whose `imageVariants` is `{}` is unprocessed, not processed. Selecting on
+  the key's presence leaves those rows permanently unreachable.
+- Older rows have no `metadata.storagePath`. The script rebuilds the path from
+  the filename at the end of `storage_url` instead, and records `storagePath`
+  while it is there. These older rows are not stragglers: they are the ones the
+  live product galleries link to.
 
 ### Work With Colour Slugs
 

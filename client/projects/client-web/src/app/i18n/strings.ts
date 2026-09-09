@@ -170,6 +170,63 @@ const EN = {
   'collection.tag.bestseller': 'Bestseller',
   'collection.tag.limited': 'Limited',
 
+  // Filter panel. The group titles used to be English literals in
+  // collection.component.ts, so the whole sidebar stayed English on an Arabic
+  // storefront while the sort options beside it translated.
+  // Piece counts. Arabic does not have one plural, it has forms that depend on
+  // the number, so the count is resolved through `pieceCount()` on the
+  // component rather than a single string with the number pasted in front.
+  // Wraps an admin-authored collection title, so the title stays as entered
+  // and only the word around it translates.
+  'collection.allOf': 'All {title}',
+
+  'collection.pieces.one': '1 piece',
+  'collection.pieces.two': '2 pieces',
+  'collection.pieces.few': '{count} pieces',
+  'collection.pieces.other': '{count} pieces',
+
+  'collection.filters.title': 'Filters',
+  'collection.filters.done': 'Done',
+  'collection.filters.sort': 'Sort',
+  'collection.filters.clear': 'Clear',
+  'collection.filters.reset': 'Reset filters',
+  'collection.filter.category': 'Categories',
+  'collection.filter.price': 'Price',
+  'collection.filter.color': 'Colors',
+  'collection.filter.leather': 'Leather',
+  'collection.filter.material': 'Materials',
+  'collection.filter.size': 'Sizes',
+  'collection.filter.brand': 'Brand',
+  'collection.filter.tag': 'Best For',
+
+  'collection.landing.kicker': 'Collections',
+  'collection.landing.title': 'Shop by collection',
+  'collection.landing.loading': 'Loading collections...',
+  'collection.landing.empty': 'No collections are published yet.',
+  'collection.breadcrumb.collections': 'Collections',
+  'collection.detail.loading': 'Loading collection...',
+  'collection.detail.notFound': 'Collection not found.',
+  'collection.detail.back': 'Back to collections',
+  'collection.products.loading': 'Loading products...',
+  'collection.products.error': 'Products could not be loaded.',
+  'collection.products.retry': 'Try again',
+
+  // Screen-reader labels. Translated like the rest of the page: the product
+  // page already does this (`product.aria.*`), and an Arabic visitor on a
+  // screen reader should not hit English landmarks halfway down the sidebar.
+  'collection.aria.collections': 'Collections',
+  'collection.aria.breadcrumb': 'Breadcrumb',
+  'collection.aria.subCollections': 'Sub-collections',
+  'collection.aria.closeFilters': 'Close filters',
+  'collection.aria.filterPanel': 'Collection filters',
+  'collection.aria.filterGroupControls': 'Filter group controls',
+  'collection.aria.expandAll': 'Expand all filters',
+  'collection.aria.collapseAll': 'Collapse all filters',
+  'collection.aria.availableColors': 'Available colors',
+  'collection.aria.pages': 'Collection pages',
+  'collection.aria.previousPage': 'Previous page',
+  'collection.aria.nextPage': 'Next page',
+
   // ─────────────────────────────────────────────────────────────────────
   //  Product page
   // ─────────────────────────────────────────────────────────────────────
@@ -643,6 +700,52 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.tag.new': 'جديد',
   'collection.tag.bestseller': 'الأكثر مبيعاً',
   'collection.tag.limited': 'محدود',
+
+  'collection.allOf': 'كل {title}',
+
+  'collection.pieces.one': 'قطعة واحدة',
+  'collection.pieces.two': 'قطعتان',
+  'collection.pieces.few': '{count} قطع',
+  'collection.pieces.other': '{count} قطعة',
+
+  'collection.filters.title': 'التصفية',
+  'collection.filters.done': 'تم',
+  'collection.filters.sort': 'الترتيب',
+  'collection.filters.clear': 'مسح',
+  'collection.filters.reset': 'إعادة ضبط التصفية',
+  'collection.filter.category': 'الفئات',
+  'collection.filter.price': 'السعر',
+  'collection.filter.color': 'الألوان',
+  'collection.filter.leather': 'الجلد',
+  'collection.filter.material': 'الخامات',
+  'collection.filter.size': 'المقاسات',
+  'collection.filter.brand': 'العلامة',
+  'collection.filter.tag': 'الأنسب لـ',
+
+  'collection.landing.kicker': 'المجموعات',
+  'collection.landing.title': 'تسوّق حسب المجموعة',
+  'collection.landing.loading': 'جارٍ تحميل المجموعات...',
+  'collection.landing.empty': 'لا توجد مجموعات منشورة بعد.',
+  'collection.breadcrumb.collections': 'المجموعات',
+  'collection.detail.loading': 'جارٍ تحميل المجموعة...',
+  'collection.detail.notFound': 'المجموعة غير موجودة.',
+  'collection.detail.back': 'العودة إلى المجموعات',
+  'collection.products.loading': 'جارٍ تحميل المنتجات...',
+  'collection.products.error': 'تعذّر تحميل المنتجات.',
+  'collection.products.retry': 'إعادة المحاولة',
+
+  'collection.aria.collections': 'المجموعات',
+  'collection.aria.breadcrumb': 'مسار التنقل',
+  'collection.aria.subCollections': 'المجموعات الفرعية',
+  'collection.aria.closeFilters': 'إغلاق التصفية',
+  'collection.aria.filterPanel': 'تصفية المجموعة',
+  'collection.aria.filterGroupControls': 'أدوات مجموعات التصفية',
+  'collection.aria.expandAll': 'توسيع كل التصفيات',
+  'collection.aria.collapseAll': 'طيّ كل التصفيات',
+  'collection.aria.availableColors': 'الألوان المتوفرة',
+  'collection.aria.pages': 'صفحات المجموعة',
+  'collection.aria.previousPage': 'الصفحة السابقة',
+  'collection.aria.nextPage': 'الصفحة التالية',
 
   // Product
   'product.breadcrumb.collection': 'المجموعة',

@@ -148,6 +148,123 @@ cd /var/www/elite
 git switch main
 ```
 
+## 7b. Storefront mobile-performance release (September 2026)
+
+This release has **no migration and no schema change**. It is an Angular rebuild
+plus one one-time data backfill. Sections 1 to 3 apply unchanged; the API restart
+in section 4 is not strictly required (nothing the running API loads changed),
+but reloading is harmless and keeps the standard flow.
+
+### What is in it
+
+| Change | Where the effect shows |
+|---|---|
+| Every `client-web` component moved to `OnPush` | Taps and scrolling respond faster across the shop |
+| `provideAnimations()` removed (nothing used it) | Initial bundle 136 KB to 119 KB gzipped |
+| Double-tap-zoom guard, grain overlay off on touch, sticky bar blur dropped, gallery layers reduced | Zooming on tap stops; scroll frames get cheaper |
+| Collection page translated (filter panel, page copy, aria labels, Arabic plural counts) | The Arabic storefront stops rendering a half-English sidebar |
+| `backfill-image-variants.js` fixed | See below. This is the large one. |
+
+### The image backfill is the step that matters
+
+The storefront hands the browser a `srcset` and lets it choose a size. Where an
+asset's `imageVariants` is missing or empty that fails silently to the full-size
+original, so phones were downloading originals: 7 MB and 17 MB PNGs were being
+served into the product gallery. The client-side changes in this release are
+worth a few hundred kilobytes; this one is worth megabytes per page view. **The
+rebuild alone does not fix it.** Run the script.
+
+Two bugs kept the existing script from reaching those rows, both fixed here: it
+skipped assets whose `imageVariants` was an empty object (the state a failed
+derive leaves behind), and it required `metadata.storagePath`, which the rows
+the live galleries link to do not have.
+
+**Before running:** take the database + uploads backup from section 2. The
+script rewrites `preview_url`, `width`, `height` and `metadata` on
+`media_assets`. It does not touch or delete any original file.
+
+**Check `sharp` is installed.** It is a normal dependency, so `npm ci --omit=dev`
+in section 3 installs it, but the script degrades to skipping everything if it
+is missing rather than failing loudly:
+
+```bash
+cd /var/www/elite/server && node -e 'require("sharp");console.log("sharp OK")'
+```
+
+**Check free disk.** On the development catalogue, 752 images produced about
+3,600 derived files and grew `uploads/` from 510 MB to 630 MB, roughly a quarter
+more. Confirm the headroom before starting:
+
+```bash
+df -h /var/www/elite && du -sh /var/www/elite/server/uploads
+```
+
+**Count what will be repaired** (run before and after; the second number should
+be far lower, and what remains should be remote URLs with no local file):
+
+```bash
+cd /var/www/elite/server && node <<'EOF'
+require("dotenv").config();
+const db = require("./db/client");
+db.pool.query(`
+  select count(*) c
+  from media_links ml
+  join media_assets m on m.id = ml.media_id
+  where ml.role in ('gallery','primary')
+    and coalesce(m.metadata->'imageVariants', '{}'::jsonb) = '{}'::jsonb
+`).then(r => console.log("gallery images with no variants:", r.rows[0].c))
+  .finally(() => process.exit(0));
+EOF
+```
+
+**Run it.** It took a few minutes for 752 images locally, and it is CPU-bound on
+`sharp`. Nothing goes down while it runs: it only adds files and updates rows,
+so the site keeps serving originals until each row is rewritten. It is
+idempotent (processed rows are no longer selected), so it is safe to re-run if
+it is interrupted:
+
+```bash
+cd /var/www/elite/server && node scripts/backfill-image-variants.js
+```
+
+It prints `Updated N, skipped M` at the end. Skipped rows are images with no
+local file to derive from, which on this catalogue means the remote Unsplash
+seed URLs.
+
+### Verifying the release
+
+The products API sends `Cache-Control: public, max-age=60`, so allow a minute,
+then confirm the storefront is actually being handed variants rather than
+originals. On a product page, every gallery image should carry a `srcset` and
+none should resolve to the original upload:
+
+```bash
+curl --silent "https://<storefront-host>/api/products?limit=1" | node -e '
+let b="";
+process.stdin.on("data", d => b += d).on("end", () => {
+  const p = JSON.parse(b).data[0];
+  const v = p.imageVariants || {};
+  const empty = Object.values(v).filter(x => !x || !Object.keys(x).length).length;
+  console.log("images:", (p.images||[]).length, "| variant maps:", Object.keys(v).length, "| still empty:", empty);
+});'
+```
+
+`still empty: 0` is the result you want. Then, in a real browser on a phone:
+
+- [ ] A product page opens and the gallery swipes between photos.
+- [ ] DevTools/network shows `-card`, `-grid` or `-pdp` `.webp` files, not the original `.png`/`.jpg`.
+- [ ] Double-tapping a size pill or "add to cart" no longer zooms the page.
+- [ ] Pinch-to-zoom still works. (This is the accessibility guarantee that replaced the old viewport scale cap; if pinch is dead, something reintroduced `maximum-scale`.)
+- [ ] Switch to Arabic on the collection page: the filter sidebar headings, "تم", "الترتيب", "مسح" and the piece counts all render in Arabic.
+- [ ] Add to cart, open the drawer, reach checkout step 2, then press browser back. The footer must reappear. (This is the check that catches a broken `OnPush` root.)
+
+### Rolling back
+
+Section 7 applies for the code. The backfill does not need rolling back and
+should not be: it only added derived files and populated empty metadata, and the
+older code ignores both. Rolling the code back leaves the new variants sitting
+unused.
+
 ## 8. Release sign-off
 
 - [ ] Local diff clean of whitespace errors and secrets.

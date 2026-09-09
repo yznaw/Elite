@@ -21,7 +21,7 @@ interface ContactForm {
     selector: 'cw-contact',
     imports: [CommonModule, FormsModule],
     templateUrl: './contact.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './contact.component.scss'
 })
 export class ContactComponent implements OnInit {

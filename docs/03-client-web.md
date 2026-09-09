@@ -449,6 +449,41 @@ const AR: Record<keyof typeof EN, string> = {
 export const STRINGS: Record<Locale, Record<string, string>> = { en: EN, ar: AR };
 ```
 
+`AR` is typed `Record<keyof typeof EN, string>` on purpose: a key that exists in
+Arabic but not English is a compile error, so the two dictionaries cannot drift
+apart silently.
+
+### Counted Nouns
+
+English needs two forms. Arabic needs four and picks between them by the number:
+one, two, a few (3 to 10), and everything else, where the 11-and-above case
+takes the singular noun. Writing `{{ n }} pieces` in a template renders
+"3 قطعة" on the Arabic storefront, which reads the way "3 piece" does in
+English.
+
+`pieceCount()` on the collection component is the pattern to copy: it selects
+`collection.pieces.{one,two,few,other}` from the number and passes `{ count }`
+as a parameter, falling back to `other` for any locale that does not define a
+form. English defines all four so the type constraint above holds; its `few` and
+`other` are the same string.
+
+### Strings Live In `strings.ts`, Not In The Template
+
+A literal typed straight into a template or a component constant renders in
+English on both storefronts. This is not visible while developing in English and
+there is no error for it — the page just stays half-translated. The collection
+page had accumulated the whole filter sidebar this way: the group headings were
+English constants in `collection.component.ts` while the sort control beside
+them translated correctly.
+
+The same applies to `aria-label`. Bind it (`[attr.aria-label]="t('...')"`)
+rather than hardcoding, so an Arabic visitor on a screen reader does not hit
+English landmarks.
+
+**Not everything English on the page is a missing string.** Collection titles,
+descriptions and category names come from the database as the admin authored
+them. Those need an Arabic value entered in the admin; no key will fix them.
+
 ### Key Categories
 
 | Prefix | Content |
@@ -542,6 +577,102 @@ All `@font-face` declarations are at the top of `styles.scss`. No external font 
 - `rotateSlow` — 360° rotation
 - `pulseGold` — Gold glow pulse
 - `metaIn` — Metadata entrance
+
+The storefront has no Angular animations. There is no `animations: []` metadata
+and no `@angular/animations` import anywhere in the app, and `app.config.ts`
+deliberately does not call `provideAnimations()` — the provider was booting the
+animation engine, and adding it to the initial bundle, for nothing. Add it back
+alongside the first component that actually declares a trigger, not before.
+
+---
+
+## Mobile Touch and Performance Contract
+
+Everything below exists because of one report: the shop felt heavy on a phone
+and the screen kept zooming when you touched things. These are the parts that
+have to stay true together, so they are written down as one contract rather
+than rediscovered per page.
+
+### Zoom
+
+Two separate iOS behaviours zoom the page, and each needs its own guard. Both
+live in `styles.scss`, under `pointer: coarse`, and neither is a viewport-meta
+scale cap — `maximum-scale` is what the codebase used to use, and it took real
+pinch zoom away from every visitor to fix an accidental one. Do not bring it
+back (there is a note in `index.html` saying so).
+
+| Zoom | Trigger | Guard |
+|---|---|---|
+| Focus zoom | A focused text control rendering below 16px | The 16px control floor. Any new focusable text control on the storefront joins that list. |
+| Double-tap zoom | Two taps anywhere, which on a shop is almost always an impatient second press on a size pill or "add to cart" | `touch-action: manipulation` on `html`. |
+
+`manipulation` disables double-tap zoom and the click delay that comes with
+waiting for the second tap, and leaves pinch zoom and scrolling alone. A
+component that needs the browser's own gesture handling back (a pinch-zoom
+viewer, a map) overrides `touch-action` locally.
+
+### Cost per frame
+
+A phone repaints while it scrolls, so anything permanently on screen is a cost
+paid on every frame rather than once:
+
+- **The grain overlay** (`body::before`) is a fixed, full-viewport layer above
+  every other element. It is hidden under `pointer: coarse`. It renders at 1.2%
+  effective opacity, which is not visible on a phone; desktop keeps it.
+- **The PDP sticky add-to-cart bar** is fixed over the page for the whole
+  scroll. Its backdrop blur is dropped on mobile and the background made
+  opaque: at 97% opacity there was nothing underneath for the blur to show.
+- **The PDP gallery** stacks every image in the frame at once so the swipe can
+  cross-fade. Inactive images carry `visibility: hidden` and no colour
+  `filter`, which are the two properties that would promote each one to its own
+  composited layer. A 16-photo product was otherwise holding 16 full-size
+  layers live in the viewport.
+
+### Change detection
+
+Components on this app are `OnPush` unless there is a reason. The v17 to v22
+migration wrote `ChangeDetectionStrategy.Eager` onto every existing component to
+preserve the old framework default; that is a migration artifact, not a
+decision. `Eager` plus zone.js means the whole template is re-evaluated on every
+touch, scroll and timer on the page — on the product page that was roughly a
+hundred translation lookups, the price formatter and every per-image srcset
+builder, per event, which is what the delay between pressing a size and seeing
+it select was made of.
+
+**The whole storefront is now on `OnPush`.** There is no `Eager` left in
+`client-web`. It was safe because every value these templates read comes from a
+signal, including the ones read inside the methods the templates call. The
+non-signal fields that remain are private plumbing that never reaches a
+template: timers, RxJS subscriptions, `MediaQueryList` handles,
+`IntersectionObserver`s, idempotency keys.
+
+Anything added later that a template must react to has to be a signal. That is
+now a requirement rather than a preference, and it fails quietly: the build
+still passes and no error is thrown, the view simply stops updating and shows a
+stale value.
+
+**Order matters if this is ever redone.** `app.component` is the shell holding
+the nav, the footer, the cart drawer and the router outlet, and an `OnPush` view
+that is not dirty is not descended into. Flipping the root while its children
+were still eager would stop them updating. Leaves first, root last.
+
+Verified after the switch, in a browser rather than by building: hero arrows and
+the burst/interleaved-tap cases (the hero suite, 29 passing), collection filters
+re-rendering the grid, add-to-cart updating the nav badge and drawer, the
+checkout stepper advancing, `hideFooter()` removing the footer on a client-side
+route into `/checkout` and restoring it on browser-back, `isExperience()` hiding
+the shell, and the locale toggle re-rendering nav, footer and `dir` across
+component boundaries.
+
+### Image weight
+
+The storefront never sizes images itself; it hands the browser a `srcset` of
+the stored variants and lets it choose. That only works if the variants exist.
+When an asset's `imageVariants` is empty, `imageSrcset()` returns null, the
+`src` fallback is the **full-size original**, and a phone downloads it — which
+in practice meant multi-megabyte PNGs on the product gallery. See
+`07-dev-guide.md`, "Backfill missing image variants", for how to detect and
+repair that.
 
 ---
 

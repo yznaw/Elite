@@ -9,7 +9,7 @@ import { SeoService } from '../../services/seo.service';
     selector: 'cw-story',
     imports: [CommonModule],
     templateUrl: './story.component.html',
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './story.component.scss'
 })
 export class StoryComponent implements OnInit {
