@@ -194,7 +194,7 @@ const EN = {
 
   'product.color.label': 'Select Color',
   'product.color.choose': 'Choose {color}',
-  'product.size.label': 'Select Size (UK)',
+  'product.size.label': 'Select Size',
   'product.size.guide': 'Size Guide',
   'product.size.guideLoading': 'Loading size guide...',
   'product.size.guideEmpty': 'No size guide is available yet.',

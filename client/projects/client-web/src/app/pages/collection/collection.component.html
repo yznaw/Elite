@@ -382,7 +382,9 @@
 
                     <div
                       class="purchase-panel"
-                      [class.purchase-panel--disabled]="availableSizes(p).length === 0"
+                      [class.purchase-panel--disabled]="
+                        availableSizes(p).length === 0
+                      "
                       [attr.aria-disabled]="availableSizes(p).length === 0"
                     >
                       <div
@@ -399,16 +401,20 @@
                           <select
                             class="size-select"
                             [id]="'size-select-' + p.id"
-                            [value]="availableSizes(p).length ? selectedSize(p) : ''"
+                            [value]="
+                              availableSizes(p).length ? selectedSize(p) : ''
+                            "
                             [disabled]="availableSizes(p).length === 0"
                             (change)="selectSize(p, sizeSelectValue($event))"
                             [attr.aria-label]="t('collection.quickAdd.size')"
                           >
                             @if (availableSizes(p).length === 0) {
-                              <option value="">{{ t("collection.quickAdd.noSizes") }}</option>
+                              <option value="">
+                                {{ t("collection.quickAdd.noSizes") }}
+                              </option>
                             } @else {
                               @for (size of availableSizes(p); track size) {
-                                <option [value]="size">EU {{ size }}</option>
+                                <option [value]="size">{{ size }}</option>
                               }
                             }
                           </select>
