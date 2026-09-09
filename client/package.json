@@ -12,7 +12,8 @@
     "lint": "ng lint",
     "test": "ng test",
     "test:hero": "playwright test --config=playwright.hero.config.ts",
-    "test:sku": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/variant-sku.test.ts"
+    "test:sku": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/variant-sku.test.ts",
+    "test:pos-printing": "node --test test/pos-printing.test.mjs"
   },
   "private": true,
   "dependencies": {
@@ -36,6 +37,7 @@
     "@angular/compiler-cli": "^22.0.7",
     "@playwright/test": "^1.53.2",
     "@types/node": "^18.18.0",
+    "esbuild": "^0.28.1",
     "typescript": "~6.0.3"
   }
 }

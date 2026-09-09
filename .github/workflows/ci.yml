@@ -102,6 +102,8 @@ jobs:
         working-directory: client
       - run: npx playwright install --with-deps chromium
         working-directory: client
+      - run: npm run test:pos-printing
+        working-directory: client
       # The Playwright config starts the API and the admin dev server itself.
       - run: npm run test:e2e
         working-directory: client

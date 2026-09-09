@@ -1547,16 +1547,28 @@ export class PosComponent implements OnInit, OnDestroy {
     }
 
     if (completedVoid) {
-      try {
-        await this.hardware.printReceipt(completedVoid.receiptData, completedVoid.openDrawer);
-      } catch (printError) {
-        this.toast.warning('Sale voided, receipt not printed', this.errorMessage(printError));
-        this.clientLogger.logError('pos-client', printError, {
-          code: 'PRINT_FAILED',
-          severity: 'warn',
-          context: { receiptKind: 'void', printerName: this.hardware.printerName(), openDrawer: completedVoid.openDrawer },
-        });
-      }
+      await this.printCorrectionReceipt(completedVoid.receiptData, completedVoid.openDrawer, 'Sale voided, receipt not printed');
+    }
+  }
+
+  private async printCorrectionReceipt(receiptData: unknown, openDrawer: boolean, failureTitle: string): Promise<void> {
+    try {
+      await this.hardware.printReceipt(receiptData, openDrawer);
+    } catch (printError) {
+      // Retry the saved receipt only: never repeat the refund/void or pulse
+      // the drawer again when the original print's outcome is uncertain.
+      this.toast.push({
+        kind: 'warning',
+        title: failureTitle,
+        sub: this.errorMessage(printError),
+        duration: null,
+        action: { label: 'Retry print', run: () => { void this.printCorrectionReceipt(receiptData, false, failureTitle); } },
+      });
+      this.clientLogger.logError('pos-client', printError, {
+        code: 'PRINT_FAILED',
+        severity: 'warn',
+        context: { receiptKind: (receiptData as PosReceiptData)?.kind, printerName: this.hardware.printerName(), openDrawer },
+      });
     }
   }
 
@@ -1577,6 +1589,7 @@ export class PosComponent implements OnInit, OnDestroy {
       || !this.correctionReason.trim()
       || (transaction.paymentMethod === 'card' && !refundTerminalReference)
     ) return;
+    let completedRefund: { receiptData: unknown; openDrawer: boolean } | null = null;
     this.busy.set(true);
     try {
       await this.ensureReceiptBlock();
@@ -1598,8 +1611,7 @@ export class PosComponent implements OnInit, OnDestroy {
       await this.local.commitReceipt(receiptNumber);
       this.receiptBlock.set(await this.local.getReceiptBlock());
       this.applyStockUpdates(result.stockUpdates || []);
-      await this.hardware.printReceipt(result.receipt.receiptData, result.method === 'cash').catch(() => undefined);
-      this.operationTransaction.set(await this.pos.findTransaction(transaction.transactionId));
+      completedRefund = { receiptData: result.receipt.receiptData, openDrawer: result.method === 'cash' };
       this.managerPin = '';
       this.correctionReason = '';
       this.refundTerminalReference = '';
@@ -1608,6 +1620,18 @@ export class PosComponent implements OnInit, OnDestroy {
       this.toast.error("Couldn't complete refund", this.errorMessage(error));
     } finally {
       this.busy.set(false);
+    }
+
+    if (completedRefund) {
+      await this.printCorrectionReceipt(completedRefund.receiptData, completedRefund.openDrawer, 'Refund saved, receipt not printed');
+      // Refreshing the operations panel is optional and must not delay the
+      // receipt or make a committed refund appear to have failed.
+      try {
+        const refreshed = await this.pos.findTransaction(transaction.transactionId);
+        if (this.operationTransaction() === transaction) this.operationTransaction.set(refreshed);
+      } catch (error) {
+        this.toast.warning('Refund saved, transaction details could not be refreshed', this.errorMessage(error));
+      }
     }
   }
 

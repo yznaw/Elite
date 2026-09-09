@@ -17,10 +17,6 @@ import { ClientLoggerService, ClientLogSeverity } from './client-logger.service'
 const LOG_PREFIX = '[pos-hardware]';
 
 interface PosPrintJobOptions {
-  /** Reset inherited ESC/POS modes before this job. */
-  initializePrinter?: boolean;
-  /** Override QZ's default image command for this job only. */
-  imageEncoding?: 'esc_asterisk' | 'gs_l' | 'gs_v_0';
   /** Ephemeral QZ job options; never written to the device's saved settings. */
   qzConfig?: Record<string, unknown>;
 }
@@ -91,7 +87,7 @@ export class PosHardwareService {
     const stale = Date.now() - this.businessProfileFetchedAt > this.BUSINESS_PROFILE_TTL_MS;
     if (!stale) return this.businessProfile;
     try {
-      this.businessProfile = await this.pos.businessProfile();
+      this.businessProfile = await this.withTimeout(this.pos.businessProfile(), 3000, 'Receipt business profile');
     } catch {
       // Printing must not fail because the profile fetch failed (e.g. offline)
       // — fall back to whatever was last cached, or the renderer's defaults.
@@ -385,15 +381,8 @@ export class PosHardwareService {
     const profile = await this.getBusinessProfile();
     const rendered = await this.renderer.renderZReport(report as Parameters<PosReceiptRenderer['renderZReport']>[0], profile);
     await this.printRendered('printZReport', rendered, false, {
-      initializePrinter: true,
-      // Raster mode is a better fit for this single tall bitmap than QZ's
-      // default banded ESC * encoding, and avoids driver page-band boundaries.
-      // This override applies only to Z reports.
-      imageEncoding: 'gs_v_0',
       qzConfig: {
         jobName: 'Elite POS Z Report',
-        margins: 0,
-        scaleContent: false,
       },
     });
   }
@@ -419,10 +408,13 @@ export class PosHardwareService {
       language: 'escpos',
       dotDensity: 'double',
       quantization: 'luma',
-      ...(jobOptions.imageEncoding ? { imageEncoding: jobOptions.imageEncoding } : {}),
+      // Use the same native-size raster path for every receipt/report. GS v 0
+      // feeds each bitmap slice by its actual height without relying on the
+      // ESC * line/motion settings inherited from an earlier print job.
+      imageEncoding: 'gs_v_0',
     };
     const data: Array<{ type: string; format: string; flavor?: string; data: string; options?: Record<string, unknown> } | string> = [];
-    if (jobOptions.initializePrinter) data.push('\x1b' + '@');
+    data.push('\x1b' + '@');
     data.push(
       {
         type: 'raw',
@@ -454,7 +446,13 @@ export class PosHardwareService {
     if (openDrawer && this.settings.drawerPulse !== 'disabled') {
       data.push(this.renderer.drawerCommand(this.settings.drawerPulse));
     }
-    const config = qz.configs.create(this.settings.printerName, jobOptions.qzConfig);
+    const config = qz.configs.create(this.settings.printerName, {
+      jobName: 'Elite POS Receipt',
+      encoding: 'ISO-8859-1',
+      margins: 0,
+      scaleContent: false,
+      ...jobOptions.qzConfig,
+    });
     try {
       await this.withTimeout(qz.print(config, data), this.PRINT_TIMEOUT_MS, 'Receipt printing');
       this.connected.set(true);

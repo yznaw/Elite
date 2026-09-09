@@ -89,8 +89,11 @@ export class PosReceiptRenderer {
    * SRP-QE300 spec: 80mm media, 180dpi, but only 72mm is actually printable
    * (confirmed by a real test print — 576px, sized for 80mm at 203dpi, cut
    * off the right ~15% of every line). 72mm / 25.4mm-per-inch * 180dpi ≈ 510px.
+   * Round DOWN to whole 8-dot bytes for ESC/POS raster rows. 510 is not
+   * byte-aligned; 504 keeps the bitmap inside the printable area and avoids
+   * mismatched raster row lengths in the QZ conversion.
    */
-  private readonly widthPx = 510;
+  private readonly widthPx = Math.floor((72 / 25.4 * 180) / 8) * 8;
   private readonly marginPx = 28;
   private readonly lineHeightPx = 30;
   private readonly smallLineHeightPx = 24;
@@ -195,12 +198,7 @@ export class PosReceiptRenderer {
 
     return {
       imageDataUrl: finalCanvas.toDataURL('image/png'),
-      // The cutter sits downstream from the thermal head. Cutting immediately
-      // after the raster can physically slice through its final rows even
-      // though every pixel reached the printer. Feed roughly 25mm first (six
-      // default lines at 180dpi), then partial-cut. This is deliberately scoped
-      // to Z reports; customer receipt QR/cut handling remains unchanged.
-      footerCommands: '\x1b' + 'a' + '\x00' + '\x1b' + 'd' + '\x06' + '\x1d' + 'V' + '\x01',
+      footerCommands: this.feedAndCutCommands(),
     };
   }
 
@@ -323,13 +321,18 @@ export class PosReceiptRenderer {
    * how tall it renders for a given payload length.
    */
   private footerCommands(receipt: PosReceiptData): string {
-    const gs = '\x1d';
     const esc = '\x1b';
     const centre = esc + 'a' + '\x01';
-    const alignLeft = esc + 'a' + '\x00';
     const lookup = receipt.lookupCode || `#${receipt.receiptNumber}`;
-    const feedLines = '\x06'; // 6 lines ≈ well clear of the largest QR this payload will ever produce
-    return centre + this.qrCode(lookup) + alignLeft + esc + 'd' + feedLines + gs + 'V' + '\x01';
+    return centre + this.qrCode(lookup) + this.feedAndCutCommands();
+  }
+
+  private feedAndCutCommands(): string {
+    // Reset line spacing before feeding: ESC d uses the printer's current
+    // spacing, which an image/previous job can change. Six default lines
+    // advance about 25mm past the thermal head so the final rows (including
+    // refund/void counts on Z reports) leave the cutter before it fires.
+    return '\x1b' + 'a' + '\x00' + '\x1b' + '2' + '\x1b' + 'd' + '\x06' + '\x1d' + 'V' + '\x01';
   }
 
   private qrCode(data: string): string {
