@@ -150,6 +150,7 @@ export class HomeContentService {
       ...content,
       hero:       { ...fallback.hero,       ...(content.hero       || {}) },
       collections: Array.isArray(content.collections) ? content.collections : fallback.collections,
+      collectionsIntro: { ...fallback.collectionsIntro, ...(content.collectionsIntro || {}) },
       heroSlider: {
         ctaEn: content.heroSlider?.ctaEn || fallback.heroSlider.ctaEn,
         ctaAr: content.heroSlider?.ctaAr || fallback.heroSlider.ctaAr,

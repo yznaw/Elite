@@ -2,11 +2,8 @@ export interface HomeDiscountHeroContent {
   imageUrl: string;
   title: string;
   body: string;
-  discountText: string;
   kickerEn: string;
   kickerAr: string;
-  discountLabelEn: string;
-  discountLabelAr: string;
   ctaText: string;
   ctaLink: string;
   titleEn: string;
@@ -27,6 +24,13 @@ export interface HomeCollectionTileContent {
   titleAr: string;
   ctaTextEn: string;
   ctaTextAr: string;
+}
+
+export interface HomeCollectionsIntroContent {
+  titleEn: string;
+  titleAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryHeroContent {
@@ -240,6 +244,7 @@ export interface MediaVariant {
 export interface HomeContentData {
   hero: HomeDiscountHeroContent;
   collections: HomeCollectionTileContent[];
+  collectionsIntro: HomeCollectionsIntroContent;
   story: StoryContentData;
   heroSlider: HeroSliderContent;
   promise: PromiseContent;
@@ -267,13 +272,13 @@ export function createEmptyHomeContent(): HomeContentData {
       imageUrl: '',
       title: '',
       body: '',
-      discountText: '',
-      kickerEn: '', kickerAr: '', discountLabelEn: '', discountLabelAr: '',
+      kickerEn: '', kickerAr: '',
       ctaText: '',
       ctaLink: '',
       titleEn: '', titleAr: '', bodyEn: '', bodyAr: '', ctaTextEn: '', ctaTextAr: '',
     },
     collections: [],
+    collectionsIntro: { titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' },
     heroSlider: {
       ctaEn: '',
       ctaAr: '',

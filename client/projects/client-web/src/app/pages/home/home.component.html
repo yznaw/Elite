@@ -382,10 +382,8 @@
             >
               <div class="collection-showcase">
                 <div class="collection-heading">
-                  <h2 id="home-collection-title">Featured Collections</h2>
-                  <p>
-                    Dare to mix and match. Explore the latest edits by category.
-                  </p>
+                  <h2 id="home-collection-title">{{ localized(contentData().collectionsIntro.titleEn, contentData().collectionsIntro.titleAr) }}</h2>
+                  <p>{{ localized(contentData().collectionsIntro.bodyEn, contentData().collectionsIntro.bodyAr) }}</p>
                 </div>
 
                 <div class="collection-grid">
@@ -436,11 +434,6 @@
                     {{ localized(contentData().hero.titleEn, contentData().hero.titleAr, contentData().hero.title) }}
                   </h2>
                   <p class="discount-body">{{ localized(contentData().hero.bodyEn, contentData().hero.bodyAr, contentData().hero.body) }}</p>
-
-                  <div class="discount-callout">
-                    <span>{{ localized(contentData().hero.discountLabelEn, contentData().hero.discountLabelAr) }}</span>
-                    <strong>{{ contentData().hero.discountText }}</strong>
-                  </div>
 
                   <button
                     type="button"

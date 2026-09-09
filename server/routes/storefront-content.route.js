@@ -10,11 +10,8 @@ const DEFAULT_HOME_CONTENT = {
     imageUrl: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1500&q=85&auto=format&fit=crop',
     title: "Find Your Perfect Look at Elite's New Collection",
     body: 'Step into a sharper wardrobe with curated footwear, outerwear, and everyday essentials selected for modern city style.',
-    discountText: '50%',
     kickerEn: 'Elite Collection',
     kickerAr: 'إيليت كوليكشن',
-    discountLabelEn: 'Come and Enjoy Sale!',
-    discountLabelAr: 'استمتعوا بعروض التخفيضات!',
     ctaText: 'Shop Now',
     ctaLink: '/collection',
   },
@@ -39,6 +36,12 @@ const DEFAULT_HOME_CONTENT = {
       link: '/collection?category=jacket',
     },
   ],
+  collectionsIntro: {
+    titleEn: 'Featured Collections',
+    titleAr: 'المجموعات المميزة',
+    bodyEn: 'Dare to mix and match. Explore the latest edits by category.',
+    bodyAr: 'اكتشف أحدث اختياراتنا وتعرّف على مجموعاتنا حسب الفئة.',
+  },
   story: {
     hero: {
       kicker: 'EST. 2018 · QATAR',
@@ -504,15 +507,13 @@ function createEmptyHomeContent() {
       imageUrl: '',
       title: '',
       body: '',
-      discountText: '',
       kickerEn: '',
       kickerAr: '',
-      discountLabelEn: '',
-      discountLabelAr: '',
       ctaText: '',
       ctaLink: '',
     },
     collections: [],
+    collectionsIntro: { titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' },
     story: {
       hero: {
         kicker: '',
@@ -583,11 +584,8 @@ function normalizeHero(hero = {}) {
     imageUrl: asText(hero.imageUrl, DEFAULT_HOME_CONTENT.hero.imageUrl),
     title: asText(hero.title, DEFAULT_HOME_CONTENT.hero.title),
     body: asText(hero.body, DEFAULT_HOME_CONTENT.hero.body),
-    discountText: asText(hero.discountText, DEFAULT_HOME_CONTENT.hero.discountText),
     kickerEn: asText(hero.kickerEn, DEFAULT_HOME_CONTENT.hero.kickerEn),
     kickerAr: asText(hero.kickerAr, DEFAULT_HOME_CONTENT.hero.kickerAr),
-    discountLabelEn: asText(hero.discountLabelEn, DEFAULT_HOME_CONTENT.hero.discountLabelEn),
-    discountLabelAr: asText(hero.discountLabelAr, DEFAULT_HOME_CONTENT.hero.discountLabelAr),
     ctaText: asText(hero.ctaText, DEFAULT_HOME_CONTENT.hero.ctaText),
     ctaLink: asText(hero.ctaLink, DEFAULT_HOME_CONTENT.hero.ctaLink),
     titleEn: asText(hero.titleEn, asText(hero.title, DEFAULT_HOME_CONTENT.hero.title)),
@@ -596,6 +594,16 @@ function normalizeHero(hero = {}) {
     bodyAr: asText(hero.bodyAr, ''),
     ctaTextEn: asText(hero.ctaTextEn, asText(hero.ctaText, DEFAULT_HOME_CONTENT.hero.ctaText)),
     ctaTextAr: asText(hero.ctaTextAr, ''),
+  };
+}
+
+function normalizeCollectionsIntro(collectionsIntro = {}) {
+  const fallback = DEFAULT_HOME_CONTENT.collectionsIntro;
+  return {
+    titleEn: asText(collectionsIntro.titleEn, fallback.titleEn),
+    titleAr: asText(collectionsIntro.titleAr, fallback.titleAr),
+    bodyEn: asText(collectionsIntro.bodyEn, fallback.bodyEn),
+    bodyAr: asText(collectionsIntro.bodyAr, fallback.bodyAr),
   };
 }
 
@@ -985,6 +993,7 @@ function normalizeContent(input = {}) {
   return {
     hero:        normalizeHero(input.hero),
     collections: normalizeCollections(input.collections),
+    collectionsIntro: normalizeCollectionsIntro(input.collectionsIntro),
     story:       normalizeStory(input.story),
     heroSlider:  normalizeHeroSlider(input.heroSlider),
     promise:     normalizePromise(input.promise),

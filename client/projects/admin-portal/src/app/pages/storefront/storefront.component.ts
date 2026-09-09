@@ -42,8 +42,9 @@ interface SocialLink    { id: string; platform: string; handle: string; enabled:
 interface HeroFact      { id: string; label: string; labelEn: string; labelAr: string; }
 
 interface StorefrontContent {
-  hero: { imageUrl: string; title: string; body: string; discountText: string; kickerEn: string; kickerAr: string; discountLabelEn: string; discountLabelAr: string; ctaText: string; ctaLink: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; ctaTextEn: string; ctaTextAr: string; };
+  hero: { imageUrl: string; title: string; body: string; kickerEn: string; kickerAr: string; ctaText: string; ctaLink: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; ctaTextEn: string; ctaTextAr: string; };
   collections: Array<{ id: string; collectionId?: string; title: string; imageUrl: string; link: string; ctaText?: string; titleEn: string; titleAr: string; ctaTextEn: string; ctaTextAr: string; }>;
+  collectionsIntro: { titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; };
   heroSlider: { ctaEn: string; ctaAr: string; items: HeroSliderItem[]; };
   promise: { kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; cards: PromiseCard[]; };
   stats: StatItem[];
@@ -518,6 +519,14 @@ interface StorefrontContent {
               </button>
             </div>
             <div class="card-pad">
+              <div class="two-col mb-16">
+                <label><span class="lbl">Header (English)</span><input class="inp" [ngModel]="content().collectionsIntro.titleEn" (ngModelChange)="patchCollectionsIntro('titleEn', $event)"/></label>
+                <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().collectionsIntro.titleAr" (ngModelChange)="patchCollectionsIntro('titleAr', $event)"/></label>
+              </div>
+              <div class="two-col mb-16">
+                <label><span class="lbl">Description (English)</span><textarea class="inp" rows="2" [ngModel]="content().collectionsIntro.bodyEn" (ngModelChange)="patchCollectionsIntro('bodyEn', $event)"></textarea></label>
+                <label><span class="lbl">الوصف (العربية)</span><textarea class="inp" dir="rtl" rows="2" [ngModel]="content().collectionsIntro.bodyAr" (ngModelChange)="patchCollectionsIntro('bodyAr', $event)"></textarea></label>
+              </div>
               @if (featuredRefs().length > 0) {
                 <div class="featured-chips mb-16">
                   @for (ref of featuredRefs(); track ref) {
@@ -665,14 +674,9 @@ interface StorefrontContent {
                   <label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().hero.bodyAr" (ngModelChange)="patchHero('bodyAr',$event)"></textarea></label>
                 </div>
                 <div class="two-col">
-                  <label><span class="lbl">{{ t('storefront.editor.promotion.discount') }}</span><input class="inp" [ngModel]="content().hero.discountText" (ngModelChange)="patchHero('discountText',$event)"/></label>
                   <label><span class="lbl">CTA (English)</span><input class="inp" [ngModel]="content().hero.ctaTextEn" (ngModelChange)="patchHero('ctaTextEn',$event)"/></label>
+                  <label><span class="lbl">CTA (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.ctaTextAr" (ngModelChange)="patchHero('ctaTextAr',$event)"/></label>
                 </div>
-                <div class="two-col">
-                  <label><span class="lbl">Sale label (English)</span><input class="inp" [ngModel]="content().hero.discountLabelEn" (ngModelChange)="patchHero('discountLabelEn',$event)"/></label>
-                  <label><span class="lbl">تسمية الخصم (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.discountLabelAr" (ngModelChange)="patchHero('discountLabelAr',$event)"/></label>
-                </div>
-                <label><span class="lbl">CTA (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.ctaTextAr" (ngModelChange)="patchHero('ctaTextAr',$event)"/></label>
                 <label><span class="lbl">{{ t('storefront.editor.promotion.btnLink') }}</span><input class="inp" [ngModel]="content().hero.ctaLink" (ngModelChange)="patchHero('ctaLink',$event)"/></label>
               </div>
             </div>
@@ -684,7 +688,6 @@ interface StorefrontContent {
                   <small>Elite Collection</small>
                   <h3>{{ content().hero.title }}</h3>
                   <p>{{ content().hero.body }}</p>
-                  <strong>{{ content().hero.discountText }}</strong>
                   <span>{{ content().hero.ctaText }}</span>
                 </div>
               </div>
@@ -2523,6 +2526,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
 
   patchPromise(key: string, value: string): void {
     this.content.update((c) => ({ ...c, promise: { ...c.promise, [key]: value } }));
+    this.markDirty();
+  }
+
+  patchCollectionsIntro(key: string, value: string): void {
+    this.content.update((c) => ({ ...c, collectionsIntro: { ...c.collectionsIntro, [key]: value } }));
     this.markDirty();
   }
 
