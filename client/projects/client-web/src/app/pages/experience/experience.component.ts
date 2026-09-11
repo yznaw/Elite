@@ -35,7 +35,7 @@ const PARTICLE_ICONS = [
 // ── All UI strings in both languages ─────────────────────────────────────────
 const STRINGS: Record<ExperienceLang, Record<string, any>> = {
   en: {
-    logoSub: 'Arabic Leather Artisans',
+    logoSub: 'Qatari Design, Crafted in Italy',
     welcomeTitle: 'Excellence is in the details.',
     welcomeSub: 'We\'d love your thoughts on today\'s visit.',
 
@@ -66,7 +66,7 @@ const STRINGS: Record<ExperienceLang, Record<string, any>> = {
     langToggle: 'عربي',
   },
   ar: {
-    logoSub: 'حِرَفيّو الجِلد العربي',
+    logoSub: 'تصميم قطري، صناعة إيطالية',
     welcomeTitle: 'التميز يكمن في التفاصيل.',
     welcomeSub: 'يسعدنا الاستماع لرأيك حول زيارتك اليوم.',
 

@@ -176,6 +176,44 @@ feature-name/
 
 ## How-To Recipes
 
+### Add or change a page's search metadata
+
+Every route's `<head>` is owned by `SeoService` (`client/projects/client-web/src/app/services/seo.service.ts`). Call `watch()` from a **field initializer**, never from `ngOnInit`, so the effect dies with the component:
+
+```typescript
+private readonly seoTags = this.seo.watch(() => ({
+  title: this.i18n.t('seo.contact.title'),
+  description: this.i18n.t('seo.contact.description'),
+  canonicalPath: '/contact',
+}));
+```
+
+Copy lives in `i18n/strings.ts` under the `seo.*` keys, in **both** locales. `AR` is typed `Record<keyof typeof EN, string>`, so a key added to one locale and not the other is a compile error.
+
+**Three things stay in sync by hand**, because there is no single source for them yet:
+
+| What | Where |
+|---|---|
+| Site-level `og:`/`twitter:` fallback tags | `client/projects/client-web/src/index.html` |
+| `seo.*` copy, both locales | `client/projects/client-web/src/app/i18n/strings.ts` |
+| White-label defaults | `brand.config.json` |
+
+The tags in `index.html` exist because `SeoService` runs after hydration and social crawlers do not run JavaScript. Do not add a `canonical` or `og:url` there: those are per-URL, and a hardcoded value tells non-JS crawlers that every page duplicates the homepage. Both are created at runtime instead.
+
+### Regenerate the link-preview (og:image) card
+
+`assets/brand/og-default.jpg` must stay 1200x630. The source is `docs/seo/og-image-source.html`, a self-contained page with the product shot and logo inlined as data URIs:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless --disable-gpu --hide-scrollbars \
+  --force-device-scale-factor=2 --window-size=1200,630 \
+  --screenshot=/tmp/og.png docs/seo/og-image-source.html
+```
+
+Then downsample the 2400x1260 capture to 1200x630 and save as JPEG (quality ~86) over `client/projects/client-web/src/assets/brand/og-default.jpg`. Keep it under ~300 kB; WhatsApp skips images that are too large.
+
+
 ### Run the browser release gate
 
 The POS browser suite is the gate that proves checkout still works end to end — an online sale through the real variant picker, an offline sale that reconnects, and a network failure injected after the server commits.

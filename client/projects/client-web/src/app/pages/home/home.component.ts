@@ -18,6 +18,7 @@ import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
 import { ProductsService } from '../../services/products.service';
+import { BRAND_REGISTRY } from '../../models/brand-registry';
 import { HomeCollectionTileContent, HeroColorContent } from '../../models/home-content.model';
 import { colorKey } from '../../utils/color-slug';
 import { mediaVariantKey, resolveClientMediaUrl } from '../../utils/media-url';
@@ -127,14 +128,30 @@ export class HomeComponent implements OnInit, OnDestroy {
         '@context': 'https://schema.org',
         '@type': 'Organization',
         name: this.i18n.t('seo.siteName'),
+        // Confirmed against the commercial registration, 2026-09-10. A legal
+        // name and registration number are what let a search engine tie this
+        // site to a single real company rather than to the several unrelated
+        // businesses trading under a similar name.
+        legalName: BRAND_REGISTRY.legalName,
+        taxID: BRAND_REGISTRY.crNumber,
         url: this.seo.origin(),
         logo: `${this.seo.origin()}/assets/brand/elite-logo-green.png`,
-        foundingDate: '2018',
+        foundingDate: BRAND_REGISTRY.foundingDate,
+        ...(this.homeContent.contentData().contact.email
+          ? { email: this.homeContent.contentData().contact.email } : {}),
+        ...(this.homeContent.contentData().contact.phone
+          ? { telephone: this.homeContent.contentData().contact.phone.replace(/\s+/g, '') } : {}),
         address: {
           '@type': 'PostalAddress',
           addressLocality: 'Doha',
           addressCountry: 'QA',
         },
+        // Each shop is described in full on /contact; referencing them here
+        // keeps the org and its outlets as one connected entity.
+        subOrganization: (this.homeContent.contentData().contact.branches ?? []).map((b) => ({
+          '@type': 'Store',
+          '@id': `${this.seo.origin()}/contact#${b.id}`,
+        })),
       },
       {
         '@context': 'https://schema.org',

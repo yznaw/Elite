@@ -782,3 +782,12 @@ For architecture, data flow, current limitations, API behavior, setup, testing, 
 - [05 – API Server](./05-api-server.md) — Express API details
 - [06 – White-Label Guide](./06-white-label-guide.md) — Rebranding the admin
 - [08 – Database & API Implementation](./08-database-api-implementation.md) — PostgreSQL schema and endpoint map
+
+### Storefront editor: Contact
+
+The **Info Blocks** sub-tab is now **Branches and stockists**.
+
+- **Branches** carry name, address, phone, map link, Google Maps embed URL, coordinates, parking, and opening hours as whole 24h hours for the Sunday-Thursday and Friday-Saturday bands. Those hours drive the `Open now` badge on the storefront and the opening hours sent to Google, so they are numbers rather than free text.
+- **Stockists** are for shops that carry Elite but are not Elite premises. Their map link points at the host store and is never published as an Elite location.
+- The embed URL is checked against `google.com/maps/embed` on the server and again in the storefront before it is bound to an `iframe src`, so content editing cannot frame a third-party page.
+- Arabic fields were added for the subhead, promise line and signature. Previously those were single fields, which is why the Arabic contact page showed English copy.

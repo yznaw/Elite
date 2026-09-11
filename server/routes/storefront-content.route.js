@@ -11,7 +11,7 @@ const DEFAULT_HOME_CONTENT = {
     title: "Find Your Perfect Look at Elite's New Collection",
     body: 'Step into a sharper wardrobe with curated footwear, outerwear, and everyday essentials selected for modern city style.',
     kickerEn: 'Elite Collection',
-    kickerAr: 'إيليت كوليكشن',
+    kickerAr: 'اليت كولكشن',
     ctaText: 'Shop Now',
     ctaLink: '/collection',
   },
@@ -51,7 +51,7 @@ const DEFAULT_HOME_CONTENT = {
       imageUrl: '/api/uploads/mq8mzu95-06808f73-card.webp',
       imageAlt: 'Elite Collection founder beside a classic car in Doha',
       imageAltEn: 'Elite Collection founder beside a classic car in Doha',
-      imageAltAr: 'مؤسس إيليت كولكشن بجانب سيارة كلاسيكية في الدوحة',
+      imageAltAr: 'مؤسس اليت كولكشن بجانب سيارة كلاسيكية في الدوحة',
       kickerEn: 'EST. 2018 · QATAR',
       kickerAr: 'منذ 2018 · قطر',
       titleEn: 'A Qatari Perspective',
@@ -59,7 +59,7 @@ const DEFAULT_HOME_CONTENT = {
       accentEn: 'crafted in Italy',
       accentAr: 'بحِرفة إيطالية',
       bodyEn: 'Elite Collection is a Qatari brand founded in 2018, creating refined footwear and accessories shaped by the region’s quiet confidence and custom-crafted in Italy.',
-      bodyAr: 'إيليت كولكشن علامة قطرية تأسست عام 2018، تقدّم أحذية وإكسسوارات راقية تستلهم أناقة المنطقة الهادئة وتُصنع حسب الطلب في إيطاليا.',
+      bodyAr: 'اليت كولكشن علامة قطرية تأسست عام 2018، تقدّم أحذية وإكسسوارات راقية تستلهم أناقة المنطقة الهادئة وتُصنع حسب الطلب في إيطاليا.',
     },
     chapters: [
       {
@@ -76,7 +76,7 @@ const DEFAULT_HOME_CONTENT = {
         titleEn: 'A Qatari idea with a global finish',
         titleAr: 'فكرة قطرية برؤية أوسع',
         bodyEn: 'Elite Collection began with a clear ambition: to create pieces that reflect the taste of the region while meeting the standards of Italian craftsmanship.',
-        bodyAr: 'بدأت إيليت كولكشن بفكرة واضحة: قطع تليق بالذوق القطري وتُنفّذ بمعايير الحِرفة الإيطالية.',
+        bodyAr: 'بدأت اليت كولكشن بفكرة واضحة: قطع تليق بالذوق القطري وتُنفّذ بمعايير الحِرفة الإيطالية.',
       },
       {
         id: 'materials',
@@ -124,7 +124,7 @@ const DEFAULT_HOME_CONTENT = {
         titleEn: 'Made to become part of your wardrobe',
         titleAr: 'قطع تجد مكانها في حياتك',
         bodyEn: 'Elite Collection brings together Qatari identity and Italian craft in pieces created for everyday refinement, meaningful occasions, and everything in between.',
-        bodyAr: 'تجمع إيليت كولكشن بين الهوية القطرية والحِرفة الإيطالية في قطع تناسب اليوم العادي والمناسبات التي تعني الكثير.',
+        bodyAr: 'تجمع اليت كولكشن بين الهوية القطرية والحِرفة الإيطالية في قطع تناسب اليوم العادي والمناسبات التي تعني الكثير.',
       },
     ],
     quote: {
@@ -136,7 +136,7 @@ const DEFAULT_HOME_CONTENT = {
       accentEn: 'It lives in the details you notice every time you wear it.',
       accentAr: 'تظهر في التفاصيل التي تلاحظها كل مرة ترتدي فيها القطعة.',
       authorEn: 'Elite Collection',
-      authorAr: 'إيليت كولكشن',
+      authorAr: 'اليت كولكشن',
     },
     atelier: {
       kicker: 'Our standard',
@@ -223,21 +223,85 @@ const DEFAULT_HOME_CONTENT = {
     { id: 'lifetime', value: '∞',    labelEn: 'Lifetime Promise',  labelAr: 'ضمان مدى الحياة' },
   ],
   contact: {
-    kicker: 'A Private Atelier',
-    headlineEn: 'Commission',
-    headlineAccentEn: 'a pair.',
-    headlineAr: 'اطلب',
-    headlineAccentAr: 'زوجاً خاصاً.',
-    subhead: 'Every enquiry is treated as a personal commission. Our advisors respond within 24 hours.',
-    email: 'hello@elitecollections.qa',
-    phone: '+974 4XXX XXXX',
-    whatsapp: '',
+    // The old copy sold a private atelier taking commissions by appointment.
+    // Elite is a retail business with two shops open twelve hours a day, and
+    // "by appointment only" turned away the walk-in customer it was shown to.
+    kicker: '',
+    headlineEn: 'We are here to help',
+    headlineAccentEn: '',
+    headlineAr: 'نحن هنا لمساعدتك',
+    headlineAccentAr: '',
+    subhead: 'Our team is ready for your question, from sizing to following up an order.',
+    subheadAr: 'فريقنا جاهز للرد على استفسارك، من اختيار المقاس إلى متابعة طلبك.',
+    // Confirmed by Elite, 2026-09-10. The previous values here were
+    // development placeholders that reached production: a literal
+    // "+974 4XXX XXXX" under a call-to-action, a West Bay address the brand
+    // does not trade from, and two conflicting sets of opening hours.
+    // Branch facts are mirrored in client-web `branches.ts`, which builds the
+    // LocalBusiness structured data. Change both together.
+    email: 'we@elitecollections.qa',
+    phone: '+974 44758172',
+    whatsapp: '+974 74007003',
     promiseLine: 'Each conversation is held in confidence, with the same care we give the leather.',
-    promiseSignature: 'Elite Atelier, Doha',
-    infoBlocks: [
-      { id: 'atelier',      icon: '◆', titleEn: 'The Atelier',      titleAr: 'الورشة',         lines: ['West Bay, Doha, Qatar', 'By appointment only', 'Sat – Thu, 10am – 8pm'] },
-      { id: 'appointments', icon: '◇', titleEn: 'Appointments',     titleAr: 'المواعيد',       lines: ['Call or WhatsApp to book', '+974 4XXX XXXX', '24-hour advance notice'] },
-      { id: 'client',       icon: '◈', titleEn: 'Client Services',  titleAr: 'خدمة العملاء',  lines: ['hello@elitecollections.qa', 'Mon – Fri, 9am – 5pm', 'Arabic & English'] },
+    promiseLineAr: 'كل محادثة تبقى بيننا، بنفس العناية التي نمنحها للجلد.',
+    promiseSignature: 'Elite Collection, Doha',
+    promiseSignatureAr: 'اليت كولكشن، الدوحة',
+
+    // Structured, not free text. The old `infoBlocks` held an array of plain
+    // strings with no Arabic counterpart, so the Arabic page rendered English
+    // addresses and hours and no admin edit could fix it. Hours are stored as
+    // 24h numbers rather than a display string so the page can work out
+    // whether a shop is open right now, and so the same values can feed the
+    // LocalBusiness structured data on the client.
+    branches: [
+      {
+        id: 'pearl',
+        nameEn: 'The Pearl', nameAr: 'اللؤلؤة',
+        addressEn: 'Porto Arabia, Tower 24, Marina Way 23\nZone 66 · Street 122 · Building 16',
+        addressAr: 'بورتو أرابيا، برج 24، مارينا واي 23\nالمنطقة 66 · الشارع 122 · المبنى 16',
+        phone: '+974 44758172',
+        mapUrl: 'https://maps.app.goo.gl/dUyLxwkB1uZ18D9P8',
+        mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3605.1233439710213!2d51.54558977598618!3d25.36718232479358!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3e45c35ea5e86499%3A0x750d82eb51849e90!2s%E2%80%98elite%20collection!5e0!3m2!1sen!2sqa!4v1789112800511!5m2!1sen!2sqa',
+        lat: 25.3671775,
+        lng: 51.5481647,
+        parking: true,
+        weekdayOpen: 10, weekdayClose: 22,
+        weekendOpen: 13, weekendClose: 22,
+      },
+      {
+        id: 'rayyan',
+        nameEn: 'Al Rayyan', nameAr: 'الريان',
+        addressEn: 'Al Rayyan Al Jadeed, Al Shafi Street\nZone 53 · Street 989 · Building 20',
+        addressAr: 'الريان الجديد، شارع آل شافي\nالمنطقة 53 · الشارع 989 · المبنى 20',
+        phone: '+974 44604667',
+        mapUrl: 'https://maps.app.goo.gl/zGK525gfyfvofd4r8',
+        mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3607.0974482823026!2d51.418579775984526!3d25.300929827490155!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3e45d9193fc53843%3A0xe0000c0f787c9e9a!2sElite%20collection!5e0!3m2!1sen!2sqa!4v1789112667781!5m2!1sen!2sqa',
+        lat: 25.300925,
+        lng: 51.4211547,
+        parking: true,
+        weekdayOpen: 10, weekdayClose: 22,
+        weekendOpen: 13, weekendClose: 22,
+      },
+    ],
+
+    // A counter inside someone else's shop is not a branch, and presenting it
+    // as one would promise the visitor a shopfront that is not there. Separate
+    // shape, separate treatment: no map of its own, no direct line, and hours
+    // that belong to the host store rather than to Elite.
+    stockists: [
+      {
+        id: 'printemps',
+        nameEn: 'Printemps Doha',
+        nameAr: 'برنتان الدوحة',
+        locationEn: '', // TODO: floor and department inside the store
+        locationAr: '',
+        hoursNoteEn: 'Open during Printemps opening hours',
+        hoursNoteAr: 'يفتح حسب دوام برنتان',
+        // Printemps' own Google listing, not Elite's. It is the right target
+        // for a directions link and the wrong thing to put in Elite's
+        // `sameAs`, which would tell search engines the two are one business.
+        mapUrl: 'https://share.google/Wg7JrCbygdvjmo9vk',
+      },
     ],
     socialLinks: [
       { id: 'whatsapp',  platform: 'whatsapp',  handle: '',                    enabled: false },
@@ -564,12 +628,16 @@ function createEmptyHomeContent() {
       headlineAr: '',
       headlineAccentAr: '',
       subhead: '',
+      subheadAr: '',
       email: '',
       phone: '',
       whatsapp: '',
       promiseLine: '',
+      promiseLineAr: '',
       promiseSignature: '',
-      infoBlocks: [],
+      promiseSignatureAr: '',
+      branches: [],
+      stockists: [],
       socialLinks: [],
     },
   };
@@ -939,22 +1007,95 @@ function normalizeStats(stats = []) {
   });
 }
 
+/**
+ * Opening hours as whole hours on a 24h clock.
+ *
+ * Stored as numbers, not a display string, so the storefront can decide
+ * whether a shop is open right now and so the same values can be emitted as
+ * `openingHoursSpecification`. A shop that closes past midnight is out of
+ * scope here; both Elite shops close at 22:00.
+ */
+/** A finite number, or the fallback. Used for branch coordinates. */
+function asNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : (Number.isFinite(fallback) ? fallback : null);
+}
+
+/**
+ * Accept a Google Maps embed URL, or nothing.
+ *
+ * The storefront binds this straight into an `iframe src`. Without a host
+ * check, anyone who can edit storefront content could frame an arbitrary
+ * third-party page inside the contact page.
+ */
+function safeMapEmbed(value, fallback) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return typeof value === 'string' ? '' : fallback;
+  try {
+    const u = new URL(raw);
+    const ok = u.protocol === 'https:'
+      && (u.hostname === 'www.google.com' || u.hostname === 'google.com')
+      && u.pathname.startsWith('/maps/embed');
+    return ok ? raw : '';
+  } catch {
+    return '';
+  }
+}
+
+function normalizeHourPair(b, fallback) {
+  const hour = (value, fb) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 0 && n <= 24 ? n : fb;
+  };
+  return {
+    weekdayOpen:  hour(b.weekdayOpen,  fallback.weekdayOpen  ?? 10),
+    weekdayClose: hour(b.weekdayClose, fallback.weekdayClose ?? 22),
+    weekendOpen:  hour(b.weekendOpen,  fallback.weekendOpen  ?? 13),
+    weekendClose: hour(b.weekendClose, fallback.weekendClose ?? 22),
+  };
+}
+
 function normalizeContact(contact = {}) {
   const fb = DEFAULT_HOME_CONTENT.contact;
 
-  // Info blocks: allow any number (add/remove)
-  const inBlocksRaw = Array.isArray(contact.infoBlocks) && contact.infoBlocks.length > 0
-    ? contact.infoBlocks
-    : fb.infoBlocks;
-  const infoBlocks = inBlocksRaw.filter((b) => b && b.id).map((b) => {
-    const fallback = fb.infoBlocks.find((f) => f.id === b.id) || {};
-    const inLines = Array.isArray(b.lines) ? b.lines : (fallback.lines || []);
+  // Branches: any number, added or removed from the admin.
+  const inBranchesRaw = Array.isArray(contact.branches) && contact.branches.length > 0
+    ? contact.branches
+    : fb.branches;
+  const branches = inBranchesRaw.filter((b) => b && b.id).map((b) => {
+    const fallback = fb.branches.find((f) => f.id === b.id) || {};
     return {
-      id:      b.id,
-      icon:    asText(b.icon,    fallback.icon    || '◆'),
-      titleEn: asText(b.titleEn, fallback.titleEn || ''),
-      titleAr: asText(b.titleAr, fallback.titleAr || ''),
-      lines:   inLines.map((l) => asText(l, '')).filter(Boolean),
+      id:        b.id,
+      nameEn:    asText(b.nameEn,    fallback.nameEn    || ''),
+      nameAr:    asText(b.nameAr,    fallback.nameAr    || ''),
+      addressEn: asText(b.addressEn, fallback.addressEn || ''),
+      addressAr: asText(b.addressAr, fallback.addressAr || ''),
+      phone:     asText(b.phone,     fallback.phone     || ''),
+      mapUrl:      asText(b.mapUrl,      fallback.mapUrl      || ''),
+      // Only Google's own embed host is accepted. This value is bound into an
+      // iframe src on the storefront, so anything else here would be an
+      // arbitrary third-party frame injected through the content editor.
+      mapEmbedUrl: safeMapEmbed(b.mapEmbedUrl, fallback.mapEmbedUrl || ''),
+      lat:         asNumber(b.lat, fallback.lat),
+      lng:         asNumber(b.lng, fallback.lng),
+      parking:   b.parking === undefined ? Boolean(fallback.parking) : Boolean(b.parking),
+      ...normalizeHourPair(b, fallback),
+    };
+  });
+
+  // Stockists: shops that carry Elite but are not Elite's own premises.
+  const inStockistsRaw = Array.isArray(contact.stockists) ? contact.stockists : fb.stockists;
+  const stockists = inStockistsRaw.filter((s) => s && s.id).map((s) => {
+    const fallback = fb.stockists.find((f) => f.id === s.id) || {};
+    return {
+      id:          s.id,
+      nameEn:      asText(s.nameEn,      fallback.nameEn      || ''),
+      nameAr:      asText(s.nameAr,      fallback.nameAr      || ''),
+      locationEn:  asText(s.locationEn,  fallback.locationEn  || ''),
+      locationAr:  asText(s.locationAr,  fallback.locationAr  || ''),
+      hoursNoteEn: asText(s.hoursNoteEn, fallback.hoursNoteEn || ''),
+      hoursNoteAr: asText(s.hoursNoteAr, fallback.hoursNoteAr || ''),
+      mapUrl:      asText(s.mapUrl,      fallback.mapUrl      || ''),
     };
   });
 
@@ -979,12 +1120,16 @@ function normalizeContact(contact = {}) {
     headlineAr:       asText(contact.headlineAr,       fb.headlineAr),
     headlineAccentAr: asText(contact.headlineAccentAr, fb.headlineAccentAr),
     subhead:          asText(contact.subhead,          fb.subhead),
+    subheadAr:        asText(contact.subheadAr,        fb.subheadAr),
     email:            asText(contact.email,            fb.email),
     phone:            asText(contact.phone,            fb.phone),
     whatsapp:         asText(contact.whatsapp,         fb.whatsapp),
-    promiseLine:      asText(contact.promiseLine,      fb.promiseLine),
-    promiseSignature: asText(contact.promiseSignature, fb.promiseSignature),
-    infoBlocks,
+    promiseLine:        asText(contact.promiseLine,        fb.promiseLine),
+    promiseLineAr:      asText(contact.promiseLineAr,      fb.promiseLineAr),
+    promiseSignature:   asText(contact.promiseSignature,   fb.promiseSignature),
+    promiseSignatureAr: asText(contact.promiseSignatureAr, fb.promiseSignatureAr),
+    branches,
+    stockists,
     socialLinks,
   };
 }

@@ -176,7 +176,8 @@ export class HomeContentService {
       contact: {
         ...fallback.contact,
         ...(content.contact || {}),
-        infoBlocks:  Array.isArray(content.contact?.infoBlocks)  ? content.contact!.infoBlocks  : fallback.contact.infoBlocks,
+        branches:    Array.isArray(content.contact?.branches)    ? content.contact!.branches    : fallback.contact.branches,
+        stockists:   Array.isArray(content.contact?.stockists)   ? content.contact!.stockists   : fallback.contact.stockists,
         socialLinks: Array.isArray(content.contact?.socialLinks) ? content.contact!.socialLinks : fallback.contact.socialLinks,
       },
       story: {

@@ -10,7 +10,7 @@ const EN = {
   //  Brand
   // ─────────────────────────────────────────────────────────────────────
   'brand.name': 'ELITE',
-  'brand.tagline': 'Arabic Leather Artisans',
+  'brand.tagline': 'Qatari Design, Crafted in Italy',
   'brand.heritageEst': 'Est. 2018 · Qatar',
   'brand.heritageEstFull': 'Established 2018 · Qatar',
 
@@ -239,13 +239,13 @@ const EN = {
   'product.aria.scrollPreviousImages': 'Scroll to previous product images',
   'product.aria.decreaseQty': 'Decrease quantity',
   'product.aria.increaseQty': 'Increase quantity',
-  'product.handcraftedSuffix': 'Handcrafted in Doha',
+  'product.handcraftedSuffix': 'Crafted in Italy',
   'product.dutiesIncluded': '· Duties included',
 
   'product.attr.leather': 'Leather',
   'product.attr.style': 'Style',
   'product.attr.origin': 'Origin',
-  'product.attr.originValue': 'Doha, Qatar',
+  'product.attr.originValue': 'Italy',
   'product.attr.edition': 'Edition',
   'product.attr.editionValue': 'Numbered',
 
@@ -429,39 +429,6 @@ const EN = {
 
 
   // ─────────────────────────────────────────────────────────────────────
-  //  Story page
-  // ─────────────────────────────────────────────────────────────────────
-  'story.headline.line1': 'The Craft of',
-  'story.headline.line2': 'Silence & Precision',
-  'story.hero.alt': 'Artisan workshop',
-  'story.subhead': 'Six decades of Arabic leather artisanship. Twelve master craftsmen. One unbroken promise.',
-
-  'story.chapter.2018.title': 'A Workshop in Al-Dirah',
-  'story.chapter.2018.body': "In the ancient souks of Doha's Al-Dirah quarter, master cobbler Khalid Al-Rashidi opened a workshop with nothing but a single last, a curved needle, and an uncompromising vision. Every pair he produced bore the weight of his name — each stitch a contract between craftsman and wearer.",
-  'story.chapter.1978.title': 'The Camel Leather Discovery',
-  'story.chapter.1978.body': "A chance encounter with Bedouin leather traders from the Najd plateau introduced Khalid to full-grain camel hide — a material of extraordinary durability, warmth, and a grain unlike anything sourced from European tanneries. The leather breathes in desert heat and softens with wear into a second skin. It became the house's defining material overnight.",
-  'story.chapter.1995.title': 'Royal Patronage',
-  'story.chapter.1995.body': 'By royal appointment, Elite began crafting bespoke footwear for members of the Saudi royal household and senior government ministers. Each commission took between 60 and 90 days — a testament to the refusal to compromise quality for speed. Word spread quietly, as it does among those who know.',
-  'story.chapter.today.year': 'Today',
-  'story.chapter.today.title': 'Twelve Hands, One Pair',
-  'story.chapter.today.body': 'Today, every pair passes through the hands of twelve specialists — from the leather cutter who has worked here for 30 years, to the finisher who hand-burnishes each edge with beeswax and carnauba. We limit production to 400 pairs per year. Not because we must, but because excellence demands it. Each pair ships with a numbered certificate signed by its maker.',
-
-  'story.pullQuote.line1': '"A shoe is not a product.',
-  'story.pullQuote.line2': 'It is the autobiography of a craftsman."',
-  'story.pullQuote.author': '— Khalid Al-Rashidi, Founder',
-
-  'story.atelier.kicker': 'The Atelier',
-  'story.atelier.title': 'Twelve Masters',
-  'story.atelier.experience': 'experience',
-  'story.yearsAbbr': 'yrs',
-  'story.role.leatherSelector': 'Leather Selector',
-  'story.role.patternCutter': 'Pattern Cutter',
-  'story.role.lastMaker': 'Last Maker',
-  'story.role.weltStitcher': 'Welt Stitcher',
-  'story.role.heelBuilder': 'Heel Builder',
-  'story.role.edgeFinisher': 'Edge Finisher',
-
-  // ─────────────────────────────────────────────────────────────────────
   //  Contact page
   // ─────────────────────────────────────────────────────────────────────
   'contact.kicker': 'Personal Service',
@@ -475,11 +442,11 @@ const EN = {
   'contact.field.subject': 'Subject',
   'contact.field.message': 'Your Message',
 
-  'contact.subject.bespoke': 'Bespoke Commission',
-  'contact.subject.product': 'Product Inquiry',
-  'contact.subject.sizing': 'Sizing Assistance',
-  'contact.subject.order': 'Order Support',
-  'contact.subject.press': 'Press & Partnerships',
+  'contact.subject.bespoke': 'Sizing',
+  'contact.subject.product': 'A product',
+  'contact.subject.sizing': 'An order',
+  'contact.subject.order': 'Partnership',
+  'contact.subject.press': 'Something else',
 
   'contact.form.title': 'Send an Enquiry',
   'contact.send': 'Send Message',
@@ -492,21 +459,33 @@ const EN = {
   'contact.success.body': 'We respond to all inquiries within 2 business hours. For urgent matters, call our Doha atelier directly.',
   'contact.success.directLine': 'Direct Line',
 
-  'contact.info.atelier.title': 'Doha Atelier',
-  'contact.info.atelier.l1': 'Al-Dirah Quarter, Doha',
-  'contact.info.atelier.l2': 'Kingdom of Qatar',
-  'contact.info.atelier.l3': 'Open Sun–Thu, 9am–6pm',
-  'contact.info.appointments.title': 'Private Appointments',
-  'contact.info.appointments.l1': 'Bespoke consultations by appointment',
-  'contact.info.appointments.l2': 'In-atelier or at your residence',
-  'contact.info.appointments.l3': 'Available 7 days a week',
-  'contact.info.client.title': 'Client Services',
-  'contact.info.client.l1': '+966 11 XXX XXXX',
-  'contact.info.client.l2': 'advisors@elitecollection.sa',
-  'contact.info.client.l3': 'Response within 2 hours',
 
-  'contact.promise.line1': '"No inquiry is too small. No request is unreasonable. You are our guest."',
-  'contact.promise.signature': 'The Elite Promise',
+  'contact.branches.label': 'Our shops',
+  'contact.branch.openNow': 'Open now',
+  'contact.branch.closedNow': 'Closed now',
+  'contact.branch.parking': 'Parking available',
+  'contact.branch.weekdays': 'Sunday to Thursday',
+  'contact.branch.weekend': 'Friday and Saturday',
+  'contact.branch.call': 'Call',
+  'contact.branch.whatsapp': 'WhatsApp',
+  'contact.branch.directions': 'Directions',
+  'contact.branch.mapAria': 'Open on Google Maps:',
+  'contact.stockists.title': 'Also available at',
+  'contact.direct.title': 'Direct contact',
+  'contact.direct.sub': 'The fastest way to reach us, during opening hours.',
+  'contact.direct.email': 'Email',
+  'contact.direct.whatsapp': 'WhatsApp',
+  'contact.direct.phone': 'Phone',
+  'contact.follow': 'Follow us',
+
+  // ─────────────────────────────────────────────────────────────────────
+  //  Not found (404)
+  // ─────────────────────────────────────────────────────────────────────
+  'notFound.title': 'This page no longer exists',
+  'notFound.body': 'The link may be out of date, or the piece it pointed to has been retired. The collection is the best place to pick up from here.',
+  'notFound.cta.collection': 'Browse the Collection',
+  'notFound.cta.home': 'Go Home',
+  'notFound.linksLabel': 'Other pages',
 
   // ─────────────────────────────────────────────────────────────────────
   //  Product data
@@ -533,7 +512,7 @@ const EN = {
   // SEO — page titles, meta descriptions and link-preview copy. SeoService
   // appends the site name to every title, so these hold the page part only.
   'seo.siteName': 'Elite Collection',
-  'seo.tagline': 'Arabic Leather Artisans',
+  'seo.tagline': 'Qatari Design, Crafted in Italy',
   'seo.defaultDescription': 'Qatari footwear and accessories with a distinct point of view, custom-crafted in Italy.',
   'seo.home.title': 'Qatari Footwear, Crafted in Italy',
   'seo.home.description': 'Discover refined footwear and accessories designed from a Qatari perspective and custom-crafted in Italy.',
@@ -553,7 +532,7 @@ const EN = {
 const AR: Record<keyof typeof EN, string> = {
   // Brand
   'brand.name': 'إيليت',
-  'brand.tagline': 'حرفيون عرب لصناعة الجلود',
+  'brand.tagline': 'تصميم قطري، صناعة إيطالية',
   'brand.heritageEst': 'تأسست 2018 · قطر',
   'brand.heritageEstFull': 'تأسست عام 2018 · قطر',
 
@@ -630,7 +609,7 @@ const AR: Record<keyof typeof EN, string> = {
   'footer.link.sizeGuide': 'دليل المقاسات',
   'footer.link.careGuide': 'دليل العناية',
   'footer.link.returns': 'الإرجاع',
-  'footer.copyright': '© {year} إيليت كولكشن. جميع الحقوق محفوظة.',
+  'footer.copyright': '© {year} اليت كولكشن. جميع الحقوق محفوظة.',
   'footer.cities': 'الدوحة',
 
   // Home
@@ -757,13 +736,13 @@ const AR: Record<keyof typeof EN, string> = {
   'product.aria.scrollPreviousImages': 'التمرير لعرض صور المنتج السابقة',
   'product.aria.decreaseQty': 'تقليل الكمية',
   'product.aria.increaseQty': 'زيادة الكمية',
-  'product.handcraftedSuffix': 'صناعة يدوية في الدوحة',
+  'product.handcraftedSuffix': 'صناعة إيطالية',
   'product.dutiesIncluded': '· الرسوم مشمولة',
 
   'product.attr.leather': 'الجلد',
   'product.attr.style': 'الطراز',
   'product.attr.origin': 'المنشأ',
-  'product.attr.originValue': 'الدوحة، قطر',
+  'product.attr.originValue': 'إيطاليا',
   'product.attr.edition': 'الإصدار',
   'product.attr.editionValue': 'مرقّم',
 
@@ -945,35 +924,7 @@ const AR: Record<keyof typeof EN, string> = {
 
 
   // Story
-  'story.headline.line1': 'حرفة',
-  'story.headline.line2': 'الصمت والإتقان',
-  'story.hero.alt': 'ورشة حرفيين',
-  'story.subhead': 'ستة عقود من الحرفية الجلدية العربية. اثنا عشر حرفياً ماهراً. وعد واحد لا يُكسَر.',
 
-  'story.chapter.2018.title': 'ورشة في الدِّيرة',
-  'story.chapter.2018.body': 'في أسواق حي الدِّيرة العتيقة في الدوحة، افتتح الحرفي الماهر خالد الراشدي ورشةً بقالبٍ واحد، وإبرة منحنية، ورؤية لا تقبل المساومة. كل زوج صنعه حمل ثقل اسمه — كل غرزة عقدٌ بين الحرفي ومُرتديه.',
-  'story.chapter.1978.title': 'اكتشاف جلد الجمل',
-  'story.chapter.1978.body': 'لقاء عابر مع تجار جلود بدو من هضبة نجد عرّف خالد على جلد الجمل كامل الحبيبات — مادة استثنائية في المتانة والدفء وحبيبات لا تشبه أي جلد من المدابغ الأوروبية. الجلد يتنفس في حر الصحراء ويلين بالاستعمال إلى جلد ثانٍ. أصبح المادة المُعرّفة للدار بين عشية وضحاها.',
-  'story.chapter.1995.title': 'الرعاية الملكية',
-  'story.chapter.1995.body': 'بأمر ملكي، بدأت إيليت في صناعة أحذية مُفصَّلة لأفراد العائلة المالكة السعودية وكبار الوزراء. كل تكليف استغرق بين 60 و90 يوماً — شاهدٌ على رفض المساومة على الجودة من أجل السرعة. انتشرت السمعة بهدوء، كما تنتقل بين العارفين.',
-  'story.chapter.today.year': 'اليوم',
-  'story.chapter.today.title': 'اثنتا عشرة يداً، زوجٌ واحد',
-  'story.chapter.today.body': 'اليوم، يمر كل زوج بأيدي اثني عشر متخصصاً — من قاطع الجلود الذي يعمل هنا منذ 30 عاماً، إلى المُلمِّع الذي يُلمّع كل حافة بشمع العسل والكارنوبا. نحدد الإنتاج بـ 400 زوج سنوياً. ليس لأنه مفروض علينا، بل لأن التميّز يقتضي ذلك. كل زوج يُشحَن مع شهادة مرقّمة موقّعة من صانعه.',
-
-  'story.pullQuote.line1': '"الحذاء ليس منتجاً.',
-  'story.pullQuote.line2': 'إنه السيرة الذاتية للحرفي."',
-  'story.pullQuote.author': '— خالد الراشدي، المؤسس',
-
-  'story.atelier.kicker': 'الورشة',
-  'story.atelier.title': 'اثنا عشر حرفياً',
-  'story.atelier.experience': 'خبرة',
-  'story.yearsAbbr': 'سنة',
-  'story.role.leatherSelector': 'منتقي الجلود',
-  'story.role.patternCutter': 'قاطع الأنماط',
-  'story.role.lastMaker': 'صانع القوالب',
-  'story.role.weltStitcher': 'حائك الدرز',
-  'story.role.heelBuilder': 'صانع الكعب',
-  'story.role.edgeFinisher': 'مُلمِّع الحواف',
 
   // Contact
   'contact.kicker': 'خدمة شخصية',
@@ -987,11 +938,11 @@ const AR: Record<keyof typeof EN, string> = {
   'contact.field.subject': 'الموضوع',
   'contact.field.message': 'رسالتك',
 
-  'contact.subject.bespoke': 'تفصيل حصري',
-  'contact.subject.product': 'استفسار عن منتج',
-  'contact.subject.sizing': 'مساعدة في المقاس',
-  'contact.subject.order': 'دعم الطلبات',
-  'contact.subject.press': 'صحافة وشراكات',
+  'contact.subject.bespoke': 'المقاسات',
+  'contact.subject.product': 'منتج',
+  'contact.subject.sizing': 'طلب قائم',
+  'contact.subject.order': 'تعاون',
+  'contact.subject.press': 'شيء آخر',
 
   'contact.form.title': 'أرسل استفساراً',
   'contact.send': 'إرسال الرسالة',
@@ -1004,21 +955,31 @@ const AR: Record<keyof typeof EN, string> = {
   'contact.success.body': 'نرد على جميع الاستفسارات خلال ساعتين عمل. للأمور العاجلة، اتصل مباشرة بورشتنا في الدوحة.',
   'contact.success.directLine': 'الخط المباشر',
 
-  'contact.info.atelier.title': 'ورشة الدوحة',
-  'contact.info.atelier.l1': 'حي الدِّيرة، الدوحة',
-  'contact.info.atelier.l2': 'دولة قطر',
-  'contact.info.atelier.l3': 'يفتح الأحد–الخميس، 9 صباحاً–6 مساءً',
-  'contact.info.appointments.title': 'مواعيد خاصة',
-  'contact.info.appointments.l1': 'استشارات تفصيل حصري بموعد مسبق',
-  'contact.info.appointments.l2': 'في الورشة أو في منزلك',
-  'contact.info.appointments.l3': 'متاحة 7 أيام في الأسبوع',
-  'contact.info.client.title': 'خدمة العملاء',
-  'contact.info.client.l1': '+966 11 XXX XXXX',
-  'contact.info.client.l2': 'advisors@elitecollection.sa',
-  'contact.info.client.l3': 'استجابة خلال ساعتين',
 
-  'contact.promise.line1': '"لا استفسار صغير، ولا طلب غير معقول. أنت ضيفنا."',
-  'contact.promise.signature': 'وعد إيليت',
+  'contact.branches.label': 'فروعنا',
+  'contact.branch.openNow': 'مفتوح الآن',
+  'contact.branch.closedNow': 'مغلق الآن',
+  'contact.branch.parking': 'مواقف متاحة',
+  'contact.branch.weekdays': 'الأحد إلى الخميس',
+  'contact.branch.weekend': 'الجمعة والسبت',
+  'contact.branch.call': 'اتصال',
+  'contact.branch.whatsapp': 'واتساب',
+  'contact.branch.directions': 'الاتجاهات',
+  'contact.branch.mapAria': 'افتح على خرائط جوجل:',
+  'contact.stockists.title': 'متوفرون أيضاً في',
+  'contact.direct.title': 'تواصل مباشر',
+  'contact.direct.sub': 'الأسرع للوصول إلينا، خلال ساعات العمل.',
+  'contact.direct.email': 'البريد',
+  'contact.direct.whatsapp': 'واتساب',
+  'contact.direct.phone': 'الهاتف',
+  'contact.follow': 'تابعونا',
+
+  // Not found (404)
+  'notFound.title': 'هذه الصفحة لم تعد موجودة',
+  'notFound.body': 'قد يكون الرابط قديمًا، أو أن القطعة التي يشير إليها لم تعد متاحة. يمكنك متابعة التصفح من المجموعة.',
+  'notFound.cta.collection': 'تصفّح المجموعة',
+  'notFound.cta.home': 'الصفحة الرئيسية',
+  'notFound.linksLabel': 'صفحات أخرى',
 
   // Product data
   'productData.1.name': 'أوكسفورد المحمل',
@@ -1040,22 +1001,22 @@ const AR: Record<keyof typeof EN, string> = {
   'productData.style.loafer': 'لوفر',
   'productData.style.boot': 'بوت',
   // SEO
-  'seo.siteName': 'إيليت كوليكشن',
-  'seo.tagline': 'حرفيون عرب لصناعة الجلود',
+  'seo.siteName': 'اليت كولكشن',
+  'seo.tagline': 'تصميم قطري، صناعة إيطالية',
   'seo.defaultDescription': 'أحذية وإكسسوارات راقية برؤية قطرية مميزة، تُصنع حسب الطلب في إيطاليا.',
   'seo.home.title': 'أحذية قطرية بحِرفة إيطالية',
   'seo.home.description': 'اكتشف أحذية وإكسسوارات راقية تنطلق من رؤية قطرية وتُصنع حسب الطلب في إيطاليا.',
   'seo.collection.title': 'المجموعة',
-  'seo.collection.description': 'كل قطعة في كتالوج إيليت كوليكشن، مع تصفية حسب الجلد والطراز واللون والمقاس.',
-  'seo.collection.pageDescription': '{title} من إيليت كوليكشن. اكتشف {count} قطعة راقية.',
+  'seo.collection.description': 'كل قطعة في كتالوج اليت كولكشن، مع تصفية حسب الجلد والطراز واللون والمقاس.',
+  'seo.collection.pageDescription': '{title} من اليت كولكشن. اكتشف {count} قطعة راقية.',
   'seo.story.title': 'قصتنا',
-  'seo.story.description': 'تأسست إيليت كولكشن في قطر عام 2018، وتقدّم رؤية قطرية مميزة في قطع تُصنع حسب الطلب في إيطاليا.',
+  'seo.story.description': 'تأسست اليت كولكشن في قطر عام 2018، وتقدّم رؤية قطرية مميزة في قطع تُصنع حسب الطلب في إيطاليا.',
   'seo.experience.title': 'التجربة',
-  'seo.experience.description': 'ما يجري في جلسة القياس داخل أتيليه إيليت كوليكشن، وكيف يُصنع الحذاء المفصّل.',
+  'seo.experience.description': 'ما يجري في جلسة القياس داخل أتيليه اليت كولكشن، وكيف يُصنع الحذاء المفصّل.',
   'seo.contact.title': 'تواصل معنا',
-  'seo.contact.description': 'تواصل مع أتيليه إيليت كوليكشن في الدوحة لحجز موعد تفصيل أو الاستفسار عن المقاسات والطلبات.',
+  'seo.contact.description': 'تواصل مع أتيليه اليت كولكشن في الدوحة لحجز موعد تفصيل أو الاستفسار عن المقاسات والطلبات.',
   'seo.product.description': '{name} من {leather}. يُصنع حسب الطلب في إيطاليا، {price}.',
-  'seo.policy.description': '{title} لدى إيليت كوليكشن، الدوحة.',
+  'seo.policy.description': '{title} لدى اليت كولكشن، الدوحة.',
 };
 
 export const STRINGS: Record<Locale, Record<string, string>> = {

@@ -21,9 +21,19 @@ export interface SeoInput {
   type?: 'website' | 'product' | 'article';
   /** One JSON-LD object, or several. Replaces whatever the last page emitted. */
   jsonLd?: Record<string, unknown> | Record<string, unknown>[] | null;
+  /**
+   * Keep this page out of the index. Set on the 404 page: a SPA cannot return
+   * a 404 status from the client, and `noindex` is the only signal that
+   * actually stops a bad URL being indexed. Emitting no tag at all is the
+   * default, and the tag is removed again on the next indexable page.
+   */
+  noIndex?: boolean;
 }
 
-const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
+// A 1200x630 card, not the logo. og:image feeds a `summary_large_image`
+// preview, and a tall transparent wordmark gets letterboxed or cropped to
+// nonsense at that ratio. Regenerate from docs/seo/og-image-source.html.
+const FALLBACK_IMAGE = '/assets/brand/og-default.jpg';
 const JSON_LD_ID = 'seo-jsonld';
 const MAX_DESCRIPTION = 160;
 
@@ -70,6 +80,7 @@ export class SeoService {
     this.titleSvc.setTitle(title);
     this.meta.updateTag({ name: 'description', content: description });
 
+    this.setRobots(input.noIndex === true);
     this.setCanonical(url);
 
     this.meta.updateTag({ property: 'og:type', content: input.type ?? 'website' });
@@ -124,6 +135,22 @@ export class SeoService {
     const cut = flat.slice(0, MAX_DESCRIPTION);
     const lastSpace = cut.lastIndexOf(' ');
     return `${(lastSpace > 80 ? cut.slice(0, lastSpace) : cut).trimEnd()}...`;
+  }
+
+  /**
+   * Add or remove `<meta name="robots" content="noindex, follow">`.
+   *
+   * Removing matters as much as adding: navigation is client-side, so a tag
+   * left behind by the 404 page would silently de-index the next real page
+   * the visitor lands on. `follow` is deliberate, so the crawler still walks
+   * the nav links out of a dead URL.
+   */
+  private setRobots(noIndex: boolean): void {
+    if (noIndex) {
+      this.meta.updateTag({ name: 'robots', content: 'noindex, follow' });
+    } else {
+      this.meta.removeTag('name="robots"');
+    }
   }
 
   /**

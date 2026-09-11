@@ -202,12 +202,49 @@ export interface StatItem {
   labelAr: string;
 }
 
-export interface ContactInfoBlock {
+/**
+ * One of Elite's own shops.
+ *
+ * Hours are whole hours on a 24h clock rather than a display string, so the
+ * page can work out whether a shop is open right now and emit the same values
+ * as `openingHoursSpecification`. Addresses may contain newlines.
+ */
+export interface ContactBranch {
   id: string;
-  icon: string;
-  titleEn: string;
-  titleAr: string;
-  lines: string[];
+  nameEn: string;
+  nameAr: string;
+  addressEn: string;
+  addressAr: string;
+  phone: string;
+  mapUrl: string;
+  /** Google Maps embed URL. Empty renders the card without a map. */
+  mapEmbedUrl: string;
+  /** Coordinates, emitted as `geo` in the Store structured data. */
+  lat: number | null;
+  lng: number | null;
+  parking: boolean;
+  weekdayOpen: number;
+  weekdayClose: number;
+  weekendOpen: number;
+  weekendClose: number;
+}
+
+/**
+ * A shop that carries Elite but is not Elite's own premises, such as the
+ * counter inside Printemps. It has no map of its own, no direct line, and
+ * hours that belong to the host store, so it is a distinct shape rather than
+ * a branch with empty fields.
+ */
+export interface ContactStockist {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  locationEn: string;
+  locationAr: string;
+  hoursNoteEn: string;
+  hoursNoteAr: string;
+  /** The host store's own map link, never Elite's. */
+  mapUrl: string;
 }
 
 export type SocialPlatform = 'whatsapp' | 'instagram' | 'twitter' | 'facebook' | 'tiktok' | 'snapchat' | 'youtube' | 'linkedin';
@@ -226,12 +263,16 @@ export interface ContactContent {
   headlineAr: string;
   headlineAccentAr: string;
   subhead: string;
+  subheadAr: string;
   email: string;
   phone: string;
   whatsapp: string;
   promiseLine: string;
+  promiseLineAr: string;
   promiseSignature: string;
-  infoBlocks: ContactInfoBlock[];
+  promiseSignatureAr: string;
+  branches: ContactBranch[];
+  stockists: ContactStockist[];
   socialLinks: SocialLink[];
 }
 
@@ -296,12 +337,16 @@ export function createEmptyHomeContent(): HomeContentData {
       headlineAr: '',
       headlineAccentAr: '',
       subhead: '',
+      subheadAr: '',
       email: '',
       phone: '',
       whatsapp: '',
       promiseLine: '',
+      promiseLineAr: '',
       promiseSignature: '',
-      infoBlocks: [],
+      promiseSignatureAr: '',
+      branches: [],
+      stockists: [],
       socialLinks: [],
     },
     story: {

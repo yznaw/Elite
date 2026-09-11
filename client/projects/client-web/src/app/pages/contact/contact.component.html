@@ -33,116 +33,142 @@
 
     <!-- ── Page header ──────────────────────────────────── -->
     <header class="contact-header anim-fade-up">
-      <div class="contact-header__kicker">{{ contactContent().kicker }}</div>
+      @if (contactContent().kicker) {
+        <div class="contact-header__kicker">{{ contactContent().kicker }}</div>
+      }
       <h1 class="serif contact-header__headline">
-        @if (locale.locale() === 'ar') {
-          {{ contactContent().headlineAr }}<br/><em class="contact-header__accent">{{ contactContent().headlineAccentAr }}</em>
-        } @else {
-          {{ contactContent().headlineEn }}<br/><em class="contact-header__accent">{{ contactContent().headlineAccentEn }}</em>
-        }
+        {{ locale.locale() === 'ar' ? contactContent().headlineAr : contactContent().headlineEn }}
       </h1>
-      <p class="contact-header__sub">{{ contactContent().subhead }}</p>
+      <p class="contact-header__sub">{{ subheadText() }}</p>
     </header>
 
-    <!-- ── WhatsApp quick CTA ───────────────────────────── -->
-    @if (contactContent().whatsapp) {
-      <div class="whatsapp-bar">
-        <a
-          class="whatsapp-cta"
-          [href]="'https://wa.me/' + contactContent().whatsapp"
-          target="_blank" rel="noopener noreferrer"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" aria-hidden="true">
-            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-          </svg>
-          <span>Chat on WhatsApp</span>
-          <span class="whatsapp-handle">+{{ contactContent().whatsapp }}</span>
-        </a>
-      </div>
-    }
-
-    <div class="contact-body">
-      <!-- ── Contact form ───────────────────────────────── -->
-      <section class="contact-form-wrap glass">
-        <h2 class="contact-section-title">{{ t('contact.form.title') }}</h2>
-        <form (ngSubmit)="onSubmit()" #f="ngForm">
-          <div class="form-grid">
-            <div class="float-wrap">
-              <input class="float-input" type="text" [ngModel]="form().name" (ngModelChange)="set('name',$event)" name="name" placeholder=" " required/>
-              <label class="float-label">{{ t('contact.field.name') }}</label>
-            </div>
-            <div class="float-wrap">
-              <input class="float-input" type="email" [ngModel]="form().email" (ngModelChange)="set('email',$event)" name="email" placeholder=" " required/>
-              <label class="float-label">{{ t('contact.field.email') }}</label>
-            </div>
-            <div class="float-wrap">
-              <input class="float-input" type="tel" [ngModel]="form().phone" (ngModelChange)="set('phone',$event)" name="phone" placeholder=" "/>
-              <label class="float-label">{{ t('contact.field.phone') }}</label>
-            </div>
-            <div class="float-wrap">
-              <select class="float-input" [ngModel]="form().subject" (ngModelChange)="set('subject',$event)" name="subject">
-                <option value=""> </option>
-                @for (s of subjects; track s) { <option [value]="s">{{ t(s) }}</option> }
-              </select>
-              <label class="float-label"
-                [style.top]="form().subject ? '6px' : null"
-                [style.font-size]="form().subject ? '9px' : null"
-                [style.color]="form().subject ? 'var(--gold)' : null">
-                {{ t('contact.field.subject') }}
-              </label>
-            </div>
-          </div>
-          <div class="float-wrap" style="margin-bottom:24px;">
-            <textarea class="float-input" rows="5" [ngModel]="form().message" (ngModelChange)="set('message',$event)" name="message" placeholder=" " style="resize:vertical;min-height:120px;"></textarea>
-            <label class="float-label">{{ t('contact.field.message') }}</label>
-          </div>
-          @if (error()) {
-            <p class="contact-error">{{ error() }}</p>
-          }
-          <button type="submit" class="btn-gold contact-submit" [disabled]="submitting()">
-            {{ submitting() ? t('contact.sending') : t('contact.send') }}
-          </button>
-        </form>
-      </section>
-
-      <!-- ── Info column ────────────────────────────────── -->
-      <aside class="contact-info-col">
-
-        <!-- Info blocks -->
-        @for (block of contactContent().infoBlocks; track block.id) {
-          <div class="contact-info-block">
-            <span class="contact-info-icon">{{ block.icon }}</span>
-            <div>
-              <div class="contact-info-title">
-                {{ locale.locale() === 'ar' ? block.titleAr : block.titleEn }}
+    <!-- ── Branches ─────────────────────────────────────── -->
+    @if (contactContent().branches?.length) {
+      <section class="branches anim-fade-up" [attr.aria-label]="t('contact.branches.label')">
+        @for (b of contactContent().branches; track b.id) {
+          <article class="branch">
+            @if (mapEmbed(b.mapEmbedUrl); as embed) {
+              <div class="branch__map">
+                <iframe
+                  [src]="embed"
+                  [title]="t('contact.branch.mapAria') + ' ' + branchName(b)"
+                  loading="lazy"
+                  referrerpolicy="strict-origin-when-cross-origin"
+                  allowfullscreen></iframe>
               </div>
-              @for (line of block.lines; track line) {
-                <div class="contact-info-line">{{ line }}</div>
+            }
+
+            <div class="branch__top">
+              <h2 class="branch__name">{{ branchName(b) }}</h2>
+              <span class="branch__state" [class.branch__state--open]="isOpenNow(b)">
+                <i aria-hidden="true"></i>
+                {{ isOpenNow(b) ? t('contact.branch.openNow') : t('contact.branch.closedNow') }}
+              </span>
+            </div>
+
+            <p class="branch__addr">
+              @for (line of branchAddressLines(b); track line) {
+                <span class="branch__addr-line">{{ line }}</span>
+              }
+            </p>
+            @if (b.parking) {
+              <p class="branch__park">{{ t('contact.branch.parking') }}</p>
+            }
+
+            <div class="branch__hours">
+              <div class="branch__hours-row" [class.is-now]="!isWeekendInDoha()">
+                <span>{{ t('contact.branch.weekdays') }}</span>
+                <span class="num">{{ fmtHour(b.weekdayOpen) }} - {{ fmtHour(b.weekdayClose) }}</span>
+              </div>
+              <div class="branch__hours-row" [class.is-now]="isWeekendInDoha()">
+                <span>{{ t('contact.branch.weekend') }}</span>
+                <span class="num">{{ fmtHour(b.weekendOpen) }} - {{ fmtHour(b.weekendClose) }}</span>
+              </div>
+            </div>
+
+            <div class="branch__acts">
+              @if (b.phone) {
+                <a class="branch__act branch__act--call" [href]="'tel:' + b.phone.split(' ').join('')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.1 9.9a16 16 0 0 0 6 6l1.26-1.26a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+                  </svg>
+                  {{ t('contact.branch.call') }}
+                </a>
+              }
+              @if (b.mapUrl) {
+                <a class="branch__act" [href]="b.mapUrl" target="_blank" rel="noopener noreferrer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  {{ t('contact.branch.directions') }}
+                </a>
+              }
+              @if (contactContent().whatsapp) {
+                <a class="branch__act" [href]="whatsappUrl()" target="_blank" rel="noopener noreferrer">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.47-2.4-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.91-2.2-.25-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.87 1.22 3.07c.15.2 2.1 3.2 5.08 4.49.7.3 1.26.49 1.69.62.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.42-.08-.12-.28-.2-.57-.35M12.05 21.8a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.89 9.89-9.89 2.64 0 5.12 1.03 6.99 2.9a9.83 9.83 0 0 1 2.89 6.99c0 5.45-4.43 9.89-9.89 9.89m8.41-18.3A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.69 1.45c6.55 0 11.89-5.34 11.89-11.89a11.82 11.82 0 0 0-3.48-8.42z"/></svg>
+                  {{ t('contact.branch.whatsapp') }}
+                </a>
               }
             </div>
-          </div>
+          </article>
         }
+      </section>
+    }
 
-        <!-- Email + Phone quick links -->
-        <div class="contact-quick-links">
-          @if (contactContent().email) {
-            <a class="quick-link" [href]="'mailto:' + contactContent().email">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="16" height="16"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              {{ contactContent().email }}
-            </a>
-          }
-          @if (contactContent().phone) {
-            <a class="quick-link" [href]="'tel:' + contactContent().phone">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="16" height="16"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.07 2.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.08 6.08l1.28-1.28a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-              {{ contactContent().phone }}
-            </a>
+    <!-- ── Stockists: someone else's shop, so a lighter treatment ── -->
+    @if (contactContent().stockists?.length) {
+      <section class="stockists anim-fade-up">
+        <h2 class="stockists__title">{{ t('contact.stockists.title') }}</h2>
+        <div class="stockists__grid">
+          @for (s of contactContent().stockists; track s.id) {
+            <article class="stockist">
+              <div class="stockist__name">{{ stockistName(s) }}</div>
+              @if (stockistLocation(s)) {
+                <div class="stockist__line">{{ stockistLocation(s) }}</div>
+              }
+              @if (stockistHours(s)) {
+                <div class="stockist__line stockist__line--muted">{{ stockistHours(s) }}</div>
+              }
+              @if (s.mapUrl) {
+                <a class="stockist__link" [href]="s.mapUrl" target="_blank" rel="noopener noreferrer">
+                  {{ t('contact.branch.directions') }}
+                </a>
+              }
+            </article>
           }
         </div>
+      </section>
+    }
 
-        <!-- Social links -->
+    <!-- ── Direct contact, ahead of the form ─────────────── -->
+    <section class="direct anim-fade-up">
+      <h2 class="direct__title">{{ t('contact.direct.title') }}</h2>
+      <p class="direct__sub">{{ t('contact.direct.sub') }}</p>
+
+      <dl class="direct__grid">
+        @if (contactContent().email) {
+          <div class="direct__cell">
+            <dt>{{ t('contact.direct.email') }}</dt>
+            <dd><a class="num" [href]="'mailto:' + contactContent().email">{{ contactContent().email }}</a></dd>
+          </div>
+        }
+        @if (contactContent().whatsapp) {
+          <div class="direct__cell">
+            <dt>{{ t('contact.direct.whatsapp') }}</dt>
+            <dd><a class="num" [href]="whatsappUrl()" target="_blank" rel="noopener noreferrer">{{ contactContent().whatsapp }}</a></dd>
+          </div>
+        }
+        @if (contactContent().phone) {
+          <div class="direct__cell">
+            <dt>{{ t('contact.direct.phone') }}</dt>
+            <dd><a class="num" [href]="'tel:' + contactContent().phone.split(' ').join('')">{{ contactContent().phone }}</a></dd>
+          </div>
+        }
+      </dl>
+
         @if (activeSocialLinks().length > 0) {
           <div class="social-links">
-            <div class="social-links__label">Follow us</div>
+            <div class="social-links__label">{{ t('contact.follow') }}</div>
             <div class="social-links__row">
               @for (link of activeSocialLinks(); track link.id) {
                 <a
@@ -186,12 +212,53 @@
           </div>
         }
 
-        <!-- Promise card -->
-        <div class="contact-promise">
-          <p class="serif contact-promise__line">{{ contactContent().promiseLine }}</p>
-          <span class="contact-promise__sig">{{ contactContent().promiseSignature }}</span>
-        </div>
-      </aside>
+    </section>
+
+    <!-- ── Enquiry form ─────────────────────────────────── -->
+    <div class="contact-body">
+      <section class="contact-form-wrap glass">
+        <h2 class="contact-section-title">{{ t('contact.form.title') }}</h2>
+        <form (ngSubmit)="onSubmit()" #f="ngForm">
+          <div class="form-grid">
+            <div class="float-wrap">
+              <input class="float-input" type="text" [ngModel]="form().name" (ngModelChange)="set('name',$event)" name="name" placeholder=" " required/>
+              <label class="float-label">{{ t('contact.field.name') }}</label>
+            </div>
+            <div class="float-wrap">
+              <input class="float-input" type="email" [ngModel]="form().email" (ngModelChange)="set('email',$event)" name="email" placeholder=" " required/>
+              <label class="float-label">{{ t('contact.field.email') }}</label>
+            </div>
+            <div class="float-wrap">
+              <input class="float-input" type="tel" [ngModel]="form().phone" (ngModelChange)="set('phone',$event)" name="phone" placeholder=" "/>
+              <label class="float-label">{{ t('contact.field.phone') }}</label>
+            </div>
+            <div class="float-wrap">
+              <select class="float-input" [ngModel]="form().subject" (ngModelChange)="set('subject',$event)" name="subject">
+                <option value=""> </option>
+                @for (s of subjects; track s) { <option [value]="s">{{ t(s) }}</option> }
+              </select>
+              <label class="float-label"
+                [style.top]="form().subject ? '6px' : null"
+                [style.font-size]="form().subject ? '9px' : null"
+                [style.color]="form().subject ? 'var(--gold)' : null">
+                {{ t('contact.field.subject') }}
+              </label>
+            </div>
+          </div>
+          <div class="float-wrap" style="margin-bottom:24px;">
+            <textarea class="float-input" rows="5" [ngModel]="form().message" (ngModelChange)="set('message',$event)" name="message" placeholder=" " style="resize:vertical;min-height:120px;"></textarea>
+            <label class="float-label">{{ t('contact.field.message') }}</label>
+          </div>
+          @if (error()) {
+            <p class="contact-error">{{ error() }}</p>
+          }
+          <button type="submit" class="btn-gold contact-submit" [disabled]="submitting()">
+            {{ submitting() ? t('contact.sending') : t('contact.send') }}
+          </button>
+        </form>
+      </section>
+
+      <!-- ── Info column ────────────────────────────────── -->
     </div>
   </div>
 }

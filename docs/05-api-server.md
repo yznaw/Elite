@@ -825,3 +825,20 @@ pm2 start server/index.js --name elite-api
 
 - [02 – Architecture](./02-architecture.md) — Full system architecture
 - [07 – Developer Guide](./07-dev-guide.md) — Local setup instructions
+
+### Contact content shape
+
+`contact.branches[]` and `contact.stockists[]` replaced the old `contact.infoBlocks[]`, which held an array of plain strings with **no Arabic counterpart** — so the Arabic contact page rendered English addresses and hours, and no admin edit could fix it.
+
+| Field | Notes |
+|---|---|
+| `branches[].nameEn` / `nameAr` | Shop name per locale |
+| `branches[].addressEn` / `addressAr` | Newlines split into separate rows on the page |
+| `branches[].phone` | The branch's own line, not the main number |
+| `branches[].mapUrl` | Google Maps link; also emitted as `hasMap` / `sameAs` |
+| `branches[].mapEmbedUrl` | Google Maps embed URL. Validated server-side against `google.com/maps/embed`, because it is bound into an `iframe src` |
+| `branches[].lat` / `lng` | Coordinates, emitted as `geo` in the Store structured data |
+| `branches[].weekdayOpen/Close`, `weekendOpen/Close` | Whole hours, 24h. Sunday-Thursday and Friday-Saturday |
+| `stockists[]` | Host-store counters. `mapUrl` is the **host's** listing and is never emitted as an Elite location |
+
+`subheadAr`, `promiseLineAr` and `promiseSignatureAr` were added alongside their English counterparts for the same reason.

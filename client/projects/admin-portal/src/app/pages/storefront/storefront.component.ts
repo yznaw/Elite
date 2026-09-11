@@ -37,7 +37,18 @@ interface HeroColor     { label: string; slug: string; imageUrl: string; }
 interface HeroSliderItem { id: string; name: string; subtitle: string; nameEn: string; nameAr: string; subtitleEn: string; subtitleAr: string; descriptionEn: string; descriptionAr: string; imageUrl: string; alt: string; productId: string; colors: HeroColor[]; defaultColorSlug: string; }
 interface PromiseCard   { id: string; icon: string; labelEn: string; labelAr: string; subEn: string; subAr: string; }
 interface StatItem      { id: string; value: string; labelEn: string; labelAr: string; }
-interface ContactBlock  { id: string; icon: string; titleEn: string; titleAr: string; lines: string[]; }
+interface ContactBranch {
+  id: string; nameEn: string; nameAr: string;
+  addressEn: string; addressAr: string;
+  phone: string; mapUrl: string; mapEmbedUrl: string;
+  lat: number | null; lng: number | null; parking: boolean;
+  weekdayOpen: number; weekdayClose: number; weekendOpen: number; weekendClose: number;
+}
+interface ContactStockist {
+  id: string; nameEn: string; nameAr: string;
+  locationEn: string; locationAr: string;
+  hoursNoteEn: string; hoursNoteAr: string; mapUrl: string;
+}
 interface SocialLink    { id: string; platform: string; handle: string; enabled: boolean; }
 interface HeroFact      { id: string; label: string; labelEn: string; labelAr: string; }
 
@@ -50,10 +61,12 @@ interface StorefrontContent {
   stats: StatItem[];
   contact: {
     kicker: string; headlineEn: string; headlineAccentEn: string;
-    headlineAr: string; headlineAccentAr: string; subhead: string;
+    headlineAr: string; headlineAccentAr: string;
+    subhead: string; subheadAr: string;
     email: string; phone: string; whatsapp: string;
-    promiseLine: string; promiseSignature: string;
-    infoBlocks: ContactBlock[]; socialLinks: SocialLink[];
+    promiseLine: string; promiseLineAr: string;
+    promiseSignature: string; promiseSignatureAr: string;
+    branches: ContactBranch[]; stockists: ContactStockist[]; socialLinks: SocialLink[];
   };
   story: {
     hero:      { kicker: string; title: string; accent: string; body: string; imageUrl: string; imageAlt: string; imageAltEn: string; imageAltAr: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; accentEn: string; accentAr: string; bodyEn: string; bodyAr: string; };
@@ -967,51 +980,108 @@ interface StorefrontContent {
                 <label><span class="lbl">{{ t('storefront.editor.contactHeader.headlineAccentAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().contact.headlineAccentAr" (ngModelChange)="patchContact('headlineAccentAr',$event)"/></label>
               </div>
               <label><span class="lbl">{{ t('storefront.editor.contactHeader.subhead') }}</span><textarea class="inp" rows="2" [ngModel]="content().contact.subhead" (ngModelChange)="patchContact('subhead',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.contactHeader.subheadAr') }}</span><textarea class="inp" rows="2" dir="rtl" [ngModel]="content().contact.subheadAr" (ngModelChange)="patchContact('subheadAr',$event)"></textarea></label>
             </div>
           </div>
         </div>
       }
 
-      <!-- Contact: Info Blocks ─────────────────── -->
+      <!-- Contact: Branches and stockists ───────── -->
       @if (contactSubTab() === 'info') {
         <div class="tab-content">
-          @for (block of content().contact.infoBlocks; track block.id; let i = $index) {
+
+          @for (b of content().contact.branches; track b.id; let i = $index) {
             <div class="card mb-16">
               <div class="card-header">
-                <div><div class="card-title">{{ block.titleEn || infoBlockTitle(i + 1) }}</div><div class="card-sub mono">{{ block.id }}</div></div>
-                @if (content().contact.infoBlocks.length > 1) {
-                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeInfoBlock(i)">
-                    <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.infoBlocks.remove') }}
-                  </button>
-                }
+                <div>
+                  <div class="card-title">{{ b.nameEn || b.nameAr || t('storefront.editor.branches.untitled') }}</div>
+                  <div class="card-sub mono">{{ b.id }}</div>
+                </div>
+                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeBranch(i)">
+                  <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.branches.remove') }}
+                </button>
               </div>
               <div class="card-pad field-stack">
-                <div class="row gap-sm align-center">
-                  <label style="width:64px"><span class="lbl">{{ t('storefront.editor.infoBlocks.icon') }}</span><input class="inp" style="text-align:center;font-size:18px;" [ngModel]="block.icon" (ngModelChange)="patchInfoBlock(i,'icon',$event)"/></label>
-                  <div class="two-col" style="flex:1">
-                    <label><span class="lbl">{{ t('storefront.editor.infoBlocks.titleEn') }}</span><input class="inp" [ngModel]="block.titleEn" (ngModelChange)="patchInfoBlock(i,'titleEn',$event)"/></label>
-                    <label><span class="lbl">{{ t('storefront.editor.infoBlocks.titleAr') }}</span><input class="inp" dir="rtl" [ngModel]="block.titleAr" (ngModelChange)="patchInfoBlock(i,'titleAr',$event)"/></label>
-                  </div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.nameEn') }}</span><input class="inp" [ngModel]="b.nameEn" (ngModelChange)="patchBranch(i,'nameEn',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.nameAr') }}</span><input class="inp" dir="rtl" [ngModel]="b.nameAr" (ngModelChange)="patchBranch(i,'nameAr',$event)"/></label>
                 </div>
-                @for (line of block.lines; track line; let li = $index) {
-                  <div class="row gap-sm">
-                    <input class="inp" style="flex:1" [placeholder]="lineLabel(li + 1)" [ngModel]="line" (ngModelChange)="patchInfoBlockLine(i, li, $event)"/>
-                    @if (block.lines.length > 1) {
-                      <button class="btn btn-outline btn-sm" style="color:var(--danger);" type="button" (click)="removeInfoBlockLine(i, li)">
-                        <ap-icon name="x" [size]="11"/>
-                      </button>
-                    }
-                  </div>
-                }
-                <button class="btn btn-outline btn-sm" style="align-self:flex-start;" type="button" (click)="addInfoBlockLine(i)">
-                  <ap-icon name="plus" [size]="11"/> {{ t('storefront.editor.infoBlocks.addLine') }}
-                </button>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.addressEn') }}</span><textarea class="inp" rows="2" [ngModel]="b.addressEn" (ngModelChange)="patchBranch(i,'addressEn',$event)"></textarea></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.addressAr') }}</span><textarea class="inp" rows="2" dir="rtl" [ngModel]="b.addressAr" (ngModelChange)="patchBranch(i,'addressAr',$event)"></textarea></label>
+                </div>
+                <div class="card-sub">{{ t('storefront.editor.branches.addressHint') }}</div>
+
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.phone') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.phone" (ngModelChange)="patchBranch(i,'phone',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.mapUrl') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.mapUrl" (ngModelChange)="patchBranch(i,'mapUrl',$event)"/></label>
+                </div>
+
+                <label><span class="lbl">{{ t('storefront.editor.branches.mapEmbed') }}</span><textarea class="inp mono" rows="2" dir="ltr" [ngModel]="b.mapEmbedUrl" (ngModelChange)="patchBranch(i,'mapEmbedUrl',$event)"></textarea></label>
+                <div class="card-sub">{{ t('storefront.editor.branches.mapEmbedHint') }}</div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.lat') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.lat" (ngModelChange)="patchBranch(i,'lat',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.lng') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.lng" (ngModelChange)="patchBranch(i,'lng',$event)"/></label>
+                </div>
+                <div class="card-sub">{{ t('storefront.editor.branches.latLngHint') }}</div>
+
+                <label class="row gap-sm align-center" style="cursor:pointer">
+                  <input type="checkbox" [ngModel]="b.parking" (ngModelChange)="patchBranch(i,'parking',$event)"/>
+                  <span class="lbl" style="margin:0">{{ t('storefront.editor.branches.parking') }}</span>
+                </label>
+
+                <div class="lbl">{{ t('storefront.editor.branches.weekdays') }}</div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.opens') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekdayOpen" (ngModelChange)="patchBranchHour(i,'weekdayOpen',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.closes') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekdayClose" (ngModelChange)="patchBranchHour(i,'weekdayClose',$event)"/></label>
+                </div>
+                <div class="lbl">{{ t('storefront.editor.branches.weekend') }}</div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.opens') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekendOpen" (ngModelChange)="patchBranchHour(i,'weekendOpen',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.closes') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekendClose" (ngModelChange)="patchBranchHour(i,'weekendClose',$event)"/></label>
+                </div>
+                <div class="card-sub">{{ t('storefront.editor.branches.hoursHint') }}</div>
               </div>
             </div>
           }
-          <button class="btn btn-outline add-slide-btn" type="button" (click)="addInfoBlock()">
-            <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.infoBlocks.addBlock') }}
+          <button class="btn btn-outline add-slide-btn" type="button" (click)="addBranch()">
+            <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.branches.add') }}
           </button>
+
+          <div class="card mt-16 mb-16">
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.stockists.title') }}</div><div class="card-sub">{{ t('storefront.editor.stockists.hint') }}</div></div></div>
+            <div class="card-pad field-stack">
+              @for (x of content().contact.stockists; track x.id; let i = $index) {
+                <div class="card mb-16">
+                  <div class="card-header">
+                    <div><div class="card-title">{{ x.nameEn || x.nameAr || t('storefront.editor.stockists.untitled') }}</div><div class="card-sub mono">{{ x.id }}</div></div>
+                    <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeStockist(i)">
+                      <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.branches.remove') }}
+                    </button>
+                  </div>
+                  <div class="card-pad field-stack">
+                    <div class="two-col">
+                      <label><span class="lbl">{{ t('storefront.editor.branches.nameEn') }}</span><input class="inp" [ngModel]="x.nameEn" (ngModelChange)="patchStockist(i,'nameEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.branches.nameAr') }}</span><input class="inp" dir="rtl" [ngModel]="x.nameAr" (ngModelChange)="patchStockist(i,'nameAr',$event)"/></label>
+                    </div>
+                    <div class="two-col">
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.locationEn') }}</span><input class="inp" [ngModel]="x.locationEn" (ngModelChange)="patchStockist(i,'locationEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.locationAr') }}</span><input class="inp" dir="rtl" [ngModel]="x.locationAr" (ngModelChange)="patchStockist(i,'locationAr',$event)"/></label>
+                    </div>
+                    <div class="two-col">
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.hoursEn') }}</span><input class="inp" [ngModel]="x.hoursNoteEn" (ngModelChange)="patchStockist(i,'hoursNoteEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.hoursAr') }}</span><input class="inp" dir="rtl" [ngModel]="x.hoursNoteAr" (ngModelChange)="patchStockist(i,'hoursNoteAr',$event)"/></label>
+                    </div>
+                    <label><span class="lbl">{{ t('storefront.editor.stockists.mapUrl') }}</span><input class="inp mono" dir="ltr" [ngModel]="x.mapUrl" (ngModelChange)="patchStockist(i,'mapUrl',$event)"/></label>
+                    <div class="card-sub">{{ t('storefront.editor.stockists.mapHint') }}</div>
+                  </div>
+                </div>
+              }
+              <button class="btn btn-outline add-slide-btn" type="button" (click)="addStockist()">
+                <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.stockists.add') }}
+              </button>
+            </div>
+          </div>
         </div>
       }
 
@@ -1028,7 +1098,9 @@ interface StorefrontContent {
               </div>
               <div class="hint-box">{{ t('storefront.editor.phone.whatsappHint') }}</div>
               <label><span class="lbl">{{ t('storefront.editor.phone.promise') }}</span><textarea class="inp" rows="2" [ngModel]="content().contact.promiseLine" (ngModelChange)="patchContact('promiseLine',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.phone.promiseAr') }}</span><textarea class="inp" rows="2" dir="rtl" [ngModel]="content().contact.promiseLineAr" (ngModelChange)="patchContact('promiseLineAr',$event)"></textarea></label>
               <label><span class="lbl">{{ t('storefront.editor.phone.signature') }}</span><input class="inp" [ngModel]="content().contact.promiseSignature" (ngModelChange)="patchContact('promiseSignature',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.phone.signatureAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().contact.promiseSignatureAr" (ngModelChange)="patchContact('promiseSignatureAr',$event)"/></label>
             </div>
           </div>
 
@@ -2857,22 +2929,25 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
-  patchInfoBlock(i: number, key: string, value: string): void {
+  /** `value` is typed loosely because a branch mixes text, numbers and a flag. */
+  patchBranch(i: number, key: string, value: string | number | boolean): void {
     this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, idx) => idx === i ? { ...b, [key]: value } : b);
-      return { ...c, contact: { ...c.contact, infoBlocks } };
+      const branches = c.contact.branches.map((b, idx) => idx === i ? { ...b, [key]: value } : b);
+      return { ...c, contact: { ...c.contact, branches } };
     });
     this.markDirty();
   }
 
-  patchInfoBlockLine(blockIdx: number, lineIdx: number, value: string): void {
+  /** Hours are stored as whole hours, so the input's string needs coercing. */
+  patchBranchHour(i: number, key: string, value: string): void {
+    const n = Number(value);
+    this.patchBranch(i, key, Number.isInteger(n) && n >= 0 && n <= 24 ? n : 0);
+  }
+
+  patchStockist(i: number, key: string, value: string): void {
     this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, bi) => {
-        if (bi !== blockIdx) return b;
-        const lines = b.lines.map((l, li) => li === lineIdx ? value : l);
-        return { ...b, lines };
-      });
-      return { ...c, contact: { ...c.contact, infoBlocks } };
+      const stockists = c.contact.stockists.map((x, idx) => idx === i ? { ...x, [key]: value } : x);
+      return { ...c, contact: { ...c.contact, stockists } };
     });
     this.markDirty();
   }
@@ -2938,41 +3013,51 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
-  // ── Info blocks add/remove/lines ──────────────────────────────────────
-  addInfoBlock(): void {
-    const id = `block-${Date.now()}`;
+  // ── Branches and stockists ────────────────────────────────────────────
+  addBranch(): void {
+    const id = `branch-${Date.now()}`;
     this.content.update((c) => ({
       ...c,
-      contact: { ...c.contact, infoBlocks: [...c.contact.infoBlocks, { id, icon: '◆', titleEn: '', titleAr: '', lines: [''] }] },
+      contact: {
+        ...c.contact,
+        branches: [...c.contact.branches, {
+          id, nameEn: '', nameAr: '', addressEn: '', addressAr: '',
+          phone: '', mapUrl: '', mapEmbedUrl: '', lat: null, lng: null, parking: false,
+          weekdayOpen: 10, weekdayClose: 22, weekendOpen: 13, weekendClose: 22,
+        }],
+      },
     }));
     this.markDirty();
   }
 
-  removeInfoBlock(i: number): void {
+  removeBranch(i: number): void {
     this.content.update((c) => ({
       ...c,
-      contact: { ...c.contact, infoBlocks: c.contact.infoBlocks.filter((_, idx) => idx !== i) },
+      contact: { ...c.contact, branches: c.contact.branches.filter((_, idx) => idx !== i) },
     }));
     this.markDirty();
   }
 
-  addInfoBlockLine(blockIdx: number): void {
-    this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, bi) =>
-        bi === blockIdx ? { ...b, lines: [...b.lines, ''] } : b
-      );
-      return { ...c, contact: { ...c.contact, infoBlocks } };
-    });
+  addStockist(): void {
+    const id = `stockist-${Date.now()}`;
+    this.content.update((c) => ({
+      ...c,
+      contact: {
+        ...c.contact,
+        stockists: [...c.contact.stockists, {
+          id, nameEn: '', nameAr: '', locationEn: '', locationAr: '',
+          hoursNoteEn: '', hoursNoteAr: '', mapUrl: '',
+        }],
+      },
+    }));
     this.markDirty();
   }
 
-  removeInfoBlockLine(blockIdx: number, lineIdx: number): void {
-    this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, bi) =>
-        bi === blockIdx ? { ...b, lines: b.lines.filter((_, li) => li !== lineIdx) } : b
-      );
-      return { ...c, contact: { ...c.contact, infoBlocks } };
-    });
+  removeStockist(i: number): void {
+    this.content.update((c) => ({
+      ...c,
+      contact: { ...c.contact, stockists: c.contact.stockists.filter((_, idx) => idx !== i) },
+    }));
     this.markDirty();
   }
 
@@ -3070,9 +3155,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     return this.t('storefront.editor.chapters.chapterN').replace('{n}', String(n));
   }
 
-  infoBlockTitle(n: number): string {
-    return this.t('storefront.editor.infoBlocks.blockN').replace('{n}', String(n));
-  }
+
 
   lineLabel(n: number): string {
     return this.t('storefront.editor.line.placeholder').replace('{n}', String(n));

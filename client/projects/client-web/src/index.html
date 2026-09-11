@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8" />
-  <title>Elite Collection — Arabic Leather Artisans</title>
+  <title>Elite Collection | Qatari Design, Crafted in Italy</title>
   <base href="/" />
   <!-- `maximum-scale=1.0` was here to stop the hero double-tap zooming the page.
        It never actually did that: it also removed deliberate pinch zoom for
@@ -13,7 +13,40 @@
        (see home.component.scss). Focus zoom is handled by the 16px control
        floor in styles.scss. Do not reintroduce a scale cap here. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="description" content="Elite Collection — handcrafted Arabic leather shoes from Doha since 2018." />
+  <meta name="description" content="Qatari-designed footwear and accessories, custom-crafted in Italy. Founded in Qatar, 2018." />
+
+  <!-- Social/link-preview tags, deliberately duplicated here as static markup.
+       SeoService rewrites all of these per route, but it runs after hydration
+       and no social crawler executes JavaScript: WhatsApp, Facebook, X,
+       LinkedIn and iMessage read this file and stop. Without these, every
+       shared link previewed with no image at all. These are the site-level
+       fallback; per-page values still come from SeoService for anything that
+       does run JS (Google included). Remove only once SSR/prerender ships,
+       which is what makes SeoService's output visible to crawlers.
+       Keep in sync with seo.* in i18n/strings.ts and with brand.config.json.
+
+       No static canonical or og:url here on purpose. Both are per-URL values,
+       and a hardcoded one would tell every crawler that does not run JS that
+       /collection and every product page are duplicates of the homepage, which
+       is worse than having none. SeoService creates both at runtime, and with
+       og:url absent the social platforms fall back to the URL that was
+       actually shared, which is the right answer anyway. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Elite Collection" />
+  <meta property="og:title" content="Elite Collection | Qatari Design, Crafted in Italy" />
+  <meta property="og:description" content="Qatari-designed footwear and accessories, custom-crafted in Italy. Founded in Qatar, 2018." />
+  <meta property="og:image" content="https://elitecollections.qa/assets/brand/og-default.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Elite Collection leather sandals" />
+  <meta property="og:locale" content="en_QA" />
+  <meta property="og:locale:alternate" content="ar_QA" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Elite Collection | Qatari Design, Crafted in Italy" />
+  <meta name="twitter:description" content="Qatari-designed footwear and accessories, custom-crafted in Italy. Founded in Qatar, 2018." />
+  <meta name="twitter:image" content="https://elitecollections.qa/assets/brand/og-default.jpg" />
+  <meta name="theme-color" content="#b8924a" />
+
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="preload" as="image" type="image/webp" href="/assets/hero-scroll/elite-hero-sandals-cutout.webp" fetchpriority="high" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />

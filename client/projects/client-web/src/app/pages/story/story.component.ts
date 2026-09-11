@@ -37,7 +37,7 @@ export class StoryComponent implements OnInit {
     if (localizedAlt) return localizedAlt;
     if (this.locale.locale() !== 'ar' && legacy.trim()) return legacy.trim();
     return this.locale.locale() === 'ar'
-      ? 'قطعة جلدية من إيليت كولكشن منفّذة بعناية'
+      ? 'قطعة جلدية من اليت كولكشن منفّذة بعناية'
       : 'An Elite Collection leather piece, crafted with care';
   }
 

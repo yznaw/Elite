@@ -42,80 +42,35 @@ sudo ufw allow 'Nginx Full'
 
 ## Create The Nginx Site
 
-Create `/etc/nginx/sites-available/elite`:
+The site config lives in the repo at [`deploy/nginx/elite.conf`](../deploy/nginx/elite.conf).
+Copy it to `/etc/nginx/sites-available/elite` rather than retyping it, so the
+served config and the repo cannot drift.
 
-```nginx
-# Express stays private. Nginx is the public HTTPS edge.
-upstream elite_api {
-    server 127.0.0.1:3000;
-}
-
-server {
-    listen 80;
-    server_name elitecollections.qa www.elitecollections.qa;
-
-    root /var/www/elite/client/dist/client-web/browser;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Crawlers expect the sitemap at the site root, but it is generated from
-    # live catalogue data by the API. Without this block the SPA fallback
-    # above would answer /sitemap.xml with index.html.
-    location = /sitemap.xml {
-        proxy_pass http://elite_api/api/sitemap.xml;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /api/ {
-        proxy_pass http://elite_api;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
-    }
-
-    location /uploads/ {
-        alias /var/www/elite/server/uploads/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
-}
-
-server {
-    listen 80;
-    server_name admin.elitecollections.qa;
-
-    root /var/www/elite/client/dist/admin-portal/browser;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://elite_api;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
-    }
-
-    location /uploads/ {
-        alias /var/www/elite/server/uploads/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
-}
+```bash
+sudo cp /var/www/elite/deploy/nginx/elite.conf /etc/nginx/sites-available/elite
 ```
+
+It carries three things beyond a plain SPA host, each marked with a numbered
+comment in the file:
+
+1. **Compression.** Nginx's default `gzip_types` is `text/html` only, so the
+   Angular bundle went out uncompressed: `main.js` is about 500 kB raw against
+   roughly 120 kB gzipped. The HTML *was* compressed, which is what hid it.
+   These directives sit at `http` context (the `sites-enabled` include is
+   inside `http`), so do not move them inside a `server` block.
+2. **A canonical host.** `www.elitecollections.qa` previously answered 200 and
+   served the entire site. Since the storefront derives its canonical URL from
+   `location.origin`, the www copy declared *itself* canonical, so the two
+   hostnames competed as separate sites. www now only issues a 301.
+3. **Caching.** `index.html` is `no-store` because it names the current build's
+   hashed files. Hashed `.js`/`.css` are immutable for a year. `/assets/` is
+   deliberately only 7 days, because those filenames are *not* hashed and a
+   longer TTL would mean a replaced image takes a year to reach return visitors.
+
+> **If certbot has already run on this server, do not overwrite the live file.**
+> `certbot --nginx` rewrites it in place, adding `listen 443 ssl`, the
+> certificate paths and its own port-80 redirects. Merge the three numbered
+> blocks into the existing file instead.
 
 Enable and reload it:
 

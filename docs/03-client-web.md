@@ -26,8 +26,8 @@ All page components are **lazy-loaded** via `loadComponent()`:
 | `/product/:id` | `ProductComponent` | `pages/product/` | Product detail — gallery, size selector, add to cart, accordions |
 | `/checkout` | `CheckoutComponent` | `pages/checkout/` | 3-step checkout (details → delivery → payment) |
 | `/story` | `StoryComponent` | `pages/story/` | Brand story with timeline chapters and artisan profiles |
-| `/contact` | `ContactComponent` | `pages/contact/` | Contact form + advisor info cards |
-| `**` | — | — | Redirects to `/` |
+| `/contact` | `ContactComponent` | `pages/contact/` | Branch cards with live open/closed state, stockists, direct contact, enquiry form |
+| `**` | `NotFoundComponent` | `pages/not-found/` | 404 dead end. Sets `noindex, follow`; deliberately does **not** redirect |
 
 ### Route Definition
 
@@ -364,7 +364,39 @@ Located in `app/shared/`:
 
 ---
 
+## Contact Page
+
+Structured around what a visitor to a physical retailer actually wants: where the shops are, whether they are open, and how to call. Order is branches, stockists, direct contact, then the form.
+
+- **Branches** come from `contact.branches` in the storefront CMS. Hours are stored as whole hours on a 24h clock, not a display string, which is what lets the page compute the `Open now` badge (in Doha time, fixed UTC+3) and emit the same values as `openingHoursSpecification`.
+- **Stockists** (`contact.stockists`) are shops that carry Elite but are not Elite's premises, such as the counter inside Printemps. They get a lighter treatment, no map of their own, and are **deliberately excluded from the `Store` structured data** — describing them as Elite locations, or reusing the host's map link in `sameAs`, would tell search engines the two businesses are one.
+- **`LocalBusiness` / `Store` JSON-LD** is built from the same CMS data, so the page and the structured data cannot drift.
+
+> **Bidirectional text:** Latin runs and digits inside Arabic copy need the `.num` utility (`direction: ltr; unicode-bidi: isolate`). Without it a phone number renders as `4475 8172 974+` and trailing full stops jump to the head of the line. This bug is not unique to this page; apply `.num` anywhere a number sits in RTL copy.
+
 ## Services
+
+### `SeoService`
+
+- **File:** `services/seo.service.ts`
+- **Provider:** Root-level (`providedIn: 'root'`)
+- **Purpose:** Owns everything in `<head>` that varies per route: title, description, canonical, Open Graph, Twitter Card, `robots`, and JSON-LD.
+- **Usage:** call `seo.watch(factory)` from a **field initializer** so the effect is owned by the component's injector and is destroyed on navigation. Returning `null` from the factory means "data not ready", which leaves the previous tags in place instead of flashing an empty title.
+
+```typescript
+private readonly seoTags = this.seo.watch(() => ({
+  title: this.i18n.t('seo.home.title'),
+  description: this.i18n.t('seo.home.description'),
+  canonicalPath: '/',
+  jsonLd: [ /* ... */ ],
+}));
+```
+
+- **`noIndex: true`** emits `<meta name="robots" content="noindex, follow">` and, just as importantly, the tag is **removed** on the next page that does not set it. Navigation is client-side, so a tag left behind would silently de-index the next real page the visitor lands on. Only `NotFoundComponent` sets it today.
+- **`FALLBACK_IMAGE`** is `/assets/brand/og-default.jpg`, a 1200x630 card — not the logo. `og:image` feeds a `summary_large_image` preview, where a tall transparent wordmark is letterboxed or cropped to nonsense. Regenerate the card from `docs/seo/og-image-source.html`.
+
+> **Known limitation:** everything this service writes runs *after* hydration, and no social crawler executes JavaScript. WhatsApp, Facebook, X, LinkedIn and iMessage read the static `index.html` and stop. That file therefore carries a duplicated set of site-level `og:`/`twitter:` tags as a fallback. It deliberately carries **no** `canonical` and **no** `og:url`, because a hardcoded per-URL value would tell every non-JS crawler that all pages are duplicates of the homepage. Both limitations disappear once SSR or prerendering ships.
+
 
 ### `ProductsService`
 
