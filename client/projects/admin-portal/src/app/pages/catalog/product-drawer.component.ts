@@ -22,7 +22,7 @@ import { AdminMediaService } from '../../services/admin-media.service';
 import { StorageService } from '../../services/storage.service';
 import { LabelPrinterService, arabicPrice } from '../../services/label-printer.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
-import { formatVariantSku } from '../../utils/variant-sku';
+import { formatVariantSku, variantBaseSku } from '../../utils/variant-sku';
 
 interface FormShape {
   name: string; nameAr: string; sku: string; brand: string; collectionIds: string[];
@@ -492,22 +492,6 @@ function readPreview(file: File): Promise<string> {
                     <!-- Spacer -->
                     <span style="flex:1;"></span>
 
-                    <!-- Generate sizes for this color -->
-                    @if (refSizeSets().length > 0 && expandedGroups().has(group.colorKey)) {
-                      <div class="gen-sizes-wrap" (click)="$event.stopPropagation()">
-                        <select class="inp inp-sm" #grpSizeSetSel style="font-size:11px;">
-                          <option value="">{{ t('product.variants.generateSizes') }}</option>
-                          @for (ss of refSizeSets(); track ss.id) {
-                            <option [value]="ss.id">{{ ss.name }}</option>
-                          }
-                        </select>
-                        <button class="btn btn-outline btn-sm" [disabled]="!grpSizeSetSel.value"
-                                (click)="generateSizesForColor(grpSizeSetSel.value, group.colorName); grpSizeSetSel.value=''">
-                          <ap-icon name="plus" [size]="12"/>
-                        </button>
-                      </div>
-                    }
-
                     <!-- Add size in this color -->
                     @if (expandedGroups().has(group.colorKey)) {
                       <button class="btn btn-outline btn-sm" type="button"
@@ -519,6 +503,34 @@ function readPreview(file: File): Promise<string> {
 
                   <!-- Size rows — shown only when group is expanded -->
                   @if (expandedGroups().has(group.colorKey)) {
+                    <div class="vcg-sku-tools" (click)="$event.stopPropagation()">
+                      <label class="vcg-sku-field">
+                        <span>{{ t('product.variants.colorBaseSku') }}</span>
+                        <input class="inp inp-sm mono"
+                               [placeholder]="t('product.variants.colorBaseSku.placeholder')"
+                               [ngModel]="colorVariantBaseSku(group.colorName, group.items)"
+                               (ngModelChange)="setColorVariantBaseSku(group.colorName, $event)"/>
+                      </label>
+                      <span class="muted small vcg-sku-example">
+                        {{ colorVariantBaseSku(group.colorName, group.items) || t('product.variants.colorBaseSku.placeholder') }}-SIZE
+                      </span>
+                      @if (refSizeSets().length > 0) {
+                        <div class="gen-sizes-wrap">
+                          <select class="inp inp-sm" #grpSizeSetSel>
+                            <option value="">{{ t('product.variants.generateSizes') }}</option>
+                            @for (ss of refSizeSets(); track ss.id) {
+                              <option [value]="ss.id">{{ ss.name }}</option>
+                            }
+                          </select>
+                          <button class="btn btn-outline btn-sm" type="button"
+                                  [disabled]="!grpSizeSetSel.value || !colorVariantBaseSku(group.colorName, group.items).trim()"
+                                  (click)="generateSizesForColor(grpSizeSetSel.value, group.colorName); grpSizeSetSel.value=''">
+                            <ap-icon name="plus" [size]="12"/> {{ t('product.variants.generate') }}
+                          </button>
+                        </div>
+                      }
+                    </div>
+
                     <!-- Column headers -->
                     <div class="vc-header vc-header--group">
                       <span>{{ t('product.variants.col.size') }}</span>
@@ -1601,6 +1613,18 @@ function readPreview(file: File): Promise<string> {
     }
     .vcg-stock--out { color: var(--danger); border-color: rgba(239,68,68,.3); }
 
+    .vcg-sku-tools {
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) auto minmax(250px, auto);
+      gap: 12px;
+      align-items: end;
+      padding: 12px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-2);
+    }
+    .vcg-sku-field { display: grid; gap: 5px; color: var(--text-2); font-size: 11px; font-weight: 700; }
+    .vcg-sku-example { align-self: center; white-space: nowrap; }
+
     /* Wrapper gives the picker a tight anchor right next to the button */
     .vcg-img-wrap { position: relative; flex-shrink: 0; }
 
@@ -1982,7 +2006,14 @@ function readPreview(file: File): Promise<string> {
     .color-select { flex: 1; min-width: 0; }
 
     /* Generate sizes row */
-    .gen-sizes-wrap { display: flex; gap: 4px; align-items: center; }
+    .gen-sizes-wrap { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+
+    @media (max-width: 900px) {
+      .vcg-sku-tools { grid-template-columns: 1fr; align-items: stretch; }
+      .vcg-sku-example { white-space: normal; }
+      .gen-sizes-wrap { justify-content: stretch; }
+      .gen-sizes-wrap select { flex: 1; }
+    }
 
     /* Responsive: stack on narrow screens */
     @media (max-width: 600px) {
@@ -2237,6 +2268,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly expandedVariants = signal(new Set<string>());
   /** Only IDs created during this open editor session are safe to regenerate. */
   private readonly autoGeneratedVariantIds = signal(new Set<string>());
+  /** Unsaved typing state for each colour's base SKU. It deliberately lives
+      outside the product schema: the generated variant SKUs are the durable
+      source of truth and the base is recovered from them when reopening. */
+  private readonly colorSkuDrafts = signal<Record<string, string>>({});
   readonly barcodeSheetOpen = signal(false);
 
   // ── Bulk Stock Update ─────────────────────────────────────────────────
@@ -2302,6 +2337,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.lastSavedAt.set(null);
     this.draftRestoredAt.set(null);
     this.autoGeneratedVariantIds.set(new Set());
+    this.colorSkuDrafts.set({});
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
 
@@ -2692,11 +2728,18 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (!current) return;
     const manualSkuEdit = Object.prototype.hasOwnProperty.call(patch, 'sku');
     if (manualSkuEdit) this.unmarkVariantSkuAutomatic(current.id);
+    const currentBaseSku = this.baseSkuForVariant(current);
+    const followsGeneratedFormat = !!current.size
+      && current.sku === formatVariantSku(currentBaseSku, current.size);
+    const updateSkuAutomatically = !manualSkuEdit && (
+      this.autoGeneratedVariantIds().has(current.id)
+      || (Object.prototype.hasOwnProperty.call(patch, 'size') && followsGeneratedFormat)
+    );
     const next = this.form().variants.map((v, i) => {
       if (i !== index) return v;
       const updated = { ...v, ...patch };
-      return !manualSkuEdit && this.autoGeneratedVariantIds().has(v.id)
-        ? { ...updated, sku: formatVariantSku(this.form().sku, updated.size) }
+      return updateSkuAutomatically
+        ? { ...updated, sku: formatVariantSku(currentBaseSku, updated.size) }
         : updated;
     });
     this.set('variants', next);
@@ -2781,6 +2824,44 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly expandedGroups = signal<Set<string>>(new Set());
 
+  private colorKey(colorName: string): string {
+    return String(colorName || '').trim().toLowerCase() || '__none__';
+  }
+
+  colorVariantBaseSku(
+    colorName: string,
+    items: { v: ProductVariant; globalIndex: number }[] = [],
+  ): string {
+    const key = this.colorKey(colorName);
+    const drafts = this.colorSkuDrafts();
+    if (Object.prototype.hasOwnProperty.call(drafts, key)) return drafts[key];
+    const saved = items.find(item => String(item.v.sku || '').trim());
+    return saved ? variantBaseSku(saved.v.sku, saved.v.size) : '';
+  }
+
+  setColorVariantBaseSku(colorName: string, value: string): void {
+    const key = this.colorKey(colorName);
+    const rawBase = String(value || '');
+    this.colorSkuDrafts.update(drafts => ({ ...drafts, [key]: rawBase }));
+    const affectedIds: string[] = [];
+    const next = this.form().variants.map(variant => {
+      if (this.colorKey(variant.color || '') !== key || !variant.size) return variant;
+      affectedIds.push(variant.id);
+      return { ...variant, sku: formatVariantSku(rawBase, variant.size) };
+    });
+    this.markVariantSkusAutomatic(affectedIds);
+    this.set('variants', next);
+    this.warnIfDuplicateVariantSkus(next);
+  }
+
+  private baseSkuForVariant(variant: ProductVariant): string {
+    if (!variant.color) return this.form().sku;
+    const groupItems = this.form().variants
+      .map((v, globalIndex) => ({ v, globalIndex }))
+      .filter(item => this.colorKey(item.v.color || '') === this.colorKey(variant.color || ''));
+    return this.colorVariantBaseSku(variant.color, groupItems) || variantBaseSku(variant.sku, variant.size);
+  }
+
   toggleGroup(key: string): void {
     this.expandedGroups.update(s => {
       const next = new Set(s);
@@ -2815,18 +2896,24 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const ss = this.refSizeSets().find(s => s.id === sizeSetId);
     if (!ss) return;
     const f = this.form();
-    if (!String(f.sku || '').trim().replace(/-+$/, '')) {
+    const groupItems = f.variants
+      .map((v, globalIndex) => ({ v, globalIndex }))
+      .filter(item => this.colorKey(item.v.color || '') === this.colorKey(colorName));
+    const colorBaseSku = this.colorVariantBaseSku(colorName, groupItems);
+    if (!String(colorBaseSku || '').trim().replace(/-+$/, '')) {
       this.toast.error(this.t('product.variants.baseSkuRequired.title'), this.t('product.variants.baseSkuRequired.sub'));
       return;
     }
     const existingSizes = new Set(
-      f.variants.filter(v => v.color === colorName).map(v => v.size)
+      f.variants
+        .filter(v => this.colorKey(v.color || '') === this.colorKey(colorName))
+        .map(v => v.size)
     );
     const toAdd = ss.sizes.filter(sz => !existingSizes.has(sz));
     if (toAdd.length === 0) { this.toast.info(this.t('product.variants.allSizesAdded'), ss.name); return; }
     const newVariants: ProductVariant[] = toAdd.map(sz => ({
       id:       'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
-      sku:      formatVariantSku(f.sku, sz),
+      sku:      formatVariantSku(colorBaseSku, sz),
       size:     sz,
       color:    colorName,
       material: '',
@@ -2860,6 +2947,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       if (key !== colorKey) return v;
       return { ...v, color: newColor };
     });
+    const draft = this.colorSkuDrafts()[colorKey];
+    if (draft !== undefined) {
+      this.colorSkuDrafts.update(drafts => {
+        const renamed = { ...drafts };
+        delete renamed[colorKey];
+        renamed[this.colorKey(newColor)] = draft;
+        return renamed;
+      });
+    }
     this.set('variants', next);
   }
 
@@ -3052,7 +3148,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.form.update(f => ({
         ...f,
         sku: baseSku,
-        variants: f.variants.map(variant => automaticIds.has(variant.id)
+        variants: f.variants.map(variant => automaticIds.has(variant.id) && !variant.color
           ? { ...variant, sku: formatVariantSku(baseSku, variant.size) }
           : variant),
       }));
@@ -3154,6 +3250,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.draftRestoredAt.set(null);
       this.initial.set({ ...this.form() });
       this.autoGeneratedVariantIds.set(new Set());
+      this.colorSkuDrafts.set({});
 
       await this.syncCollections(previousId, saved.id, this.form().collectionIds);
 
@@ -3203,6 +3300,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (!this.dirty()) return;
     this.form.set({ ...this.initial() });
     this.autoGeneratedVariantIds.set(new Set());
+    this.colorSkuDrafts.set({});
     this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
@@ -3212,6 +3310,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   discardDraft(): void {
     this.form.set({ ...this.initial() });
     this.autoGeneratedVariantIds.set(new Set());
+    this.colorSkuDrafts.set({});
     this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');

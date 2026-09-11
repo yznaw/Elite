@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatVariantSku } from '../projects/admin-portal/src/app/utils/variant-sku.ts';
+import { formatVariantSku, variantBaseSku } from '../projects/admin-portal/src/app/utils/variant-sku.ts';
 
 test('formats numeric and decimal sizes from a base SKU', () => {
   assert.equal(formatVariantSku('1493-GF-', '5'), '1493-GF-5');
@@ -19,4 +19,14 @@ test('does not invent a SKU without both base and size', () => {
   assert.equal(formatVariantSku('', '5'), '');
   assert.equal(formatVariantSku('1493-GF-', ''), '');
   assert.equal(formatVariantSku('---', '5'), '');
+});
+
+test('preserves the model, leather and colour segments when recovering a colour base', () => {
+  assert.equal(variantBaseSku('1493-GF-MK-5', '5'), '1493-GF-MK');
+  assert.equal(variantBaseSku('1493-GF-WHT-5.5', '5.5'), '1493-GF-WHT');
+});
+
+test('does not guess when a saved SKU does not end with its size', () => {
+  assert.equal(variantBaseSku('CUSTOM-SKU', '6'), 'CUSTOM-SKU');
+  assert.equal(variantBaseSku('1493-GF-MK', ''), '1493-GF-MK');
 });

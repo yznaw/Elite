@@ -500,10 +500,6 @@ interface StorefrontContent {
                     <label><span class="lbl">اسم المنتج (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.nameAr" (ngModelChange)="patchSliderItem(i,'nameAr',$event)"/></label>
                   </div>
                   <div class="two-col">
-                    <label><span class="lbl">Subtitle (English)</span><input class="inp" [ngModel]="item.subtitleEn" (ngModelChange)="patchSliderItem(i,'subtitleEn',$event)"/></label>
-                    <label><span class="lbl">العنوان الفرعي (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.subtitleAr" (ngModelChange)="patchSliderItem(i,'subtitleAr',$event)"/></label>
-                  </div>
-                  <div class="two-col">
                     <label>
                       <span class="lbl">{{ t('storefront.editor.slider.descriptionEn') }}</span>
                       <textarea class="inp" rows="2" [ngModel]="item.descriptionEn" (ngModelChange)="patchSliderItem(i,'descriptionEn',$event)"></textarea>
@@ -2852,9 +2848,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         name:          fill(item.name, product.name),
         nameEn:        fill(item.nameEn, product.name),
         nameAr:        fill(item.nameAr, product.nameAr || ''),
-        subtitle:      fill(item.subtitle, this.productSubtitle(product)),
-        subtitleEn:    fill(item.subtitleEn, product.brand || ''),
-        subtitleAr:    fill(item.subtitleAr, product.nameAr || ''),
         // Seeded from the product's Hook (shortEn/shortAr); falls back to the
         // legacy long description only if the Hook itself is empty.
         descriptionEn: fill(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
@@ -2908,9 +2901,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           name:          keep(item.name, product.name),
           nameEn:        keep(item.nameEn, product.name),
           nameAr:        keep(item.nameAr, product.nameAr || ''),
-          subtitle:      keep(item.subtitle, this.productSubtitle(product)),
-          subtitleEn:    keep(item.subtitleEn, product.brand || ''),
-          subtitleAr:    keep(item.subtitleAr, product.nameAr || ''),
           // Seeded from the product's Hook (shortEn/shortAr); falls back to the
           // legacy long description only if the Hook itself is empty.
           descriptionEn: keep(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
@@ -2923,14 +2913,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       return { ...c, heroSlider: { ...c.heroSlider, items } };
     });
     this.markDirty();
-  }
-
-  /** Bilingual subtitle in the "العربية / English" shape the hero splits on. */
-  private productSubtitle(product: Product): string {
-    const ar = (product.nameAr || '').trim();
-    const en = (product.brand || '').trim();
-    if (ar && en) return `${ar} / ${en}`;
-    return ar || en;
   }
 
   /**
