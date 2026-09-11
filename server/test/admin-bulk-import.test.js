@@ -149,6 +149,22 @@ test('Template V2 separates product and variant SKUs and resets carry between pr
   assert.equal(rows[2].collection, 'Footwear');
 });
 
+test('metadata-only product row owns Arabic name and colour rows cannot overwrite it', () => {
+  const csv = [
+    'Product SKU,Variant SKU,English Name,Arabic Name,English Color,Selling Price,Quantity',
+    '1493-GF,,Signature II Luxe,سيغنتشر اا لوكس,,,',
+    ',1493-GF-WHT-5,Signature II Luxe,سيغنتشر اا لوكس – نعال أبيض,White,1200,1',
+    ',1493-GF-MK-5,Signature II Luxe,سيغنتشر اا لوكس – نعال بيج فاتح,Milk,1200,1',
+  ].join('\n');
+
+  const rows = _test.csvToObjects(csv);
+
+  assert.equal(rows.length, 2, 'the parent metadata row is not imported as a variant');
+  assert.deepEqual(rows.map(row => row.productSku), ['1493-GF', '1493-GF']);
+  assert.deepEqual(rows.map(row => row.variantSku), ['1493-GF-WHT-5', '1493-GF-MK-5']);
+  assert.deepEqual(rows.map(row => row.nameAr), ['سيغنتشر اا لوكس', 'سيغنتشر اا لوكس']);
+});
+
 test('legacy New SKU template remains readable', () => {
   const csv = [
     'New SKU,English Name,Size,Description,English Color,Arabic Name,Selling Price,quantity',

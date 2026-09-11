@@ -130,7 +130,7 @@ function csvToObjects(text) {
     const rawProductSku = read(row, idx.productSku);
     const variantSku = read(row, idx.variantSku) || legacySku;
     const rawName = read(row, idx.name);
-    if (!variantSku || SECTION_HEADERS.has(variantSku.toLowerCase())) continue;
+    if (variantSku && SECTION_HEADERS.has(variantSku.toLowerCase())) continue;
 
     // Product-level values may be entered once on the first variant row. Reset
     // every carried value as soon as Product SKU (preferred) or product name
@@ -156,10 +156,19 @@ function csvToObjects(text) {
     };
     for (const [key, column] of Object.entries(carryColumns)) {
       const value = read(row, column);
-      if (value) carry[key] = value;
+      // Product-level values belong to the first row that supplies them. A
+      // colour row may repeat a more specific Arabic label, but it must not
+      // replace the product's generic Arabic name for every colour variant.
+      if (value && !carry[key]) carry[key] = value;
     }
     const rawColor = read(row, idx.color);
     if (rawColor) carry.color = rawColor;
+
+    // Template V2 may use a metadata-only parent row: Product SKU and product
+    // copy are filled, while Variant SKU is intentionally blank. Keep its
+    // values in `carry` for the following variants, but do not create a fake
+    // product_variants row for it.
+    if (!variantSku) continue;
 
     objects.push({
       productSku: carry.productSku,
