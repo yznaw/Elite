@@ -76,18 +76,19 @@ for (const kind of ['sale', 'refund', 'void', 'z-report']) {
   });
 }
 
-test('receipt paints the required Arabic business, price and transaction details', async () => {
-  const text = await page.evaluate(async () => {
+test('receipt paints large, one-bit bilingual business, price and transaction details', async () => {
+  const result = await page.evaluate(async () => {
     const { createHardware, receipt } = window.posPrinting;
     const { renderer } = createHardware();
     const calls = [];
     const original = CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText = function(value, ...args) {
-      calls.push(String(value));
+      calls.push({ value: String(value), font: this.font });
       return original.call(this, value, ...args);
     };
+    let rendered;
     try {
-      await renderer.render(receipt, {
+      rendered = await renderer.render(receipt, {
         tradeNameAr: 'مجموعة إيليت', tradeNameEn: 'Elite Collection',
         addressAr: 'الدوحة، قطر', addressEn: 'Doha, Qatar', phone: '12345678',
         crLicenseNumber: 'CR-100', returnPolicyAr: 'الاستبدال خلال 14 يوماً',
@@ -97,15 +98,33 @@ test('receipt paints the required Arabic business, price and transaction details
     } finally {
       CanvasRenderingContext2D.prototype.fillText = original;
     }
-    return calls.join('\n');
+    const image = new Image();
+    image.src = rendered.imageDataUrl;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, image.width, image.height).data;
+    const oneBit = pixels.every((channel, index) => index % 4 === 3 ? channel === 255 : channel === 0 || channel === 255);
+    return { text: calls.map((call) => call.value).join('\n'), calls, oneBit };
   });
-  assert.match(text, /مجموعة إيليت/);
-  assert.match(text, /الدوحة، قطر/);
-  assert.match(text, /فاتورة/);
-  assert.match(text, /الإجمالي/);
-  assert.match(text, /طريقة الدفع/);
-  assert.match(text, /ر\.ق/);
-  assert.match(text, /السجل التجاري/);
+  assert.match(result.text, /مجموعة إيليت/);
+  assert.match(result.text, /الدوحة، قطر/);
+  assert.match(result.text, /فاتورة/);
+  assert.match(result.text, /الإجمالي/);
+  assert.match(result.text, /طريقة الدفع/);
+  assert.match(result.text, /ر\.ق/);
+  assert.match(result.text, /السجل التجاري/);
+  const fontSize = (text) => {
+    const call = result.calls.find(({ value }) => value.includes(text));
+    return Number(call?.font.match(/(\d+)px/)?.[1] || 0);
+  };
+  assert.ok(fontSize('Leather shoes') >= 20, 'product names use a print-safe size');
+  assert.ok(fontSize('حذاء جلد') >= 21, 'Arabic product names use a print-safe size');
+  assert.ok(fontSize('Exchange within 14 days') >= 16, 'policy text uses a print-safe size');
+  assert.equal(result.oneBit, true, 'body is explicitly black and white before reaching the printer driver');
 });
 
 test('concurrent receipts are serialized before reaching the printer spooler', async () => {
