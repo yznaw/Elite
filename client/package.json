@@ -14,18 +14,22 @@
     "test:hero": "playwright test --config=playwright.hero.config.ts",
     "test:sku": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/variant-sku.test.ts",
     "test:stocktake-csv": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/stocktake-csv.test.ts",
-    "test:pos-printing": "node --test test/pos-printing.test.mjs"
+    "test:pos-printing": "node --test test/pos-printing.test.mjs",
+    "serve:ssr:client-web": "node dist/client-web/server/server.mjs"
   },
   "private": true,
   "dependencies": {
-    "@angular/animations": "^22.0.7",
-    "@angular/common": "^22.0.7",
-    "@angular/compiler": "^22.0.7",
-    "@angular/core": "^22.0.7",
-    "@angular/forms": "^22.0.7",
-    "@angular/platform-browser": "^22.0.7",
-    "@angular/platform-browser-dynamic": "^22.0.7",
-    "@angular/router": "^22.0.7",
+    "@angular/animations": "22.0.7",
+    "@angular/common": "22.0.7",
+    "@angular/compiler": "22.0.7",
+    "@angular/core": "22.0.7",
+    "@angular/forms": "22.0.7",
+    "@angular/platform-browser": "22.0.7",
+    "@angular/platform-browser-dynamic": "22.0.7",
+    "@angular/platform-server": "22.0.7",
+    "@angular/router": "22.0.7",
+    "@angular/ssr": "22.0.7",
+    "express": "^5.1.0",
     "jsbarcode": "^3.12.3",
     "qz-tray": "^2.2.6",
     "rxjs": "~7.8.0",
@@ -33,11 +37,12 @@
     "zone.js": "~0.15.1"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^22.0.7",
-    "@angular/cli": "^22.0.7",
-    "@angular/compiler-cli": "^22.0.7",
+    "@angular-devkit/build-angular": "22.0.7",
+    "@angular/cli": "22.0.7",
+    "@angular/compiler-cli": "22.0.7",
     "@playwright/test": "^1.53.2",
-    "@types/node": "^18.18.0",
+    "@types/express": "^5.0.1",
+    "@types/node": "^20.17.19",
     "esbuild": "^0.28.1",
     "typescript": "~6.0.3"
   }

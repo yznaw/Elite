@@ -1,8 +1,10 @@
+import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { ApplicationRef, Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { EMPTY_HOME_CONTENT, HomeContentData, MediaVariant, createEmptyHomeContent } from '../models/home-content.model';
 import { mediaVariantKey, resolveClientMediaUrl } from '../utils/media-url';
+import { API_BASE, PUBLIC_API_BASE } from '../core/api-base';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -31,13 +33,36 @@ const DEFAULT_HOME_LAYOUT: HomeLayoutSection[] = [
 @Injectable({ providedIn: 'root' })
 export class HomeContentService {
   private readonly http = inject(HttpClient);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
   private readonly _contentData = signal<HomeContentData>(this.cloneContent(EMPTY_HOME_CONTENT));
   private readonly _layoutSections = signal<HomeLayoutSection[]>([]);
   private readonly _loading = signal(true);
   private readonly _loaded = signal(false);
   private readonly _previewToken = signal<string | null>(this.detectPreviewToken());
   private loadPromise: Promise<HomeContentData> | null = null;
+
+  /**
+   * False until the app has finished starting (and, after a server render,
+   * hydrating). Pages call `refresh(true)` on init so admin edits show on the
+   * next in-app navigation, and forcing appends a `?t=` timestamp. During
+   * startup that is exactly wrong: the server rendered the page with the plain
+   * URL and shipped the response in the transfer cache, keyed by that exact
+   * URL, so a timestamped request can never be served from it and the browser
+   * would download the content a second time. Content loaded moments ago by
+   * the server, or by the first request of a fresh tab, is not stale, so
+   * until the app is stable a forced refresh just shares the plain load. The
+   * server never leaves this window: each render is its own fresh request.
+   */
+  private startupSettled = false;
+
+  constructor() {
+    if (isPlatformBrowser(inject(PLATFORM_ID))) {
+      void inject(ApplicationRef).whenStable().then(() => {
+        this.startupSettled = true;
+      });
+    }
+  }
 
   readonly contentData = this._contentData.asReadonly();
   readonly layoutSections = this._layoutSections.asReadonly();
@@ -71,11 +96,13 @@ export class HomeContentService {
         });
     }
 
-    if (force) this.loadPromise = null;
+    // Only a forced refresh after startup reloads and busts; see startupSettled.
+    const reload = force && this.startupSettled;
+    if (reload) this.loadPromise = null;
     if (this.loadPromise) return this.loadPromise;
 
     // Normal mode: load live content + layout
-    const bust = force ? `?t=${Date.now()}` : '';
+    const bust = reload ? `?t=${Date.now()}` : '';
     this._loading.set(true);
     this._loaded.set(false);
 
@@ -113,16 +140,6 @@ export class HomeContentService {
     return token && token.length > 0 ? token : null;
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal =
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      /^10\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private cloneContent(content: HomeContentData): HomeContentData {
     return JSON.parse(JSON.stringify(content)) as HomeContentData;
@@ -240,6 +257,6 @@ export class HomeContentService {
   }
 
   private resolveMediaUrl(url: string): string {
-    return resolveClientMediaUrl(url, this.apiBase);
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 }

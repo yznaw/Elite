@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { CartItem } from '../models/product.model';
+import { API_BASE } from '../core/api-base';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -18,7 +20,7 @@ interface ServerCart {
 @Injectable({ providedIn: 'root' })
 export class CartService {
   private readonly http = inject(HttpClient);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
   private readonly _items = signal<CartItem[]>([]);
   private readonly _open = signal<boolean>(false);
 
@@ -28,7 +30,10 @@ export class CartService {
   readonly subtotal = computed(() => this._items().reduce((s, i) => s + i.price * i.qty, 0));
 
   constructor() {
-    void this.refresh();
+    // Browser only. The cart is tied to the visitor's session cookie, which a
+    // server render doesn't carry, so fetching it there would create an
+    // anonymous server-side cart on every rendered page view.
+    if (isPlatformBrowser(inject(PLATFORM_ID))) void this.refresh();
   }
 
   add(item: CartItem): void {
@@ -137,15 +142,4 @@ export class CartService {
     ].join('|');
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 }

@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Product } from '../models/product.model';
 import { resolveClientMediaUrl } from '../utils/media-url';
+import { API_BASE, PUBLIC_API_BASE } from '../core/api-base';
 
 const LOGO_FALLBACK = '/assets/brand/elite-logo-green.png';
 
@@ -19,7 +20,8 @@ export class ProductsService {
   private readonly _loading = signal(false);
   private readonly _loaded = signal(false);
   private readonly _error = signal<string | null>(null);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
   private readonly cacheMs = 60_000;
   private loadPromise: Promise<Product[]> | null = null;
   private loadedAt = 0;
@@ -163,19 +165,8 @@ export class ProductsService {
     }, {});
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private resolveMediaUrl(url: string | undefined): string {
-    return resolveClientMediaUrl(url, this.apiBase);
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 }

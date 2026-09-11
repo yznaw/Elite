@@ -27,7 +27,7 @@ All page components are **lazy-loaded** via `loadComponent()`:
 | `/checkout` | `CheckoutComponent` | `pages/checkout/` | 3-step checkout (details → delivery → payment) |
 | `/story` | `StoryComponent` | `pages/story/` | Brand story with timeline chapters and artisan profiles |
 | `/contact` | `ContactComponent` | `pages/contact/` | Branch cards with live open/closed state, stockists, direct contact, enquiry form |
-| `**` | `NotFoundComponent` | `pages/not-found/` | 404 dead end. Sets `noindex, follow`; deliberately does **not** redirect |
+| `**` | `NotFoundComponent` | `pages/not-found/` | 404 dead end. Answers HTTP `404` from the server, sets `noindex, follow`; deliberately does **not** redirect |
 
 ### Route Definition
 
@@ -49,7 +49,7 @@ export const routes: Routes = [
 
 `robots.txt` lives at `projects/client-web/src/robots.txt` and is copied to the bundle root by the `assets` list in `client/angular.json`. It allows everything except `/checkout` and `/thank-you`, and points crawlers at `https://elitecollections.qa/sitemap.xml`.
 
-The sitemap itself is **not** a static file. It is generated from live catalogue data by `GET /api/sitemap.xml` (see `docs/05-api-server.md`) and exposed at the site root by an nginx `location = /sitemap.xml` proxy, because the SPA fallback would otherwise answer it with `index.html`. Adding a public route to `app.routes.ts` therefore means adding it to `STATIC_ROUTES` in `server/routes/sitemap.route.js` as well — nothing scans the route table automatically.
+The sitemap itself is **not** a static file. It is generated from live catalogue data by `GET /api/sitemap.xml` (see `docs/05-api-server.md`) and exposed at the site root by an nginx `location = /sitemap.xml` proxy, because the page renderer would otherwise answer it as a `404` page. Adding a public route to `app.routes.ts` therefore means adding it to `STATIC_ROUTES` in `server/routes/sitemap.route.js` as well, and giving it a render mode in `app.routes.server.ts` (see below) — nothing scans the route table automatically. `/experience` is the in-store feedback kiosk and is deliberately in neither.
 
 ### Per-page Head Tags (`SeoService`)
 
@@ -79,7 +79,75 @@ Copy lives in `i18n/strings.ts` under the `seo.*` prefix, in both languages. `Se
 
 Deliberately **not** implemented: `AggregateRating` in the product JSON-LD (the storefront has no rating aggregate to read, and inventing one violates Google's structured-data policy) and `hreflang` (EN and AR share one URL, so there is no alternate to point at).
 
-Note the app is still client-rendered. Googlebot executes JavaScript and will see these tags; the social crawlers behind WhatsApp, Facebook and X do not, so link previews continue to show the static `index.html` copy until the app is server-rendered or prerendered.
+On server-rendered routes these tags are in the HTML the server sends, so every crawler sees them, including the social ones behind WhatsApp, Facebook and X that never run JavaScript. Client-rendered routes (product pages, for now) still only have the static site-level tags in `index.html` until the browser runs the app.
+
+---
+
+## Server-Side Rendering
+
+Public pages are rendered per request by `@angular/ssr` (`outputMode: "server"` in `angular.json`) and hydrated in the browser. Nothing is prerendered at build time, so content published from the admin is live on the next page view.
+
+| File | Role |
+|---|---|
+| `src/server.ts` | Express entry run by PM2 `elite-web` on `127.0.0.1:4000`. Sends `Cache-Control: no-store` on every page. |
+| `src/main.server.ts` | Server bootstrap. |
+| `app/app.routes.server.ts` | Render mode per route. |
+| `app/app.config.server.ts` | Server-only providers: the API backend and `SITE_ORIGIN`. |
+| `app/core/api-base.ts` | `API_BASE`, `PUBLIC_API_BASE`, `SITE_ORIGIN` injection tokens. |
+| `scripts/ssr-smoke.mjs` | Renders every route with the API down and (with `--api`) up. |
+
+### Render modes
+
+| Mode | Routes | Why |
+|---|---|---|
+| Server | `/`, `/collection`, `/collection/:collection`, `/collection/:parent/:child`, `/story`, `/contact`, `/policy/:handle` | Content worth indexing and sharing. |
+| Server, status `404` | `**` | Unknown URLs used to answer `200`. |
+| Client | `/product/:id` | Stays client-rendered until product URLs move from UUIDs to slugs. |
+| Client | `/checkout` and its result routes, `/thank-you`, `/experience` | Session-bound or kiosk pages with nothing to index. |
+
+A client-rendered route is served as `index.csr.html`, the same shell nginx falls back to when the renderer is down (`docs/09-nginx-https.md`).
+
+### Rules for code that runs on the server
+
+- **No browser globals at construction time.** `window`, `document`, `location`, `localStorage`, `matchMedia`, `requestAnimationFrame` and `new Image()` do not exist on the server. Inject `DOCUMENT`, and guard browser-only work with `isPlatformBrowser(inject(PLATFORM_ID))` or `afterNextRender`.
+- **No timers during a render.** Zone.js waits for pending `setTimeout`/`setInterval` before sending the page, so an interval started on the server (the contact page's open/closed clock, the experience kiosk reset) hangs the request forever. Start them in the browser only. `ssr-smoke.mjs` fails any route slower than 5 s to catch this.
+- **API URLs come from the tokens, never from `window.location`.** `API_BASE` and `PUBLIC_API_BASE` resolve to the same value on both sides for the same page: `/api` in production, `http://<host>:3000/api` on a development host. That equality matters twice: image `src`s rendered into the HTML must match what the browser renders, and the transfer cache (below) keys responses by the literal request URL.
+- **The cart is browser-only.** `CartService` never loads on the server; it belongs to the visitor's session.
+
+### How server renders reach the API
+
+`app.config.server.ts` replaces the `HttpBackend` on the server. `@angular/platform-server` first makes `/api/x` absolute against the page (`https://elitecollections.qa/api/x`); the backend then sends any request for the page's own host under `/api/` to `API_ORIGIN` (`http://127.0.0.1:3000` in production), so renders never leave the machine. It also drops `Set-Cookie` and `Cache-Control` from those responses: the API sets its CSRF cookie on every response and marks some reads `no-store`, and Angular's transfer cache refuses anything carrying either, which left it empty.
+
+### Transfer cache
+
+`provideClientHydration(withEventReplay(), withHttpTransferCacheOptions(...))` in `app.config.ts` embeds each server-side GET response in the page, so the browser does not fetch the same data again and does not repaint the rendered page with loading states. Cart requests (sent with credentials) and admin preview drafts are excluded.
+
+A request made in the browser during startup has to use the exact URL the server used. That is why `HomeContentService.refresh(true)`, which appends a `?t=` cache-buster, only busts once the app is stable; until then it shares the plain load.
+
+### Language
+
+`LocaleService` stores the choice in `localStorage` and in an `elite_locale` cookie (path `/`, one year, `SameSite=Lax`). The server reads the cookie and renders Arabic with `lang="ar" dir="rtl"` from the first byte, so there is no English flash and no hydration mismatch. Because the HTML varies by cookie, pages must never be cached by nginx or a CDN.
+
+### Environment (`deploy/pm2/elite-web.config.cjs`)
+
+| Variable | Production | Purpose |
+|---|---|---|
+| `HOST` / `PORT` | `127.0.0.1` / `4000` | Loopback only; nginx is the public edge. |
+| `API_ORIGIN` | `http://127.0.0.1:3000` | Where server renders send API requests. |
+| `SITE_URL` | `https://elitecollections.qa` | Origin written into canonical, `og:url` and JSON-LD. |
+
+Allowed `Host` values are compiled in from `security.allowedHosts` in `angular.json` (`elitecollections.qa`, `localhost`, `127.0.0.1`). Any other Host gets a `400` and is never rendered, which is Angular's protection against Host-header SSRF. A new public domain must be added there.
+
+### Verifying
+
+```bash
+cd client
+npm run build:web
+node scripts/ssr-smoke.mjs                                                     # API down: renders degrade, never hang
+node scripts/ssr-smoke.mjs --api https://elitecollections.qa --timeout 20000   # real data (read-only GETs)
+```
+
+The API-down pass also fails if a data page still ships API data, which would mean renders are reaching an API other than `API_ORIGIN`. The API-up pass fails if a data page ships an empty transfer cache.
 
 ---
 
@@ -395,7 +463,7 @@ private readonly seoTags = this.seo.watch(() => ({
 - **`noIndex: true`** emits `<meta name="robots" content="noindex, follow">` and, just as importantly, the tag is **removed** on the next page that does not set it. Navigation is client-side, so a tag left behind would silently de-index the next real page the visitor lands on. Only `NotFoundComponent` sets it today.
 - **`FALLBACK_IMAGE`** is `/assets/brand/og-default.jpg`, a 1200x630 card — not the logo. `og:image` feeds a `summary_large_image` preview, where a tall transparent wordmark is letterboxed or cropped to nonsense. Regenerate the card from `docs/seo/og-image-source.html`.
 
-> **Known limitation:** everything this service writes runs *after* hydration, and no social crawler executes JavaScript. WhatsApp, Facebook, X, LinkedIn and iMessage read the static `index.html` and stop. That file therefore carries a duplicated set of site-level `og:`/`twitter:` tags as a fallback. It deliberately carries **no** `canonical` and **no** `og:url`, because a hardcoded per-URL value would tell every non-JS crawler that all pages are duplicates of the homepage. Both limitations disappear once SSR or prerendering ships.
+> **Server-rendered vs client-rendered routes:** on server-rendered routes (see *Server-Side Rendering*) everything this service writes is already in the HTML the server sends, so social crawlers that never run JavaScript (WhatsApp, Facebook, X, LinkedIn, iMessage) get the per-page tags. On client-rendered routes, and in nginx's fallback shell when the renderer is down, they still read only the static `index.html`. That file therefore keeps a duplicated set of site-level `og:`/`twitter:` tags; `Meta.updateTag` overwrites them in place, so server-rendered pages never carry duplicates. It deliberately carries **no** `canonical` and **no** `og:url`, because a hardcoded per-URL value would tell every non-JS crawler that all pages are duplicates of the homepage. `SITE_ORIGIN` (from `SITE_URL` on the server) is the origin written into canonical, `og:url` and JSON-LD.
 
 
 ### `ProductsService`
@@ -433,8 +501,8 @@ private readonly seoTags = this.seo.watch(() => ({
 
 - **File:** `services/locale.service.ts`
 - **State:** Signal with `'en' | 'ar'` locale
-- **Persistence:** `localStorage` key `elite-web:locale`
-- **Side effects:** Sets `lang` and `dir` attributes on `<html>`, toggles `.rtl` class on `<body>`
+- **Persistence:** `localStorage` key `elite-web:locale`, mirrored to the `elite_locale` cookie (path `/`, one year, `SameSite=Lax`, `Secure` on HTTPS) so the server renders the same language. In the browser `localStorage` wins, then the cookie; on the server only the cookie exists.
+- **Side effects:** Sets `lang` and `dir` attributes on `<html>`, toggles `.rtl` class on `<body>`, through the injected `DOCUMENT` so it works during server rendering too
 - **API:**
   - `locale` — Current locale signal
   - `dir` — Computed `'ltr' | 'rtl'`

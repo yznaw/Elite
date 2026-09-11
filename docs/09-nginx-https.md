@@ -6,7 +6,8 @@ Nginx should terminate public HTTPS for Elite. The Node/Express API stays on pla
 
 | Public URL | Nginx behavior | Upstream |
 |---|---|---|
-| `https://elitecollections.qa/` | Serves storefront Angular build | `/var/www/elite/client/dist/client-web/browser` |
+| `https://elitecollections.qa/` (built files) | Serves storefront Angular build | `/var/www/elite/client/dist/client-web/browser` |
+| `https://elitecollections.qa/` (pages) | Proxies to the render server; falls back to `index.csr.html` | `http://127.0.0.1:4000` (PM2 `elite-web`) |
 | `https://admin.elitecollections.qa/` | Serves admin Angular build | `/var/www/elite/client/dist/admin-portal/browser` |
 | `https://elitecollections.qa/api/*` | Proxies API requests | `http://127.0.0.1:3000` |
 | `https://admin.elitecollections.qa/api/*` | Proxies API requests | `http://127.0.0.1:3000` |
@@ -53,8 +54,7 @@ sudo cp /var/www/elite/deploy/nginx/compression.conf  /etc/nginx/conf.d/compress
 
 Two files, deliberately. Compression is http-context configuration; `sites-enabled/*` is included *inside* the http block, so keeping those directives in the site file put them in http context as well and collided with the `gzip on;` that Ubuntu's stock `nginx.conf` already sets — `nginx -t` fails outright with *"gzip directive is duplicate"*. A second site file would have hit the same wall.
 
-It carries three things beyond a plain SPA host, each marked with a numbered
-comment in the file:
+It carries four things beyond a plain SPA host:
 
 1. **Compression** (in `compression.conf`). Ubuntu's stock `nginx.conf` has
    `gzip on;` active but leaves `gzip_types` commented out, so nginx falls back
@@ -66,15 +66,29 @@ comment in the file:
    served the entire site. Since the storefront derives its canonical URL from
    `location.origin`, the www copy declared *itself* canonical, so the two
    hostnames competed as separate sites. www now only issues a 301.
-3. **Caching** (in `elite.conf`). `index.html` is `no-store` because it names the current build's
-   hashed files. Hashed `.js`/`.css` are immutable for a year. `/assets/` is
+3. **Caching** (in `elite.conf`). The shell `index.csr.html` is `no-store` because it names the current build's
+   hashed files; server-rendered pages send their own `no-store` from
+   `server.ts`. Hashed `.js`/`.css` are immutable for a year. `/assets/` is
    deliberately only 7 days, because those filenames are *not* hashed and a
    longer TTL would mean a replaced image takes a year to reach return visitors.
+   Never add an nginx cache for pages: the rendered HTML depends on the
+   visitor's `elite_locale` cookie.
+4. **Server-side rendering with a fallback** (in `elite.conf`). A request that
+   matches a built file is answered from disk. Everything else is a page and goes
+   to `location @ssr`, the `elite-web` PM2 process on `127.0.0.1:4000`
+   (`deploy/pm2/elite-web.config.cjs`). If that answers `500`, `502`, `503` or
+   `504` (crashed render, process down, or no answer within 10 s), nginx serves
+   `index.csr.html` from `location @csr` instead, which is how the storefront
+   worked before SSR. A `404` from the renderer is a real answer and passes
+   through. The build no longer contains `index.html`, so the old
+   `try_files $uri $uri/ /index.html` must not come back. First-time rollout
+   steps are in `docs/DEPLOYMENT.md` section 7c.
 
-> **If certbot has already run on this server, do not overwrite the live file.**
+> **If certbot has already run on this server, do not overwrite the live file blind.**
 > `certbot --nginx` rewrites it in place, adding `listen 443 ssl`, the
-> certificate paths and its own port-80 redirects. Merge the three numbered
-> blocks into the existing file instead.
+> certificate paths and its own port-80 redirects. Back it up and `diff` it
+> against the repo file first; copy only when the differences are the blocks
+> above, otherwise merge them into the existing file by hand.
 
 Enable and reload it:
 

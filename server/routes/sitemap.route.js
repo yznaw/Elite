@@ -39,11 +39,12 @@ function urlEntry({ loc, lastmod, changefreq, priority }) {
 // Routes with no dynamic segment, from client/projects/client-web/src/app/app.routes.ts.
 // Checkout, thank-you and the checkout result pages are deliberately absent:
 // they are transactional dead ends with nothing to index.
+// /experience is absent too: it is the in-store feedback kiosk, linked from the
+// admin feedback page, not a page a searcher should ever land on.
 const STATIC_ROUTES = [
   { path: '/',           changefreq: 'weekly',  priority: '1.0' },
   { path: '/collection', changefreq: 'daily',   priority: '0.9' },
   { path: '/story',      changefreq: 'monthly', priority: '0.6' },
-  { path: '/experience', changefreq: 'monthly', priority: '0.6' },
   { path: '/contact',    changefreq: 'monthly', priority: '0.5' },
 ];
 

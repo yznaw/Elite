@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { SeoService } from '../../services/seo.service';
+import { API_BASE } from '../../core/api-base';
 
 interface PolicyPage {
   id: string;
@@ -294,12 +295,8 @@ export class PolicyComponent implements OnInit {
   readonly loading = signal(true);
   readonly error   = signal(false);
   readonly policy  = signal<PolicyPage | null>(null);
+  private readonly apiBase = inject(API_BASE);
 
-  private get apiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   async ngOnInit(): Promise<void> {
     const handle = this.route.snapshot.paramMap.get('handle') ?? '';

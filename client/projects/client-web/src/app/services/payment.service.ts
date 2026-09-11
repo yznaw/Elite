@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { API_BASE } from '../core/api-base';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -17,7 +18,7 @@ interface SadadInitiateResponse {
 @Injectable({ providedIn: 'root' })
 export class PaymentService {
   private readonly http = inject(HttpClient);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
 
   /**
    * Initiate a Sadad Web Checkout 2.1 payment for the given order.
@@ -74,16 +75,4 @@ export class PaymentService {
     form.submit();
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal =
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '::1' ||
-      hostname === '[::1]' ||
-      /^10\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 }

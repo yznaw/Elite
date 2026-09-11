@@ -1,6 +1,6 @@
 # Elite Production Deployment Guide
 
-> Production host: `vmi3327182` · repository: `/var/www/elite` · API: PM2 process `elite-api` on port `3000` · public traffic: Nginx over HTTPS.
+> Production host: `vmi3327182` · repository: `/var/www/elite` · API: PM2 process `elite-api` on port `3000` · storefront renderer: PM2 process `elite-web` on `127.0.0.1:4000` · public traffic: Nginx over HTTPS.
 
 This release deploys the API, both Angular applications, migrations `022`–`025`, POS diagnostics, inventory operations, and the production POS offline package. Deploy them as one coordinated release; do not upload only selected files.
 
@@ -47,6 +47,8 @@ npm run build:all
 
 `build:admin` also generates and audits the POS-only precache manifest. A failure there is a release failure; do not serve a manually copied old `dist` directory.
 
+`build:web` produces two halves: `dist/client-web/browser/` (static files, including the client-rendered fallback shell `index.csr.html`; there is **no** `index.html` any more) and `dist/client-web/server/server.mjs`, which `elite-web` runs. The build replaces the whole `dist/client-web` directory, so `elite-web` must be reloaded after every build (section 4). A renderer left running on the previous build loads the new build's route chunks from disk and renders HTML that mixes the two.
+
 Do not run `npm audit fix` during a deploy. Dependency remediation is a reviewed code change with its own tests. Do not run `npm run db:migrate` for this release: that legacy script applies only `001_initial_schema.sql`, not incremental POS migrations.
 
 ## 4. Restart API and apply database migrations
@@ -75,12 +77,30 @@ Columns worth spot-checking after a release: `pos_transaction_items.product_name
 
 Every value must be present. These migrations are additive and idempotent, but verification is mandatory.
 
+### Storefront renderer (`elite-web`)
+
+```bash
+cd /var/www/elite
+pm2 startOrReload deploy/pm2/elite-web.config.cjs
+pm2 save
+pm2 logs elite-web --lines 50
+```
+
+`startOrReload` creates the process on the first deploy and reloads it on every later one; `pm2 save` makes it survive a reboot. The config file defines only `elite-web`, so running it can never restart or reconfigure `elite-api`. The log must show `Storefront SSR listening on http://127.0.0.1:4000`.
+
+The storefront stays up if this process is down: nginx serves the client-rendered shell instead (see `docs/09-nginx-https.md`), so pages only lose server rendering until it is back. The very first SSR deploy also needs the one-time nginx switch in section 7c.
+
 ## 5. Health and smoke verification
 
 ```bash
 pm2 status
 curl --fail --silent http://127.0.0.1:3000/api/health
 nginx -t
+
+# Storefront server rendering
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: elitecollections.qa' http://127.0.0.1:4000/contact   # 200
+curl -s https://elitecollections.qa/contact | grep -o '<link rel="canonical"[^>]*>'                    # present in the raw HTML
+curl -s -o /dev/null -w '%{http_code}\n' https://elitecollections.qa/this-page-does-not-exist          # 404
 ```
 
 Then verify through the public HTTPS URLs:
@@ -137,7 +157,10 @@ git switch --detach <previous-commit-hash>
 cd server && npm ci --omit=dev
 cd ../client && npm ci && npm run build:all
 cd .. && pm2 reload elite-api --update-env
+pm2 reload elite-web
 ```
+
+Rolling back to a commit from before server-side rendering is different, because that build produces `index.html` and no `server.mjs`: restore the nginx backup from section 7c (reload nginx), then `pm2 delete elite-web && pm2 save`, then rebuild as above.
 
 Migrations `022`–`025` are additive, so the prior application can normally run with the added tables/columns. Do not reverse database migrations or restore the production backup merely to remove unused additive schema. Restore data only for confirmed data corruption and follow the restore runbook.
 
@@ -264,6 +287,66 @@ Section 7 applies for the code. The backfill does not need rolling back and
 should not be: it only added derived files and populated empty metadata, and the
 older code ignores both. Rolling the code back leaves the new variants sitting
 unused.
+
+## 7c. Storefront server-side rendering: first deploy (September 2026)
+
+A one-time switch. Afterwards a normal deploy is sections 3–5 with nothing extra.
+
+**What changes for visitors and crawlers:** `/`, `/collection…`, `/story`, `/contact` and `/policy/…` arrive as complete HTML rendered by `elite-web`, in the visitor's language. Product, checkout, thank-you and experience pages are still client-rendered. Unknown URLs now answer a real `404` instead of `200`. No URL changes.
+
+**Order matters.** The new build contains no `index.html`, and the current nginx site falls back to exactly that file, so between the build finishing and nginx being switched every page would fail. The steps below close that gap.
+
+1. On the development machine, capture a fresh URL baseline (the pre-SSR one from 11 September 2026 is committed at `client/scripts/baselines/2026-09-11-pre-ssr.json`):
+   ```bash
+   cd client && node scripts/url-baseline.mjs capture scripts/baselines/before.json
+   ```
+2. On the VPS, pull and build (section 3), then bridge the old nginx config for the next few minutes:
+   ```bash
+   cp /var/www/elite/client/dist/client-web/browser/index.csr.html /var/www/elite/client/dist/client-web/browser/index.html
+   ```
+3. Reload the API and start the renderer (section 4), then check the renderer directly:
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: elitecollections.qa' http://127.0.0.1:4000/contact
+   ```
+   Expect `200`.
+4. Back up the live site file and compare it with the repo:
+   ```bash
+   sudo cp /etc/nginx/sites-available/elite /root/elite.nginx.$(date +%F-%H%M).bak
+   diff -u /etc/nginx/sites-available/elite /var/www/elite/deploy/nginx/elite.conf
+   ```
+   The only differences should be inside the storefront `server_name elitecollections.qa;` block: `index index.html;` removed, the new `location /`, `location @ssr` and `location @csr` blocks, `location = /index.html` renamed to `location = /index.csr.html`, and their comments. Nothing on a `# managed by Certbot` line. If that is all, copy and reload:
+   ```bash
+   sudo cp /var/www/elite/deploy/nginx/elite.conf /etc/nginx/sites-available/elite
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+   If the diff shows anything else, stop and edit the live file by hand instead.
+5. Verify through the public site:
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' https://elitecollections.qa/                          # 200
+   curl -s https://elitecollections.qa/contact | grep -o '<h1[^>]*>[^<]*'                         # real heading in the raw HTML
+   curl -s -o /dev/null -w '%{http_code}\n' https://elitecollections.qa/this-page-does-not-exist  # 404
+   curl -s -o /dev/null -w '%{http_code}\n' https://elitecollections.qa/checkout                  # 200
+   curl -sI https://www.elitecollections.qa/ | head -3                                            # 301 to the apex
+   ```
+   Then on the development machine:
+   ```bash
+   cd client
+   node scripts/url-baseline.mjs capture scripts/baselines/after.json
+   node scripts/url-baseline.mjs compare scripts/baselines/2026-09-11-pre-ssr.json scripts/baselines/after.json
+   ```
+   The only accepted differences are an unknown URL going `200 → 404` and `/?order_id=…` becoming a redirect to `/checkout/failure`. Anything else: roll back.
+6. Prove the fallback once:
+   ```bash
+   pm2 stop elite-web
+   curl -s -o /dev/null -w '%{http_code}\n' https://elitecollections.qa/contact   # still 200, client-rendered shell
+   pm2 start elite-web
+   ```
+7. Remove the bridge copy, which nothing uses any more:
+   ```bash
+   rm /var/www/elite/client/dist/client-web/browser/index.html
+   ```
+
+**Rollback:** put the bridge copy back (step 2) if it was removed, restore the nginx backup from step 4 and reload nginx, run `pm2 delete elite-web && pm2 save`, then rebuild the previous commit (section 7).
 
 ## 8. Release sign-off
 

@@ -9,6 +9,7 @@ import { CheckoutService } from '../../services/checkout.service';
 import { DeliveryQuote } from '../../services/checkout.service';
 import { PaymentService } from '../../services/payment.service';
 import { I18nService } from '../../services/i18n.service';
+import { API_BASE } from '../../core/api-base';
 
 // Written just before the browser is sent to Sadad. On Back, ngOnInit reads
 // this and silently resumes the checkout at the Payment step.
@@ -51,6 +52,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
   private readonly i18n = inject(I18nService);
+  private readonly apiBase = inject(API_BASE);
 
   readonly termsHandle   = signal<string | null>(null);
   readonly privacyHandle = signal<string | null>(null);
@@ -62,11 +64,6 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   // successful order so the next checkout gets a fresh key.
   private idempotencyKey: string | null = null;
 
-  private get apiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   // Bound reference so we can add AND remove the same listener.
   private readonly onPageShow = (event: PageTransitionEvent): void => {

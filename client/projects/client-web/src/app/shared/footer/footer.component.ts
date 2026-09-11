@@ -8,6 +8,7 @@ import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { SocialLink } from '../../models/home-content.model';
 import { NousBadgeComponent } from '../nous-badge/nous-badge.component';
+import { API_BASE } from '../../core/api-base';
 
 interface FooterLink {
   labelKey: string;
@@ -311,6 +312,7 @@ export class FooterComponent implements OnInit {
     this.locale.locale() === 'ar' ? (p.titleAr || p.title) : p.title;
   private readonly http = inject(HttpClient);
   private readonly homeContent = inject(HomeContentService);
+  private readonly apiBase = inject(API_BASE);
   readonly t = this.i18n.t;
   readonly currentYear = new Date().getFullYear();
   readonly policyLinks = signal<PolicyMeta[]>([]);
@@ -318,11 +320,6 @@ export class FooterComponent implements OnInit {
     this.homeContent.contentData().contact?.socialLinks?.filter((s) => s.enabled) ?? []
   );
 
-  private get apiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   async ngOnInit(): Promise<void> {
     void this.homeContent.refresh();

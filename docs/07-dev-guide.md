@@ -84,7 +84,10 @@ npm run admin    # admin-portal only
 |---|---|---|
 | `npm run start` | `ng serve client-web` | Storefront on :4200 |
 | `npm run start:admin` | `ng serve admin-portal --port 4300` | Admin on :4300 |
-| `npm run build:web` | Production build (client-web) | → `dist/client-web/` |
+| `npm run build:web` | Production build (client-web) | → `dist/client-web/browser/` (static files, `index.csr.html`) and `dist/client-web/server/server.mjs` |
+| `npm run serve:ssr:client-web` | `node dist/client-web/server/server.mjs` | Run the built render server locally (`PORT`, `HOST`, `API_ORIGIN`, `SITE_URL`) |
+| `node scripts/ssr-smoke.mjs` | Render every route, API down (add `--api <origin>` for real data) | SSR gate; fails on crashes, hangs, wrong status, or a broken transfer cache |
+| `node scripts/url-baseline.mjs` | `capture <out.json> [origin]` / `compare <before> <after>` | Record and diff every public URL's status and redirect around a release |
 | `npm run build:admin` | Production build (admin-portal) | → `dist/admin-portal/` |
 | `npm run build:all` | Build both apps | Full production build |
 | `npm run lint` | `ng lint` | Run linter |
@@ -234,7 +237,9 @@ Failures upload a Playwright trace and screenshots under `client/test-results`. 
 
 ### Run the storefront hero suite
 
-Separate from the POS gate: it drives the storefront on :4200 with the API behind it, and replaces the hero payload per test rather than seeding a tenant.
+Separate from the POS gate: it drives the storefront with the API behind it, and replaces the hero payload per test rather than seeding a tenant.
+
+The storefront runs **client-rendered** for this suite, on its own port (`ng serve client-web --configuration csr --port 4210`). The tests swap content by intercepting the browser's `/api/storefront-content` request; with server-side rendering the page arrives already rendered and hydrates from the transfer cache, so that request never happens and the swapped payload would be silently ignored. The `csr` configuration in `angular.json` exists only for this. Server rendering is covered separately by `node scripts/ssr-smoke.mjs`.
 
 ```bash
 cd client && npm run test:hero
@@ -245,7 +250,7 @@ Two files, deliberately split by what they hold:
 - `e2e-hero/hero-resilience.spec.ts` — **layout** against content nobody has authored yet. Ten viewports, hostile copy lengths, an unmapped colour, a slide with no art. Every assertion is a measurement taken once the page is still.
 - `e2e-hero/hero-interaction.spec.ts` — **state** against input nobody has sent yet. Rapid and interleaved taps, images resolving out of order, a stalled decode, a failed load, reduced motion, and hit-testing the arrows across their width.
 
-It reuses an already-running `npm run dev`, so a developer with one open gets an instant run.
+It reuses an already-running API (`npm run dev`), but always starts its own client-rendered storefront on :4210 rather than reusing a server-rendering `npm start` on :4200.
 
 **What it cannot certify.** Chromium will not reproduce Safari's double-tap zoom. The suite proves the contract that prevents it — the declared `touch-action` on each control and the absence of a scale cap in the viewport meta — but a physical iPhone pass stays mandatory before shipping hero changes.
 

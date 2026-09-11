@@ -7,9 +7,10 @@ import {
   computed,
   inject,
   signal,
-  ChangeDetectionStrategy
+  ChangeDetectionStrategy,
+  PLATFORM_ID,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -23,6 +24,7 @@ import { HomeCollectionTileContent, HeroColorContent } from '../../models/home-c
 import { colorKey } from '../../utils/color-slug';
 import { mediaVariantKey, resolveClientMediaUrl } from '../../utils/media-url';
 import { SeoService } from '../../services/seo.service';
+import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -115,7 +117,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly referenceData = inject(ReferenceDataService);
   private readonly productsService = inject(ProductsService);
   private readonly seo          = inject(SeoService);
-  private readonly apiBase      = this.resolveApiBase();
+  private readonly apiBase      = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
+  private readonly isBrowser    = isPlatformBrowser(inject(PLATFORM_ID));
 
   // Field initializer, so the effect is owned by this component's injector and
   // is torn down on navigation. Re-runs when the locale flips.
@@ -427,11 +431,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly isArabic = computed(() => this.locale.locale() === 'ar');
 
   ngOnInit(): void {
-    this.heroStackedMedia = window.matchMedia(HERO_STACKED_QUERY);
-    this.heroStackedMedia.addEventListener('change', this.onHeroStackedViewportChange);
-    this.heroReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
-    this.heroReducedMotion.set(this.heroReducedMotionMedia.matches);
-    this.heroReducedMotionMedia.addEventListener('change', this.onHeroMotionPreferenceChange);
+    // Media queries, image preloads, the swipe hint and the meta reveal are all
+    // browser-only: none of window, matchMedia, Image or requestAnimationFrame
+    // exist in a server render, and a pending timer there would stop the page
+    // from ever finishing. The data loads below still run on the server, which
+    // is what puts real content into the rendered HTML.
+    if (this.isBrowser) {
+      this.heroStackedMedia = window.matchMedia(HERO_STACKED_QUERY);
+      this.heroStackedMedia.addEventListener('change', this.onHeroStackedViewportChange);
+      this.heroReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+      this.heroReducedMotion.set(this.heroReducedMotionMedia.matches);
+      this.heroReducedMotionMedia.addEventListener('change', this.onHeroMotionPreferenceChange);
+    }
     void this.referenceData.ensureColors();
     // Feeds the `+N` colour chip. The service caches for 60s and revalidates on
     // return, so an admin adding a colourway shows up without a hard reload.
@@ -440,11 +451,14 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.loadCollectionTiles(),
       this.homeContent.refresh(true),
     ]).then(() => {
+      if (!this.isBrowser) return;
       this.preloadHeroAssets();
       this.preloadHeroColorImages();
       this.scheduleHeroSwipeHint();
     });
-    this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
+    if (this.isBrowser) {
+      this.metaTimer = window.setTimeout(() => this.metaVisible.set(true), 1800);
+    }
   }
 
   ngOnDestroy(): void {
@@ -1211,20 +1225,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     document.head.appendChild(link);
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal =
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '::1' ||
-      hostname === '[::1]' ||
-      /^10\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private resolveMediaUrl(url: string | null): string {
-    return resolveClientMediaUrl(url, this.apiBase);
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 }

@@ -20,7 +20,9 @@
             "outputPath": "dist/client-web",
             "index": "projects/client-web/src/index.html",
             "browser": "projects/client-web/src/main.ts",
-            "polyfills": ["zone.js"],
+            "polyfills": [
+              "zone.js"
+            ],
             "tsConfig": "projects/client-web/tsconfig.app.json",
             "assets": [
               "projects/client-web/src/favicon.ico",
@@ -32,8 +34,18 @@
                 "output": "/"
               }
             ],
-            "styles": ["projects/client-web/src/styles.scss"],
-            "scripts": []
+            "styles": [
+              "projects/client-web/src/styles.scss"
+            ],
+            "scripts": [],
+            "server": "projects/client-web/src/main.server.ts",
+            "outputMode": "server",
+            "security": {
+              "allowedHosts": ["elitecollections.qa", "localhost", "127.0.0.1"]
+            },
+            "ssr": {
+              "entry": "projects/client-web/src/server.ts"
+            }
           },
           "configurations": {
             "production": {
@@ -47,6 +59,11 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "csr": {
+              "server": false,
+              "ssr": false,
+              "outputMode": "static"
             }
           },
           "defaultConfiguration": "production"
@@ -55,7 +72,8 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": { "buildTarget": "client-web:build:production" },
-            "development": { "buildTarget": "client-web:build:development" }
+            "development": { "buildTarget": "client-web:build:development" },
+            "csr": { "buildTarget": "client-web:build:development,csr" }
           },
           "defaultConfiguration": "development",
           "options": { "host": "0.0.0.0", "port": 4200 }

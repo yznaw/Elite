@@ -1,5 +1,5 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, DestroyRef, OnInit, PLATFORM_ID, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -9,6 +9,7 @@ import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { ContactBranch, ContactStockist, SocialLink } from '../../models/home-content.model';
 import { SeoService } from '../../services/seo.service';
+import { API_BASE } from '../../core/api-base';
 
 /** Whole hour to a schema.org / display friendly `HH:MM`. */
 function hhmm(h: number): string {
@@ -50,7 +51,8 @@ export class ContactComponent implements OnInit {
    * `dohaNow()` is what makes the badge a live value instead of a snapshot.
    */
   private readonly nowTick = signal(Date.now());
-  private readonly apiBase     = this.resolveApiBase();
+  private readonly apiBase     = inject(API_BASE);
+  private readonly isBrowser   = isPlatformBrowser(inject(PLATFORM_ID));
 
   private readonly seoTags = this.seo.watch(() => ({
     title: this.i18n.t('seo.contact.title'),
@@ -231,8 +233,15 @@ export class ContactComponent implements OnInit {
     // 30s is frequent enough that the badge never reads stale for more than
     // half a minute, and light enough (one signal write, no HTTP) to leave
     // running for as long as a visitor stays on the page.
-    const timer = setInterval(() => this.nowTick.set(Date.now()), 30_000);
-    this.destroyRef.onDestroy(() => clearInterval(timer));
+    //
+    // Browser only. A server render waits for pending timers before it
+    // serialises, and an interval never finishes, so this would hang the
+    // render indefinitely. The server's own Date.now() is a correct badge for
+    // the moment the page is sent.
+    if (this.isBrowser) {
+      const timer = setInterval(() => this.nowTick.set(Date.now()), 30_000);
+      this.destroyRef.onDestroy(() => clearInterval(timer));
+    }
   }
 
   set<K extends keyof ContactForm>(key: K, value: ContactForm[K]): void {
@@ -271,17 +280,6 @@ export class ContactComponent implements OnInit {
     }
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private sanitizePhone(phone: string): string {
     return phone.trim().replace(/\D/g, '');

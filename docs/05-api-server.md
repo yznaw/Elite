@@ -171,9 +171,11 @@ See `server/routes/sitemap.route.js`. No auth required. Generated from live data
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/sitemap.xml` | `application/xml` sitemap covering the storefront's indexable URLs: the static pages (`/`, `/collection`, `/story`, `/experience`, `/contact`), every `status = 'active'` collection (nested ones as `/collection/:parent/:child`), every `status = 'active'` product (`/product/:id`), and every `status = 'active'` policy (`/policy/:handle`). `<lastmod>` comes from each row's `updated_at`. |
+| `GET` | `/api/sitemap.xml` | `application/xml` sitemap covering the storefront's indexable URLs: the static pages (`/`, `/collection`, `/story`, `/contact`), every `status = 'active'` collection (nested ones as `/collection/:parent/:child`), every `status = 'active'` product (`/product/:id`), and every `status = 'active'` policy (`/policy/:handle`). `<lastmod>` comes from each row's `updated_at`. |
 
-Checkout, `/thank-you` and the checkout-result routes are deliberately excluded — transactional dead ends with nothing to index. Crawlers reach this at `https://elitecollections.qa/sitemap.xml`; nginx proxies that root path to this endpoint so the SPA fallback does not answer it with `index.html` (see `docs/09-nginx-https.md`). `robots.txt` ships as a static asset with the Angular bundle at `client/projects/client-web/src/robots.txt` and points at the same URL.
+Checkout, `/thank-you` and the checkout-result routes are deliberately excluded — transactional dead ends with nothing to index. So is `/experience`, the in-store feedback kiosk. Crawlers reach this at `https://elitecollections.qa/sitemap.xml`; nginx proxies that root path to this endpoint so the storefront's page renderer does not answer it as a `404` page (see `docs/09-nginx-https.md`).
+
+The storefront's server renders also call the public read endpoints (`/api/config`, `/api/products`, `/api/collections`, `/api/storefront-content`, `/api/storefront/published`, `/api/ref/*`, `/api/policies/*`) over loopback from PM2 `elite-web`, without cookies. All of them must stay usable without a session; see *Server-Side Rendering* in `docs/03-client-web.md`. `robots.txt` ships as a static asset with the Angular bundle at `client/projects/client-web/src/robots.txt` and points at the same URL.
 
 ### Admin — Products (`/api/admin/products`)
 

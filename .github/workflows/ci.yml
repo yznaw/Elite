@@ -55,7 +55,7 @@ jobs:
         working-directory: server
 
   client-build:
-    name: Admin build
+    name: Client builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +67,15 @@ jobs:
       - run: npm ci
         working-directory: client
       - run: npm run build:admin
+        working-directory: client
+      # The storefront was never built in CI, so a change that broke it only
+      # surfaced during a production deploy. It now also carries the SSR server
+      # bundle, which is the half most likely to break unnoticed.
+      - run: npm run build:web
+        working-directory: client
+      # Renders every route with the API unreachable: catches a render that
+      # crashes on a browser global, hangs on a timer, or loses its 404 status.
+      - run: node scripts/ssr-smoke.mjs
         working-directory: client
 
   browser:

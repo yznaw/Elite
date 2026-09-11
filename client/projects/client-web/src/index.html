@@ -20,9 +20,11 @@
        and no social crawler executes JavaScript: WhatsApp, Facebook, X,
        LinkedIn and iMessage read this file and stop. Without these, every
        shared link previewed with no image at all. These are the site-level
-       fallback; per-page values still come from SeoService for anything that
-       does run JS (Google included). Remove only once SSR/prerender ships,
-       which is what makes SeoService's output visible to crawlers.
+       fallback. On server-rendered routes SeoService overwrites them in the
+       HTML itself, so crawlers get the per-page values. They stay for the
+       routes that are still client-rendered (see app.routes.server.ts) and for
+       nginx's fallback shell when the SSR process is down, which is this
+       file served as-is. Do not remove them while either still exists.
        Keep in sync with seo.* in i18n/strings.ts and with brand.config.json.
 
        No static canonical or og:url here on purpose. Both are per-URL values,

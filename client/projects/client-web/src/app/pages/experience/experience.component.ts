@@ -1,14 +1,15 @@
 import {
   Component, OnInit, OnDestroy, inject, signal, computed, HostListener,
-  ChangeDetectionStrategy
+  ChangeDetectionStrategy, PLATFORM_ID
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { I18nService } from '../../services/i18n.service';
 import { SeoService } from '../../services/seo.service';
 import { firstValueFrom } from 'rxjs';
+import { API_BASE } from '../../core/api-base';
 
 type ExperienceView = 'main' | 'thanks';
 type ExperienceLang = 'en' | 'ar';
@@ -701,16 +702,14 @@ export class ExperienceComponent implements OnInit, OnDestroy {
   private activityTimer: ReturnType<typeof setTimeout> | null = null;
   private countdownInterval: ReturnType<typeof setInterval> | null = null;
 
-  private readonly apiBase = (() => {
-    const isLocal = typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    return isLocal
-      ? `${window.location.protocol}//${window.location.hostname}:3000/api`
-      : '/api';
-  })();
+  private readonly apiBase = inject(API_BASE);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   ngOnInit(): void {
-    this.startActivity();
+    // The idle reset re-arms itself every 60s forever. This route is rendered
+    // in the browser today, but if it is ever switched to server rendering an
+    // unguarded timer here would hang that render indefinitely.
+    if (this.isBrowser) this.startActivity();
   }
 
   ngOnDestroy(): void { this.clearTimers(); this.clearLowRatingCountdown(); }

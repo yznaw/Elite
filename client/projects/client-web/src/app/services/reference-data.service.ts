@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { resolveClientMediaUrl } from '../utils/media-url';
+import { API_BASE, PUBLIC_API_BASE } from '../core/api-base';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -36,7 +37,8 @@ export interface RefSizeSet {
 @Injectable({ providedIn: 'root' })
 export class ReferenceDataService {
   private readonly http = inject(HttpClient);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
   // This endpoint is tiny and admin-managed. Revalidate on page navigation so
   // a newly saved Arabic color name replaces the in-memory value promptly.
   private readonly cacheMs = 0;
@@ -158,19 +160,8 @@ export class ReferenceDataService {
     return this.sizeSetsPromise;
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private resolveMediaUrl(url: string | null | undefined): string {
-    return resolveClientMediaUrl(url, this.apiBase);
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 }

@@ -12,6 +12,7 @@ import { ReferenceDataService } from '../../services/reference-data.service';
 import { AnalyticsService } from '../../services/analytics.service';
 import { colorKey, colorSlug } from '../../utils/color-slug';
 import { SeoService } from '../../services/seo.service';
+import { API_BASE } from '../../core/api-base';
 
 interface Accordion {
   id: string;
@@ -79,7 +80,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly referenceData = inject(ReferenceDataService);
   private readonly analytics = inject(AnalyticsService);
   private readonly seo = inject(SeoService);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
 
   /**
    * Head tags for the product on screen. Null while it loads, so a shared link
@@ -1143,15 +1144,4 @@ export class ProductComponent implements OnInit, OnDestroy {
     }
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 }

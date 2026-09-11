@@ -3,6 +3,7 @@ import { Meta, Title } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { I18nService } from './i18n.service';
 import { LocaleService } from './locale.service';
+import { SITE_ORIGIN } from '../core/api-base';
 
 /**
  * What a page wants search engines and link previews to show.
@@ -45,6 +46,7 @@ export class SeoService {
   private readonly router = inject(Router);
   private readonly i18n = inject(I18nService);
   private readonly locale = inject(LocaleService);
+  private readonly siteOrigin = inject(SITE_ORIGIN);
 
   /**
    * Keep the head in sync with a page's own signals.
@@ -102,9 +104,13 @@ export class SeoService {
   /**
    * Absolute origin of the storefront. Every og: and canonical value has to be
    * absolute — a relative og:image is silently dropped by every crawler.
+   *
+   * Comes from SITE_ORIGIN rather than the document's own location: behind
+   * nginx a server render sees the proxied request, which can report http://
+   * or an internal host, and would bake that into every canonical and og:url.
    */
   origin(): string {
-    return this.doc.defaultView?.location.origin ?? '';
+    return this.siteOrigin;
   }
 
   private currentPath(): string {

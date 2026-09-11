@@ -11,6 +11,7 @@ import { CartService } from '../../services/cart.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
 import { resolveClientMediaUrl } from '../../utils/media-url';
 import { SeoService } from '../../services/seo.service';
+import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
@@ -111,7 +112,8 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private readonly cart = inject(CartService);
   private readonly referenceData = inject(ReferenceDataService);
   private readonly seo = inject(SeoService);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
 
   /**
    * Head tags for whichever collection the route is pointing at. Returns null
@@ -1012,20 +1014,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
     }
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private resolveMediaUrl(url: string | null): string {
-    return resolveClientMediaUrl(url, this.apiBase);
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 
   private setupMobilePagination(): void {
