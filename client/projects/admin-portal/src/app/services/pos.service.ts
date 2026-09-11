@@ -13,6 +13,8 @@ export interface PosCatalogItem {
   variant: string;
   size: string;
   color: string;
+  /** Arabic reference-list name for the colour, snapshotted on a sale. */
+  colorAr: string;
   material: string;
   sku: string;
   barcode: string;
@@ -102,7 +104,11 @@ export interface PosTransactionItem {
   id: string;
   variantId: string | null;
   name: string;
+  nameAr?: string | null;
   variant: string;
+  color?: string | null;
+  colorAr?: string | null;
+  size?: string | null;
   sku: string;
   quantity: number;
   refundableQty: number;

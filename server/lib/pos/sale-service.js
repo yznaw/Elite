@@ -21,6 +21,7 @@ function mapCatalogRow(row) {
     variant: variantTitle(row),
     size: row.size || '',
     color: row.color || '',
+    colorAr: row.color_ar || '',
     material: row.material || '',
     sku: row.sku,
     barcode: row.barcode || '',
@@ -80,6 +81,14 @@ async function searchProducts(context, query) {
          p.pos_status AS product_pos_status,
          pt.name AS product_name_ar,
          pv.id AS variant_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
+         COALESCE((
+           SELECT NULLIF(btrim(rc.name_ar), '')
+           FROM ref_colors rc
+           WHERE rc.tenant_id = pv.tenant_id
+             AND (rc.id = pv.color_ref_id OR lower(btrim(rc.name_en)) = lower(btrim(pv.color)))
+           ORDER BY (rc.id = pv.color_ref_id) DESC
+           LIMIT 1
+         ), '') AS color_ar,
          pv.price_cents, pv.stock_quantity, pv.is_active,
          COALESCE(pm.preview_url, pm.storage_url, '') AS image_url
        FROM product_variants pv
@@ -147,6 +156,14 @@ async function findByBarcode(context, barcodeValue) {
          p.pos_status AS product_pos_status,
          pt.name AS product_name_ar,
          pv.id AS variant_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
+         COALESCE((
+           SELECT NULLIF(btrim(rc.name_ar), '')
+           FROM ref_colors rc
+           WHERE rc.tenant_id = pv.tenant_id
+             AND (rc.id = pv.color_ref_id OR lower(btrim(rc.name_en)) = lower(btrim(pv.color)))
+           ORDER BY (rc.id = pv.color_ref_id) DESC
+           LIMIT 1
+         ), '') AS color_ar,
          pv.price_cents, pv.stock_quantity, pv.is_active,
          COALESCE(pm.preview_url, pm.storage_url, '') AS image_url
        FROM product_variants pv
@@ -245,6 +262,9 @@ async function loadSale(client, tenantId, transactionId) {
          'name', i.product_name,
          'nameAr', i.product_name_ar,
          'variant', i.variant_title,
+         'color', i.color,
+         'colorAr', i.color_ar,
+         'size', i.size,
          'sku', i.sku,
          'barcode', i.barcode,
          'quantity', i.quantity,
@@ -391,6 +411,14 @@ async function createSale(context, body, options = {}) {
     const variantIds = sale.items.map((item) => item.variantId);
     const variantsResult = await client.query(
       `SELECT pv.id, pv.product_id, pv.sku, pv.barcode, pv.size, pv.color, pv.material,
+         COALESCE((
+           SELECT NULLIF(btrim(rc.name_ar), '')
+           FROM ref_colors rc
+           WHERE rc.tenant_id = pv.tenant_id
+             AND (rc.id = pv.color_ref_id OR lower(btrim(rc.name_en)) = lower(btrim(pv.color)))
+           ORDER BY (rc.id = pv.color_ref_id) DESC
+           LIMIT 1
+         ), '') AS color_ar,
          pv.price_cents, pv.stock_quantity, pv.is_active,
          p.name AS product_name, p.status AS product_status, p.pos_status AS product_pos_status,
          -- Snapshotted onto the sale below, not joined at print time: a receipt
@@ -588,9 +616,9 @@ async function createSale(context, body, options = {}) {
       await client.query(
         `INSERT INTO pos_transaction_items (
            tenant_id, transaction_id, order_item_id, product_id, variant_id,
-           sku, barcode, product_name, product_name_ar, variant_title, quantity,
+           sku, barcode, product_name, product_name_ar, variant_title, color, color_ar, size, quantity,
            unit_price_cents, tax_rate, tax_amount_cents, line_total_cents
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,0,$13)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,0,$16)`,
         [
           context.tenantId,
           transactionId,
@@ -602,6 +630,9 @@ async function createSale(context, body, options = {}) {
           v.product_name,
           v.product_name_ar || null,
           title || null,
+          v.color || null,
+          v.color_ar || null,
+          v.size || null,
           line.quantity,
           line.unitPriceCents,
           line.lineTotalCents,

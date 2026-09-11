@@ -211,7 +211,8 @@ async function loadRefundReceiptData(client, tenantId, refundId) {
   assertPos(result.rowCount === 1, 404, 'REFUND_NOT_FOUND', 'POS refund not found.');
   const items = await client.query(
     `SELECT ri.quantity, ri.refund_amount_cents,
-       i.product_name, i.variant_title, i.sku, i.unit_price_cents, i.created_at
+       i.product_name, i.product_name_ar, i.variant_title,
+       i.color, i.color_ar, i.size, i.sku, i.unit_price_cents, i.created_at
      FROM pos_refund_items ri
      JOIN pos_transaction_items i ON i.id = ri.original_transaction_item_id
      WHERE ri.tenant_id = $1 AND ri.refund_id = $2
@@ -226,7 +227,11 @@ function mapRefund(row, { stockUpdates = [], items = [] } = {}) {
   const padded = String(receiptNumber).padStart(8, '0');
   const receiptItems = items.map((item) => ({
     name: item.product_name,
+    nameAr: item.product_name_ar || null,
     variant: item.variant_title || '',
+    color: item.color || '',
+    colorAr: item.color_ar || '',
+    size: item.size || '',
     sku: item.sku || '',
     quantity: Number(item.quantity),
     unitPriceCents: Number(item.unit_price_cents),

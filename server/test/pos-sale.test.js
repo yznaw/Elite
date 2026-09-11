@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { PosError } = require('../lib/pos/errors');
 const { normalizeSale, validatePayment } = require('../lib/pos/sale-service');
+const { mapRefund } = require('../lib/pos/correction-service');
 
 const variantId = '11111111-1111-4111-8111-111111111111';
 const shiftId = '22222222-2222-4222-8222-222222222222';
@@ -102,4 +103,43 @@ test('card payment cannot carry cash tender fields', () => {
     amountTenderedCents: 3000,
     changeGivenCents: 0,
   }, 3000), (error) => error instanceof PosError && error.code === 'PAYMENT_TOTAL_MISMATCH');
+});
+
+test('refund receipts preserve bilingual product, colour and size snapshots', () => {
+  const result = mapRefund({
+    id: 'refund-1',
+    original_transaction_id: 'transaction-1',
+    receipt_number: 1002,
+    amount_cents: 2500,
+    method: 'cash',
+    reason: 'Return',
+    order_payment_status: 'refunded',
+    created_at: '2026-09-11T10:00:00.000Z',
+  }, {
+    items: [{
+      product_name: 'Leather shoes',
+      product_name_ar: 'حذاء جلد',
+      variant_title: 'Beige / 42',
+      color: 'Beige',
+      color_ar: 'بيج',
+      size: '42',
+      sku: 'SHOE-42',
+      quantity: 1,
+      unit_price_cents: 2500,
+      refund_amount_cents: 2500,
+    }],
+  });
+
+  assert.deepEqual(result.receipt.receiptData.items[0], {
+    name: 'Leather shoes',
+    nameAr: 'حذاء جلد',
+    variant: 'Beige / 42',
+    color: 'Beige',
+    colorAr: 'بيج',
+    size: '42',
+    sku: 'SHOE-42',
+    quantity: 1,
+    unitPriceCents: 2500,
+    lineTotalCents: 2500,
+  });
 });

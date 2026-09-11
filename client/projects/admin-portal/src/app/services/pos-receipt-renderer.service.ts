@@ -6,6 +6,11 @@ export interface PosReceiptLine {
   /** Snapshotted Arabic product name, printed above the English one. */
   nameAr?: string | null;
   variant?: string;
+  /** Structured variant values. These are preferred over the legacy combined
+   *  variant string so colour and size can be labelled bilingually. */
+  color?: string | null;
+  colorAr?: string | null;
+  size?: string | null;
   sku?: string;
   quantity: number;
   unitPriceCents: number;
@@ -541,13 +546,36 @@ export class PosReceiptRenderer {
       }
       ctx.font = `700 20px ${this.bodyFont}`;
       y = this.wrapText(ctx, item.name, this.marginPx, y, width - this.marginPx * 2, false, false, 29);
-      if (item.variant) {
-        // Labelled, because a bare "15" under a shoe name is not information.
-        // It could be a size, a quantity or a style code, and the customer has
-        // no way to tell which.
-        // Both language labels share one full-width row. Repeating the size on
-        // two tiny lines made the item block look like two separate products.
-        ctx.font = `600 17px ${this.bodyFont}`;
+      const color = item.color?.trim() || '';
+      const size = item.size?.trim() || '';
+      if (color || size) {
+        // Colour and size are separate, explicitly-labelled lines. Keeping the
+        // Arabic on its own row gives the thermal printer enough pixels for
+        // joined Arabic glyphs instead of squeezing two languages together.
+        const variantEn = [color && `Color: ${color}`, size && `Size: ${size}`].filter(Boolean).join('  •  ');
+        const variantAr = [
+          color && `اللون: ${item.colorAr?.trim() || color}`,
+          size && `المقاس: ${this.arabicDigits(size)}`,
+        ].filter(Boolean).join('  •  ');
+        ctx.font = `700 18px ${this.bodyFont}`;
+        ctx.textAlign = 'left';
+        y = this.wrapText(ctx, variantEn, this.marginPx, y, width - this.marginPx * 2, false, false, 27);
+        ctx.textAlign = 'right';
+        y = this.wrapText(
+          ctx,
+          variantAr,
+          this.widthPx - this.marginPx,
+          y,
+          width - this.marginPx * 2,
+          false,
+          true,
+          27,
+        );
+        ctx.textAlign = 'left';
+      } else if (item.variant) {
+        // Backward-compatible fallback for historical receipts created before
+        // colour and size were snapshotted separately.
+        ctx.font = `700 18px ${this.bodyFont}`;
         ctx.fillText(this.labelVariant(item.variant), this.marginPx, y);
         ctx.textAlign = 'right';
         ctx.fillText(this.shapeArabic(this.labelVariantAr(item.variant)), this.widthPx - this.marginPx, y);

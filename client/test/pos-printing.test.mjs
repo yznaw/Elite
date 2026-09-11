@@ -115,6 +115,10 @@ test('receipt paints large, one-bit bilingual business, price and transaction de
   assert.match(result.text, /فاتورة/);
   assert.match(result.text, /الإجمالي/);
   assert.match(result.text, /طريقة الدفع/);
+  assert.match(result.text, /Color: Beige/);
+  assert.match(result.text, /Size: 42/);
+  assert.match(result.text, /اللون: بيج/);
+  assert.match(result.text, /المقاس: ٤٢/);
   assert.match(result.text, /ر\.ق/);
   assert.match(result.text, /السجل التجاري/);
   const fontSize = (text) => {

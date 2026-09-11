@@ -13,7 +13,11 @@ const receipt = {
   paymentMethod: 'cash', subtotalCents: 2500, totalCents: 2500,
   amountCents: 2500, amountTenderedCents: 3000, changeGivenCents: 500,
   lookupCode: 'elite-pos:transaction-1001',
-  items: [{ name: 'Leather shoes', nameAr: 'حذاء جلد', variant: '42', quantity: 1, unitPriceCents: 2500, lineTotalCents: 2500 }],
+  items: [{
+    name: 'Leather shoes', nameAr: 'حذاء جلد', variant: 'Beige / 42',
+    color: 'Beige', colorAr: 'بيج', size: '42', quantity: 1,
+    unitPriceCents: 2500, lineTotalCents: 2500,
+  }],
 };
 const report = {
   zReportId: 'report-1001', createdAt: receipt.createdAt, openingFloatCents: 5000,
