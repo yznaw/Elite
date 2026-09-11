@@ -154,6 +154,8 @@ export class HomeContentService {
       heroSlider: {
         ctaEn: content.heroSlider?.ctaEn || fallback.heroSlider.ctaEn,
         ctaAr: content.heroSlider?.ctaAr || fallback.heroSlider.ctaAr,
+        productCtaEn: content.heroSlider?.productCtaEn || fallback.heroSlider.productCtaEn,
+        productCtaAr: content.heroSlider?.productCtaAr || fallback.heroSlider.productCtaAr,
         items: Array.isArray(content.heroSlider?.items)
           ? content.heroSlider.items.map((item) => ({
               ...item,

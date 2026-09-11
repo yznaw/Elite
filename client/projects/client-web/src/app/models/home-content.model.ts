@@ -175,6 +175,8 @@ export interface HeroSliderItem {
 export interface HeroSliderContent {
   ctaEn: string;
   ctaAr: string;
+  productCtaEn: string;
+  productCtaAr: string;
   items: HeroSliderItem[];
 }
 
@@ -323,6 +325,8 @@ export function createEmptyHomeContent(): HomeContentData {
     heroSlider: {
       ctaEn: '',
       ctaAr: '',
+      productCtaEn: '',
+      productCtaAr: '',
       items: [],
     },
     promise: {

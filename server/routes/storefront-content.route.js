@@ -177,6 +177,8 @@ const DEFAULT_HOME_CONTENT = {
   heroSlider: {
     ctaEn: 'Shop the Collection',
     ctaAr: 'تسوّق المجموعة',
+    productCtaEn: 'Shop this style',
+    productCtaAr: 'تسوّق هذا التصميم',
     items: [
       {
         id: 'brown-leather',
@@ -611,6 +613,8 @@ function createEmptyHomeContent() {
     heroSlider: {
       ctaEn: '',
       ctaAr: '',
+      productCtaEn: '',
+      productCtaAr: '',
       items: [],
     },
     promise: {
@@ -966,6 +970,8 @@ function normalizeHeroSlider(heroSlider = {}) {
   return {
     ctaEn: asText(heroSlider.ctaEn, fb.ctaEn),
     ctaAr: asText(heroSlider.ctaAr, fb.ctaAr),
+    productCtaEn: asText(heroSlider.productCtaEn, fb.productCtaEn),
+    productCtaAr: asText(heroSlider.productCtaAr, fb.productCtaAr),
     items,
   };
 }

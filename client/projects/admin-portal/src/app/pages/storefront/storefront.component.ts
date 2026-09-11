@@ -56,7 +56,7 @@ interface StorefrontContent {
   hero: { imageUrl: string; title: string; body: string; kickerEn: string; kickerAr: string; ctaText: string; ctaLink: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; ctaTextEn: string; ctaTextAr: string; };
   collections: Array<{ id: string; collectionId?: string; title: string; imageUrl: string; link: string; ctaText?: string; titleEn: string; titleAr: string; ctaTextEn: string; ctaTextAr: string; }>;
   collectionsIntro: { titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; };
-  heroSlider: { ctaEn: string; ctaAr: string; items: HeroSliderItem[]; };
+  heroSlider: { ctaEn: string; ctaAr: string; productCtaEn: string; productCtaAr: string; items: HeroSliderItem[]; };
   promise: { kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; cards: PromiseCard[]; };
   stats: StatItem[];
   contact: {
@@ -237,9 +237,14 @@ interface StorefrontContent {
             <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.slider.title') }}</div><div class="card-sub">{{ t('storefront.editor.slider.sub') }}</div></div></div>
             <div class="card-pad field-stack">
               <div class="two-col">
+                <label><span class="lbl">{{ t('storefront.editor.slider.productCtaEn') }}</span><input class="inp" [ngModel]="content().heroSlider.productCtaEn" (ngModelChange)="patchHeroSlider('productCtaEn', $event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.slider.productCtaAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().heroSlider.productCtaAr" (ngModelChange)="patchHeroSlider('productCtaAr', $event)"/></label>
+              </div>
+              <div class="two-col">
                 <label><span class="lbl">{{ t('storefront.editor.slider.ctaEn') }}</span><input class="inp" [ngModel]="content().heroSlider.ctaEn" (ngModelChange)="patchHeroSlider('ctaEn', $event)"/></label>
                 <label><span class="lbl">{{ t('storefront.editor.slider.ctaAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().heroSlider.ctaAr" (ngModelChange)="patchHeroSlider('ctaAr', $event)"/></label>
               </div>
+              <div class="hint-box">{{ t('storefront.editor.slider.ctaDifferenceHint') }}</div>
             </div>
           </div>
 
@@ -288,7 +293,7 @@ interface StorefrontContent {
                       </div>
                       <button class="btn btn-outline btn-sm" type="button"
                               [title]="t('storefront.editor.slider.refillHint')"
-                              (click)="refillSlideFromProduct(i)">
+                              (click)="updateSlideProductInfo(i)">
                         <ap-icon name="wand" [size]="11"/> {{ t('storefront.editor.slider.refill') }}
                       </button>
                       <button class="btn btn-outline btn-sm" type="button" (click)="productPickerSlide.set(productPickerSlide() === i ? null : i)">
@@ -2806,20 +2811,20 @@ export class StorefrontComponent implements OnInit, OnDestroy {
    * copy, alt text, featured colours, and each colour's hero shot taken from the
    * product's own gallery tagging.
    *
-   * Fields the editor has already filled in are left alone, so re-linking a
-   * product never destroys hand-written copy. `refillSlideFromProduct()` is the
-   * explicit opt-in for overwriting.
+   * Linking or changing a product establishes a new slide source. Product info
+   * is refreshed and featured colours are cleared completely so the editor
+   * must make a deliberate new selection for the newly linked product.
    */
   selectSlideProduct(i: number, productId: string): void {
-    this.applyProductToSlide(i, productId, false);
+    this.applyProductToSlide(i, productId, true);
     this.productPickerSlide.set(null);
     this.productPickerSearch.set('');
   }
 
-  /** Re-pull every derivable field from the linked product, overwriting edits. */
-  refillSlideFromProduct(i: number): void {
+  /** Refresh product copy while preserving the editor's colour curation. */
+  updateSlideProductInfo(i: number): void {
     const productId = this.content().heroSlider?.items?.[i]?.productId;
-    if (productId) this.applyProductToSlide(i, productId, true);
+    if (productId) this.applyProductToSlide(i, productId, false);
   }
 
   /**
@@ -2861,54 +2866,28 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     }
   }
 
-  private applyProductToSlide(i: number, productId: string, overwrite: boolean): void {
+  private applyProductToSlide(i: number, productId: string, resetColors: boolean): void {
     const product = this.productById(productId);
     if (!product) return;
-
-    // Prefer colours that can actually render a swatch, so a freshly linked
-    // product does not come back with an empty-looking row.
-    const names = this.productColorNames(productId);
-    const renderable = names.filter((name) => !this.colorMissingHex(name));
-    const prefill = (renderable.length ? renderable : names).slice(0, HERO_MAX_COLORS);
-
-    // Hero art is never taken from the product. Hero shots are always shot
-    // separately, so a product gallery image is wrong here rather than merely a
-    // rough starting point. Refill therefore syncs colour names and count only.
-    //
-    // Existing hero images are matched by slug and carried over, so refilling to
-    // pick up a renamed or newly added colourway cannot wipe art the editor has
-    // already uploaded for the colourways that survive.
-    const existingImageBySlug = new Map(
-      (this.content().heroSlider.items[i]?.colors ?? [])
-        .map((color) => [color.slug, color.imageUrl] as const)
-        .filter(([, imageUrl]) => !!imageUrl),
-    );
-
-    const colors = prefill.map((label) => {
-      const slug = heroColorSlug(label);
-      return { label, slug, imageUrl: existingImageBySlug.get(slug) ?? '' };
-    });
 
     this.content.update((c) => {
       const items = c.heroSlider.items.map((item, idx) => {
         if (idx !== i) return item;
-        const keep = (current: string, next: string) =>
-          (!overwrite && current.trim()) ? current : (next || current);
-
-        return {
+        const updated = {
           ...item,
           productId,
-          name:          keep(item.name, product.name),
-          nameEn:        keep(item.nameEn, product.name),
-          nameAr:        keep(item.nameAr, product.nameAr || ''),
+          name:          product.name || '',
+          nameEn:        product.name || '',
+          nameAr:        product.nameAr || '',
           // Seeded from the product's Hook (shortEn/shortAr); falls back to the
           // legacy long description only if the Hook itself is empty.
-          descriptionEn: keep(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
-          descriptionAr: keep(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
-          alt:           keep(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
-          colors: (!overwrite && (item.colors ?? []).length) ? item.colors : colors,
-          defaultColorSlug: (!overwrite && item.defaultColorSlug) ? item.defaultColorSlug : (colors[0]?.slug ?? ''),
+          descriptionEn: this.heroCopy(product.shortEn, product.enDesc),
+          descriptionAr: this.heroCopy(product.shortAr, product.arDesc),
+          alt:           product.name ? `${product.name} by ${product.brand || 'Elite'}` : '',
         };
+        return resetColors
+          ? { ...updated, colors: [], defaultColorSlug: '' }
+          : updated;
       });
       return { ...c, heroSlider: { ...c.heroSlider, items } };
     });

@@ -235,6 +235,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       ? (this.contentData().heroSlider.ctaAr  || 'تسوّق المجموعة')
       : (this.contentData().heroSlider.ctaEn  || 'Shop the Collection')
   );
+  readonly heroProductCtaLabel = computed(() =>
+    this.locale.locale() === 'ar'
+      ? (this.contentData().heroSlider.productCtaAr || 'تسوّق هذا التصميم')
+      : (this.contentData().heroSlider.productCtaEn || 'Shop this style')
+  );
   readonly activeHeroItem    = computed(() => this.heroItems()[this.activeHeroItemIndex()] ?? this.heroItems()[0]);
   readonly nextHeroItem      = computed(() => {
     const items = this.heroItems();
