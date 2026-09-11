@@ -6,6 +6,7 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
+import { ConfirmService } from '../../services/confirm.service';
 import {
   InventoryService,
   StocktakeDetail,
@@ -14,6 +15,7 @@ import {
   StocktakeSummary,
 } from '../../services/inventory.service';
 import { LocationSelectorComponent, LocationOption } from '../../shared/location-selector/location-selector.component';
+import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
 
 /**
  * Stocktake: count the shelf, post the difference (docs/25 Phase 8).
@@ -93,11 +95,13 @@ import { LocationSelectorComponent, LocationOption } from '../../shared/location
 
           <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
             @if (stocktake.locations.length && stocktake.status === 'counting') {
-              <button class="btn btn-gold" [disabled]="posting() || !selectedLocationCompleteReady()" (click)="completeLocation()">
+              <button class="btn btn-gold" [disabled]="posting() || !selectedLocationCompleteReady()" (click)="completeLocation()"
+                      [title]="selectedLocationCompleteReady() ? '' : t('stocktake.location.complete.hint')">
                 {{ t('stocktake.location.complete') }}
               </button>
             }
-            <button class="btn btn-gold" [disabled]="posting() || stocktake.status !== 'review' || countedCount() === 0" (click)="post()">
+            <button class="btn btn-gold" [disabled]="posting() || stocktake.status !== 'review' || countedCount() === 0" (click)="post()"
+                    [title]="stocktake.status === 'review' ? '' : t('stocktake.post.hint')">
               @if (posting()) { <ap-spinner [size]="12"/> }
               {{ t('stocktake.post') }}
             </button>
@@ -106,13 +110,19 @@ import { LocationSelectorComponent, LocationOption } from '../../shared/location
               <ap-icon name="sync" [size]="14"/> {{ t('common.refresh') }}
             </button>
             <button class="btn btn-outline" (click)="exportCsv()" [disabled]="!stocktake.lines.length">
-              <ap-icon name="download" [size]="14"/> Export CSV
+              <ap-icon name="download" [size]="14"/> {{ t('stocktake.csv.export') }}
             </button>
-            <label class="btn btn-outline" [class.disabled]="importing()">
-              <ap-icon name="upload" [size]="14"/> Import counts
-              <input type="file" accept=".csv,text/csv" hidden [disabled]="importing()" (change)="importCounts($event)"/>
+            <label class="btn btn-outline" [class.disabled]="importing() || !canEditSelectedLocation()"
+                   [title]="canEditSelectedLocation() ? '' : t('stocktake.csv.import.hint')">
+              <ap-icon name="upload" [size]="14"/> {{ t('stocktake.csv.import') }}
+              <input type="file" accept=".csv,text/csv" hidden [disabled]="importing() || !canEditSelectedLocation()" (change)="importCounts($event)"/>
             </label>
           </div>
+          @if (stocktake.status === 'counting') {
+            <p class="action-hint mt-8">
+              {{ remainingCount() > 0 ? t('stocktake.location.complete.hint') : t('stocktake.post.hint') }}
+            </p>
+          }
 
           @if (stocktake.locations.length) {
             <div class="location-toolbar mt-16">
@@ -128,13 +138,28 @@ import { LocationSelectorComponent, LocationOption } from '../../shared/location
                 <button class="btn btn-outline btn-sm" (click)="reopenLocation()">{{ t('stocktake.location.reopen') }}</button>
               }
             </div>
+            <div class="count-progress mt-12" role="status">
+              <div>
+                <strong>{{ selectedLocation()?.name }}</strong>
+                <span>{{ countedCount() }} / {{ stocktake.lines.length }} {{ t('stocktake.counted') }}</span>
+              </div>
+              @if (remainingCount() > 0 && canEditSelectedLocation()) {
+                <span class="muted small">{{ remainingCount() }} {{ t('stocktake.remaining') }}</span>
+                <button class="btn btn-outline btn-sm" [disabled]="fillingZeros()" (click)="fillMissingWithZero()">
+                  @if (fillingZeros()) { <ap-spinner [size]="12"/> }
+                  {{ t('stocktake.fillZero') }}
+                </button>
+              } @else if (remainingCount() === 0) {
+                <span class="ready-text">✓ {{ t('stocktake.location.ready') }}</span>
+              }
+            </div>
           }
 
           <div class="row gap-sm mt-16" style="align-items:center;flex-wrap:wrap;">
             <input class="inp" style="max-width:300px;" [ngModel]="scanCode()"
                    (ngModelChange)="scanCode.set($event)" (keydown.enter)="scanBarcode()"
-                   placeholder="Scan barcode or enter SKU" autocomplete="off"/>
-            <button class="btn btn-outline" [disabled]="!scanCode().trim() || scanning()" (click)="scanBarcode()">
+                   [disabled]="!canEditSelectedLocation()" placeholder="Scan barcode or enter SKU" autocomplete="off"/>
+            <button class="btn btn-outline" [disabled]="!canEditSelectedLocation() || !scanCode().trim() || scanning()" (click)="scanBarcode()">
               {{ scanning() ? 'Saving…' : 'Scan +1' }}
             </button>
             <span class="muted small">Each scan increases the physical count by one.</span>
@@ -255,6 +280,14 @@ import { LocationSelectorComponent, LocationOption } from '../../shared/location
     .location-checks { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
     .location-check { display:flex; gap:7px; align-items:center; border:1px solid var(--border,#e5e7eb); border-radius:8px; padding:9px 11px; }
     .location-toolbar { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
+    .count-progress {
+      display:flex; align-items:center; flex-wrap:wrap; gap:12px;
+      padding:12px 14px; border:1px solid var(--border,#e5e7eb); border-radius:10px;
+      background:var(--bg,#f8f8f6);
+    }
+    .count-progress > div { display:flex; gap:8px; align-items:baseline; margin-inline-end:auto; }
+    .ready-text { color:#0f7b3f; font-size:13px; font-weight:600; }
+    .action-hint { margin-bottom:0; color:var(--muted); font-size:12px; }
     @media (max-width: 900px) {
       .count-row { grid-template-columns: 1fr; }
     }
@@ -264,6 +297,7 @@ export class StocktakeComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly api = inject(InventoryService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
@@ -278,6 +312,7 @@ export class StocktakeComponent implements OnInit {
   readonly saving = signal<string | null>(null);
   readonly scanning = signal(false);
   readonly importing = signal(false);
+  readonly fillingZeros = signal(false);
 
   readonly newReference = signal('');
   readonly newBlind = signal(true);
@@ -310,6 +345,7 @@ export class StocktakeComponent implements OnInit {
     !!this.selectedLocation() && this.selectedLocation()?.status === 'counting'
       && this.countedCount() === (this.active()?.lines.length ?? -1),
   );
+  readonly remainingCount = computed(() => Math.max(0, (this.active()?.lines.length ?? 0) - this.countedCount()));
 
   /** Lines where a recount contradicts the first count. Posting is blocked
    *  until they are resolved: two counts that disagree are a question, not a
@@ -454,6 +490,33 @@ export class StocktakeComponent implements OnInit {
     }
   }
 
+  async fillMissingWithZero(): Promise<void> {
+    const stocktake = this.active();
+    const location = this.selectedLocation();
+    if (!stocktake || !location || !this.canEditSelectedLocation() || this.remainingCount() === 0) return;
+    const confirmed = await this.confirm.ask({
+      title: this.t('stocktake.fillZero.confirm.title'),
+      message: this.t('stocktake.fillZero.confirm.message')
+        .replace('{count}', String(this.remainingCount()))
+        .replace('{location}', location.name),
+      confirmLabel: this.t('stocktake.fillZero'),
+      cancelLabel: this.t('common.cancel'),
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+
+    this.fillingZeros.set(true);
+    try {
+      const result = await this.api.fillMissingCountsWithZero(stocktake.stocktakeId, location.locationId);
+      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
+      this.toast.success(this.t('stocktake.fillZero.toast'), `${result.updatedCount}`);
+    } catch {
+      /* reported by the interceptor */
+    } finally {
+      this.fillingZeros.set(false);
+    }
+  }
+
   async reopenLocation(): Promise<void> {
     const stocktake = this.active();
     const location = this.selectedLocation();
@@ -500,27 +563,31 @@ export class StocktakeComponent implements OnInit {
   exportCsv(): void {
     const stocktake = this.active();
     if (!stocktake) return;
-    const cell = (value: unknown): string => `"${String(value ?? '').replace(/"/g, '""')}"`;
-    const locationHeaders = stocktake.locations.map((location) => location.name);
-    const rows = [
-      ['SKU', 'Barcode', 'Product', 'Color', 'Size', ...locationHeaders, 'Expected', 'Combined Count', 'Difference'],
-      ...stocktake.lines.map((line) => [
-        line.sku,
-        line.barcode,
-        line.productName,
-        line.color,
-        line.size,
-        ...stocktake.locations.map((location) => line.locationCounts[location.locationId] ?? ''),
-        line.expectedQuantity ?? '',
-        line.countedQuantity ?? '',
-        line.discrepancy ?? '',
-      ]),
-    ];
-    const csv = '\uFEFF' + rows.map((row) => row.map(cell).join(',')).join('\r\n');
+    const location = this.selectedLocation();
+    const rows = location
+      ? [
+          ['Location ID', 'Location', 'SKU', 'Barcode', 'Product', 'Color', 'Size', 'Counted'],
+          ...stocktake.lines.map((line) => [
+            location.locationId,
+            location.name,
+            line.sku,
+            line.barcode,
+            line.productName,
+            line.color,
+            line.size,
+            line.locationCounts[location.locationId] ?? '',
+          ]),
+        ]
+      : [
+          ['SKU', 'Barcode', 'Product', 'Color', 'Size', 'Counted'],
+          ...stocktake.lines.map((line) => [line.sku, line.barcode, line.productName, line.color, line.size, line.countedQuantity ?? '']),
+        ];
+    const csv = csvRows(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `stocktake-${stocktake.reference}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const safeName = `${stocktake.reference}${location ? `-${location.name}` : ''}`.replace(/[^a-z0-9\u0600-\u06ff._-]+/gi, '-');
+    link.download = `stocktake-${safeName}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -530,39 +597,33 @@ export class StocktakeComponent implements OnInit {
     const file = input.files?.[0];
     input.value = '';
     const stocktake = this.active();
-    if (!file || !stocktake || this.importing()) return;
+    if (!file || !stocktake || this.importing() || !this.canEditSelectedLocation()) return;
 
     this.importing.set(true);
     try {
-      const text = (await file.text()).replace(/^\uFEFF/, '');
-      const rows = this.parseCsv(text);
-      if (rows.length < 2) throw new Error('The file must contain a header and at least one count row.');
-      const headers = rows[0].map((header) => header.trim().toLowerCase());
-      const skuIndex = headers.indexOf('sku');
-      const barcodeIndex = headers.indexOf('barcode');
-      const countIndex = ['counted', 'count', 'quantity'].map((name) => headers.indexOf(name)).find((index) => index >= 0) ?? -1;
-      if ((skuIndex < 0 && barcodeIndex < 0) || countIndex < 0) {
-        throw new Error('Use columns SKU or Barcode and Counted (or Count/Quantity).');
-      }
+      const location = this.selectedLocation();
+      const parsed = parseStocktakeCountCsv(await file.text(), {
+        locationId: location?.locationId,
+        locationName: location?.name,
+      });
 
       const byKey = new Map<string, StocktakeDetail['lines'][number]>();
       for (const line of stocktake.lines) {
-        byKey.set(line.sku.toLowerCase(), line);
-        byKey.set(line.barcode.toLowerCase(), line);
+        if (line.sku) byKey.set(line.sku.toLowerCase(), line);
+        if (line.barcode) byKey.set(line.barcode.toLowerCase(), line);
       }
       let updated = 0;
-      let skipped = 0;
-      for (const row of rows.slice(1)) {
-        const key = String(row[barcodeIndex >= 0 ? barcodeIndex : skuIndex] || '').trim().toLowerCase();
-        const quantity = Number.parseInt(String(row[countIndex] || ''), 10);
-        const line = byKey.get(key);
-        if (!line || !Number.isFinite(quantity) || quantity < 0) {
+      let skipped = parsed.skipped;
+      for (const count of parsed.counts) {
+        const line = byKey.get(count.barcode.toLowerCase()) ?? byKey.get(count.sku.toLowerCase());
+        if (!line) {
           skipped++;
           continue;
         }
-        await this.api.saveCount(stocktake.stocktakeId, line.variantId, quantity, this.selectedLocationId() || undefined);
+        await this.api.saveCount(stocktake.stocktakeId, line.variantId, count.quantity, this.selectedLocationId() || undefined);
         updated++;
       }
+      if (updated === 0) throw new Error('No valid product counts matched this stocktake.');
       this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
       this.toast.success('Counts imported', `${updated} updated${skipped ? ` · ${skipped} skipped` : ''}`);
     } catch (error) {
@@ -570,32 +631,6 @@ export class StocktakeComponent implements OnInit {
     } finally {
       this.importing.set(false);
     }
-  }
-
-  private parseCsv(text: string): string[][] {
-    const rows: string[][] = [];
-    let row: string[] = [];
-    let cell = '';
-    let quoted = false;
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === '"') {
-        if (quoted && text[i + 1] === '"') { cell += '"'; i++; }
-        else quoted = !quoted;
-      } else if (char === ',' && !quoted) {
-        row.push(cell); cell = '';
-      } else if ((char === '\n' || char === '\r') && !quoted) {
-        if (char === '\r' && text[i + 1] === '\n') i++;
-        row.push(cell); cell = '';
-        if (row.some((value) => value.trim())) rows.push(row);
-        row = [];
-      } else {
-        cell += char;
-      }
-    }
-    row.push(cell);
-    if (row.some((value) => value.trim())) rows.push(row);
-    return rows;
   }
 
   async post(): Promise<void> {

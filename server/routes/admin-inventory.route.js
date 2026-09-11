@@ -7,6 +7,7 @@ const {
   listStocktakes,
   listStocktakeLocations,
   completeStocktakeLocation,
+  fillMissingStocktakeCountsWithZero,
   reopenStocktakeLocation,
   postStocktake,
   saveCount,
@@ -58,6 +59,10 @@ router.post('/stocktakes/:id/counts', asyncHandler(async (req, res) => {
 
 router.post('/stocktakes/:id/locations/:locationId/complete', asyncHandler(async (req, res) => {
   ok(res, await completeStocktakeLocation(context(req), req.params.id, req.params.locationId));
+}));
+
+router.post('/stocktakes/:id/locations/:locationId/fill-missing-zero', asyncHandler(async (req, res) => {
+  ok(res, await fillMissingStocktakeCountsWithZero(context(req), req.params.id, req.params.locationId));
 }));
 
 router.post('/stocktakes/:id/locations/:locationId/reopen', asyncHandler(async (req, res) => {

@@ -12,6 +12,8 @@ import { I18nService } from '../../services/i18n.service';
 import { AuthService } from '../../services/auth.service';
 import { ToastService } from '../../services/toast.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
+import { SpinnerComponent } from '../spinner/spinner.component';
+import { checkForPosUpdate, posBuildVersions } from '../../services/pos-service-worker.service';
 
 interface PageMeta {
   crumbKey: string;
@@ -33,7 +35,7 @@ const META: Record<string, PageMeta> = {
 
 @Component({
     selector: 'ap-topbar',
-    imports: [CommonModule, IconComponent, AvatarComponent, LanguageSwitcherComponent, NotificationDropdownComponent],
+    imports: [CommonModule, IconComponent, AvatarComponent, LanguageSwitcherComponent, NotificationDropdownComponent, SpinnerComponent],
     template: `
     <div class="topbar">
       <div class="row gap-sm" style="min-width:0;align-items:center;">
@@ -79,6 +81,18 @@ const META: Record<string, PageMeta> = {
             <span class="topbar-pos-link-label">{{ t('topbar.goToPos') }}</span>
           </a>
         }
+
+        <button class="topbar-update" type="button"
+                [class.update-available]="updateAvailable()"
+                [disabled]="checkingUpdate()"
+                [attr.aria-label]="t('topbar.update.action')"
+                [attr.title]="updateAvailable() ? t('topbar.update.available') : t('topbar.update.action')"
+                (click)="checkForUpdate()">
+          @if (checkingUpdate()) { <ap-spinner [size]="12"/> }
+          @else { <ap-icon name="sync" [size]="14"/> }
+          <span class="topbar-update-label">{{ checkingUpdate() ? t('topbar.update.checking') : t('topbar.update.action') }}</span>
+          @if (updateAvailable()) { <i aria-hidden="true"></i> }
+        </button>
 
         <ap-language-switcher/>
 
@@ -184,6 +198,24 @@ const META: Record<string, PageMeta> = {
     }
     html[dir='rtl'] .topbar .crumb { letter-spacing: 0; }
     .topbar-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+
+    .topbar-update {
+      position:relative; height:36px; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+      padding:0 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface);
+      color:var(--ink-2); font:600 12px/1 inherit; cursor:pointer; white-space:nowrap;
+      transition:transform 140ms cubic-bezier(.23,1,.32,1), background 140ms ease, border-color 140ms ease;
+    }
+    .topbar-update:active:not(:disabled) { transform:scale(.97); }
+    .topbar-update:disabled { cursor:wait; opacity:.7; }
+    .topbar-update.update-available { border-color:var(--gold); color:var(--green); background:rgba(196,145,48,.09); }
+    .topbar-update i {
+      position:absolute; inset-block-start:5px; inset-inline-end:5px; width:6px; height:6px;
+      border-radius:50%; background:var(--gold);
+    }
+    @media (max-width: 1100px) {
+      .topbar-update { width:36px; padding:0; }
+      .topbar-update-label { display:none; }
+    }
 
     /* ── Go to POS link ── */
     .topbar-pos-link {
@@ -377,6 +409,8 @@ export class TopbarComponent {
   readonly searchOpen   = signal(false);
   readonly userDropOpen = signal(false);
   readonly isMobile     = signal(window.innerWidth <= 768);
+  readonly checkingUpdate = signal(false);
+  readonly updateAvailable = signal(false);
 
   @HostListener('window:resize')
   onWinResize(): void { this.isMobile.set(window.innerWidth <= 768); }
@@ -387,6 +421,10 @@ export class TopbarComponent {
   // never see the admin shell at all — this button only needs to cover
   // roles that land in the admin portal first and want a way into /pos).
   readonly canOpenPos = computed(() => this.auth.hasRole('owner', 'admin', 'manager'));
+
+  constructor() {
+    void this.loadUpdateStatus();
+  }
 
   // Primary tab pages — no back button needed (bottom nav handles them)
   private readonly PRIMARY_PATHS = new Set(['/dashboard', '/catalog', '/orders', '/customers']);
@@ -425,6 +463,35 @@ export class TopbarComponent {
       this.toast.info(this.t('login.signedOut'));
     } finally {
       void this.router.navigate(['/login']);
+    }
+  }
+
+  async checkForUpdate(): Promise<void> {
+    if (this.checkingUpdate()) return;
+    this.checkingUpdate.set(true);
+    try {
+      const result = await checkForPosUpdate();
+      await this.loadUpdateStatus();
+      if (result === 'current') {
+        this.toast.success(this.t('topbar.update.current.title'), this.t('topbar.update.current.sub'));
+      } else if (result === 'busy') {
+        this.toast.warning(this.t('topbar.update.busy.title'), this.t('topbar.update.busy.sub'));
+      } else if (result === 'updating') {
+        this.toast.success(this.t('topbar.update.updating.title'), this.t('topbar.update.updating.sub'));
+      }
+    } catch {
+      this.toast.error(this.t('topbar.update.error.title'), this.t('topbar.update.error.sub'));
+    } finally {
+      this.checkingUpdate.set(false);
+    }
+  }
+
+  private async loadUpdateStatus(): Promise<void> {
+    try {
+      const versions = await posBuildVersions();
+      this.updateAvailable.set(Boolean(versions.running && versions.deployed && versions.running !== versions.deployed));
+    } catch {
+      this.updateAvailable.set(false);
     }
   }
 

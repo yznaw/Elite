@@ -118,6 +118,12 @@ export class InventoryService {
     ));
   }
 
+  fillMissingCountsWithZero(stocktakeId: string, locationId: string): Promise<{ updatedCount: number }> {
+    return firstValueFrom(this.api.post<{ updatedCount: number }>(
+      `/admin/inventory/stocktakes/${stocktakeId}/locations/${locationId}/fill-missing-zero`, {},
+    ));
+  }
+
   reopenLocation(stocktakeId: string, locationId: string): Promise<void> {
     return firstValueFrom(this.api.post<void>(
       `/admin/inventory/stocktakes/${stocktakeId}/locations/${locationId}/reopen`, {},

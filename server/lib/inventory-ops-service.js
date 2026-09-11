@@ -493,6 +493,61 @@ async function completeStocktakeLocation(context, stocktakeId, locationId) {
   }
 }
 
+/** Explicitly records zero for every still-uncounted line at one location.
+ * Missing means "unknown", so this is never implicit and is only exposed
+ * behind a confirmation in the admin UI. */
+async function fillMissingStocktakeCountsWithZero(context, stocktakeId, locationId) {
+  assertPos(
+    ['owner', 'admin', 'manager'].includes(context.role),
+    403,
+    'INSUFFICIENT_PERMISSIONS',
+    'Only owners, admins and managers can enter stocktake counts.',
+  );
+  const id = uuid(stocktakeId, 'stocktakeId');
+  const resolvedLocationId = uuid(locationId, 'locationId');
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const run = await client.query(
+      `SELECT r.id, r.status
+         FROM stocktake_location_runs r
+         JOIN stocktakes s ON s.id = r.stocktake_id
+        WHERE r.stocktake_id = $1 AND r.location_id = $2 AND r.tenant_id = $3
+          AND s.status = 'counting'
+        FOR UPDATE OF r`,
+      [id, resolvedLocationId, context.tenantId],
+    );
+    assertPos(run.rowCount === 1, 404, 'LOCATION_NOT_FOUND', 'That location is not part of an open stocktake.');
+    assertPos(run.rows[0].status === 'counting', 409, 'LOCATION_COMPLETED', 'Reopen this location before changing its counts.');
+
+    const inserted = await client.query(
+      `INSERT INTO stocktake_location_counts
+         (stocktake_id, tenant_id, location_run_id, location_id, variant_id, quantity, counted_by_user_id)
+       SELECT $1, $2, $3, $4, l.variant_id, 0, $5
+         FROM stocktake_lines l
+        WHERE l.stocktake_id = $1
+          AND NOT EXISTS (
+            SELECT 1 FROM stocktake_location_counts c
+             WHERE c.location_run_id = $3 AND c.variant_id = l.variant_id
+          )
+       ON CONFLICT (location_run_id, variant_id) DO NOTHING
+       RETURNING variant_id`,
+      [id, context.tenantId, run.rows[0].id, resolvedLocationId, context.userId],
+    );
+    await writeAudit(client, context, 'inventory.stocktake.missing_counts_zeroed', 'stocktake', id, {
+      locationId: resolvedLocationId,
+      insertedCount: inserted.rowCount,
+    });
+    await client.query('COMMIT');
+    return { stocktakeId: id, locationId: resolvedLocationId, updatedCount: inserted.rowCount };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function reopenStocktakeLocation(context, stocktakeId, locationId) {
   assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can reopen a location.');
   const id = uuid(stocktakeId, 'stocktakeId');
@@ -849,6 +904,7 @@ module.exports = {
   listStocktakes,
   listStocktakeLocations,
   completeStocktakeLocation,
+  fillMissingStocktakeCountsWithZero,
   reopenStocktakeLocation,
   ADJUSTMENT_REASONS,
 };

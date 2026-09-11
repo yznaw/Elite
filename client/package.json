@@ -13,6 +13,7 @@
     "test": "ng test",
     "test:hero": "playwright test --config=playwright.hero.config.ts",
     "test:sku": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/variant-sku.test.ts",
+    "test:stocktake-csv": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/stocktake-csv.test.ts",
     "test:pos-printing": "node --test test/pos-printing.test.mjs"
   },
   "private": true,

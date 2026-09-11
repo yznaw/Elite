@@ -278,10 +278,17 @@ test('inventory operations: adjustments, blind stocktake, and sales during a cou
     assert.equal(distributed.locationCount, locations.length);
     for (let index = 0; index < locations.length; index++) {
       const quantity = index === 0 ? 9 : 0;
-      await api(`/admin/inventory/stocktakes/${distributed.stocktakeId}/counts`, {
-        method: 'POST',
-        body: JSON.stringify({ variantId: variantB, locationId: locations[index].locationId, quantity }),
-      });
+      const zeroed = await api(
+        `/admin/inventory/stocktakes/${distributed.stocktakeId}/locations/${locations[index].locationId}/fill-missing-zero`,
+        { method: 'POST', body: '{}' },
+      );
+      assert.equal(zeroed.updatedCount, 1, 'the explicit shortcut records every missing line as zero');
+      if (quantity > 0) {
+        await api(`/admin/inventory/stocktakes/${distributed.stocktakeId}/counts`, {
+          method: 'POST',
+          body: JSON.stringify({ variantId: variantB, locationId: locations[index].locationId, quantity }),
+        });
+      }
       const completed = await api(`/admin/inventory/stocktakes/${distributed.stocktakeId}/locations/${locations[index].locationId}/complete`, {
         method: 'POST', body: '{}',
       });
@@ -313,6 +320,7 @@ test('inventory operations: adjustments, blind stocktake, and sales during a cou
     const actions = audits.rows.map((row) => row.action);
     assert.ok(actions.includes('inventory.adjusted'));
     assert.ok(actions.includes('inventory.stocktake.started'));
+    assert.ok(actions.includes('inventory.stocktake.missing_counts_zeroed'));
     assert.ok(actions.includes('inventory.stocktake.posted'));
   } finally {
     await new Promise((resolve) => server.close(resolve));
