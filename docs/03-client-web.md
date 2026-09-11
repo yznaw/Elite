@@ -149,6 +149,10 @@ node scripts/ssr-smoke.mjs --api https://elitecollections.qa --timeout 20000   #
 
 The API-down pass also fails if a data page still ships API data, which would mean renders are reaching an API other than `API_ORIGIN`. The API-up pass fails if a data page ships an empty transfer cache.
 
+**Run it on the production Node major (22).** The script refuses to run on any other. Node 25+ defines browser globals such as `sessionStorage`, so an unguarded call passes on a newer local Node and still crashes the production render: that is exactly how `/?order_id=…` (Sadad's cancel return) shipped as a `404` on 12 September 2026. On macOS with Homebrew: `$(brew --prefix node@22)/bin/node scripts/ssr-smoke.mjs`.
+
+**Only pages that display products fetch them on the server.** `ProductsService` loads the catalogue eagerly in the browser but, on the server, only when a page calls `ensureLoaded()` (home, collection). Anything injected on every page (nav, footer, cart drawer) must not trigger a full-catalogue request during a render.
+
 ---
 
 ## App Shell

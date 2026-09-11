@@ -1,5 +1,6 @@
+import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Product } from '../models/product.model';
 import { resolveClientMediaUrl } from '../utils/media-url';
@@ -24,6 +25,7 @@ export class ProductsService {
   private readonly publicApiBase = inject(PUBLIC_API_BASE);
   private readonly cacheMs = 60_000;
   private loadPromise: Promise<Product[]> | null = null;
+  private configPromise: Promise<void> | null = null;
   private loadedAt = 0;
   defaultImage = LOGO_FALLBACK;
   readonly products = this._products.asReadonly();
@@ -32,16 +34,31 @@ export class ProductsService {
   readonly error = this._error.asReadonly();
 
   constructor() {
-    void this.loadConfig().then(() => this.loadFromApi());
+    // Browser: warm the catalogue immediately, so search and navigation feel
+    // instant. Server: only when a page asks (`ensureLoaded()` from home and
+    // collection). The nav injects this service on every page, so an eager
+    // load here fetched the whole catalogue for every render, including
+    // contact, story and policy pages that never show a product: ~800 kB
+    // embedded in each page's transfer state and the full /api/products
+    // response time added to every request.
+    if (isPlatformBrowser(inject(PLATFORM_ID))) void this.loadFromApi();
   }
 
-  private async loadConfig(): Promise<void> {
-    try {
-      const res = await firstValueFrom(
-        this.http.get<{ success: boolean; data: { defaultImage?: string } }>(`${this.apiBase}/config`),
-      );
-      if (res?.data?.defaultImage) this.defaultImage = res.data.defaultImage;
-    } catch { /* use logo fallback */ }
+  /**
+   * `defaultImage` feeds every product without art, so it must be known before
+   * products are normalised, on both sides alike: a server that normalised with
+   * the logo fallback and a browser that normalised with the configured image
+   * would render different `src`s for the same product. Fetched once.
+   */
+  private loadConfig(): Promise<void> {
+    this.configPromise ??= firstValueFrom(
+      this.http.get<{ success: boolean; data: { defaultImage?: string } }>(`${this.apiBase}/config`),
+    )
+      .then((res) => {
+        if (res?.data?.defaultImage) this.defaultImage = res.data.defaultImage;
+      })
+      .catch(() => { /* use logo fallback */ });
+    return this.configPromise;
   }
 
   getAll(): Product[] {
@@ -80,9 +97,8 @@ export class ProductsService {
     this._loading.set(true);
     this._error.set(null);
 
-    this.loadPromise = firstValueFrom(
-      this.http.get<ApiResponse<Product[]>>(url),
-    )
+    this.loadPromise = this.loadConfig()
+      .then(() => firstValueFrom(this.http.get<ApiResponse<Product[]>>(url)))
       .then((res) => {
         if (Array.isArray(res.data) && res.data.length > 0) {
           this._products.set(res.data.map((product) => this.normalizeProductImages(product)));

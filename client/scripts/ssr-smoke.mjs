@@ -23,7 +23,7 @@
  * browser would fetch everything again and repaint over the rendered page.
  */
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -221,6 +221,24 @@ async function pass(label, apiOrigin) {
 if (!existsSync(SERVER)) {
   console.error(`No server bundle at ${SERVER}. Run \`npm run build:web\` first.`);
   process.exit(2);
+}
+
+// The render server runs on the production Node major or this proves nothing.
+// Newer Node ships browser globals (Node 25+ defines `sessionStorage`), so an
+// unguarded `sessionStorage` call passed here on Node 26 and broke Sadad's
+// return URL in production on Node 22. The production major is the one the
+// API pins in server/package.json `engines`.
+{
+  const engines = JSON.parse(readFileSync(resolve(CLIENT, '../server/package.json'), 'utf8')).engines?.node ?? '';
+  const wanted = Number((engines.match(/\d+/) ?? [])[0]);
+  const running = Number(process.versions.node.split('.')[0]);
+  if (wanted && running !== wanted) {
+    console.error(
+      `ssr-smoke must run on Node ${wanted} (server/package.json engines "${engines}"), not ${process.version}.\n`
+      + `Run it with a Node ${wanted} binary, e.g. \`$(brew --prefix node@${wanted})/bin/node scripts/ssr-smoke.mjs\`.`,
+    );
+    process.exit(2);
+  }
 }
 
 const all = [];

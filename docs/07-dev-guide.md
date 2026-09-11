@@ -86,7 +86,7 @@ npm run admin    # admin-portal only
 | `npm run start:admin` | `ng serve admin-portal --port 4300` | Admin on :4300 |
 | `npm run build:web` | Production build (client-web) | → `dist/client-web/browser/` (static files, `index.csr.html`) and `dist/client-web/server/server.mjs` |
 | `npm run serve:ssr:client-web` | `node dist/client-web/server/server.mjs` | Run the built render server locally (`PORT`, `HOST`, `API_ORIGIN`, `SITE_URL`) |
-| `node scripts/ssr-smoke.mjs` | Render every route, API down (add `--api <origin>` for real data) | SSR gate; fails on crashes, hangs, wrong status, or a broken transfer cache |
+| `node scripts/ssr-smoke.mjs` | Render every route, API down (add `--api <origin>` for real data) | SSR gate; fails on crashes, hangs, wrong status, or a broken transfer cache. Must run on Node 22 (production); on macOS `$(brew --prefix node@22)/bin/node scripts/ssr-smoke.mjs` |
 | `node scripts/url-baseline.mjs` | `capture <out.json> [origin]` / `compare <before> <after>` | Record and diff every public URL's status and redirect around a release |
 | `npm run build:admin` | Production build (admin-portal) | → `dist/admin-portal/` |
 | `npm run build:all` | Build both apps | Full production build |

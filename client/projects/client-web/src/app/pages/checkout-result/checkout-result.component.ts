@@ -1,5 +1,5 @@
-import { CommonModule } from '@angular/common';
-import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
+import { Component, PLATFORM_ID, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { I18nService } from '../../services/i18n.service';
 
@@ -23,6 +23,14 @@ export class CheckoutResultComponent {
   constructor() {
     // Payment completed (success or failure) — clear the back-navigation flag
     // so the recovery screen does not appear if the user navigates back later.
-    sessionStorage.removeItem('elite_pending_order');
+    //
+    // Browser only. Sadad's cancel return lands on `/?order_id=…`, which is
+    // server-rendered, and its guard redirects here, so this constructor also
+    // runs during that server render. Node 22 has no `sessionStorage`; the
+    // ReferenceError failed the whole navigation and the customer got a bare
+    // "Cannot GET /" instead of this page.
+    if (isPlatformBrowser(inject(PLATFORM_ID))) {
+      sessionStorage.removeItem('elite_pending_order');
+    }
   }
 }
