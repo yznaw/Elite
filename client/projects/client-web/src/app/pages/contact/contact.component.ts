@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -37,6 +37,19 @@ export class ContactComponent implements OnInit {
   private readonly http        = inject(HttpClient);
   private readonly seo         = inject(SeoService);
   private readonly sanitizer   = inject(DomSanitizer);
+  private readonly destroyRef  = inject(DestroyRef);
+
+  /**
+   * Ticks once a minute so the "Open now" badge updates on its own.
+   *
+   * OnPush only re-renders on an input change, a DOM event, or a signal read
+   * during the last render changing -- a plain `new Date()` inside
+   * `isOpenNow()` computed the right answer exactly once, at whatever moment
+   * the page happened to render, and then sat there wrong past the next
+   * hour boundary until the visitor did something. Reading this signal from
+   * `dohaNow()` is what makes the badge a live value instead of a snapshot.
+   */
+  private readonly nowTick = signal(Date.now());
   private readonly apiBase     = this.resolveApiBase();
 
   private readonly seoTags = this.seo.watch(() => ({
@@ -115,7 +128,7 @@ export class ContactComponent implements OnInit {
 
   /** Doha keeps a fixed UTC+3 offset, so this needs no DST handling. */
   private dohaNow(): Date {
-    const n = new Date();
+    const n = new Date(this.nowTick());
     return new Date(n.getTime() + n.getTimezoneOffset() * 60000 + 3 * 3600000);
   }
 
@@ -214,6 +227,12 @@ export class ContactComponent implements OnInit {
 
   ngOnInit(): void {
     void this.homeContent.refresh(true);
+
+    // 30s is frequent enough that the badge never reads stale for more than
+    // half a minute, and light enough (one signal write, no HTTP) to leave
+    // running for as long as a visitor stays on the page.
+    const timer = setInterval(() => this.nowTick.set(Date.now()), 30_000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
   }
 
   set<K extends keyof ContactForm>(key: K, value: ContactForm[K]): void {

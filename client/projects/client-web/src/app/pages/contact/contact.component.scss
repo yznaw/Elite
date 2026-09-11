@@ -31,9 +31,10 @@
 }
 
 .contact-success__body {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.8;
+  /* Same contrast fix as .contact-header__sub. */
+  font-size: 16px;
+  color: var(--cream-dim);
+  line-height: 1.65;
 }
 
 .contact-success__direct {
@@ -85,8 +86,12 @@
 }
 
 /* ── Header ──────────────────────────────────────── */
+/* 600px fit the old two-line "Commission / a pair." hero. The current
+   headline ("We are here to help" / "نحن هنا لمساعدتك") is meant to read as
+   one line, so the box needs real room -- 600px was wrapping it at nearly
+   every viewport width. */
 .contact-header {
-  max-width: 600px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 56px 24px 48px;
   text-align: center;
@@ -101,73 +106,53 @@
 }
 
 .contact-header__headline {
-  font-size: clamp(36px, 7vw, 64px);
+  /* Scales down before it wraps: at 900px container width even the longer
+     Arabic rendering ("نحن هنا لمساعدتك") clears comfortably on one line. */
+  font-size: clamp(26px, 4.6vw, 50px);
   font-weight: 300;
   color: var(--cream);
-  line-height: 1;
+  line-height: 1.15;
   margin-bottom: 16px;
+  white-space: nowrap;
+}
+
+@media (max-width: 460px) {
+  /* Below this the nowrap guard would rather shrink the type further than
+     let it overflow the viewport; a single very long word is the only case
+     that still wraps, and that is the honest fallback. */
+  .contact-header__headline {
+    font-size: clamp(22px, 7.2vw, 32px);
+  }
 }
 
 .contact-header__accent { color: var(--gold); font-style: italic; }
 
 .contact-header__sub {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.8;
+  /* var(--muted) on white sits at ~4.2:1, under the 4.5:1 AA floor for text
+     this size -- readable on some monitors and not on others. cream-dim
+     clears 12:1. Width capped so the single line the headline sets up
+     doesn't run edge to edge at 900px. */
+  max-width: 62ch;
+  margin-inline: auto;
+  font-size: 16px;
+  color: var(--cream-dim);
+  line-height: 1.65;
 }
 
-/* ── WhatsApp bar ────────────────────────────────── */
-.whatsapp-bar {
-  max-width: 600px;
-  margin: 0 auto 40px;
-  padding: 0 24px;
-  display: flex;
-  justify-content: center;
-}
-
-.whatsapp-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 28px;
-  background: #25d366;
-  color: #fff;
-  border-radius: 99px;
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: all 0.2s;
-  box-shadow: 0 4px 20px rgba(37, 211, 102, 0.3);
-
-  &:hover {
-    background: #20ba5a;
-    box-shadow: 0 6px 28px rgba(37, 211, 102, 0.4);
-    transform: translateY(-1px);
-  }
-}
-
-.whatsapp-handle {
-  opacity: 0.85;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-/* ── Body grid ───────────────────────────────────── */
+/* ── Form section container ────────────────────────
+   Used to be a 2-column grid (form + a 380px info aside). The aside
+   moved out into `.direct` and `.social` above the form, so this is a
+   single column now -- a leftover 380px second column here silently
+   squeezed the form into ~680px on an 1100px page while it looked like
+   the box had simply not grown to fit. */
 .contact-body {
   max-width: 1100px;
   margin: 0 auto;
   padding: 0 24px;
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 40px;
-  align-items: start;
 }
 
 @media (max-width: 900px) {
-  .contact-body {
-    grid-template-columns: 1fr;
-    padding: 0 16px;
-  }
+  .contact-body { padding: 0 16px; }
 }
 
 /* ── Contact form ────────────────────────────────── */
@@ -459,7 +444,7 @@
   line-height: 1.75;
 }
 .branch__addr-line { display: block; }
-.branch__park { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.branch__park { margin: 6px 0 0; color: var(--cream-dim); font-size: 13px; }
 
 .branch__hours {
   margin-top: 18px;
@@ -532,7 +517,7 @@
 .stockist { background: var(--surface); padding: 18px 22px; }
 .stockist__name { font-size: 15px; font-weight: 600; color: var(--cream); }
 .stockist__line { font-size: 13.5px; color: var(--cream-dim); margin-top: 3px; }
-.stockist__line--muted { color: var(--muted); }
+.stockist__line--muted { color: var(--cream-dim); }
 .stockist__link {
   display: inline-block;
   margin-top: 9px;
@@ -558,7 +543,7 @@
   margin: 0;
 }
 .direct__cell { background: var(--surface); padding: 18px 20px; }
-.direct__cell dt { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+.direct__cell dt { font-size: 12px; font-weight: 600; color: var(--cream-dim); margin-bottom: 5px; }
 .direct__cell dd { margin: 0; font-size: 15px; }
 .direct__cell a {
   color: var(--cream);

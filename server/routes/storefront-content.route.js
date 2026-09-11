@@ -231,8 +231,8 @@ const DEFAULT_HOME_CONTENT = {
     headlineAccentEn: '',
     headlineAr: 'نحن هنا لمساعدتك',
     headlineAccentAr: '',
-    subhead: 'Our team is ready for your question, from sizing to following up an order.',
-    subheadAr: 'فريقنا جاهز للرد على استفسارك، من اختيار المقاس إلى متابعة طلبك.',
+    subhead: 'Our team is ready to help, from sizing to following up an order.',
+    subheadAr: 'فريقنا جاهز لمساعدتك، من اختيار المقاس إلى متابعة طلبك.',
     // Confirmed by Elite, 2026-09-10. The previous values here were
     // development placeholders that reached production: a literal
     // "+974 4XXX XXXX" under a call-to-action, a West Bay address the brand
