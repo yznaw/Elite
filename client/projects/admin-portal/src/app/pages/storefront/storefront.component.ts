@@ -2824,7 +2824,31 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   /** Refresh product copy while preserving the editor's colour curation. */
   updateSlideProductInfo(i: number): void {
     const productId = this.content().heroSlider?.items?.[i]?.productId;
-    if (productId) this.applyProductToSlide(i, productId, false);
+    if (!productId) {
+      this.toast.error(
+        this.t('storefront.editor.toast.linkedProductMissing'),
+        this.t('storefront.editor.toast.linkedProductMissing.sub'),
+      );
+      return;
+    }
+
+    const result = this.applyProductToSlide(i, productId, false);
+    if (result === 'updated') {
+      this.toast.success(
+        this.t('storefront.editor.toast.productInfoUpdated'),
+        this.t('storefront.editor.toast.productInfoUpdated.sub'),
+      );
+    } else if (result === 'unchanged') {
+      this.toast.info(
+        this.t('storefront.editor.toast.productInfoCurrent'),
+        this.t('storefront.editor.toast.productInfoCurrent.sub'),
+      );
+    } else {
+      this.toast.error(
+        this.t('storefront.editor.toast.linkedProductMissing'),
+        this.t('storefront.editor.toast.linkedProductMissing.sub'),
+      );
+    }
   }
 
   /**
@@ -2866,10 +2890,15 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     }
   }
 
-  private applyProductToSlide(i: number, productId: string, resetColors: boolean): void {
+  private applyProductToSlide(
+    i: number,
+    productId: string,
+    resetColors: boolean,
+  ): 'updated' | 'unchanged' | 'missing' {
     const product = this.productById(productId);
-    if (!product) return;
+    if (!product) return 'missing';
 
+    let changed = false;
     this.content.update((c) => {
       const items = c.heroSlider.items.map((item, idx) => {
         if (idx !== i) return item;
@@ -2885,13 +2914,25 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           descriptionAr: this.heroCopy(product.shortAr, product.arDesc),
           alt:           product.name ? `${product.name} by ${product.brand || 'Elite'}` : '',
         };
-        return resetColors
+        const next = resetColors
           ? { ...updated, colors: [], defaultColorSlug: '' }
           : updated;
+
+        changed = item.productId !== next.productId
+          || item.name !== next.name
+          || item.nameEn !== next.nameEn
+          || item.nameAr !== next.nameAr
+          || item.descriptionEn !== next.descriptionEn
+          || item.descriptionAr !== next.descriptionAr
+          || item.alt !== next.alt
+          || (resetColors && ((item.colors?.length ?? 0) > 0 || !!item.defaultColorSlug));
+
+        return changed ? next : item;
       });
-      return { ...c, heroSlider: { ...c.heroSlider, items } };
+      return changed ? { ...c, heroSlider: { ...c.heroSlider, items } } : c;
     });
-    this.markDirty();
+    if (changed) this.markDirty();
+    return changed ? 'updated' : 'unchanged';
   }
 
   /**
