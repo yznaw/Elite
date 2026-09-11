@@ -30,6 +30,11 @@ pm2 status
 
 - The worktree must be clean. Stop if it contains uncommitted server edits.
 - Node must satisfy the server requirement (`22.x`).
+- The database must still have JIT disabled. A restored or rebuilt database re-enables it, and every catalogue page pays ~3 s of query compilation:
+  ```bash
+  cd /var/www/elite/server && node -e 'require("dotenv").config();const db=require("./db/client");db.pool.query("SELECT current_setting($1) AS jit",["jit"]).then(r=>console.log("jit:",r.rows[0].jit)).finally(()=>db.pool.end())'
+  ```
+  Expect `off`; if not, see *Database Settings* in [05 – API Server](./05-api-server.md) and reload the API afterwards.
 - Record the current commit hash for rollback.
 - Take and verify an encrypted database + uploads backup using [the backup/restore runbook](./18-backup-restore-runbook.md). Do not deploy migrations without a usable backup.
 

@@ -505,6 +505,46 @@ The complete endpoint and payload reference is in [12 – POS System and Integra
 
 ---
 
+## Database Settings
+
+Some settings live on the production database itself, not in `server/.env`, so a
+restored, rebuilt or freshly created database silently loses them. Re-apply and
+verify them after any restore.
+
+### `jit = off` — required
+
+```sql
+ALTER DATABASE elite SET jit = off;
+-- new connections only: restart the API afterwards (pm2 reload elite-api)
+SELECT current_setting('jit');   -- must be 'off'
+```
+
+`GET /api/products` builds a single query carrying five correlated subqueries
+per product (variants, gallery image, image list, per-colour images, related
+products). Postgres priced that plan at ~1.8 million cost units — far above the
+default `jit_above_cost` of 100 000 — and compiled 201 functions before running
+it. Measured on production on 12 September 2026 with 41 active products:
+
+| | Time |
+|---|---|
+| JIT compilation (generation, inlining, optimisation, emission) | 3 747 ms |
+| Actual query execution | 73 ms |
+| `/api/products` end to end, JIT on | ~3 300 ms |
+| `/api/products` end to end, JIT off | ~110 ms |
+| Server-rendered home page, JIT off | ~300 ms (was ~3 500 ms) |
+
+The catalogue is thousands of rows, not millions; JIT can never repay its
+compilation cost at this size, and the estimate is inflated by the subqueries
+rather than by real work. This predates server-side rendering — it made every
+first paint slow — but SSR turned it into slow time-to-first-byte, which is
+what search engines measure.
+
+Revert with `ALTER DATABASE elite RESET jit;` and reload the API. If a future
+query genuinely needs JIT, raise `jit_above_cost` instead of enabling it
+globally.
+
+---
+
 ## Environment Variables
 
 Create `server/.env` from the template:
