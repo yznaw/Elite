@@ -47,22 +47,26 @@ Copy it to `/etc/nginx/sites-available/elite` rather than retyping it, so the
 served config and the repo cannot drift.
 
 ```bash
-sudo cp /var/www/elite/deploy/nginx/elite.conf /etc/nginx/sites-available/elite
+sudo cp /var/www/elite/deploy/nginx/elite.conf        /etc/nginx/sites-available/elite
+sudo cp /var/www/elite/deploy/nginx/compression.conf  /etc/nginx/conf.d/compression.conf
 ```
+
+Two files, deliberately. Compression is http-context configuration; `sites-enabled/*` is included *inside* the http block, so keeping those directives in the site file put them in http context as well and collided with the `gzip on;` that Ubuntu's stock `nginx.conf` already sets — `nginx -t` fails outright with *"gzip directive is duplicate"*. A second site file would have hit the same wall.
 
 It carries three things beyond a plain SPA host, each marked with a numbered
 comment in the file:
 
-1. **Compression.** Nginx's default `gzip_types` is `text/html` only, so the
-   Angular bundle went out uncompressed: `main.js` is about 500 kB raw against
-   roughly 120 kB gzipped. The HTML *was* compressed, which is what hid it.
-   These directives sit at `http` context (the `sites-enabled` include is
-   inside `http`), so do not move them inside a `server` block.
+1. **Compression** (in `compression.conf`). Ubuntu's stock `nginx.conf` has
+   `gzip on;` active but leaves `gzip_types` commented out, so nginx falls back
+   to `text/html` alone: the HTML was compressed while `main.js` — about 500 kB
+   raw against roughly 120 kB gzipped — went out whole. Compressed HTML is
+   exactly what hid the problem. **Never add `gzip on;` to this file**; the one
+   in `nginx.conf` is already in the same context.
 2. **A canonical host.** `www.elitecollections.qa` previously answered 200 and
    served the entire site. Since the storefront derives its canonical URL from
    `location.origin`, the www copy declared *itself* canonical, so the two
    hostnames competed as separate sites. www now only issues a 301.
-3. **Caching.** `index.html` is `no-store` because it names the current build's
+3. **Caching** (in `elite.conf`). `index.html` is `no-store` because it names the current build's
    hashed files. Hashed `.js`/`.css` are immutable for a year. `/assets/` is
    deliberately only 7 days, because those filenames are *not* hashed and a
    longer TTL would mean a replaced image takes a year to reach return visitors.
