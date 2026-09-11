@@ -54,6 +54,13 @@ export class AdminMediaService {
 
   /** Resolve relative /uploads/… URLs so they route through the API proxy. */
   normalizeFile(f: MediaFile): MediaFile {
-    return { ...f, preview: f.preview ? this.api.mediaUrl(f.preview) : f.preview };
+    return {
+      ...f,
+      preview: f.preview ? this.api.mediaUrl(f.preview) : f.preview,
+      // The media picker prefers the full-resolution original. Leaving this as
+      // `/uploads/...` made the admin browser request it from the Angular host
+      // instead of the API, so the selected image immediately looked broken.
+      storageUrl: f.storageUrl ? this.api.mediaUrl(f.storageUrl) : f.storageUrl,
+    };
   }
 }

@@ -383,12 +383,20 @@ interface StorefrontContent {
                       }
 
                       @if (slideColorWarnings(i).length > 0) {
-                        <div class="hero-warn">
+                        <div class="hero-warn hero-warn--actionable">
                           <ap-icon name="warning" [size]="12"/>
-                          <span>
+                          <span class="hero-warn__copy">
                             {{ t('storefront.editor.slider.missingHex') }}
                             <strong>{{ slideColorWarnings(i).join(', ') }}</strong>
                             {{ t('storefront.editor.slider.missingHexFix') }}
+                          </span>
+                          <span class="hero-warn__actions">
+                            @for (label of slideColorWarnings(i); track label) {
+                              <button class="hero-warn__btn" type="button" (click)="openCreateColor(label)">
+                                <ap-icon name="plus" [size]="11"/>
+                                {{ t('storefront.editor.slider.createColour') }} {{ label }}
+                              </button>
+                            }
                           </span>
                         </div>
                       }
@@ -436,7 +444,7 @@ interface StorefrontContent {
 
                               <div class="hero-colorshot__media">
                                 @if (c.imageUrl) {
-                                  <img class="hero-colorshot__thumb" [src]="c.imageUrl" [alt]="c.label"/>
+                                  <img class="hero-colorshot__thumb" [src]="mediaUrl(c.imageUrl)" [alt]="c.label"/>
                                 } @else {
                                   <span class="hero-colorshot__thumb hero-colorshot__thumb--none" [title]="t('storefront.editor.slider.usesDefault')">
                                     <ap-icon name="media" [size]="14"/>
@@ -571,7 +579,7 @@ interface StorefrontContent {
                     @else {
                       @for (col of filteredPickerCollections(); track col.id) {
                         <div class="col-picker-row" [class.selected]="featuredRefs().includes(col.id)" (click)="toggleFeatured(col.id)">
-                          @if (col.imageUrl) { <img [src]="col.imageUrl" [alt]="col.title" class="col-picker-img"/> }
+                          @if (col.imageUrl) { <img [src]="mediaUrl(col.imageUrl)" [alt]="col.title" class="col-picker-img"/> }
                           @else { <div class="col-picker-img-empty"><ap-icon name="collections" [size]="14"/></div> }
                           <div class="col-picker-info"><div class="col-picker-name">{{ col.title }}</div><div class="col-picker-path mono">/collection/{{ col.handle }}</div></div>
                           <div class="col-picker-check" [class.on]="featuredRefs().includes(col.id)"></div>
@@ -596,7 +604,7 @@ interface StorefrontContent {
               <div class="tile-editor-grid">
                 @for (tile of content().collections; track tile.id; let ti = $index) {
                   <article class="tile-editor">
-                    <div class="tile-thumb"><img [src]="tile.imageUrl" [alt]="tile.title"/><span>{{ tile.title }}</span><span class="tile-num">{{ ti + 1 }}</span></div>
+                    <div class="tile-thumb"><img [src]="mediaUrl(tile.imageUrl)" [alt]="tile.title"/><span>{{ tile.title }}</span><span class="tile-num">{{ ti + 1 }}</span></div>
                     <div class="field-stack compact">
                       <label><span class="lbl">{{ t('storefront.editor.tiles.linkedCollection') }}</span>
                         <select class="inp inp-sm" [ngModel]="tile.collectionId || ''" (ngModelChange)="selectTileCollection(ti, $event)">
@@ -616,7 +624,7 @@ interface StorefrontContent {
                         </div>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.imageReadonly') }}</span>
                           <div class="row gap-sm">
-                            @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
+                            @if (tile.imageUrl) { <img class="img-thumb" [src]="mediaUrl(tile.imageUrl)" [alt]="tile.title"/> }
                             <input class="inp" [ngModel]="tile.imageUrl" readonly style="opacity:0.5;cursor:not-allowed;flex:1;"/>
                           </div>
                         </label>
@@ -628,7 +636,7 @@ interface StorefrontContent {
                         </div>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.imageUrl') }}</span>
                           <div class="row gap-sm">
-                            @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
+                            @if (tile.imageUrl) { <img class="img-thumb" [src]="mediaUrl(tile.imageUrl)" [alt]="tile.title"/> }
                             <div style="flex:1">
                               <div class="row gap-sm mb-4">
                                 <input #tileFile type="file" accept="image/*" (change)="uploadTileImage(ti, $event)" hidden/>
@@ -663,7 +671,7 @@ interface StorefrontContent {
               <div class="card-pad field-stack">
                 <label><span class="lbl">{{ t('storefront.editor.promotion.image') }}</span>
                   <div class="image-picker-row">
-                    @if (content().hero.imageUrl) { <img class="img-thumb" [src]="content().hero.imageUrl" [alt]="content().hero.title"/> }
+                    @if (content().hero.imageUrl) { <img class="img-thumb" [src]="mediaUrl(content().hero.imageUrl)" [alt]="content().hero.title"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #heroFile type="file" accept="image/*" (change)="uploadHeroImage($event)" hidden/>
@@ -696,7 +704,7 @@ interface StorefrontContent {
             <div class="card preview-card">
               <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.promotion.preview') }}</div></div></div>
               <div class="card-pad preview-hero">
-                <img [src]="content().hero.imageUrl" [alt]="content().hero.title"/>
+                <img [src]="mediaUrl(content().hero.imageUrl)" [alt]="content().hero.title"/>
                 <div>
                   <small>Elite Collection</small>
                   <h3>{{ content().hero.title }}</h3>
@@ -788,7 +796,7 @@ interface StorefrontContent {
                 <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="content().story.hero.bodyEn" (ngModelChange)="patchStoryHero('bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().story.hero.bodyAr" (ngModelChange)="patchStoryHero('bodyAr',$event)"></textarea></label></div>
                 <label><span class="lbl">{{ t('storefront.editor.storyHero.image') }}</span>
                   <div class="image-picker-row">
-                    @if (content().story.hero.imageUrl) { <img class="img-thumb" [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/> }
+                    @if (content().story.hero.imageUrl) { <img class="img-thumb" [src]="mediaUrl(content().story.hero.imageUrl)" [alt]="content().story.hero.imageAlt"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #shFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden/>
@@ -805,7 +813,7 @@ interface StorefrontContent {
             <div class="card preview-card">
               <div class="card-header"><div class="card-title">{{ t('storefront.editor.promotion.preview') }}</div></div>
               <div class="card-pad story-preview-hero">
-                <img [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/>
+                <img [src]="mediaUrl(content().story.hero.imageUrl)" [alt]="content().story.hero.imageAlt"/>
                 <div><small>{{ content().story.hero.kickerEn }}</small><h3>{{ content().story.hero.titleEn }}</h3><em>{{ content().story.hero.accentEn }}</em></div>
               </div>
             </div>
@@ -873,7 +881,7 @@ interface StorefrontContent {
                 <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="chapter.bodyEn" (ngModelChange)="patchChapter(i,'bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="chapter.bodyAr" (ngModelChange)="patchChapter(i,'bodyAr',$event)"></textarea></label></div>
                 <label><span class="lbl">{{ t('storefront.editor.chapters.image') }}</span>
                   <div class="image-picker-row">
-                    @if (chapter.imageUrl) { <img class="img-thumb" [src]="chapter.imageUrl" [alt]="chapter.imageAlt"/> }
+                    @if (chapter.imageUrl) { <img class="img-thumb" [src]="mediaUrl(chapter.imageUrl)" [alt]="chapter.imageAlt"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #chFile type="file" accept="image/*" (change)="uploadChapterImage(i,$event)" hidden/>
@@ -1144,6 +1152,65 @@ interface StorefrontContent {
     }
 
   </div><!-- /sf-shell -->
+
+  <!-- ── Create missing reference colour ─────────────────────── -->
+  @if (createColorNameEn()) {
+    <div class="color-create-backdrop" (click)="closeCreateColor()"></div>
+    <div class="color-create-modal" role="dialog" aria-modal="true"
+         [attr.aria-labelledby]="'create-colour-title'" (keydown.escape)="closeCreateColor()">
+      <form (ngSubmit)="createMissingColor()">
+        <div class="color-create-head">
+          <div>
+            <p class="mpp-eyebrow">{{ t('storefront.editor.createColour.eyebrow') }}</p>
+            <div class="card-title" id="create-colour-title">{{ t('storefront.editor.createColour.title') }}</div>
+          </div>
+          <button class="x-btn" type="button" [disabled]="createColorSaving()" (click)="closeCreateColor()"
+                  [attr.aria-label]="t('common.cancel')">
+            <ap-icon name="x" [size]="14"/>
+          </button>
+        </div>
+
+        <div class="color-create-body">
+          <p class="color-create-intro">{{ t('storefront.editor.createColour.intro') }}</p>
+
+          <label>
+            <span class="lbl">{{ t('storefront.editor.createColour.nameEn') }}</span>
+            <input class="inp" name="createColorNameEn" [ngModel]="createColorNameEn()" readonly/>
+          </label>
+
+          <label>
+            <span class="lbl">{{ t('storefront.editor.createColour.nameAr') }}</span>
+            <input class="inp" name="createColorNameAr" dir="rtl" autocomplete="off"
+                   [ngModel]="createColorNameAr()" (ngModelChange)="createColorNameAr.set($event)"
+                   [placeholder]="t('storefront.editor.createColour.nameArPlaceholder')" required/>
+          </label>
+
+          <label>
+            <span class="lbl">{{ t('storefront.editor.createColour.hex') }}</span>
+            <span class="color-create-hex">
+              <input class="color-create-swatch" type="color" name="createColorPicker"
+                     [ngModel]="createColorPickerValue()" (ngModelChange)="createColorHex.set($event)"
+                     [attr.aria-label]="t('storefront.editor.createColour.hex')"/>
+              <input class="inp mono" name="createColorHex" maxlength="7" autocomplete="off"
+                     [ngModel]="createColorHex()" (ngModelChange)="createColorHex.set($event)"
+                     placeholder="#000000" required pattern="#[0-9A-Fa-f]{6}"/>
+            </span>
+          </label>
+        </div>
+
+        <div class="color-create-foot">
+          <button class="btn btn-outline" type="button" [disabled]="createColorSaving()" (click)="closeCreateColor()">
+            {{ t('common.cancel') }}
+          </button>
+          <button class="btn btn-gold" type="submit" [disabled]="!canCreateColor() || createColorSaving()">
+            @if (createColorSaving()) { <ap-spinner [size]="11"/> }
+            @else { <ap-icon name="plus" [size]="12"/> }
+            {{ t('storefront.editor.createColour.submit') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  }
 
   <!-- ── Media picker slide-in (shared) ──────────────────────── -->
   @if (mediaPickerTarget()) {
@@ -1664,6 +1731,58 @@ interface StorefrontContent {
       font-size: 12px; line-height: 1.4;
     }
     .hero-warn strong { font-weight: 700; }
+    .hero-warn--actionable { align-items: flex-start; flex-wrap: wrap; }
+    .hero-warn__copy { flex: 1; min-width: 220px; }
+    .hero-warn__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }
+    .hero-warn__btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      min-height: 28px; padding: 4px 9px;
+      border: 1px solid currentColor; border-radius: 7px;
+      background: var(--surface); color: inherit;
+      font: inherit; font-weight: 700; cursor: pointer;
+      transition: transform 140ms cubic-bezier(.23,1,.32,1), background-color 140ms ease;
+    }
+    .hero-warn__btn:active { transform: scale(.97); }
+
+    /* Missing-colour modal. Kept compact because it is a quick repair action,
+       not a second full Reference Data editor. */
+    .color-create-backdrop {
+      position: fixed; inset: 0; z-index: 450;
+      background: rgba(12, 18, 24, .48);
+      backdrop-filter: blur(2px);
+    }
+    .color-create-modal {
+      position: fixed; z-index: 451;
+      inset-block-start: 50%; inset-inline-start: 50%;
+      width: min(460px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px); overflow-y: auto;
+      transform: translate(-50%, -50%);
+      border: 1px solid var(--border-2); border-radius: 14px;
+      background: var(--surface); box-shadow: 0 24px 80px rgba(0,0,0,.24);
+      opacity: 1;
+      transition: opacity 180ms cubic-bezier(.23,1,.32,1), transform 180ms cubic-bezier(.23,1,.32,1);
+      @starting-style { opacity: 0; transform: translate(-50%, -48%) scale(.97); }
+    }
+    .color-create-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+      padding: 18px 20px 14px; border-bottom: 1px solid var(--border-2);
+    }
+    .color-create-intro { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .color-create-body { display: grid; gap: 16px; padding: 18px 20px; }
+    .color-create-body label { display: grid; gap: 7px; }
+    .color-create-body input[readonly] { color: var(--muted); background: var(--bg); }
+    .color-create-hex { display: grid; grid-template-columns: 52px 1fr; gap: 8px; }
+    .color-create-swatch {
+      width: 52px; height: 40px; padding: 3px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); cursor: pointer;
+    }
+    .color-create-foot {
+      display: flex; justify-content: flex-end; gap: 8px;
+      padding: 14px 20px 18px; border-top: 1px solid var(--border-2);
+    }
+    .color-create-foot .btn { transition: transform 140ms cubic-bezier(.23,1,.32,1); }
+    .color-create-foot .btn:active:not(:disabled) { transform: scale(.97); }
 
     .hero-picker { display: grid; gap: 8px; }
     .hero-picker__empty { color: var(--muted); padding: 8px 0; }
@@ -2232,6 +2351,18 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   readonly allProducts        = signal<Product[]>([]);
   readonly productsLoading    = signal(true);
   readonly refColors          = signal<RefColor[]>([]);
+  readonly createColorNameEn  = signal('');
+  readonly createColorNameAr  = signal('');
+  readonly createColorHex     = signal('');
+  readonly createColorSaving  = signal(false);
+  readonly createColorPickerValue = computed(() =>
+    /^#[0-9a-f]{6}$/i.test(this.createColorHex().trim()) ? this.createColorHex().trim() : '#808080',
+  );
+  readonly canCreateColor     = computed(() =>
+    !!this.createColorNameEn().trim()
+      && !!this.createColorNameAr().trim()
+      && /^#[0-9a-f]{6}$/i.test(this.createColorHex().trim()),
+  );
   /** Index of the slide whose product picker is open, or null. */
   readonly productPickerSlide = signal<number | null>(null);
   readonly productPickerSearch = signal('');
@@ -2317,7 +2448,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   colorSwatchImage(label: string): string {
     const key = String(label || '').trim().toLowerCase();
     const match = this.refColors().find((c) => c.name_en.trim().toLowerCase() === key);
-    return match?.swatch_image_url || '';
+    return this.api.mediaUrl(match?.swatch_image_url || '');
   }
 
   /** A colour with neither hex nor swatch image cannot render, so warn in the editor. */
@@ -2330,6 +2461,65 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     return (item?.colors ?? []).map((c) => c.label).filter((label) => this.colorMissingHex(label));
   }
 
+  openCreateColor(label: string): void {
+    const name = String(label || '').trim();
+    if (!name) return;
+    const existing = this.refColors().find((color) =>
+      color.name_en.trim().toLowerCase() === name.toLowerCase(),
+    );
+    this.createColorNameEn.set(name);
+    this.createColorNameAr.set('');
+    this.createColorHex.set(/^#[0-9a-f]{6}$/i.test(existing?.hex || '') ? existing!.hex : '');
+  }
+
+  closeCreateColor(): void {
+    if (this.createColorSaving()) return;
+    this.createColorNameEn.set('');
+    this.createColorNameAr.set('');
+  }
+
+  async createMissingColor(): Promise<void> {
+    if (!this.canCreateColor() || this.createColorSaving()) return;
+
+    const nameEn = this.createColorNameEn().trim();
+    const existing = this.refColors().find((color) =>
+      color.name_en.trim().toLowerCase() === nameEn.toLowerCase(),
+    );
+
+    this.createColorSaving.set(true);
+    try {
+      const nextOrder = this.refColors().reduce((max, color) => Math.max(max, color.sort_order || 0), 0) + 1;
+      const values = {
+        name_en: nameEn,
+        name_ar: this.createColorNameAr().trim(),
+        hex: this.createColorHex().trim().toUpperCase(),
+        swatch_image_url: existing?.swatch_image_url ?? null,
+        sort_order: existing?.sort_order ?? nextOrder,
+      };
+      // A legacy reference row can exist without either a hex value or swatch
+      // image. In that case the same warning is shown, so repair that row
+      // instead of creating a duplicate with the same English name.
+      const saved = existing
+        ? await this.refApi.updateColor(existing.id, values)
+        : await this.refApi.createColor(values);
+      this.refColors.update((list) => [...list.filter((color) => color.id !== saved.id), saved]
+        .sort((a, b) => a.sort_order - b.sort_order || a.name_en.localeCompare(b.name_en)));
+      this.createColorNameEn.set('');
+      this.createColorNameAr.set('');
+      this.toast.success(
+        this.t('storefront.editor.createColour.success'),
+        this.t('storefront.editor.createColour.successSub'),
+      );
+    } catch {
+      this.toast.error(
+        this.t('storefront.editor.createColour.failed'),
+        this.t('storefront.editor.createColour.failedSub'),
+      );
+    } finally {
+      this.createColorSaving.set(false);
+    }
+  }
+
   /** Featured colours on a slide with no hero shot of their own. */
   slideImageWarnings(i: number): string[] {
     const item = this.content().heroSlider?.items?.[i];
@@ -2339,11 +2529,12 @@ export class StorefrontComponent implements OnInit, OnDestroy {
 
   /** Set the hero shot for one colourway on one slide. */
   patchSlideColorImage(slideIdx: number, colorIdx: number, url: string): void {
+    const resolvedUrl = this.api.mediaUrl(url);
     this.content.update((c) => {
       const items = c.heroSlider.items.map((item, idx) => {
         if (idx !== slideIdx) return item;
         const colors = (item.colors ?? []).map((color, ci) =>
-          ci === colorIdx ? { ...color, imageUrl: url } : color);
+          ci === colorIdx ? { ...color, imageUrl: resolvedUrl } : color);
         return { ...item, colors };
       });
       return { ...c, heroSlider: { ...c.heroSlider, items } };
@@ -3249,6 +3440,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   applyMediaPick(url: string): void {
     const target = this.mediaPickerTarget();
     if (!target || !url) { this.mediaPickerTarget.set(null); return; }
+    url = this.api.mediaUrl(url);
 
     if (target === 'hero') { this.patchHero('imageUrl', url); }
     else if (target === 'story-hero') { this.patchStoryHero('imageUrl', url); }
@@ -3274,6 +3466,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   imageName(url: string): string {
     if (!url) return 'No image selected';
     try { return decodeURIComponent(url.split('/').pop() ?? url).slice(0, 40); } catch { return url.slice(0, 40); }
+  }
+
+  /** Resolve legacy `/uploads/...` values already stored in an old draft. */
+  mediaUrl(url: string): string {
+    return this.api.mediaUrl(url);
   }
 
   async uploadHeroImage(event: Event): Promise<void> {
