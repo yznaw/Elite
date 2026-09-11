@@ -73,6 +73,10 @@ export class PosHardwareService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private signerWatchTimer: ReturnType<typeof setInterval> | null = null;
+  /** One physical printer cannot finish two receipts concurrently. Chaining
+   * jobs prevents a fast refund/void followed by a sale from interleaving at
+   * the spooler boundary. A failed job never blocks the next one. */
+  private printQueue: Promise<void> = Promise.resolve();
   private readonly SIGNER_POLL_MS = 60000;
   // How many consecutive reconnect failures get shipped to the server before
   // the durable log goes quiet. Console logging is unaffected. A register
@@ -361,35 +365,45 @@ export class PosHardwareService {
   }
 
   async printReceipt(receiptData: unknown, openDrawer = false): Promise<void> {
-    logStage('printReceipt — start', {
-      printerName: this.settings?.printerName || null,
-      openDrawer,
-      receiptNumber: (receiptData as PosReceiptData)?.receiptNumber,
+    return this.enqueuePrint(async () => {
+      logStage('printReceipt — start', {
+        printerName: this.settings?.printerName || null,
+        openDrawer,
+        receiptNumber: (receiptData as PosReceiptData)?.receiptNumber,
+      });
+      const profile = await this.getBusinessProfile();
+      logStage('printReceipt — business profile', { loaded: Boolean(profile) });
+      const rendered = await this.renderer.render(receiptData as PosReceiptData, profile);
+      await this.printRendered('printReceipt', rendered, openDrawer);
     });
-    const profile = await this.getBusinessProfile();
-    logStage('printReceipt — business profile', { loaded: Boolean(profile) });
-    const rendered = await this.renderer.render(receiptData as PosReceiptData, profile);
-    await this.printRendered('printReceipt', rendered, openDrawer);
   }
 
   /** Z-report reprint/first-print — a cash/sales summary, never opens the drawer. */
   async printZReport(report: unknown): Promise<void> {
-    logStage('printZReport — start', {
-      printerName: this.settings?.printerName || null,
-      zReportId: (report as { zReportId?: string })?.zReportId,
+    return this.enqueuePrint(async () => {
+      logStage('printZReport — start', {
+        printerName: this.settings?.printerName || null,
+        zReportId: (report as { zReportId?: string })?.zReportId,
+      });
+      const profile = await this.getBusinessProfile();
+      const rendered = await this.renderer.renderZReport(report as Parameters<PosReceiptRenderer['renderZReport']>[0], profile);
+      await this.printRendered('printZReport', rendered, false, {
+        qzConfig: {
+          jobName: 'Elite POS Z Report',
+        },
+      });
     });
-    const profile = await this.getBusinessProfile();
-    const rendered = await this.renderer.renderZReport(report as Parameters<PosReceiptRenderer['renderZReport']>[0], profile);
-    await this.printRendered('printZReport', rendered, false, {
-      qzConfig: {
-        jobName: 'Elite POS Z Report',
-      },
-    });
+  }
+
+  private enqueuePrint(task: () => Promise<void>): Promise<void> {
+    const run = this.printQueue.then(task, task);
+    this.printQueue = run.catch(() => undefined);
+    return run;
   }
 
   private async printRendered(
     stage: string,
-    rendered: { imageDataUrl: string; footerCommands: string },
+    rendered: { imageDataUrl: string; footerCommands: string; paperHeightMm: number },
     openDrawer: boolean,
     jobOptions: PosPrintJobOptions = {},
   ): Promise<void> {
@@ -451,6 +465,11 @@ export class PosHardwareService {
       encoding: 'ISO-8859-1',
       margins: 0,
       scaleContent: false,
+      // Continuous roll printers still inherit a finite page length from the
+      // OS driver. Tell it the measured job length so the final refund/void
+      // rows cannot be deferred to the next physical receipt.
+      units: 'mm',
+      size: { width: 80, height: rendered.paperHeightMm, custom: true },
       ...jobOptions.qzConfig,
     });
     try {

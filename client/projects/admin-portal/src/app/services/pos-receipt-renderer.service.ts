@@ -41,6 +41,8 @@ export interface PosRenderedReceipt {
   imageDataUrl: string;
   /** Raw ESC/POS command bytes for the QR code + cut, appended after the image. */
   footerCommands: string;
+  /** Dynamic roll length sent to QZ so the driver never paginates the tail. */
+  paperHeightMm: number;
 }
 
 /** Z-report print data — a cash/sales summary, not a per-item receipt. */
@@ -175,6 +177,7 @@ export class PosReceiptRenderer {
     return {
       imageDataUrl: finalCanvas.toDataURL('image/png'),
       footerCommands: this.footerCommands(receipt),
+      paperHeightMm: this.paperHeightMm(finalCanvas.height, true),
     };
   }
 
@@ -203,6 +206,7 @@ export class PosReceiptRenderer {
     return {
       imageDataUrl: finalCanvas.toDataURL('image/png'),
       footerCommands: this.feedAndCutCommands(),
+      paperHeightMm: this.paperHeightMm(finalCanvas.height, false),
     };
   }
 
@@ -275,7 +279,9 @@ export class PosReceiptRenderer {
     y = this.columns(ctx, 'Expected cash', this.money(report.expectedCashCents), y);
     y = this.columns(ctx, 'Physical cash', this.money(report.physicalCashCents), y);
     ctx.font = `600 16px ${this.bodyFont}`;
-    if (report.varianceCents !== 0) ctx.fillStyle = report.varianceCents < 0 ? '#9e3e24' : '#1c6b3f';
+    // Thermal heads do not reproduce semantic UI colours reliably. Keep the
+    // variance black and use weight for emphasis, exactly like the receipt.
+    ctx.fillStyle = '#000';
     y = this.columns(ctx, 'Variance', this.money(report.varianceCents), y);
     ctx.fillStyle = '#000';
     y += 10;
@@ -423,15 +429,24 @@ export class PosReceiptRenderer {
       ctx.restore();
       y += 22;
     }
-    // The receipt is English-only for the header/items (owner decision,
-    // 2026-08-01) — the profile's Arabic trade name, address, and footer
-    // stamp are stored but never printed. The return/exchange policy is the
-    // one exception (owner decision, 2026-08-17): it prints in both
-    // languages, Arabic above English, same convention as the item lines.
+    if (profile?.tradeNameAr) {
+      ctx.font = `600 16px ${this.bodyFont}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(this.shapeArabic(profile.tradeNameAr), centerX, y);
+      y += 23;
+    }
     y += 10;
 
     ctx.font = `13px ${this.bodyFont}`;
     ctx.fillStyle = this.inkMuted;
+    if (profile?.addressAr) {
+      for (const line of profile.addressAr.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true, true);
+      }
+      y += 2;
+    }
     // A real shop address does not fit on one line. The Pearl branch alone is
     // "Parcel 14, 25 La Croisette Ground Floor / Shop 317, Marina Way 23 /
     // The Pearl - Qatar" — printed with a single `fillText` it ran off both
@@ -458,11 +473,17 @@ export class PosReceiptRenderer {
     ctx.font = `600 16px ${this.bodyFont}`;
     ctx.textAlign = 'center';
     const receiptTitle = receipt.kind === 'refund' ? 'REFUND' : receipt.kind === 'void' ? 'VOID' : 'RECEIPT';
+    const receiptTitleAr = receipt.kind === 'refund' ? 'مرتجع' : receipt.kind === 'void' ? 'إلغاء' : 'فاتورة';
+    ctx.fillText(this.shapeArabic(receiptTitleAr), centerX, y);
+    y += 22;
     this.fillTextTracked(ctx, receiptTitle, centerX, y, 3);
     y += 24;
     ctx.font = `22px ${this.displayFont}`;
     ctx.fillText(`No. ${receipt.receiptNumber}`, centerX, y);
     y += 26;
+    ctx.font = `600 13px ${this.bodyFont}`;
+    ctx.fillText(this.shapeArabic(`رقم الفاتورة ${receipt.receiptNumber}`), centerX, y);
+    y += 20;
     ctx.font = `13px ${this.bodyFont}`;
     ctx.fillStyle = this.inkMuted;
     ctx.fillText(this.formatQatarDateTime(receipt.createdAt), centerX, y);
@@ -492,9 +513,8 @@ export class PosReceiptRenderer {
       // purchases sitting at opposite margins.
       if (index > 0) y += 14;
 
-      // Item lines are the one bilingual part of an otherwise English receipt
-      // (owner decision, 2026-08-01): the Arabic name sits above the English
-      // one so a customer reading either language recognises what they bought.
+      // The Arabic name sits above the English one so a customer reading
+      // either language recognises what they bought.
       // It is right-aligned because Arabic reads right-to-left — left-aligning
       // it would put the end of the phrase where the eye starts.
       //
@@ -519,6 +539,11 @@ export class PosReceiptRenderer {
         ctx.fillText(this.labelVariant(item.variant), this.marginPx, y);
         ctx.fillStyle = '#000';
         y += 20;
+        ctx.font = `500 13px ${this.bodyFont}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(this.shapeArabic(this.labelVariantAr(item.variant)), this.widthPx - this.marginPx, y);
+        ctx.textAlign = 'left';
+        y += 20;
       }
       // The SKU is deliberately not printed (owner decision, 2026-08-02).
       // It is an internal catalogue reference: the receipt number and the QR
@@ -532,6 +557,13 @@ export class PosReceiptRenderer {
       // so it needs enough stroke to survive the threshold.
       ctx.font = `500 15px ${this.bodyFont}`;
       y = this.columns(ctx, `${item.quantity} × ${this.money(item.unitPriceCents)}`, this.money(item.lineTotalCents), y);
+      ctx.font = `600 14px ${this.bodyFont}`;
+      y = this.arabicColumns(
+        ctx,
+        `${this.arabicNumber(item.quantity)} × ${this.arabicMoney(item.unitPriceCents)}`,
+        this.arabicMoney(item.lineTotalCents),
+        y,
+      );
     });
     y += 12;
     y = this.rule(ctx, y);
@@ -549,28 +581,37 @@ export class PosReceiptRenderer {
       const subtotal = receipt.subtotalCents ?? 0;
       if (subtotal !== amount) {
         y = this.columns(ctx, 'Subtotal', this.money(subtotal), y);
+        y = this.arabicColumns(ctx, 'المجموع الفرعي', this.arabicMoney(subtotal), y);
         y += 8;
       }
     }
     ctx.font = `600 20px ${this.displayFont}`;
     const totalLabel = receipt.kind === 'refund' ? 'Refund total' : receipt.kind === 'void' ? 'Void total' : 'Total';
     y = this.columns(ctx, totalLabel, this.money(amount), y);
+    const totalLabelAr = receipt.kind === 'refund' ? 'إجمالي المرتجع' : receipt.kind === 'void' ? 'إجمالي الإلغاء' : 'الإجمالي';
+    ctx.font = `600 19px ${this.bodyFont}`;
+    y = this.arabicColumns(ctx, totalLabelAr, this.arabicMoney(amount), y);
     y += 12;
     ctx.font = `13px ${this.bodyFont}`;
     ctx.fillStyle = this.inkMuted;
     y = this.columns(ctx, 'Payment', String(receipt.paymentMethod || receipt.method || '').toUpperCase(), y);
+    y = this.arabicColumns(ctx, 'طريقة الدفع', this.paymentMethodAr(receipt.paymentMethod || receipt.method), y);
     if (receipt.terminalReference) {
       y = this.columns(ctx, 'Terminal ref', receipt.terminalReference, y);
+      y = this.arabicColumns(ctx, 'مرجع الدفع', receipt.terminalReference, y);
     }
     if (!correctionKind && (receipt.paymentMethod || receipt.method) === 'cash') {
       y = this.columns(ctx, 'Tendered', this.money(receipt.amountTenderedCents ?? 0), y);
+      y = this.arabicColumns(ctx, 'المبلغ المدفوع', this.arabicMoney(receipt.amountTenderedCents ?? 0), y);
       y = this.columns(ctx, 'Change', this.money(receipt.changeGivenCents ?? 0), y);
+      y = this.arabicColumns(ctx, 'الباقي', this.arabicMoney(receipt.changeGivenCents ?? 0), y);
     }
     ctx.fillStyle = '#000';
     if (receipt.reason) {
       ctx.font = `13px ${this.bodyFont}`;
       y += 4;
       y = this.wrapText(ctx, `Reason: ${receipt.reason}`, this.marginPx, y, width - this.marginPx * 2);
+      y = this.wrapText(ctx, `السبب: ${receipt.reason}`, this.marginPx, y, width - this.marginPx * 2, true, true);
     }
     y += 10;
     y = this.rule(ctx, y);
@@ -618,6 +659,8 @@ export class PosReceiptRenderer {
       ctx.fillStyle = this.inkMuted;
       ctx.textAlign = 'center';
       ctx.fillText(`CR ${profile.crLicenseNumber}`, centerX, y);
+      y += 18;
+      ctx.fillText(this.shapeArabic(`السجل التجاري ${profile.crLicenseNumber}`), centerX, y);
       ctx.fillStyle = '#000';
       y += 18;
     }
@@ -634,6 +677,8 @@ export class PosReceiptRenderer {
     y += 14;
     ctx.font = `italic 16px ${this.displayFont}`;
     ctx.textAlign = 'center';
+    ctx.fillText(this.shapeArabic(receipt.kind === 'void' ? 'تم إلغاء العملية' : 'شكراً لتسوقكم معنا'), centerX, y);
+    y += 23;
     ctx.fillText(receipt.kind === 'void' ? 'Transaction cancelled' : 'Thank you', centerX, y);
     y += 30;
 
@@ -647,6 +692,8 @@ export class PosReceiptRenderer {
     y += 10;
     ctx.font = `600 12px ${this.bodyFont}`;
     ctx.fillStyle = this.inkMuted;
+    ctx.fillText(this.shapeArabic('امسح الرمز لعرض الفاتورة'), centerX, y);
+    y += 18;
     this.fillTextTracked(ctx, 'SCAN TO LOOK UP THIS SALE', centerX, y, 1);
     ctx.fillStyle = '#000';
 
@@ -750,6 +797,19 @@ export class PosReceiptRenderer {
     return y + this.lineHeightPx;
   }
 
+  /** RTL counterpart to columns(): label starts at the right edge and the
+   * value sits at the left edge, both shaped independently for reliable
+   * thermal raster output. */
+  private arabicColumns(ctx: CanvasRenderingContext2D, label: string, value: string, y: number): number {
+    const originalAlign = ctx.textAlign;
+    ctx.textAlign = 'right';
+    ctx.fillText(this.shapeArabic(label), this.widthPx - this.marginPx, y);
+    ctx.textAlign = 'left';
+    ctx.fillText(this.shapeArabic(value), this.marginPx, y);
+    ctx.textAlign = originalAlign;
+    return y + this.lineHeightPx;
+  }
+
   /**
    * `rtl` shapes each wrapped LINE individually (not the whole paragraph
    * once before wrapping) — `shapeArabic`'s RLE/PDF embedding marks only
@@ -795,6 +855,11 @@ export class PosReceiptRenderer {
     return /^\d+([.,]\d+)?$/.test(value) ? `Size ${value}` : value;
   }
 
+  private labelVariantAr(variant: string): string {
+    const value = variant.trim();
+    return /^\d+([.,]\d+)?$/.test(value) ? `المقاس ${this.arabicDigits(value)}` : value;
+  }
+
   private money(cents: number): string {
     // Grouped thousands. A four-figure sale is the normal case here, and
     // "QAR 1220.00" makes the customer count digits to read their own total.
@@ -803,6 +868,46 @@ export class PosReceiptRenderer {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  }
+
+  private arabicMoney(cents: number): string {
+    const amount = Number(cents) / 100;
+    try {
+      return new Intl.NumberFormat('ar-QA-u-nu-arab', {
+        style: 'currency',
+        currency: 'QAR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    } catch {
+      return `${this.arabicDigits(amount.toFixed(2))} ر.ق`;
+    }
+  }
+
+  private arabicNumber(value: number): string {
+    try {
+      return new Intl.NumberFormat('ar-QA-u-nu-arab', { maximumFractionDigits: 2 }).format(value);
+    } catch {
+      return this.arabicDigits(String(value));
+    }
+  }
+
+  private arabicDigits(value: string): string {
+    return value.replace(/\d/g, (digit) => '٠١٢٣٤٥٦٧٨٩'[Number(digit)]);
+  }
+
+  private paymentMethodAr(method?: 'cash' | 'card'): string {
+    if (method === 'cash') return 'نقداً';
+    if (method === 'card') return 'بطاقة';
+    return 'غير محدد';
+  }
+
+  /** 180dpi renderer pixels converted to millimetres, plus the native QR and
+   * cutter feed that are appended after the raster body. */
+  private paperHeightMm(bodyHeightPx: number, includesQr: boolean): number {
+    const bodyMm = bodyHeightPx / 180 * 25.4;
+    const footerMm = includesQr ? 58 : 30;
+    return Math.ceil(bodyMm + footerMm);
   }
 
   private formatQatarDateTime(value: string): string {

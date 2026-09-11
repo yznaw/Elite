@@ -58,6 +58,13 @@ for (const kind of ['sale', 'refund', 'void', 'z-report']) {
     assert.equal(result.options.encoding, 'ISO-8859-1');
     assert.equal(result.options.scaleContent, false);
     assert.equal(result.options.margins, 0);
+    assert.equal(result.options.units, 'mm');
+    assert.equal(result.options.size.width, 80);
+    assert.equal(result.options.size.custom, true);
+    assert.ok(
+      result.options.size.height > result.height / 180 * 25.4,
+      'driver page includes the full raster body plus cutter/QR feed',
+    );
     assert.ok(result.footer.endsWith(feedAndCut));
     assert.equal(result.footer.split(cut).length - 1, 1);
     if (kind === 'z-report') assert.equal(result.footer, feedAndCut);
@@ -68,6 +75,61 @@ for (const kind of ['sale', 'refund', 'void', 'z-report']) {
     assert.equal(result.drawer, kind === 'sale' ? '\x1bp\x00\x32\x32' : undefined);
   });
 }
+
+test('receipt paints the required Arabic business, price and transaction details', async () => {
+  const text = await page.evaluate(async () => {
+    const { createHardware, receipt } = window.posPrinting;
+    const { renderer } = createHardware();
+    const calls = [];
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function(value, ...args) {
+      calls.push(String(value));
+      return original.call(this, value, ...args);
+    };
+    try {
+      await renderer.render(receipt, {
+        tradeNameAr: 'مجموعة إيليت', tradeNameEn: 'Elite Collection',
+        addressAr: 'الدوحة، قطر', addressEn: 'Doha, Qatar', phone: '12345678',
+        crLicenseNumber: 'CR-100', returnPolicyAr: 'الاستبدال خلال 14 يوماً',
+        returnPolicyEn: 'Exchange within 14 days', footerStampAr: null,
+        footerStampEn: null, updatedAt: receipt.createdAt,
+      });
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = original;
+    }
+    return calls.join('\n');
+  });
+  assert.match(text, /مجموعة إيليت/);
+  assert.match(text, /الدوحة، قطر/);
+  assert.match(text, /فاتورة/);
+  assert.match(text, /الإجمالي/);
+  assert.match(text, /طريقة الدفع/);
+  assert.match(text, /ر\.ق/);
+  assert.match(text, /السجل التجاري/);
+});
+
+test('concurrent receipts are serialized before reaching the printer spooler', async () => {
+  const result = await page.evaluate(async () => {
+    const { createHardware, receipt } = window.posPrinting;
+    const { hardware, qz } = createHardware();
+    let calls = 0;
+    let releaseFirst;
+    qz.print = async () => {
+      calls++;
+      if (calls === 1) await new Promise((resolve) => { releaseFirst = resolve; });
+    };
+    const first = hardware.printReceipt(receipt);
+    const second = hardware.printReceipt({ ...receipt, receiptNumber: '1002' });
+    while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const callsBeforeFirstFinished = calls;
+    releaseFirst();
+    await Promise.all([first, second]);
+    return { callsBeforeFirstFinished, finalCalls: calls };
+  });
+  assert.equal(result.callsBeforeFirstFinished, 1);
+  assert.equal(result.finalCalls, 2);
+});
 
 test('long bilingual receipt grows beyond the measuring canvas and keeps the footer', async () => {
   const result = await page.evaluate(async () => {
