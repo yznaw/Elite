@@ -7,6 +7,7 @@ import { CollectionDrawerComponent } from './collection-drawer.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
+import { ApiClient } from '../../services/api-client.service';
 import { Collection } from '../../models';
 
 interface HierarchyGroup {
@@ -75,7 +76,7 @@ interface HierarchyGroup {
               <div class="parent-row" (click)="openCollection(group.parent)" [style.opacity]="group.parent.hidden ? 0.6 : 1">
                 <div class="parent-thumb">
                   @if (group.parent.imageUrl) {
-                    <img [src]="group.parent.imageUrl" [alt]="group.parent.title" (error)="onImgError($event)"/>
+                    <img [src]="mediaUrl(group.parent.imageUrl)" [alt]="group.parent.title" (error)="onImgError($event)"/>
                   } @else {
                     <ap-icon name="collections" [size]="18"/>
                   }
@@ -109,7 +110,7 @@ interface HierarchyGroup {
                   @for (child of group.children; track child.id) {
                     <button class="sub-col-chip" [class.hidden-chip]="child.hidden" (click)="openCollection(child)" [title]="child.title">
                       @if (child.imageUrl) {
-                        <img [src]="child.imageUrl" [alt]="child.title" class="sub-chip-img" (error)="onImgError($event)"/>
+                        <img [src]="mediaUrl(child.imageUrl)" [alt]="child.title" class="sub-chip-img" (error)="onImgError($event)"/>
                       } @else {
                         <span class="sub-chip-img sub-chip-placeholder"><ap-icon name="collections" [size]="10"/></span>
                       }
@@ -149,7 +150,7 @@ interface HierarchyGroup {
       <div class="prod-card" (click)="openCollection(c)" [style.opacity]="c.hidden ? 0.65 : 1">
         <div class="prod-img">
           @if (c.imageUrl) {
-            <img [src]="c.imageUrl" [alt]="c.title" (error)="onImgError($event)" [style.filter]="c.hidden ? 'grayscale(0.6)' : null"/>
+            <img [src]="mediaUrl(c.imageUrl)" [alt]="c.title" (error)="onImgError($event)" [style.filter]="c.hidden ? 'grayscale(0.6)' : null"/>
           } @else {
             <div class="card-img-placeholder">
               <ap-icon name="collections" [size]="24"/>
@@ -310,7 +311,13 @@ export class CollectionsComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly collectionsApi = inject(AdminCollectionsService);
+  private readonly api = inject(ApiClient);
   readonly t = (k: string): string => this.i18n.t(k);
+
+  /** Covers are stored as `/uploads/...` paths; this resolves one for display. */
+  mediaUrl(path: string | null): string {
+    return this.api.mediaUrl(path || '');
+  }
 
   readonly _collections = signal<Collection[]>([]);
   readonly loading = signal(true);

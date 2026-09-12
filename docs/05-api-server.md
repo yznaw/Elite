@@ -545,6 +545,43 @@ globally.
 
 ---
 
+## Images Are Files, Never `data:` URLs
+
+Content columns store the **path** of an uploaded image, never the image
+itself. `POST /api/admin/media` writes the file through `lib/storage.js`,
+generates the sized variants (`card`, `grid`, `pdp`, `zoom`) and returns a
+`/uploads/...` URL; that string is what belongs in `collections.seo.imageUrl`,
+`store_settings.home_content` and friends.
+
+The admin's collection drawer used to keep a picked cover as a base64 `data:`
+URL, so the bytes lived in the row. Those columns are read by
+`GET /api/collections` and `GET /api/storefront-content`, which the storefront
+requests on every page that lists collections — and under server-side rendering
+each page ships them twice, in the markup and again in the hydration payload.
+Six covers and three home tiles came to ~900 kB on every home and collection
+page, uncacheable, with no smaller variant for a phone to pick.
+
+Two defences, because the data outlives any one screen:
+
+- `POST` and `PATCH /api/admin/collections` reject an `imageUrl` starting with
+  `data:` (`validationError`), whatever client sends it.
+- `server/scripts/convert-data-uri-images.js` converts anything already stored:
+  it decodes each `data:` URL, saves it through the same storage helper (so the
+  variants exist), records a `media_assets` row so the image shows up in the
+  media library, and rewrites the value to its `/uploads/...` path. It walks
+  `collections.seo` and both `store_settings.home_content` and
+  `home_content_draft`.
+
+  ```bash
+  cd server
+  node scripts/convert-data-uri-images.js           # dry run: reports, writes nothing
+  node scripts/convert-data-uri-images.js --apply   # converts
+  ```
+
+  Safe to re-run; rows without a `data:` URL are skipped.
+
+---
+
 ## Environment Variables
 
 Create `server/.env` from the template:

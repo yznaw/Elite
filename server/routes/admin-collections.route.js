@@ -69,6 +69,14 @@ router.post('/', asyncHandler(async (req, res) => {
   const title = String(req.body.title || '').trim();
   if (!title) return validationError(res, ['Collection title is required.']);
 
+  // A cover must be a URL, never the image itself. The admin used to send a
+  // base64 data URL, which then lived in this row and shipped on every
+  // storefront page that lists collections -- 720 kB across six covers. Upload
+  // through /api/admin/media and store the path it returns.
+  if (typeof req.body.imageUrl === 'string' && /^data:/i.test(req.body.imageUrl.trim())) {
+    return validationError(res, ['Cover image must be an uploaded file URL, not embedded image data.']);
+  }
+
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -103,6 +111,11 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.patch('/:id', asyncHandler(async (req, res) => {
+  // See the same guard on POST: a cover is a URL, not the image itself.
+  if (typeof req.body.imageUrl === 'string' && /^data:/i.test(req.body.imageUrl.trim())) {
+    return validationError(res, ['Cover image must be an uploaded file URL, not embedded image data.']);
+  }
+
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
