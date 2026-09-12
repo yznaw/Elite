@@ -9,6 +9,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
+import { MediaPickerComponent } from '../../shared/media-picker/media-picker.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
@@ -34,7 +35,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
 @Component({
     selector: 'ap-collection-drawer',
-    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, SaveBarComponent],
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, SaveBarComponent, MediaPickerComponent],
     template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
@@ -160,6 +161,9 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
               {{ form().imageUrl ? t('collections.cover.replace') : t('collections.cover.upload') }}
               <input type="file" accept="image/*" hidden [disabled]="uploading()" (change)="onCoverPick($event)"/>
             </label>
+            <button class="btn btn-outline btn-sm" type="button" (click)="mediaPickerOpen.set(true)">
+              <ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}
+            </button>
             <button class="btn btn-outline btn-sm" type="button" (click)="addCoverUrl()">
               <ap-icon name="link" [size]="12"/> URL
             </button>
@@ -455,6 +459,13 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         </div>
       </div>
     }
+
+    <!-- Cover image: pick from the media library, or upload from inside it. -->
+    <ap-media-picker
+      [open]="mediaPickerOpen()"
+      (picked)="set('imageUrl', $event)"
+      (close)="mediaPickerOpen.set(false)"
+    />
   `,
     changeDetection: ChangeDetectionStrategy.Eager,
     styles: [`
@@ -680,6 +691,8 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
 
   /** True while a cover upload is in flight. */
   readonly uploading = signal(false);
+  /** Media library panel for choosing an existing cover. */
+  readonly mediaPickerOpen = signal(false);
   readonly t = (k: string): string => this.i18n.t(k);
 
   private readonly initial = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false, parentId: null });
