@@ -178,7 +178,18 @@ if (process.env.CSRF_ENFORCE !== 'false') {
 // ─── Static uploads ──────────────────────────────────────────────────────────
 // Served at both /uploads/ (legacy, direct host access) AND /api/uploads/
 // (via the /api proxy so admin.example.com/api/uploads/… always resolves).
-const staticOpts = { maxAge: '1y', immutable: true, fallthrough: false };
+const staticOpts = {
+  maxAge: '1y',
+  immutable: true,
+  fallthrough: false,
+  setHeaders: (res, filePath) => {
+    // Express's mime table predates AVIF, so an .avif upload goes out as
+    // application/octet-stream. Chrome sniffs and renders it anyway; Safari
+    // does not, and neither does anything that trusts the header (link
+    // previews, image CDNs). The uploader already accepts image/avif.
+    if (filePath.toLowerCase().endsWith('.avif')) res.type('image/avif');
+  },
+};
 app.use(uploadsPublicBase, express.static(uploadsDir, staticOpts));
 app.use('/api/uploads', express.static(uploadsDir, staticOpts));
 
