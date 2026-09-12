@@ -30,7 +30,7 @@ import { MediaFile } from '../../models';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (open) {
-      <div class="overlay" (click)="close.emit()"></div>
+      <div class="overlay media-picker-overlay" (click)="close.emit()"></div>
       <div class="drawer media-picker-drawer" role="dialog" aria-modal="true">
 
         <div class="mpp-head">
@@ -94,9 +94,16 @@ import { MediaFile } from '../../models';
     }
   `,
   styles: [`
+    /* Above whatever opened it. The global scale is: overlay 200, drawer 210,
+       and a drawer's own nested modal 220/230 (see the collection drawer's
+       product picker). At the global 200 this panel opened *behind* the
+       drawer that summoned it -- the dimming showed, the panel did not. 300
+       is taken globally, so this sits just under it. */
+    .media-picker-overlay { z-index: 240; }
+
     .media-picker-drawer {
       position: fixed; inset-block: 0; inset-inline-end: 0;
-      width: 380px; z-index: 200;
+      width: 380px; z-index: 250;
       display: flex; flex-direction: column;
       background: var(--surface);
       box-shadow: -10px 0 40px rgba(0,0,0,.18);
