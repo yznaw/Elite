@@ -10,8 +10,17 @@ test('product validation requires at least one variant', () => {
   assert.match(adminProducts._test.validateProduct({ ...base, variants: [] }).join(' '), /variant is required/i);
   assert.deepEqual(adminProducts._test.validateProduct({
     ...base,
-    variants: [{ sku: 'TEST-1-ONE', price: 10, stock: 0 }],
+    variants: [{ sku: 'TEST-1-ONE', size: '40', price: 10, stock: 0 }],
   }), []);
+});
+
+test('product validation requires a size on every variant', () => {
+  const base = { name: 'Test', sku: 'TEST-1', brand: 'Elite', price: 10, stock: 0 };
+  const errors = adminProducts._test.validateProduct({
+    ...base,
+    variants: [{ sku: 'TEST-1-NEW', price: 10, stock: 0 }],
+  });
+  assert.match(errors.join(' '), /TEST-1-NEW needs a size/);
 });
 
 test('product validation rejects blank and duplicate variant SKUs', () => {

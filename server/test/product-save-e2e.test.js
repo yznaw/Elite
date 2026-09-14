@@ -73,7 +73,7 @@ test('product create + read still works after the has_3d/views_3d column removal
         price: 450,
         stock: 5,
         variants: [
-          { sku: `E2E-${runId}-DEFAULT`, barcode: `E2E-${runId}-DEFAULT`, price: 450, stock: 5 },
+          { sku: `E2E-${runId}-DEFAULT`, barcode: `E2E-${runId}-DEFAULT`, size: '40', price: 450, stock: 5 },
         ],
       }),
     });

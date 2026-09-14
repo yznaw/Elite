@@ -25,6 +25,7 @@ function urlStem(url) {
 }
 
 const router = Router();
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Ensure SEO columns exist (migration 004 may not have run on all environments)
 let seoColumnsReady = false;
@@ -84,6 +85,17 @@ const IMAGE_COLORS_SELECT = `
           ) unique_gallery_colors
         ), '{}'::jsonb) AS image_colors`;
 
+/** Turns a unique-constraint failure into a 409 the editor can show. */
+function productConflict(err) {
+  if (err?.code !== '23505') return err;
+  const detail = String(err.detail || '');
+  const field = /slug/.test(detail) ? 'slug' : /barcode/.test(detail) ? 'barcode' : 'SKU';
+  const value = /=\(([^)]*)\)/.exec(detail)?.[1]?.split(', ').pop();
+  const conflict = new Error(`Another product already uses this ${field}${value ? ` (${value})` : ''}.`);
+  conflict.status = 409;
+  return conflict;
+}
+
 function validateProduct(body) {
   const errors = [];
 
@@ -94,6 +106,11 @@ function validateProduct(body) {
   if (!String(body.sku || '').trim()) errors.push('SKU is required.');
   if (!String(body.brand || '').trim()) errors.push('Brand is required.');
   if (Number(body.price) < 0) errors.push('Price cannot be negative.');
+  // Prices are whole QAR (owner decision 2026-09-15); a fraction or text would
+  // otherwise be rounded or zeroed silently.
+  if (body.price != null && body.price !== '' && !Number.isInteger(Number(body.price))) {
+    errors.push('Price must be a whole number of QAR.');
+  }
   if (Number(body.stock) < 0) errors.push('Stock cannot be negative.');
   if (!Array.isArray(body.variants) || body.variants.length === 0) {
     errors.push('At least one product variant is required.');
@@ -107,13 +124,20 @@ function validateProduct(body) {
         errors.push(`Duplicate variant SKU "${sku}".`);
       }
       if (sku) seen.add(sku);
+      // Every variant is a sellable size (owner decision 2026-09-15).
+      if (!String(variant?.size ?? '').trim()) {
+        errors.push(`Variant ${sku || index + 1} needs a size.`);
+      }
+      if (variant?.price != null && variant.price !== '' && !Number.isInteger(Number(variant.price))) {
+        errors.push(`Variant ${sku || index + 1} price must be a whole number of QAR.`);
+      }
     });
   }
 
   return errors;
 }
 
-async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true, actorUserId = null } = {}) {
+async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true, actorUserId = null, expectedStock = null } = {}) {
   await ensureVariantNoteColumns(client);
   // SKU generation belongs to the catalog editor. The API deliberately
   // rejects blanks instead of inventing an unrelated productId-Vn identifier.
@@ -131,6 +155,24 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     return { variant, sku, barcode };
   });
   const incomingSkus = resolved.map((r) => r.sku);
+
+  if (incomingSkus.length > 0) {
+    // ON CONFLICT (tenant_id, sku) below would silently move another product's
+    // variant onto this one, taking its stock and stocktake history with it.
+    const taken = await client.query(
+      `SELECT pv.sku, p.name, p.status FROM product_variants pv
+         JOIN products p ON p.id = pv.product_id
+        WHERE pv.tenant_id = $1 AND pv.product_id <> $2 AND pv.sku = ANY($3::text[])
+        LIMIT 1`,
+      [tenantId, productId, incomingSkus],
+    );
+    if (taken.rowCount > 0) {
+      const row = taken.rows[0];
+      const err = new Error(`Variant SKU "${row.sku}" already belongs to "${row.name}"${row.status === 'archived' ? ' (archived)' : ''}. Use a different SKU.`);
+      err.status = 409;
+      throw err;
+    }
+  }
 
   // product_variants has a UNIQUE(tenant_id, barcode) partial index — check
   // for collisions up front so a duplicate manually-typed barcode surfaces as
@@ -163,10 +205,29 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
   // variant was deleted, which would otherwise vanish with no trace and show
   // up later as unexplained drift.
   const previousStockBySku = new Map();
+  // Locked so a sale cannot change stock between the check below and the write.
   const existingVariants = await client.query(
-    'SELECT id, sku, stock_quantity FROM product_variants WHERE tenant_id = $1 AND product_id = $2',
+    'SELECT id, sku, stock_quantity FROM product_variants WHERE tenant_id = $1 AND product_id = $2 FOR UPDATE',
     [tenantId, productId],
   );
+  if (expectedStock && typeof expectedStock === 'object') {
+    // The editor sends the stock it loaded. If a sale, stocktake or bulk update
+    // changed a variant since then and this save would overwrite or remove it,
+    // refuse rather than silently undo that change (owner decision 2026-09-15).
+    const incomingStock = new Map(resolved.map(({ variant, sku }) => [sku, Math.max(0, Number.parseInt(variant.stock, 10) || 0)]));
+    const changed = existingVariants.rows.filter((row) => {
+      if (!Object.prototype.hasOwnProperty.call(expectedStock, row.sku)) return false;
+      const current = Number(row.stock_quantity) || 0;
+      if (Number(expectedStock[row.sku]) === current) return false;
+      return !incomingStock.has(row.sku) || incomingStock.get(row.sku) !== current;
+    });
+    if (changed.length > 0) {
+      const err = new Error(`Stock changed while this product was open: ${changed.map((row) => `${row.sku} is now ${row.stock_quantity}`).join(', ')}. The editor reloaded the latest stock; review it and save again.`);
+      err.status = 409;
+      err.code = 'STOCK_CHANGED';
+      throw err;
+    }
+  }
   for (const row of existingVariants.rows) {
     previousStockBySku.set(row.sku, { id: row.id, stock: Number(row.stock_quantity) || 0 });
   }
@@ -175,6 +236,17 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
   // Recorded BEFORE the delete, while the rows still exist — inventory_movements
   // has ON DELETE SET NULL on variant_id, so a movement written afterwards
   // would lose the link to what it described.
+  // recordMovement back-computes the ledger baseline as (current - delta), so a
+  // removed row must already hold zero when its removal is recorded.
+  const removedWithStock = removedVariants
+    .filter((row) => (Number(row.stock_quantity) || 0) !== 0)
+    .map((row) => row.id);
+  if (removedWithStock.length > 0) {
+    await client.query(
+      'UPDATE product_variants SET stock_quantity = 0, updated_at = NOW() WHERE id = ANY($1::uuid[])',
+      [removedWithStock],
+    );
+  }
   for (const removed of removedVariants) {
     const stock = Number(removed.stock_quantity) || 0;
     if (stock === 0) continue;
@@ -681,12 +753,24 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     ? variants.reduce((sum, v) => sum + (Math.max(0, Number.parseInt(v.stock, 10) || 0)), 0)
     : Math.max(0, Number.parseInt(product.stock, 10) || 0);
 
+  // Slugs are unique per tenant, archived products included. Suffix instead of
+  // failing the whole save with a constraint error.
+  const baseSlug = slugify(product.slug || name);
+  const slugRows = await client.query(
+    `SELECT slug FROM products
+      WHERE tenant_id = $1 AND id IS DISTINCT FROM $2::uuid AND (slug = $3 OR slug LIKE $4)`,
+    [tenant.id, product.id || null, baseSlug, `${baseSlug}-%`],
+  );
+  const usedSlugs = new Set(slugRows.rows.map((row) => row.slug));
+  let slug = baseSlug;
+  for (let n = 2; usedSlugs.has(slug); n += 1) slug = `${baseSlug}-${n}`;
+
   const params = [
     tenant.id,
     sku,
     brand,
     name,
-    slugify(product.slug || name),
+    slug,
     status,
     JSON.stringify(description),
     JSON.stringify(careInstructions),
@@ -729,26 +813,17 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
           meta_title, meta_desc, pos_status
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14)
-        ON CONFLICT (tenant_id, sku) DO UPDATE
-        SET brand = EXCLUDED.brand,
-            name = EXCLUDED.name,
-            slug = EXCLUDED.slug,
-            status = EXCLUDED.status,
-            description = EXCLUDED.description,
-            care_instructions = EXCLUDED.care_instructions,
-            base_price_cents = EXCLUDED.base_price_cents,
-            currency = EXCLUDED.currency,
-            stock_quantity = EXCLUDED.stock_quantity,
-            meta_title = EXCLUDED.meta_title,
-            meta_desc = EXCLUDED.meta_desc,
-            pos_status = EXCLUDED.pos_status
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       params,
     );
 
   const saved = upserted.rows[0];
-  await replaceVariants(client, tenant.id, saved.id, variants, { actorUserId });
+  // A PATCH that does not send variants (hide toggle, name edit) must not
+  // rewrite them: that would reset stock sold in the meantime.
+  if (!product.skipVariants) {
+    await replaceVariants(client, tenant.id, saved.id, variants, { actorUserId, expectedStock: product.expectedStock || null });
+  }
   // Re-sum variant stock onto the product row so the catalog total is always
   // accurate even when the stock-preservation branch kept a different value.
   if (variants.length > 0) {
@@ -917,14 +992,14 @@ router.post('/', asyncHandler(async (req, res) => {
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
-    const saved = await upsertProduct(client, tenant, req.body, { actorUserId: req.user?.id || null });
+    const saved = await upsertProduct(client, tenant, { ...req.body, id: undefined }, { actorUserId: req.user?.id || null });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
     kickRestockDispatch([saved.id]);
     created(res, product, 'Product saved.');
   } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw productConflict(err);
   } finally {
     client.release();
   }
@@ -972,7 +1047,8 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
         `UPDATE product_variants pv
             SET stock_quantity = $1, updated_at = now()
            FROM (SELECT id, stock_quantity AS previous FROM product_variants
-                  WHERE tenant_id = $2 AND sku = $3 FOR UPDATE) prev
+                  WHERE tenant_id = $2 AND lower(sku) = lower($3) AND is_active
+                  ORDER BY (sku = $3) DESC LIMIT 1 FOR UPDATE) prev
           WHERE pv.id = prev.id
         RETURNING pv.product_id, pv.id AS variant_id, prev.previous`,
         [stock, tenant.id, sku],
@@ -1016,7 +1092,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
     ok(res, { updated, notFound }, `${updated} variant(s) updated.`);
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
-    throw err;
+    throw productConflict(err);
   } finally {
     client.release();
   }
@@ -1027,7 +1103,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
-    const current = await client.query('SELECT * FROM products WHERE tenant_id = $1 AND id = $2', [tenant.id, req.params.id]);
+    const current = await client.query("SELECT * FROM products WHERE tenant_id = $1 AND id = $2 AND status <> 'archived'", [tenant.id, req.params.id]);
     if (current.rowCount === 0) {
       await client.query('ROLLBACK');
       return notFound(res, 'Product not found.');
@@ -1079,6 +1155,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       id: req.params.id,
       nameAr: req.body.nameAr ?? existingFull?.nameAr ?? '',
       variants: patchVariants,
+      skipVariants: !Array.isArray(req.body.variants),
+      expectedStock: req.body.expectedStock || null,
       images: Object.prototype.hasOwnProperty.call(req.body, 'images') ? req.body.images : existingFull?.images,
       imageColors: Object.prototype.hasOwnProperty.call(req.body, 'imageColors') ? req.body.imageColors : existingFull?.imageColors,
       relatedProductIds: Object.prototype.hasOwnProperty.call(req.body, 'relatedProductIds')
@@ -1098,14 +1176,14 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     kickRestockDispatch([saved.id]);
     ok(res, product, 'Product updated.');
   } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw productConflict(err);
   } finally {
     client.release();
   }
 }));
 
-// POST /api/admin/products/bulk-delete — permanently removes products by ID array
+// POST /api/admin/products/bulk-delete: archives products by ID array (same as DELETE /:id)
 router.post('/bulk-delete', asyncHandler(async (req, res) => {
   const ids = req.body?.ids;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1117,33 +1195,24 @@ router.post('/bulk-delete', asyncHandler(async (req, res) => {
     const tenant = await ensureDefaultTenant(client);
     await client.query('BEGIN');
 
-    // cart_items has ON DELETE RESTRICT — must be removed before products/variants
-    await client.query(
-      'DELETE FROM cart_items WHERE product_id = ANY($1::uuid[])',
-      [ids],
-    );
-    // Remove media links, variants, then products — scoped to tenant
-    await client.query(
-      'DELETE FROM media_links WHERE product_id = ANY($1::uuid[])',
-      [ids],
-    );
-    await client.query(
-      'DELETE FROM product_variants WHERE product_id = ANY($1::uuid[])',
-      [ids],
-    );
+    // Archive instead of deleting (owner decision 2026-09-15): orders, POS
+    // lines, stocktakes and the stock ledger keep real rows, and Undo can restore
+    // it. Scoped to the tenant, and unsaved editor ids are ignored.
     const result = await client.query(
-      'DELETE FROM products WHERE tenant_id = $1 AND id = ANY($2::uuid[]) RETURNING id',
-      [tenant.id, ids],
+      `UPDATE products SET status = 'archived', updated_at = now()
+        WHERE tenant_id = $1 AND id = ANY($2::uuid[]) AND status <> 'archived'
+        RETURNING id`,
+      [tenant.id, ids.filter((id) => UUID_RE.test(String(id)))],
     );
     for (const row of result.rows) {
-      await publishCatalogEvent(client, tenant.id, row.id, 'deleted');
+      await publishCatalogEvent(client, tenant.id, row.id, 'archived');
     }
 
     await client.query('COMMIT');
     ok(res, { deleted: result.rowCount }, `${result.rowCount} product(s) deleted.`);
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
-    throw err;
+    throw productConflict(err);
   } finally {
     client.release();
   }
@@ -1173,7 +1242,38 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     ok(res, { id: result.rows[0].id }, 'Product archived.');
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
-    throw err;
+    throw productConflict(err);
+  } finally {
+    client.release();
+  }
+}));
+
+// POST /api/admin/products/:id/restore: undo an archive. The caller says
+// whether it was hidden; without that it comes back hidden so it cannot
+// reappear on the storefront unchecked.
+router.post('/:id/restore', asyncHandler(async (req, res) => {
+  if (!UUID_RE.test(String(req.params.id))) return notFound(res, 'Archived product not found.');
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE products SET status = $3, updated_at = now()
+        WHERE tenant_id = $1 AND id = $2 AND status = 'archived'
+        RETURNING id`,
+      [tenant.id, req.params.id, req.body?.hidden === false ? 'active' : 'hidden'],
+    );
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return notFound(res, 'Archived product not found.');
+    }
+    await publishCatalogEvent(client, tenant.id, result.rows[0].id, 'updated');
+    const product = await loadAdminProduct(client, tenant.id, result.rows[0].id);
+    await client.query('COMMIT');
+    ok(res, product, 'Product restored.');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw productConflict(err);
   } finally {
     client.release();
   }
@@ -1328,9 +1428,15 @@ router.post('/:id/duplicate', asyncHandler(async (req, res) => {
       slug: newSku,
       hidden: true,
       stock: 0,
-      variants: (source.variants || []).map(v => ({
+      // A copy starts empty: no stock, and barcodes fall back to the new SKUs so
+      // they cannot clash with the source's labels. A variant SKU that does not
+      // contain the product SKU still gets a new one instead of the source's.
+      variants: (source.variants || []).map((v, index) => ({
         ...v,
-        sku: v.sku.replaceAll(source.sku, newSku),
+        id: undefined,
+        barcode: '',
+        stock: 0,
+        sku: v.sku.includes(source.sku) ? v.sku.replaceAll(source.sku, newSku) : `${newSku}-${index + 1}`,
       })),
     });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
@@ -1338,7 +1444,7 @@ router.post('/:id/duplicate', asyncHandler(async (req, res) => {
     created(res, product, 'Product duplicated.');
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
-    throw err;
+    throw productConflict(err);
   } finally {
     client.release();
   }

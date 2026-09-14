@@ -119,7 +119,7 @@ test('saving a product with a preview URL reuses the original asset', { timeout:
         stock: 1,
         // The defect: the admin sends the preview rather than the original.
         images: [previewUrl],
-        variants: [{ sku: `PREVIEW-${runId}-D`, barcode: `PREVIEW-${runId}-D`, price: 300, stock: 1 }],
+        variants: [{ sku: `PREVIEW-${runId}-D`, barcode: `PREVIEW-${runId}-D`, size: '40', price: 300, stock: 1 }],
       }),
     });
 
