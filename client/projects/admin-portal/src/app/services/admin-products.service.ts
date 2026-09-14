@@ -73,6 +73,12 @@ export class AdminProductsService {
     return firstValueFrom(this.api.delete<{ id: string }>(`/admin/products/${id}`));
   }
 
+  /** Undo an archive. `hidden` restores the visibility it had before. */
+  restore(id: string, hidden?: boolean): Promise<Product> {
+    return firstValueFrom(this.api.post<Product>(`/admin/products/${id}/restore`, { hidden }))
+      .then(p => this.normalizeProduct(p));
+  }
+
   bulkDelete(ids: string[]): Promise<{ deleted: number }> {
     return firstValueFrom(this.api.post<{ deleted: number }>('/admin/products/bulk-delete', { ids }));
   }

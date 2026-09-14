@@ -16,7 +16,7 @@ import { BarcodeComponent } from '../../shared/barcode/barcode.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminProductsService } from '../../services/admin-products.service';
+import { AdminProductsService, SaveProductPayload } from '../../services/admin-products.service';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
@@ -362,7 +362,7 @@ function readPreview(file: File): Promise<string> {
           <div class="grid-2">
             <div>
               <label class="lbl">{{ t('product.field.price') }}</label>
-              <input class="inp mono" type="number" min="0" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
+              <input class="inp mono" type="number" min="0" step="1" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
             </div>
             <div>
               <label class="lbl">{{ t('product.field.stock') }}</label>
@@ -409,7 +409,9 @@ function readPreview(file: File): Promise<string> {
             <div class="variants-cards">
               <!-- ══ Color groups accordion ══ -->
               @for (group of colorGroups(); track group.colorKey) {
-                <div class="vcg" [class.vcg--open]="expandedGroups().has(group.colorKey)">
+                <div class="vcg" [class.vcg--open]="expandedGroups().has(group.colorKey)"
+                     [class.vcg--new]="group.colorKey === newGroupKey"
+                     [attr.data-group-key]="group.colorKey">
 
                   <!-- Group header row -->
                   <div class="vcg-head" (click)="toggleGroup(group.colorKey)">
@@ -423,6 +425,9 @@ function readPreview(file: File): Promise<string> {
                     } @else {
                       <span class="vcg-swatch" [style.background]="colorHex(group.colorName)"></span>
                     }
+                    @if (group.colorKey === newGroupKey) {
+                      <span class="vcg-new-label">{{ t('product.variants.newGroup') }}</span>
+                    }
 
                     <!-- Color selector — click stops group toggle, select changes all variants in group -->
                     <div class="vcg-color-wrap" (click)="$event.stopPropagation()">
@@ -430,7 +435,7 @@ function readPreview(file: File): Promise<string> {
                         <select class="inp inp-sm vcg-color-sel"
                                 [ngModel]="group.colorName"
                                 (ngModelChange)="renameGroupColor(group.colorKey, $event)">
-                          <option value="">{{ t('product.variants.noColor') }}</option>
+                          <option value="">{{ group.colorKey === newGroupKey ? t('product.variants.chooseColor') : t('product.variants.noColor') }}</option>
                           @for (c of refColors(); track c.id) {
                             <option [value]="c.name_en">{{ c.name_en }}</option>
                           }
@@ -495,7 +500,13 @@ function readPreview(file: File): Promise<string> {
                     <span style="flex:1;"></span>
 
                     <!-- Add size in this color -->
-                    @if (expandedGroups().has(group.colorKey)) {
+                    @if (group.colorKey === newGroupKey) {
+                      <button class="vt-remove" type="button"
+                              (click)="$event.stopPropagation(); removeVariant(group.items[0].globalIndex)"
+                              [attr.aria-label]="t('common.remove')">
+                        <ap-icon name="trash" [size]="12"/>
+                      </button>
+                    } @else if (expandedGroups().has(group.colorKey)) {
                       <button class="btn btn-outline btn-sm" type="button"
                               (click)="$event.stopPropagation(); addVariantForColor(group.colorName)">
                         <ap-icon name="plus" [size]="11"/> {{ t('product.variants.addSize') }}
@@ -504,7 +515,9 @@ function readPreview(file: File): Promise<string> {
                   </div>
 
                   <!-- Size rows — shown only when group is expanded -->
-                  @if (expandedGroups().has(group.colorKey)) {
+                  @if (group.colorKey === newGroupKey) {
+                    <p class="vcg-new-hint">{{ t('product.variants.pickColorFirst') }}</p>
+                  } @else if (expandedGroups().has(group.colorKey)) {
                     <div class="vcg-sku-tools" (click)="$event.stopPropagation()">
                       <label class="vcg-sku-field">
                         <span>{{ t('product.variants.colorBaseSku') }}</span>
@@ -518,15 +531,16 @@ function readPreview(file: File): Promise<string> {
                       </span>
                       @if (refSizeSets().length > 0) {
                         <div class="gen-sizes-wrap">
-                          <select class="inp inp-sm" #grpSizeSetSel>
+                          <select class="inp inp-sm" [value]="groupSizeSet()[group.colorKey] || ''"
+                                  (change)="pickGroupSizeSet(group.colorKey, $any($event.target).value)">
                             <option value="">{{ t('product.variants.generateSizes') }}</option>
                             @for (ss of refSizeSets(); track ss.id) {
                               <option [value]="ss.id">{{ ss.name }}</option>
                             }
                           </select>
                           <button class="btn btn-outline btn-sm" type="button"
-                                  [disabled]="!grpSizeSetSel.value || !colorVariantBaseSku(group.colorName, group.items).trim()"
-                                  (click)="generateSizesForColor(grpSizeSetSel.value, group.colorName); grpSizeSetSel.value=''">
+                                  [disabled]="!groupSizeSet()[group.colorKey] || !colorVariantBaseSku(group.colorName, group.items).trim()"
+                                  (click)="generateSizesForColor(groupSizeSet()[group.colorKey], group.colorName); pickGroupSizeSet(group.colorKey, '')">
                             <ap-icon name="plus" [size]="12"/> {{ t('product.variants.generate') }}
                           </button>
                         </div>
@@ -585,7 +599,7 @@ function readPreview(file: File): Promise<string> {
                               <span class="vc-price-pfx">QAR</span>
                               <input class="inp inp-sm mono" type="number" min="0"
                                      [ngModel]="item.v.price"
-                                     (ngModelChange)="updateVariant(item.globalIndex, { price: +$event || 0 })"/>
+                                     (ngModelChange)="updateVariant(item.globalIndex, { price: wholeQar($event) })"/>
                             </div>
                           </div>
 
@@ -959,14 +973,14 @@ function readPreview(file: File): Promise<string> {
 
         <div class="mb-24" [style.display]="isMobile() && !openSections().has('seo') ? 'none' : ''"  >
           <label class="lbl">{{ t('product.field.metaTitle') }}</label>
-          <input class="inp mb-16" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
+          <input class="inp mb-16" [placeholder]="seoTitlePlaceholder()" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
           <label class="lbl">{{ t('product.field.metaDesc') }}</label>
           <div class="meta-desc-wrap mb-16">
-            <textarea class="inp" rows="3" [ngModel]="form().metaDesc" (ngModelChange)="set('metaDesc', $event)" maxlength="160" style="resize:vertical;"></textarea>
+            <textarea class="inp" rows="3" [placeholder]="seoDescPlaceholder()" [ngModel]="form().metaDesc" (ngModelChange)="set('metaDesc', $event)" maxlength="160" style="resize:vertical;"></textarea>
             <div class="char-counter" [class.over]="form().metaDesc.length > 160">{{ form().metaDesc.length }}/160</div>
           </div>
           <label class="lbl">{{ t('product.field.slug') }}</label>
-          <input class="inp mono" [ngModel]="form().slug" (ngModelChange)="set('slug', $event)" [class.inp-invalid]="slugError()"/>
+          <input class="inp mono" [placeholder]="slugPlaceholder()" [ngModel]="form().slug" (ngModelChange)="set('slug', $event)" [class.inp-invalid]="slugError()"/>
           @if (slugError()) {
             <div class="field-error mt-6">{{ t('product.field.slugError') }}</div>
           }
@@ -1587,6 +1601,10 @@ function readPreview(file: File): Promise<string> {
     }
     .vcg-head:hover { background: var(--bg-2); }
     .vcg--open .vcg-head { background: var(--bg-2); border-bottom: 1px solid var(--border-2); }
+    /* A variant started with "Add variant", waiting for its colour */
+    .vcg--new { box-shadow: inset 0 0 0 2px var(--warning, #d97706); border-radius: 8px; }
+    .vcg-new-label { font-size: 11px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+    .vcg-new-hint { margin: 0; padding: 10px 12px 12px; font-size: 12px; color: var(--ink); }
 
     .vcg-chev {
       color: var(--muted); transition: transform .2s; flex-shrink: 0;
@@ -2274,6 +2292,20 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
+  /** What the server generates when these are left empty, shown as placeholders. */
+  seoTitlePlaceholder(): string {
+    const f = this.form();
+    return [f.name, f.brand, 'Elite Collection'].filter(Boolean).join(' · ');
+  }
+  seoDescPlaceholder(): string {
+    const name = this.form().name;
+    return name ? `Buy the ${name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.` : '';
+  }
+  /** Same rule as server `slugify()` in routes/lib.js. */
+  slugPlaceholder(): string {
+    return this.form().name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
   readonly slugError = computed(() => {
     const s = this.form().slug;
     return !!s && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
@@ -2357,6 +2389,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.draftRestoredAt.set(null);
     this.autoGeneratedVariantIds.set(new Set());
     this.colorSkuDrafts.set({});
+    this.pendingVariantIds.set(new Set());
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
 
@@ -2365,10 +2398,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       const raw = this.storage.get(this.draftBase);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.savedAt) {
+        // Resume only a draft made against the data loaded now. If the product
+        // changed since (a sale, another admin's save), replaying the draft
+        // would write old stock and prices back.
+        if (parsed && parsed.savedAt && JSON.stringify(parsed.base) === JSON.stringify(this.initial())) {
           this.form.set(parsed.form);
           this.draftRestoredAt.set(parsed.savedAt);
           this.saveState.set('dirty');
+        } else {
+          this.storage.remove(this.draftBase);
         }
       }
     } catch {}
@@ -2418,9 +2456,11 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       noteAr: p.noteAr ?? '',
       careEn: p.careEn ?? '',
       careAr: p.careAr ?? '',
-      metaTitle: p.metaTitle || `${p.name} · ${p.brand} · Elite Collection`,
-      metaDesc: p.metaDesc || `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
-      slug: p.slug || p.name.toLowerCase().replace(/\s+/g, '-'),
+      // Empty means "generate": the server fills slug from the name, and the
+      // inputs show the generated SEO text as placeholders only.
+      metaTitle: p.metaTitle || '',
+      metaDesc: p.metaDesc || '',
+      slug: p.slug || '',
       variants: (p.variants ?? []).map(v => ({ ...v })),
       images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
       imageColors: { ...(p.imageColors ?? {}) },
@@ -2611,11 +2651,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     }
     if (accepted.length === 0) return;
 
+    const uploadProductId = this.product.id;
+    const uploadProductName = this.product.name;
     try {
       await new Promise<void>((resolve, reject) => {
         const filesToSend = accepted.map((a) => a.file);
         let lastPercent = 0;
-        this.uploads.uploadProductImages(this.product.id, filesToSend).subscribe({
+        this.uploads.uploadProductImages(uploadProductId, filesToSend).subscribe({
           next: (ev) => {
             if (ev.stage === 'uploading') {
               lastPercent = ev.percent;
@@ -2627,15 +2669,24 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
             }
             if (ev.stage === 'done') {
               const result = ev.result as ProductImageUploadResult;
-              if (result?.images) {
-                this.set('images', result.images);
-                const imageColors = this.pruneImageColors(this.form().imageColors, result.images);
-                this.set('imageColors', imageColors);
-                this.initial.set({ ...this.initial(), images: [...result.images], imageColors: { ...imageColors } });
+              // Saved on its own product. If the editor moved on meanwhile, leave
+              // the other product's form alone.
+              if (result?.images && this.product?.id === uploadProductId) {
+                // Add the new server images without dropping unsaved gallery
+                // edits (reorder, removals); the baseline is the server list.
+                const added = result.images.filter((url) => !this.initial().images.includes(url));
+                const images = [...this.form().images, ...added.filter((url) => !this.form().images.includes(url))];
+                this.set('images', images);
+                this.set('imageColors', this.pruneImageColors(this.form().imageColors, images));
+                this.initial.set({
+                  ...this.initial(),
+                  images: [...result.images],
+                  imageColors: this.pruneImageColors(this.initial().imageColors, result.images),
+                });
               }
               this.toast.success(
                 `${result?.uploaded ?? accepted.length} ${this.t('product.gallery.upload').toLowerCase()}`,
-                this.product.name,
+                uploadProductName,
               );
               resolve();
             }
@@ -2727,6 +2778,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // ────────────────────────────────────────────────────────────────────
 
   addVariant(): void {
+    // One new variant at a time: a second click brings back the one still
+    // waiting for its colour instead of stacking blank rows.
+    const waiting = this.form().variants.find(v => !v.color && this.pendingVariantIds().has(v.id));
+    if (waiting) {
+      this.revealVariant(waiting.id);
+      return;
+    }
     const f = this.form();
     const id = 'V-' + Date.now().toString(36);
     const next: ProductVariant = {
@@ -2739,9 +2797,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       stock: 0,
     };
     this.markVariantSkuAutomatic(id);
+    this.pendingVariantIds.update(ids => new Set(ids).add(id));
     this.set('variants', [...f.variants, next]);
-    // A colourless variant lands in the "no color" group, which starts
-    // collapsed and may sit below the fold; reveal it or the click looks like a no-op.
+    // Its own group opens at the top with the colour select focused.
     this.revealVariant(id);
   }
 
@@ -2750,7 +2808,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (!current) return;
     const nextSize = String(patch.size ?? '').trim();
     if (nextSize && this.form().variants.some(v => v.id !== current.id
-      && this.colorKey(v.color || '') === this.colorKey(current.color || '')
+      && this.groupKeyOf(v) === this.groupKeyOf(current)
       && String(v.size || '').trim() === nextSize)) {
       this.toast.error(this.t('product.variants.duplicateSize.title'), `${nextSize} · ${this.t('product.variants.duplicateSize.sub')}`);
       return;
@@ -2796,8 +2854,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const next = this.form().variants.filter(v => v.id !== removed.id);
     this.unmarkVariantSkuAutomatic(removed.id);
     this.expandedVariants.update(ids => { const n = new Set(ids); n.delete(removed.id); return n; });
-    const groupKey = this.colorKey(removed.color || '');
-    if (!next.some(v => this.colorKey(v.color || '') === groupKey)) {
+    const groupKey = this.groupKeyOf(removed);
+    this.pendingVariantIds.update(ids => { const n = new Set(ids); n.delete(removed.id); return n; });
+    if (!next.some(v => this.groupKeyOf(v) === groupKey)) {
       // Last size of that colour: drop the colour's UI state and photo links
       // so they do not come back if the colour is added again.
       this.expandedGroups.update(keys => { const n = new Set(keys); n.delete(groupKey); return n; });
@@ -2818,12 +2877,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private revealVariant(id: string, flash = false): void {
     const variant = this.form().variants.find(v => v.id === id);
     if (!variant) return;
-    this.expandedGroups.update(keys => new Set(keys).add(this.colorKey(variant.color || '')));
+    const groupKey = this.groupKeyOf(variant);
+    this.expandedGroups.update(keys => new Set(keys).add(groupKey));
     if (flash) this.flashVariantId.set(id);
     setTimeout(() => {
-      const row = document.querySelector<HTMLElement>(`[data-variant-id="${CSS.escape(id)}"]`);
-      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      row?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
+      // A new variant has no rows yet, only its colour select.
+      const target = groupKey === this.newGroupKey
+        ? document.querySelector<HTMLElement>(`[data-group-key="${this.newGroupKey}"]`)
+        : document.querySelector<HTMLElement>(`[data-variant-id="${CSS.escape(id)}"]`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
     });
   }
 
@@ -2888,15 +2951,40 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     }>();
 
     variants.forEach((v, globalIndex) => {
-      const key = (v.color || '').trim().toLowerCase() || '__none__';
+      const key = this.groupKeyOf(v);
       if (!map.has(key)) map.set(key, { colorKey: key, colorName: v.color || '', items: [] });
       map.get(key)!.items.push({ v, globalIndex });
     });
 
-    return [...map.values()];
+    // A variant started with "Add variant" sits on top, apart from older
+    // colourless rows, until its colour is chosen.
+    const groups = [...map.values()];
+    return [
+      ...groups.filter(g => g.colorKey === this.newGroupKey),
+      ...groups.filter(g => g.colorKey !== this.newGroupKey),
+    ];
   });
 
   readonly expandedGroups = signal<Set<string>>(new Set());
+
+  /** Ids made by "Add variant" whose colour is not chosen yet. They get their
+      own group so they never mix with older rows that have no colour. */
+  readonly pendingVariantIds = signal<Set<string>>(new Set());
+  readonly newGroupKey = '__new__';
+
+  private groupKeyOf(v: ProductVariant): string {
+    return !v.color && this.pendingVariantIds().has(v.id) ? this.newGroupKey : this.colorKey(v.color || '');
+  }
+
+  /** This colour's rows added in this session that are still blank (no size, no SKU). */
+  private emptySessionRows(colorName: string): ProductVariant[] {
+    const saved = new Set(this.initial().variants.map(v => v.id));
+    const key = this.colorKey(colorName);
+    return this.form().variants.filter(v => !saved.has(v.id)
+      && this.groupKeyOf(v) === key
+      && !String(v.size || '').trim()
+      && !String(v.sku || '').trim());
+  }
 
   private colorKey(colorName: string): string {
     return String(colorName || '').trim().toLowerCase() || '__none__';
@@ -2945,6 +3033,12 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   addVariantForColor(colorName: string): void {
+    // Fill this colour's empty new row first (e.g. the one "Add variant" made).
+    const empty = this.emptySessionRows(colorName)[0];
+    if (empty) {
+      this.revealVariant(empty.id, true);
+      return;
+    }
     const f = this.form();
     const id = 'V-' + Date.now().toString(36);
     const next: ProductVariant = {
@@ -2959,6 +3053,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.markVariantSkuAutomatic(id);
     this.set('variants', [...f.variants, next]);
     this.revealVariant(id);
+  }
+
+  /** Size chart picked per colour group. A signal, not a template reference:
+      reading `#ref.value` never re-rendered, so Generate stayed disabled after
+      a chart was picked until something else happened on the page. */
+  readonly groupSizeSet = signal<Record<string, string>>({});
+
+  pickGroupSizeSet(colorKey: string, sizeSetId: string): void {
+    this.groupSizeSet.update(choices => ({ ...choices, [colorKey]: sizeSetId }));
   }
 
   generateSizesForColor(sizeSetId: string, colorName: string): void {
@@ -2990,7 +3093,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       stock:    0,
     }));
     this.markVariantSkusAutomatic(newVariants.map(v => v.id));
-    const next = [...f.variants, ...newVariants];
+    // The generated sizes replace this colour's blank new rows.
+    const blanks = new Set(this.emptySessionRows(colorName).map(v => v.id));
+    const next = [...f.variants.filter(v => !blanks.has(v.id)), ...newVariants];
     this.set('variants', next);
     if (!this.warnIfDuplicateVariantSkus(next)) {
       this.toast.success(`${newVariants.length} ${this.t('product.variants.sizesAdded')}`, `${colorName} · ${ss.name}`);
@@ -3010,11 +3115,21 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   /** Rename a color without rewriting stable SKU identifiers. */
   renameGroupColor(colorKey: string, newColor: string): void {
+    if (colorKey === this.newGroupKey) {
+      if (!String(newColor || '').trim()) return;
+      const pending = this.pendingVariantIds();
+      this.pendingVariantIds.set(new Set());
+      this.set('variants', this.form().variants.map(v => (pending.has(v.id) && !v.color ? { ...v, color: newColor } : v)));
+      // Next step is the size: open that colour's group at the new row.
+      const first = this.form().variants.find(v => pending.has(v.id));
+      if (first) this.revealVariant(first.id);
+      return;
+    }
     const f = this.form();
     const targetKey = this.colorKey(newColor);
     if (targetKey !== colorKey) {
       const sizesIn = (key: string) => new Set(f.variants
-        .filter(v => this.colorKey(v.color || '') === key)
+        .filter(v => this.groupKeyOf(v) === key)
         .map(v => String(v.size || '').trim())
         .filter(Boolean));
       const target = sizesIn(targetKey);
@@ -3026,8 +3141,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       }
     }
     const next = f.variants.map(v => {
-      const key = (v.color || '').trim().toLowerCase() || '__none__';
-      if (key !== colorKey) return v;
+      if (this.groupKeyOf(v) !== colorKey) return v;
       return { ...v, color: newColor };
     });
     const draft = this.colorSkuDrafts()[colorKey];
@@ -3242,8 +3356,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.scheduleAutoSave();
   }
 
+  wholeQar(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+  }
+
   setNum(k: 'price' | 'stock', v: string | number): void {
-    const n = typeof v === 'number' ? v : parseInt(v, 10) || 0;
+    // Whole QAR and whole units: round what was typed so the field shows what is saved.
+    const raw = typeof v === 'number' ? v : parseFloat(v);
+    const n = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
     this.set(k, n);
   }
 
@@ -3287,7 +3408,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (this.saveState() === 'idle') this.saveState.set('dirty');
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     this.autoSaveTimer = window.setTimeout(() => {
-      this.storage.set(this.draftBase, JSON.stringify({ form: this.form(), savedAt: new Date().toISOString() }));
+      this.storage.set(this.draftBase, JSON.stringify({ form: this.form(), base: this.initial(), savedAt: new Date().toISOString() }));
     }, 400);
   }
 
@@ -3297,9 +3418,34 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   async save(): Promise<void> {
     if (!this.dirty() || this.saveState() === 'saving') return;
+    // A pending draft write would re-create the draft right after this save.
+    if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
+    const basics = this.form();
+    if (!basics.name.trim() || !basics.brand.trim() || !basics.sku.trim()) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.validation.required.title'), this.t('product.validation.required.sub'));
+      return;
+    }
+    if (this.slugError()) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.field.slugError'));
+      return;
+    }
     if (this.form().variants.length === 0) {
       this.saveState.set('error');
       this.toast.error(this.t('product.variants.required.title'), this.t('product.variants.required.sub'));
+      return;
+    }
+    // Every row needs a size (owner decision 2026-09-15): a colour with no size,
+    // or a SKU without a size, is not a sellable variant.
+    const sizeless = this.form().variants.find(variant => !String(variant.size || '').trim());
+    if (sizeless) {
+      this.saveState.set('error');
+      this.toast.error(
+        this.t('product.variants.missingSize.title'),
+        this.t(this.pendingVariantIds().has(sizeless.id) ? 'product.variants.pickColorFirst' : 'product.variants.missingSize.sub'),
+      );
+      this.revealVariant(sizeless.id, true);
       return;
     }
     const incomplete = this.form().variants.find(variant => !String(variant.sku || '').trim());
@@ -3325,13 +3471,21 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
     try {
       const f = submitted;
-      const previousId = this.product.id;
+      // Resolved once: the getter follows `_currentId`, which only moves to the
+      // saved id at the end, so reading it mid-way can return another product.
+      const target = this.product;
+      const previousId = target.id;
       const payload = f.variants.length > 0
         ? { ...f, stock: this.variantsTotalStock() }
         : { ...f };
-      const saved = this.product.id.startsWith('P-NEW-')
+      const saved = target.id.startsWith('P-NEW-')
         ? await this.productsApi.saveProduct(payload)
-        : await this.productsApi.update(this.product.id, payload);
+        : await this.productsApi.update(target.id, {
+          ...payload,
+          // The stock the editor loaded; the server refuses the save if a sale
+          // or stock update changed it since (STOCK_CHANGED).
+          expectedStock: Object.fromEntries(this.initial().variants.map(v => [v.sku, v.stock])),
+        } as Partial<SaveProductPayload>);
 
       const editedDuringSave = JSON.stringify(this.form()) !== JSON.stringify(submitted);
       // The baseline is what the server stored (real variant ids, barcode
@@ -3350,49 +3504,83 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
         this.storage.remove(this.draftBase);
         this.autoGeneratedVariantIds.set(new Set());
         this.colorSkuDrafts.set({});
+        this.pendingVariantIds.set(new Set());
       }
 
-      await this.syncCollections(previousId, saved.id, f.collectionIds);
 
       // Persist editable fields back on the underlying product so the current
       // catalog reflects the saved API state.
-      this.product.id = saved.id;
-      this.product.name = saved.name;
-      this.product.sku = saved.sku;
-      this.product.brand = saved.brand;
-      this.product.price = saved.price;
-      this.product.stock = saved.stock;
-      this.product.hidden = saved.hidden;
-      this.product.posHidden = saved.posHidden;
-      this.product.enDesc = saved.enDesc ?? f.enDesc;
-      this.product.arDesc = saved.arDesc ?? f.arDesc;
-      this.product.shortEn = saved.shortEn ?? f.shortEn;
-      this.product.shortAr = saved.shortAr ?? f.shortAr;
-      this.product.teaserEn = saved.teaserEn ?? f.teaserEn;
-      this.product.teaserAr = saved.teaserAr ?? f.teaserAr;
-      this.product.noteEn = saved.noteEn ?? f.noteEn;
-      this.product.noteAr = saved.noteAr ?? f.noteAr;
-      this.product.careEn = saved.careEn ?? f.careEn;
-      this.product.careAr = saved.careAr ?? f.careAr;
-      this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
-      this.product.images = [...(saved.images ?? f.images)];
-      this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };
-      this.product.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
+      target.id = saved.id;
+      target.name = saved.name;
+      target.sku = saved.sku;
+      target.brand = saved.brand;
+      target.price = saved.price;
+      target.stock = saved.stock;
+      target.hidden = saved.hidden;
+      target.posHidden = saved.posHidden;
+      target.enDesc = saved.enDesc ?? f.enDesc;
+      target.arDesc = saved.arDesc ?? f.arDesc;
+      target.shortEn = saved.shortEn ?? f.shortEn;
+      target.shortAr = saved.shortAr ?? f.shortAr;
+      target.teaserEn = saved.teaserEn ?? f.teaserEn;
+      target.teaserAr = saved.teaserAr ?? f.teaserAr;
+      target.noteEn = saved.noteEn ?? f.noteEn;
+      target.noteAr = saved.noteAr ?? f.noteAr;
+      target.careEn = saved.careEn ?? f.careEn;
+      target.careAr = saved.careAr ?? f.careAr;
+      target.variants = (saved.variants ?? []).map(v => ({ ...v }));
+      target.images = [...(saved.images ?? f.images)];
+      target.imageColors = { ...(saved.imageColors ?? f.imageColors) };
+      target.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
       // Keep the legacy `image` field in sync with images[0] so the catalog
       // grid, dashboard heatmap, and order rows use the new primary.
-      this.product.image = saved.image || this.product.images?.[0] || this.product.image;
+      target.image = saved.image || target.images?.[0] || target.image;
       if (previousId !== saved.id) {
         this._currentId.set(saved.id);
         this.currentIdChange.emit(saved.id);
       }
       
-      this.productSaved.emit({ ...this.product });
+      this.productSaved.emit({ ...target });
+      // Last, and on its own: the product is already saved, so a collection
+      // failure must not leave the drawer on a stale id or a nameless new row.
+      try {
+        await this.syncCollections(previousId, saved.id, f.collectionIds);
+      } catch {
+        this.toast.error(this.t('product.toast.collectionsFailed.title'), this.t('product.toast.collectionsFailed.sub'));
+      }
       this.toast.success(this.t('product.toast.saved.title'), `${f.name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
       this.feedbackTimer = window.setTimeout(() => this.saveState.set(this.dirty() ? 'dirty' : 'idle'), 1800);
-    } catch {
+    } catch (err) {
       this.saveState.set('error');
       this.triggerShake();
+      const body = (err as { error?: { code?: string; errors?: string[] } })?.error;
+      if (body?.code === 'STOCK_CHANGED') {
+        await this.reloadVariantStock();
+      } else if (body?.errors?.length) {
+        this.toast.error(this.t('product.toast.saveInvalid'), body.errors.join('; '));
+      }
+    }
+  }
+
+  /** After a STOCK_CHANGED refusal: take the stock the server holds now into
+      both the baseline and the form, keeping every other edit, so the next
+      save goes through without undoing the sale. */
+  private async reloadVariantStock(): Promise<void> {
+    const id = this.product?.id;
+    if (!id || id.startsWith('P-NEW-')) return;
+    try {
+      const fresh = await this.productsApi.get(id);
+      if (this.product?.id !== id) return;
+      const stockBySku = new Map((fresh.variants ?? []).map(v => [v.sku, v.stock]));
+      const withFreshStock = (shape: FormShape): FormShape => ({
+        ...shape,
+        variants: shape.variants.map(v => stockBySku.has(v.sku) ? { ...v, stock: stockBySku.get(v.sku)! } : v),
+      });
+      this.initial.update(withFreshStock);
+      this.form.update(withFreshStock);
+    } catch {
+      // The error interceptor already reported it.
     }
   }
 
@@ -3401,6 +3589,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.form.set({ ...this.initial() });
     this.autoGeneratedVariantIds.set(new Set());
     this.colorSkuDrafts.set({});
+    this.pendingVariantIds.set(new Set());
     this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
@@ -3411,6 +3600,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.form.set({ ...this.initial() });
     this.autoGeneratedVariantIds.set(new Set());
     this.colorSkuDrafts.set({});
+    this.pendingVariantIds.set(new Set());
     this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
@@ -3444,10 +3634,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       variant: 'danger',
     });
     if (!ok) return;
+    const target = this.product;
+    const draftKey = this.draftBase;
     this.deleting.set(true);
     setTimeout(() => {
       this.deleting.set(false);
-      this.deleted.emit(this.product);
+      this.storage.remove(draftKey);
+      this.deleted.emit(target);
     }, 600);
   }
 
@@ -3456,6 +3649,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // ────────────────────────────────────────────────────────────────────
 
   async navigate(dir: -1 | 1): Promise<void> {
+    if (this.deleting()) return;
     const list = this._products();
     const idx = this.currentIndex();
     const newIdx = idx + dir;
@@ -3466,6 +3660,29 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       return;
     }
     this.currentIdChange.emit(list[newIdx].id);
+  }
+
+  /** Closing the tab or reloading with unsaved edits asks the browser to confirm. */
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.dirty()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
+  /** Used by the catalog route guard: leaving the page with unsaved edits
+      asks first instead of silently dropping them. */
+  async confirmLeaveIfDirty(): Promise<boolean> {
+    if (!this.dirty()) return true;
+    const leave = await this.confirm.ask({
+      title: this.t('product.leaveConfirm.title'),
+      message: this.t('product.leaveConfirm.message'),
+      confirmLabel: this.t('product.leaveConfirm.confirm'),
+      cancelLabel: this.t('common.cancel'),
+      variant: 'warning',
+    });
+    if (!leave) this.triggerShake();
+    return leave;
   }
 
   triggerShake(): void {

@@ -47,6 +47,8 @@ export const routes: Routes = [
         path: 'catalog',
         loadComponent: () =>
           import('./pages/catalog/catalog.component').then((m) => m.CatalogComponent),
+        // Leaving the catalog with an unsaved product asks first.
+        canDeactivate: [(component: { canLeave?: () => boolean | Promise<boolean> }) => component.canLeave?.() ?? true],
       },
       {
         path: 'collections',

@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal, ChangeDetectionStrategy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, ActivatedRoute } from '@angular/router';
@@ -280,7 +280,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
       <!-- ── GRID view ── -->
       @if (effectiveView() === 'grid') {
-        @if (paged().length === 0) {
+        @if (paged().length === 0 && !loading()) {
           <div class="card">
             <ap-empty-state icon="catalog" [title]="t('catalog.empty.title')" [sub]="t('catalog.empty.sub')">
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
@@ -340,7 +340,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
       <!-- ── LIST view ── -->
       @if (effectiveView() === 'list') {
-        @if (paged().length === 0) {
+        @if (paged().length === 0 && !loading()) {
           <div class="card">
             <ap-empty-state icon="catalog" [title]="t('catalog.empty.title')" [sub]="t('catalog.empty.sub')">
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
@@ -401,9 +401,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       <!-- ── Pagination ── -->
       @if (pageSize() > 0 && filtered().length > pageSize()) {
         <div class="pagination mt-16">
-          <button class="btn btn-sm btn-outline" [disabled]="page() === 0" (click)="prevPage()">← {{ t('common.prev') }}</button>
-          <span class="muted small">{{ t('catalog.pagination.page') }} {{ page() + 1 }} {{ t('catalog.pagination.of') }} {{ totalPages() }}</span>
-          <button class="btn btn-sm btn-outline" [disabled]="page() >= totalPages() - 1" (click)="nextPage()">{{ t('common.next') }} →</button>
+          <button class="btn btn-sm btn-outline" [disabled]="safePage() === 0" (click)="prevPage()">← {{ t('common.prev') }}</button>
+          <span class="muted small">{{ t('catalog.pagination.page') }} {{ safePage() + 1 }} {{ t('catalog.pagination.of') }} {{ totalPages() }}</span>
+          <button class="btn btn-sm btn-outline" [disabled]="safePage() >= totalPages() - 1" (click)="nextPage()">{{ t('common.next') }} →</button>
         </div>
       }
     </div>
@@ -417,7 +417,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
     @if (activeId(); as id) {
       <ap-product-drawer
-        [products]="paged()"
+        [products]="drawerProducts()"
         [collections]="collections()"
         [currentId]="id"
         (closed)="onDrawerClosed()"
@@ -738,6 +738,7 @@ export class CatalogComponent implements OnInit {
       this.refColors.set(colors);
     } catch {
       this._products.set([]);
+      this.toast.error(this.t('catalog.toast.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -800,7 +801,8 @@ export class CatalogComponent implements OnInit {
   );
 
   readonly outOfStockCount = computed(() =>
-    this._products().filter(p => !p.hidden && p.stock === 0).length,
+    // Same rule as the Out of Stock filter, so the badge matches what it shows.
+    this._products().filter(p => p.stock === 0).length,
   );
 
   readonly brands = computed(() => {
@@ -896,10 +898,25 @@ export class CatalogComponent implements OnInit {
     this.pageSize() > 0 ? Math.ceil(this.filtered().length / this.pageSize()) : 1,
   );
 
+  /** The page actually shown. Filters, page size or deletes can leave `page`
+      past the end, which used to render an empty grid with no way back. */
+  readonly safePage = computed(() => Math.min(this.page(), Math.max(0, this.totalPages() - 1)));
+
+  /** What the drawer navigates. The open product is always included, so a save
+      that moves it out of the current filter, page or sort cannot swap the
+      drawer onto a different product. */
+  readonly drawerProducts = computed(() => {
+    const list = this.filtered();
+    const id = this.activeId();
+    if (!id || list.some(p => p.id === id)) return list;
+    const open = this._products().find(p => p.id === id);
+    return open ? [open, ...list] : list;
+  });
+
   readonly paged = computed(() => {
     const all = this.filtered();
     if (this.pageSize() === 0) return all;
-    const start = this.page() * this.pageSize();
+    const start = this.safePage() * this.pageSize();
     return all.slice(start, start + this.pageSize());
   });
 
@@ -907,8 +924,8 @@ export class CatalogComponent implements OnInit {
     const total = this.filtered().length;
     const ps = this.pageSize();
     if (ps === 0 || total <= ps) return `${total} ${total !== 1 ? this.t('catalog.products') : this.t('catalog.product')}`;
-    const start = this.page() * ps + 1;
-    const end = Math.min((this.page() + 1) * ps, total);
+    const start = this.safePage() * ps + 1;
+    const end = Math.min((this.safePage() + 1) * ps, total);
     return `${start}–${end} ${this.t('catalog.pagination.of')} ${total}`;
   });
 
@@ -923,7 +940,8 @@ export class CatalogComponent implements OnInit {
     this.selectionMode.update(v => !v);
     this.selectedIds.set(new Set());
     this.confirmingDelete.set(false);
-    this.activeId.set(null);
+    // Through the normal close path so an unsaved new-product row is cleaned up.
+    if (this.activeId()) this.onDrawerClosed();
   }
 
   toggleSelect(id: string): void {
@@ -934,7 +952,7 @@ export class CatalogComponent implements OnInit {
     });
   }
 
-  selectAll(): void { this.selectedIds.set(new Set(this.paged().map(p => p.id))); }
+  selectAll(): void { this.selectedIds.set(new Set(this.paged().filter(p => !p.id.startsWith('P-NEW-')).map(p => p.id))); }
   clearSelection(): void { this.selectedIds.set(new Set()); }
 
   // ── Bulk actions ──────────────────────────────────────────────────────────
@@ -948,7 +966,8 @@ export class CatalogComponent implements OnInit {
   }
 
   async bulkSetStatus(hidden: boolean): Promise<void> {
-    const ids = [...this.selectedIds()];
+    const ids = [...this.selectedIds()].filter(id => !id.startsWith('P-NEW-'));
+    const snapshot = this._products();
     this._products.update(all =>
       all.map(p => ids.includes(p.id) ? { ...p, hidden } : p),
     );
@@ -960,7 +979,9 @@ export class CatalogComponent implements OnInit {
       ));
       this.toast.success(`${ids.length} ${ids.length === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${hidden ? this.t('catalog.status.hidden') : this.t('catalog.status.active')}`);
     } catch {
-      const list = await this.productsApi.list().catch(() => this._products());
+      // Reload the truth (some calls may have succeeded); if that fails too,
+      // go back to the list as it was before the change.
+      const list = await this.productsApi.list().catch(() => snapshot);
       this._products.set(list);
       this.toast.error(this.t('catalog.toast.statusError'));
     }
@@ -970,20 +991,33 @@ export class CatalogComponent implements OnInit {
     const ids = [...this.selectedIds()];
     if (!ids.length) return;
     this.confirmingDelete.set(false);
+    const snapshot = this._products();
+    const removed = snapshot.filter(p => ids.includes(p.id) && !p.id.startsWith('P-NEW-'));
     this._products.update(all => all.filter(p => !ids.includes(p.id)));
     this.selectedIds.set(new Set());
     this.selectionMode.set(false);
     try {
-      const { deleted } = await this.productsApi.bulkDelete(ids);
-      this.toast.success(`${deleted} ${deleted === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${this.t('common.delete').toLowerCase()}`);
+      const { deleted } = await this.productsApi.bulkDelete(removed.map(p => p.id));
+      this.toast.success(
+        `${deleted} ${deleted === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${this.t('common.delete').toLowerCase()}`,
+        undefined,
+        { label: this.t('common.undo'), run: () => { void this.restoreProducts(removed); } },
+      );
     } catch {
-      const list = await this.productsApi.list().catch(() => this._products());
+      const list = await this.productsApi.list().catch(() => snapshot);
       this._products.set(list);
       this.toast.error(this.t('catalog.toast.deleteError'));
     }
   }
 
   // ── Product CRUD ──────────────────────────────────────────────────────────
+
+  @ViewChild(ProductDrawerComponent) private drawer?: ProductDrawerComponent;
+
+  /** Route guard hook: an open product with unsaved edits confirms before leaving. */
+  canLeave(): boolean | Promise<boolean> {
+    return this.drawer ? this.drawer.confirmLeaveIfDirty() : true;
+  }
 
   openProduct(p: Product): void { this.activeId.set(p.id); }
 
@@ -1016,6 +1050,8 @@ export class CatalogComponent implements OnInit {
     };
     this._products.update(all => [draft, ...all]);
     this.clearFilters();
+    // Newest keeps the empty draft at the top of the first page.
+    this.sortKey.set('newest');
     this.activeId.set(id);
   }
 
@@ -1031,42 +1067,55 @@ export class CatalogComponent implements OnInit {
     this.page.set(0);
   }
 
-  onDeleted(deleted: Product): void {
-    const before = this._products();
-    const beforeIndex = before.findIndex(p => p.id === deleted.id);
-    if (beforeIndex < 0) return;
-
-    const visible = this.filtered();
-    const visibleIndex = visible.findIndex(p => p.id === deleted.id);
+  async onDeleted(deleted: Product): Promise<void> {
+    if (!this._products().some(p => p.id === deleted.id)) return;
+    const visibleIndex = this.filtered().findIndex(p => p.id === deleted.id);
 
     if (!deleted.id.startsWith('P-NEW-')) {
-      this.productsApi.archive(deleted.id).catch(() => {});
+      try {
+        await this.productsApi.archive(deleted.id);
+      } catch {
+        // The error interceptor explains why; the product stays in the list.
+        return;
+      }
     }
     this._products.update(all => all.filter(p => p.id !== deleted.id));
 
     const nextVisible = this.filtered();
-    if (nextVisible.length === 0) {
-      this.activeId.set(null);
-    } else {
-      this.activeId.set(nextVisible[Math.min(Math.max(visibleIndex, 0), nextVisible.length - 1)].id);
-    }
+    this.activeId.set(nextVisible.length === 0
+      ? null
+      : nextVisible[Math.min(Math.max(visibleIndex, 0), nextVisible.length - 1)].id);
 
+    if (deleted.id.startsWith('P-NEW-')) return;
     this.toast.success(
       this.t('product.toast.deleted.title'),
       `${deleted.name} (${deleted.sku})`,
       {
         label: this.t('common.undo'),
         run: () => {
-          this._products.update(all => {
-            const r = [...all];
-            r.splice(beforeIndex, 0, deleted);
-            return r;
+          void this.restoreProducts([deleted]).then(restored => {
+            if (restored.length) this.activeId.set(deleted.id);
           });
-          this.activeId.set(deleted.id);
-          this.toast.info(this.t('product.toast.restored.title'), deleted.name);
         },
       },
     );
+  }
+
+  /** Undo for delete: restores on the server first, then puts the rows back. */
+  private async restoreProducts(products: Product[]): Promise<Product[]> {
+    const restored: Product[] = [];
+    for (const product of products) {
+      try {
+        restored.push(await this.productsApi.restore(product.id, product.hidden));
+      } catch {
+        this.toast.error(this.t('product.toast.restoreFailed'), product.name);
+      }
+    }
+    if (restored.length === 0) return restored;
+    const ids = new Set(restored.map(p => p.id));
+    this._products.update(all => [...restored, ...all.filter(p => !ids.has(p.id))]);
+    this.toast.info(this.t('product.toast.restored.title'), restored.map(p => p.name).join(', '));
+    return restored;
   }
 
   async onBulkImported(): Promise<void> {
@@ -1080,12 +1129,18 @@ export class CatalogComponent implements OnInit {
   exportCsv(): void {
     const products = this.filtered();
     if (products.length === 0) return;
+    const cell = (value: unknown): string => {
+      const text = String(value ?? '');
+      // A leading = + - @ makes spreadsheet apps evaluate the cell as a formula.
+      const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const rows = [
       'SKU,Name,Brand,Price (QAR),Stock,Status,Variants',
       ...products.map(p => [
-        `"${p.sku}"`,
-        `"${p.name.replace(/"/g, '""')}"`,
-        `"${p.brand.replace(/"/g, '""')}"`,
+        cell(p.sku),
+        cell(p.name),
+        cell(p.brand),
         p.price,
         p.stock,
         p.hidden ? 'Hidden' : 'Active',
@@ -1098,7 +1153,8 @@ export class CatalogComponent implements OnInit {
     a.href = url;
     a.download = `catalog-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking in the same tick can cancel the download in Safari.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     this.toast.success(this.t('catalog.toast.exported'), `${products.length} ${products.length === 1 ? this.t('catalog.product') : this.t('catalog.products')}`);
   }
 
