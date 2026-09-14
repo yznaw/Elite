@@ -85,7 +85,28 @@ INSERT INTO color_ar_seed (name_en, name_ar, hex) VALUES
   ('T.Moro',                     'بني غامق',                 '#3D2B1F'),
   ('Taupe',                      'رمادي مائل للبني',         '#8B7D6B'),
   ('White Ostrich Leather',      'أبيض جلد نعام',            '#F5F5F0'),
-  ('Zinc',                       'رمادي زنكي',               '#7D7F7D');
+  ('Zinc',                       'رمادي زنكي',               '#7D7F7D'),
+  -- Spellings found on live variants, typos included: the receipt lookup
+  -- matches the variant's colour text exactly, so each needs its own row.
+  ('Black-MK',                   'أسود MK',                  '#1A1A1A'),
+  ('Blue',                       'أزرق',                     '#2F5DA8'),
+  ('Burgandi',                   'عنابي',                    '#800020'),
+  ('Candy',                      'كاندي',                    '#E8A0B4'),
+  ('Capuccino',                  'كابتشينو',                 '#A67B5B'),
+  ('Cezanne',                    'سيزان',                    '#B8A58C'),
+  ('Cyprus',                     'أخضر قبرصي',               '#0F4C45'),
+  ('Dark Brwon',                 'بني داكن',                 '#5C2E00'),
+  ('Deep Brwon',                 'بني غامق',                 '#4A2A17'),
+  ('Irish Blue',                 'أزرق إيرلندي',             '#2E4A7A'),
+  ('Lighit Blue',                'أزرق فاتح',                '#9CC3E0'),
+  ('Light Beige-Dark Insole',    'بيج فاتح - نعل داخلي داكن', '#EDE0C8'),
+  ('Light Brwn',                 'بني فاتح',                 '#A67B5B'),
+  ('Light Brwon',                'بني فاتح',                 '#A67B5B'),
+  ('Light Green',                'أخضر فاتح',                '#90C695'),
+  ('Milk-N10',                   'حليبي N10',                '#F5F0E6'),
+  ('Mustad',                     'خردلي',                    '#C9A227'),
+  ('Sandy Brwon',                'بني رملي',                 '#C49A6C'),
+  ('Sky Blue',                   'أزرق سماوي',               '#87CEEB');
 
 -- 1. Existing reference colours with a blank Arabic name.
 UPDATE ref_colors AS rc
