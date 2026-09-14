@@ -59,7 +59,23 @@ app.use((req, res, next) => {
   angularApp
     .handle(req)
     .then((response) => {
-      if (!response) return next();
+      if (!response) {
+        // A matching Angular route can temporarily disappear from the SSR
+        // manifest when a deploy replaces dist while an old PM2 process is
+        // still running. Keep page navigation usable until elite-web reloads.
+        // Angular's intentional 404 is a real Response, so it passes through
+        // below with its status intact. Asset and API misses stay real 404s.
+        if (req.method === 'GET'
+          && req.accepts('html')
+          && !req.path.startsWith('/api/')
+          && !req.path.startsWith('/uploads/')
+          && !/\.[^/]+$/.test(req.path)) {
+          console.warn(`SSR did not match ${req.path}; serving client shell`);
+          res.setHeader('Cache-Control', 'no-store');
+          return res.sendFile(join(browserDistFolder, 'index.csr.html'));
+        }
+        return next();
+      }
       res.setHeader('Cache-Control', 'no-store');
       return writeResponseToNodeResponse(response, res);
     })

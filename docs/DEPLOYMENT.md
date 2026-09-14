@@ -93,6 +93,36 @@ pm2 logs elite-web --lines 50
 
 `startOrReload` creates the process on the first deploy and reloads it on every later one; `pm2 save` makes it survive a reboot. The config file defines only `elite-web`, so running it can never restart or reconfigure `elite-api`. The log must show `Storefront SSR listening on http://127.0.0.1:4000`.
 
+Check direct page visits after every storefront build and renderer reload. The
+homepage alone is insufficient: a stale renderer can still serve `/` while
+returning Express's `Cannot GET /story` for other pages.
+
+```bash
+for route in contact story collection; do
+  curl -sS -o /dev/null -w "/$route %{http_code}\n" "https://elitecollections.qa/$route"
+done
+```
+
+All three must return `200`. If any returns `Cannot GET`, check that
+`dist/client-web/server/angular-app-manifest.mjs` contains that route, then
+rebuild the storefront and run `pm2 startOrReload deploy/pm2/elite-web.config.cjs`
+from `/var/www/elite` again. A route missing from the manifest means the build
+is incomplete; a present route with an old PM2 process means the renderer was
+not reloaded after the build. The render server now serves the client shell
+when Angular unexpectedly returns no page, but this is only an outage fallback;
+the route must return server-rendered HTML after a healthy deploy.
+
+Also confirm the homepage's referenced JavaScript exists. A stale renderer can
+return `200` for `/` while its HTML names a bundle deleted by the new build:
+
+```bash
+main_bundle=$(curl -fsS https://elitecollections.qa/ | grep -oE 'main-[A-Za-z0-9]+\.js' | head -1)
+test -n "$main_bundle" && curl -fsSI "https://elitecollections.qa/$main_bundle" >/dev/null
+```
+
+The second command must succeed. If it does not, reload `elite-web` from the
+current build before considering the deployment healthy.
+
 The storefront stays up if this process is down: nginx serves the client-rendered shell instead (see `docs/09-nginx-https.md`), so pages only lose server rendering until it is back. The very first SSR deploy also needs the one-time nginx switch in section 7c.
 
 ## 5. Health and smoke verification
