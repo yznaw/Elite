@@ -152,6 +152,44 @@ ALERT_EMAIL=owner@example.com
 
 Leaving `ALERT_EMAIL` unset disables operational email alerts. Register-side signer logs rotate under `C:\ProgramData\ElitePOS\device-signer\logs\signer.log`.
 
+### CORS origin rejections
+
+The public storefront uses `/api` on `https://elitecollections.qa`. A log saying
+`CORS blocked: origin http://localhost:5173 not allowed` identifies a request
+supplying that local origin, not the public storefront origin. Production only
+trusts explicitly configured origins (plus the payment-provider origins).
+Rejected origins return HTTP **403** with code `CORS_ORIGIN_DENIED` and a warning
+log; they must not appear as HTTP 500 failures or trigger server-error surge
+alerts. Older API builds incorrectly reported these rejections as HTTP 500.
+
+Use the following production origins in `server/.env`, retaining any other
+approved origins already configured:
+
+```dotenv
+NODE_ENV=production
+CORS_ORIGINS=https://elitecollections.qa,https://www.elitecollections.qa,https://admin.elitecollections.qa
+```
+
+Values must be exact origins (scheme, hostname and optional port), with no
+trailing slash, path or Markdown link formatting. Only append
+`http://localhost:5173` if that local frontend is intentionally accessing the
+production API; normal visitors to the public storefront do not need it.
+
+After editing the file, reload PM2 with the **same full allowlist** explicitly
+provided below. This also replaces a stale `CORS_ORIGINS` inherited by PM2,
+which otherwise takes precedence over `.env`. Include any approved additions
+in both the file and the command.
+
+```bash
+CORS_ORIGINS='https://elitecollections.qa,https://www.elitecollections.qa,https://admin.elitecollections.qa' pm2 reload elite-api --update-env
+pm2 save
+curl --silent --show-error -i -X OPTIONS https://elitecollections.qa/api/products \
+  -H 'Origin: https://elitecollections.qa' \
+  -H 'Access-Control-Request-Method: GET'
+```
+
+Expect HTTP 204 with `Access-Control-Allow-Origin: https://elitecollections.qa`.
+
 ## 7. Rollback
 
 If the smoke test fails, preserve logs and the failing request ID first. Then return the server checkout to the previously recorded commit and rebuild from that code:

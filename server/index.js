@@ -126,7 +126,12 @@ app.use(
       if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS blocked: origin ${origin} not allowed`));
+        const error = new Error(`CORS blocked: origin ${origin} not allowed`);
+        // An untrusted client is a 403, not an API fault. In particular, do
+        // not count these rejections toward server-error surge alerts.
+        error.status = 403;
+        error.code = 'CORS_ORIGIN_DENIED';
+        callback(error);
       }
     },
     credentials: true,
@@ -232,8 +237,8 @@ app.use((err, req, res, _next) => {
 
   // Structured, correlated, and searchable. The raw message and stack always
   // go here even when the client response hides them (see below).
-  (req.log || logger).error(
-    { err: { message: err.message, code: err.code, stack: err.stack }, status },
+  (req.log || logger)[isServerFault ? 'error' : 'warn'](
+    { err: { message: err.message, code: err.code, stack: err.stack }, status, requestId: req.requestId },
     'request failed',
   );
 
