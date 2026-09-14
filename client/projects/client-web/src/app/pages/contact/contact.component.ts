@@ -8,6 +8,7 @@ import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { ContactBranch, ContactStockist, SocialLink } from '../../models/home-content.model';
+import { socialUrl } from '../../utils/social-url';
 import { SeoService } from '../../services/seo.service';
 import { API_BASE } from '../../core/api-base';
 
@@ -286,19 +287,7 @@ export class ContactComponent implements OnInit {
   }
 
   socialUrl(link: SocialLink): string {
-    const h = link.handle.trim();
-    const sanitized = this.sanitizePhone(h);
-    switch (link.platform) {
-      case 'whatsapp':  return `https://wa.me/${sanitized}`;
-      case 'instagram': return `https://instagram.com/${h}`;
-      case 'twitter':   return `https://x.com/${h}`;
-      case 'facebook':  return `https://facebook.com/${h}`;
-      case 'tiktok':    return `https://tiktok.com/@${h}`;
-      case 'snapchat':  return `https://snapchat.com/add/${h}`;
-      case 'youtube':   return `https://youtube.com/@${h}`;
-      case 'linkedin':  return `https://linkedin.com/in/${h}`;
-      default:          return '#';
-    }
+    return socialUrl(link);
   }
 
   whatsappUrl(): string {

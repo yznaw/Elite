@@ -22,6 +22,7 @@ import { ProductsService } from '../../services/products.service';
 import { BRAND_REGISTRY } from '../../models/brand-registry';
 import { HomeCollectionTileContent, HeroColorContent } from '../../models/home-content.model';
 import { colorKey } from '../../utils/color-slug';
+import { socialUrl } from '../../utils/social-url';
 import { mediaVariantKey, resolveClientMediaUrl } from '../../utils/media-url';
 import { SeoService } from '../../services/seo.service';
 import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
@@ -145,6 +146,30 @@ export class HomeComponent implements OnInit, OnDestroy {
           ? { email: this.homeContent.contentData().contact.email } : {}),
         ...(this.homeContent.contentData().contact.phone
           ? { telephone: this.homeContent.contentData().contact.phone.replace(/\s+/g, '') } : {}),
+        // A contact method a search engine or AI answer can cite directly,
+        // instead of guessing from whichever page it happened to index.
+        ...(this.homeContent.contentData().contact.phone
+          ? {
+              contactPoint: {
+                '@type': 'ContactPoint',
+                telephone: this.homeContent.contentData().contact.phone.replace(/\s+/g, ''),
+                contactType: 'customer service',
+                areaServed: 'QA',
+                availableLanguage: ['en', 'ar'],
+                url: `${this.seo.origin()}/contact`,
+              },
+            }
+          : {}),
+        // The brand's own profiles, which is what lets an engine treat this
+        // site and those accounts as one entity. WhatsApp is a chat link, not
+        // a profile, so it stays out.
+        ...(() => {
+          const sameAs = (this.homeContent.contentData().contact.socialLinks ?? [])
+            .filter((link) => link.enabled && link.handle.trim() && link.platform !== 'whatsapp')
+            .map((link) => socialUrl(link))
+            .filter((url) => url !== '#');
+          return sameAs.length ? { sameAs } : {};
+        })(),
         address: {
           '@type': 'PostalAddress',
           addressLocality: 'Doha',

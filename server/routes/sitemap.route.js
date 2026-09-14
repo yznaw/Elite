@@ -100,10 +100,27 @@ router.get(
           .pop(),
       );
 
+      // /story and /contact are rendered from the storefront content blob in
+      // store_settings, whose updated_at a trigger bumps on every save. Without
+      // a <lastmod> these two had no change signal at all, so crawlers kept the
+      // pre-SSR empty shell they had indexed and AI answers linked the
+      // collection page when asked for contact details.
+      const settings = await client.query(
+        'SELECT updated_at FROM store_settings WHERE tenant_id = $1',
+        [tenant.id],
+      );
+      const contentUpdated = isoDate(settings.rows[0]?.updated_at);
+      const staticLastmod = {
+        '/': newest,
+        '/collection': newest,
+        '/story': contentUpdated,
+        '/contact': contentUpdated,
+      };
+
       const entries = [
         ...STATIC_ROUTES.map((r) => urlEntry({
           loc: `${origin}${r.path === '/' ? '/' : r.path}`,
-          lastmod: r.path === '/' || r.path === '/collection' ? newest : null,
+          lastmod: staticLastmod[r.path] ?? null,
           changefreq: r.changefreq,
           priority: r.priority,
         })),
