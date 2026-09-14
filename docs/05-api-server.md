@@ -165,6 +165,30 @@ See `server/routes/config.route.js`. No auth required.
 |---|---|---|
 | `GET` | `/api/config` | Returns public tenant configuration — `{ defaultImage }`. `defaultImage` is stored in `tenants.config` JSONB and set via the media "Set as Default Fallback" button. The client-web reads this on init to use as a product image fallback. |
 
+### Public — Storefront Cart (`/api/carts`)
+
+See `server/routes/carts.route.js`. Session-cookie cart, no auth.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/carts/current` | The session cart. Each item carries `available`: the variant's stock (0 when inactive), or `null` for a line with no variant. |
+| `POST` | `/api/carts/current/items` | Add or increment a line. **409 `INSUFFICIENT_STOCK`** when the bag quantity for that variant + size would exceed stock; the bag is left unchanged. |
+| `DELETE` | `/api/carts/current/items/:productId` | Remove a line (`size`, `variantId`, `color` query params). |
+| `DELETE` | `/api/carts/current/items` | Empty the bag. |
+| `POST` | `/api/carts/shipping-quote` | NBOX delivery quote. |
+| `POST` | `/api/carts/checkout` | Create the pending order. Re-checks stock under row locks and returns **409 `INSUFFICIENT_STOCK`** before any order exists. |
+
+Both 409s share one shape, so the storefront can match the failing bag line:
+
+```json
+{ "success": false, "code": "INSUFFICIENT_STOCK", "message": "...",
+  "details": [{ "variantId": "...", "sku": "...", "name": "...", "size": "39", "color": "Green",
+                "requested": 1, "available": 0, "inBag": 1 }],
+  "requestId": "..." }
+```
+
+`inBag` is only present on the add-to-bag response. Covered by `server/test/cart-stock-e2e.test.js`.
+
 ### Public — Sitemap (`/api/sitemap.xml`)
 
 See `server/routes/sitemap.route.js`. No auth required. Generated from live data on every request and cached for an hour at the edge.

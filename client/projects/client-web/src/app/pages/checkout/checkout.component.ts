@@ -2,9 +2,10 @@ import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeD
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { CartService } from '../../services/cart.service';
+import { CartService, stockShortages } from '../../services/cart.service';
+import { CartItem } from '../../models/product.model';
 import { CheckoutService } from '../../services/checkout.service';
 import { DeliveryQuote } from '../../services/checkout.service';
 import { PaymentService } from '../../services/payment.service';
@@ -111,6 +112,9 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    // The bag may have been filled days ago. Re-read it so lines that sold out
+    // since are flagged now, not when the customer presses Proceed to Payment.
+    void this.cart.refresh();
     // Covers the normal navigation case (fresh load / SPA route).
     this.silentResume();
     // Covers the bfcache case (browser Back from Sadad restores a frozen page).
@@ -177,6 +181,16 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   readonly deliveryFee = computed(() => this.shippingQuote()?.amount || 0);
   readonly total = computed(() => (this.placed() ? this.placedTotal() : this.subtotal() + this.deliveryFee()));
 
+  /** Explains which bag lines block checkout. Empty when every line is in stock. */
+  readonly stockMessage = computed(() => {
+    const issues = this.cart.stockIssues();
+    if (issues.length === 0) return '';
+    if (issues.length > 1) return this.tp('checkout.stock.many', { count: issues.length });
+    const [item] = issues;
+    const params = { name: this.itemName(item), size: item.size, count: item.available ?? 0 };
+    return item.available ? this.tp('checkout.stock.short', params) : this.tp('checkout.stock.soldOut', params);
+  });
+
   constructor() {
     effect((onCleanup) => {
       const currentStep = this.step();
@@ -202,6 +216,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   readonly t = (key: string): string => this.i18n.t(key);
+  readonly tp = (key: string, params: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
   readonly itemName = (item: { id: string; name: string }): string => this.i18n.productName(item);
 
@@ -251,6 +266,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
   async next(): Promise<void> {
     this.error.set('');
+    if (this.cart.stockIssues().length) return;
     if (!this.isCurrentStepValid()) {
       if (this.step() === 0) {
         this.touched.set({ firstName: true, lastName: true, email: true, phone: true });
@@ -263,6 +279,13 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
     if (this.step() === 1 && !(await this.ensureDeliveryQuote())) {
       return;
+    }
+
+    // Last cheap look at stock before the payment step, since filling in the
+    // form can take a while.
+    if (this.step() === 1) {
+      await this.cart.refresh();
+      if (this.cart.stockIssues().length) return;
     }
 
     if (this.step() < STEPS.length - 1) {
@@ -289,6 +312,21 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     window.scrollTo(0, 0);
   }
 
+
+  stockLabel(item: CartItem): string {
+    if (item.available == null || item.qty <= item.available) return '';
+    return item.available === 0
+      ? this.t('cart.stock.soldOut')
+      : this.tp('cart.stock.onlyLeft', { count: item.available });
+  }
+
+  /** Removes a sold-out line, or lowers it to what is left. */
+  fixStock(item: CartItem): void {
+    // The bag changed, so a retry must not reuse the previous attempt's key.
+    this.idempotencyKey = null;
+    this.error.set('');
+    void this.cart.setQty(item, item.available ?? 0);
+  }
 
   onImgError(e: Event): void {
     (e.target as HTMLImageElement).style.display = 'none';
@@ -371,8 +409,8 @@ export class CheckoutComponent implements OnInit, OnDestroy {
         idempotencyKey: this.idempotencyKey,
       });
       orderId = order.id; // UUID for payment gateway
-    } catch {
-      this.error.set(this.t('checkout.error.submit'));
+    } catch (err) {
+      this.error.set(await this.orderErrorMessage(err));
       this.placing.set(false);
       return;
     }
@@ -395,6 +433,24 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       this.redirecting.set(false);
       this.error.set(this.t('checkout.error.payment'));
     }
+  }
+
+  private async orderErrorMessage(err: unknown): Promise<string> {
+    const shortages = stockShortages(err);
+    if (shortages.length) {
+      await this.cart.refresh();
+      // The refreshed bag flags the lines itself and stockMessage explains them.
+      if (this.cart.stockIssues().length) return '';
+      if (shortages.length > 1) return this.tp('checkout.stock.many', { count: shortages.length });
+      const [s] = shortages;
+      const params = { name: this.itemName({ id: '', name: s.name }), size: s.size ?? '', count: s.available };
+      return s.available ? this.tp('checkout.stock.short', params) : this.tp('checkout.stock.soldOut', params);
+    }
+    if (err instanceof HttpErrorResponse) {
+      if (err.status === 0) return this.t('checkout.error.network');
+      if (err.status === 422) return this.t('checkout.error.validation');
+    }
+    return this.t('checkout.error.submit');
   }
 
   private async ensureDeliveryQuote(): Promise<boolean> {

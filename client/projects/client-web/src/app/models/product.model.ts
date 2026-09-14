@@ -67,4 +67,6 @@ export interface CartItem {
   color?: string | null;
   size: number;
   qty: number;
+  /** Units still in stock for this variant, from the server cart. null when the line has no variant to check. */
+  available?: number | null;
 }

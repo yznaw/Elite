@@ -13,7 +13,20 @@ const router = Router();
 async function loadCart(client, cartId) {
   const cart = await client.query('SELECT * FROM carts WHERE id = $1', [cartId]);
   if (cart.rowCount === 0) return null;
-  const items = await client.query('SELECT * FROM cart_items WHERE cart_id = $1 ORDER BY created_at', [cartId]);
+  // available_quantity lets the storefront flag a line that has sold out since
+  // it was added, instead of the customer only finding out at payment. NULL
+  // means the line is not linked to a variant, so there is nothing to check.
+  const items = await client.query(
+    `SELECT ci.*,
+            CASE WHEN pv.id IS NULL THEN NULL
+                 WHEN pv.is_active THEN GREATEST(pv.stock_quantity, 0)
+                 ELSE 0 END AS available_quantity
+       FROM cart_items ci
+       LEFT JOIN product_variants pv ON pv.id = ci.variant_id
+      WHERE ci.cart_id = $1
+      ORDER BY ci.created_at`,
+    [cartId],
+  );
   return { ...cart.rows[0], items: items.rows };
 }
 
@@ -57,6 +70,7 @@ function mapPublicCart(cart) {
       color: item.metadata?.color || null,
       size: Number(item.size) || 0,
       qty: Number(item.quantity) || 1,
+      available: item.available_quantity == null ? null : Number(item.available_quantity),
     })),
   };
 }
@@ -189,6 +203,51 @@ router.post('/current/items', asyncHandler(async (req, res) => {
     const productId = req.body.productId || req.body.id;
     const qty = Math.max(1, Number.parseInt(req.body.quantity || req.body.qty, 10) || 1);
     const size = req.body.size == null ? null : String(req.body.size);
+    const variantId = isUuid(req.body.variantId) ? req.body.variantId : null;
+
+    // Refuse to put more in the bag than exists. The product page already hides
+    // sold-out sizes, but it cannot see what is already in the bag, so adding
+    // the last pair twice used to succeed and only fail at checkout.
+    if (variantId) {
+      const variant = await client.query(
+        `SELECT pv.stock_quantity, pv.is_active, pv.sku, p.name
+           FROM product_variants pv
+           JOIN products p ON p.id = pv.product_id
+          WHERE pv.tenant_id = $1 AND pv.id = $2`,
+        [cart.tenant_id, variantId],
+      );
+      if (variant.rowCount) {
+        const inBag = await client.query(
+          `SELECT COALESCE(sum(quantity), 0) AS qty FROM cart_items
+            WHERE cart_id = $1 AND variant_id = $2 AND size IS NOT DISTINCT FROM $3`,
+          [cart.id, variantId, size],
+        );
+        const already = Number(inBag.rows[0].qty) || 0;
+        const row = variant.rows[0];
+        const available = row.is_active ? Math.max(0, Number(row.stock_quantity) || 0) : 0;
+        if (already + qty > available) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            code: 'INSUFFICIENT_STOCK',
+            message: available === 0
+              ? `${row.name} is sold out in this size.`
+              : `Only ${available} of ${row.name} available in this size.`,
+            details: [{
+              variantId,
+              sku: row.sku || '',
+              name: row.name,
+              size,
+              color: req.body.color || null,
+              requested: already + qty,
+              inBag: already,
+              available,
+            }],
+            requestId: req.requestId,
+          });
+        }
+      }
+    }
 
     await client.query(
       `
@@ -208,7 +267,7 @@ router.post('/current/items', asyncHandler(async (req, res) => {
       [
         cart.id,
         productId,
-        isUuid(req.body.variantId) ? req.body.variantId : null,
+        variantId,
         String(req.body.name || 'Item'),
         String(req.body.sku || productId),
         size,
@@ -389,6 +448,9 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       const available = Number(variant.rows[0].stock_quantity) || 0;
       if (!variant.rows[0].is_active || available < wanted) {
         outOfStock.push({
+          variantId,
+          size: item.size ?? item.s ?? null,
+          color: item.color || null,
           sku: item.sku || '',
           name: variant.rows[0].name,
           requested: wanted,

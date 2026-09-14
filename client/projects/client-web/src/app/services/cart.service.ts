@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
@@ -17,17 +17,40 @@ interface ServerCart {
   items: CartItem[];
 }
 
+/** One line of a 409 INSUFFICIENT_STOCK response from add-to-bag or checkout. */
+export interface StockShortage {
+  variantId?: string | null;
+  sku: string;
+  name: string;
+  size?: string | number | null;
+  color?: string | null;
+  requested: number;
+  available: number;
+  inBag?: number;
+}
+
+export function stockShortages(err: unknown): StockShortage[] {
+  if (!(err instanceof HttpErrorResponse) || err.status !== 409) return [];
+  if (err.error?.code !== 'INSUFFICIENT_STOCK' || !Array.isArray(err.error.details)) return [];
+  return err.error.details;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CartService {
   private readonly http = inject(HttpClient);
   private readonly apiBase = inject(API_BASE);
   private readonly _items = signal<CartItem[]>([]);
   private readonly _open = signal<boolean>(false);
+  private readonly _rejectedAdd = signal<StockShortage | null>(null);
 
   readonly items = this._items.asReadonly();
   readonly isOpen = this._open.asReadonly();
   readonly count = computed(() => this._items().reduce((s, i) => s + i.qty, 0));
   readonly subtotal = computed(() => this._items().reduce((s, i) => s + i.price * i.qty, 0));
+  /** Lines holding more than is still in stock (sold out or partly). */
+  readonly stockIssues = computed(() => this._items().filter((i) => i.available != null && i.qty > i.available));
+  /** Set when the server refused an add because there was not enough stock. */
+  readonly rejectedAdd = this._rejectedAdd.asReadonly();
 
   constructor() {
     // Browser only. The cart is tied to the visitor's session cookie, which a
@@ -37,6 +60,7 @@ export class CartService {
   }
 
   add(item: CartItem): void {
+    this._rejectedAdd.set(null);
     this._items.update((prev) => {
       const key = this.itemKey(item);
       const existing = prev.find((i) => this.itemKey(i) === key);
@@ -55,6 +79,26 @@ export class CartService {
     const target = this.itemKey({ id, size, variantId, color } as CartItem);
     this._items.update((prev) => prev.filter((i) => this.itemKey(i) !== target));
     void this.removeRemote(id, size, variantId, color);
+  }
+
+  /**
+   * Lowers a line to what is still in stock. The API has no quantity update,
+   * so the line is deleted and re-added; the UI only takes the final result.
+   */
+  async setQty(item: CartItem, qty: number): Promise<void> {
+    if (qty <= 0) {
+      this.remove(item.id, item.size, item.variantId, item.color);
+      return;
+    }
+    const key = this.itemKey(item);
+    this._items.update((prev) => prev.map((i) => (this.itemKey(i) === key ? { ...i, qty } : i)));
+    try {
+      await this.deleteItemRequest(item.id, item.size, item.variantId, item.color);
+      const cart = await this.addItemRequest({ ...item, qty });
+      this._items.set(cart.items || []);
+    } catch {
+      await this.refresh();
+    }
   }
 
   clear(): void {
@@ -79,7 +123,17 @@ export class CartService {
 
   private async addRemote(item: CartItem): Promise<void> {
     try {
-      const cart = await firstValueFrom(
+      const cart = await this.addItemRequest(item);
+      this._items.set(cart.items || []);
+    } catch (err) {
+      const [shortage] = stockShortages(err);
+      if (shortage) this._rejectedAdd.set(shortage);
+      await this.refresh();
+    }
+  }
+
+  private addItemRequest(item: CartItem): Promise<ServerCart> {
+    return firstValueFrom(
         this.http.post<ApiResponse<ServerCart>>(`${this.apiBase}/carts/current/items`, {
           productId: item.id,
           variantId: item.variantId || null,
@@ -93,27 +147,27 @@ export class CartService {
           quantity: item.qty,
         }, { withCredentials: true }),
       ).then((res) => res.data);
+  }
+
+  private async removeRemote(id: string, size: number, variantId?: string, color?: string | null): Promise<void> {
+    try {
+      const cart = await this.deleteItemRequest(id, size, variantId, color);
       this._items.set(cart.items || []);
     } catch {
       await this.refresh();
     }
   }
 
-  private async removeRemote(id: string, size: number, variantId?: string, color?: string | null): Promise<void> {
-    try {
-      const params = new URLSearchParams({ size: String(size) });
-      if (variantId) params.set('variantId', variantId);
-      if (color) params.set('color', color);
-      const cart = await firstValueFrom(
-        this.http.delete<ApiResponse<ServerCart>>(
-          `${this.apiBase}/carts/current/items/${encodeURIComponent(id)}?${params.toString()}`,
-          { withCredentials: true },
-        ),
-      ).then((res) => res.data);
-      this._items.set(cart.items || []);
-    } catch {
-      await this.refresh();
-    }
+  private deleteItemRequest(id: string, size: number, variantId?: string, color?: string | null): Promise<ServerCart> {
+    const params = new URLSearchParams({ size: String(size) });
+    if (variantId) params.set('variantId', variantId);
+    if (color) params.set('color', color);
+    return firstValueFrom(
+      this.http.delete<ApiResponse<ServerCart>>(
+        `${this.apiBase}/carts/current/items/${encodeURIComponent(id)}?${params.toString()}`,
+        { withCredentials: true },
+      ),
+    ).then((res) => res.data);
   }
 
   private async clearRemote(): Promise<void> {

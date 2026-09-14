@@ -490,16 +490,28 @@ private readonly seoTags = this.seo.watch(() => ({
 
 - **File:** `services/cart.service.ts`
 - **State:** Angular Signals (`signal()`, `computed()`)
-- **Persistence:** `localStorage` key `elite_cart`
+- **Persistence:** server-side session cart (`/api/carts/current`), refreshed on app start and on entering `/checkout`
 - **API:**
   - `items` — Readonly signal of cart items
   - `isOpen` — Readonly signal for drawer visibility
   - `count` — Computed total quantity
   - `subtotal` — Computed total price
+  - `stockIssues` — Computed lines whose `qty` exceeds `available` (sold out, or partly)
+  - `rejectedAdd` — The `StockShortage` from the last add the server refused (409 `INSUFFICIENT_STOCK`), shown as a notice in the drawer
   - `add(item)` — Add or increment item
-  - `remove(id, size)` — Remove by ID + size combo
+  - `remove(id, size, variantId?, color?)` — Remove a line
+  - `setQty(item, qty)` — Lower a line to what is left (delete + re-add, since the API has no quantity update)
   - `clear()` — Empty cart
   - `openDrawer()` / `closeDrawer()` — Toggle cart panel
+- **`stockShortages(err)`** — exported helper that pulls the per-line details out of a 409 `INSUFFICIENT_STOCK` response.
+
+#### Out-of-stock handling (2026-09-14)
+
+Stock used to be checked only by `POST /api/carts/checkout`, so a bag line that sold out after it was added (POS sale, another web order, admin edit, variant deactivated), or the same size added twice past stock, was only discovered at "Proceed to Payment", with the generic "We could not place the order" message.
+
+- The drawer and the checkout order summary flag each short line ("Sold out" / "Only N left") with a **Remove** or **Change to N** action.
+- Checkout re-reads the bag on entry and again before the payment step, and blocks Continue with a message naming the item and size (`checkout.stock.*`).
+- A 409 from checkout refreshes the bag so the flags appear. Network failures (`checkout.error.network`) and 422s (`checkout.error.validation`) get their own messages; anything else keeps `checkout.error.submit`.
 
 ### `LocaleService`
 
@@ -815,13 +827,17 @@ The public products API previously returned `[40, 41, 42, 43, 44]` as a fallback
 
 ```typescript
 interface CartItem {
-  id: number;
+  id: string;
+  variantId?: string;
+  sku?: string;
   name: string;
   price: number;
   image: string;
   leather: string;
+  color?: string | null;
   size: number;
   qty: number;
+  available?: number | null; // units still in stock; null when the line has no variant
 }
 ```
 
