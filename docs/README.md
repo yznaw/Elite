@@ -24,6 +24,7 @@
 | 13 | [POS Review & Hardening Roadmap](./13-pos-review-roadmap.md) | Backend/Frontend Devs | Concurrency and offline-resilience audit of the POS core, with a prioritized fix list for locking and offline-queue durability |
 | 24 | [Logging & Observability](./24-logging-observability-plan.md) | Operations/Developers | Structured logs, request IDs, client diagnostics, alerting, retention, and incident workflow |
 | 25 | [POS Readiness Master Plan](./25-pos-readiness-master-plan.md) | Owner/Operations/Developers | Production launch scope, two-shop shared inventory decision, gates, accepted risks, and remaining cutover work |
+| 35 | [Stock Availability & Restock Alerts Plan](./35-stock-availability-and-restock-plan.md) ([العربية](./35-stock-availability-and-restock-plan.ar.md)) | Owner/Developers | Sold-out sizes and colours on collection and product pages, reliable back-in-stock emails for every stock channel, admin restock requests |
 
 ---
 
