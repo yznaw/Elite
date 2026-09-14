@@ -898,7 +898,7 @@ Full CRUD for all three reference tables. All endpoints are tenant-scoped. Requi
 | `PUT` | `/api/admin/ref/size-sets/:id` | Replace a size set |
 | `DELETE` | `/api/admin/ref/size-sets/:id` | Delete a size set |
 
-**DB tables:** `ref_colors`, `ref_materials`, `ref_size_sets` — created by `003_ref_tables.sql`. `ref_colors` extended by `010_color_images.sql` with `swatch_image_url`. Seeded with 13 colors, 8 materials, and 5 size sets.
+**DB tables:** `ref_colors`, `ref_materials`, `ref_size_sets` — created by `003_ref_tables.sql`. `ref_colors` extended by `010_color_images.sql` with `swatch_image_url`. Seeded with 13 colors, 8 materials, and 5 size sets. `040_ref_color_arabic_names.sql` seeds Arabic names (and missing rows) for colours used on variants, so POS receipts print the colour in Arabic.
 
 **Color-image pivot** (`product_color_images`) — created by `010_color_images.sql`. Written by `replaceColorImages()` in `admin-products.route.js` on every product save alongside the legacy `media_assets.metadata.color` path (dual-write for zero-downtime rollout). Public `products.route.js` prefers the pivot JOIN; falls back to metadata JSONB for products not yet re-saved.
 

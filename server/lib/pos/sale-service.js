@@ -85,6 +85,7 @@ async function searchProducts(context, query) {
            SELECT NULLIF(btrim(rc.name_ar), '')
            FROM ref_colors rc
            WHERE rc.tenant_id = pv.tenant_id
+             AND NULLIF(btrim(rc.name_ar), '') IS NOT NULL
              AND (rc.id = pv.color_ref_id OR lower(btrim(rc.name_en)) = lower(btrim(pv.color)))
            ORDER BY (rc.id = pv.color_ref_id) DESC
            LIMIT 1
@@ -160,6 +161,7 @@ async function findByBarcode(context, barcodeValue) {
            SELECT NULLIF(btrim(rc.name_ar), '')
            FROM ref_colors rc
            WHERE rc.tenant_id = pv.tenant_id
+             AND NULLIF(btrim(rc.name_ar), '') IS NOT NULL
              AND (rc.id = pv.color_ref_id OR lower(btrim(rc.name_en)) = lower(btrim(pv.color)))
            ORDER BY (rc.id = pv.color_ref_id) DESC
            LIMIT 1
@@ -415,6 +417,7 @@ async function createSale(context, body, options = {}) {
            SELECT NULLIF(btrim(rc.name_ar), '')
            FROM ref_colors rc
            WHERE rc.tenant_id = pv.tenant_id
+             AND NULLIF(btrim(rc.name_ar), '') IS NOT NULL
              AND (rc.id = pv.color_ref_id OR lower(btrim(rc.name_en)) = lower(btrim(pv.color)))
            ORDER BY (rc.id = pv.color_ref_id) DESC
            LIMIT 1
