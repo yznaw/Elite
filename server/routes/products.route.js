@@ -176,7 +176,7 @@ function variantsSelect() {
               'isActive', sv.is_active
             ) ORDER BY sv.sort_order, sv.created_at)
             FROM product_variants sv
-            WHERE sv.product_id = p.id
+            WHERE sv.product_id = p.id AND sv.is_active
           ), '[]'::jsonb) AS variants`;
 }
 
@@ -304,7 +304,7 @@ router.get('/', async (_req, res, next) => {
               AND rp.status = 'active'
           ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id
+        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.status = 'active'
@@ -434,7 +434,7 @@ router.get('/:id', async (req, res, next) => {
               AND rp.status = 'active'
           ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id
+        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status = 'active'

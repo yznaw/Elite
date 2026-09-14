@@ -192,27 +192,36 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     await publishStockEvent(client, tenantId, removed.id, 0);
   }
 
-  // Null-out cart references for variants being removed (ON DELETE RESTRICT)
-  if (incomingSkus.length > 0) {
-    await client.query(
-      `UPDATE cart_items SET variant_id = NULL
-       WHERE variant_id IN (
-         SELECT id FROM product_variants
-         WHERE product_id = $1 AND sku <> ALL($2::text[])
-       )`,
-      [productId, incomingSkus],
+  // Stocktake counts keep a hard reference to the variant they counted
+  // (ON DELETE RESTRICT), so a counted size cannot be deleted without losing
+  // that history and the whole save used to fail. Hide it instead: it drops out
+  // of the editor, storefront and POS, and re-adding its SKU revives it through
+  // the upsert below (owner decision 2026-09-14).
+  const removedIds = existingVariants.rows
+    .filter((row) => !incomingSkus.includes(row.sku))
+    .map((row) => row.id);
+  let countedIds = [];
+  if (removedIds.length > 0) {
+    const counted = await client.query(
+      `SELECT variant_id FROM stocktake_lines WHERE variant_id = ANY($1::uuid[])
+       UNION
+       SELECT variant_id FROM stocktake_location_counts WHERE variant_id = ANY($1::uuid[])`,
+      [removedIds],
     );
+    countedIds = counted.rows.map((row) => row.variant_id);
+  }
+  const deletableIds = removedIds.filter((id) => !countedIds.includes(id));
+
+  if (countedIds.length > 0) {
     await client.query(
-      'DELETE FROM product_variants WHERE product_id = $1 AND sku <> ALL($2::text[])',
-      [productId, incomingSkus],
+      'UPDATE product_variants SET is_active = false, stock_quantity = 0, updated_at = NOW() WHERE id = ANY($1::uuid[])',
+      [countedIds],
     );
-  } else {
-    // No variants coming in — wipe all (product-level stock only)
-    await client.query(
-      'UPDATE cart_items SET variant_id = NULL WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)',
-      [productId],
-    );
-    await client.query('DELETE FROM product_variants WHERE product_id = $1', [productId]);
+  }
+  if (deletableIds.length > 0) {
+    // Null-out cart references first (cart_items.variant_id is ON DELETE RESTRICT)
+    await client.query('UPDATE cart_items SET variant_id = NULL WHERE variant_id = ANY($1::uuid[])', [deletableIds]);
+    await client.query('DELETE FROM product_variants WHERE id = ANY($1::uuid[])', [deletableIds]);
   }
 
   for (const [index, { variant, sku, barcode }] of resolved.entries()) {
@@ -607,7 +616,7 @@ async function loadAdminProduct(client, tenantId, productId) {
             'stock', pv.stock_quantity
           ) ORDER BY pv.sort_order, pv.created_at)
           FROM product_variants pv
-          WHERE pv.product_id = p.id
+          WHERE pv.product_id = p.id AND pv.is_active
         ), '[]'::jsonb) AS variants,
         COALESCE((
           SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
@@ -801,7 +810,7 @@ router.get('/', asyncHandler(async (_req, res) => {
               'stock', pv.stock_quantity
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
-            WHERE pv.product_id = p.id
+            WHERE pv.product_id = p.id AND pv.is_active
           ), '[]'::jsonb) AS variants,
           COALESCE((
             SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
@@ -865,7 +874,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
               'stock', pv.stock_quantity
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
-            WHERE pv.product_id = p.id
+            WHERE pv.product_id = p.id AND pv.is_active
           ), '[]'::jsonb) AS variants,
           COALESCE((
             SELECT array_agg(COALESCE(m.preview_url, m.storage_url) ORDER BY ml.sort_order)
@@ -1035,7 +1044,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
                 CASE WHEN shipping_cost_cents IS NULL THEN NULL ELSE round(shipping_cost_cents / 100.0) END AS "shippingCost",
                 stock_quantity AS stock
            FROM product_variants
-          WHERE tenant_id = $1 AND product_id = $2
+          WHERE tenant_id = $1 AND product_id = $2 AND is_active
           ORDER BY sort_order, created_at`,
         [tenant.id, req.params.id],
       );
