@@ -1,3 +1,4 @@
+import { ProductsService } from './products.service';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
@@ -37,6 +38,7 @@ export function stockShortages(err: unknown): StockShortage[] {
 
 @Injectable({ providedIn: 'root' })
 export class CartService {
+  private readonly products = inject(ProductsService);
   private readonly http = inject(HttpClient);
   private readonly apiBase = inject(API_BASE);
   private readonly _items = signal<CartItem[]>([]);
@@ -127,7 +129,10 @@ export class CartService {
       this._items.set(cart.items || []);
     } catch (err) {
       const [shortage] = stockShortages(err);
-      if (shortage) this._rejectedAdd.set(shortage);
+      if (shortage) {
+        this._rejectedAdd.set(shortage);
+        void this.products.refresh();
+      }
       await this.refresh();
     }
   }

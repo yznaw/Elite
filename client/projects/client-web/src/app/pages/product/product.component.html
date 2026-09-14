@@ -267,7 +267,7 @@
                     [attr.aria-pressed]="selectedSize() === s.size"
                     (click)="selectSize(s.size)"
                   >
-                    <span class="size-value">{{ s.size }}</span>
+                    <span class="size-value">{{ s.size }} {{ s.available && !s.inStock ? t("stock.soldOutOption") : "" }}</span>
                     <span class="size-state" aria-hidden="true">
                       {{ selectedSize() === s.size ? "✓" : "" }}
                     </span>
@@ -330,7 +330,7 @@
                         [attr.aria-pressed]="selectedSize() === s.size"
                         (click)="selectSize(s.size)"
                       >
-                        <span class="size-value">{{ s.size }}</span>
+                        <span class="size-value">{{ s.size }} {{ s.available && !s.inStock ? t("stock.soldOutOption") : "" }}</span>
                         <span class="size-state" aria-hidden="true">{{
                           selectedSize() === s.size ? "✓" : ""
                         }}</span>
@@ -356,6 +356,7 @@
               <button
                 type="button"
                 (click)="incQty()"
+                [disabled]="qty() >= maxQty()"
                 [attr.aria-label]="t('product.aria.increaseQty')"
               >
                 +
@@ -363,6 +364,8 @@
             </div>
           </div>
 
+          @if (maxQty() > 0) { <small>{{ t("stock.maxQty", {qty: maxQty()}) }}</small> }
+          @if (productSoldOut(p)) { <p class="stock-status">{{ t("stock.outOfStock") }}</p> }
           <div class="cta-stack">
             @if (canPurchaseProduct()) {
               <button
@@ -403,7 +406,7 @@
             }
           </div>
 
-          @if (!selectedSizeInStock()) {
+          @if (!selectedSizeInStock() || restockFormOpen() || restockSubmitted()) {
             <div
               id="restock-panel"
               class="restock-panel"
@@ -415,6 +418,13 @@
                 </p>
               } @else if (restockFormOpen()) {
                 <form (submit)="submitRestockRequest($event)">
+                  @if (p.sizes.length) {
+                    <label for="restock-size">{{ t('product.size.label') }}</label>
+                    <select id="restock-size" [value]="restockSize() ?? ''" (change)="onRestockSizeChange($event)" required>
+                      <option value="" disabled>{{ t('stock.chooseRestockSize') }}</option>
+                      @for (s of restockSizes(); track s.size) { <option [value]="s.size">{{ s.size }} {{ t('stock.soldOutOption') }}</option> }
+                    </select>
+                  }
                   <label for="restock-email">{{
                     t("product.restock.emailLabel")
                   }}</label>
@@ -436,6 +446,7 @@
                       }}
                     </button>
                   </div>
+                  <p class="restock-privacy">{{ t("stock.restockPrivacy") }}</p>
                   @if (restockError()) {
                     <p class="restock-error">{{ restockError() }}</p>
                   }

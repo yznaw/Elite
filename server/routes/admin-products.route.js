@@ -5,7 +5,7 @@ const { asyncHandler, created, notFound, ok, slugify, toCents, validationError }
 const { upload } = require('../middleware/upload');
 const { storage, IMAGE_VARIANT_KEYS } = require('../lib/storage');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
-const { processRestockNotifications } = require('../lib/restock-notifications');
+const { kickRestockDispatch } = require('../lib/restock-dispatch-job');
 // Every stock_quantity write in this file posts a matching ledger row in the
 // same transaction — see server/lib/inventory-ledger.js for why that invariant
 // exists and what breaks when a write skips it (docs/25 Phase 1b).
@@ -911,7 +911,7 @@ router.post('/', asyncHandler(async (req, res) => {
     const saved = await upsertProduct(client, tenant, req.body, { actorUserId: req.user?.id || null });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
-    await processRestockNotifications(client, tenant.id, saved.id);
+    kickRestockDispatch([saved.id]);
     created(res, product, 'Product saved.');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1002,7 +1002,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
 
     await client.query('COMMIT');
     for (const productId of changedProductIds) {
-      await processRestockNotifications(client, tenant.id, productId);
+      kickRestockDispatch([productId]);
     }
     ok(res, { updated, notFound }, `${updated} variant(s) updated.`);
   } catch (err) {
@@ -1086,7 +1086,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     const saved = await upsertProduct(client, tenant, payload, { actorUserId: req.user?.id || null });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');
-    await processRestockNotifications(client, tenant.id, saved.id);
+    kickRestockDispatch([saved.id]);
     ok(res, product, 'Product updated.');
   } catch (err) {
     await client.query('ROLLBACK');

@@ -46,6 +46,7 @@ router.use('/config', configRouter);
 router.use('/auth', authRouter);
 router.use('/invitations', invitationsRouter);
 router.use('/products', productsRouter);
+router.use('/restock-notifications', require('./restock-notifications.route'));
 router.use('/products', reviewsPublicRouter);
 router.use('/reviews', reviewsGeneralRouter);
 router.use('/collections', collectionsRouter);
@@ -70,6 +71,8 @@ router.use('/client-logs', clientLogsRouter);
 const admin = Router();
 admin.use(requireAuth());
 admin.use('/products', adminProductsRouter);
+// Same authenticated catalog access as /products.
+admin.use('/restock-requests', require('./admin-restock-requests.route'));
 admin.use('/collections', adminCollectionsRouter);
 admin.use('/customers', adminCustomersRouter);
 admin.use('/orders', adminOrdersRouter);

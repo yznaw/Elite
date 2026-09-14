@@ -1,3 +1,4 @@
+const { kickRestockDispatch } = require('./restock-dispatch-job');
 const db = require('../db/client');
 const { recordMovement, publishStockEvent } = require('./inventory-ledger');
 const { logger } = require('./logger');
@@ -333,6 +334,7 @@ async function reversePaidOrderStock(tenantId, orderId, options = {}) {
 
     await recomputeProductTotals(client, touchedProducts);
     await client.query('COMMIT');
+    kickRestockDispatch([...touchedProducts]);
     logger.info({ orderId, trigger: reason, lines: applied.length }, 'order stock reversed');
     return { reversed: true, lines: applied.length };
   } catch (error) {

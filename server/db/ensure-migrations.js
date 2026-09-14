@@ -437,6 +437,7 @@ async function ensureAllMigrations(client) {
   await client.query('DROP TRIGGER IF EXISTS products_require_variant ON products');
   await client.query('DROP TRIGGER IF EXISTS variants_keep_product_nonempty ON product_variants');
   await client.query('DROP FUNCTION IF EXISTS enforce_product_has_variant()');
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/039_restock_dispatch.sql'), 'utf8'));
   _done = true;
 }
 

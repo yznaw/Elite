@@ -1,3 +1,4 @@
+import { RestockRequestsService, RestockSummary } from '../../services/restock-requests.service';
 import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -108,6 +109,13 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
         </div>
       </div>
 
+      @if (restockDemand().length) {
+        <section class="card card-pad mb-24"><h2 class="card-title">{{ t('restock.topDemand') }}</h2>
+          @for (r of restockDemand(); track r.product_id + r.color_key + r.size) {
+            <p><a routerLink="/restock-requests">{{ r.product_name }} · {{ r.color }} · {{ r.size === 'ONE_SIZE' ? t('restock.oneSize') : r.size }}</a> — {{ r.waiting_count }} {{ t('restock.customersWaiting') }}</p>
+          }
+        </section>
+      }
       <div class="dashboard-charts mb-24">
         <div class="card">
           <div class="card-header">
@@ -180,6 +188,8 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
   `
 })
 export class DashboardComponent implements OnInit {
+  private readonly restockApi = inject(RestockRequestsService);
+  readonly restockDemand = signal<RestockSummary[]>([]);
   private readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
   private readonly ordersApi = inject(AdminOrdersService);
@@ -248,6 +258,7 @@ export class DashboardComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    void this.restockApi.summary('status=pending&soldOut=true&limit=5').then(rows => this.restockDemand.set(rows)).catch(() => {});
     try {
       const [orders, products, customers] = await Promise.all([
         this.ordersApi.list().then(r => r.orders).catch(() => []),

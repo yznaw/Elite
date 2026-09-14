@@ -582,3 +582,29 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 - Admin pages still on mock data: Media, Storefront, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
 - Password reset emails: `POST /api/auth/forgot` currently logs the URL to stdout. Wire a real email transport (Resend / SES / SendGrid) and replace the `console.log` in [server/routes/auth.route.js](../server/routes/auth.route.js).
 - No automated backend test suite exists yet.
+
+
+## Migration 039 · Restock availability and alerts (2026-09-14)
+
+`restock_notifications` is tenant- and product-scoped, with cascading foreign keys. Migration 039 adds `color_key`, `attempts`, `next_attempt_at`, `claimed_at`, `claim_token` and unique `unsubscribe_token`; states are `pending`, `sending`, `notified`, `failed`, `cancelled`. The active-request unique index includes both pending and sending requests and normalized colours. A database trigger cancels waiting consent when a product leaves active status. The runtime ensure only checks the schema; `ensureAllMigrations()` runs the SQL file during serialized startup.
+
+| Endpoint / operation | Persistence |
+|---|---|
+| `POST /api/products/:id/restock-notifications` | Locks/validates active product and offered variant, rejects available stock, upserts an open request |
+| `GET /api/restock-notifications/unsubscribe?token=…` | Cancels the token's request without login |
+| `GET /api/admin/restock-requests`, `/summary`, `/export.csv` | Tenant-scoped request rows, grouped demand and current matching stock |
+| `POST /api/admin/restock-requests/:id/resend`, `/:id/cancel` | Schedules retry / cancels consent; cancelled requests cannot be resent |
+| Dispatch / retention worker | Claims due available requests in batches of 50 with `SKIP LOCKED`, retries failed delivery, expires closed/pending requests after 180/365 days |
+
+Apply manually if needed (normal startup also applies it):
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/db/migrations/039_restock_dispatch.sql
+```
+
+For rollback, stop the dispatcher and use the migration's commented `DOWN` section before running an older API. It preserves request history and cancels sending/failed rows; it cannot reverse already-sent email or restore cleaned-up/merged requests. Extract and review that section before applying:
+
+```sh
+sed -n '/^-- DOWN/,$p' server/db/migrations/039_restock_dispatch.sql | sed '1d;s/^-- //' > /tmp/restock-rollback.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/restock-rollback.sql
+```

@@ -2547,3 +2547,7 @@ button:focus-visible {
     grid-column: 1 / -1;
   }
 }
+
+#restock-size { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid #c6c3bc; background: transparent; color: inherit; font: inherit; }
+.restock-privacy { font-size: .8rem; line-height: 1.5; margin-top: 12px; }
+.qty-control button:disabled { opacity: .4; cursor: default; }

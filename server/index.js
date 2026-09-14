@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { startRestockDispatchJob } = require('./lib/restock-dispatch-job');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -353,6 +354,7 @@ async function prepareDatabase() {
 async function startServer(port = PORT) {
   await prepareDatabase();
   const stopInventoryConsistencyJob = startInventoryConsistencyJob();
+  const stopRestockDispatchJob = startRestockDispatchJob();
   // Watches pos_sync_states for a register whose offline queue has stopped
   // draining — unsynced money sitting in a browser is the top offline risk
   // (docs/24, Phase E).
@@ -367,6 +369,7 @@ async function startServer(port = PORT) {
     });
     server.once('close', () => {
       stopInventoryConsistencyJob();
+      stopRestockDispatchJob();
       stopQueueWatchJob();
     });
     server.once('error', reject);

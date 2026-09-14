@@ -1317,3 +1317,9 @@ html[dir='rtl'] .product-tile {
     gap: 24px;
   }
 }
+
+.stock-status { display: block; min-height: 1.25rem; font-size: .75rem; }
+.product-color-swatch.is-sold-out { opacity: .45; position: relative; }
+.product-color-swatch.is-sold-out::after { content: ''; position: absolute; inset: 50% -2px auto; height: 1px; background: #272727; transform: rotate(-45deg); }
+.purchase-panel { grid-template-rows: minmax(59px, auto) 40px 40px; align-content: start; }
+.notify-only { grid-column: 1 / -1; }

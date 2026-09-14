@@ -1,3 +1,5 @@
+import { RestockRequestsService, RestockSummary } from '../../services/restock-requests.service';
+import { colorKey } from '../../../../../../../shared/color-key.js';
 import {
   Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
@@ -614,6 +616,9 @@ function readPreview(file: File): Promise<string> {
                           </div>
                         </div>
 
+                        @if (waitingForVariant(item.v); as count) {
+                          <p class="muted small" style="margin:0;padding:0 12px 8px;">{{ count }} {{ t('restock.customersWaiting') }}</p>
+                        }
                         <!-- Expandable detail: Material | Barcode | Cost | Shipping | Total Cost · Margin -->
                         @if (expandedVariants().has(item.v.id)) {
                           <div class="vc-detail vc-detail--6col">
@@ -2192,6 +2197,11 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   /** Emitted after a successful save so the catalog can update _products signal. */
   @Output() productSaved = new EventEmitter<Product>();
 
+  private readonly restockApi = inject(RestockRequestsService);
+  readonly restockDemand = signal<RestockSummary[]>([]);
+  waitingForVariant(v: ProductVariant): number {
+    return this.restockDemand().find(r => r.color_key === colorKey(v.color) && r.size === (String(v.size ?? '').trim() || 'ONE_SIZE'))?.waiting_count || 0;
+  }
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
@@ -2331,6 +2341,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const p = this.product;
     if (!p) return;
 
+    this.restockDemand.set([]);
+    if (!p.id.startsWith('P-NEW-')) void this.restockApi.summary(`productId=${encodeURIComponent(p.id)}`).then(rows => {
+      if (this.product?.id === p.id) this.restockDemand.set(rows);
+    }).catch(() => {});
     this.initial.set(this.makeFormFromProduct(p));
     this.form.set({ ...this.initial() });
     this.saveState.set('idle');

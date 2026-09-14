@@ -397,6 +397,7 @@ export class SidebarComponent {
     {
       labelKey: 'nav.section.storefront',
       links: [
+        { path: '/restock-requests', labelKey: 'restock.title', subKey: 'restock.demand', icon: 'catalog' },
         { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
         { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
         { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },

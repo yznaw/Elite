@@ -22,6 +22,7 @@ interface PageMeta {
 
 const META: Record<string, PageMeta> = {
   '/dashboard':  { crumbKey: 'page.dashboard.crumb',  titleKey: 'page.dashboard.title' },
+  '/restock-requests': { crumbKey: 'restock.title', titleKey: 'restock.title' },
   '/catalog':    { crumbKey: 'page.catalog.crumb',    titleKey: 'page.catalog.title' },
   '/media':      { crumbKey: 'page.media.crumb',      titleKey: 'page.media.title' },
   '/storefront': { crumbKey: 'page.storefront.crumb', titleKey: 'page.storefront.title' },

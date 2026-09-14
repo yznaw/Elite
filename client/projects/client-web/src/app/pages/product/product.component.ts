@@ -14,6 +14,8 @@ import { colorKey, colorSlug } from '../../utils/color-slug';
 import { SeoService } from '../../services/seo.service';
 import { API_BASE } from '../../core/api-base';
 
+import { sizeOptions, productSoldOut, defaultColor, defaultSize, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+
 interface Accordion {
   id: string;
   titleKey: string;
@@ -95,8 +97,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     if (!p) return null;
 
     const name = this.i18n.productName(p);
-    const inStock = (p.variants || []).some((v) => Number(v.stock) > 0)
-      || (!p.variants?.length && (p.stock ?? 1) > 0);
+    const inStock = !productSoldOut(p);
     // Product copy is rich text, so it is flattened before it goes anywhere
     // a crawler reads it verbatim.
     const description = this.seo.plainText(
@@ -197,6 +198,13 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly sizeGuideError = signal('');
   readonly restockFormOpen = signal(false);
   readonly restockEmail = signal('');
+  readonly restockSize = signal<number | null>(null);
+  readonly productSoldOut = productSoldOut;
+  readonly maxQty = computed(() => {
+    const p = this.product();
+    return p ? availableStock(p, this.selectedColor(), this.selectedSize()) : 0;
+  });
+  readonly restockSizes = computed(() => this.availableSizes().filter(s => s.available && !s.inStock));
   readonly restockSubmitting = signal(false);
   readonly restockSubmitted = signal(false);
   readonly restockError = signal('');
@@ -255,27 +263,12 @@ export class ProductComponent implements OnInit, OnDestroy {
     const p = this.product();
     if (!p?.sizes?.length) return [];
 
-    const sizes = [...p.sizes].sort((a, b) => a - b);
-    const variants = p.variants || [];
-    const fallbackStock = (p.stock ?? 1) > 0;
-    if (variants.length === 0) {
-      return sizes.map((size) => ({ size, available: true, inStock: fallbackStock }));
-    }
-
-    const selectedColorKey = this.selectedColor() ? this.colorKey(this.selectedColor() || '') : '';
-    return sizes.map((size) => {
-      const sizeVariants = variants.filter((variant) => Number(variant.size) === size);
-      if (sizeVariants.length === 0) {
-        return { size, available: false, inStock: false };
-      }
-
-      const colorScoped = selectedColorKey && sizeVariants.some((variant) => variant.color)
-        ? sizeVariants.filter((variant) => this.colorKey(variant.color || '') === selectedColorKey)
-        : sizeVariants;
-      const available = colorScoped.length > 0;
-      const inStock = available && colorScoped.some((variant) => Number(variant.stock) > 0);
-      return { size, available, inStock };
-    });
+    const offered = sizeOptions(p, this.selectedColor());
+    return [
+      ...offered.map(s => ({ size: s.size, available: true, inStock: s.state === 'available' })),
+      ...p.sizes.filter(size => !offered.some(s => s.size === size)).sort((a, b) => a - b)
+        .map(size => ({ size, available: false, inStock: false })),
+    ];
   });
 
   /**
@@ -324,16 +317,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   });
 
   readonly selectedSizeInStock = computed(() => {
-    const p = this.product();
-    if (!p) return false;
-    if (!p.sizes?.length) {
-      if (p.variants?.length) return p.variants.some(v => v.stock > 0);
-      return (p.stock ?? 1) > 0;
-    }
-    const size = this.selectedSize();
-    if (size === null) return false;
-    const state = this.availableSizes().find((item) => item.size === size);
-    return state ? state.available && state.inStock : false;
+    return this.maxQty() > 0;
   });
 
   readonly canPurchaseProduct = computed(() => {
@@ -422,6 +406,7 @@ export class ProductComponent implements OnInit, OnDestroy {
         void this.resolveLegacyCollectionParent(collectionHandle);
       }
       this.applyColorParam(queryParams.get('color'));
+      this.applySizeAndNotifyParams();
     });
 
     this.routeSub = this.route.paramMap.subscribe((params) => {
@@ -489,17 +474,8 @@ export class ProductComponent implements OnInit, OnDestroy {
     // cart clicks. Fired here (canonical load path) to avoid double counting.
     this.analytics.track('product_view', { productId: nextProduct.id });
     this.galleryIdx.set(0);
-    this.selectedColor.set(null);
-    this.applyColorParam(this.route.snapshot.queryParamMap.get('color'), nextProduct);
-    // With nothing selected the colour label has nothing to name, so the
-    // section reads "Select Colour" over a row of unlabelled dots. Default to
-    // the first colour (the one the gallery is already showing) unless a
-    // ?color= deep link has already picked one.
-    if (!this.selectedColor()) {
-      const firstColor = this.productColorNames(nextProduct)[0];
-      if (firstColor) this.selectedColor.set(firstColor);
-    }
-    this.selectedSize.set(null);
+    this.selectedColor.set(defaultColor(nextProduct, this.route.snapshot.queryParamMap.get('color')));
+    this.selectedSize.set(defaultSize(nextProduct, this.selectedColor()));
     this.sizeSelectionError.set(false);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
@@ -508,6 +484,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.resetReviewForm();
     void this.referenceData.ensureColors();
     this.productLoading.set(false);
+    this.applySizeAndNotifyParams();
   }
 
   goToProduct(nextProduct: Product): void {
@@ -612,7 +589,9 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   selectSize(s: number): void {
+    if (!this.availableSizes().some(option => option.size === s && option.available)) return;
     this.selectedSize.set(s);
+    this.qty.set(Math.max(1, Math.min(this.qty(), this.maxQty())));
     this.sizeSelectionError.set(false);
     this.closeSizePicker();
     this.resetRestockForm();
@@ -621,12 +600,13 @@ export class ProductComponent implements OnInit, OnDestroy {
   selectProductColor(color: string): void {
     this.selectedColor.set(color);
     this.selectGalleryIndex(0);
-    this.selectedSize.set(null);
+    this.selectedSize.set(this.product() ? defaultSize(this.product()!, color) : null);
+    this.qty.set(1);
     this.sizeSelectionError.set(false);
     this.resetRestockForm();
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { color: this.colorSlug(color) || null },
+      queryParams: { color: this.colorSlug(color) || null, size: null, notify: null },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
@@ -669,7 +649,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   decQty(): void { this.qty.update((q) => Math.max(1, q - 1)); }
-  incQty(): void { this.qty.update((q) => q + 1); }
+  incQty(): void { this.qty.update((q) => Math.max(1, Math.min(q + 1, this.maxQty()))); }
 
   toggleAccordion(id: string): void {
     this.openAccordion.update((cur) => (cur === id ? null : id));
@@ -773,16 +753,18 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   openRestockForm(): void {
+    this.restockSize.set(this.restockSizes().some(s => s.size === this.selectedSize()) ? this.selectedSize() : null);
     this.restockFormOpen.set(true);
     this.restockSubmitted.set(false);
     this.restockError.set('');
+    if (typeof window === 'undefined') return;
     requestAnimationFrame(() => {
       const panel = document.getElementById('restock-panel');
       panel?.scrollIntoView({
         behavior: this.prefersReducedMotion() ? 'auto' : 'smooth',
         block: 'center',
       });
-      document.getElementById('restock-email')?.focus({ preventScroll: true });
+      document.getElementById(this.product()?.sizes.length && this.restockSize() === null ? 'restock-size' : 'restock-email')?.focus({ preventScroll: true });
     });
   }
 
@@ -797,9 +779,13 @@ export class ProductComponent implements OnInit, OnDestroy {
   async submitRestockRequest(event?: Event): Promise<void> {
     event?.preventDefault();
     const p = this.product();
-    const size = this.selectedSize() ?? p?.sizes?.[0] ?? 0;
+    const size = this.restockSize();
     const email = this.restockEmail().trim();
     if (!p || this.restockSubmitting()) return;
+    if (p.sizes.length && !this.restockSizes().some(s => s.size === size)) {
+      this.restockError.set(this.t('stock.chooseRestockSize'));
+      return;
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       this.restockError.set(this.t('product.restock.emailError'));
       return;
@@ -811,15 +797,27 @@ export class ProductComponent implements OnInit, OnDestroy {
       await firstValueFrom(
         this.http.post<ApiResponse<unknown>>(`${this.apiBase}/products/${encodeURIComponent(p.id)}/restock-notifications`, {
           email,
-          size,
+          ...(p.sizes.length ? { size } : {}),
           color: this.selectedColor(),
-          locale: document.documentElement.lang || 'en',
+          locale: this.locale.locale(),
         }),
       );
       this.restockSubmitted.set(true);
       this.restockFormOpen.set(false);
-    } catch {
-      this.restockError.set(this.t('product.restock.submitError'));
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && error.status === 409 && error.error?.code === 'IN_STOCK') {
+        const requestedColor = this.selectedColor();
+        await this.productsSvc.refresh();
+        if (this.product()?.id === p.id) {
+          this.product.set(this.productsSvc.getById(p.id) || p);
+          this.selectedColor.set(requestedColor);
+          this.selectedSize.set(size);
+          this.qty.set(1);
+          this.restockFormOpen.set(false);
+        }
+      } else {
+        this.restockError.set(this.t(error instanceof HttpErrorResponse && error.status === 429 ? 'stock.rateLimit' : 'product.restock.submitError'));
+      }
     } finally {
       this.restockSubmitting.set(false);
     }
@@ -955,7 +953,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   private productColors(product: Product): string[] {
-    return this.compact([product.color, ...(product.colors || [])]);
+    return productColors(product);
   }
 
   private applyColorParam(colorParam: string | null, product = this.product()): void {
@@ -965,8 +963,28 @@ export class ProductComponent implements OnInit, OnDestroy {
     if (!match || this.colorSelected(match)) return;
 
     this.selectedColor.set(match);
+    this.selectedSize.set(defaultSize(product, match));
+    this.qty.set(1);
     this.selectGalleryIndex(0);
     this.resetRestockForm();
+  }
+
+  onRestockSizeChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.restockSize.set(value === '' ? null : Number(value));
+  }
+
+  private applySizeAndNotifyParams(): void {
+    if (!this.product()) return;
+    const params = this.route.snapshot.queryParamMap;
+    const size = params.get('size');
+    if (size !== null && this.availableSizes().some(s => s.size === Number(size) && s.inStock)) {
+      this.selectedSize.set(Number(size));
+      this.qty.set(1);
+    }
+    if (params.get('notify') === '1' && (this.restockSizes().length || !this.product()!.sizes.length && !this.selectedSizeInStock())) {
+      this.openRestockForm();
+    }
   }
 
   private requireSizeSelection(): boolean {
@@ -978,14 +996,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   private selectedVariant(product: Product): ProductVariant | undefined {
-    const size = this.selectedSize();
-    const selectedColorKey = this.selectedColor() ? this.colorKey(this.selectedColor() || '') : '';
-    const variants = product.variants || [];
-    return variants.find((variant) => {
-      const sizeMatches = !size || Number(variant.size) === size;
-      const colorMatches = !selectedColorKey || this.colorKey(variant.color || '') === selectedColorKey;
-      return sizeMatches && colorMatches;
-    });
+    return selectedVariant(product, this.selectedColor(), this.selectedSize());
   }
 
   private productImageForColor(product: Product, color: string, galleryImages: string[]): string | null {
@@ -1055,6 +1066,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   private resetRestockForm(): void {
+    this.restockSize.set(null);
     this.restockFormOpen.set(false);
     this.restockSubmitted.set(false);
     this.restockError.set('');

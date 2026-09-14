@@ -1,8 +1,33 @@
 # 35 · Stock Availability and Restock Alerts Plan
 
-> **Status:** Plan, not implemented. Written 2026-09-14.
+> **Status:** Implemented locally on 2026-09-14; deployment and real SMTP delivery checks remain. The audit below records the original defects.
 > **Arabic version:** [35-stock-availability-and-restock-plan.ar.md](./35-stock-availability-and-restock-plan.ar.md)
 > **Related:** [03 Client Web](./03-client-web.md), [05 API Server](./05-api-server.md), [25 POS Readiness](./25-pos-readiness-master-plan.md) (shared inventory, no stock reservation)
+
+---
+
+## Implementation record · 2026-09-14
+
+All seven phases are implemented. The recommended decisions are used: notify everyone waiting, preselect the first available size, retain closed requests for 180 days and pending requests for 365 days, and use the existing authenticated Catalog access policy. Email is the only alert channel.
+
+- Shared availability helpers drive collection cards and product selection. The public product API now includes inactive variants with `isActive`, and product-level stock, so sold-out and variant-less products render correctly. Client and server share `shared/color-key.js`; migration SQL normalization is checked against the same alias map in tests.
+- Restock requests validate the exact offered, sold-out combination under transaction locks. Size-less products use `ONE_SIZE`. The form never substitutes a size, and a stale `409 IN_STOCK` refreshes the selection.
+- Migration **039_restock_dispatch.sql** owns the schema, deduplicates alias collisions, backfills legacy `0` only on products without sizes, and adds tokens, retries, claims and indexes. An archive trigger cancels waiting requests immediately, including archive/reactivate cycles between worker runs.
+- The worker polls every two minutes and receives coalesced kicks after stock transactions commit. Claims use `SKIP LOCKED`, a claim token and a heartbeat. It rechecks stock, retries with backoff, recovers stale claims, reports missing configuration and runs retention cleanup once per UTC day.
+- English/Arabic HTML and text emails contain the selected colour/size link and an unsubscribe link. The admin page supplies summary/detail filters, retry/cancel, paginated requests and CSV export; the editor shows per-variant demand and the dashboard shows the top five sold-out selections.
+- Existing privacy policies gain the bilingual restock consent sentence through the migration. New signup forms show the same purpose clearly.
+
+Validation completed:
+
+- Server suite: **101 passed, 0 failed, 1 skipped**. The existing image-preview test skips because the local Sharp native runtime is unavailable.
+- Restock database tests cover every stock channel, concurrent workers, stock changing before send, all retries, missing SMTP, crash recovery, unsubscribe, tenant isolation, admin actions and retention. Mail delivery is mocked; no real customers are emailed by tests.
+- The focused stock suite passes all **24 tests**, including the database and email checks. Pure availability tests cover ordering, defaults, aliases, inactive variants and size-less/variant-less products.
+- Production storefront and admin builds pass. Builds report style-budget/CommonJS warnings.
+- Browser fixtures verify collection SSR/hydration, fixed card height, disabled sold-out choices, explicit restock size, quantity cap, `?color=&size=`, `?notify=1`, one-size submission, stale `409` recovery, admin filters/actions and Arabic mobile layouts. Run `node scripts/test-stock-storefront.mjs` and `node scripts/test-restock-admin.mjs` from `client/` after building.
+
+Deployment: apply migration 039 through normal API startup, rebuild/reload both frontends, and set `STOREFRONT_BASE_URL=https://elitecollections.qa` plus SMTP settings before enabling delivery. Verify actual Arabic and English delivery on staging. This task did not deploy or send live email.
+
+Delivery guarantee: overlapping workers do not send the same claimed request twice. SMTP acceptance and the database success update cannot be one atomic transaction; a crash between them can still cause a retry email. A stable Message-ID helps mail systems identify that retry but is not an exactly-once guarantee. Cancelled consent cannot be reopened by the admin resend action.
 
 ---
 
@@ -198,6 +223,8 @@ API: `GET /api/admin/restock-requests`, `GET /api/admin/restock-requests/summary
 
 ## 4. Database changes
 
+The following is the original proposal. The applied, idempotent migration is [039_restock_dispatch.sql](../server/db/migrations/039_restock_dispatch.sql); it additionally includes claim tokens, safe alias deduplication, archive cancellation and privacy copy.
+
 One migration via the `elite-migration` skill (next free number at implementation time). The table is currently created by `db/restock-notifications-schema.js`; the migration becomes the source of truth and that runtime ensure is reduced to a no-op check.
 
 ```sql
@@ -252,75 +279,75 @@ Files: new `client-web/src/app/shared/stock-availability.ts` (pure functions, no
 - Strings: `stock.soldOutOption` "(Sold out)" / "(نفد)", `stock.outOfStock` "Out of stock" / "نفد المخزون", `stock.notifyMe` "Notify Me" / "أبلغني", `stock.colorSoldOut` "{color}, sold out" / "{color}، نفد".
 
 Acceptance:
-- [ ] A product whose smallest size is sold out opens with the first available size selected.
-- [ ] Sold-out sizes are listed last, disabled, labelled.
-- [ ] Hovering a sold-out colour shows all sizes sold out and a single Notify Me.
-- [ ] A fully sold-out product shows "Out of stock" and Notify Me; no Add/Buy buttons.
-- [ ] Quick Add never produces the drawer's "sold out" notice with fresh data.
-- [ ] Card height does not change between states.
-- [ ] Arabic and English, mobile width, server render matches browser render (no hydration warning).
+- [x] A product whose smallest size is sold out opens with the first available size selected.
+- [x] Sold-out sizes are listed last, disabled, labelled.
+- [x] Hovering a sold-out colour shows all sizes sold out and a single Notify Me.
+- [x] A fully sold-out product shows "Out of stock" and Notify Me; no Add/Buy buttons.
+- [x] Quick Add never produces the drawer's "sold out" notice with fresh data.
+- [x] Card height does not change between states.
+- [x] Arabic and English, mobile width, server render matches browser render (no hydration warning).
 
 ### Phase 2: Product page
 
 Files: `pages/product/product.component.{ts,html,scss}`, `i18n/strings.ts`, reuse `stock-availability.ts`.
 
 Acceptance:
-- [ ] Available sizes first; first available size pre-selected; deep-linked `?color=` respected.
-- [ ] `?size=` from the email pre-selects that size when in stock.
-- [ ] Quantity cannot exceed variant stock.
-- [ ] `?notify=1` opens and focuses the restock panel.
-- [ ] Restock form cannot be submitted without choosing a sold-out size (products with sizes).
-- [ ] Size-less product request is saved as `ONE_SIZE`.
-- [ ] 409 `IN_STOCK` switches the page back to Add to Cart for that size.
+- [x] Available sizes first; first available size pre-selected; deep-linked `?color=` respected.
+- [x] `?size=` from the email pre-selects that size when in stock.
+- [x] Quantity cannot exceed variant stock.
+- [x] `?notify=1` opens and focuses the restock panel.
+- [x] Restock form cannot be submitted without choosing a sold-out size (products with sizes).
+- [x] Size-less product request is saved as `ONE_SIZE`.
+- [x] 409 `IN_STOCK` switches the page back to Add to Cart for that size.
 
 ### Phase 3: Restock API hardening
 
 Files: `routes/products.route.js`, `middleware/rate-limit.js`, `lib/restock-notifications.js`, new migration.
 
 Acceptance:
-- [ ] 11th request from one IP within 15 min → 429.
-- [ ] Unknown size/colour → 422; in-stock combination → 409 `IN_STOCK`; archived product → 404.
-- [ ] Colour alias (`brwon`) saved with `color_key = 'brown'`.
+- [x] 11th request from one IP within 15 min → 429.
+- [x] Unknown size/colour → 422; in-stock combination → 409 `IN_STOCK`; archived product → 404.
+- [x] Colour alias (`brwon`) saved with `color_key = 'brown'`.
 
 ### Phase 4: Dispatch worker
 
 Files: new `lib/restock-dispatch-job.js`, `server/index.js`, call sites listed in §2.3.
 
 Acceptance (server e2e, one test per channel):
-- [ ] Inventory adjustment 0 → 3 emails the waiting customer within one worker run.
-- [ ] Same for stocktake post, stock CSV commit, catalog import, POS refund with restock, web order reversal, product edit, bulk stock.
-- [ ] Two concurrent worker runs send exactly one email per request.
-- [ ] Stock returns to 0 between claim and send → no email, row back to `pending`.
-- [ ] SMTP failure → attempts/back-off recorded; 5th failure → `failed`.
-- [ ] SMTP not configured → attempts unchanged, one alert.
-- [ ] Crash mid-send (row left `sending` > 15 min) → recovered to `pending`.
+- [x] Inventory adjustment 0 → 3 emails the waiting customer within one worker run.
+- [x] Same for stocktake post, stock CSV commit, catalog import, POS refund with restock, web order reversal, product edit, bulk stock.
+- [x] Two concurrent worker runs send exactly one email per request.
+- [x] Stock returns to 0 between claim and send → no email, row back to `pending`.
+- [x] SMTP failure → attempts/back-off recorded; 5th failure → `failed`.
+- [x] SMTP not configured → attempts unchanged, one alert.
+- [x] Crash mid-send (row left `sending` > 15 min) → recovered to `pending`.
 
 ### Phase 5: Email
 
 Acceptance:
-- [ ] `locale = 'ar'` receives the Arabic template (RTL), `en` the English one.
-- [ ] Link contains colour and size and opens the right selection.
-- [ ] Unsubscribe link cancels the request and shows confirmation; second click is harmless.
-- [ ] Unset or localhost `STOREFRONT_BASE_URL` in production blocks sending and logs an error.
+- [x] `locale = 'ar'` receives the Arabic template (RTL), `en` the English one.
+- [x] Link contains colour and size and opens the right selection.
+- [x] Unsubscribe link cancels the request and shows confirmation; second click is harmless.
+- [x] Unset or localhost `STOREFRONT_BASE_URL` in production blocks sending and logs an error.
 
 ### Phase 6: Admin page
 
 Files: `admin-portal` new page via `elite-admin-page` skill, new `routes/admin-restock-requests.route.js`, `docs/04-admin-portal.md`.
 
 Acceptance:
-- [ ] Summary and detail views, filters, CSV export.
-- [ ] Resend and cancel work and are permission-gated.
-- [ ] Product editor shows waiting counts per variant.
+- [x] Summary and detail views, filters, CSV export.
+- [x] Resend and cancel work and are permission-gated.
+- [x] Product editor shows waiting counts per variant.
 
 ### Phase 7: Privacy and retention
 
 Acceptance:
-- [ ] Helper text under the email field in both languages.
-- [ ] Nightly job removes rows past retention; verified with backdated rows in a test.
+- [x] Helper text under the email field in both languages.
+- [x] Nightly job removes rows past retention; verified with backdated rows in a test.
 
 ---
 
-## 6. Open decisions for the owner
+## 6. Decisions applied at implementation
 
 | # | Decision | Recommendation | Alternative |
 |---|---|---|---|

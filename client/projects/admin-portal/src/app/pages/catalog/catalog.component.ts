@@ -1,7 +1,7 @@
 import { Component, HostListener, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
@@ -25,9 +25,10 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
 @Component({
     selector: 'ap-catalog',
-    imports: [CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, ProductDrawerComponent, BulkImportDialogComponent],
+    imports: [RouterLink, CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, ProductDrawerComponent, BulkImportDialogComponent],
     template: `
     <div class="page-fade">
+      <a class="btn mb-16" routerLink="/restock-requests">{{ t('restock.title') }}</a>
 
       <!-- ── Top bar ── -->
       <div class="card mb-16" style="padding:12px 14px;">

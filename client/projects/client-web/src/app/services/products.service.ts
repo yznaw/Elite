@@ -100,7 +100,7 @@ export class ProductsService {
     this.loadPromise = this.loadConfig()
       .then(() => firstValueFrom(this.http.get<ApiResponse<Product[]>>(url)))
       .then((res) => {
-        if (Array.isArray(res.data) && res.data.length > 0) {
+        if (Array.isArray(res.data)) {
           this._products.set(res.data.map((product) => this.normalizeProductImages(product)));
         }
         this.loadedAt = Date.now();
@@ -130,7 +130,7 @@ export class ProductsService {
     const variants = Array.isArray(product.variants)
       ? product.variants.map((variant) => ({
         ...variant,
-        size: Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
+        size: variant.size != null && Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
         stock: Math.max(0, Number.parseInt(String(variant.stock), 10) || 0),
       }))
       : undefined;

@@ -15,7 +15,8 @@
     "test:sku": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/variant-sku.test.ts",
     "test:stocktake-csv": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/stocktake-csv.test.ts",
     "test:pos-printing": "node --test test/pos-printing.test.mjs",
-    "serve:ssr:client-web": "node dist/client-web/server/server.mjs"
+    "serve:ssr:client-web": "node dist/client-web/server/server.mjs",
+    "test:stock-availability": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/stock-availability.test.ts"
   },
   "private": true,
   "dependencies": {

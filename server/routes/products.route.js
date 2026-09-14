@@ -1,8 +1,9 @@
+const { restockRequestLimiter } = require('../middleware/rate-limit');
 const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
-const { createRestockNotification, processRestockNotifications } = require('../lib/restock-notifications');
+const { createRestockNotification } = require('../lib/restock-notifications');
 
 const router = Router();
 const cardUrl = (alias) => `COALESCE(${alias}.metadata #>> '{imageVariants,card,url}', ${alias}.metadata #>> '{imageVariants,grid,url}', ${alias}.preview_url, ${alias}.storage_url)`;
@@ -93,8 +94,9 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
       .filter((variant) => variant && typeof variant === 'object')
       .map((variant) => ({
         id: variant.id,
+        isActive: variant.isActive !== false,
         sku: variant.sku || '',
-        size: Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
+        size: variant.size != null && String(variant.size).trim() !== '' && Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
         color: variant.color || '',
         material: variant.material || '',
         // Bilingual note describing a construction detail that only applies to
@@ -170,10 +172,11 @@ function variantsSelect() {
               'noteEn', sv.note_en,
               'noteAr', sv.note_ar,
               'price', round(sv.price_cents / 100.0),
-              'stock', sv.stock_quantity
+              'stock', sv.stock_quantity,
+              'isActive', sv.is_active
             ) ORDER BY sv.sort_order, sv.created_at)
             FROM product_variants sv
-            WHERE sv.product_id = p.id AND sv.is_active = true
+            WHERE sv.product_id = p.id
           ), '[]'::jsonb) AS variants`;
 }
 
@@ -210,6 +213,7 @@ router.get('/', async (_req, res, next) => {
           p.description,
           p.care_instructions,
           p.base_price_cents,
+          p.stock_quantity,
           p.tag,
           p.leather,
           p.style,
@@ -300,7 +304,7 @@ router.get('/', async (_req, res, next) => {
               AND rp.status = 'active'
           ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
+        LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.status = 'active'
@@ -339,6 +343,7 @@ router.get('/:id', async (req, res, next) => {
           p.description,
           p.care_instructions,
           p.base_price_cents,
+          p.stock_quantity,
           p.tag,
           p.leather,
           p.style,
@@ -429,7 +434,7 @@ router.get('/:id', async (req, res, next) => {
               AND rp.status = 'active'
           ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
+        LEFT JOIN product_variants pv ON pv.product_id = p.id
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.id = $2 AND p.status = 'active'
@@ -459,7 +464,10 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.post('/:id/restock-notifications', async (req, res, next) => {
+router.post('/:id/restock-notifications', restockRequestLimiter, async (req, res, next) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(422).json({ success: false, message: 'Invalid product.' });
+  }
   const email = String(req.body.email || '').trim().toLowerCase();
   const name = String(req.body.name || '').trim() || email.split('@')[0] || 'Customer';
   const phone = String(req.body.phone || '').trim() || null;
@@ -467,34 +475,29 @@ router.post('/:id/restock-notifications', async (req, res, next) => {
   const color = String(req.body.color || '').trim();
   const locale = String(req.body.locale || 'en').trim() || 'en';
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email.length > 254 || name.length > 200 || (phone || '').length > 50 || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({
       success: false,
       message: 'A valid email address is required.',
     });
   }
 
-  if (!size) {
-    return res.status(400).json({
-      success: false,
-      message: 'Size is required.',
-    });
-  }
-
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
     const product = await client.query(
       `
         SELECT id, name
         FROM products
         WHERE tenant_id = $1 AND id = $2 AND status = 'active'
-        LIMIT 1
+        LIMIT 1 FOR SHARE
       `,
       [tenant.id, req.params.id],
     );
 
     if (product.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Product not found.',
@@ -510,14 +513,15 @@ router.post('/:id/restock-notifications', async (req, res, next) => {
       color,
       locale,
     });
-    await processRestockNotifications(client, tenant.id, product.rows[0].id);
 
+    await client.query('COMMIT');
     res.status(201).json({
       success: true,
       data: inserted,
       message: 'Restock notification saved.',
     });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
     client.release();

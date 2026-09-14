@@ -365,3 +365,10 @@ A one-time switch. Afterwards a normal deploy is sections 3–5 with nothing ext
 - [ ] Health, public HTTPS, POS, Diagnostics, Stocktake, receipt, and shared-stock smoke checks pass.
 - [ ] Both shop registers retain enrollment/hardware and their queues are zero.
 - [ ] PM2/API, browser Diagnostics, and Windows signer logs are available.
+
+
+### Restock alerts (migration 039)
+
+The API applies `039_restock_dispatch.sql` at startup. Deploy the new API and rebuild/reload both storefront and admin portal. Set `STOREFRONT_BASE_URL=https://elitecollections.qa` and the `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` delivery settings. Missing/localhost storefront URLs block production restock delivery; missing SMTP leaves requests pending without consuming retries.
+
+The worker starts beside inventory consistency, polls every two minutes and coalesces post-commit stock-change kicks. PM2 instances coordinate claims through PostgreSQL; deploy the updated worker on every API instance so an old direct-send worker does not bypass those claims. Verify an English and Arabic notification on staging, including its selected colour/size and unsubscribe link. Monitor `/restock-requests` for failed attempts. Retention runs once per UTC day.

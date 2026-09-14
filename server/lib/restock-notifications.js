@@ -1,160 +1,41 @@
-const { ensureRestockNotificationsSchema } = require('../db/restock-notifications-schema');
-const { sendMail } = require('./mailer');
-
-function normalizeColor(value) {
-  return String(value || '').trim().toLowerCase();
+const { colorKey } = require('../../shared/color-key');
+const ONE_SIZE = 'ONE_SIZE';
+const normalizeSize = value => String(value ?? '').trim() || ONE_SIZE;
+function invalid(message, status = 422, code = 'INVALID_VARIANT') {
+  return Object.assign(new Error(message), { status, code });
 }
-
-function productUrl(productId) {
-  const base = (process.env.STOREFRONT_BASE_URL || process.env.CLIENT_BASE_URL || 'http://localhost:4200').replace(/\/+$/, '');
-  return `${base}/product/${productId}`;
+async function validateRestockSelection(client, tenantId, productId, input) {
+  const product = (await client.query("SELECT id, stock_quantity FROM products WHERE tenant_id = $1 AND id = $2 AND status = 'active' FOR SHARE", [tenantId, productId])).rows[0];
+  if (!product) throw invalid('Product not found.', 404, 'PRODUCT_NOT_FOUND');
+  const variants = (await client.query('SELECT size, color, stock_quantity, is_active FROM product_variants WHERE tenant_id = $1 AND product_id = $2 FOR SHARE', [tenantId, productId])).rows;
+  const size = normalizeSize(input.size);
+  const key = colorKey(input.color);
+  const matches = variants.filter(v => normalizeSize(v.size) === size && colorKey(v.color) === key);
+  if (variants.length ? !matches.length : size !== ONE_SIZE || key !== '') throw invalid('Choose a size and colour offered for this product.');
+  if (variants.length ? matches.some(v => v.is_active && v.stock_quantity > 0) : product.stock_quantity > 0) {
+    throw invalid('This selection is in stock.', 409, 'IN_STOCK');
+  }
+  return { size, color: matches[0]?.color || '', colorKey: key };
 }
-
-function buildRestockEmail(notification) {
-  const colorLine = notification.color ? `Color: ${notification.color}\n` : '';
-  const link = productUrl(notification.product_id);
-  const subject = `${notification.product_name} is back in stock`;
-  const text = [
-    `Good news${notification.name ? `, ${notification.name}` : ''}.`,
-    '',
-    `${notification.product_name} is available again in size ${notification.size}.`,
-    colorLine.trim(),
-    '',
-    `Shop it here: ${link}`,
-    '',
-    'Elite',
-  ].filter(Boolean).join('\n');
-
-  return { subject, text };
-}
-
 async function createRestockNotification(client, tenantId, input) {
-  await ensureRestockNotificationsSchema(client);
-
-  const inserted = await client.query(
-    `
-      INSERT INTO restock_notifications (
-        tenant_id, product_id, email, name, phone, size, color, locale
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
-      ON CONFLICT (tenant_id, product_id, email, size, lower(COALESCE(color, '')))
-      WHERE status = 'pending'
-      DO UPDATE SET
-        name = COALESCE(EXCLUDED.name, restock_notifications.name),
-        phone = COALESCE(EXCLUDED.phone, restock_notifications.phone),
-        locale = EXCLUDED.locale,
-        requested_at = now(),
-        last_error = NULL,
-        updated_at = now()
-      RETURNING id, status, requested_at
-    `,
-    [
-      tenantId,
-      input.productId,
-      input.email,
-      input.name || null,
-      input.phone || null,
-      String(input.size),
-      String(input.color || '').trim(),
-      input.locale || 'en',
-    ],
-  );
-
+  const selection = await validateRestockSelection(client, tenantId, input.productId, input);
+  const inserted = await client.query(`
+    INSERT INTO restock_notifications (tenant_id, product_id, email, name, phone, size, color, color_key, locale)
+    VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),$8,$9)
+    ON CONFLICT (tenant_id, product_id, email, size, color_key) WHERE status IN ('pending', 'sending')
+    DO UPDATE SET locale = EXCLUDED.locale, name = COALESCE(EXCLUDED.name, restock_notifications.name)
+    RETURNING id, status, requested_at`,
+  [tenantId, input.productId, input.email.toLowerCase(), input.name || null, input.phone || null, selection.size, selection.color, selection.colorKey, String(input.locale || '').trim().toLowerCase().split(/[-_]/)[0] === 'ar' ? 'ar' : 'en']);
   return inserted.rows[0];
 }
-
-async function processRestockNotifications(client, tenantId, productId) {
-  await ensureRestockNotificationsSchema(client);
-
-  const pending = await client.query(
-    `
-      SELECT
-        rn.*,
-        p.name AS product_name
-      FROM restock_notifications rn
-      JOIN products p ON p.id = rn.product_id
-      WHERE rn.tenant_id = $1
-        AND rn.product_id = $2
-        AND rn.status = 'pending'
-        AND EXISTS (
-          SELECT 1
-          FROM product_variants pv
-          WHERE pv.product_id = rn.product_id
-            AND pv.is_active = true
-            AND pv.stock_quantity > 0
-            AND pv.size = rn.size
-            AND (
-              rn.color IS NULL
-              OR rn.color = ''
-              OR lower(COALESCE(pv.color, '')) = lower(rn.color)
-            )
-        )
-      ORDER BY rn.requested_at
-    `,
-    [tenantId, productId],
-  );
-
-  const summary = { sent: 0, failed: 0, pending: pending.rowCount };
-
-  for (const notification of pending.rows) {
-    const email = buildRestockEmail(notification);
-    try {
-      await sendMail({
-        to: notification.email,
-        subject: email.subject,
-        text: email.text,
-      });
-
-      await client.query(
-        `
-          UPDATE restock_notifications
-          SET status = 'notified',
-              notified_at = now(),
-              last_error = NULL,
-              updated_at = now()
-          WHERE id = $1
-        `,
-        [notification.id],
-      );
-      summary.sent += 1;
-    } catch (err) {
-      await client.query(
-        `
-          UPDATE restock_notifications
-          SET last_error = $2,
-              updated_at = now()
-          WHERE id = $1
-        `,
-        [notification.id, err.message || 'Failed to send restock email.'],
-      );
-      summary.failed += 1;
-      if (err.code !== 'SMTP_NOT_CONFIGURED') {
-        console.warn(`[restock] Failed to email ${notification.email}: ${err.message}`);
-      }
-    }
-  }
-
-  return summary;
+// Shared SQL for claims, rechecks and the demand report. A variant-less product
+// uses product stock; ONE_SIZE also matches NULL/empty size on actual variants.
+function stockSql(rn = 'rn', p = 'p') {
+  return `(CASE WHEN EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = ${p}.id AND v.tenant_id = ${p}.tenant_id)
+    THEN COALESCE((SELECT max(v.stock_quantity) FROM product_variants v
+      WHERE v.product_id = ${p}.id AND v.tenant_id = ${p}.tenant_id AND v.is_active = true
+        AND COALESCE(NULLIF(btrim(v.size), ''), 'ONE_SIZE') = ${rn}.size
+        AND restock_color_key(v.color) = ${rn}.color_key), 0)
+    WHEN ${rn}.size = 'ONE_SIZE' AND ${rn}.color_key = '' THEN ${p}.stock_quantity ELSE 0 END)`;
 }
-
-function variantKey(variant) {
-  return `${String(variant.size || '').trim()}::${normalizeColor(variant.color)}`;
-}
-
-function hasRestockedVariant(beforeVariants, afterVariants) {
-  const beforeStockByKey = new Map();
-  beforeVariants.forEach((variant) => {
-    beforeStockByKey.set(variantKey(variant), Number(variant.stock || 0));
-  });
-
-  return afterVariants.some((variant) => {
-    const key = variantKey(variant);
-    return (beforeStockByKey.get(key) || 0) <= 0 && Number(variant.stock || 0) > 0;
-  });
-}
-
-module.exports = {
-  createRestockNotification,
-  hasRestockedVariant,
-  processRestockNotifications,
-};
+module.exports = { createRestockNotification, validateRestockSelection, stockSql, normalizeSize, ONE_SIZE };

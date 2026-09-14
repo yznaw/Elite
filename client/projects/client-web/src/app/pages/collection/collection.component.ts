@@ -13,6 +13,9 @@ import { resolveClientMediaUrl } from '../../utils/media-url';
 import { SeoService } from '../../services/seo.service';
 import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
+import { colorKey, colorSlug } from '../../utils/color-slug';
+import { sizeOptions, colorState, productSoldOut, defaultColor, defaultSize, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 /**
@@ -437,7 +440,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
       const available = this.availableSizes(product, color);
       const current = sizes[product.id];
       if (current && available.includes(current)) return sizes;
-      const nextSize = available[0] ?? product.sizes[0] ?? 40;
+      const nextSize = available[0] ?? 0;
       return { ...sizes, [product.id]: nextSize };
     });
   }
@@ -460,7 +463,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   addToCart(product: Product): void {
-    if (this.availableSizes(product).length === 0) return;
+    if (!this.canPurchase(product)) return;
     this.cart.add(this.cartItem(product));
 
     this.addedProductId.set(product.id);
@@ -469,22 +472,22 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   buyNow(product: Product): void {
-    if (this.availableSizes(product).length === 0) return;
+    if (!this.canPurchase(product)) return;
     this.cart.add(this.cartItem(product));
     this.cart.closeDrawer();
     void this.router.navigate(['/checkout']);
     window.scrollTo(0, 0);
   }
 
-  selectedSize(product: Product): number {
+  selectedSize(product: Product): number | null {
     const available = this.availableSizes(product);
     const selected = this.selectedSizes()[product.id];
     if (selected && available.includes(selected)) return selected;
-    return available[0] ?? product.sizes[0] ?? 40;
+    return defaultSize(product, this.selectedProductColor(product));
   }
 
   selectedProductColor(product: Product): string | null {
-    return this.selectedColors()[product.id] || null;
+    return this.selectedColors()[product.id] || defaultColor(product);
   }
 
   selectedProductImage(product: Product): string {
@@ -516,17 +519,15 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   availableSizes(product: Product, color = this.selectedProductColor(product)): number[] {
-    const variants = product.variants || [];
-    if (!color || variants.length === 0) return product.sizes;
+    return sizeOptions(product, color).filter(s => s.state === 'available').map(s => s.size);
+  }
 
-    const colorKey = this.colorKey(color);
-    const sizes = variants
-      .filter((variant) => this.colorKey(variant.color || '') === colorKey)
-      .filter((variant) => Number(variant.stock) > 0)
-      .map((variant) => Number(variant.size))
-      .filter(Number.isFinite);
-
-    return [...new Set(sizes)].sort((a, b) => a - b);
+  readonly sizeOptions = sizeOptions;
+  readonly productSoldOut = productSoldOut;
+  colorSoldOut(product: Product, color: string | null): boolean { return colorState(product, color) === 'sold-out'; }
+  canPurchase(product: Product): boolean { return availableStock(product, this.selectedProductColor(product), this.selectedSize(product)) > 0; }
+  notifyMe(product: Product): void {
+    void this.router.navigate(['/product', product.id], { queryParams: { color: colorSlug(this.selectedProductColor(product) || '') || null, notify: 1 } });
   }
 
   colorHex(name: string): string {
@@ -696,7 +697,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
       image: color ? this.productImageForColor(product, color) || product.image : this.selectedProductImage(product),
       leather: product.leather,
       color,
-      size: this.selectedSize(product),
+      size: this.selectedSize(product) ?? 0,
       qty: 1,
     };
   }
@@ -840,7 +841,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   private productColors(product: Product): string[] {
-    return this.compact([product.color, ...(product.colors || [])]);
+    return productColors(product);
   }
 
   colorLabel(value: string): string {
@@ -899,16 +900,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   private selectedVariant(product: Product): ProductVariant | undefined {
-    const size = this.selectedSize(product);
-    const selectedColorKey = this.selectedProductColor(product)
-      ? this.colorKey(this.selectedProductColor(product) || '')
-      : '';
-    const variants = product.variants || [];
-    return variants.find((variant) => {
-      const sizeMatches = Number(variant.size) === size;
-      const colorMatches = !selectedColorKey || this.colorKey(variant.color || '') === selectedColorKey;
-      return sizeMatches && colorMatches;
-    });
+    return selectedVariant(product, this.selectedProductColor(product), this.selectedSize(product));
   }
 
   private srcsetFor(src: string, product: Product): string | null {
@@ -925,11 +917,11 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   private colorKey(value: string): string {
-    return String(value || '').trim().toLowerCase();
+    return colorKey(value);
   }
 
   private colorSlug(value: string): string {
-    return this.colorKey(value).replace(/[^a-z0-9]+/g, '');
+    return colorSlug(value);
   }
 
   private normalizeSort(value: string): SortOption | null {

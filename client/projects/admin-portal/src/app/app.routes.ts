@@ -40,6 +40,10 @@ export const routes: Routes = [
           import('./pages/dashboard/dashboard.component').then((m) => m.DashboardComponent),
       },
       {
+        path: 'restock-requests',
+        loadComponent: () => import('./pages/restock-requests/restock-requests.component').then(m => m.RestockRequestsComponent),
+      },
+      {
         path: 'catalog',
         loadComponent: () =>
           import('./pages/catalog/catalog.component').then((m) => m.CatalogComponent),

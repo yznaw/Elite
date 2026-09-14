@@ -1,3 +1,4 @@
+const { kickRestockDispatch } = require('../restock-dispatch-job');
 const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
@@ -193,7 +194,7 @@ async function voidTransaction(context, transactionIdValue, body) {
       [context.tenantId, JSON.stringify({ transactionId: transaction.id, voidId: voidResult.rows[0].id })],
     );
     return mapVoid(voidResult.rows[0], stockRestored);
-  });
+  }).then(result => { kickRestockDispatch(); return result; });
 }
 
 async function loadRefundReceiptData(client, tenantId, refundId) {
@@ -474,7 +475,7 @@ async function createRefund(context, body) {
     );
     const receiptData = await loadRefundReceiptData(client, context.tenantId, refund.id);
     return mapRefund(receiptData.row, { stockUpdates, items: receiptData.items });
-  });
+  }).then(result => { kickRestockDispatch(); return result; });
 }
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;

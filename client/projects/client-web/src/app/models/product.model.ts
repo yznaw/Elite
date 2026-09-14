@@ -1,4 +1,5 @@
 export interface ProductVariant {
+  isActive?: boolean;
   id?: string;
   sku?: string;
   size?: number;

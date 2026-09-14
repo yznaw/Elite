@@ -1,3 +1,4 @@
+const { kickRestockDispatch } = require('../lib/restock-dispatch-job');
 /**
  * Bulk import — streams NDJSON progress events so the client can show
  * a live log without polling.
@@ -438,6 +439,7 @@ router.post('/stock/:id/commit', async (req, res) => {
       [job.id, JSON.stringify(summary)],
     );
     await client.query('COMMIT');
+    kickRestockDispatch([...changedProducts]);
     res.json({ success: true, data: { jobId: job.id, updated, notFound: [], summary } });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch (_) {}
@@ -1342,6 +1344,7 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           await client.query('ROLLBACK');
         } else {
           await client.query('COMMIT');
+          kickRestockDispatch([productId]);
           if (replacedStoragePaths.length) await storage.removeMany(replacedStoragePaths);
         }
 

@@ -1,3 +1,4 @@
+const { kickRestockDispatch } = require('./restock-dispatch-job');
 const db = require('../db/client');
 const { recordMovement, publishStockEvent } = require('./inventory-ledger');
 const { PosError, assertPos, nonEmpty, uuid } = require('./pos/errors');
@@ -192,6 +193,7 @@ async function adjustStock(context, body) {
     });
 
     await client.query('COMMIT');
+    if (delta > 0) kickRestockDispatch([variant.rows[0].product_id]);
     logger.info({ variantId, delta, reason, before, after }, 'stock adjusted');
     return {
       variantId,
@@ -717,6 +719,7 @@ async function postStocktake(context, stocktakeId, body = {}) {
     });
 
     await client.query('COMMIT');
+    kickRestockDispatch([...touchedProducts]);
     logger.warn({ stocktakeId: id, adjustedLines: applied.length }, 'stocktake posted');
     return { stocktakeId: id, countedLines: lines.rowCount, adjustedLines: applied.length, applied };
   } catch (error) {
