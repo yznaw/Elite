@@ -543,7 +543,9 @@ function readPreview(file: File): Promise<string> {
                     </div>
 
                     @for (item of group.items; track item.v.id) {
-                      <div class="vc vc--grouped" [class.vc-expanded]="expandedVariants().has(item.v.id)">
+                      <div class="vc vc--grouped" [class.vc-expanded]="expandedVariants().has(item.v.id)"
+                           [class.vc--flash]="flashVariantId() === item.v.id"
+                           [attr.data-variant-id]="item.v.id">
                         <div class="vc-row vc-row--grouped">
 
                           <!-- Size -->
@@ -1843,6 +1845,9 @@ function readPreview(file: File): Promise<string> {
       background: transparent;
     }
 
+    /* Row the save check or "Add variant" just pointed at */
+    .vc--flash { box-shadow: inset 0 0 0 2px var(--warning, #d97706); border-radius: 8px; }
+
     /* Validation hint */
     .vc-hint {
       font-size: 11px; color: var(--warning, #d97706);
@@ -2736,13 +2741,21 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.markVariantSkuAutomatic(id);
     this.set('variants', [...f.variants, next]);
     // A colourless variant lands in the "no color" group, which starts
-    // collapsed; open it or the new row is invisible and looks like a no-op.
-    this.expandedGroups.update(s => new Set(s).add('__none__'));
+    // collapsed and may sit below the fold; reveal it or the click looks like a no-op.
+    this.revealVariant(id);
   }
 
   updateVariant(index: number, patch: Partial<ProductVariant>): void {
     const current = this.form().variants[index];
     if (!current) return;
+    const nextSize = String(patch.size ?? '').trim();
+    if (nextSize && this.form().variants.some(v => v.id !== current.id
+      && this.colorKey(v.color || '') === this.colorKey(current.color || '')
+      && String(v.size || '').trim() === nextSize)) {
+      this.toast.error(this.t('product.variants.duplicateSize.title'), `${nextSize} · ${this.t('product.variants.duplicateSize.sub')}`);
+      return;
+    }
+    if (this.flashVariantId() === current.id) this.flashVariantId.set(null);
     const manualSkuEdit = Object.prototype.hasOwnProperty.call(patch, 'sku');
     if (manualSkuEdit) this.unmarkVariantSkuAutomatic(current.id);
     const currentBaseSku = this.baseSkuForVariant(current);
@@ -2763,11 +2776,55 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (Object.prototype.hasOwnProperty.call(patch, 'size')) this.warnIfDuplicateVariantSkus(next);
   }
 
-  removeVariant(index: number): void {
-    const removedId = this.form().variants[index]?.id;
-    const next = this.form().variants.filter((_, i) => i !== index);
-    if (removedId) this.unmarkVariantSkuAutomatic(removedId);
+  async removeVariant(index: number): Promise<void> {
+    const removed = this.form().variants[index];
+    if (!removed) return;
+    // Rows added in this session and holding no stock go straight away; a saved
+    // row or one with stock asks first, because saving zeroes that stock.
+    const isSaved = this.initial().variants.some(v => v.id === removed.id);
+    if (isSaved || removed.stock > 0) {
+      const key = removed.stock > 0 ? 'product.variants.removeConfirm.stock' : 'product.variants.removeConfirm.saved';
+      const confirmed = await this.confirm.ask({
+        title: this.t('product.variants.removeConfirm'),
+        message: this.t(key).replace('{sku}', removed.sku || removed.size || '-').replace('{n}', String(removed.stock)),
+        confirmLabel: this.t('common.remove'),
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+    }
+    // By id, not index: the list can change while the dialog is open.
+    const next = this.form().variants.filter(v => v.id !== removed.id);
+    this.unmarkVariantSkuAutomatic(removed.id);
+    this.expandedVariants.update(ids => { const n = new Set(ids); n.delete(removed.id); return n; });
+    const groupKey = this.colorKey(removed.color || '');
+    if (!next.some(v => this.colorKey(v.color || '') === groupKey)) {
+      // Last size of that colour: drop the colour's UI state and photo links
+      // so they do not come back if the colour is added again.
+      this.expandedGroups.update(keys => { const n = new Set(keys); n.delete(groupKey); return n; });
+      this.colorSkuDrafts.update(drafts => { const n = { ...drafts }; delete n[groupKey]; return n; });
+      const imageColors = Object.fromEntries(Object.entries(this.form().imageColors)
+        .filter(([, color]) => this.colorKey(color) !== groupKey));
+      if (Object.keys(imageColors).length !== Object.keys(this.form().imageColors).length) {
+        this.set('imageColors', imageColors);
+      }
+    }
     this.set('variants', next);
+  }
+
+  readonly flashVariantId = signal<string | null>(null);
+
+  /** Opens the row's colour group, scrolls it into view and focuses its first
+      control, so an added or invalid variant is never hidden in a collapsed group. */
+  private revealVariant(id: string, flash = false): void {
+    const variant = this.form().variants.find(v => v.id === id);
+    if (!variant) return;
+    this.expandedGroups.update(keys => new Set(keys).add(this.colorKey(variant.color || '')));
+    if (flash) this.flashVariantId.set(id);
+    setTimeout(() => {
+      const row = document.querySelector<HTMLElement>(`[data-variant-id="${CSS.escape(id)}"]`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
+    });
   }
 
   private markVariantSkuAutomatic(id: string): void {
@@ -2901,12 +2958,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     };
     this.markVariantSkuAutomatic(id);
     this.set('variants', [...f.variants, next]);
-    // Ensure the group is expanded so the new row is visible
-    this.expandedGroups.update(s => {
-      const next = new Set(s);
-      next.add(colorName.trim().toLowerCase() || '__none__');
-      return next;
-    });
+    this.revealVariant(id);
   }
 
   generateSizesForColor(sizeSetId: string, colorName: string): void {
@@ -2959,6 +3011,20 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   /** Rename a color without rewriting stable SKU identifiers. */
   renameGroupColor(colorKey: string, newColor: string): void {
     const f = this.form();
+    const targetKey = this.colorKey(newColor);
+    if (targetKey !== colorKey) {
+      const sizesIn = (key: string) => new Set(f.variants
+        .filter(v => this.colorKey(v.color || '') === key)
+        .map(v => String(v.size || '').trim())
+        .filter(Boolean));
+      const target = sizesIn(targetKey);
+      if ([...sizesIn(colorKey)].some(size => target.has(size))) {
+        this.toast.error(this.t('product.variants.renameConflict.title'), this.t('product.variants.renameConflict.sub'));
+        // Re-emit the list so the colour <select> snaps back to the old value.
+        this.form.update(current => ({ ...current, variants: [...current.variants] }));
+        return;
+      }
+    }
     const next = f.variants.map(v => {
       const key = (v.color || '').trim().toLowerCase() || '__none__';
       if (key !== colorKey) return v;
@@ -3236,22 +3302,29 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       this.toast.error(this.t('product.variants.required.title'), this.t('product.variants.required.sub'));
       return;
     }
-    const missingSku = this.form().variants.some(variant => !String(variant.sku || '').trim());
-    if (missingSku) {
+    const incomplete = this.form().variants.find(variant => !String(variant.sku || '').trim());
+    if (incomplete) {
       this.saveState.set('error');
       this.toast.error(this.t('product.variants.missingSku.title'), this.t('product.variants.missingSku.sub'));
+      this.revealVariant(incomplete.id, true);
       return;
     }
     const duplicateSku = this.duplicateVariantSku();
     if (duplicateSku) {
       this.saveState.set('error');
       this.toast.error(this.t('product.variants.duplicateSku.title'), `${duplicateSku} · ${this.t('product.variants.duplicateSku.sub')}`);
+      const clash = [...this.form().variants].reverse().find(v => String(v.sku || '').trim() === duplicateSku);
+      if (clash) this.revealVariant(clash.id, true);
       return;
     }
+    // What is on screen now is what gets saved. Edits made while the request is
+    // in flight (deleting a size right after pressing Save) must stay unsaved;
+    // comparing against this snapshot is what keeps the save bar up for them.
+    const submitted: FormShape = structuredClone(this.form());
     this.saveState.set('saving');
 
     try {
-      const f = this.form();
+      const f = submitted;
       const previousId = this.product.id;
       const payload = f.variants.length > 0
         ? { ...f, stock: this.variantsTotalStock() }
@@ -3260,16 +3333,26 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
         ? await this.productsApi.saveProduct(payload)
         : await this.productsApi.update(this.product.id, payload);
 
-      this.saveState.set('saved');
+      const editedDuringSave = JSON.stringify(this.form()) !== JSON.stringify(submitted);
+      // The baseline is what the server stored (real variant ids, barcode
+      // defaulting to the SKU), not the client copy that was sent.
+      const savedForm: FormShape = { ...this.makeFormFromProduct(saved), collectionIds: [...f.collectionIds] };
+      this.initial.set(savedForm);
       const ts = new Date().toTimeString().slice(0, 5);
       this.lastSavedAt.set(ts);
-      this.storage.remove(this.draftBase);
       this.draftRestoredAt.set(null);
-      this.initial.set({ ...this.form() });
-      this.autoGeneratedVariantIds.set(new Set());
-      this.colorSkuDrafts.set({});
+      if (editedDuringSave) {
+        this.saveState.set('dirty');
+        this.scheduleAutoSave();
+      } else {
+        this.saveState.set('saved');
+        this.form.set(structuredClone(savedForm));
+        this.storage.remove(this.draftBase);
+        this.autoGeneratedVariantIds.set(new Set());
+        this.colorSkuDrafts.set({});
+      }
 
-      await this.syncCollections(previousId, saved.id, this.form().collectionIds);
+      await this.syncCollections(previousId, saved.id, f.collectionIds);
 
       // Persist editable fields back on the underlying product so the current
       // catalog reflects the saved API state.
@@ -3304,9 +3387,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       }
       
       this.productSaved.emit({ ...this.product });
-      this.toast.success(this.t('product.toast.saved.title'), `${this.form().name}`);
+      this.toast.success(this.t('product.toast.saved.title'), `${f.name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
-      this.feedbackTimer = window.setTimeout(() => this.saveState.set('idle'), 1800);
+      this.feedbackTimer = window.setTimeout(() => this.saveState.set(this.dirty() ? 'dirty' : 'idle'), 1800);
     } catch {
       this.saveState.set('error');
       this.triggerShake();
