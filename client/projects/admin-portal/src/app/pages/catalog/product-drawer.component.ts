@@ -2735,6 +2735,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     };
     this.markVariantSkuAutomatic(id);
     this.set('variants', [...f.variants, next]);
+    // A colourless variant lands in the "no color" group, which starts
+    // collapsed; open it or the new row is invisible and looks like a no-op.
+    this.expandedGroups.update(s => new Set(s).add('__none__'));
   }
 
   updateVariant(index: number, patch: Partial<ProductVariant>): void {
