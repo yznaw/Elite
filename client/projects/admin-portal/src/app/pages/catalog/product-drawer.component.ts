@@ -3011,7 +3011,12 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const key = this.colorKey(colorName);
     const drafts = this.colorSkuDrafts();
     if (Object.prototype.hasOwnProperty.call(drafts, key)) return drafts[key];
-    const saved = items.find(item => String(item.v.sku || '').trim());
+    // A legacy size-less row (e.g. 1493-GF-WHT beside 1493-GF-WHI-5) has no
+    // size suffix to strip, so its whole SKU would read as the base and flip
+    // once that row is removed. Read the base from a sized row first.
+    const hasSku = (item: { v: ProductVariant }) => !!String(item.v.sku || '').trim();
+    const saved = items.find(item => hasSku(item) && String(item.v.size || '').trim())
+      ?? items.find(hasSku);
     return saved ? variantBaseSku(saved.v.sku, saved.v.size) : '';
   }
 
