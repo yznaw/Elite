@@ -2777,6 +2777,19 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // Variants
   // ────────────────────────────────────────────────────────────────────
 
+  /** Cost and shipping cost a new variant should start with: whatever an
+   *  existing variant of the same colour already has, so generating sizes
+   *  or adding a row never resets them to blank. Falls back to any variant
+   *  on the product when the colour has none yet. */
+  private inheritedCosts(colorName: string): Pick<ProductVariant, 'costPrice' | 'shippingCost'> {
+    const variants = this.form().variants;
+    const sameColor = variants.find(v =>
+      colorName && this.colorKey(v.color || '') === this.colorKey(colorName)
+      && (v.costPrice != null || v.shippingCost != null));
+    const source = sameColor ?? variants.find(v => v.costPrice != null || v.shippingCost != null);
+    return { costPrice: source?.costPrice, shippingCost: source?.shippingCost };
+  }
+
   addVariant(): void {
     // One new variant at a time: a second click brings back the one still
     // waiting for its colour instead of stacking blank rows.
@@ -2795,6 +2808,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       material: '',
       price: f.price || 0,
       stock: 0,
+      ...this.inheritedCosts(''),
     };
     this.markVariantSkuAutomatic(id);
     this.pendingVariantIds.update(ids => new Set(ids).add(id));
@@ -3049,6 +3063,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       material: '',
       price:    f.price || 0,
       stock:    0,
+      ...this.inheritedCosts(colorName),
     };
     this.markVariantSkuAutomatic(id);
     this.set('variants', [...f.variants, next]);
@@ -3083,6 +3098,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     );
     const toAdd = ss.sizes.filter(sz => !existingSizes.has(sz));
     if (toAdd.length === 0) { this.toast.info(this.t('product.variants.allSizesAdded'), ss.name); return; }
+    const costs = this.inheritedCosts(colorName);
     const newVariants: ProductVariant[] = toAdd.map(sz => ({
       id:       'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
       sku:      formatVariantSku(colorBaseSku, sz),
@@ -3091,6 +3107,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       material: '',
       price:    f.price || 0,
       stock:    0,
+      ...costs,
     }));
     this.markVariantSkusAutomatic(newVariants.map(v => v.id));
     // The generated sizes replace this colour's blank new rows.
@@ -3166,6 +3183,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     }
     const existing = new Set(f.variants.map(v => v.size));
     const toAdd = ss.sizes.filter(sz => !existing.has(sz));
+    const costs = this.inheritedCosts('');
     const newVariants: ProductVariant[] = toAdd.map(sz => ({
       id: 'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
       sku: formatVariantSku(f.sku, sz),
@@ -3174,6 +3192,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       material: '',
       price: f.price || 0,
       stock: 0,
+      ...costs,
     }));
     this.markVariantSkusAutomatic(newVariants.map(v => v.id));
     if (newVariants.length === 0) {
