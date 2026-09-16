@@ -521,6 +521,22 @@ The size picker column repeats only the size note, as a plain line under the siz
 Photo Color                 Size   Stock   Price   SKU                  Actions
 ```
 
+### Which gallery image the storefront shows
+
+The product drawer's Image Gallery is the only place the card image is chosen:
+
+- **Drag thumbnails** to reorder, or click the ✓ action on a thumbnail ("Set as primary") to move it
+  to position 1. Position 1 carries the `Primary` badge.
+- That order is saved to `media_links.sort_order`, and the storefront reads it in the same order, so
+  **the first thumbnail is the image on the collections card and the first frame of the PDP gallery**.
+- Per-colour images (below) only override the card when a colour was **explicitly** linked to an
+  image. An unlinked colour shows the primary image.
+
+Before September 2026 neither half of that held: the API ranked locally-uploaded media above
+externally-hosted media before honouring `sort_order` (so a gallery mixing an upload with a Google
+Drive link ignored the drag order), and the storefront guessed an unlinked colour's image from its
+position in the gallery. See [05 – API Server](./05-api-server.md#which-image-the-storefront-shows-image-ordering).
+
 ### Color → Image Linking
 
 Each color variant can be linked to one gallery image via the photo cell in the row:

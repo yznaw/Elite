@@ -888,15 +888,10 @@ export class CollectionComponent implements OnInit, OnDestroy {
     return 'Shoes';
   }
 
+  // Only an image the admin explicitly bound to this colour counts. Callers fall back to the
+  // product's primary image, which beats guessing a colour's image from its gallery position.
   private productImageForColor(product: Product, color: string): string | null {
-    const key = this.colorKey(color);
-    const mappedImage = this.mappedImageForColor(product, key);
-    if (mappedImage) return mappedImage;
-
-    const colors = this.productColors(product);
-    const images = product.images || [];
-    const colorIndex = colors.findIndex((item) => this.colorKey(item) === key);
-    return colorIndex >= 0 && images.length >= colors.length ? images[colorIndex] || null : null;
+    return this.mappedImageForColor(product, this.colorKey(color));
   }
 
   private selectedVariant(product: Product): ProductVariant | undefined {

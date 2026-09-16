@@ -482,6 +482,14 @@ private readonly seoTags = this.seo.watch(() => ({
   - `ensureLoaded() / refresh()` — Force-reload from API
 - **Image normalization:** All products returned from the API pass through `normalizeProductImages()` which resolves `/uploads/…` paths via `resolveMediaUrl()` (→ `/api/uploads/…`), deduplicates the `images[]` array, and applies `colorImages` normalization. Missing images fall back to `this.defaultImage`.
 
+**Per-colour images — no positional inference (September 2026):** `productImageForColor()` in both
+`collection.component.ts` and `product.component.ts` returns an image only when the admin linked one
+to that colour (`colorImages`, matched by normalized name or slug; the PDP additionally accepts a
+filename hint via `urlContainsColor()`). Otherwise it returns `null` and the caller falls back to
+`product.image`, the admin's primary. Both used to fall back to `images[colorIndex]`, pairing an
+alphabetically-sorted colour array against a gallery array sorted by `sort_order` — two unrelated
+orders, so a card could show an image that was never assigned to the colour it displayed.
+
 **`resolveMediaUrl()` — Bug fix (June 2026):** The previous implementation stripped `/api/` from the base URL (`apiBase.replace(/\/api\/?$/, '')`), leaving an empty prefix in production. Now uses `${this.apiBase}${value}` directly so `/uploads/abc.jpg` becomes `/api/uploads/abc.jpg`, which routes through the Nginx proxy to Express.
 
 **Fallback images:** `FALLBACK_IMAGE` constant (used by `onImgError` in collection and product pages) was changed from a hardcoded Unsplash URL to `/assets/brand/elite-logo-green.png`.

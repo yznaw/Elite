@@ -24,10 +24,14 @@ const COLOR_IMAGES_SELECT = `
           COALESCE(
             -- Prefer pivot table written by migration 010 + replaceColorImages()
             (
-              SELECT jsonb_object_agg(pci.color, ${pdpUrl('m')})
-              FROM product_color_images pci
-              JOIN media_assets m ON m.id = pci.media_id
-              WHERE pci.product_id = p.id
+              SELECT jsonb_object_agg(color, url)
+              FROM (
+                SELECT DISTINCT ON (pci.color) pci.color AS color, ${pdpUrl('m')} AS url
+                FROM product_color_images pci
+                JOIN media_assets m ON m.id = pci.media_id
+                WHERE pci.product_id = p.id
+                ORDER BY pci.color, pci.sort_order
+              ) primary_color_media
             ),
             -- Fall back to legacy media_assets.metadata->>'color' JSON path
             (
@@ -44,12 +48,6 @@ const COLOR_IMAGES_SELECT = `
                       sku_variant.color
                     ))) AS color_key,
                     ${pdpUrl('m')} AS url,
-                    CASE
-                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                        OR m.metadata ? 'storagePath'
-                      THEN 0
-                      ELSE 1
-                    END AS role_rank,
                     ml.sort_order
                   FROM media_links ml
                   JOIN media_assets m ON m.id = ml.media_id
@@ -59,11 +57,62 @@ const COLOR_IMAGES_SELECT = `
                     AND (ml.product_id = p.id OR linked_variant.product_id = p.id)
                 ) color_media
                 WHERE color_key IS NOT NULL AND color_key <> '' AND url IS NOT NULL AND url <> ''
-                ORDER BY color_key, role_rank, sort_order
+                ORDER BY color_key, sort_order
               ) first_color_media
             ),
             '{}'::jsonb
           ) AS color_images`;
+
+// The card image and the gallery order both follow media_links.sort_order, which the admin
+// portal writes from the drag order of the product gallery (first thumbnail = card image).
+// products.primary_media_id and role='primary' are legacy fallbacks for products that have
+// no gallery rows yet.
+const CARD_IMAGE_SELECT = `COALESCE(
+            (
+              SELECT ${cardUrl('m')}
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role = 'gallery'
+              ORDER BY ml.sort_order
+              LIMIT 1
+            ),
+            ${cardUrl('primary_media')},
+            (
+              SELECT ${cardUrl('m')}
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role = 'primary'
+              ORDER BY ml.sort_order
+              LIMIT 1
+            )
+          ) AS image`;
+
+const GALLERY_IMAGES_SELECT = `COALESCE(
+            ARRAY(
+              SELECT url
+              FROM (
+                SELECT DISTINCT ON (url) url, role_rank, sort_order
+                FROM (
+                  SELECT ${pdpUrl('m')} AS url, 0 AS role_rank, ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
+                  UNION ALL
+                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
+                  WHERE primary_media.id IS NOT NULL
+                  UNION ALL
+                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'primary'
+                ) product_media
+                WHERE url IS NOT NULL AND url <> ''
+                ORDER BY url, role_rank, sort_order
+              ) deduped_product_media
+              ORDER BY role_rank, sort_order
+            ),
+            ARRAY[]::text[]
+          ) AS images`;
 
 function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   const sizes = Array.isArray(row.sizes) ? row.sizes.filter(Boolean) : [];
@@ -233,66 +282,8 @@ router.get('/', async (_req, res, next) => {
             ARRAY[]::text[]
           ) AS materials,
           ${variantsSelect()},
-          COALESCE(
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'gallery'
-              ORDER BY
-                CASE
-                  WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                    OR m.metadata ? 'storagePath'
-                  THEN 0
-                  ELSE 1
-                END,
-                ml.sort_order
-              LIMIT 1
-            ),
-            ${cardUrl('primary_media')},
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'primary'
-              ORDER BY ml.sort_order
-              LIMIT 1
-            )
-          ) AS image,
-          COALESCE(
-            ARRAY(
-              SELECT url
-              FROM (
-                SELECT DISTINCT ON (url) url, role_rank, sort_order
-                FROM (
-                  SELECT
-                    ${pdpUrl('m')} AS url,
-                    CASE
-                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                        OR m.metadata ? 'storagePath'
-                      THEN 0
-                      ELSE 1
-                    END AS role_rank,
-                    ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
-                  UNION ALL
-                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
-                  WHERE primary_media.id IS NOT NULL
-                  UNION ALL
-                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'primary'
-                ) product_media
-                WHERE url IS NOT NULL AND url <> ''
-                ORDER BY url, role_rank, sort_order
-              ) deduped_product_media
-              ORDER BY role_rank, sort_order
-            ),
-            ARRAY[]::text[]
-          ) AS images,
+          ${CARD_IMAGE_SELECT},
+          ${GALLERY_IMAGES_SELECT},
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
           COALESCE((
@@ -363,66 +354,8 @@ router.get('/:id', async (req, res, next) => {
             ARRAY[]::text[]
           ) AS materials,
           ${variantsSelect()},
-          COALESCE(
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'gallery'
-              ORDER BY
-                CASE
-                  WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                    OR m.metadata ? 'storagePath'
-                  THEN 0
-                  ELSE 1
-                END,
-                ml.sort_order
-              LIMIT 1
-            ),
-            ${cardUrl('primary_media')},
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'primary'
-              ORDER BY ml.sort_order
-              LIMIT 1
-            )
-          ) AS image,
-          COALESCE(
-            ARRAY(
-              SELECT url
-              FROM (
-                SELECT DISTINCT ON (url) url, role_rank, sort_order
-                FROM (
-                  SELECT
-                    ${pdpUrl('m')} AS url,
-                    CASE
-                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                        OR m.metadata ? 'storagePath'
-                      THEN 0
-                      ELSE 1
-                    END AS role_rank,
-                    ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
-                  UNION ALL
-                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
-                  WHERE primary_media.id IS NOT NULL
-                  UNION ALL
-                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'primary'
-                ) product_media
-                WHERE url IS NOT NULL AND url <> ''
-                ORDER BY url, role_rank, sort_order
-              ) deduped_product_media
-              ORDER BY role_rank, sort_order
-            ),
-            ARRAY[]::text[]
-          ) AS images,
+          ${CARD_IMAGE_SELECT},
+          ${GALLERY_IMAGES_SELECT},
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
           COALESCE((

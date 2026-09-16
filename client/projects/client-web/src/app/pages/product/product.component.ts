@@ -1004,12 +1004,8 @@ export class ProductComponent implements OnInit, OnDestroy {
     const mappedImage = this.mappedImageForColor(product, key);
     if (mappedImage) return this.resolveGalleryImage(product, mappedImage, galleryImages);
 
-    const hintedImage = galleryImages.find((image) => this.urlContainsColor(image, key));
-    if (hintedImage) return hintedImage;
-
-    const colors = this.productColors(product);
-    const colorIndex = colors.findIndex((item) => this.colorKey(item) === key);
-    return colorIndex >= 0 && galleryImages.length >= colors.length ? galleryImages[colorIndex] || null : null;
+    // Filename hints are a real signal; gallery position is not, so there is no positional guess.
+    return galleryImages.find((image) => this.urlContainsColor(image, key)) || null;
   }
 
   private mappedImageForColor(product: Product, key: string): string | null {

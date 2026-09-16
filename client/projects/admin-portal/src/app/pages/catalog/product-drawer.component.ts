@@ -497,6 +497,12 @@ function readPreview(file: File): Promise<string> {
                               }
                             </div>
                           }
+                          <!-- The grid above is this product's gallery only. The library stays one
+                               click away for the case where the colour's shot is not in it yet. -->
+                          <button class="vc-img-picker-more" type="button"
+                                  (click)="openLibraryForVariantPicker('group-' + group.colorKey)">
+                            <ap-icon name="media" [size]="12"/> {{ t('product.variants.browseLibrary') }}
+                          </button>
                         </div>
                       }
                     </div>
@@ -1018,14 +1024,14 @@ function readPreview(file: File): Promise<string> {
 
     <!-- ── Media Picker Modal ── -->
     @if (mediaPicker()) {
-      <div class="overlay" style="z-index:260;" (click)="mediaPicker.set(false)"></div>
+      <div class="overlay" style="z-index:260;" (click)="closeMediaPicker()"></div>
       <div class="media-pick-panel" style="z-index:270;">
         <div class="mpp-head">
           <div>
             <p class="mpp-eyebrow">{{ t('product.gallery.library') }}</p>
             <div class="card-title">{{ t('product.gallery.selectImages') }}</div>
           </div>
-          <button class="x-btn" type="button" (click)="mediaPicker.set(false)"><ap-icon name="x" [size]="14"/></button>
+          <button class="x-btn" type="button" (click)="closeMediaPicker()"><ap-icon name="x" [size]="14"/></button>
         </div>
         <div class="mpp-search">
           <ap-icon name="search" [size]="13"/>
@@ -1056,7 +1062,7 @@ function readPreview(file: File): Promise<string> {
         <div class="drawer-foot">
           <span class="muted small">{{ mediaSelected().size }} {{ t('product.gallery.selected') }}</span>
           <div class="row gap-sm">
-            <button class="btn btn-outline" type="button" (click)="mediaPicker.set(false)">{{ t('common.cancel') }}</button>
+            <button class="btn btn-outline" type="button" (click)="closeMediaPicker()">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" type="button" [disabled]="mediaSelected().size === 0" (click)="applyMediaSelection()">
               {{ mediaSelected().size !== 1 ? t('product.gallery.addImages') : t('product.gallery.addImage') }}
             </button>
@@ -1831,6 +1837,15 @@ function readPreview(file: File): Promise<string> {
       transition: color 0.12s, background 0.12s;
     }
     .vc-img-picker-close:hover { color: var(--ink); background: var(--bg); }
+    .vc-img-picker-more {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; margin-top: 10px; padding: 7px 8px;
+      border: 1px dashed var(--border); border-radius: 8px;
+      background: none; cursor: pointer;
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      transition: color 0.12s, border-color 0.12s, background 0.12s;
+    }
+    .vc-img-picker-more:hover { color: var(--ink); border-color: var(--ink-2); background: var(--bg); }
     .vc-img-picker-empty {
       font-size: 12px; color: var(--muted);
       text-align: center; padding: 8px 0 4px; margin: 0;
@@ -2336,6 +2351,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly bulkStockSetAll = signal<number | null>(null);
   readonly bulkStockRows = signal<{ id: string; color: string; size: string; sku: string; stock: number }[]>([]);
   readonly variantPickerOpenId = signal<string | null>(null);
+  /** Colour picker to reopen once the media library closes (set by openLibraryForVariantPicker). */
+  private readonly variantPickerResumeId = signal<string | null>(null);
 
   /** Convenience: the current product object (or first as fallback). */
   get product(): Product {
@@ -2555,7 +2572,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (toAdd.length > 0) {
       this.set('images', [...this.form().images, ...toAdd]);
     }
+    this.closeMediaPicker();
+  }
+
+  closeMediaPicker(): void {
     this.mediaPicker.set(false);
+    const resumeId = this.variantPickerResumeId();
+    if (resumeId) {
+      this.variantPickerResumeId.set(null);
+      this.variantPickerOpenId.set(resumeId);
+    }
   }
 
   /** Per-pending-file progress UI state. We render one row per active upload
@@ -3319,6 +3345,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   closeVariantPicker(): void {
     this.variantPickerOpenId.set(null);
+    this.variantPickerResumeId.set(null);
+  }
+
+  /** Open the media library from inside a colour's picker, and come back to that
+      picker afterwards so the newly added image can be linked to the colour. */
+  openLibraryForVariantPicker(pickerId: string): void {
+    this.variantPickerResumeId.set(pickerId);
+    this.variantPickerOpenId.set(null);
+    void this.openMediaPicker();
   }
 
   imageForColor(colorName: string): string | null {

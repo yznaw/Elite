@@ -909,6 +909,29 @@ Full CRUD for all three reference tables. All endpoints are tenant-scoped. Requi
 
 **Color-image pivot** (`product_color_images`) — created by `010_color_images.sql`. Written by `replaceColorImages()` in `admin-products.route.js` on every product save alongside the legacy `media_assets.metadata.color` path (dual-write for zero-downtime rollout). Public `products.route.js` prefers the pivot JOIN; falls back to metadata JSONB for products not yet re-saved.
 
+### Which image the storefront shows (image ordering)
+
+`GET /api/products` and `GET /api/products/:id` share two SQL constants in `products.route.js`,
+`CARD_IMAGE_SELECT` (the `image` field) and `GALLERY_IMAGES_SELECT` (the `images[]` array), so the
+collections card and the product detail page can never disagree.
+
+Both order strictly by `media_links.sort_order` for `role = 'gallery'` rows. That column is written
+from the admin portal's gallery drag order (`replaceImages()` in `admin-products.route.js` inserts
+`sort_order = index`), so **the first thumbnail in the product drawer is the card image**.
+`products.primary_media_id` and `role = 'primary'` remain as fallbacks for products with no gallery
+rows; in `images[]` they sort after the gallery via a literal source rank.
+
+**Fixed (September 2026):** the ordering used to lead with a `CASE` that ranked locally-uploaded
+media (`/uploads/%` or `metadata.storagePath`) ahead of externally-hosted media, with `sort_order`
+only as a tiebreaker. Any product whose gallery mixed an upload with a Google Drive link therefore
+showed a different first image on the storefront than in the admin, and the same bias was applied to
+`images[]` and to the legacy colour path in `COLOR_IMAGES_SELECT`. All three now order by
+`sort_order` alone. The pivot branch of `COLOR_IMAGES_SELECT` also picks `DISTINCT ON (pci.color)`
+ordered by `pci.sort_order`, so the `sort_order = 0` row wins per colour instead of an arbitrary one
+(the intent documented in `010_color_images.sql`).
+
+Note the 60-second response cache on `/api/products` when verifying a reorder.
+
 ---
 
 ## Running the Server
