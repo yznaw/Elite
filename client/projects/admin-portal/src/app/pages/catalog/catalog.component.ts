@@ -1038,7 +1038,12 @@ export class CatalogComponent implements OnInit {
     const draft: Product = {
       id, name: '', sku: '', brand: '', price: 0, stock: 0,
       hidden: true,
-      image: 'https://images.unsplash.com/photo-1519415943484-9fa1873496d4?w=600&q=80&auto=format&fit=crop',
+      // Empty, not a stock placeholder: the drawer seeds `images[]` from this
+      // field when empty (see product-drawer's form init), and a save with no
+      // real photo would otherwise persist a stock image as the product's
+      // gallery. The catalog/drawer's own no-image fallback (elite logo)
+      // covers the empty state visually.
+      image: '',
       variants: [],
     };
     this._products.update(all => [draft, ...all]);
