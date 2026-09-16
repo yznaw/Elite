@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<!--
+  Source of truth for docs/33-user-roles-guide.pdf.
+
+  ===========================================================================
+  INTERNAL — NOT FOR THE TEAM. Kept here deliberately; never render it.
+  ===========================================================================
+
+  This guide states INTENDED POLICY. As of 2026-09-16 the server does not yet
+  enforce all of it. Audited by signing in as each role and probing every admin
+  surface (403 = blocked by a role gate; 404/422 = the gate let it through).
+
+  OPEN GAPS — the table claims these are blocked, but the code allows them:
+
+    GAP 1 — Viewer can edit the catalogue, collections and media.
+            POST/PATCH/DELETE on /admin/products, /admin/collections and
+            /admin/media carry no role gate; they inherit requireAuth() alone,
+            so any signed-in user can add, edit and delete products and media.
+            Guide rows affected: "تعديل الكتالوج والمجموعات", "رفع وحذف الوسائط".
+
+    GAP 2 — Manager AND Viewer can edit the storefront and the policies.
+            /admin/storefront, /admin/storefront-content and /admin/policies
+            also carry no role gate, so either role can change what the
+            customer sees on the public site.
+            Guide rows affected: "محرر واجهة المتجر", "تعديل السياسات".
+
+    GAP 3 — Internal contradiction on stocktake.
+            routes/index.js mounts /admin/inventory for owner+admin+manager,
+            but lib/inventory-ops-service.js rejects manager. Net effect
+            matches the table (manager blocked), but the two disagree, so
+            changing either one alone silently opens or closes the surface.
+
+  THE FIX (already built, not yet applied): middleware/require-write-role.js
+  keeps reads open and restricts writes. Five mount lines in routes/index.js:
+
+    admin.use('/products',    requireWriteRole(['owner','admin','manager']), …);
+    admin.use('/collections', requireWriteRole(['owner','admin','manager']), …);
+    admin.use('/media',       requireWriteRole(['owner','admin','manager']), …);
+    admin.use('/storefront',  requireWriteRole(['owner','admin']),           …);
+    admin.use('/policies',    requireWriteRole(['owner','admin']),           …);
+
+  Add role tests next to the ones in
+  server/test/admin-orders-customers-e2e.test.js ("a viewer can read orders and
+  customers but cannot change them"), then re-probe and update this note.
+
+  CLOSED 2026-09-16 — Viewer could refund orders, cancel them and delete
+  customers despite the guide saying read-only. Gated behind requireWriteRole
+  and covered by an automated test so it cannot regress.
+  ===========================================================================
+
+
+  Regenerate the PDF after editing (do not hand-edit the PDF):
+    cd client && node scripts/build-roles-guide-pdf.mjs
+
+  The rendered guide is the team's copy and states policy only. Anything about
+  how far the code actually enforces that policy belongs in the block above,
+  never in a <section>. See docs/07-dev-guide.md.
+-->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دليل صلاحيات المستخدمين · Elite Collection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#004538;
+    --green-deep:#00352b;
+    --gold:#c5a572;
+    --gold-soft:#f7f2e8;
+    --ink:#1a1f36;
+    --ink-2:#4a4f66;
+    --muted:#6b7089;
+    --line:#e3e6ef;
+    --ok:#1a7f5a;
+    --no:#c0392b;
+    --warn:#b7791f;
+    --warn-bg:#fdf6e7;
+    --page:#ffffff;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+
+  body{
+    font-family:'IBM Plex Sans Arabic',-apple-system,'Segoe UI',Tahoma,sans-serif;
+    color:var(--ink);
+    background:#f0f1f5;
+    line-height:1.75;
+    font-size:14px;
+  }
+
+  .page{
+    background:var(--page);
+    width:210mm;
+    min-height:297mm;
+    margin:0 auto 18px;
+    padding:22mm 18mm;
+    position:relative;
+  }
+
+  /* ── Cover ───────────────────────────────────────────────── */
+  .cover{
+    background:linear-gradient(160deg,var(--green) 0%,var(--green-deep) 100%);
+    color:#fff;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:40mm 18mm;
+  }
+  .cover .wordmark{
+    font-size:44px;font-weight:700;letter-spacing:.22em;
+    margin-inline-start:.22em;
+  }
+  .cover .rule{width:76px;height:2px;background:var(--gold);margin:22px auto 26px;}
+  .cover h1{font-size:28px;font-weight:700;margin-bottom:14px;}
+  .cover p{font-size:14px;color:rgba(255,255,255,.78);max-width:420px;margin:0 auto;}
+  .cover .meta{margin-top:54px;font-size:11.5px;color:rgba(255,255,255,.55);letter-spacing:.04em;}
+
+  /* ── Headings ────────────────────────────────────────────── */
+  h2{
+    font-size:19px;font-weight:700;color:var(--green);
+    padding-bottom:9px;margin-bottom:20px;
+    border-bottom:2px solid var(--gold);
+  }
+  h2:not(:first-child){margin-top:34px;}
+  h3{font-size:14.5px;font-weight:700;color:var(--green);margin-bottom:7px;}
+
+  p{margin-bottom:12px;}
+  .lead{color:var(--ink-2);}
+
+  /* ── Callouts ────────────────────────────────────────────── */
+  .callout{
+    background:var(--gold-soft);
+    border-inline-start:3px solid var(--gold);
+    padding:15px 18px;margin-bottom:20px;border-radius:0 5px 5px 0;
+  }
+  .callout.warn{background:var(--warn-bg);border-inline-start-color:var(--warn);}
+  .callout.warn strong{color:var(--warn);}
+  .callout p:last-child{margin-bottom:0;}
+
+  /* ── Role cards ──────────────────────────────────────────── */
+  .role{
+    border:1px solid var(--line);border-radius:7px;
+    overflow:hidden;margin-bottom:20px;
+    break-inside:avoid;page-break-inside:avoid;
+  }
+  .role-head{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:13px 18px;color:#fff;
+  }
+  .role-head .name{font-size:15.5px;font-weight:700;}
+  .role-head .tag{font-size:11px;opacity:.72;letter-spacing:.06em;}
+  .role-body{padding:16px 18px;}
+  .role-body h3{margin-top:14px;}
+  .role-body h3:first-child{margin-top:0;}
+  .role-body ul{margin:0 18px 4px 0;padding:0;}
+  .role-body li{margin-bottom:5px;color:var(--ink-2);}
+
+  .r-owner   .role-head{background:var(--gold);color:#3a2c11;}
+  .r-owner   .role-head .tag{color:#3a2c11;}
+  .r-admin   .role-head{background:var(--green);}
+  .r-manager .role-head{background:#2f6d5b;}
+  .r-cashier .role-head{background:#7a6a58;}
+  .r-viewer  .role-head{background:#8c8fa3;}
+
+  .pos-yes{color:var(--ok);font-weight:600;}
+  .pos-no{color:var(--no);font-weight:600;}
+
+  .need{
+    background:#fbfaf6;border:1px dashed var(--gold);
+    border-radius:5px;padding:11px 14px;margin-top:14px;font-size:13px;
+  }
+  .need strong{color:var(--warn);}
+
+  /* ── Matrix ──────────────────────────────────────────────── */
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  caption{text-align:start;color:var(--muted);font-size:12px;margin-bottom:9px;}
+  thead th{
+    background:var(--green);color:#fff;font-weight:600;
+    padding:9px 8px;text-align:center;font-size:12px;
+  }
+  thead th:first-child{text-align:start;padding-inline-start:14px;}
+  tbody td{
+    border-bottom:1px solid var(--line);
+    padding:8px;text-align:center;
+  }
+  tbody td:first-child{
+    text-align:start;padding-inline-start:14px;
+    background:#faf9f7;font-weight:500;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  .y{color:var(--ok);font-weight:700;}
+  .n{color:var(--no);font-weight:700;}
+  /* Outranks `tbody td:first-child`, which would otherwise paint the cream
+     cell background over this row and leave white text on cream. */
+  tbody tr.group td,
+  tbody tr.group td:first-child{
+    background:var(--green);color:#fff;
+    font-weight:700;font-size:11.5px;letter-spacing:.06em;
+    text-align:start;padding:6px 14px;
+    border-bottom:none;
+  }
+  .note{font-size:11.5px;color:var(--muted);margin-top:11px;line-height:1.7;}
+
+  /* ── Steps ───────────────────────────────────────────────── */
+  .step{display:flex;gap:13px;margin-bottom:15px;break-inside:avoid;}
+  .step .num{
+    flex-shrink:0;width:25px;height:25px;border-radius:50%;
+    background:var(--green);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;
+  }
+  .step .txt{font-size:13px;color:var(--ink-2);}
+  .step .txt b{color:var(--green);}
+
+  footer{
+    margin-top:36px;padding-top:14px;border-top:1px solid var(--line);
+    font-size:11px;color:var(--muted);text-align:center;
+  }
+
+  @media print{
+    body{background:#fff;}
+    .page{
+      width:auto;min-height:0;margin:0;padding:0;
+      page-break-after:always;
+    }
+    .page:last-child{page-break-after:auto;}
+    .cover{
+      min-height:247mm;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+
+  @page{size:A4;margin:14mm;}
+</style>
+</head>
+<body>
+
+<!-- ══ Cover ══════════════════════════════════════════════════ -->
+<section class="page cover">
+  <div class="wordmark">ELITE</div>
+  <div class="rule"></div>
+  <h1>دليل صلاحيات المستخدمين</h1>
+  <p>شرح كل نوع مستخدم في نظام لوحة التحكم الإدارية، ماذا يستطيع أن يفعل، وكيف يمكنه الدخول إلى نظام نقاط البيع (POS)</p>
+  <div class="meta">Elite Collection · Admin System · تحديث 16-09-2026</div>
+</section>
+
+<!-- ══ Intro ══════════════════════════════════════════════════ -->
+<section class="page">
+  <h2>مقدمة</h2>
+  <div class="callout">
+    <p>يحتوي نظام Elite على خمسة أنواع من المستخدمين (أدوار)، كل دور له صلاحيات مختلفة داخل لوحة التحكم الإدارية (Admin Portal) ونظام نقاط البيع (POS). هذا الملف يشرح كل دور بالتفصيل: ماذا يستطيع فعله، هل يستطيع الدخول لنقطة البيع وكيف، وما هي المعلومات التي نحتاجها منك لإنشاء حساب لهذا الشخص.</p>
+  </div>
+
+  <p class="lead">الأدوار الخمسة مرتبة من الأعلى صلاحية للأقل: <strong>المالك (Owner)</strong> ← <strong>المدير العام (Admin)</strong> ← <strong>مدير الفرع (Manager)</strong> ← <strong>الكاشير (Cashier)</strong> ← <strong>المُشاهد (Viewer)</strong>.</p>
+
+  <h2>ما الجديد منذ النسخة السابقة (05-08-2026)</h2>
+  <ul style="margin-inline-start:18px;color:var(--ink-2);">
+    <li style="margin-bottom:7px;"><strong>تسجيل هوية المنفّذ:</strong> كل تغيير على حالة طلب وكل ملاحظة داخلية صار يُحفظ باسم الموظف الذي نفّذه. أفعالك موثّقة ويمكن مراجعتها لاحقاً.</li>
+    <li style="margin-bottom:7px;"><strong>المُشاهد:</strong> للقراءة فقط — لا يستطيع الاسترجاع أو الإلغاء أو حذف العملاء.</li>
+    <li style="margin-bottom:7px;"><strong>مدير الفرع:</strong> صلاحيته على الطلبات والعملاء صارت صريحة (استرجاع، إلغاء، شحن، تعديل وحذف عميل).</li>
+    <li style="margin-bottom:7px;"><strong>شاشات جديدة</strong> لم تكن موجودة في النسخة السابقة: المصروفات التشغيلية، الاستيراد الجماعي، طلبات إعادة التوفير، صفحة التشخيص، تقارير الفروع.</li>
+  </ul>
+</section>
+
+<!-- ══ Roles ══════════════════════════════════════════════════ -->
+<section class="page">
+  <h2>شرح الأدوار بالتفصيل</h2>
+
+  <div class="role r-owner">
+    <div class="role-head"><span class="name">المالك — Owner</span><span class="tag">Owner</span></div>
+    <div class="role-body">
+      <h3>الوصف</h3>
+      <p class="lead">صاحب الحساب الأساسي. يوجد مالك واحد فقط لكل متجر، ويُنشأ تلقائياً عند فتح الحساب لأول مرة — لا يمكن إنشاء مالك جديد من داخل لوحة التحكم حالياً (انظر خطة التوسعة في آخر الملف).</p>
+
+      <h3>ماذا يستطيع أن يفعل في لوحة التحكم</h3>
+      <ul>
+        <li>كل شيء بدون استثناء: الكتالوج، المجموعات، الطلبات، العملاء، التسويق، الإعدادات العامة، الفروع، الفريق، الأجهزة والأمان، التقارير، الجرد، التسوية، المصروفات، الاستيراد الجماعي، صفحة التشخيص.</li>
+        <li>هو الوحيد القادر على تعديل إعدادات الموافقات الحساسة، ومنح دور «مالك» لشخص آخر.</li>
+      </ul>
+
+      <h3>الدخول إلى نقطة البيع (POS)</h3>
+      <p><span class="pos-yes">✔ نعم</span> — بنفس بيانات الدخول المستخدمة للوحة التحكم (البريد الإلكتروني وكلمة المرور).</p>
+
+      <div class="need"><strong>المعلومات المطلوبة:</strong> لا يوجد — هذا الدور يُنشأ تلقائياً مرة واحدة فقط عند فتح الحساب.</div>
+    </div>
+  </div>
+
+  <div class="role r-admin">
+    <div class="role-head"><span class="name">المدير العام — Admin</span><span class="tag">Admin</span></div>
+    <div class="role-body">
+      <h3>الوصف</h3>
+      <p class="lead">الدور الأعلى القابل للتعيين من الواجهة. مناسب لشريك عمل أو مدير عمليات موثوق تماماً، يدير كل شيء تقريباً ما عدا بعض إعدادات الموافقات الحساسة المحفوظة للمالك فقط.</p>
+
+      <h3>ماذا يستطيع أن يفعل في لوحة التحكم</h3>
+      <ul>
+        <li>الكتالوج، المجموعات، الطلبات، العملاء، الوسائط، محرر واجهة المتجر، السياسات، التحليلات.</li>
+        <li>الإعدادات الكاملة: بيانات المتجر، الفروع، دعوة وتعديل وتعطيل وحذف أعضاء الفريق (ما عدا منح دور المالك)، إدارة أجهزة نقاط البيع وأكواد التفعيل.</li>
+        <li>التقارير، التسوية المالية، الجرد، المصروفات التشغيلية، الاستيراد الجماعي، صفحة التشخيص.</li>
+      </ul>
+
+      <h3>الدخول إلى نقطة البيع (POS)</h3>
+      <p><span class="pos-yes">✔ نعم</span> — بنفس بيانات الدخول (البريد وكلمة المرور).</p>
+
+      <div class="need"><strong>المعلومات المطلوبة لإنشاء حسابه:</strong> الاسم الكامل، البريد الإلكتروني. تُرسل له دعوة عبر البريد (أو رابط يُشارك يدوياً) صالحة لمدة 48 ساعة، يضع من خلالها كلمة المرور بنفسه.</div>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="role r-manager">
+    <div class="role-head"><span class="name">مدير الفرع / الوردية — Manager</span><span class="tag">Manager</span></div>
+    <div class="role-body">
+      <h3>الوصف</h3>
+      <p class="lead">مسؤول إشرافي على مستوى الفرع أو الوردية. لا يدخل على إعدادات المتجر أو الفريق أو الأجهزة، لكنه المسؤول عن الموافقة على تصرفات الكاشير الحساسة في نقطة البيع (استرجاع، إلغاء، فتح الدرج بدون بيع).</p>
+
+      <h3>ماذا يستطيع أن يفعل في لوحة التحكم</h3>
+      <ul>
+        <li><strong>الطلبات:</strong> عرض وتعديل كامل — تأكيد الدفع، الشحن، الإلغاء، الاسترجاع، رقم التتبّع، الملاحظات الداخلية، طباعة الفاتورة.</li>
+        <li><strong>العملاء:</strong> عرض وإضافة وتعديل وحذف.</li>
+        <li>عرض الكتالوج والمجموعات والتحليلات.</li>
+        <li>التقارير والتسوية المالية الخاصة بالفرع.</li>
+        <li>تعيين رمزه الشخصي السري (Manager PIN) من صفحة خاصة به.</li>
+      </ul>
+
+      <h3>ما لا يستطيع فعله</h3>
+      <ul>
+        <li>إعدادات المتجر العامة، إدارة الفروع، دعوة أو تعديل أعضاء الفريق، إدارة أجهزة نقاط البيع.</li>
+        <li>الجرد وتسويات المخزون، المصروفات التشغيلية، الاستيراد الجماعي، صفحة التشخيص.</li>
+      </ul>
+
+      <h3>الدخول إلى نقطة البيع (POS)</h3>
+      <p><span class="pos-yes">✔ نعم</span> — بنفس بيانات الدخول، بالإضافة لدوره الخاص كـ«موافق» على عمليات الكاشير الحساسة عبر رمز PIN مكوّن من أرقام يُدخله على شاشة الجهاز عند الحاجة (وليس بيانات دخول منفصلة).</p>
+
+      <div class="need"><strong>المعلومات المطلوبة لإنشاء حسابه:</strong> الاسم الكامل، البريد الإلكتروني — نفس أسلوب الدعوة بالبريد. بعد الدخول، يُفضّل أن يضع رمز PIN خاصاً به من إعداداته الشخصية ليقدر يوافق على عمليات الكاشير.</div>
+    </div>
+  </div>
+
+  <div class="role r-cashier">
+    <div class="role-head"><span class="name">الكاشير — Cashier</span><span class="tag">Cashier</span></div>
+    <div class="role-body">
+      <h3>الوصف</h3>
+      <p class="lead">دور محدود جداً ومخصص فقط لتشغيل جهاز نقطة البيع. لا يملك أي وصول لأي صفحة إدارية في لوحة التحكم.</p>
+
+      <h3>ماذا يستطيع أن يفعل في لوحة التحكم</h3>
+      <ul><li>لا شيء — عند تسجيل الدخول يُوجَّه مباشرة لشاشة نقطة البيع فقط، وأي محاولة فتح صفحة إدارية أخرى غير متاحة له.</li></ul>
+
+      <h3>ماذا يستطيع أن يفعل في نقطة البيع</h3>
+      <ul>
+        <li>البيع، ركن ورقة بيع مؤقتاً واستئنافها، إعادة طباعة الفاتورة، إدارة ورديته الخاصة (فتح/إغلاق).</li>
+        <li>عمليات تحتاج موافقة مدير عبر رمز PIN: الاسترجاع، الإلغاء، فتح الدرج بدون بيع، سحب نقدية من الدرج.</li>
+      </ul>
+
+      <h3>الدخول إلى نقطة البيع (POS)</h3>
+      <p><span class="pos-yes">✔ نعم</span> — هذا هو الاستخدام الوحيد لحسابه، بنفس بيانات الدخول (بريد إلكتروني وكلمة مرور).</p>
+
+      <div class="need"><strong>المعلومات المطلوبة لإنشاء حسابه:</strong> الاسم الكامل، البريد الإلكتروني. لا يحتاج رمز PIN (هذا خاص بالمدراء فقط الذين يوافقون على تصرفاته).</div>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="role r-viewer">
+    <div class="role-head"><span class="name">المُشاهد — Viewer</span><span class="tag">Viewer</span></div>
+    <div class="role-body">
+      <h3>الوصف</h3>
+      <p class="lead">وصول للقراءة فقط. مناسب لمحاسب خارجي، مستشار، أو أي شخص يحتاج يشوف الأرقام والبيانات بدون صلاحية التعديل على شيء أو الدخول لنقطة البيع.</p>
+
+      <h3>ماذا يستطيع أن يفعل في لوحة التحكم</h3>
+      <ul>
+        <li>عرض: الكتالوج، المجموعات، الطلبات، العملاء، لوحة المعلومات الرئيسية، التحليلات.</li>
+        <li><strong>لا يستطيع</strong> تعديل الطلبات أو العملاء — لا استرجاع، لا إلغاء، لا حذف عميل.</li>
+        <li><strong>لا يستطيع</strong> الوصول للتقارير المالية، التسوية، الجرد، المصروفات، الإعدادات، الفروع، الأجهزة، أو صفحة التشخيص.</li>
+      </ul>
+
+      <h3>الدخول إلى نقطة البيع (POS)</h3>
+      <p><span class="pos-no">✘ لا</span> — هذا الدور الوحيد الممنوع تماماً من الدخول لشاشة نقطة البيع.</p>
+
+      <div class="need"><strong>المعلومات المطلوبة لإنشاء حسابه:</strong> الاسم الكامل، البريد الإلكتروني.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ Matrix ═════════════════════════════════════════════════ -->
+<section class="page">
+  <h2>جدول مقارنة شامل بين الأدوار</h2>
+  <table>
+    <caption>الصلاحيات المعتمدة لكل دور. إذا احتجت صلاحية غير متاحة لدورك، راجع المدير العام.</caption>
+    <thead>
+      <tr>
+        <th>الصلاحية / الوصول</th>
+        <th>المالك</th><th>المدير العام</th><th>مدير الفرع</th><th>الكاشير</th><th>المُشاهد</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="group"><td colspan="6">الوصول العام</td></tr>
+      <tr><td>الدخول للوحة التحكم</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="y">✔</td></tr>
+      <tr><td>الدخول لنقطة البيع (POS)</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td></tr>
+
+      <tr class="group"><td colspan="6">الكتالوج والمحتوى</td></tr>
+      <tr><td>عرض الكتالوج والمجموعات</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="y">✔</td></tr>
+      <tr><td>تعديل الكتالوج والمجموعات</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>رفع وحذف الوسائط</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>محرر واجهة المتجر (Storefront)</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>تعديل السياسات</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+
+      <tr class="group"><td colspan="6">الطلبات والعملاء</td></tr>
+      <tr><td>عرض الطلبات والعملاء</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="y">✔</td></tr>
+      <tr><td>تعديل الطلبات (شحن، إلغاء، استرجاع)</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>إضافة وتعديل وحذف العملاء</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>طلبات إعادة التوفير (Restock)</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="y">✔</td></tr>
+
+      <tr class="group"><td colspan="6">الإعدادات والفريق</td></tr>
+      <tr><td>الإعدادات العامة للمتجر</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>إدارة الفروع</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>دعوة وإدارة أعضاء الفريق</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>إدارة أجهزة نقطة البيع</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>منح دور «مالك» لشخص آخر</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+
+      <tr class="group"><td colspan="6">المال والمخزون</td></tr>
+      <tr><td>التقارير المالية</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>التسوية المالية (Reconciliation)</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>الجرد وتسويات المخزون</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>المصروفات التشغيلية <span style="color:var(--gold);">جديد</span></td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>الاستيراد الجماعي <span style="color:var(--gold);">جديد</span></td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+
+      <tr class="group"><td colspan="6">نقطة البيع والتشخيص</td></tr>
+      <tr><td>البيع في نقطة البيع</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td></tr>
+      <tr><td>الموافقة على استرجاع / إلغاء (PIN)</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td></tr>
+      <tr><td>صفحة التشخيص وسجل التدقيق <span style="color:var(--gold);">جديد</span></td><td class="y">✔</td><td class="y">✔</td><td class="n">✘</td><td class="n">✘</td><td class="n">✘</td></tr>
+    </tbody>
+  </table>
+  <p class="note">الكاشير لا يصل إلى أي شاشة إدارية في لوحة التحكم، لذلك كل صفوفه ✘ ما عدا ما يخص نقطة البيع.</p>
+</section>
+
+<!-- ══ Gaps ═══════════════════════════════════════════════════ -->
+<section class="page">
+  <h2>خطة إضافة مستوى «مالك» جديد (Owner)</h2>
+  <div class="callout">
+    <p><strong>الوضع الحالي:</strong> يوجد مالك واحد فقط لكل متجر، يُنشأ تلقائياً عند فتح الحساب لأول مرة. لا توجد حالياً أي طريقة من داخل لوحة التحكم لترقية شخص آخر إلى «مالك» — لا في قائمة الدعوة ولا في تعديل صلاحية عضو موجود. هذا قرار تصميمي مقصود لحماية الحساب (شخص واحد فقط يملك أعلى صلاحية غير قابلة للسحب من نفسه).</p>
+  </div>
+
+  <p class="lead">إذا كان الهدف إضافة مالك ثانٍ (شريك عمل مثلاً)، هذه خطة آمنة لتفعيل ذلك دون المخاطرة بأمان الحساب:</p>
+
+  <div class="step"><div class="num">١</div><div class="txt"><b>تحديد نوع الحاجة أولاً</b> — هل المطلوب «مالك ثانٍ فعلي» (يقدر يحذف أو يعدّل أي شيء بما فيه المالك الآخر)، أو فقط «صلاحيات أدمن كاملة لكن بدون الإعدادات الحساسة»؟ الحالة الثانية محلولة أصلاً بدور Admin الموجود. يُفصّل تأكيد هذه النقطة قبل البدء بالتنفيذ.</div></div>
+
+  <div class="step"><div class="num">٢</div><div class="txt"><b>إجراء «ترقية إلى مالك» محمي بخطوة تأكيد إضافية</b> — إضافة زر خاص (وليس مجرد خيار عادي بقائمة الأدوار) يظهر فقط للمالك الحالي، يطلب منه إعادة إدخال كلمة المرور أو رمز تأكيد قبل تنفيذ الترقية، بما إن هذا إجراء لا رجعة فيه وحساس.</div></div>
+
+  <div class="step"><div class="num">٣</div><div class="txt"><b>السماح بأكثر من مالك واحد في قاعدة البيانات</b> — من الناحية التقنية هذا غير ممنوع حالياً (لا يوجد قيد «مالك واحد فقط»)، لكن كل الواجهات مبنية على افتراض وجود مالك واحد ظاهر فقط. يحتاج تحديثاً بسيطاً لعرض «كل المُلاك» في صفحة الفريق بدل افتراض صف واحد فقط.</div></div>
+
+  <div class="step"><div class="num">٤</div><div class="txt"><b>سجل تدقيق (Audit Log) لكل ترقية</b> — أي عملية ترقية لمالك جديد تُسجّل تلقائياً (من قام بالترقية، لمن، متى) حتى يكون هناك أثر واضح لهذا القرار الحساس. البنية التحتية لتسجيل هوية المنفّذ صارت جاهزة بعد تحديث 16-09-2026.</div></div>
+
+  <div class="step"><div class="num">٥</div><div class="txt"><b>توضيح ما الذي يبقى محصوراً بـ«المالك الأساسي» فقط (اختياري)</b> — حتى مع وجود أكثر من مالك، ممكن نحصر بعض الإجراءات شديدة الحساسية (مثل حذف الحساب بالكامل أو تغيير بيانات الفوترة) بالمالك الذي أنشأ الحساب تحديداً، وليس أي «مالك» لاحق — قرار عملي يعتمد على مستوى الثقة المطلوب.</div></div>
+
+  <p class="lead" style="margin-top:20px;">هذه الخطوات الخمس تمثل تصميم الحل من الناحية العملية. التنفيذ الفعلي (كود) يبدأ بعد تأكيد نقطة ١ أعلاه، لأنها تحدد حجم العمل الفعلي المطلوب.</p>
+
+  <footer>Elite Collection — دليل داخلي لصلاحيات نظام لوحة التحكم الإدارية ونقطة البيع. للاستخدام الداخلي فقط.<br>آخر تحديث: 16-09-2026 · المصدر: <code>docs/33-user-roles-guide.html</code></footer>
+</section>
+
+</body>
+</html>

@@ -254,6 +254,11 @@ single gallery images of 7 MB and 17 MB. Repair with
 
 ### Admin — Orders (`/api/admin/orders`)
 
+> **Role gate (2026-09):** `/admin/orders` and `/admin/customers` are mounted behind `requireWriteRole(['owner','admin','manager'])` (`server/middleware/require-write-role.js`) in addition to `requireAuth()`. GET/HEAD/OPTIONS stay open to any signed-in user; every mutation is 403 for a `viewer`. Previously a viewer could refund an order, cancel it, or delete a customer.
+>
+> **Shipment joins (2026-09):** both list queries and the customer order-history query use a `LEFT JOIN LATERAL … LIMIT 1` instead of a plain `LEFT JOIN shipments`. `shipments.order_id` has no unique index, so an order with both a manual and an NBOX shipment previously appeared twice while `total` used `COUNT(DISTINCT o.id)` — page contents and count disagreed and LIMIT/OFFSET drifted.
+
+
 See `server/routes/admin-orders.route.js`. All endpoints require an active admin session.
 
 **Idempotency:** `POST /` accepts an optional `idempotencyKey` body field. If a key is supplied and an order with that key already exists for the tenant, the existing order is returned (HTTP 200) without creating a duplicate. The key is stored in `orders.idempotency_key` (unique per tenant, nullable — enforced by `idx_orders_idempotency`).
@@ -268,12 +273,12 @@ See `server/routes/admin-orders.route.js`. All endpoints require an active admin
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/admin/orders` | List orders with server-side pagination and filtering. Query params: `page` (0-based, default 0), `limit` (default 50, max 200), `payment` (paid / pending / refunded / failed — maps to DB enum values automatically), `fulfillment` (awaiting / processing / shipped / delivered / returned), `from` (YYYY-MM-DD), `to` (YYYY-MM-DD), `q` (searches customer name, public number, email). Returns `{ orders[], total, page, limit, pages }`. |
-| `GET` | `/api/admin/orders/:id` | Single order by DB UUID or `public_number`; includes items (with `img`), timeline, notes |
+| `GET` | `/api/admin/orders` | List orders with server-side pagination, filtering and sorting. Query params: `page` (0-based, default 0), `limit` (default 50, max 200), `payment` (paid / pending / refunded / failed — maps to DB enum values automatically), `fulfillment` (awaiting / processing / shipped / delivered / returned), `from` (YYYY-MM-DD), `to` (YYYY-MM-DD), `q` (searches customer name, public number, email), `sort` + `dir`. **Sorting (2026-09)** is applied server-side over the whole result set; `sort` is whitelisted against `ORDER_SORTS` (id / date / customer / total / itemsCount / payment / fulfillment) and anything else falls back to `placed_at DESC`. Returns `{ orders[], total, page, limit, pages }`. List rows carry **no** `timeline` / `notes` keys — see the detail endpoint. |
+| `GET` | `/api/admin/orders/:id` | Single order by DB UUID or `public_number`; includes items (with `img`), timeline, notes, and `delivery` (carrier / service / trackingNumber / trackingUrl / shippedAt / deliveredAt / eta). `delivery` is **absent** when no shipment is booked, so the invoice omits the block rather than printing an empty one. |
 | `POST` | `/api/admin/orders` | Create order. Body: `{ customerName, items[], idempotencyKey?, customerId?, customerEmail?, customerPhone?, shippingAddress?, payment?, fulfillment?, total? }`. Validates `customerId` existence if provided. |
-| `PATCH` | `/api/admin/orders/:id/status` | Update payment/fulfillment status; optionally sets `trackingNumber`. Appends timeline entry. If `payment=paid`, triggers NBOX shipment booking (non-fatal on failure — stored in `orders.metadata.nbox.bookingFailedAt` / `bookingError`). |
+| `PATCH` | `/api/admin/orders/:id/status` | Update payment/fulfillment status; optionally sets `trackingNumber`. Appends a timeline entry carrying `actor_user_id`. Stamps `orders.cancelled_at` when the order becomes cancelled. `payment` / `fulfillment` / `status` / `timelineKind` are validated against the DB enums and return **422** (not a raw 500) when out of range. If `payment=paid`, triggers NBOX shipment booking (non-fatal on failure — stored in `orders.metadata.nbox.bookingFailedAt` / `bookingError`). |
 | `POST` | `/api/admin/orders/:id/rebook-delivery` | Retry NBOX delivery booking for a paid order. Clears previous `bookingFailedAt`/`bookingError` flags, then calls `bookNboxForPaidOrder`. Returns full updated order; 409 if not paid; 502 if NBOX call fails. |
-| `POST` | `/api/admin/orders/:id/notes` | Add an internal note. Body: `{ body }`. Also appends a `note` timeline entry. |
+| `POST` | `/api/admin/orders/:id/notes` | Add an internal note. Body: `{ body }`. Records `author_user_id` and appends a `note` timeline entry with `actor_user_id`; the detail endpoint reads the author's real name back instead of the old hardcoded `Admin` / `AD`. |
 
 ### Admin — Customers (`/api/admin/customers`)
 
@@ -287,11 +292,11 @@ See `server/routes/admin-customers.route.js`. All endpoints require an active ad
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/admin/customers` | List all active (non-deleted) customers with live order stats |
+| `GET` | `/api/admin/customers` | Paginated, searchable, sortable list of active (non-deleted) customers with live order stats. Query params: `page`, `limit` (default 50, max 200), `q` (name / email / city / phone), `sort` + `dir` (whitelisted against `CUSTOMER_SORTS`: name / email / city / orders / ltv / sizePref / lastOrder / joined). Returns `{ customers[], total, page, limit, pages }`. **Breaking change (2026-09):** previously returned a bare unbounded array. |
 | `GET` | `/api/admin/customers/:id` | Single customer with live order stats |
 | `GET` | `/api/admin/customers/:id/orders` | Customer's full order history (matches by `customer_id` OR `customer_email`) |
 | `POST` | `/api/admin/customers` | Upsert customer by email. If email already exists with `deleted_at`, resets `deleted_at = NULL` (restore). Body: `{ name, email, city?, sizePref?, notes?, phone? }` |
-| `PATCH` | `/api/admin/customers/:id` | Update customer. Body: `{ name?, email?, city?, sizePref?, notes?, phone? }` |
+| `PATCH` | `/api/admin/customers/:id` | Update customer. Body: `{ name?, email?, city?, sizePref?, notes?, phone? }`. The SET list is built from the keys actually present, so **a field can be cleared** by sending `''`; the previous blanket `COALESCE` silently kept the old value. Blanking the required `name` / `email` returns 422. |
 | `DELETE` | `/api/admin/customers/:id` | Soft-delete — sets `deleted_at = now()`. Order history preserved. |
 | `PATCH` | `/api/admin/customers/:id/restore` | Restore a soft-deleted customer — sets `deleted_at = NULL` |
 

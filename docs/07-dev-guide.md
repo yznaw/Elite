@@ -285,6 +285,59 @@ this.clientLogger.logError('pos-client', error, { code: 'PRINT_FAILED' });
 ```
 `log()`/`logError()` are fire-and-forget: never `await` them, and never call them in a way that can affect a sale. Entries buffer in IndexedDB (`elite-logs`, separate from the POS money database) and flush when connectivity returns, so errors that happen offline still arrive.
 
+### Update the user-roles guide (docs/33)
+
+`docs/33-user-roles-guide.html` is the source; the PDF is generated, never
+hand-edited.
+
+```bash
+cd client && node scripts/build-roles-guide-pdf.mjs
+```
+
+The rendered guide is the team's copy and states **policy** — what each role is
+permitted to do. It deliberately says nothing about how far the code enforces
+that policy.
+
+Where the two differ, the detail lives in the HTML comment at the top of the
+source, which never renders. Keep it there: do not add a "known gaps" section
+to the document, and do not hide one with `display:none` either — an internal
+finding one CSS change away from the team's PDF is not contained.
+
+Before changing a table row, probe it rather than reading the mounts: sign in as
+each role and check whether the endpoint returns 403. A 404 or 422 means the
+role gate let the request through and only the handler rejected it; **only 403
+is a block.** Update the comment whenever a gap opens or closes.
+
+### Add a server-side sortable column to an admin list
+
+Sorting a page in the browser while the header arrow implies a full sort is worse
+than offering no arrow at all, so admin lists sort on the server.
+
+1. Add the column to the route's sort whitelist — `ORDER_SORTS` in
+   `server/routes/admin-orders.route.js`, `CUSTOMER_SORTS` in
+   `server/routes/admin-customers.route.js`. **Never interpolate `req.query.sort`
+   into SQL**; an unrecognised key must fall back to the default ordering.
+2. Pass `sort` / `dir` through the service's list params.
+3. On the component's `<ap-sortable-table>`, set `[serverSort]="true"` and handle
+   `(sortChange)`: store the key and direction, reset `page` to 0, reload.
+
+`SortableTableComponent` still sorts locally by default, so pages that load their
+whole dataset at once need no change.
+
+### Print something (invoice, receipt, report) from the admin portal
+
+Render the HTML and print it from a hidden same-page `<iframe>`; see
+`printInvoice()` in `pages/orders/order-drawer.component.ts`.
+
+- **Do not use `window.open`.** Pop-up and ad blockers silently kill it, and the
+  only signal is a toast the user has to act on.
+- **Do not reach for a PDF library.** `pdfkit` / `jsPDF` both need manual Arabic
+  font embedding and neither does RTL shaping properly. The browser's print
+  dialog produces a PDF via "Save as PDF" and lays out Arabic correctly.
+- Set `lang` and `dir` on the printed document from `LocaleService`, and drive
+  `text-align` from the direction rather than hardcoding `left`.
+- Clean the iframe up on `afterprint`, with a timeout as a backstop.
+
 ### Add a New i18n Key
 
 1. Open the appropriate `i18n/strings.ts` file
