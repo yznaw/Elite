@@ -11,6 +11,7 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { AdminOrdersService, OrderStatusPayload } from '../../services/admin-orders.service';
 import { Order, OrderFulfillment, OrderTimelineEntry, QAR } from '../../models';
+import { NO_IMAGE_LOGO } from '../../utils/no-image';
 
 const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
   placed:     'orderModal.tl.placed',
@@ -169,7 +170,7 @@ function escapeHtml(value: unknown): string {
                 @if (it.img) {
                   <img [src]="it.img" [alt]="it.n" style="width:100%;height:100%;object-fit:cover;" loading="lazy"/>
                 } @else {
-                  <div style="width:100%;height:100%;background:linear-gradient(135deg,#e8eaf2,#dde1ee);"></div>
+                  <img class="no-img" [src]="noImageLogo" [alt]="it.n" style="background:var(--surface);"/>
                 }
               </div>
               <div class="grow">
@@ -448,6 +449,7 @@ function escapeHtml(value: unknown): string {
   `]
 })
 export class OrderDrawerComponent {
+  readonly noImageLogo = NO_IMAGE_LOGO;
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);

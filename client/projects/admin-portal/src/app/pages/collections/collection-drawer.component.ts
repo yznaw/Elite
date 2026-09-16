@@ -18,6 +18,7 @@ import { AdminCollectionsService } from '../../services/admin-collections.servic
 import { AdminProductsService } from '../../services/admin-products.service';
 import { ApiClient } from '../../services/api-client.service';
 import { MediaUploadService } from '../../services/media-upload.service';
+import { NO_IMAGE_LOGO, onProductImgError } from '../../utils/no-image';
 
 interface FormShape {
   title: string;
@@ -349,7 +350,11 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                        [class.drag-over]="dragOverIndex() === i">
                     <span class="reorder-handle"><ap-icon name="drag" [size]="14"/></span>
                     <span class="reorder-pos">{{ i + 1 }}</span>
-                    <img [src]="p.image" [alt]="p.name" class="reorder-thumb"/>
+                    @if (p.image) {
+                      <img [src]="p.image" [alt]="p.name" class="reorder-thumb" (error)="onImgError($event)"/>
+                    } @else {
+                      <img class="reorder-thumb no-img" [src]="noImageLogo" [alt]="p.name" style="background:var(--surface);"/>
+                    }
                     <div class="reorder-info">
                       <div class="strong small" style="font-size:13px;">{{ p.name }}</div>
                       <div class="muted mono" style="font-size:11px;">{{ p.sku }}</div>
@@ -372,7 +377,11 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                        (dragover)="onProductDragOver($event)"
                        (drop)="onProductDrop(i, $event)">
                     <div class="prod-img">
-                      <img [src]="p.image" [alt]="p.name"/>
+                      @if (p.image) {
+                        <img [src]="p.image" [alt]="p.name" (error)="onImgError($event)"/>
+                      } @else {
+                        <img class="no-img" [src]="noImageLogo" [alt]="p.name"/>
+                      }
                       <span class="corner-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
                       <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)">
                         <ap-icon name="x" [size]="12"/>
@@ -444,7 +453,11 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
             @for (p of pickerProducts(); track p.id) {
               <div class="picker-row" [class.selected]="form().productIds.includes(p.id)" (click)="toggleProduct(p.id)">
                 <input type="checkbox" [checked]="form().productIds.includes(p.id)" style="pointer-events:none;flex-shrink:0;"/>
-                <img [src]="p.image" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;"/>
+                @if (p.image) {
+                  <img [src]="p.image" [alt]="p.name" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;" (error)="onImgError($event)"/>
+                } @else {
+                  <img class="no-img" [src]="noImageLogo" [alt]="p.name" style="width:36px;height:36px;border-radius:6px;flex-shrink:0;background:var(--surface);"/>
+                }
                 <div style="flex:1;min-width:0;">
                   <div class="strong" style="font-size:13px;">{{ p.name }}</div>
                   <div class="muted small mono">{{ p.sku }}</div>
@@ -664,6 +677,9 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
   `]
 })
 export class CollectionDrawerComponent implements OnInit, OnDestroy {
+  readonly noImageLogo = NO_IMAGE_LOGO;
+  onImgError(e: Event): void { onProductImgError(e); }
+
   private readonly _collections = signal<Collection[]>([]);
   private readonly _currentId = signal<string>('');
 

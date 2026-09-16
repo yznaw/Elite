@@ -16,6 +16,7 @@ import { Collection, Product, QAR } from '../../models';
 import { StorageService } from '../../services/storage.service';
 import { StoreConfigService } from '../../services/store-config.service';
 import { COLLECTIONS } from '../../data/mock';
+import { NO_IMAGE_LOGO, onProductImgError } from '../../utils/no-image';
 // import { Product, QAR } from '../../models';
 
 type SortKey = 'name-az' | 'name-za' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'newest';
@@ -304,9 +305,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                     <img [src]="p.image" [alt]="p.name" (error)="onImgError($event)"
                          [style.filter]="p.hidden && !selectionMode() ? 'grayscale(0.6)' : null"/>
                   } @else {
-                    <div class="prod-img-empty">
-                      <ap-icon name="catalog" [size]="32"/>
-                    </div>
+                    <img class="no-img" [src]="noImageLogo" [alt]="p.name"/>
                   }
                   @if (!selectionMode()) {
                     @if (p.hidden) {
@@ -370,9 +369,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   @if (p.image) {
                     <img class="lv-thumb" [src]="p.image" [alt]="p.name" (error)="onImgError($event)"/>
                   } @else {
-                    <div class="lv-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--bg-2);color:var(--muted);">
-                      <ap-icon name="catalog" [size]="16"/>
-                    </div>
+                    <img class="lv-thumb no-img" style="background:var(--surface);" [src]="noImageLogo" [alt]="p.name"/>
                   }
                 </div>
                 <div class="lv-c-name">
@@ -575,11 +572,6 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     .result-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 
     /* ── Card grid (existing) ── */
-    .prod-img-empty {
-      width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
-      background: var(--bg-2); color: var(--muted);
-    }
     .prod-card { position: relative; cursor: pointer; transition: outline .1s; }
     .prod-card.selected { outline: 2px solid #c9a84c; outline-offset: 2px; border-radius: 10px; }
     .sel-check {
@@ -719,6 +711,7 @@ export class CatalogComponent implements OnInit {
   private readonly storage = inject(StorageService);
   private readonly storeConfig = inject(StoreConfigService);
   readonly t = (k: string): string => this.i18n.t(k);
+  readonly noImageLogo = NO_IMAGE_LOGO;
 
   readonly QAR = QAR;
   readonly collections = signal<Collection[]>([]);
@@ -1169,5 +1162,5 @@ export class CatalogComponent implements OnInit {
     return `${p.stock} ${this.t('catalog.inStock')}`;
   }
 
-  onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
+  onImgError(e: Event): void { onProductImgError(e); }
 }

@@ -25,6 +25,7 @@ import { StorageService } from '../../services/storage.service';
 import { LabelPrinterService, arabicPrice } from '../../services/label-printer.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
 import { formatVariantSku, variantBaseSku } from '../../utils/variant-sku';
+import { NO_IMAGE_LOGO, onProductImgError } from '../../utils/no-image';
 
 interface FormShape {
   name: string; nameAr: string; sku: string; brand: string; collectionIds: string[];
@@ -190,7 +191,11 @@ function readPreview(file: File): Promise<string> {
         <!-- Image preview + key facts -->
         <div class="mb-24" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           <div class="prod-img" style="border-radius:10px;">
-            <img [src]="primaryImage()" [alt]="form().name" (error)="onImgError($event)"/>
+            @if (primaryImage()) {
+              <img [src]="primaryImage()" [alt]="form().name" (error)="onImgError($event)"/>
+            } @else {
+              <img class="no-img" [src]="noImageLogo" [alt]="form().name"/>
+            }
             @if (form().images.length > 1) {
               <span class="corner-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">{{ form().images.length }}</span>
             }
@@ -951,6 +956,8 @@ function readPreview(file: File): Promise<string> {
                   <span class="related-thumb">
                     @if (productThumb(p)) {
                       <img [src]="productThumb(p)" [alt]="p.name" (error)="onImgError($event)" />
+                    } @else {
+                      <img class="no-img" [src]="noImageLogo" [alt]="p.name" />
                     }
                   </span>
                   <span class="related-copy">
@@ -2186,6 +2193,8 @@ function readPreview(file: File): Promise<string> {
   `]
 })
 export class ProductDrawerComponent implements OnInit, OnDestroy {
+  readonly noImageLogo = NO_IMAGE_LOGO;
+
   /** Internal signals — reactive so `currentIndex` / `canPrev` / `canNext`
       re-run when the inputs change. Plain @Input properties don't trigger
       computed re-evaluation. */
@@ -3826,5 +3835,5 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   firstName(name: string): string { return name.split(' ')[0] || name; }
-  onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
+  onImgError(e: Event): void { onProductImgError(e); }
 }
