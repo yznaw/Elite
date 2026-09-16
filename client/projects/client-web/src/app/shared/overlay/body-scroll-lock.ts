@@ -74,6 +74,17 @@ export class BodyScrollLock {
     document.body.style.width = this.previousBodyWidth;
     document.documentElement.style.overflow = this.previousHtmlOverflow;
     document.body.style.paddingInlineEnd = this.previousBodyPaddingInlineEnd;
-    window.scrollTo(0, this.scrollY);
+
+    /*
+     * `html { scroll-behavior: smooth }` is set globally, and pinning the body collapses the
+     * document so the browser is sitting at the top by the time we unpin. Restoring with a
+     * plain scrollTo therefore *animated* the page from the top back down to wherever the
+     * customer was, which reads as the page throwing them to the top and crawling back every
+     * time they close a size sheet. Restore instantly instead.
+     */
+    const previousScrollBehavior = document.documentElement.style.scrollBehavior;
+    document.documentElement.style.scrollBehavior = 'auto';
+    window.scrollTo({ top: this.scrollY, left: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.style.scrollBehavior = previousScrollBehavior;
   }
 }

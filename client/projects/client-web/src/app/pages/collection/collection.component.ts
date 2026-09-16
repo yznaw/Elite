@@ -234,15 +234,24 @@ export class CollectionComponent implements OnInit, OnDestroy {
     return collection.children.length === 0 || this.activeSubCollectionKey() !== null;
   });
 
-  /** Total unique product count across the parent + all its sub-collections. */
-  readonly activeCollectionTotalCount = computed((): number => {
-    const col = this.activeCollection();
-    if (!col) return 0;
+  /**
+   * Unique products in a collection, counting everything in its sub-collections.
+   *
+   * A parent such as Men keeps no products of its own, so counting only its direct links
+   * advertised "0 pieces" on a collection holding forty of them.
+   */
+  collectionTotalCount(collection: { productIds: string[]; children?: { productIds: string[] }[] }): number {
     const ids = new Set<string>([
-      ...col.productIds,
-      ...(col.children ?? []).flatMap((c) => c.productIds),
+      ...collection.productIds,
+      ...(collection.children ?? []).flatMap((child) => child.productIds),
     ]);
     return ids.size;
+  }
+
+  /** Total for the collection currently being viewed. */
+  readonly activeCollectionTotalCount = computed((): number => {
+    const col = this.activeCollection();
+    return col ? this.collectionTotalCount(col) : 0;
   });
 
   readonly isCollectionLanding = computed(() => !this.activeCollectionKey());

@@ -12,9 +12,17 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(
       routes,
+      /*
+       * `scrollPositionRestoration` is deliberately off. It scrolls with the browser's
+       * scroller, which obeys `html { scroll-behavior: smooth }` from styles.scss, so
+       * arriving on a new page from the footer of a long one *animated* the whole way up:
+       * for the first half second you were still looking at the bottom of the new page, and
+       * a single touch cancelled the animation and left you stranded mid-page. AppComponent
+       * scrolls to the top itself, instantly, and only when the path actually changes.
+       */
       withInMemoryScrolling({
         anchorScrolling: 'enabled',
-        scrollPositionRestoration: 'top',
+        scrollPositionRestoration: 'disabled',
       }),
     ),
     provideHttpClient(withFetch()),

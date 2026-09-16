@@ -34,7 +34,10 @@
                   (error)="onImgError($event)"
                 />
               }
-              <span>{{ pieceCount(collection.productIds.length) }}</span>
+              <!-- Counts sub-collections too: a parent such as Men holds its products in
+                   its children and read "0 pieces" while holding forty. This matches the
+                   number shown in the collection's own header. -->
+              <span>{{ pieceCount(collectionTotalCount(collection)) }}</span>
               <strong>{{ collection.title }}</strong>
             </button>
           }
