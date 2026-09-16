@@ -37,6 +37,7 @@ const adminDiagnosticsRouter = require('./admin-diagnostics.route');
 const adminInventoryRouter = require('./admin-inventory.route');
 const { router: reviewsPublicRouter, generalRouter: reviewsGeneralRouter, adminRouter: reviewsAdminRouter } = require('./product-reviews.route');
 const { requireAuth } = require('../middleware/require-auth');
+const { requireWriteRole } = require('../middleware/require-write-role');
 
 const router = Router();
 
@@ -68,14 +69,19 @@ router.use('/pos', posRouter);
 router.use('/client-logs', clientLogsRouter);
 
 // ─── Admin routes — require an authenticated session ────────────────────────
+const ADMIN_WRITE_ROLES = ['owner', 'admin', 'manager'];
+
 const admin = Router();
 admin.use(requireAuth());
 admin.use('/products', adminProductsRouter);
 // Same authenticated catalog access as /products.
 admin.use('/restock-requests', require('./admin-restock-requests.route'));
 admin.use('/collections', adminCollectionsRouter);
-admin.use('/customers', adminCustomersRouter);
-admin.use('/orders', adminOrdersRouter);
+// Anyone signed in may read orders and customers, but changing them (refund,
+// cancel, fulfil, delete a customer) is owner/admin/manager only. Previously
+// these inherited requireAuth() alone, so a viewer could refund an order.
+admin.use('/customers', requireWriteRole(ADMIN_WRITE_ROLES), adminCustomersRouter);
+admin.use('/orders', requireWriteRole(ADMIN_WRITE_ROLES), adminOrdersRouter);
 admin.use('/media', adminMediaRouter);
 admin.use('/storefront', adminStorefrontRouter);
 admin.use('/storefront-content', storefrontContentRouter.adminRouter);

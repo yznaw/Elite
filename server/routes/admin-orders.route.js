@@ -9,7 +9,11 @@ const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError
 
 const router = Router();
 
-function mapOrder(row) {
+// `detailed` distinguishes the single-order endpoint (which loads timeline and
+// notes) from the list endpoint (which does not). The list must leave both
+// undefined rather than empty so the client can tell "not loaded yet" from
+// "genuinely has none" and render a loading state instead of a blank history.
+function mapOrder(row, detailed = false) {
   const shippingAddress = row.shipping_address || {};
   return {
     id: row.public_number,
@@ -32,8 +36,28 @@ function mapOrder(row) {
       row.metadata?.nbox?.bookingFailedAt && !row.metadata?.nbox?.bookedAt,
     ),
     nboxBookingError: row.metadata?.nbox?.bookingError || undefined,
-    timeline: row.timeline || [],
-    notes: row.notes || [],
+    delivery: mapDelivery(row),
+    ...(detailed ? { timeline: row.timeline || [], notes: row.notes || [] } : {}),
+  };
+}
+
+/** Shipment + carrier details, or undefined when nothing has been booked yet.
+    Drives the invoice's delivery block, so it must stay absent rather than
+    empty when there is no shipment. */
+function mapDelivery(row) {
+  const quote = row.metadata?.nbox?.quote || null;
+  const hasShipment = Boolean(row.carrier || row.tracking_number || row.shipped_at);
+  if (!hasShipment && !quote) return undefined;
+
+  const iso = (value) => (value ? new Date(value).toISOString() : undefined);
+  return {
+    carrier: row.carrier || (quote ? 'nbox' : undefined),
+    service: row.service || quote?.serviceName || undefined,
+    trackingNumber: row.tracking_number || undefined,
+    trackingUrl: row.tracking_url || undefined,
+    shippedAt: iso(row.shipped_at),
+    deliveredAt: iso(row.delivered_at),
+    eta: quote?.eta || undefined,
   };
 }
 
@@ -44,6 +68,22 @@ function formatAddress(address) {
     address.region,
     address.country,
   ].filter(Boolean).join(', ');
+}
+
+// Mirrors the Postgres enums in 001_initial_schema.sql. Without these an
+// unexpected body value reached the UPDATE as a raw cast failure and surfaced
+// as a 500 instead of a 422 naming the bad field.
+const PAYMENT_STATUSES     = new Set(['pending', 'authorized', 'paid', 'failed', 'refunded', 'partially_refunded']);
+const FULFILLMENT_STATUSES = new Set(['awaiting', 'processing', 'shipped', 'delivered', 'cancelled', 'returned']);
+const ORDER_STATUSES       = new Set(['placed', 'confirmed', 'processing', 'completed', 'cancelled', 'refunded', 'returned']);
+const TIMELINE_KINDS       = new Set(['placed', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded', 'returned', 'note']);
+
+/** Returns an error string when `value` is present but not a member of `allowed`. */
+function invalidEnum(field, value, allowed) {
+  if (value === undefined || value === null || value === '') return null;
+  return allowed.has(String(value))
+    ? null
+    : `${field} must be one of: ${[...allowed].join(', ')}.`;
 }
 
 function mapPayment(status) {
@@ -57,18 +97,45 @@ async function loadAdminOrder(client, tenantId, id) {
     `
       SELECT o.*,
         (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
-        s.tracking_number,
+        s.carrier, s.service, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail) ORDER BY t.occurred_at) FROM order_timeline_entries t WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', to_char(n.created_at, 'YYYY-MM-DD HH24:MI'), 'author', 'Admin', 'initials', 'AD', 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n WHERE n.order_id = o.id), '[]'::jsonb) AS notes
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail, 'actor', tu.full_name) ORDER BY t.occurred_at) FROM order_timeline_entries t LEFT JOIN admin_users tu ON tu.id = t.actor_user_id WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', to_char(n.created_at, 'YYYY-MM-DD HH24:MI'), 'author', COALESCE(nu.full_name, 'Admin'), 'initials', COALESCE(nu.initials, 'AD'), 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n LEFT JOIN admin_users nu ON nu.id = n.author_user_id WHERE n.order_id = o.id), '[]'::jsonb) AS notes
       FROM orders o
-      LEFT JOIN shipments s ON s.order_id = o.id
+      LEFT JOIN LATERAL (
+        SELECT sh.carrier, sh.service, sh.tracking_number, sh.tracking_url,
+               sh.shipped_at, sh.delivered_at
+          FROM shipments sh
+         WHERE sh.order_id = o.id
+         ORDER BY (sh.tracking_number IS NOT NULL) DESC, sh.created_at DESC
+         LIMIT 1
+      ) s ON TRUE
       WHERE o.tenant_id = $1 AND (o.id::text = $2 OR o.public_number = $2)
-      GROUP BY o.id, s.tracking_number
     `,
     [tenantId, id],
   );
-  return result.rowCount === 0 ? null : mapOrder(result.rows[0]);
+  return result.rowCount === 0 ? null : mapOrder(result.rows[0], true);
+}
+
+// Whitelist of sortable columns. The table header offered click-to-sort but the
+// server always ordered by placed_at DESC, so the arrow sorted only the rows
+// that happened to be on the current page.
+const ORDER_SORTS = {
+  id:          'o.public_number',
+  date:        'o.placed_at',
+  customer:    'o.customer_name',
+  total:       'o.total_cents',
+  itemsCount:  'items_count',
+  payment:     'o.payment_status',
+  fulfillment: 'o.fulfillment_status',
+};
+
+function orderOrderBy(sort, dir) {
+  const column = ORDER_SORTS[sort];
+  if (!column) return 'o.placed_at DESC';
+  const direction = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  // Tie-break on placed_at so paging is stable across equal values.
+  return `${column} ${direction} NULLS LAST, o.placed_at DESC`;
 }
 
 router.get('/', asyncHandler(async (req, res) => {
@@ -108,6 +175,7 @@ router.get('/', asyncHandler(async (req, res) => {
     }
 
     const whereClause = where.join(' AND ');
+    const orderBy = orderOrderBy(req.query.sort, req.query.dir);
 
     // Total count for pagination metadata
     const countResult = await client.query(
@@ -122,20 +190,26 @@ router.get('/', asyncHandler(async (req, res) => {
         SELECT
           o.*,
           (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
-          s.tracking_number,
+          s.carrier, s.service, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
           COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items
         FROM orders o
-        LEFT JOIN shipments s ON s.order_id = o.id
+        LEFT JOIN LATERAL (
+          SELECT sh.carrier, sh.service, sh.tracking_number, sh.tracking_url,
+                 sh.shipped_at, sh.delivered_at
+            FROM shipments sh
+           WHERE sh.order_id = o.id
+           ORDER BY (sh.tracking_number IS NOT NULL) DESC, sh.created_at DESC
+           LIMIT 1
+        ) s ON TRUE
         WHERE ${whereClause}
-        GROUP BY o.id, s.tracking_number
-        ORDER BY o.placed_at DESC
+        ORDER BY ${orderBy}
         LIMIT $${params.length - 1} OFFSET $${params.length}
       `,
       params,
     );
 
     ok(res, {
-      orders: result.rows.map(mapOrder),
+      orders: result.rows.map((row) => mapOrder(row)),
       total,
       page,
       limit,
@@ -255,10 +329,21 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.patch('/:id/status', asyncHandler(async (req, res) => {
+  const errors = [
+    invalidEnum('payment', req.body.payment, PAYMENT_STATUSES),
+    invalidEnum('fulfillment', req.body.fulfillment, FULFILLMENT_STATUSES),
+    invalidEnum('status', req.body.status, ORDER_STATUSES),
+    invalidEnum('timelineKind', req.body.timelineKind, TIMELINE_KINDS),
+  ].filter(Boolean);
+  if (errors.length > 0) return validationError(res, errors);
+
   const client = await db.pool.connect();
   let shouldBookNbox = false;
   let updatedOrderId = null;
   let tenantId = null;
+  // Everything after COMMIT (NBOX booking, receipt email, stock helpers) runs
+  // outside the transaction; rolling back there would target a non-transaction.
+  let committed = false;
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
@@ -279,7 +364,10 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
         SET payment_status = COALESCE($3, payment_status),
             paid_at = CASE WHEN $3 = 'paid' THEN COALESCE(paid_at, now()) ELSE paid_at END,
             fulfillment_status = COALESCE($4, fulfillment_status),
-            status = COALESCE($5, status)
+            status = COALESCE($5, status),
+            cancelled_at = CASE WHEN $5 = 'cancelled' OR $4 = 'cancelled'
+                                THEN COALESCE(cancelled_at, now()) ELSE cancelled_at END,
+            updated_at = now()
         WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)
         RETURNING *
       `,
@@ -323,10 +411,19 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
     }
 
     await client.query(
-      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
-      [tenant.id, order.rows[0].id, req.body.timelineKind || 'note', req.body.detail || 'Status updated'],
+      `INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, actor_user_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        tenant.id,
+        order.rows[0].id,
+        req.body.timelineKind || 'note',
+        req.body.detail || 'Status updated',
+        // Without this you cannot tell who refunded or cancelled an order.
+        req.user?.id || null,
+      ],
     );
     await client.query('COMMIT');
+    committed = true;
     if (shouldBookNbox) {
       try {
         const deliveryResult = await bookNboxForPaidOrder(client, tenantId, updatedOrderId);
@@ -377,7 +474,7 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
 
     ok(res, await loadAdminOrder(client, tenant.id, req.params.id), 'Order status updated.');
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
     client.release();
@@ -431,12 +528,19 @@ router.post('/:id/notes', asyncHandler(async (req, res) => {
     const order = await client.query('SELECT id FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)', [tenant.id, req.params.id]);
     if (order.rowCount === 0) return notFound(res, 'Order not found.');
     const note = await client.query(
-      'INSERT INTO order_notes (tenant_id, order_id, body) VALUES ($1, $2, $3) RETURNING *',
-      [tenant.id, order.rows[0].id, body],
+      'INSERT INTO order_notes (tenant_id, order_id, body, author_user_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [tenant.id, order.rows[0].id, body, req.user?.id || null],
     );
     await client.query(
-      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
-      [tenant.id, order.rows[0].id, 'note', body.length > 80 ? `${body.slice(0, 77)}...` : body],
+      `INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, actor_user_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        tenant.id,
+        order.rows[0].id,
+        'note',
+        body.length > 80 ? `${body.slice(0, 77)}...` : body,
+        req.user?.id || null,
+      ],
     );
     created(res, note.rows[0], 'Order note added.');
   } finally {
