@@ -285,61 +285,14 @@
               }
             </div>
 
-            @if (sizePickerOpen()) {
-              <div
-                class="size-sheet"
-                role="dialog"
-                aria-modal="true"
-                [attr.aria-label]="t('product.size.label')"
-              >
-                <button
-                  type="button"
-                  class="size-sheet-backdrop"
-                  (click)="closeSizePicker()"
-                  [attr.aria-label]="t('common.close')"
-                ></button>
-                <div class="size-sheet-panel">
-                  <div class="size-sheet-head">
-                    <div>
-                      <span>{{ t("product.size.choose") }}</span>
-                      <strong>{{ t("product.size.label") }}</strong>
-                      @if (sizeSelectionError()) {
-                        <small class="size-required-message" role="alert">
-                          {{ t("product.size.required") }}
-                        </small>
-                      }
-                    </div>
-                    <button
-                      type="button"
-                      class="size-sheet-close"
-                      (click)="closeSizePicker()"
-                      [attr.aria-label]="t('common.close')"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div class="size-list">
-                    @for (s of availableSizes(); track s.size) {
-                      <button
-                        type="button"
-                        class="size-btn"
-                        [class.active]="selectedSize() === s.size"
-                        [class.unavailable]="!s.available"
-                        [class.out-of-stock]="s.available && !s.inStock"
-                        [disabled]="!s.available"
-                        [attr.aria-pressed]="selectedSize() === s.size"
-                        (click)="selectSize(s.size)"
-                      >
-                        <span class="size-value">{{ s.size }} {{ s.available && !s.inStock ? t("stock.soldOutOption") : "" }}</span>
-                        <span class="size-state" aria-hidden="true">{{
-                          selectedSize() === s.size ? "✓" : ""
-                        }}</span>
-                      </button>
-                    }
-                  </div>
-                </div>
-              </div>
-            }
+            <cw-size-sheet
+              [open]="sizePickerOpen()"
+              [sizes]="availableSizes()"
+              [selected]="selectedSize()"
+              [error]="sizeSelectionError() ? t('product.size.required') : ''"
+              (picked)="selectSize($event)"
+              (closed)="closeSizePicker()"
+            />
           }
 
           <div class="qty-row">
@@ -420,9 +373,12 @@
                 <form (submit)="submitRestockRequest($event)">
                   @if (p.sizes.length) {
                     <label for="restock-size">{{ t('product.size.label') }}</label>
-                    <select id="restock-size" [value]="restockSize() ?? ''" (change)="onRestockSizeChange($event)" required>
-                      <option value="" disabled>{{ t('stock.chooseRestockSize') }}</option>
-                      @for (s of restockSizes(); track s.size) { <option [value]="s.size">{{ s.size }} {{ t('stock.soldOutOption') }}</option> }
+                    <!-- `selected` per option rather than `[value]` on the select: the select
+                         exists before its options do, so the value binding is discarded and the
+                         browser selects the first enabled option instead of the chosen size. -->
+                    <select id="restock-size" (change)="onRestockSizeChange($event)" required>
+                      <option value="" disabled [selected]="restockSize() === null">{{ t('stock.chooseRestockSize') }}</option>
+                      @for (s of restockSizes(); track s.size) { <option [value]="s.size" [selected]="restockSize() === s.size">{{ s.size }} {{ t('stock.soldOutOption') }}</option> }
                     </select>
                   }
                   <label for="restock-email">{{

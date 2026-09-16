@@ -311,6 +311,7 @@
             } @else {
               <div class="product-grid">
                 @for (p of visibleProducts(); track p.id; let i = $index) {
+                  <div class="product-cell">
                   <article
                     class="product-tile"
                     (mouseenter)="hovered.set(p.id)"
@@ -393,6 +394,19 @@
                         >
                           {{ t("collection.quickAdd.size") }}
                         </label>
+                        @if (isSheetView()) {
+                          <button
+                            type="button"
+                            class="size-trigger"
+                            (click)="openSizeSheet(p)"
+                            [disabled]="sizeOptions(p, selectedProductColor(p)).length === 0"
+                            [attr.aria-haspopup]="'dialog'"
+                            [attr.aria-expanded]="sizeSheetTarget()?.id === p.id"
+                          >
+                            <span>{{ t("product.size.choose") }}</span>
+                            <strong>{{ selectedSize(p) ?? "—" }}</strong>
+                          </button>
+                        } @else {
                         <div class="size-select-wrap">
                           <select
                             class="size-select"
@@ -405,16 +419,17 @@
                             [attr.aria-label]="t('collection.quickAdd.size')"
                           >
                             @if (selectedSize(p) === null) {
-                              <option value="">{{ p.sizes.length ? t('stock.outOfStock') : t('stock.oneSize') }}</option>
+                              <option value="">{{ p.sizes.length ? t('product.size.choose') : t('stock.oneSize') }}</option>
                             }
                             @for (option of sizeOptions(p, selectedProductColor(p)); track option.size) {
-                              <option [value]="option.size" [disabled]="option.state === 'sold-out'">{{ option.size }} {{ option.state === 'sold-out' ? t('stock.soldOutOption') : '' }}</option>
+                              <option [value]="option.size">{{ option.size }} {{ option.state === 'sold-out' ? t('stock.soldOutOption') : '' }}</option>
                             }
                           </select>
                           <span class="size-select-arrow" aria-hidden="true"
                             >⌄</span
                           >
                         </div>
+                        }
                       </div>
 
                       @if (canPurchase(p)) {
@@ -437,13 +452,52 @@
                           <span>{{ t("collection.buyNow") }}</span>
                           <span class="quick-add-arrow">→</span>
                         </button>
+                      } @else if (cardCta(p) === 'choose-size') {
+                        <button type="button" class="quick-add notify-only" (click)="openSizeSheet(p)">
+                          {{ t('product.size.choose') }}
+                        </button>
+                        <span class="other-sizes-note">{{ t('stock.otherSizesAvailable') }}</span>
                       } @else {
-                        <button type="button" class="quick-add notify-only" (click)="notifyMe(p)">{{ t('stock.notifyMe') }}</button>
+                        <button
+                          type="button"
+                          class="quick-add notify-only"
+                          (click)="notifyMe(p)"
+                          [attr.aria-haspopup]="'dialog'"
+                          [attr.aria-expanded]="notifyTarget()?.id === p.id"
+                        >
+                          {{ selectedSize(p) !== null ? t('stock.notifyMeSize', { size: selectedSize(p) ?? '' }) : t('stock.notifyMe') }}
+                        </button>
                       }
                     </div>
                   </article>
+
+                    @if (notifyTarget()?.id === p.id) {
+                      <cw-restock-form
+                        class="card-notify"
+                        [open]="true"
+                        [product]="p"
+                        [image]="selectedProductImage(p)"
+                        [color]="selectedProductColor(p)"
+                        [hasSizes]="p.sizes.length > 0"
+                        [soldOutSizes]="soldOutSizes(p)"
+                        [initialSize]="selectedSize(p)"
+                        (backInStock)="onRestockBackInStock()"
+                        (closed)="notifyTarget.set(null)"
+                      />
+                    }
+                  </div>
                 }
               </div>
+
+              @if (sizeSheetTarget(); as sp) {
+                <cw-size-sheet
+                  [open]="true"
+                  [sizes]="sheetSizes(sp)"
+                  [selected]="selectedSize(sp)"
+                  (picked)="onSheetSizePicked(sp, $event)"
+                  (closed)="sizeSheetTarget.set(null)"
+                />
+              }
 
               @if (showMobilePagination()) {
                 <div class="mobile-pagination" [attr.aria-label]='t("collection.aria.pages")'>

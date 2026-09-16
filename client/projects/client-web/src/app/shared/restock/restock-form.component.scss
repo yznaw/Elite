@@ -1,0 +1,139 @@
+:host {
+  --rf-ink: var(--pdp-ink, #1f1c17);
+  --rf-line: var(--pdp-line, rgba(31, 28, 23, 0.1));
+  --rf-green: var(--pdp-green, #004538);
+  --rf-muted: rgba(31, 28, 23, 0.55);
+}
+
+.rf-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--rf-line);
+}
+
+.rf-thumb {
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+  background: #fff;
+  object-fit: cover;
+}
+
+.rf-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rf-identity strong {
+  overflow: hidden;
+  color: var(--rf-ink);
+  font-family: var(--ff-sans);
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-identity span {
+  color: var(--rf-muted);
+  font-family: var(--ff-sans);
+  font-size: 12px;
+}
+
+form {
+  display: grid;
+  gap: 6px;
+}
+
+.rf-label {
+  color: var(--rf-muted);
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rf-select,
+.rf-input {
+  width: 100%;
+  min-height: 46px;
+  margin-bottom: 8px;
+  padding-block: 0;
+  padding-inline: 12px;
+  border: 1px solid var(--rf-line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--rf-ink);
+  font-family: var(--ff-sans);
+  font-size: 14px;
+}
+
+.rf-select:focus-visible,
+.rf-input:focus-visible {
+  border-color: var(--rf-green);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.rf-input::placeholder {
+  /* Kept above the 4.5:1 line; the old placeholder inherited a much lighter grey. */
+  color: rgba(31, 28, 23, 0.5);
+}
+
+.rf-submit {
+  display: inline-grid;
+  place-items: center;
+  min-height: 48px;
+  padding-inline: 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--rf-green);
+  color: #f3efe4;
+  cursor: pointer;
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.rf-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.rf-submit:not(:disabled):active {
+  transform: scale(0.99);
+}
+
+.rf-error {
+  margin: 0 0 4px;
+  color: #a33a32;
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rf-success {
+  margin: 0;
+  color: var(--rf-green);
+  font-family: var(--ff-sans);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.rf-privacy {
+  margin: 6px 0 0;
+  color: var(--rf-muted);
+  font-family: var(--ff-sans);
+  font-size: 11px;
+  line-height: 1.5;
+}

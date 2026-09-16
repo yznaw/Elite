@@ -1,0 +1,30 @@
+<cw-overlay
+  variant="sheet"
+  [open]="open"
+  [eyebrow]="t('product.size.choose')"
+  [heading]="t('product.size.label')"
+  [closeLabel]="t('common.close')"
+  (closed)="closed.emit()"
+>
+  @if (error) {
+    <p class="size-required-message" role="alert">{{ error }}</p>
+  }
+
+  <div class="size-list">
+    @for (s of sizes; track s.size) {
+      <button
+        type="button"
+        class="size-row"
+        [class.active]="selected === s.size"
+        [class.unavailable]="!s.available"
+        [class.out-of-stock]="s.available && !s.inStock"
+        [disabled]="!s.available"
+        [attr.aria-pressed]="selected === s.size"
+        (click)="picked.emit(s.size)"
+      >
+        <span class="size-value">{{ s.size }} {{ s.available && !s.inStock ? t('stock.soldOutOption') : '' }}</span>
+        <span class="size-state" aria-hidden="true">{{ selected === s.size ? "✓" : "" }}</span>
+      </button>
+    }
+  </div>
+</cw-overlay>

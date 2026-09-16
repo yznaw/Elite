@@ -15,6 +15,9 @@ import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
 import { colorKey, colorSlug } from '../../utils/color-slug';
 import { sizeOptions, colorState, productSoldOut, defaultColor, defaultSize, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+import { SizeSheetComponent, SizeOption } from '../../shared/size-sheet/size-sheet.component';
+import { RestockFormComponent } from '../../shared/restock/restock-form.component';
+import { MOBILE_SHEET_QUERY } from '../../shared/overlay/body-scroll-lock';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
@@ -101,7 +104,7 @@ interface StorefrontCollection {
 
 @Component({
     selector: 'cw-collection',
-    imports: [CommonModule, FormsModule],
+    imports: [CommonModule, FormsModule, SizeSheetComponent, RestockFormComponent],
     templateUrl: './collection.component.html',
     changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './collection.component.scss'
@@ -165,12 +168,19 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private addedTimer: number | undefined;
   private mobileMediaQuery?: MediaQueryList;
   private mobileMediaQueryHandler?: () => void;
+  private sheetMediaQuery?: MediaQueryList;
+  private sheetMediaQueryHandler?: () => void;
   private routeSyncSub?: Subscription;
 
   readonly sortOptions = SORT_OPTIONS;
   readonly sort = signal<SortOption>('Featured');
   readonly hovered = signal<string | null>(null);
   readonly addedProductId = signal<string | null>(null);
+  /** At most one card shows the alert form or the size sheet, so both are page-level. */
+  readonly notifyTarget = signal<Product | null>(null);
+  readonly sizeSheetTarget = signal<Product | null>(null);
+  /** Below this width the card swaps its native select for the same sheet the product page uses. */
+  readonly isSheetView = signal(false);
   readonly loadedProductImages = signal<Record<string, boolean>>({});
   readonly collections = signal<StorefrontCollection[]>([]);
   readonly collectionsLoaded = signal(false);
@@ -327,6 +337,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.routeSyncSub?.unsubscribe();
+    if (this.sheetMediaQuery && this.sheetMediaQueryHandler) {
+      this.sheetMediaQuery.removeEventListener('change', this.sheetMediaQueryHandler);
+    }
     if (this.mobileMediaQuery && this.mobileMediaQueryHandler) {
       this.mobileMediaQuery.removeEventListener('change', this.mobileMediaQueryHandler);
     }
@@ -480,9 +493,11 @@ export class CollectionComponent implements OnInit, OnDestroy {
   }
 
   selectedSize(product: Product): number | null {
-    const available = this.availableSizes(product);
     const selected = this.selectedSizes()[product.id];
-    if (selected && available.includes(selected)) return selected;
+    // Any size offered for this colour counts, sold out or not: picking a sold-out size is
+    // how a customer asks to be told when it returns. `canPurchase` still gates the cart.
+    const offered = this.sizeOptions(product, this.selectedProductColor(product)).map((option) => option.size);
+    if (selected && offered.includes(selected)) return selected;
     return defaultSize(product, this.selectedProductColor(product));
   }
 
@@ -526,8 +541,49 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly productSoldOut = productSoldOut;
   colorSoldOut(product: Product, color: string | null): boolean { return colorState(product, color) === 'sold-out'; }
   canPurchase(product: Product): boolean { return availableStock(product, this.selectedProductColor(product), this.selectedSize(product)) > 0; }
+
+  /**
+   * Three states, not two. Once a sold-out size can be picked from the sheet, "cannot buy"
+   * stops meaning "sold out": the colour may still have other sizes on the shelf, and
+   * offering a back-in-stock alert there would talk a customer out of a sale we can make.
+   */
+  cardCta(product: Product): 'buy' | 'choose-size' | 'notify' {
+    if (this.canPurchase(product)) return 'buy';
+    return this.availableSizes(product).length > 0 ? 'choose-size' : 'notify';
+  }
+
+  /** Sold-out sizes offered for the selected colour; the only ones the API accepts. */
+  soldOutSizes(product: Product): number[] {
+    return this.sizeOptions(product, this.selectedProductColor(product))
+      .filter((option) => option.state === 'sold-out')
+      .map((option) => option.size);
+  }
+
+  sheetSizes(product: Product): SizeOption[] {
+    return this.sizeOptions(product, this.selectedProductColor(product)).map((option) => ({
+      size: option.size,
+      available: true,
+      inStock: option.state === 'available',
+    }));
+  }
+
   notifyMe(product: Product): void {
-    void this.router.navigate(['/product', product.id], { queryParams: { color: colorSlug(this.selectedProductColor(product) || '') || null, notify: 1 } });
+    this.notifyTarget.set(product);
+  }
+
+  openSizeSheet(product: Product): void {
+    this.sizeSheetTarget.set(product);
+  }
+
+  onSheetSizePicked(product: Product, size: number): void {
+    this.selectSize(product, size);
+    this.sizeSheetTarget.set(null);
+  }
+
+  /** The alert was refused because the selection is buyable again; reload and let the card update. */
+  async onRestockBackInStock(): Promise<void> {
+    this.notifyTarget.set(null);
+    await this.products.refresh();
   }
 
   colorHex(name: string): string {
@@ -1017,5 +1073,20 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
     this.mobileMediaQueryHandler();
     this.mobileMediaQuery.addEventListener('change', this.mobileMediaQueryHandler);
+
+    /*
+     * Deliberately a second query rather than reusing the one above. Mobile pagination
+     * switches at 767px and the size sheet at 759px, matching the product page, and
+     * dragging pagination to a new breakpoint to save one listener would change a feature
+     * this work has nothing to do with.
+     */
+    this.sheetMediaQuery = window.matchMedia(MOBILE_SHEET_QUERY);
+    this.sheetMediaQueryHandler = () => {
+      const isSheet = this.sheetMediaQuery?.matches ?? false;
+      this.isSheetView.set(isSheet);
+      if (!isSheet) this.sizeSheetTarget.set(null);
+    };
+    this.sheetMediaQueryHandler();
+    this.sheetMediaQuery.addEventListener('change', this.sheetMediaQueryHandler);
   }
 }

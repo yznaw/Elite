@@ -553,6 +553,18 @@
   display: none;
 }
 
+/*
+ * The notify layer lives here rather than inside `.product-tile`, which clips its overflow
+ * and lifts itself on hover. A transformed ancestor becomes the containing block for fixed
+ * children, so a layer inside the tile would be cut off at its edge and would slide with it
+ * whenever the pointer entered the card.
+ */
+.product-cell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
 .product-tile {
   display: grid;
   align-content: start;
@@ -779,7 +791,8 @@
   appearance: none;
   width: 100%;
   min-height: 40px;
-  padding: 0 34px 0 12px;
+  padding-block: 0;
+  padding-inline: 12px 34px;
   border: 1px solid rgba(36, 36, 36, 0.12);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.82);
@@ -803,7 +816,7 @@
 .size-select-arrow {
   position: absolute;
   top: 50%;
-  right: 12px;
+  inset-inline-end: 12px;
   transform: translateY(-50%);
   pointer-events: none;
   color: #6f6659;
@@ -1323,3 +1336,44 @@ html[dir='rtl'] .product-tile {
 .product-color-swatch.is-sold-out::after { content: ''; position: absolute; inset: 50% -2px auto; height: 1px; background: #272727; transform: rotate(-45deg); }
 .purchase-panel { grid-template-rows: minmax(59px, auto) 40px 40px; align-content: start; }
 .notify-only { grid-column: 1 / -1; }
+
+/* Size trigger shown instead of the native select below the sheet breakpoint. */
+.size-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding-block: 0;
+  padding-inline: 12px;
+  border: 1px solid rgba(36, 36, 36, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #242424;
+  cursor: pointer;
+  font-family: var(--ff-sans);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: start;
+}
+
+.size-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.size-trigger strong {
+  font-size: 13px;
+}
+
+.other-sizes-note {
+  grid-column: 1 / -1;
+  color: #6f6659;
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+}

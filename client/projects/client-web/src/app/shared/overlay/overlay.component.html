@@ -1,0 +1,41 @@
+@if (open) {
+  <div
+    class="ovl"
+    [class.ovl--sheet]="variant === 'sheet'"
+    [class.ovl--dialog]="variant === 'dialog'"
+    [class.ovl--card]="variant === 'card'"
+  >
+    <button
+      type="button"
+      class="ovl-backdrop"
+      (click)="close()"
+      [attr.aria-label]="closeLabel"
+    ></button>
+
+    <div
+      #panel
+      class="ovl-panel"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      [attr.aria-label]="ariaLabel || null"
+      [attr.aria-labelledby]="ariaLabel ? null : headingId"
+    >
+      <div class="ovl-head">
+        <div class="ovl-title">
+          @if (eyebrow) {
+            <span class="ovl-eyebrow">{{ eyebrow }}</span>
+          }
+          <strong [id]="headingId">{{ heading }}</strong>
+        </div>
+        <button type="button" class="ovl-close" (click)="close()" [attr.aria-label]="closeLabel">
+          &times;
+        </button>
+      </div>
+
+      <div class="ovl-body">
+        <ng-content />
+      </div>
+    </div>
+  </div>
+}

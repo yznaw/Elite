@@ -1,0 +1,229 @@
+/**
+ * Ported from the product page's `.size-sheet*` rules, with one change: those read
+ * `--pdp-*` tokens, which are declared inside the product page's own stylesheet and are
+ * therefore undefined anywhere else. Every token here carries a fallback so the overlay
+ * renders correctly on the collection page too, while still picking up the product page's
+ * values when it happens to be used there.
+ */
+:host {
+  --ovl-surface: var(--pdp-surface, #fbf9f5);
+  --ovl-ink: var(--pdp-ink, #1f1c17);
+  --ovl-line: var(--pdp-line, rgba(31, 28, 23, 0.1));
+  --ovl-gold-deep: var(--pdp-gold-deep, #9a7535);
+}
+
+.ovl {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.ovl-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  min-height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(20, 18, 14, 0.46);
+  cursor: pointer;
+  animation: ovl-fade 0.2s ease;
+}
+
+.ovl-panel {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+  background: var(--ovl-surface);
+  touch-action: pan-y;
+}
+
+.ovl-panel:focus {
+  outline: none;
+}
+
+.ovl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ovl-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ovl-eyebrow {
+  color: var(--ovl-gold-deep);
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ovl-title strong {
+  color: var(--ovl-ink);
+  font-family: var(--ff-serif);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.ovl-close {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--ovl-line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ovl-ink);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ovl-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Card layer: the overlay covers the element the caller anchored it to, which is what makes
+ * it feel like it belongs to that card rather than to the page. The backdrop stays fixed to
+ * the viewport so a click anywhere outside still closes it.
+ *
+ * The caller must give the anchor `position: relative`, and the anchor must not clip its
+ * overflow or carry a transform, or this panel would be cut off and would move with it.
+ */
+.ovl--card {
+  position: absolute;
+  inset: 0;
+}
+
+.ovl--card .ovl-backdrop {
+  position: fixed;
+  background: rgba(20, 18, 14, 0.32);
+}
+
+/* A card is far narrower than a page, so the display heading is stepped down to match. */
+.ovl--card .ovl-title strong {
+  font-size: 20px;
+}
+
+.ovl--card .ovl-close {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+}
+
+.ovl--card .ovl-panel {
+  inset: 0;
+  padding: 16px;
+  border: 1px solid var(--ovl-line);
+  border-radius: 8px;
+  box-shadow: 0 24px 56px rgba(30, 28, 24, 0.22);
+  animation: ovl-fade 0.18s ease;
+}
+
+/* Centred dialog: the default above the sheet breakpoint. */
+.ovl--dialog .ovl-panel {
+  top: 50%;
+  left: 50%;
+  width: min(430px, calc(100vw - 32px));
+  max-height: min(80dvh, 620px);
+  padding: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 18px;
+  box-shadow: 0 30px 80px rgba(26, 24, 21, 0.3);
+  animation: ovl-rise-dialog 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Bottom sheet. Applies to `sheet` always, and to `dialog` on phones, so a form that is
+   a centred dialog on a laptop becomes a sheet on a phone without the caller knowing. */
+@media (max-width: 759px) {
+  .ovl--dialog .ovl-panel {
+    top: auto;
+    left: auto;
+    width: auto;
+    transform: none;
+  }
+
+  .ovl--card {
+    position: fixed;
+  }
+
+  .ovl--card .ovl-panel {
+    inset: auto;
+    border: 0;
+  }
+
+  .ovl--sheet .ovl-panel,
+  .ovl--dialog .ovl-panel,
+  .ovl--card .ovl-panel {
+    inset-inline: 0;
+    bottom: 0;
+    max-height: 80dvh;
+    padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -22px 70px rgba(26, 24, 21, 0.26);
+    animation: ovl-rise-sheet 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* The size list wants a predictable height; a form sizes to its content. */
+  .ovl--sheet .ovl-panel {
+    height: 50dvh;
+    max-height: 50dvh;
+  }
+}
+
+/* Above the sheet breakpoint a `sheet` still needs somewhere to live: centre it. */
+@media (min-width: 760px) {
+  .ovl--sheet .ovl-panel {
+    top: 50%;
+    left: 50%;
+    width: min(430px, calc(100vw - 32px));
+    max-height: min(70dvh, 560px);
+    padding: 22px;
+    transform: translate(-50%, -50%);
+    border-radius: 18px;
+    box-shadow: 0 30px 80px rgba(26, 24, 21, 0.3);
+  }
+}
+
+@keyframes ovl-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ovl-rise-sheet {
+  from { transform: translateY(12%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes ovl-rise-dialog {
+  from { transform: translate(-50%, -46%); opacity: 0; }
+  to { transform: translate(-50%, -50%); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ovl-backdrop,
+  .ovl-panel {
+    animation: none;
+  }
+}

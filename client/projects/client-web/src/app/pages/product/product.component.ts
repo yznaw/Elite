@@ -15,6 +15,9 @@ import { SeoService } from '../../services/seo.service';
 import { API_BASE } from '../../core/api-base';
 
 import { sizeOptions, productSoldOut, defaultColor, defaultSize, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+import { SizeSheetComponent } from '../../shared/size-sheet/size-sheet.component';
+import { BodyScrollLock, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
+import { RestockService } from '../../shared/restock/restock.service';
 
 interface Accordion {
   id: string;
@@ -52,7 +55,7 @@ const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 
 @Component({
     selector: 'cw-product',
-    imports: [CommonModule],
+    imports: [CommonModule, SizeSheetComponent],
     templateUrl: './product.component.html',
     /**
      * `Eager` here was written by the v17 to v22 migration, which preserved the
@@ -75,6 +78,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
+  private readonly scrollLock = inject(BodyScrollLock);
+  private readonly restock = inject(RestockService);
   private readonly cart = inject(CartService);
   private readonly productsSvc = inject(ProductsService);
   private readonly i18n = inject(I18nService);
@@ -142,13 +147,6 @@ export class ProductComponent implements OnInit, OnDestroy {
   private routeSub?: Subscription;
   private querySub?: Subscription;
   private loadToken = 0;
-  private previousBodyOverflow = '';
-  private previousBodyPosition = '';
-  private previousBodyTop = '';
-  private previousBodyWidth = '';
-  private previousHtmlOverflow = '';
-  private lockedScrollY = 0;
-  private bodyScrollLocked = false;
   private thumbStrip?: HTMLElement;
   private thumbStripResizeObserver?: ResizeObserver;
   private thumbStripMutationObserver?: MutationObserver;
@@ -421,13 +419,13 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.thumbStripMutationObserver?.disconnect();
     if (this.gallerySyncFrame) cancelAnimationFrame(this.gallerySyncFrame);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
-    this.unlockBodyScroll();
+    if (this.reviewOpen()) this.scrollLock.release();
   }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    // The size sheet closes itself; cw-overlay owns Escape for everything it renders.
     if (this.reviewOpen()) this.closeReview();
-    else if (this.sizePickerOpen()) this.closeSizePicker();
   }
 
   async goCollection(): Promise<void> {
@@ -566,7 +564,7 @@ export class ProductComponent implements OnInit, OnDestroy {
       this.gallerySyncFrame = undefined;
       const activeThumbnail = this.thumbStrip?.querySelector<HTMLElement>('.thumb.is-active');
       activeThumbnail?.scrollIntoView({
-        behavior: this.prefersReducedMotion() ? 'auto' : 'smooth',
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
         block: 'nearest',
         inline: 'center',
       });
@@ -620,12 +618,10 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   openSizePicker(): void {
     this.sizePickerOpen.set(true);
-    this.lockBodyScroll();
   }
 
   closeSizePicker(): void {
     this.sizePickerOpen.set(false);
-    this.unlockBodyScroll();
   }
 
   async openSizeGuide(): Promise<void> {
@@ -761,15 +757,11 @@ export class ProductComponent implements OnInit, OnDestroy {
     requestAnimationFrame(() => {
       const panel = document.getElementById('restock-panel');
       panel?.scrollIntoView({
-        behavior: this.prefersReducedMotion() ? 'auto' : 'smooth',
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
         block: 'center',
       });
       document.getElementById(this.product()?.sizes.length && this.restockSize() === null ? 'restock-size' : 'restock-email')?.focus({ preventScroll: true });
     });
-  }
-
-  private prefersReducedMotion(): boolean {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
   onRestockEmailInput(event: Event): void {
@@ -779,47 +771,42 @@ export class ProductComponent implements OnInit, OnDestroy {
   async submitRestockRequest(event?: Event): Promise<void> {
     event?.preventDefault();
     const p = this.product();
-    const size = this.restockSize();
-    const email = this.restockEmail().trim();
     if (!p || this.restockSubmitting()) return;
-    if (p.sizes.length && !this.restockSizes().some(s => s.size === size)) {
-      this.restockError.set(this.t('stock.chooseRestockSize'));
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      this.restockError.set(this.t('product.restock.emailError'));
+
+    const size = this.restockSize();
+    this.restockSubmitting.set(true);
+    this.restockError.set('');
+    const result = await this.restock.submit({
+      productId: p.id,
+      size,
+      hasSizes: p.sizes.length > 0,
+      soldOutSizes: this.restockSizes().map((s) => s.size),
+      color: this.selectedColor(),
+      email: this.restockEmail(),
+    });
+    this.restockSubmitting.set(false);
+
+    if (result.kind === 'ok') {
+      this.restockSubmitted.set(true);
+      this.restockFormOpen.set(false);
       return;
     }
 
-    this.restockSubmitting.set(true);
-    this.restockError.set('');
-    try {
-      await firstValueFrom(
-        this.http.post<ApiResponse<unknown>>(`${this.apiBase}/products/${encodeURIComponent(p.id)}/restock-notifications`, {
-          email,
-          ...(p.sizes.length ? { size } : {}),
-          color: this.selectedColor(),
-          locale: this.locale.locale(),
-        }),
-      );
-      this.restockSubmitted.set(true);
+    if (result.kind === 'error') {
+      this.restockError.set(this.t(result.messageKey));
+      return;
+    }
+
+    // Back in stock while the form was open: reload the catalogue and put the page into a
+    // buyable state on the selection they asked about, rather than showing them an error.
+    const requestedColor = this.selectedColor();
+    await this.productsSvc.refresh();
+    if (this.product()?.id === p.id) {
+      this.product.set(this.productsSvc.getById(p.id) || p);
+      this.selectedColor.set(requestedColor);
+      this.selectedSize.set(size);
+      this.qty.set(1);
       this.restockFormOpen.set(false);
-    } catch (error) {
-      if (error instanceof HttpErrorResponse && error.status === 409 && error.error?.code === 'IN_STOCK') {
-        const requestedColor = this.selectedColor();
-        await this.productsSvc.refresh();
-        if (this.product()?.id === p.id) {
-          this.product.set(this.productsSvc.getById(p.id) || p);
-          this.selectedColor.set(requestedColor);
-          this.selectedSize.set(size);
-          this.qty.set(1);
-          this.restockFormOpen.set(false);
-        }
-      } else {
-        this.restockError.set(this.t(error instanceof HttpErrorResponse && error.status === 429 ? 'stock.rateLimit' : 'product.restock.submitError'));
-      }
-    } finally {
-      this.restockSubmitting.set(false);
     }
   }
 
@@ -829,12 +816,12 @@ export class ProductComponent implements OnInit, OnDestroy {
       ? document.activeElement
       : undefined;
     this.reviewOpen.set(true);
-    this.lockBodyScroll();
+    this.scrollLock.acquire();
   }
 
   closeReview(): void {
     this.reviewOpen.set(false);
-    this.unlockBodyScroll();
+    this.scrollLock.release();
     requestAnimationFrame(() => this.reviewTrigger?.focus());
   }
 
@@ -1095,40 +1082,6 @@ export class ProductComponent implements OnInit, OnDestroy {
           ? 'review-email'
           : 'review-contact-consent';
     requestAnimationFrame(() => document.getElementById(id)?.focus());
-  }
-
-  private unlockBodyScroll(): void {
-    if (!this.bodyScrollLocked) return;
-    const scrollY = this.lockedScrollY;
-    document.body.style.overflow = this.previousBodyOverflow;
-    document.body.style.position = this.previousBodyPosition;
-    document.body.style.top = this.previousBodyTop;
-    document.body.style.width = this.previousBodyWidth;
-    document.documentElement.style.overflow = this.previousHtmlOverflow;
-    this.bodyScrollLocked = false;
-    window.scrollTo(0, scrollY);
-  }
-
-  private lockBodyScroll(): void {
-    if (this.bodyScrollLocked) return;
-
-    this.lockedScrollY = window.scrollY;
-    this.previousBodyOverflow = document.body.style.overflow;
-    this.previousBodyPosition = document.body.style.position;
-    this.previousBodyTop = document.body.style.top;
-    this.previousBodyWidth = document.body.style.width;
-    this.previousHtmlOverflow = document.documentElement.style.overflow;
-
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-
-    if (window.matchMedia('(max-width: 759px)').matches) {
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${this.lockedScrollY}px`;
-      document.body.style.width = '100%';
-    }
-
-    this.bodyScrollLocked = true;
   }
 
   private async resolveLegacyCollectionParent(childKey: string): Promise<void> {

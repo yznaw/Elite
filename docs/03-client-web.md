@@ -433,6 +433,46 @@ Located in `app/shared/`:
 | `NavComponent` | `<cw-nav>` | Floating green primary navigation bar with logo, desktop links, cart icon, and mobile menu |
 | `FooterComponent` | `<cw-footer>` | Footer with link columns, brand tagline, copyright |
 | `CartDrawerComponent` | `<cw-cart-drawer>` | Slide-in cart panel with items, quantities, subtotal, checkout button |
+| `OverlayComponent` | `<cw-overlay>` | The storefront's one dialog. Owns the modal contract; callers project content |
+| `SizeSheetComponent` | `<cw-size-sheet>` | "Select Size" sheet, used by the product page and the collection card |
+| `RestockFormComponent` | `<cw-restock-form>` | Back-in-stock alert form (size, email) over a collection card |
+
+### The overlay contract (September 2026)
+
+Every dialog on the storefront used to be hand-rolled, and each implemented a different
+subset of the modal contract: the product page's size sheet declared `aria-modal="true"`
+without trapping focus, the size guide never locked scroll, and only the review modal
+returned focus to the element that opened it. `cw-overlay` now owns all of it in one place:
+`role="dialog"`, `aria-modal`, `aria-labelledby`, Escape, backdrop click, body scroll lock,
+initial focus into the panel, a Tab/Shift+Tab trap, and focus restored to the trigger.
+
+Three variants:
+
+| Variant | Above 760px | Below 760px |
+|---|---|---|
+| `sheet` | centred panel | bottom sheet |
+| `dialog` | centred panel, max 430px | bottom sheet |
+| `card` | covers the element it is anchored to | bottom sheet |
+
+The `card` variant is how the collection card shows its back-in-stock form "inside" the card.
+The anchor must be `position: relative` and must not clip overflow or carry a transform: a
+transformed ancestor becomes the containing block for fixed children, so the panel would be
+clipped at the card's edge and would slide with the card's hover lift. That is why
+`.product-tile` (which does both) is wrapped in a `.product-cell` and the overlay is a
+sibling of the tile rather than a child.
+
+**Scroll lock** lives in `shared/overlay/body-scroll-lock.ts` and is **reference counted**,
+because the product page can have the size guide open on top of the size sheet and a boolean
+per component would unlock the page underneath the one still open. It also holds the layout
+width with `padding-inline-end` while the scrollbar is hidden; without that, hiding the
+scrollbar reflowed the whole product grid sideways by the scrollbar's width every time a
+dialog opened. `MOBILE_SHEET_QUERY` (759px) is exported from the same file so the two pages
+cannot drift apart. The collection page's mobile *pagination* keeps its own 767px query on
+purpose; it is a separate feature.
+
+**A `<select>` inside an overlay must set `selected` on its options**, not `[value]` on the
+select. The select is created before its options exist, so the value binding is discarded and
+the browser falls back to the first enabled option. Both restock forms hit this.
 
 ---
 
@@ -481,6 +521,21 @@ private readonly seoTags = this.seo.watch(() => ({
   - `getFeatured(): Product[]` — Returns first 3 products
   - `ensureLoaded() / refresh()` — Force-reload from API
 - **Image normalization:** All products returned from the API pass through `normalizeProductImages()` which resolves `/uploads/…` paths via `resolveMediaUrl()` (→ `/api/uploads/…`), deduplicates the `images[]` array, and applies `colorImages` normalization. Missing images fall back to `this.defaultImage`.
+
+**Back-in-stock alerts from the collection card (September 2026):** the card's `NOTIFY ME`
+button used to navigate to `/product/:id?color=…&notify=1` so the customer could type one
+email address on the product page, losing the size they had just picked on the way. It now
+opens `cw-restock-form` over the card itself. Submission goes through
+`shared/restock/restock.service.ts`, shared with the product page, which returns
+`ok | in-stock | error` and leaves recovery to the caller: the product page puts itself back
+into a buyable state, the collection page reloads the catalogue so the card flips to ADD TO
+CART. The product page's inline restock panel and the `?notify=1` deep link are unchanged, so
+existing links keep working.
+
+The card CTA has three states rather than two, because a sold-out size can now be picked from
+the sheet: buyable → ADD TO CART, selected size sold out but others in stock → "Choose size"
+plus a note, whole colour sold out → the alert. `canPurchase()` still gates the cart, so a
+sold-out selection cannot reach it.
 
 **Per-colour images — no positional inference (September 2026):** `productImageForColor()` in both
 `collection.component.ts` and `product.component.ts` returns an image only when the admin linked one

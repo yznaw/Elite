@@ -1,0 +1,98 @@
+/**
+ * Moved out of the product page's `@media (max-width: 759px)` block, where these rules
+ * layered on top of the desktop chip styles. Here they are self-contained, since the
+ * chips stay behind on the product page and the rows now render on two pages.
+ */
+:host {
+  --size-ink: var(--pdp-ink, #1f1c17);
+  --size-line: var(--pdp-line, rgba(31, 28, 23, 0.1));
+  --size-green: var(--pdp-green, #004538);
+  --size-gold: var(--pdp-gold, #b8924a);
+}
+
+.size-required-message {
+  margin: 0 0 10px;
+  color: #a33a32;
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.size-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.size-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  flex: 0 0 52px;
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--size-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--size-ink);
+  cursor: pointer;
+  font-family: var(--ff-sans);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.size-row:disabled {
+  cursor: not-allowed;
+}
+
+.size-row.active {
+  border-color: var(--size-green);
+  background: var(--size-green);
+  color: #f3efe4;
+}
+
+.size-row.out-of-stock,
+.size-row.unavailable {
+  border-color: rgba(31, 28, 23, 0.12);
+  background: rgba(31, 28, 23, 0.06);
+  color: rgba(31, 28, 23, 0.34);
+}
+
+.size-row.unavailable .size-value {
+  text-decoration: line-through;
+}
+
+.size-value {
+  min-width: 0;
+  text-align: start;
+}
+
+.size-state {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--size-line);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+}
+
+.size-row.active .size-state {
+  border-color: var(--size-gold);
+  background: var(--size-gold);
+  color: #fff;
+}
+
+.size-row.out-of-stock .size-state {
+  border-color: rgba(31, 28, 23, 0.12);
+  background: transparent;
+  color: rgba(31, 28, 23, 0.3);
+}
