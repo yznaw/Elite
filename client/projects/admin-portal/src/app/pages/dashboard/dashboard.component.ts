@@ -263,7 +263,7 @@ export class DashboardComponent implements OnInit {
       const [orders, products, customers] = await Promise.all([
         this.ordersApi.list().then(r => r.orders).catch(() => []),
         this.productsApi.list().catch(() => []),
-        this.customersApi.list().catch(() => []),
+        this.customersApi.list({ limit: 200 }).then(r => r.customers).catch(() => []),
       ]);
       this.orders.set(orders);
       this.products.set(products);

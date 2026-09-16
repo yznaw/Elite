@@ -1,6 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { Subject, debounceTime, takeUntil } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
@@ -14,6 +15,7 @@ import { I18nService } from '../../services/i18n.service';
 import { AdminCustomersService } from '../../services/admin-customers.service';
 import { AdminOrdersService } from '../../services/admin-orders.service';
 import { StorageService } from '../../services/storage.service';
+import { ToastService } from '../../services/toast.service';
 import { Customer, Order, QAR } from '../../models';
 
 type View = 'table' | 'cards';
@@ -128,7 +130,13 @@ const MOBILE_BP = 900;
         </div>
       } @else if (effectiveView() === 'table') {
         <div class="card">
-          <ap-sortable-table [columns]="columns" [rows]="paged()" [rowClick]="openCustomer">
+          <ap-sortable-table
+            [columns]="columns"
+            [rows]="paged()"
+            [rowClick]="openCustomer"
+            [serverSort]="true"
+            (sortChange)="onSortChange($event)"
+          >
             <ng-template apCellTpl="name" let-r>
               <div class="row gap-sm">
                 <ap-avatar [initials]="initials(r.name)"/>
@@ -188,9 +196,9 @@ const MOBILE_BP = 900;
     <ap-pagination
       [page]="page()"
       [pageSize]="pageSize()"
-      [total]="filtered().length"
+      [total]="_serverTotal()"
       [totalPages]="totalPages()"
-      (pageChange)="page.set($event)"
+      (pageChange)="onPageChange($event)"
       (pageSizeChange)="onPageSizeChange($event)"
     />
 
@@ -371,6 +379,8 @@ export class CustomersComponent implements OnInit, OnDestroy {
   private readonly customersApi = inject(AdminCustomersService);
   private readonly ordersApi = inject(AdminOrdersService);
   private readonly storage = inject(StorageService);
+  private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly QAR = QAR;
@@ -396,8 +406,18 @@ export class CustomersComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     this.searchInput$.pipe(debounceTime(300), takeUntil(this.destroy$))
-      .subscribe((v) => { this.search.set(v); this.page.set(0); });
+      .subscribe((v) => { this.search.set(v); this.page.set(0); void this.loadCustomers(); });
+
+    // Deep link from an order's "View customer profile".
+    const highlight = this.route.snapshot.queryParamMap.get('highlight');
+    if (highlight) this.search.set(highlight);
+
     await this.loadCustomers();
+
+    if (highlight) {
+      const match = this._customers().find((c) => c.id === highlight || c.email === highlight);
+      if (match) this.active.set(match);
+    }
   }
 
   ngOnDestroy(): void {
@@ -405,17 +425,39 @@ export class CustomersComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  /** Search, paging and sorting are all applied by the server: the customer
+      table can be large, and sorting a single page while the header arrow
+      implies a full sort is worse than not offering the arrow at all. */
   async loadCustomers(): Promise<void> {
     this.loading.set(true);
     this.loadError.set(null);
     try {
-      const list = await this.customersApi.list();
-      this._customers.set(list);
+      const resp = await this.customersApi.list({
+        page:  this.page(),
+        limit: this.pageSize(),
+        q:     this.search() || undefined,
+        sort:  this.sort() ?? undefined,
+        dir:   this.sortDir(),
+      });
+      this._customers.set(resp.customers);
+      this._serverTotal.set(resp.total);
     } catch {
       this.loadError.set(this.t('customers.loadError'));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  onSortChange(e: { sort: string | null; dir: 'asc' | 'desc' }): void {
+    this.sort.set(e.sort);
+    this.sortDir.set(e.dir);
+    this.page.set(0);
+    void this.loadCustomers();
+  }
+
+  onPageChange(page: number): void {
+    this.page.set(page);
+    void this.loadCustomers();
   }
 
   onSearchChange(value: string): void { this.searchInput$.next(value); }
@@ -425,27 +467,22 @@ export class CustomersComponent implements OnInit, OnDestroy {
   readonly effectiveView = computed<View>(() => (this.isMobile() ? 'cards' : this.view()));
   readonly page = signal(0);
   readonly pageSize = signal(50);
+  /** Total across every page, from the server — not the length of this page. */
+  readonly _serverTotal = signal(0);
+  /** null = the server's default order (most recent activity first). */
+  readonly sort = signal<string | null>(null);
+  readonly sortDir = signal<'asc' | 'desc'>('desc');
 
   @HostListener('window:resize')
   onResize(): void {
     this.isMobile.set(this.computeIsMobile());
   }
 
-  readonly filtered = computed(() => {
-    const q = this.search().toLowerCase();
-    return this._customers().filter((c) => {
-      if (q && !(c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.city.toLowerCase().includes(q))) return false;
-      return true;
-    });
-  });
-
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
-
-  readonly paged = computed(() => {
-    const all = this.filtered();
-    const start = this.page() * this.pageSize();
-    return all.slice(start, start + this.pageSize());
-  });
+  /** The server already applied the search and the page window, so these are
+      the rows as returned. Kept as named members so the template reads the same. */
+  readonly filtered = computed(() => this._customers());
+  readonly paged = computed(() => this._customers());
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this._serverTotal() / this.pageSize())));
 
   readonly columns: TableColumn<Customer>[] = [
     { key: 'name',      label: 'Customer',       labelKey: 'orders.col.customer' },
@@ -462,11 +499,13 @@ export class CustomersComponent implements OnInit, OnDestroy {
   clearFilters(): void {
     this.search.set('');
     this.page.set(0);
+    void this.loadCustomers();
   }
 
   onPageSizeChange(size: number): void {
     this.pageSize.set(size);
     this.page.set(0);
+    void this.loadCustomers();
   }
 
   /** "Add Customer" — synthesize a blank record and open the drawer in
@@ -498,30 +537,21 @@ export class CustomersComponent implements OnInit, OnDestroy {
     this.active.set(null);
   }
 
-  async onCustomerSaved(c: Customer): Promise<void> {
-    const wasDraft = !!this.creatingId() && c.id === this.creatingId();
-    const payload = {
-      name: c.name,
-      email: c.email,
-      city: c.city,
-      sizePref: c.sizePref,
-      notes: c.notes,
-    };
+  /** The drawer has already persisted the record and adopted the server's
+      response. All that is left here is to merge it into the list so
+      `filtered()` recomputes — issuing a second request would double-write. */
+  onCustomerSaved(c: Customer): void {
+    const draftId = this.creatingId();
 
-    try {
-      const saved = wasDraft
-        ? await this.customersApi.create(payload)
-        : await this.customersApi.update(c.id, payload);
+    // A create mutates the draft object in place with the server's id, so match
+    // on either id to be safe.
+    this._customers.update((all) =>
+      all.map((x) => (x.id === c.id || (!!draftId && x.id === draftId) ? { ...x, ...c } : x)),
+    );
 
-      // Adopt the server's id (especially for newly-created records) and
-      // re-emit a fresh array so `filtered()` recomputes.
-      this._customers.update((all) => all.map((x) => (x.id === c.id ? { ...x, ...saved } : x)));
-      if (wasDraft) {
-        this.creatingId.set(null);
-        this.active.set({ ...c, ...saved });
-      }
-    } catch {
-      // Toast already raised by the global error interceptor.
+    if (draftId) {
+      this.creatingId.set(null);
+      this.active.set({ ...c });
     }
   }
 
@@ -529,11 +559,35 @@ export class CustomersComponent implements OnInit, OnDestroy {
     try {
       await this.customersApi.remove(c.id);
     } catch {
-      // Global error interceptor raises the toast.
+      // Global error interceptor raises the toast. Keep the row — the customer
+      // still exists on the server.
+      return;
     }
+
     this._customers.update((all) => all.filter((x) => x.id !== c.id));
     this.active.set(null);
     this.creatingId.set(null);
+
+    this.toast.push({
+      title: this.t('customerDrawer.toast.deleted'),
+      sub: c.name,
+      kind: 'success',
+      duration: 8000, // longer than the default so Undo is actually reachable
+      action: { label: this.t('common.undo'), run: () => void this.restoreCustomer(c) },
+    });
+  }
+
+  /** Undo a soft delete via the restore endpoint. */
+  private async restoreCustomer(c: Customer): Promise<void> {
+    try {
+      const restored = await this.customersApi.restore(c.id);
+      this._customers.update((all) =>
+        all.some((x) => x.id === c.id) ? all : [{ ...c, ...restored }, ...all],
+      );
+      this.toast.success(this.t('customerDrawer.toast.restored'), c.name);
+    } catch {
+      // Global error interceptor raises the toast.
+    }
   }
 
   onOpenOrder(o: Order): void {
@@ -558,23 +612,39 @@ export class CustomersComponent implements OnInit, OnDestroy {
     this.activeOrder.set(updated);
   }
 
-  exportCsv(): void {
+  /** Exports every matching customer, not just the visible page. The list is
+      paged server-side now, so this walks the pages rather than dumping the
+      rows that happen to be on screen. */
+  async exportCsv(): Promise<void> {
     if (this.exporting()) return;
     this.exporting.set(true);
     try {
-      const list = this.filtered();
+      const PAGE = 200;
+      const all: Customer[] = [];
+      for (let page = 0; ; page++) {
+        const resp = await this.customersApi.list({
+          page,
+          limit: PAGE,
+          q: this.search() || undefined,
+          sort: this.sort() ?? undefined,
+          dir: this.sortDir(),
+        });
+        all.push(...resp.customers);
+        if (all.length >= resp.total || resp.customers.length === 0) break;
+      }
+
       const headers = [
         this.t('customers.csv.name'), this.t('customers.csv.email'), this.t('customers.csv.city'), this.t('customers.csv.orders'),
         this.t('customers.csv.ltv'), this.t('customers.csv.size'), this.t('customers.csv.lastOrder'), this.t('customers.csv.joined'),
       ];
-      const rows = list.map((c) => [
+      const rows = all.map((c) => [
         c.name, c.email, c.city, c.orders,
         c.ltv.toFixed(2), c.sizePref || '', c.lastOrder, c.joined,
       ]);
       const csv = [headers, ...rows]
         .map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
         .join('\r\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -583,9 +653,17 @@ export class CustomersComponent implements OnInit, OnDestroy {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      this.toast.success(this.t('common.exported'), this.exportedCountLabel(all.length));
+    } catch {
+      // Global error interceptor raises the toast.
     } finally {
       this.exporting.set(false);
     }
+  }
+
+  private exportedCountLabel(n: number): string {
+    return this.t('common.exportedCount').replace('{n}', String(n));
   }
 
   setView(v: View): void {

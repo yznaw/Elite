@@ -20,6 +20,9 @@ export interface OrderListParams {
   from?: string;
   to?: string;
   q?: string;
+  /** Server-side sort. Column keys are whitelisted in admin-orders.route.js. */
+  sort?: string;
+  dir?: 'asc' | 'desc';
 }
 
 export interface OrderListResponse {
@@ -43,6 +46,8 @@ export class AdminOrdersService {
     if (params.from)            qs.set('from',        params.from);
     if (params.to)              qs.set('to',          params.to);
     if (params.q)               qs.set('q',           params.q);
+    if (params.sort)            qs.set('sort',        params.sort);
+    if (params.dir)             qs.set('dir',         params.dir);
     const suffix = qs.toString() ? `?${qs}` : '';
     return firstValueFrom(this.api.get<OrderListResponse>(`/admin/orders${suffix}`));
   }

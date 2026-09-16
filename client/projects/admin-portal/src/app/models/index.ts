@@ -120,6 +120,19 @@ export interface OrderNote {
   body: string;
 }
 
+/** Shipment details as reported by the delivery provider (NBOX today). */
+export interface OrderDelivery {
+  carrier?: string;
+  service?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  /** ISO timestamps. */
+  shippedAt?: string;
+  deliveredAt?: string;
+  /** Carrier's own estimated delivery, as quoted at booking time. */
+  eta?: string;
+}
+
 export interface Order {
   id: string;
   date: string;
@@ -142,6 +155,10 @@ export interface Order {
   trackingNumber?: string;
   nboxBookingFailed?: boolean;
   nboxBookingError?: string;
+  /** Carrier/shipment details. Absent when nothing has been booked yet. */
+  delivery?: OrderDelivery;
+  /** Undefined until GET /admin/orders/:id has resolved — the list endpoint
+      does not carry these, so undefined means "loading", not "none". */
   timeline?: OrderTimelineEntry[];
   notes?: OrderNote[];
 }

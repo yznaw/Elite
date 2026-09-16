@@ -12,6 +12,7 @@ import { PaginationComponent } from '../../shared/pagination/pagination.componen
 import { OrderDrawerComponent } from './order-drawer.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
+import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminOrdersService, OrderListParams } from '../../services/admin-orders.service';
 import { Order, QAR } from '../../models';
@@ -107,7 +108,13 @@ import { Order, QAR } from '../../models';
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
             </ap-empty-state>
           } @else {
-            <ap-sortable-table [columns]="columns" [rows]="_orders()" [rowClick]="openOrder">
+            <ap-sortable-table
+              [columns]="columns"
+              [rows]="_orders()"
+              [rowClick]="openOrder"
+              [serverSort]="true"
+              (sortChange)="onSortChange($event)"
+            >
               <ng-template apCellTpl="id" let-r>
                 <span class="strong mono" style="color:var(--green);">{{ r.id }}</span>
               </ng-template>
@@ -276,6 +283,7 @@ import { Order, QAR } from '../../models';
 })
 export class OrdersComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly route = inject(ActivatedRoute);
   private readonly ordersApi = inject(AdminOrdersService);
@@ -300,9 +308,21 @@ export class OrdersComponent implements OnInit, OnDestroy {
 
     // Deep-link from customer drawer: ?id=EC-26-1042 auto-opens that order.
     const id = this.route.snapshot.queryParamMap.get('id');
-    if (id) {
-      const target = this._orders().find((o) => o.id === id);
-      if (target) void this.openOrder(target);
+    if (id) void this.openOrderById(id);
+  }
+
+  /** A deep-linked order is usually not on the first page of the default
+      filter. Previously this only searched the rows already loaded and failed
+      in complete silence. */
+  private async openOrderById(id: string): Promise<void> {
+    const loaded = this._orders().find((o) => o.id === id);
+    if (loaded) { this.openOrder(loaded); return; }
+
+    try {
+      const full = await this.ordersApi.get(id);
+      this.active.set(full);
+    } catch {
+      this.toast.error(this.t('orders.deepLink.notFound.title'), id);
     }
   }
 
@@ -328,6 +348,8 @@ export class OrdersComponent implements OnInit, OnDestroy {
         fulfillment: this.fulfillmentFilter() !== 'all' ? this.fulfillmentFilter() : undefined,
         from:        from || undefined,
         to:          to || undefined,
+        sort:        this.sort() ?? undefined,
+        dir:         this.sortDir(),
       });
       this._ordersSignal.set(resp.orders);
       this._serverTotal.set(resp.total);
@@ -351,6 +373,16 @@ export class OrdersComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Sorting is applied by the server so it covers the whole result set, not
+      just the rows currently on screen. Reset to page 1: the row that sorts
+      first is meaningless if we stay on page 4. */
+  onSortChange(e: { sort: string | null; dir: 'asc' | 'desc' }): void {
+    this.sort.set(e.sort);
+    this.sortDir.set(e.dir);
+    this.page.set(0);
+    void this.refreshOrders();
+  }
+
   private effectiveDateRange(): { from: string; to: string } {
     const dr = this.dateRange();
     const today = new Date().toISOString().slice(0, 10);
@@ -368,6 +400,9 @@ export class OrdersComponent implements OnInit, OnDestroy {
   readonly paymentFilter = signal('all');
   readonly fulfillmentFilter = signal('all');
   readonly dateRange = signal<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
+  /** null = the server's default order (newest first). */
+  readonly sort = signal<string | null>(null);
+  readonly sortDir = signal<'asc' | 'desc'>('desc');
   readonly dateFrom = signal('');
   readonly dateTo = signal('');
   readonly fulfillingId = signal<string | null>(null);
@@ -410,7 +445,14 @@ export class OrdersComponent implements OnInit, OnDestroy {
         this._ordersSignal.update((all) => all.map((x) => (x.id === full.id ? { ...x, ...full } : x)));
         this.active.set(full);
       })
-      .catch(() => {});
+      .catch(() => {
+        // The interceptor's generic toast does not name the order, and without
+        // the detail payload the timeline and notes stay stuck on their skeleton.
+        this.toast.error(this.t('orders.detailFailed.title'), o.id, {
+          label: this.t('common.retry'),
+          run: () => this.openOrder(o),
+        });
+      });
   };
 
   onOrderUpdated(updated: Order): void {
@@ -462,8 +504,28 @@ export class OrdersComponent implements OnInit, OnDestroy {
     void this.refreshOrders();
   }
 
+  /** The drawer refuses to mark an order shipped without a tracking number.
+      This button used to jump straight to `shipped` with no tracking and no
+      confirmation, so the same rule and a confirm step apply here. */
   async markFulfilled(o: Order): Promise<void> {
     if (this.fulfillingId() === o.id) return;
+
+    if (!o.trackingNumber) {
+      this.toast.warning(this.t('orders.markFulfilled.needsTracking.title'), `${o.id} · ${o.customer}`, {
+        label: this.t('orders.toast.viewOrder'),
+        run: () => this.openOrder(o),
+      });
+      return;
+    }
+
+    const ok = await this.confirm.ask({
+      title: this.t('orders.markFulfilled.confirm.title'),
+      message: `${this.t('orders.markFulfilled.confirm.message')} ${o.id} · ${o.customer}`,
+      confirmLabel: this.t('orders.markFulfilled'),
+      cancelLabel: this.t('common.cancel'),
+    });
+    if (!ok) return;
+
     this.fulfillingId.set(o.id);
     try {
       const updated = await this.ordersApi.updateStatus(o.id, {
@@ -483,14 +545,35 @@ export class OrdersComponent implements OnInit, OnDestroy {
     }
   }
 
-  exportCsv(): void {
+  /** Exports every order matching the current filters, not just the page on
+      screen. The toast previously reported the page count as the full total. */
+  async exportCsv(): Promise<void> {
     if (this.exporting()) return;
     this.exporting.set(true);
     try {
-      const orders = this._orders();
+      const { from, to } = this.effectiveDateRange();
+      const base: OrderListParams = {
+        q:           this.search() || undefined,
+        payment:     this.paymentFilter() !== 'all' ? this.paymentFilter() : undefined,
+        fulfillment: this.fulfillmentFilter() !== 'all' ? this.fulfillmentFilter() : undefined,
+        from:        from || undefined,
+        to:          to || undefined,
+        sort:        this.sort() ?? undefined,
+        dir:         this.sortDir(),
+      };
+
+      const PAGE = 200;
+      const orders: Order[] = [];
+      for (let page = 0; ; page++) {
+        const resp = await this.ordersApi.list({ ...base, page, limit: PAGE });
+        orders.push(...resp.orders);
+        if (orders.length >= resp.total || resp.orders.length === 0) break;
+      }
+
       const headers = [
-        this.t('orders.csv.orderId'), this.t('orders.csv.date'), this.t('orders.csv.customer'),
-        this.t('orders.csv.items'), this.t('orders.csv.total'), this.t('orders.csv.payment'), this.t('orders.csv.fulfillment'),
+        this.t('orders.col.id'), this.t('orders.col.date'), this.t('orders.col.customer'),
+        this.t('orders.col.items'), this.t('orders.col.total'),
+        this.t('orders.col.payment'), this.t('orders.col.fulfillment'),
       ];
       const rows = orders.map((o) => [
         o.id, o.date, o.customer, o.itemsCount,
@@ -499,7 +582,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
       const csv = [headers, ...rows]
         .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
         .join('\r\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -508,7 +591,12 @@ export class OrdersComponent implements OnInit, OnDestroy {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      this.toast.success(this.t('orders.toast.exportDone'), `${orders.length} ${orders.length !== 1 ? this.t('orders.items') : this.t('orders.item')} · CSV`);
+      this.toast.success(
+        this.t('orders.toast.exportDone'),
+        `${orders.length} ${orders.length !== 1 ? this.t('orders.items') : this.t('orders.item')} · CSV`,
+      );
+    } catch {
+      // Global error interceptor raises the toast.
     } finally {
       this.exporting.set(false);
     }

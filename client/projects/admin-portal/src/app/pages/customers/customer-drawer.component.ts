@@ -1,5 +1,5 @@
 import {
-  Component, EventEmitter, Input, OnDestroy, OnInit, Output,
+  Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
   ChangeDetectionStrategy
 } from '@angular/core';
@@ -33,7 +33,8 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
     imports: [CommonModule, FormsModule, IconComponent, AvatarComponent, PillComponent, SpinnerComponent, SaveBarComponent],
     template: `
     <div class="overlay" (click)="handleClose()"></div>
-    <div class="drawer drawer-wide customer-drawer" [class.is-dirty]="dirty()">
+    <div class="drawer drawer-wide customer-drawer" [class.is-dirty]="dirty()"
+         role="dialog" aria-modal="true" [attr.aria-label]="form().name || t('customers.add')">
 
       <!-- Head -->
       <div class="drawer-head">
@@ -496,6 +497,13 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
     this.closed.emit();
   }
 
+  /** Escape closes the drawer, but never silently discards unsaved edits —
+      handleClose() shakes the save bar instead when the form is dirty. */
+  @HostListener('window:keydown.escape')
+  onEscape(): void {
+    if (this.saveState() !== 'saving' && !this.deleting()) this.handleClose();
+  }
+
   triggerShake(): void {
     this.shakeSaveBar.set(false);
     setTimeout(() => this.shakeSaveBar.set(true), 10);
@@ -525,7 +533,8 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
     if (!ok) return;
     this.deleting.set(true);
     try {
-      this.toast.success(this.t('customerDrawer.toast.deleted'), this.customer.name);
+      // The parent owns the DELETE request and raises the toast only once the
+      // server has confirmed it. Reporting success from here would lie on failure.
       this.deleted.emit(this.customer);
     } finally {
       this.deleting.set(false);
