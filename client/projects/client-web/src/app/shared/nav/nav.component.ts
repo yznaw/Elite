@@ -6,7 +6,6 @@ import { CartService } from '../../services/cart.service';
 import { I18nService } from '../../services/i18n.service';
 import { Locale, LocaleService } from '../../services/locale.service';
 import { ProductsService } from '../../services/products.service';
-import { NousBadgeComponent } from '../nous-badge/nous-badge.component';
 
 interface NavLink {
   path: string;
@@ -19,7 +18,7 @@ const FALLBACK_SEARCH_IMAGE =
 
 @Component({
     selector: 'cw-nav',
-    imports: [CommonModule, RouterLink, RouterLinkActive, NousBadgeComponent],
+    imports: [CommonModule, RouterLink, RouterLinkActive],
     template: `
     <nav class="nav-shell" [class.is-scrolled]="scrolled()" [attr.aria-label]="t('nav.menu')">
       <a routerLink="/" class="brand-link" [attr.aria-label]="t('brand.name')" data-track="nav-brand">
@@ -210,7 +209,6 @@ const FALLBACK_SEARCH_IMAGE =
 
         <div class="mobile-footer">
           <p>{{ t('nav.bespokeAvailable') }}</p>
-          <cw-nous-badge placement="drawer"/>
         </div>
       </div>
     }

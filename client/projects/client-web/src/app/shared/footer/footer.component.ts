@@ -8,7 +8,6 @@ import { LocaleService } from '../../services/locale.service';
 import { HomeContentService } from '../../services/home-content.service';
 import { SocialLink } from '../../models/home-content.model';
 import { socialUrl } from '../../utils/social-url';
-import { NousBadgeComponent } from '../nous-badge/nous-badge.component';
 import { API_BASE } from '../../core/api-base';
 
 interface FooterLink {
@@ -30,7 +29,7 @@ interface PolicyMeta {
 
 @Component({
     selector: 'cw-footer',
-    imports: [CommonModule, RouterLink, NousBadgeComponent],
+    imports: [CommonModule, RouterLink],
     template: `
     <footer id="site-footer" class="site-footer">
       <div class="footer-grid" [class.has-legal]="policyLinks().length > 0">
@@ -115,7 +114,6 @@ interface PolicyMeta {
         <p>
           {{ t('footer.cities') }}
         </p>
-        <cw-nous-badge/>
       </div>
     </footer>
   `,

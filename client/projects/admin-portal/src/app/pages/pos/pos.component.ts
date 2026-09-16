@@ -31,7 +31,6 @@ import { ClientLoggerService } from '../../services/client-logger.service';
 import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { checkForPosUpdate, posBuildVersions, setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
 import { PosReceiptData } from '../../services/pos-receipt-renderer.service';
-import { NousBadgeComponent } from '../../shared/nous-badge/nous-badge.component';
 
 type PosPhase = 'loading' | 'enrollment' | 'resume-failed' | 'shift' | 'shift-recovery' | 'selling';
 type PaymentMethod = 'cash' | 'card';
@@ -59,7 +58,7 @@ const POS_REGISTER_REJECTED_EVENT = 'elite:pos-register-rejected';
 
 @Component({
     selector: 'ap-pos',
-    imports: [CommonModule, FormsModule, PaginationComponent, NousBadgeComponent],
+    imports: [CommonModule, FormsModule, PaginationComponent],
     templateUrl: './pos.component.html',
     changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './pos.component.scss'
