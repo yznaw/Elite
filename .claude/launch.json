@@ -16,6 +16,13 @@
       "port": 4200
     },
     {
+      "name": "client-web-csr",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["ng", "serve", "client-web", "--configuration", "csr", "--port", "4210"],
+      "cwd": "client",
+      "port": 4210
+    },
+    {
       "name": "admin-portal",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start:admin"],
