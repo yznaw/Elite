@@ -9,6 +9,8 @@ import {
   signal,
   ChangeDetectionStrategy,
   PLATFORM_ID,
+  TransferState,
+  makeStateKey,
 } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
@@ -43,6 +45,9 @@ interface StorefrontCollection {
 }
 
 const FEATURED_COLLECTION_HANDLES = ['men', 'kids', 'sunglasses'];
+
+/** The collection tiles the server rendered; see `seededTiles` below. */
+const HOME_TILES_KEY = makeStateKey<HomeCollectionTileContent[]>('home-collection-tiles');
 
 /** Swatches drawn in the hero before the rest collapse into a `+N` chip. */
 const HERO_MAX_SWATCHES = 4;
@@ -121,6 +126,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly apiBase      = inject(API_BASE);
   private readonly publicApiBase = inject(PUBLIC_API_BASE);
   private readonly isBrowser    = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly transferState = inject(TransferState);
 
   // Field initializer, so the effect is owned by this component's injector and
   // is torn down on navigation. Re-runs when the locale flips.
@@ -253,8 +259,16 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly heroPendingItemIndex = signal(0);
   readonly contentData         = this.homeContent.contentData;
   readonly layoutSections      = this.homeContent.layoutSections;
-  readonly collectionTiles     = signal<HomeCollectionTileContent[]>([]);
-  readonly collectionsLoaded   = signal(false);
+  /**
+   * Seeded from the server's render for the same reason the content signals in
+   * HomeContentService are: `pageReady` gates the whole page behind a loading
+   * shell, and these two are half of that condition. Left starting empty, a
+   * hydrating client swapped the rendered page for the shell until the
+   * collections request came back, however fast that was.
+   */
+  private readonly seededTiles = this.transferState.get(HOME_TILES_KEY, null);
+  readonly collectionTiles     = signal<HomeCollectionTileContent[]>(this.seededTiles ?? []);
+  readonly collectionsLoaded   = signal(this.seededTiles !== null);
   readonly pageReady           = computed(() => !this.homeContent.loading() && this.collectionsLoaded());
 
   // ── Hero slider — read from API, fallback to model defaults ─────────────
@@ -1097,8 +1111,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private async loadCollectionTiles(): Promise<void> {
-    this.collectionsLoaded.set(false);
-
+    // Deliberately does not reset `collectionsLoaded`. It feeds `pageReady`,
+    // which gates the entire page behind a loading shell, so clearing it here
+    // tore the rendered page down on every hydration and every in-app return
+    // to `/`. Once there are tiles to show, a re-fetch is a background update.
     try {
       const res = await firstValueFrom(
         this.http.get<ApiResponse<StorefrontCollection[]>>(`${this.apiBase}/collections?limit=12`),
@@ -1132,6 +1148,9 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.collectionTiles.set([]);
     } finally {
       this.collectionsLoaded.set(true);
+      if (!this.isBrowser) {
+        this.transferState.set(HOME_TILES_KEY, this.collectionTiles());
+      }
     }
   }
 

@@ -1,6 +1,6 @@
-import { isPlatformBrowser } from '@angular/common';
+import { isPlatformBrowser, isPlatformServer } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { ApplicationRef, Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
+import { ApplicationRef, Injectable, PLATFORM_ID, TransferState, computed, inject, makeStateKey, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { EMPTY_HOME_CONTENT, HeroProductRef, HomeContentData, MediaVariant, createEmptyHomeContent } from '../models/home-content.model';
 import { mediaVariantKey, resolveClientMediaUrl } from '../utils/media-url';
@@ -22,6 +22,25 @@ interface StorefrontSnapshot {
   blocks: Array<{ id: string; title: string; visible: boolean }>;
 }
 
+/**
+ * What the server rendered the home page with, handed to the browser inside the
+ * document so the first client render can match it exactly.
+ *
+ * The HTTP transfer cache already stops the browser re-requesting this data,
+ * but it hands it back through `HttpClient`, which resolves a promise — always
+ * at least a microtask after the first change detection. That gap is enough:
+ * the page arrives fully rendered, the client's first pass finds empty content
+ * and `loading` still true, swaps the whole page for the loading shell, and
+ * swaps back a frame later. Seeding straight from `TransferState` is
+ * synchronous, so there is no pass where the state disagrees with the DOM.
+ */
+interface HomeContentSnapshot {
+  content: HomeContentData;
+  layout: HomeLayoutSection[];
+}
+
+const HOME_STATE_KEY = makeStateKey<HomeContentSnapshot>('home-content');
+
 const DEFAULT_HOME_LAYOUT: HomeLayoutSection[] = [
   { id: 'home-hero',        title: 'Landing Hero',        visible: true },
   { id: 'home-collections', title: 'Featured Collections', visible: true },
@@ -35,10 +54,24 @@ export class HomeContentService {
   private readonly http = inject(HttpClient);
   private readonly apiBase = inject(API_BASE);
   private readonly publicApiBase = inject(PUBLIC_API_BASE);
-  private readonly _contentData = signal<HomeContentData>(this.cloneContent(EMPTY_HOME_CONTENT));
-  private readonly _layoutSections = signal<HomeLayoutSection[]>([]);
-  private readonly _loading = signal(true);
-  private readonly _loaded = signal(false);
+  private readonly transferState = inject(TransferState);
+  private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
+  /**
+   * Null on the server and on a cold client; the server's render on a hydrating
+   * one. Read once, here, because these fields initialise in declaration order
+   * and every signal below depends on it.
+   */
+  private readonly seeded = this.transferState.get(HOME_STATE_KEY, null);
+
+  private readonly _contentData = signal<HomeContentData>(
+    this.seeded ? this.seeded.content : this.cloneContent(EMPTY_HOME_CONTENT),
+  );
+  private readonly _layoutSections = signal<HomeLayoutSection[]>(this.seeded?.layout ?? []);
+  // `loading` gates a full-page loading shell, so it means "nothing to show
+  // yet", not "a request is in flight". A hydrating client has the server's
+  // page on screen already and must not start out claiming otherwise.
+  private readonly _loading = signal(!this.seeded);
+  private readonly _loaded = signal(this.seeded !== null);
   private readonly _previewToken = signal<string | null>(this.detectPreviewToken());
   private loadPromise: Promise<HomeContentData> | null = null;
 
@@ -78,7 +111,7 @@ export class HomeContentService {
     if (token) {
       // Preview mode: never cache — always fetch the latest saved draft
       // so re-opening preview always reflects the most recent Save Draft.
-      this._loading.set(true);
+      if (!this._loaded()) this._loading.set(true);
       const bust = `&t=${Date.now()}`;
       return firstValueFrom(
         this.http.get<ApiResponse<HomeContentData>>(
@@ -88,6 +121,7 @@ export class HomeContentService {
         .then((res) => {
           if (res.data) this._contentData.set(this.normalizeContentImages(res.data));
           this._loaded.set(true);
+          this.captureForClient();
           return this._contentData();
         })
         .catch(() => this._contentData())
@@ -103,8 +137,15 @@ export class HomeContentService {
 
     // Normal mode: load live content + layout
     const bust = reload ? `?t=${Date.now()}` : '';
-    this._loading.set(true);
-    this._loaded.set(false);
+    // Only when there is genuinely nothing on screen. Every caller of this is
+    // also the hydration path and the in-app return to `/`, where the page is
+    // already rendered: flipping these unconditionally is what replaced it with
+    // the loading shell for a frame. A reload with content up is a background
+    // revalidation, and the new data simply lands when it lands.
+    if (!this._loaded()) {
+      this._loading.set(true);
+      this._loaded.set(false);
+    }
 
     this.loadPromise = Promise.allSettled([
       firstValueFrom(this.http.get<ApiResponse<HomeContentData>>(`${this.apiBase}/storefront-content${bust}`)),
@@ -123,6 +164,7 @@ export class HomeContentService {
         }
 
         this._loaded.set(true);
+        this.captureForClient();
         return this._contentData();
       })
       .catch(() => this._contentData())
@@ -131,6 +173,22 @@ export class HomeContentService {
       });
 
     return this.loadPromise;
+  }
+
+  /**
+   * Hand the rendered state to the browser. Server-only: on the client this
+   * would just grow the payload of a document nobody re-reads.
+   *
+   * Stored already normalised, which is safe because `PUBLIC_API_BASE` resolves
+   * to the same value on both sides for the same page (see core/api-base.ts) --
+   * the image URLs in here are the ones the browser would have built anyway.
+   */
+  private captureForClient(): void {
+    if (!this.isServer) return;
+    this.transferState.set(HOME_STATE_KEY, {
+      content: this._contentData(),
+      layout: this._layoutSections(),
+    });
   }
 
   private detectPreviewToken(): string | null {
