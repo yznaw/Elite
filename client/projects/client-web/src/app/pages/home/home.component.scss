@@ -46,7 +46,10 @@
   --claude-border-strong: #b8965a;
   --claude-text-primary: #1c140c;
   --claude-text-secondary: rgba(28, 20, 12, 0.62);
-  --claude-text-gold: #9f783c;
+  // Darkened from #9f783c (4.02:1 on white, failed WCAG AA). Same hue and
+  // saturation, brightness scaled to 93%, which clears 4.5:1. The "+N" swatch
+  // counter is the smallest text using it, so this token sets the floor.
+  --claude-text-gold: #947038;
   --claude-crystal-green: #0b6f62;
   --claude-crystal-green-hover: #09584e;
   --claude-shadow-soft: 0 28px 80px rgba(87, 58, 31, 0.13);

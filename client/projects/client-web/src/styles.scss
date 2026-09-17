@@ -17,7 +17,10 @@
   --green-2:   #004538;
   --cream:     #1a1208;
   --cream-dim: #3d3120;
-  --muted:     #8a7a62;
+  // Darkened from #8a7a62, which measured 4.17:1 on white and failed WCAG AA
+  // for body text. Hue and saturation are unchanged (a uniform 95% brightness
+  // scale), so this reads as the same colour; it just clears 4.5:1.
+  --muted:     #83745d;
   --ff-serif:  'Montserrat', sans-serif;
   --ff-sans:   'Inter', sans-serif;
   --ff-arabic: 'IBM Plex Sans Arabic', sans-serif;
