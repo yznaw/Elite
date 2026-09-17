@@ -399,10 +399,16 @@
                         (click)="goToCollectionTile(tile)"
                       >
                         @if (tile.imageUrl) {
+                          <!-- attr. bindings, not property bindings: `srcset`
+                               and `sizes` are IDL properties, so binding null
+                               to them writes the string "null" rather than
+                               removing the attribute, and the browser then
+                               treats it as a candidate URL and fetches /null
+                               in preference to src. -->
                           <img
                             [src]="tile.imageUrl"
-                            [srcset]="heroSrcset(tile.imageUrl) || null"
-                            [sizes]="heroSrcset(tile.imageUrl) ? collectionTileSizes : null"
+                            [attr.srcset]="heroSrcset(tile.imageUrl) || null"
+                            [attr.sizes]="heroSrcset(tile.imageUrl) ? collectionTileSizes : null"
                             [alt]="collectionTitle(tile)"
                             loading="lazy"
                             decoding="async"
@@ -429,10 +435,13 @@
             >
               <div class="discount-hero anim-fade-up">
                 <div class="discount-image">
+                  <!-- attr. bindings for the same reason as the collection
+                       tiles above: a null property binding here writes
+                       srcset="null" and the browser fetches /null. -->
                   <img
                     [src]="contentData().hero.imageUrl"
-                    [srcset]="heroSrcset(contentData().hero.imageUrl) || null"
-                    [sizes]="heroSrcset(contentData().hero.imageUrl) ? discountImageSizes : null"
+                    [attr.srcset]="heroSrcset(contentData().hero.imageUrl) || null"
+                    [attr.sizes]="heroSrcset(contentData().hero.imageUrl) ? discountImageSizes : null"
                     [alt]="localized(contentData().hero.titleEn, contentData().hero.titleAr, contentData().hero.title)"
                     loading="lazy"
                     decoding="async"
