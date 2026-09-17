@@ -54,7 +54,7 @@ sudo cp /var/www/elite/deploy/nginx/compression.conf  /etc/nginx/conf.d/compress
 
 Two files, deliberately. Compression is http-context configuration; `sites-enabled/*` is included *inside* the http block, so keeping those directives in the site file put them in http context as well and collided with the `gzip on;` that Ubuntu's stock `nginx.conf` already sets — `nginx -t` fails outright with *"gzip directive is duplicate"*. A second site file would have hit the same wall.
 
-It carries four things beyond a plain SPA host:
+It carries six things beyond a plain SPA host:
 
 1. **Compression** (in `compression.conf`). Ubuntu's stock `nginx.conf` has
    `gzip on;` active but leaves `gzip_types` commented out, so nginx falls back
@@ -83,6 +83,25 @@ It carries four things beyond a plain SPA host:
    through. The build no longer contains `index.html`, so the old
    `try_files $uri $uri/ /index.html` must not come back. First-time rollout
    steps are in `docs/DEPLOYMENT.md` section 7c.
+5. **HTTP/2** (in `elite.conf`), as a standalone `http2 on;` in each HTTPS
+   server block. The storefront pulls roughly twenty images from one origin and
+   HTTP/1.1 only allows six connections to it, so they queued: a Lighthouse run
+   measured every request as `http/1.1` and put the cost at about a second of
+   LCP. **This needs nginx 1.25.1 or newer.** On anything older `http2 on;` is
+   an unknown directive and `nginx -t` fails — check with `nginx -v` first and
+   upgrade rather than moving the token onto the `listen` line, which is
+   certbot's and must not be edited (see the warning below).
+6. **Uploaded images served from disk** (in `elite.conf`). The storefront builds
+   media URLs as `<apiBase>/uploads/…` with `apiBase` of `/api`, so every image
+   — the LCP one included — used to match `location /api/` and be proxied
+   through node. `location /api/uploads/` now aliases the same directory that
+   `/uploads/` does; longest matching prefix wins, so it takes precedence over
+   `/api/` wherever it sits in the file. The API side is a plain
+   `express.static` with no auth or per-request work (`server/index.js`), so
+   nothing is bypassed. Both server blocks need it, because the admin portal
+   resolves media through `/api` too. If `grep avif /etc/nginx/mime.types` comes
+   up empty, add `types { image/avif avif; }` inside the new location — Express
+   was setting that content type by hand.
 
 > **If certbot has already run on this server, do not overwrite the live file blind.**
 > `certbot --nginx` rewrites it in place, adding `listen 443 ssl`, the
@@ -120,6 +139,7 @@ Choose the redirect option when prompted. After that, Nginx owns HTTPS and forwa
 ## Verify
 
 ```bash
+nginx -v
 sudo nginx -t
 sudo systemctl reload nginx
 sudo certbot renew --dry-run
@@ -128,6 +148,8 @@ curl -I http://elitecollections.qa
 curl -I https://elitecollections.qa
 curl -I https://admin.elitecollections.qa
 curl https://admin.elitecollections.qa/api/health
+
+curl -sI --http2 https://elitecollections.qa/ | head -1
 ```
 
 Expected results:
@@ -136,3 +158,7 @@ Expected results:
 - HTTPS returns `200`.
 - `/api/health` returns the Express health response.
 - The browser shows a valid lock icon for both domains.
+- The last command prints `HTTP/2 200`. `HTTP/1.1 200` means `http2 on;` is not
+  in effect — check `nginx -v` against the 1.25.1 floor in item 5 above.
+- An image request (`curl -sI https://elitecollections.qa/api/uploads/<file>`)
+  leaves no line in the API log, because nginx is answering it from disk.
