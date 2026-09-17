@@ -284,6 +284,19 @@ export interface MediaVariant {
   width: number;
 }
 
+/**
+ * The little a hero slide needs to know about the product it links to: the slug
+ * its call to action points at, and the colourways the `+N` chip counts.
+ *
+ * Not a `Product`. Widening it invites the page back into loading the catalogue
+ * for fields it can already get from `ProductsService` in the browser.
+ */
+export interface HeroProductRef {
+  id: string;
+  slug: string;
+  colors: string[];
+}
+
 export interface HomeContentData {
   hero: HomeDiscountHeroContent;
   collections: HomeCollectionTileContent[];
@@ -307,6 +320,17 @@ export interface HomeContentData {
    * absent key means no `srcset`, which is correct-but-heavy rather than broken.
    */
   mediaVariants: Record<string, MediaVariant[]>;
+  /**
+   * Hero-linked products, keyed by the `productId` on the slide.
+   *
+   * Also a read-time projection. It exists so the home page does not have to
+   * load the catalogue to read a slug and a colour list: doing that put roughly
+   * 730 kB of products into the rendered HTML's transfer state on every
+   * request. An absent key means the product was deleted, unpublished, or the
+   * slide carries a non-uuid id — the hero falls back to linking by id, which
+   * still resolves.
+   */
+  heroProducts: Record<string, HeroProductRef>;
 }
 
 export function createEmptyHomeContent(): HomeContentData {
@@ -388,6 +412,7 @@ export function createEmptyHomeContent(): HomeContentData {
       },
     },
     mediaVariants: {},
+    heroProducts: {},
   };
 }
 

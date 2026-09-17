@@ -399,7 +399,14 @@
                         (click)="goToCollectionTile(tile)"
                       >
                         @if (tile.imageUrl) {
-                          <img [src]="tile.imageUrl" [alt]="collectionTitle(tile)" />
+                          <img
+                            [src]="tile.imageUrl"
+                            [srcset]="heroSrcset(tile.imageUrl) || null"
+                            [sizes]="heroSrcset(tile.imageUrl) ? collectionTileSizes : null"
+                            [alt]="collectionTitle(tile)"
+                            loading="lazy"
+                            decoding="async"
+                          />
                         }
                         <span class="collection-overlay"></span>
                         <span class="collection-title">{{ collectionTitle(tile) }}</span>
@@ -424,7 +431,11 @@
                 <div class="discount-image">
                   <img
                     [src]="contentData().hero.imageUrl"
+                    [srcset]="heroSrcset(contentData().hero.imageUrl) || null"
+                    [sizes]="heroSrcset(contentData().hero.imageUrl) ? discountImageSizes : null"
                     [alt]="localized(contentData().hero.titleEn, contentData().hero.titleAr, contentData().hero.title)"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </div>
 

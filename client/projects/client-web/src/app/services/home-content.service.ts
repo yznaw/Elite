@@ -2,7 +2,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { ApplicationRef, Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { EMPTY_HOME_CONTENT, HomeContentData, MediaVariant, createEmptyHomeContent } from '../models/home-content.model';
+import { EMPTY_HOME_CONTENT, HeroProductRef, HomeContentData, MediaVariant, createEmptyHomeContent } from '../models/home-content.model';
 import { mediaVariantKey, resolveClientMediaUrl } from '../utils/media-url';
 import { API_BASE, PUBLIC_API_BASE } from '../core/api-base';
 
@@ -251,6 +251,22 @@ export class HomeContentService {
         return map;
       },
       {} as Record<string, MediaVariant[]>,
+    );
+
+    // Carried through as-is: ids, a slug and colour labels, with no URL in it to
+    // rebase. Copied rather than referenced so a later mutation of the raw
+    // response cannot reach into the signal the hero reads.
+    next.heroProducts = Object.entries(content.heroProducts ?? {}).reduce(
+      (map, [productId, ref]) => {
+        if (!productId || !ref?.id) return map;
+        map[productId] = {
+          id: ref.id,
+          slug: ref.slug ?? '',
+          colors: Array.isArray(ref.colors) ? [...ref.colors] : [],
+        };
+        return map;
+      },
+      {} as Record<string, HeroProductRef>,
     );
 
     return next;

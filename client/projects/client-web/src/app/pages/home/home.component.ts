@@ -369,14 +369,38 @@ export class HomeComponent implements OnInit, OnDestroy {
    *
    * It cannot come from `item.colors`: that array is the admin's *featured*
    * selection and the editor hard-caps it at four, so subtracting the cap from
-   * it always yields zero and the chip could never appear. The real total lives
-   * on the product record, read through `ProductsService` so a colour added in
-   * the admin is reflected on the next refresh without a template change.
+   * it always yields zero and the chip could never appear. The real total comes
+   * from the product record, via `heroProduct`.
    */
+  /**
+   * The hero's view of a linked product: `id`, `slug` and `colors`.
+   *
+   * Reads the projection the content payload carries first, and only then the
+   * catalogue in `ProductsService`. The order is what keeps hydration quiet.
+   * The server renders from `heroProducts`, which arrives inside the content
+   * response and so is in the transfer state the moment the browser boots. The
+   * catalogue is not: `ProductsService` starts fetching it at hydration and it
+   * lands a few hundred milliseconds later. Asking the catalogue first would
+   * mean the first change detection on the client finds nothing, and the `+N`
+   * chip and the product link would visibly reset and then come back.
+   *
+   * The catalogue is still the fallback, so a slide whose product the
+   * projection missed (deleted, unpublished, non-uuid id) still resolves once
+   * the browser has the catalogue for its own reasons.
+   */
+  private heroProduct(productId: string): { slug: string; colors: string[] } | null {
+    const fromContent = this.contentData().heroProducts?.[productId];
+    if (fromContent) return fromContent;
+    const fromCatalogue = this.productsService.getById(productId);
+    return fromCatalogue
+      ? { slug: fromCatalogue.slug ?? '', colors: fromCatalogue.colors ?? [] }
+      : null;
+  }
+
   readonly activeHeroProductColorCount = computed(() => {
     const productId = this.activeHeroItem()?.productId;
     if (!productId) return 0;
-    const product = this.productsService.products().find((p) => p.id === productId);
+    const product = this.heroProduct(productId);
     if (!product) return 0;
     // Deduplicated on the same key the swatches use, so a casing or spacing
     // difference between the product record and the featured list cannot
@@ -469,9 +493,14 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.heroReducedMotionMedia.addEventListener('change', this.onHeroMotionPreferenceChange);
     }
     void this.referenceData.ensureColors();
-    // Feeds the `+N` colour chip. The service caches for 60s and revalidates on
-    // return, so an admin adding a colourway shows up without a hard reload.
-    void this.productsService.ensureLoaded();
+    // No `productsService.ensureLoaded()` here. The `+N` colour chip and the
+    // hero's product link are the only things this page wanted the catalogue
+    // for, and both now come from `content.heroProducts` — three fields per
+    // linked product instead of 43 full records. Loading it here cost a lot
+    // more than the request: the transfer cache embedded the response in the
+    // rendered HTML, measured at 731 kB of an 853 kB page. The browser still
+    // warms the catalogue from `ProductsService`'s own constructor, for search
+    // and navigation, but after paint rather than inside the document.
     void Promise.all([
       this.loadCollectionTiles(),
       this.homeContent.refresh(true),
@@ -567,8 +596,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly heroProductLink = computed<unknown[] | null>(() => {
     const productId = this.activeHeroItem()?.productId;
     if (!productId) return null;
-    const linked = this.productsService.getById(productId);
-    return ['/product', linked ? this.productsService.productKey(linked) : productId];
+    const linked = this.heroProduct(productId);
+    return ['/product', linked?.slug?.trim() || productId];
   });
 
   /** The colourway currently previewed in the hero, carried into the product page. */
@@ -1259,6 +1288,19 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly heroSizes =
     `(max-width: ${HERO_STACKED_MAX_PX}px) min(132vw, 620px), min(1240px, 76vw)`;
   readonly heroPeekSizes = `(max-width: ${HERO_STACKED_MAX_PX}px) min(38vw, 152px)`;
+
+  /**
+   * Widths for the two images outside the hero, mirroring home.component.scss
+   * the same way `heroSizes` does. Both render into fixed-height boxes with
+   * `object-fit: cover`, so these describe the box, not the upload.
+   *
+   * Collection tiles: `.collection-grid` is a single column until the 3-column
+   * rule at min-width 1024 wins, so full width below that and a third of it
+   * above. Discount image: `.discount-hero` stacks below 720px and is the
+   * 1.42fr of a `1.42fr / 0.58fr` split above it, i.e. ~71%.
+   */
+  readonly collectionTileSizes = '(max-width: 1023px) 100vw, 33vw';
+  readonly discountImageSizes = '(max-width: 719px) 100vw, 71vw';
 
   private preloadHeroAssets(): void {
     const firstUrl = this.heroItems()[0]?.imageUrl;

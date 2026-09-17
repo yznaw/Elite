@@ -174,7 +174,13 @@ The API-down pass also fails if a data page still ships API data, which would me
 
 **Run it on the production Node major (22).** The script refuses to run on any other. Node 25+ defines browser globals such as `sessionStorage`, so an unguarded call passes on a newer local Node and still crashes the production render: that is exactly how `/?order_id=…` (Sadad's cancel return) shipped as a `404` on 12 September 2026. On macOS with Homebrew: `$(brew --prefix node@22)/bin/node scripts/ssr-smoke.mjs`.
 
-**Only pages that display products fetch them on the server.** `ProductsService` loads the catalogue eagerly in the browser but, on the server, only when a page calls `ensureLoaded()` (home, collection). Anything injected on every page (nav, footer, cart drawer) must not trigger a full-catalogue request during a render.
+**Only pages that display products fetch them on the server.** `ProductsService` loads the catalogue eagerly in the browser but, on the server, only when a page calls `ensureLoaded()` — which now means `/collection` alone, the one page that actually renders a product grid. Anything injected on every page (nav, footer, cart drawer) must not trigger a full-catalogue request during a render.
+
+Home used to call it too, for two fields on the hero's linked product, and paid for the whole catalogue to get them: the transfer cache embeds whatever the render fetched, so the rendered HTML measured **853 kB, of which 731 kB was one `/api/products` response**. It now reads `content.heroProducts` instead, a projection the content route already had to build for `mediaVariants` (`docs/05-api-server.md`). Measured on the same data: **853 kB → 148 kB** of HTML, **130 kB → 29 kB** gzipped, and the render itself **94 ms → 29 ms**, against a 20 ms floor for `/story`, a page with no catalogue at all.
+
+The rule this leaves behind: **a page that does not render products should never load the catalogue to read a field off one of them.** If the hero needs something new about its product, widen the projection in `storefront-content.route.js`, do not reach for `ensureLoaded()`.
+
+The order inside `heroProduct()` in `home.component.ts` is load-bearing. It reads `content.heroProducts` first and `ProductsService` only as a fallback, because the content response is in the transfer state at hydration while the catalogue is still in flight. Reversing the two would leave the first client-side change detection with nothing, and the `+N` chip and hero product link would visibly reset before coming back.
 
 ---
 
@@ -244,7 +250,7 @@ A tap has to be acknowledged immediately and resolved correctly even when severa
 
 **Touch policy.** The viewport meta carries no scale cap: deliberate pinch zoom stays available everywhere. Accidental double-tap zoom is suppressed where it happens instead, by `touch-action: manipulation` on the hero's arrows, swatches, pagination segments and CTA. The stage itself declares `pan-y pinch-zoom`. Focus zoom on form fields is handled separately by the 16px control floor in `styles.scss` — that floor is what makes removing the cap safe, so the two must not be separated.
 
-**Responsive sources.** `heroSrcset()` reads `mediaVariants` from the content payload; it does not derive candidates from the filename. The server joins `media_assets` on each hero image and reports the sizes it actually generated, keyed by upload filename. This matters because `createImageVariants` skips any size wider than roughly the source, so a hero uploaded at 1200px has no `-zoom` sibling — and the old string-concatenation version still advertised `-zoom` at `1800w`, which a retina browser would then choose. An upload the map does not cover gets no `srcset` and a plain `src`: heavier, but never a request for a file that was never written.
+**Responsive sources.** `heroSrcset()` reads `mediaVariants` from the content payload; it does not derive candidates from the filename. The server joins `media_assets` on every image in the content tree — not just the hero's — and reports the sizes it actually generated, keyed by upload filename. The name is historical: the discount hero (`.discount-image`) and the collection tiles use the same helper, with their own `sizes` strings on the component. This matters because `createImageVariants` skips any size wider than roughly the source, so a hero uploaded at 1200px has no `-zoom` sibling — and the old string-concatenation version still advertised `-zoom` at `1800w`, which a retina browser would then choose. An upload the map does not cover gets no `srcset` and a plain `src`: heavier, but never a request for a file that was never written.
 
 **Stacking.** `.hero-pagination` sets `position: relative; z-index: 3`. It runs an opacity animation with `fill: both`, which makes it a permanent stacking context; without an explicit z-index that context painted below `.hero-product`, and the absolutely positioned arrows inside it were completely unclickable at every width.
 - The stacked layout groups product name and description before the art, then pagination, colours and CTA.
@@ -398,17 +404,34 @@ Guards in `home.component.ts`:
 
 Swipe-hint pill text is `#7d5e28`, measured at 5.48:1 against its composited background. The previous `#8f6d32` measured 4.36:1 and missed the WCAG AA 4.5:1 floor.
 
+Two more tokens were below the same floor on white and have been darkened by a
+uniform brightness scale, so hue and saturation are unchanged:
+
+| Token | Was | Now | Contrast on white |
+|---|---|---|---|
+| `--claude-text-gold` (`home.component.scss`) | `#9f783c` | `#947038` | 4.02 -> 4.53 |
+| `--muted` (`styles.scss`) | `#8a7a62` | `#83745d` | 4.17 -> 4.54 |
+
+`--muted` is the site-wide secondary text colour, so this is the floor for every
+surface that uses it, not just the home stats grid where the audit caught it.
+
 ### Hero Assets
 
-The hero uses one dominant cutout and supporting detail images.
+**The hero no longer ships its own art.** It renders whatever the home content
+points at (`contentData().hero.imageUrl` and `heroSlider.items[]`), uploaded
+through the admin Media library and sized by the variant pipeline.
 
-| Asset | Purpose |
-|---|---|---|
-| `/assets/hero-scroll/elite-angle-pair-cutout.png` | Main transparent hero product image |
-| `/assets/hero-scroll/elite-angle-single.jpeg` | Leather strap thumbnail and natural grain detail |
-| `/assets/hero-scroll/elite-front-pair.jpeg` | Buckle thumbnail |
-| `/assets/hero-scroll/elite-top-pair.jpeg` | Stitching thumbnail and embossed footbed detail |
-| `/assets/hero-scroll/elite-side-single.jpeg` | Comfort sole thumbnail and profile detail |
+`src/assets/hero-scroll/` is left over from the version that did bundle its art:
+roughly 13 MB, and as of this change nothing in `src/` references it. It used to
+have exactly one reference, a `<link rel="preload">` in `index.html` naming
+`elite-hero-sandals-cutout.webp` at `fetchpriority="high"` — 227 kB fetched
+before anything else and then never painted, because the element it was meant
+for had long since become CMS-driven. That line is gone. A correct preload here
+would have to name a URL that only the API knows, so `home.component.ts`
+issues it at runtime instead (`preloadHeroAssets`).
+
+The folder itself is still on disk. It costs build and deploy time rather than
+visitor bandwidth, so it can be deleted once a release has proven nothing 404s.
 
 ### Framing and Responsive Notes
 

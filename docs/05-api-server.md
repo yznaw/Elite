@@ -339,7 +339,7 @@ See `server/routes/invitations.route.js`. Mounted in the **public** routes secti
 
 See `server/routes/storefront-content.route.js`. Exports a `publicRouter` and an `adminRouter`; the admin side requires an active admin session. Every write runs through `normalizeContent`, which fills missing keys from `DEFAULT_HOME_CONTENT` so a partial payload can never blank out a section.
 
-**`mediaVariants` is a read-time projection, not stored content.** `loadContent` and `loadDraft` join `media_assets` on every hero image and attach the responsive sizes that were actually generated, keyed by `storage_url`:
+**`mediaVariants` is a read-time projection, not stored content.** `loadContent` and `loadDraft` join `media_assets` on every image in the content tree and attach the responsive sizes that were actually generated, keyed by `storage_url`:
 
 ```json
 "mediaVariants": {
@@ -351,6 +351,29 @@ See `server/routes/storefront-content.route.js`. Exports a `publicRouter` and an
 ```
 
 It is deliberately absent from `normalizeContent`, so a client that PATCHes back content it just read cannot persist it. The storefront needs it because `createImageVariants` skips any size wider than roughly the source: an upload at 1200px genuinely has no `-zoom` sibling, and the client previously guessed the full set from the filename and advertised widths for files that were never written. Reporting the truth turns the client's `srcset` into a lookup — see `docs/03-client-web.md`.
+
+**`heroProducts` is the second read-time projection**, for weight rather than
+correctness. Each hero slide can link a product, and the page needs two things
+from it: the slug its call to action points at, and the colourways the `+N` chip
+counts. The home page used to get those by loading the whole catalogue through
+`ProductsService.ensureLoaded()`, which the transfer cache then embedded in the
+rendered HTML — measured at 731 kB of an 853 kB page to read a slug and a colour
+list off one row. `loadHeroProducts` sends `{ id, slug, colors }` per linked
+product instead, about 144 bytes for a slide.
+
+`colors` is sent raw, not pre-counted: the client dedupes with `colorKey`, the
+same normaliser the swatches use, and a count computed server-side could drift
+from it silently. Slide `productId` is stored as free text, so non-uuid values
+are filtered before the query rather than letting Postgres reject the array; a
+product that is missing, unpublished or non-uuid simply has no key, and the hero
+falls back to linking by id.
+
+The URL set comes from `collectContentImageUrls`, the same recursive walk the
+media-linking check uses, rather than a hand-listed set of paths. It used to
+walk `heroSlider.items` alone, which quietly left `hero` and `collections[]`
+out of the map: both rendered their original upload at full size, in one case a
+3000x4000 file inside a 732x976 box. A section added later is covered without
+anyone remembering to widen this.
 
 | Method | Path | Description |
 |---|---|---|

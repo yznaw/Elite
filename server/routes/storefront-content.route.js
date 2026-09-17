@@ -5,6 +5,8 @@ const { ensureDefaultTenant } = require('../db/tenant');
 
 const HOME_COLLECTION_LIMIT = 3;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const DEFAULT_HOME_CONTENT = {
   hero: {
     imageUrl: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1500&q=85&auto=format&fit=crop',
@@ -400,12 +402,13 @@ async function loadContent(client, tenantId) {
   }
 
   content.mediaVariants = await loadHeroMediaVariants(client, tenantId, content);
+  content.heroProducts = await loadHeroProducts(client, tenantId, content);
 
   return content;
 }
 
 /**
- * Real responsive variants for every image the hero can render.
+ * Real responsive variants for every image the home page can render.
  *
  * The storefront used to build its `srcset` by pasting `-card`, `-grid`, `-pdp`
  * and `-zoom` onto the filename and declaring fixed widths for each. Both
@@ -420,17 +423,17 @@ async function loadContent(client, tenantId) {
  * than a guess. Anything absent from this map simply gets no `srcset` and falls
  * back to a plain `src`, which is slower but always correct.
  *
- * Keyed by `media_assets.storage_url`, which is exactly the value the hero
- * stores in its slide and colour entries.
+ * Keyed by `media_assets.storage_url`; the client rekeys to the bare filename
+ * (home-content.service.ts) so a lookup succeeds whatever form of the URL the
+ * content happens to be holding.
  */
 async function loadHeroMediaVariants(client, tenantId, content) {
-  const urls = new Set();
-  for (const item of content.heroSlider?.items ?? []) {
-    if (item.imageUrl) urls.add(item.imageUrl);
-    for (const colour of item.colors ?? []) {
-      if (colour.imageUrl) urls.add(colour.imageUrl);
-    }
-  }
+  // Every imageUrl in the tree, not just the hero slider's. The narrower walk
+  // this replaced left `content.hero` and `content.collections[]` out of the
+  // map, so those two rendered their original upload at full size: the
+  // discount hero was shipping a 3000x4000 file into a 732x976 box. The
+  // variants existed the whole time; nothing was asking for them.
+  const urls = collectContentImageUrls(content);
 
   // Bundled art under /assets carries no variants and is not a media asset.
   const uploads = [...urls].filter((url) => url.includes('/uploads/'));
@@ -458,6 +461,64 @@ async function loadHeroMediaVariants(client, tenantId, content) {
       .sort((a, b) => a.width - b.width)
       .map((variant) => ({ url: variant.url, width: variant.width }));
     if (entries.length > 0) map[row.storage_url] = entries;
+  }
+  return map;
+}
+
+/**
+ * The two fields the home hero needs about each product it links to: the slug
+ * its call to action points at, and the colourways the `+N` chip counts.
+ *
+ * Another read-time projection, for the same reason `mediaVariants` is one, but
+ * the motivation here is weight. The hero used to get these by having the page
+ * load the entire catalogue through `ProductsService.ensureLoaded()`, which the
+ * transfer cache then embedded in the rendered HTML: measured at 731 kB of a
+ * 853 kB home page, to read a slug and a colour list off one or two rows. Those
+ * two fields are about 115 bytes each.
+ *
+ * `colors` is sent raw rather than pre-counted. The client dedupes it with
+ * `colorKey`, the same normaliser the swatches use, and a second count computed
+ * here could drift from that one without anything failing loudly.
+ *
+ * `productId` is stored as free text, so ids that are not uuids are dropped
+ * before the query rather than letting Postgres reject the whole array.
+ */
+async function loadHeroProducts(client, tenantId, content) {
+  const ids = [...new Set(
+    (content.heroSlider?.items ?? [])
+      .map((item) => String(item?.productId || '').trim())
+      .filter((id) => UUID_RE.test(id)),
+  )];
+  if (ids.length === 0) return {};
+
+  const { rows } = await client.query(
+    `SELECT p.id,
+            p.slug,
+            COALESCE(
+              array_agg(DISTINCT pv.color ORDER BY pv.color)
+                FILTER (WHERE pv.color IS NOT NULL AND pv.color <> ''),
+              ARRAY[]::text[]
+            ) AS colors
+       FROM products p
+       LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active
+      WHERE p.tenant_id = $1
+        AND p.status = 'active'
+        AND p.id = ANY($2::uuid[])
+      GROUP BY p.id`,
+    [tenantId, ids],
+  );
+
+  const map = {};
+  for (const row of rows) {
+    // Shaped exactly like the catalogue endpoint's `mapRow`, down to the
+    // `filter(Boolean)`. The `+N` chip counts these, and it used to count the
+    // catalogue's copy: any difference between the two would move a number on
+    // the hero without anything failing.
+    map[row.id] = {
+      id: row.id,
+      slug: row.slug || '',
+      colors: Array.isArray(row.colors) ? row.colors.filter(Boolean) : [],
+    };
   }
   return map;
 }
@@ -529,10 +590,13 @@ async function loadDraft(client, tenantId) {
   const raw = result.rows[0]?.home_content_draft;
   if (!raw) return null;
   const draft = normalizeContent(raw);
-  // The preview is meant to be the storefront, so it resolves variants the same
-  // way. Without this a draft renders every hero image at full size and the
-  // admin reviews a page that is heavier than the one visitors will get.
+  // The preview is meant to be the storefront, so it resolves variants and hero
+  // products the same way. Without the first a draft renders every hero image at
+  // full size and the admin reviews a page heavier than the one visitors get;
+  // without the second the `+N` colour chip and the hero's product link are
+  // missing from the preview only.
   draft.mediaVariants = await loadHeroMediaVariants(client, tenantId, draft);
+  draft.heroProducts = await loadHeroProducts(client, tenantId, draft);
   return draft;
 }
 
