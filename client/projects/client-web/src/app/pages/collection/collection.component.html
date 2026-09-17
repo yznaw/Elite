@@ -16,16 +16,16 @@
           [attr.aria-label]='t("collection.aria.collections")'
         >
           @for (collection of collections(); track collection.id) {
-            <button
-              type="button"
+            <a
               class="collection-card"
+              [routerLink]="collectionPath(collection)"
               [class.collection-card--all]="
                 collection.handle === 'all-products'
               "
               [class.collection-card--full]="
                 collection.handle === 'all-products'
               "
-              (click)="selectCollection(collection)"
+              (click)="onCollectionLinkClick($event)"
             >
               @if (collection.imageUrl) {
                 <img
@@ -39,7 +39,7 @@
                    number shown in the collection's own header. -->
               <span>{{ pieceCount(collectionTotalCount(collection)) }}</span>
               <strong>{{ collection.title }}</strong>
-            </button>
+            </a>
           }
         </div>
       } @else {
@@ -52,14 +52,14 @@
     @if (activeCollection(); as collection) {
       <div class="collection-detail-head">
         <nav class="back-to-collections" [attr.aria-label]='t("collection.aria.breadcrumb")'>
-          <button type="button" (click)="showAllCollections()">
+          <a routerLink="/collection" (click)="onAllCollectionsLinkClick($event)">
             {{ t("collection.breadcrumb.collections") }}
-          </button>
+          </a>
           <span aria-hidden="true">/</span>
           @if (activeSubCollectionKey() !== null) {
-            <button type="button" (click)="selectCollection(collection)">
+            <a [routerLink]="collectionPath(collection)" (click)="onCollectionLinkClick($event)">
               {{ collection.title }}
-            </button>
+            </a>
             <span aria-hidden="true">/</span>
             <strong>{{ activeSubCollection()?.title ?? "All" }}</strong>
           } @else {
@@ -91,11 +91,11 @@
           class="collection-picker collection-picker--sub"
           [attr.aria-label]='t("collection.aria.subCollections")'
         >
-          <button
-            type="button"
+          <a
             class="collection-card collection-card--sub collection-card--all"
+            [routerLink]="subCollectionPath(null)"
             [class.is-active]="activeSubCollectionKey() === 'all'"
-            (click)="selectSubCollection(null)"
+            (click)="onCollectionLinkClick($event)"
           >
             @if (collection.imageUrl) {
               <img
@@ -106,13 +106,13 @@
             }
             <span>{{ pieceCount(activeCollectionTotalCount()) }}</span>
             <strong>{{ t("collection.allOf", { title: collection.title }) }}</strong>
-          </button>
+          </a>
           @for (child of activeCollection()!.children; track child.id) {
-            <button
-              type="button"
+            <a
               class="collection-card collection-card--sub"
+              [routerLink]="subCollectionPath(child)"
               [class.is-active]="activeSubCollection()?.id === child.id"
-              (click)="selectSubCollection(child)"
+              (click)="onCollectionLinkClick($event)"
             >
               @if (child.imageUrl) {
                 <img
@@ -124,7 +124,7 @@
               }
               <span>{{ pieceCount(child.productIds.length) }}</span>
               <strong>{{ child.title }}</strong>
-            </button>
+            </a>
           }
         </div>
       }
@@ -321,10 +321,11 @@
                     (mouseleave)="onProductTileLeave(p)"
                     [style.animation-delay]="i * 0.035 + 's'"
                   >
-                    <button
-                      type="button"
+                    <a
                       class="product-link"
-                      (click)="goToProduct(p)"
+                      [routerLink]="productPath(p)"
+                      [queryParams]="productQueryParams(p)"
+                      (click)="onProductLinkClick($event)"
                       data-track="product-card"
                       [attr.data-track-product]="p.id"
                     >
@@ -352,7 +353,7 @@
                         <span class="product-price">{{ price(p.price) }}</span>
                         <span class="stock-status">{{ productSoldOut(p) ? t("stock.outOfStock") : ' ' }}</span>
                       </span>
-                    </button>
+                    </a>
 
                     @if (productColorNames(p).length > 0) {
                       <div class="product-colors" [attr.aria-label]='t("collection.aria.availableColors")'>
@@ -540,9 +541,9 @@
     } @else {
       <div class="empty-state empty-state--collections">
         <p>{{ t("collection.detail.notFound") }}</p>
-        <button type="button" (click)="showAllCollections()">
+        <a routerLink="/collection" (click)="onAllCollectionsLinkClick($event)">
           {{ t("collection.detail.back") }}
-        </button>
+        </a>
       </div>
     }
   }

@@ -819,10 +819,11 @@
           <div class="related-grid">
             @for (item of recommendedProducts(); track item.id) {
               <article class="related-card">
-                <button
-                  type="button"
+                <a
                   class="related-link"
-                  (click)="goToProduct(item)"
+                  [routerLink]="relatedPath(item)"
+                  queryParamsHandling="preserve"
+                  (click)="onRelatedLinkClick($event, item)"
                 >
                   <span class="related-image">
                     <img
@@ -842,7 +843,7 @@
                     }}</span>
                     <span class="related-price">{{ price(item.price) }}</span>
                   </span>
-                </button>
+                </a>
               </article>
             }
           </div>

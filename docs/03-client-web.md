@@ -51,6 +51,21 @@ export const routes: Routes = [
 
 The sitemap itself is **not** a static file. It is generated from live catalogue data by `GET /api/sitemap.xml` (see `docs/05-api-server.md`) and exposed at the site root by an nginx `location = /sitemap.xml` proxy, because the page renderer would otherwise answer it as a `404` page. Adding a public route to `app.routes.ts` therefore means adding it to `STATIC_ROUTES` in `server/routes/sitemap.route.js` as well, and giving it a render mode in `app.routes.server.ts` (see below) — nothing scans the route table automatically. `/experience` is the in-store feedback kiosk and is deliberately in neither.
 
+### Catalogue Navigation Is Anchors, Not Click Handlers
+
+Every card that moves a visitor deeper into the catalogue is an `<a [routerLink]>`: the collection cards on `/collection`, the sub-collection cards under a parent such as Men, the product cards in the grid, the hero's primary call to action, and the recommended products on a product page.
+
+They used to be `<button (click)="router.navigate(...)">`. That is invisible to a crawler. The served HTML for `/collection/all-products` carried the names of all 48 products and not a single `href`, so Google could read the catalogue and never walk into it. Search Console reported 47 product pages as `Discovered - currently not indexed`, the signature of URLs known only from a sitemap with nothing linking to them: **a sitemap says a page exists, an internal link says it matters.**
+
+Rules when adding a card:
+
+- Navigation is an anchor with `routerLink`. Anything that is not navigation (a colour swatch, a size picker, add-to-cart) stays a `<button>`, and must be a **sibling** of the anchor, never nested inside it.
+- Side effects that used to live in the navigate method (resetting filters, scrolling to top, swapping the rendered product) move into a `(click)` handler that first checks the click is a plain left click. `routerLink` leaves ctrl-, cmd-, shift- and middle-clicks to the browser, so a card opened in a background tab must not mutate the tab the visitor is still looking at.
+- Anything feeding `[queryParams]` is memoised. It is a binding now, not a one-shot call, so a fresh object each change-detection pass would rebuild 48 hrefs on every pass.
+- The anchors need `text-decoration: none`; the old `<button>` rules did not.
+
+Recommended products on a product page are the one gap: they need the full catalogue, which the server deliberately does not load for a single product render (it cost roughly a megabyte per request). They appear in the browser only, so product-to-product linking passes no crawl signal. The crawl path into every product runs through the collection pages instead: `/collection` links the four collections, a parent links its children, and `/collection/all-products` links all 48 products.
+
 ### Per-page Head Tags (`SeoService`)
 
 `services/seo.service.ts` owns everything in `<head>` that varies by page: `<title>`, `meta[name=description]`, `link[rel=canonical]`, the Open Graph and Twitter Card set, and one JSON-LD block.

@@ -1,7 +1,7 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, RESPONSE_INIT, ViewChild, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { CartService } from '../../services/cart.service';
 import { ProductsService } from '../../services/products.service';
@@ -64,7 +64,7 @@ const LOW_STOCK_AT = 5;
 
 @Component({
     selector: 'cw-product',
-    imports: [CommonModule, SizeSheetComponent],
+    imports: [CommonModule, RouterLink, SizeSheetComponent],
     templateUrl: './product.component.html',
     /**
      * `Eager` here was written by the v17 to v22 migration, which preserved the
@@ -570,7 +570,26 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.applySizeAndNotifyParams();
   }
 
-  goToProduct(nextProduct: Product): void {
+  /**
+   * Where a recommended product points.
+   *
+   * These cards were buttons that navigated in script, which meant a product
+   * page linked to nothing: the one place in the site that could pass
+   * relevance between related products emitted no `href` for a crawler to
+   * follow.
+   */
+  relatedPath(item: Product): unknown[] {
+    return ['/product', this.productsSvc.productKey(item)];
+  }
+
+  /**
+   * Swapping the rendered product is a side effect of the click, not the
+   * navigation itself: `routerLink` handles that, and leaves modified clicks
+   * to the browser, so a card opened in a background tab must not replace the
+   * product on the tab the visitor is still reading.
+   */
+  onRelatedLinkClick(event: MouseEvent, nextProduct: Product): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     this.product.set(nextProduct);
     this.galleryIdx.set(0);
     this.selectedSize.set(null);
@@ -581,9 +600,6 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.sizeGuideOpen.set(false);
     this.resetRestockForm();
     this.resetReviewForm();
-    void this.router.navigate(['/product', this.productsSvc.productKey(nextProduct)], {
-      queryParamsHandling: 'preserve',
-    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 

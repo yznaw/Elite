@@ -132,6 +132,7 @@
   isolation: isolate;
   box-shadow: 0 18px 42px rgba(30, 28, 24, 0.08);
   transition: border-color 0.24s ease, box-shadow 0.24s ease, transform 0.24s ease;
+  text-decoration: none;
 }
 
 .collection-card:hover {
@@ -598,6 +599,7 @@
   font: inherit;
   text-align: start;
   -webkit-tap-highlight-color: transparent;
+  text-decoration: none;
 }
 
 .product-image-wrap {

@@ -110,21 +110,21 @@
 
                     <div class="hero-actions">
                       @if (showHeroProductLink()) {
-                        <button
-                          type="button"
+                        <a
                           class="hero-cta hero-cta--primary"
-                          (click)="goToHeroProduct()"
+                          [routerLink]="heroProductLink()"
+                          [queryParams]="heroProductQueryParams()"
+                          (click)="onHeroProductLinkClick($event)"
                         >
                           <span>{{ heroProductCtaLabel() }}</span>
-                        </button>
+                        </a>
                       } @else {
-                        <button
-                          type="button"
+                        <a
                           class="hero-cta hero-cta--primary"
-                          (click)="goTo('/collection')"
+                          routerLink="/collection"
                         >
                           <span>{{ heroCtaLabel() }}</span>
-                        </button>
+                        </a>
                       }
                     </div>
                   </div>

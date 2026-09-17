@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetection
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { Subscription, combineLatest, firstValueFrom } from 'rxjs';
 import { ProductsService } from '../../services/products.service';
 import { Product, ProductVariant } from '../../models/product.model';
@@ -104,7 +104,7 @@ interface StorefrontCollection {
 
 @Component({
     selector: 'cw-collection',
-    imports: [CommonModule, FormsModule, SizeSheetComponent, RestockFormComponent],
+    imports: [CommonModule, FormsModule, RouterLink, SizeSheetComponent, RestockFormComponent],
     templateUrl: './collection.component.html',
     changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './collection.component.scss'
@@ -202,6 +202,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly selectedSizes = signal<Record<string, number>>({});
   readonly selectedColors = signal<Record<string, string>>({});
   readonly selectedFilters = signal<SelectedFilters>(this.emptySelectedFilters());
+  private readonly productQueryParamsCache = new Map<string, { key: string; value: Record<string, string> | null }>();
 
   readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
@@ -357,10 +358,35 @@ export class CollectionComponent implements OnInit, OnDestroy {
     }
   }
 
-  goToProduct(p: Product): void {
+  productPath(p: Product): unknown[] {
+    return ['/product', this.products.productKey(p)];
+  }
+
+  /**
+   * The breadcrumb context a product page shows, and the colourway the visitor
+   * is looking at on this card.
+   *
+   * Memoised because this feeds a template binding rather than a click
+   * handler now: a fresh object on every change-detection pass would make
+   * `routerLink` rebuild every card's href on every pass, forty-eight times
+   * over. The cache key carries everything the result is derived from, so a
+   * changed collection or swatch still produces a new object.
+   */
+  productQueryParams(p: Product): Record<string, string> | null {
     const active = this.activeCollection();
     const sub = this.activeSubCollection();
     const selectedColor = this.selectedProductColor(p);
+    const cacheKey = [
+      p.id,
+      active?.id ?? '',
+      sub?.id ?? '',
+      this.activeSubCollectionKey() ?? '',
+      selectedColor ?? '',
+    ].join('|');
+
+    const cached = this.productQueryParamsCache.get(p.id);
+    if (cached && cached.key === cacheKey) return cached.value;
+
     const queryParams: Record<string, string> = {};
     if (sub) {
       queryParams['col'] = sub.handle || sub.id;
@@ -377,8 +403,15 @@ export class CollectionComponent implements OnInit, OnDestroy {
       queryParams['colName'] = active.title;
     }
     if (selectedColor) queryParams['color'] = this.colorSlug(selectedColor);
-    const extras = Object.keys(queryParams).length ? { queryParams } : undefined;
-    void this.router.navigate(['/product', this.products.productKey(p)], extras);
+
+    const value = Object.keys(queryParams).length ? queryParams : null;
+    this.productQueryParamsCache.set(p.id, { key: cacheKey, value });
+    return value;
+  }
+
+  /** Side effects only. `routerLink` on the anchor does the navigating. */
+  onProductLinkClick(event: MouseEvent): void {
+    if (!this.navigatesInPlace(event)) return;
     window.scrollTo(0, 0);
   }
 
@@ -426,27 +459,53 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.filtersOpen.set(false);
   }
 
-  selectCollection(collection: StorefrontCollection | null): void {
+  /**
+   * Where a collection card points.
+   *
+   * Every card in this page used to be a `<button>` that called
+   * `router.navigate`. That works for a person and is invisible to a crawler:
+   * the served HTML carried the names of all 48 products and not one `href`,
+   * so Google could read the catalogue but never walk into it. Search Console
+   * reported 47 product pages as "Discovered - currently not indexed", the
+   * signature of URLs known only from a sitemap with nothing linking to them.
+   *
+   * The cards are anchors now. `routerLink` still navigates in-app on a plain
+   * click, and additionally emits the href that makes the catalogue crawlable,
+   * middle-clickable and openable in a new tab.
+   */
+  collectionPath(collection: StorefrontCollection | null): unknown[] {
+    return collection ? ['/collection', collection.handle || collection.id] : ['/collection'];
+  }
+
+  subCollectionPath(sub: StorefrontChildCollection | null): unknown[] {
+    const parent = this.activeCollection();
+    if (!parent) return ['/collection'];
+    return ['/collection', parent.handle || parent.id, sub ? sub.handle || sub.id : 'all'];
+  }
+
+  /**
+   * A click the browser itself should handle: a new tab, a new window, a
+   * download. `routerLink` already leaves these alone, so the side effects
+   * below have to leave them alone too, or opening a card in a background tab
+   * would reset the filters on the tab the visitor is still looking at.
+   */
+  private navigatesInPlace(event: MouseEvent): boolean {
+    return event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+  }
+
+  /** Side effects only. `routerLink` on the anchor does the navigating. */
+  onCollectionLinkClick(event: MouseEvent): void {
+    if (!this.navigatesInPlace(event)) return;
     this.selectedFilters.set(this.emptySelectedFilters());
     this.mobilePage.set(0);
-    const route = collection
-      ? ['/collection', collection.handle || collection.id]
-      : ['/collection'];
-    void this.router.navigate(route);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  selectSubCollection(sub: StorefrontChildCollection | null): void {
-    const parent = this.activeCollection();
-    if (!parent) return;
-    this.selectedFilters.set(this.emptySelectedFilters());
-    this.mobilePage.set(0);
-    if (!sub) {
-      void this.router.navigate(['/collection', parent.handle || parent.id, 'all']);
-    } else {
-      void this.router.navigate(['/collection', parent.handle || parent.id, sub.handle || sub.id]);
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  /** Leaving the catalogue entirely also drops the sort, as the old button did. */
+  onAllCollectionsLinkClick(event: MouseEvent): void {
+    if (!this.navigatesInPlace(event)) return;
+    this.sort.set('Featured');
+    this.onCollectionLinkClick(event);
   }
 
   selectSize(product: Product, size: number): void {
@@ -698,14 +757,6 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   retryProducts(): void {
     void this.products.refresh();
-  }
-
-  showAllCollections(): void {
-    this.selectedFilters.set(this.emptySelectedFilters());
-    this.sort.set('Featured');
-    this.mobilePage.set(0);
-    void this.router.navigate(['/collection']);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   prevMobilePage(): void {

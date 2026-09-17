@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
@@ -104,7 +104,7 @@ const HERO_HINT_SESSION_KEY = 'elite:hero-swipe-hint-shown';
 
 @Component({
     selector: 'cw-home',
-    imports: [CommonModule],
+    imports: [CommonModule, RouterLink],
     templateUrl: './home.component.html',
     changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './home.component.scss'
@@ -554,18 +554,41 @@ export class HomeComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Open the active product and carry the colour currently previewed in the hero. */
-  goToHeroProduct(): void {
+  /**
+   * Where the hero's primary call to action points.
+   *
+   * The hero stores a product id. Prefer the slug when the catalogue is
+   * loaded; the id is a valid URL either way and redirects to the slug.
+   *
+   * A computed rather than a click handler, because the call to action is an
+   * anchor now: it used to be a `<button>` that navigated in script, which
+   * left the home page with no crawlable link into the catalogue at all.
+   */
+  readonly heroProductLink = computed<unknown[] | null>(() => {
     const productId = this.activeHeroItem()?.productId;
-    if (!productId) return;
+    if (!productId) return null;
+    const linked = this.productsService.getById(productId);
+    return ['/product', linked ? this.productsService.productKey(linked) : productId];
+  });
+
+  /** The colourway currently previewed in the hero, carried into the product page. */
+  readonly heroProductQueryParams = computed<Record<string, string> | null>(() => {
     const selectedKey = this.activeHeroSelectedColorKey();
     const selected = this.activeHeroSwatches().find((color) => color.key === selectedKey);
-    // The hero stores a product id. Prefer the slug when the catalogue is
-    // loaded; the id is a valid URL either way and redirects to the slug.
-    const linked = this.productsService.getById(productId);
-    void this.router.navigate(['/product', linked ? this.productsService.productKey(linked) : productId], {
-      queryParams: selected?.slug ? { color: selected.slug } : undefined,
-    });
+    return selected?.slug ? { color: selected.slug } : null;
+  });
+
+  /** Side effects only. `routerLink` on the anchor does the navigating. */
+  onHeroProductLinkClick(event: MouseEvent): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    window.scrollTo(0, 0);
+  }
+
+  /** Still script-driven: the "+N colours" swatch is a control, not a link. */
+  goToHeroProduct(): void {
+    const link = this.heroProductLink();
+    if (!link) return;
+    void this.router.navigate(link, { queryParams: this.heroProductQueryParams() ?? undefined });
     window.scrollTo(0, 0);
   }
 
