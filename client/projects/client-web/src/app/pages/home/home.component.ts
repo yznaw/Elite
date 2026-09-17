@@ -44,7 +44,7 @@ interface StorefrontCollection {
   productIds: string[];
 }
 
-const FEATURED_COLLECTION_HANDLES = ['men', 'kids', 'sunglasses'];
+const FEATURED_COLLECTION_HANDLES = ['mens', 'kids', 'sunglasses'];
 
 /** The collection tiles the server rendered; see `seededTiles` below. */
 const HOME_TILES_KEY = makeStateKey<HomeCollectionTileContent[]>('home-collection-tiles');
