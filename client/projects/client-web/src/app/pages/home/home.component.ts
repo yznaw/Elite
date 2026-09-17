@@ -42,7 +42,7 @@ interface StorefrontCollection {
   productIds: string[];
 }
 
-const FEATURED_COLLECTION_HANDLES = ['men', 'sunglasses', 'kids'];
+const FEATURED_COLLECTION_HANDLES = ['men', 'kids', 'sunglasses'];
 
 /** Swatches drawn in the hero before the rest collapse into a `+N` chip. */
 const HERO_MAX_SWATCHES = 4;
