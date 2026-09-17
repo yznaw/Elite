@@ -292,8 +292,15 @@ cd /var/www/elite/server && node -e 'require("sharp");console.log("sharp OK")'
 more. Confirm the headroom before starting:
 
 ```bash
-df -h /var/www/elite && du -sh /var/www/elite/server/uploads
+df -h /var/www/elite && du -sh "$(grep UPLOADS_DIR /var/www/elite/server/.env | cut -d= -f2)"
 ```
+
+`UPLOADS_DIR` is a host-specific path outside `/var/www/elite` in production
+(`/var/www/elite-uploads` as of 2026-09-18), not `server/uploads/` — every
+deploy replaces `server/`, so uploads live somewhere that survives it. Hardcoding
+the package-default path here silently reports on an empty or nonexistent
+directory instead of failing (see `docs/09-nginx-https.md`, which hit the same
+assumption in the nginx config).
 
 **Count what will be repaired** (run before and after; the second number should
 be far lower, and what remains should be remote URLs with no local file):

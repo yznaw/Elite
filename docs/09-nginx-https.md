@@ -11,7 +11,7 @@ Nginx should terminate public HTTPS for Elite. The Node/Express API stays on pla
 | `https://admin.elitecollections.qa/` | Serves admin Angular build | `/var/www/elite/client/dist/admin-portal/browser` |
 | `https://elitecollections.qa/api/*` | Proxies API requests | `http://127.0.0.1:3000` |
 | `https://admin.elitecollections.qa/api/*` | Proxies API requests | `http://127.0.0.1:3000` |
-| `https://*/uploads/*` | Serves uploaded media | `/var/www/elite/server/uploads` |
+| `https://*/api/uploads/*`, `https://*/uploads/*` | Serves uploaded media | `UPLOADS_DIR` (`server/.env`) — a path outside `/var/www/elite`, since every deploy replaces that directory. `/var/www/elite-uploads` on this host, confirmed 2026-09-18. |
 
 ## App Environment
 
@@ -161,6 +161,11 @@ curl -I https://admin.elitecollections.qa
 curl https://admin.elitecollections.qa/api/health
 
 curl -sI --http2 https://elitecollections.qa/ | head -1
+
+grep UPLOADS_DIR /var/www/elite/server/.env
+grep -n "alias" /etc/nginx/sites-available/elite
+FILE=$(ls "$(grep UPLOADS_DIR /var/www/elite/server/.env | cut -d= -f2)" | head -1)
+curl -sI "https://elitecollections.qa/api/uploads/$FILE" | head -1
 ```
 
 Expected results:
@@ -172,5 +177,12 @@ Expected results:
 - The last command prints `HTTP/2 200`. `HTTP/1.1 200` means the `http2` token
   on the `listen` line (or `http2 on;`, on a host upgraded past 1.25.1) is not
   in effect — see item 5 above.
-- An image request (`curl -sI https://elitecollections.qa/api/uploads/<file>`)
-  leaves no line in the API log, because nginx is answering it from disk.
+- The `grep alias` lines match `UPLOADS_DIR` exactly. A mismatch here does not
+  fail `nginx -t` — it is a valid config that serves 404 for every image, which
+  looks identical to a genuinely deleted upload. This is what went wrong on
+  first deploy of this change (2026-09-18): the alias assumed the package
+  default path under `server/uploads`, not knowing this host points
+  `UPLOADS_DIR` outside it so uploads survive a deploy replacing `server/`.
+- The final `curl` on a real filename returns `200` and leaves no new line in
+  the API log (`pm2 logs elite-api`), confirming nginx answered from disk
+  rather than proxying to node.
