@@ -1,5 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Product } from '../models/product.model';
@@ -77,8 +77,10 @@ export class ProductsService {
    * browser still loads the catalogue afterwards for search and related
    * products; this just keeps the page itself off that critical path.
    *
-   * Resolves to undefined for an unknown slug, which the page turns into its
-   * not-found state (and the server into a 404).
+   * Resolves to undefined only when the API says the product is not there,
+   * which the page turns into a real 404. Every other failure — API down,
+   * timeout, 500 — throws, because answering 404 for a product that still
+   * exists would tell search engines to drop it over a blip.
    */
   async fetchOne(idOrSlug: string): Promise<Product | undefined> {
     const key = idOrSlug.trim();
@@ -89,8 +91,9 @@ export class ProductsService {
         this.http.get<ApiResponse<Product>>(`${this.apiBase}/products/${encodeURIComponent(key)}`),
       );
       return res?.data ? this.normalizeProductImages(res.data) : undefined;
-    } catch {
-      return undefined;
+    } catch (err) {
+      if (err instanceof HttpErrorResponse && err.status === 404) return undefined;
+      throw err;
     }
   }
 

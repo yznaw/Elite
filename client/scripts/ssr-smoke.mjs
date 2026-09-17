@@ -56,9 +56,11 @@ const ROUTES = [
   { path: '/contact', status: [200] },
   { path: '/policy/smoke-handle', status: [200, 404] },
   { path: '/this-page-does-not-exist-smoke', status: [404] },
-  // A product that does not exist must answer 404 too, not a 200 "not found"
-  // page: search engines keep a soft 404 in the index.
-  { path: '/product/no-such-product-smoke', status: [404] },
+  // A product that does not exist must answer 404, not a 200 "not found" page:
+  // search engines keep a soft 404 in the index. With the API unreachable the
+  // same URL must answer 503 instead -- "unknown right now" is not "gone", and
+  // a minute of API trouble must not deindex the catalogue.
+  { path: '/product/no-such-product-smoke', status: [404], statusApiDown: [503] },
   // Client-rendered routes: served as the CSR shell, never rendered here.
   { path: '/checkout', status: [200] },
   { path: '/thank-you', status: [200] },
@@ -182,7 +184,8 @@ async function pass(label, apiOrigin) {
         continue;
       }
       const ms = Date.now() - started;
-      const okStatus = route.status.includes(res.status);
+      const expectedStatus = (!apiUp && route.statusApiDown) || route.status;
+      const okStatus = expectedStatus.includes(res.status);
       const okLocation = !route.location || route.location.test(res.location);
       const cached = transferEntries(res.body);
       // API up: data pages must ship their responses. API down: they must ship
@@ -195,7 +198,7 @@ async function pass(label, apiOrigin) {
         route.transfers ? `(${cached} cached)` : '',
       ].filter(Boolean).join('  ');
       console.log(`  ${mark} ${String(res.status).padEnd(3)} ${String(ms).padStart(5)}ms  ${route.path}${extra ? `  ${extra}` : ''}`);
-      if (!okStatus) failures.push(`${route.path}: status ${res.status}, expected ${route.status.join('/')}`);
+      if (!okStatus) failures.push(`${route.path}: status ${res.status}, expected ${expectedStatus.join('/')}`);
       if (!okLocation) failures.push(`${route.path}: redirect to "${res.location}", expected ${route.location}`);
       if (!okTransfer) {
         failures.push(apiUp

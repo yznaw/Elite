@@ -519,8 +519,16 @@ export class ProductComponent implements OnInit, OnDestroy {
     let nextProduct = idParam
       ? this.productsSvc.getBySlug(idParam) ?? this.productsSvc.getById(idParam)
       : this.productsSvc.getAll()[0];
+    // Told apart deliberately: "this product is gone" and "the catalogue is
+    // unreachable right now" look the same to a visitor but must not look the
+    // same to a crawler (see the status codes below).
+    let apiUnavailable = false;
     if (!nextProduct && idParam) {
-      nextProduct = await this.productsSvc.fetchOne(idParam);
+      try {
+        nextProduct = await this.productsSvc.fetchOne(idParam);
+      } catch {
+        apiUnavailable = true;
+      }
       if (token !== this.loadToken) return;
     }
     if (!nextProduct) {
@@ -528,7 +536,9 @@ export class ProductComponent implements OnInit, OnDestroy {
       this.productLoading.set(false);
       // A removed product must answer 404, not 200 with a "not found" page:
       // search engines call that a soft 404 and keep the URL in the index.
-      if (this.responseInit) this.responseInit.status = 404;
+      // But a product we merely could not load is 503 — "come back later" —
+      // so a minute of API trouble cannot get the whole catalogue deindexed.
+      if (this.responseInit) this.responseInit.status = apiUnavailable ? 503 : 404;
       return;
     }
     this.product.set(nextProduct);
