@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, RESPONSE_INIT, ViewChild, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -97,6 +97,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   private readonly analytics = inject(AnalyticsService);
   private readonly seo = inject(SeoService);
   private readonly apiBase = inject(API_BASE);
+  /** Null in the browser; during a server render it carries the response status. */
+  private readonly responseInit = inject(RESPONSE_INIT, { optional: true });
 
   /**
    * Head tags for the product on screen. Null while it loads, so a shared link
@@ -127,7 +129,7 @@ export class ProductComponent implements OnInit, OnDestroy {
       title: name,
       description,
       image: this.gallery()[0],
-      canonicalPath: `/product/${p.id}`,
+      canonicalPath: this.productsSvc.productPath(p),
       type: 'product' as const,
       jsonLd: {
         '@context': 'https://schema.org',
@@ -146,7 +148,7 @@ export class ProductComponent implements OnInit, OnDestroy {
           availability: inStock
             ? 'https://schema.org/InStock'
             : 'https://schema.org/OutOfStock',
-          url: `${this.seo.origin()}/product/${p.id}`,
+          url: `${this.seo.origin()}${this.productsSvc.productPath(p)}`,
         },
       },
     };
@@ -502,17 +504,44 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.productLoading.set(true);
     this.productError.set('');
     this.product.set(null);
-    await (force ? this.productsSvc.refresh() : this.productsSvc.ensureLoaded());
-    if (token !== this.loadToken) return;
+    // The catalogue is a browser concern: search, related products and the
+    // collection grid all read from it. A server render of one product page
+    // would pull roughly a megabyte to find a single row, on every request, so
+    // there it fetches just this product instead (below).
+    if (typeof window !== 'undefined') {
+      await (force ? this.productsSvc.refresh() : this.productsSvc.ensureLoaded());
+      if (token !== this.loadToken) return;
+    }
 
-    const p = idParam ? this.productsSvc.getById(idParam) : undefined;
-    const nextProduct = p ?? (idParam ? undefined : this.productsSvc.getAll()[0]);
+    // The route segment is a slug today and a UUID in every link shared or
+    // indexed before slugs existed. Both resolve; the UUID is swapped for the
+    // slug below so only one URL ends up in search results.
+    let nextProduct = idParam
+      ? this.productsSvc.getBySlug(idParam) ?? this.productsSvc.getById(idParam)
+      : this.productsSvc.getAll()[0];
+    if (!nextProduct && idParam) {
+      nextProduct = await this.productsSvc.fetchOne(idParam);
+      if (token !== this.loadToken) return;
+    }
     if (!nextProduct) {
       this.productError.set(this.productsSvc.error() || 'Product not found.');
       this.productLoading.set(false);
+      // A removed product must answer 404, not 200 with a "not found" page:
+      // search engines call that a soft 404 and keep the URL in the index.
+      if (this.responseInit) this.responseInit.status = 404;
       return;
     }
     this.product.set(nextProduct);
+    // An old UUID link keeps working, but the address bar and anything copied
+    // from it should carry the slug. `replaceUrl` so Back still leaves the page
+    // rather than returning to the same product under its other URL.
+    const key = this.productsSvc.productKey(nextProduct);
+    if (idParam && idParam !== key) {
+      void this.router.navigate(['/product', key], {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+    }
     // Record a product view so "Most Engaged Products" reflects views, not just
     // cart clicks. Fired here (canonical load path) to avoid double counting.
     this.analytics.track('product_view', { productId: nextProduct.id });
@@ -542,7 +571,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.sizeGuideOpen.set(false);
     this.resetRestockForm();
     this.resetReviewForm();
-    void this.router.navigate(['/product', nextProduct.id], {
+    void this.router.navigate(['/product', this.productsSvc.productKey(nextProduct)], {
       queryParamsHandling: 'preserve',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -605,6 +634,9 @@ export class ProductComponent implements OnInit, OnDestroy {
     const normalizedIndex = (index + count) % count;
     this.galleryIdx.set(normalizedIndex);
 
+    // Same guard as openRestockForm(): scrolling the thumbnail strip is a
+    // browser-only concern, and this page is server-rendered.
+    if (typeof window === 'undefined') return;
     if (this.gallerySyncFrame) cancelAnimationFrame(this.gallerySyncFrame);
     this.gallerySyncFrame = requestAnimationFrame(() => {
       this.gallerySyncFrame = undefined;

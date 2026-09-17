@@ -378,7 +378,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
     }
     if (selectedColor) queryParams['color'] = this.colorSlug(selectedColor);
     const extras = Object.keys(queryParams).length ? { queryParams } : undefined;
-    void this.router.navigate(['/product', p.id], extras);
+    void this.router.navigate(['/product', this.products.productKey(p)], extras);
     window.scrollTo(0, 0);
   }
 

@@ -943,7 +943,7 @@ export class NavComponent {
     this.searchOpen.set(false);
     this.menuOpen.set(false);
     this.searchQuery.set('');
-    void this.router.navigate(['/product', product.id]);
+    void this.router.navigate(['/product', this.products.productKey(product)]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 

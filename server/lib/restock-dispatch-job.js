@@ -53,7 +53,7 @@ async function runRestockDispatch({ pool = db.pool, sendMail = mailer.sendMail, 
   try {
     for (const row of claimed.rows) {
       if (beforeSend) await beforeSend(row.id);
-      const result = await pool.query(`SELECT rn.*, p.name AS product_name, pt.name AS product_name_ar,
+      const result = await pool.query(`SELECT rn.*, p.name AS product_name, p.slug AS product_slug, pt.name AS product_name_ar,
         p.base_price_cents, COALESCE(m.preview_url, m.storage_url, (SELECT COALESCE(ma.preview_url, ma.storage_url)
           FROM media_links ml JOIN media_assets ma ON ma.id = ml.media_id WHERE ml.product_id = p.id ORDER BY ml.sort_order LIMIT 1)) AS product_image,
         (SELECT rc.name_ar FROM ref_colors rc WHERE rc.tenant_id = p.tenant_id AND restock_color_key(rc.name_en) = rn.color_key LIMIT 1) AS color_name_ar,

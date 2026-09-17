@@ -177,6 +177,10 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
 
   return {
     id: row.id,
+    // The storefront's public URL for this product. Unique per tenant and
+    // generated from the name on save; the id stays the identifier everywhere
+    // else (cart, orders, analytics).
+    slug: row.slug || '',
     name: row.name,
     nameAr: row.name_ar || '',
     brand: row.brand || '',
@@ -256,6 +260,7 @@ router.get('/', async (_req, res, next) => {
       `
         SELECT
           p.id,
+          p.slug,
           p.name,
           pt_ar.name AS name_ar,
           p.brand,
@@ -318,8 +323,19 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+/**
+ * One product, by either its slug (`/product/kids-brown-sandal`, what the
+ * storefront links to) or its id (every URL shared or indexed before slugs
+ * existed, and what the admin links to).
+ *
+ * The id is a uuid column, so passing a slug straight into `p.id = $2` made
+ * Postgres raise a type error and the endpoint answered 500 where it should
+ * answer 404.
+ */
+router.get('/:idOrSlug', async (req, res, next) => {
   res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  const key = String(req.params.idOrSlug || '').trim();
+  const asUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key) ? key : null;
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -328,6 +344,7 @@ router.get('/:id', async (req, res, next) => {
       `
         SELECT
           p.id,
+          p.slug,
           p.name,
           pt_ar.name AS name_ar,
           p.brand,
@@ -370,11 +387,13 @@ router.get('/:id', async (req, res, next) => {
         LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
-        WHERE p.tenant_id = $1 AND p.id = $2 AND p.status = 'active'
+        WHERE p.tenant_id = $1
+          AND p.status = 'active'
+          AND ($2::uuid IS NOT NULL AND p.id = $2::uuid OR $2::uuid IS NULL AND p.slug = $3)
         GROUP BY p.id, pt_ar.name, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
         LIMIT 1
       `,
-      [tenant.id, req.params.id],
+      [tenant.id, asUuid, key],
     );
 
     if (result.rowCount === 0) {

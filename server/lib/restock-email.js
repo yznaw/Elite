@@ -15,7 +15,9 @@ function escapeHtml(value) {
 function buildRestockEmail(n, base = storefrontBaseUrl()) {
   const ar = n.locale === 'ar';
   const name = ar ? n.product_name_ar || n.product_name : n.product_name;
-  const url = new URL(`${base}/product/${n.product_id}`);
+  // Slug when the row has one, id otherwise: the storefront resolves both, and
+  // an email sent before a product was given a slug must still open.
+  const url = new URL(`${base}/product/${n.product_slug || n.product_id}`);
   if (n.color_key) url.searchParams.set('color', colorSlug(n.color_key));
   if (n.size !== 'ONE_SIZE') url.searchParams.set('size', n.size);
   const unsubscribe = new URL(`${base}/api/restock-notifications/unsubscribe`);

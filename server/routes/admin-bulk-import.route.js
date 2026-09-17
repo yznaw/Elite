@@ -1002,6 +1002,11 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
         const brand = firstRow.brand || existingProduct?.brand || tenant.name || 'Elite';
         const status = importStatus(firstRow.status, existingProduct?.status || 'hidden');
         const posStatus = importStatus(firstRow.posStatus, existingProduct?.pos_status || 'active');
+        // The slug is the storefront URL (/product/<slug>), so it has to survive
+        // a re-import. Regenerating it from the name meant renaming a product
+        // and re-importing silently broke every link to it, shared or indexed.
+        // An existing product keeps its slug unless the file names one.
+        const updateSlug = firstRow.slug ? baseSlug : (existingProduct?.slug || baseSlug);
         const existingDesc = existingProduct?.description || {};
         const existingCare = existingProduct?.care_instructions || {};
         const description = {
@@ -1035,7 +1040,7 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
                     description=$8::jsonb, care_instructions=$9::jsonb,
                     base_price_cents=$10, meta_title=$11, meta_desc=$12, updated_at=NOW()
               WHERE id=$1`,
-            [productId, baseName, baseProductSku, brand, baseSlug, status, posStatus,
+            [productId, baseName, baseProductSku, brand, updateSlug, status, posStatus,
              JSON.stringify(description), JSON.stringify(careInstructions), basePriceCents,
              metaTitle, metaDesc]
           );

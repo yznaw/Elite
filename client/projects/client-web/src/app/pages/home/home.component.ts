@@ -560,7 +560,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (!productId) return;
     const selectedKey = this.activeHeroSelectedColorKey();
     const selected = this.activeHeroSwatches().find((color) => color.key === selectedKey);
-    void this.router.navigate(['/product', productId], {
+    // The hero stores a product id. Prefer the slug when the catalogue is
+    // loaded; the id is a valid URL either way and redirects to the slug.
+    const linked = this.productsService.getById(productId);
+    void this.router.navigate(['/product', linked ? this.productsService.productKey(linked) : productId], {
       queryParams: selected?.slug ? { color: selected.slug } : undefined,
     });
     window.scrollTo(0, 0);

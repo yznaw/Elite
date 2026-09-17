@@ -16,6 +16,13 @@ export interface ProductVariant {
 
 export interface Product {
   id: string;
+  /**
+   * The product's public URL segment (`/product/<slug>`), generated from the
+   * name when the admin saves and unique per tenant. Empty on a product saved
+   * before slugs existed; `ProductsService.productKey()` falls back to the id,
+   * which the storefront and API both still resolve.
+   */
+  slug?: string;
   name: string;
   nameAr?: string;
   brand?: string;

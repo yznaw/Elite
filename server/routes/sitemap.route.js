@@ -76,7 +76,7 @@ router.get(
       // Only 'active' products are reachable on the storefront — the public
       // product endpoint returns 404 for draft/hidden/archived rows.
       const products = await client.query(
-        `SELECT id::text, updated_at
+        `SELECT id::text, slug, updated_at
            FROM products
           WHERE tenant_id = $1 AND status = 'active'
           ORDER BY updated_at DESC`,
@@ -133,7 +133,10 @@ router.get(
           priority: '0.8',
         })),
         ...products.rows.map((r) => urlEntry({
-          loc: `${origin}/product/${r.id}`,
+          // The slug is what the storefront links to; the id still resolves and
+          // redirects, so a product somehow saved without a slug still gets a
+          // working entry rather than being dropped from the sitemap.
+          loc: `${origin}/product/${encodeURIComponent(r.slug || r.id)}`,
           lastmod: isoDate(r.updated_at),
           changefreq: 'weekly',
           priority: '0.7',

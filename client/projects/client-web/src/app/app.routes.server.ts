@@ -26,7 +26,10 @@ export const serverRoutes: ServerRoute[] = [
   { path: 'contact', renderMode: RenderMode.Server },
   { path: 'policy/:handle', renderMode: RenderMode.Server },
 
-  { path: 'product/:id', renderMode: RenderMode.Client },
+  // Rendered per request like the rest of the catalogue: every product URL in
+  // the sitemap used to reach a crawler as an empty shell, so the name, price
+  // and photo existed only for visitors whose browser ran the app.
+  { path: 'product/:id', renderMode: RenderMode.Server },
   { path: 'checkout', renderMode: RenderMode.Client },
   { path: 'checkout/success', renderMode: RenderMode.Client },
   { path: 'checkout/failure', renderMode: RenderMode.Client },

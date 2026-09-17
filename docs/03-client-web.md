@@ -79,7 +79,7 @@ Copy lives in `i18n/strings.ts` under the `seo.*` prefix, in both languages. `Se
 
 Deliberately **not** implemented: `AggregateRating` in the product JSON-LD (the storefront has no rating aggregate to read, and inventing one violates Google's structured-data policy) and `hreflang` (EN and AR share one URL, so there is no alternate to point at).
 
-On server-rendered routes these tags are in the HTML the server sends, so every crawler sees them, including the social ones behind WhatsApp, Facebook and X that never run JavaScript. Client-rendered routes (product pages, for now) still only have the static site-level tags in `index.html` until the browser runs the app.
+On server-rendered routes these tags are in the HTML the server sends, so every crawler sees them, including the social ones behind WhatsApp, Facebook and X that never run JavaScript. That now covers product pages: their title, description, image and `Product` JSON-LD (price and availability included) ship with the page. The routes still rendered in the browser — checkout and its result pages, thank-you, the in-store kiosk — carry only the static site-level tags from `index.html`, and none of them is meant to be indexed.
 
 ---
 
@@ -102,10 +102,18 @@ Public pages are rendered per request by `@angular/ssr` (`outputMode: "server"` 
 |---|---|---|
 | Server | `/`, `/collection`, `/collection/:collection`, `/collection/:parent/:child`, `/story`, `/contact`, `/policy/:handle` | Content worth indexing and sharing. |
 | Server, status `404` | `**` | Unknown URLs used to answer `200`. |
-| Client | `/product/:id` | Stays client-rendered until product URLs move from UUIDs to slugs. |
+| Server | `/product/:slug` | The catalogue's other half. Answers `404` (via `RESPONSE_INIT`) for a slug that no longer exists, so a removed product leaves the index instead of lingering as a soft 404. |
 | Client | `/checkout` and its result routes, `/thank-you`, `/experience` | Session-bound or kiosk pages with nothing to index. |
 
 A client-rendered route is served as `index.csr.html`, the same shell nginx falls back to when the renderer is down (`docs/09-nginx-https.md`).
+
+### Product URLs
+
+A product lives at `/product/<slug>`. The route parameter also accepts the uuid every link shared or indexed before slugs existed used, and the page swaps it for the slug with `replaceUrl` once it knows the product, so one URL ends up in search results without any old link dying.
+
+Build product links with `ProductsService.productKey()` (route segment) or `productPath()` (canonical, JSON-LD) — never from `product.id` directly, or the link costs a redirect and splits the page's ranking. `GET /api/products/:idOrSlug` resolves both forms.
+
+The page fetches its own product through `ProductsService.fetchOne()` rather than waiting for the catalogue: a server render would otherwise pull roughly a megabyte to find one row on every request. The browser still loads the catalogue afterwards, which is what fills in related products and nav search.
 
 ### Rules for code that runs on the server
 

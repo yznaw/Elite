@@ -69,6 +69,51 @@ export class ProductsService {
     return this._products().find((p) => p.id === id);
   }
 
+  /**
+   * Fetch a single product by slug or id, without loading the catalogue.
+   *
+   * A server render of one product page would otherwise pull the whole
+   * catalogue (roughly a megabyte) to find one row, on every request. The
+   * browser still loads the catalogue afterwards for search and related
+   * products; this just keeps the page itself off that critical path.
+   *
+   * Resolves to undefined for an unknown slug, which the page turns into its
+   * not-found state (and the server into a 404).
+   */
+  async fetchOne(idOrSlug: string): Promise<Product | undefined> {
+    const key = idOrSlug.trim();
+    if (!key) return undefined;
+    await this.loadConfig();
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<Product>>(`${this.apiBase}/products/${encodeURIComponent(key)}`),
+      );
+      return res?.data ? this.normalizeProductImages(res.data) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  getBySlug(slug: string): Product | undefined {
+    const key = slug.trim().toLowerCase();
+    if (!key) return undefined;
+    return this._products().find((p) => (p.slug || '').toLowerCase() === key);
+  }
+
+  /**
+   * What a product's URL uses: its slug, or its id for a product saved before
+   * slugs existed. One definition, because a link built any other way either
+   * 404s or costs a redirect.
+   */
+  productKey(product: Pick<Product, 'id' | 'slug'>): string {
+    return product.slug?.trim() || product.id;
+  }
+
+  /** Path form of the same, for canonical URLs and structured data. */
+  productPath(product: Pick<Product, 'id' | 'slug'>): string {
+    return `/product/${this.productKey(product)}`;
+  }
+
   getFeatured(): Product[] {
     return this._products().slice(0, 3);
   }

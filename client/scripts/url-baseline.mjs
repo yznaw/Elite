@@ -37,6 +37,15 @@ const EXPECTED = [
       && [301, 302, 303, 307, 308].includes(a.status)
       && /\/checkout\/failure/.test(a.location || ''),
   },
+  {
+    // A UUID product URL still resolves: the page loads it and replaces the
+    // address with the slug. What must never happen is a 404 or a 5xx, which
+    // would mean a shared or indexed link died.
+    why: 'product URLs moved from UUIDs to slugs; the old UUID still answers',
+    match: (url) => /^\/product\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(url.pathname),
+    ok: (b, a) => b.status === 200
+      && (a.status === 200 || ([301, 302, 303, 307, 308].includes(a.status) && /\/product\//.test(a.location || ''))),
+  },
 ];
 
 function extra(origin) {

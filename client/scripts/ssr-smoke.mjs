@@ -56,6 +56,9 @@ const ROUTES = [
   { path: '/contact', status: [200] },
   { path: '/policy/smoke-handle', status: [200, 404] },
   { path: '/this-page-does-not-exist-smoke', status: [404] },
+  // A product that does not exist must answer 404 too, not a 200 "not found"
+  // page: search engines keep a soft 404 in the index.
+  { path: '/product/no-such-product-smoke', status: [404] },
   // Client-rendered routes: served as the CSR shell, never rendered here.
   { path: '/checkout', status: [200] },
   { path: '/thank-you', status: [200] },
@@ -198,6 +201,33 @@ async function pass(label, apiOrigin) {
         failures.push(apiUp
           ? `${route.path}: transfer cache is empty with the API up -- the browser would refetch and repaint`
           : `${route.path}: ${cached} API responses with API_ORIGIN unreachable -- renders are calling a different API`);
+      }
+    }
+
+    // One real product, looked up at runtime rather than hard-coded: a slug is
+    // data, and product pages are the half of the catalogue that used to reach
+    // crawlers as an empty shell.
+    if (apiUp) {
+      let product = null;
+      try {
+        const res = await fetch(`${apiOrigin}/api/products`, { signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) });
+        const body = await res.json();
+        product = (body?.data ?? []).find((p) => p.slug && p.name) ?? null;
+      } catch { /* reported below */ }
+
+      if (!product) {
+        failures.push('no product with a slug came back from the API, so product rendering went untested');
+      } else {
+        const path = `/product/${encodeURIComponent(product.slug)}`;
+        const started = Date.now();
+        const res = await get(path, ROUTE_TIMEOUT_MS);
+        const cached = transferEntries(res.body);
+        const named = res.body.includes(product.name);
+        const ok = res.status === 200 && named && cached > 0;
+        console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${String(res.status).padEnd(3)} ${String(Date.now() - started).padStart(5)}ms  ${path}  (${cached} cached)`);
+        if (res.status !== 200) failures.push(`${path}: status ${res.status}, expected 200`);
+        else if (!named) failures.push(`${path}: the product name is not in the HTML -- the page rendered empty`);
+        else if (cached === 0) failures.push(`${path}: transfer cache empty -- the browser would fetch the product again`);
       }
     }
   } catch (err) {
