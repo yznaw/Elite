@@ -83,14 +83,25 @@ It carries six things beyond a plain SPA host:
    through. The build no longer contains `index.html`, so the old
    `try_files $uri $uri/ /index.html` must not come back. First-time rollout
    steps are in `docs/DEPLOYMENT.md` section 7c.
-5. **HTTP/2** (in `elite.conf`), as a standalone `http2 on;` in each HTTPS
-   server block. The storefront pulls roughly twenty images from one origin and
-   HTTP/1.1 only allows six connections to it, so they queued: a Lighthouse run
-   measured every request as `http/1.1` and put the cost at about a second of
-   LCP. **This needs nginx 1.25.1 or newer.** On anything older `http2 on;` is
-   an unknown directive and `nginx -t` fails — check with `nginx -v` first and
-   upgrade rather than moving the token onto the `listen` line, which is
-   certbot's and must not be edited (see the warning below).
+5. **HTTP/2** (in `elite.conf`). The storefront pulls roughly twenty images
+   from one origin and HTTP/1.1 only allows six connections to it, so they
+   queued: a Lighthouse run measured every request as `http/1.1` and put the
+   cost at about a second of LCP.
+   The clean way to enable it is a standalone `http2 on;` directive (nginx
+   1.25.1+), which needs no change to `listen`. This host runs Ubuntu's stock
+   nginx 1.24, below that floor — `http2 on;` there is an unknown directive and
+   `nginx -t` refuses to start — so as of 2026-09-18 the token is instead on
+   the `listen` line itself: `listen 443 ssl http2;`. That line carries
+   `# managed by Certbot`, which is a real exception to the warning below, made
+   deliberately rather than by accident. It is safe because `nginx -t` gates
+   the reload either way, and because a future `certbot --nginx` run only
+   rewrites the tokens it manages on that line (the port, `ssl`, the
+   certificate paths) — it does not replace the line wholesale, so it will not
+   silently drop `http2`. Check after any certbot run that touches this file
+   regardless: `grep 'listen 443' /etc/nginx/sites-available/elite`.
+   If this host's nginx is ever upgraded past 1.25.1, switch to the standalone
+   `http2 on;` form and drop the token back off the `listen` line — it is the
+   less surprising spelling and doesn't need this exception.
 6. **Uploaded images served from disk** (in `elite.conf`). The storefront builds
    media URLs as `<apiBase>/uploads/…` with `apiBase` of `/api`, so every image
    — the LCP one included — used to match `location /api/` and be proxied
@@ -158,7 +169,8 @@ Expected results:
 - HTTPS returns `200`.
 - `/api/health` returns the Express health response.
 - The browser shows a valid lock icon for both domains.
-- The last command prints `HTTP/2 200`. `HTTP/1.1 200` means `http2 on;` is not
-  in effect — check `nginx -v` against the 1.25.1 floor in item 5 above.
+- The last command prints `HTTP/2 200`. `HTTP/1.1 200` means the `http2` token
+  on the `listen` line (or `http2 on;`, on a host upgraded past 1.25.1) is not
+  in effect — see item 5 above.
 - An image request (`curl -sI https://elitecollections.qa/api/uploads/<file>`)
   leaves no line in the API log, because nginx is answering it from disk.
