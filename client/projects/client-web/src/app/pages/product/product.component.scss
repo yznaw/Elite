@@ -1120,6 +1120,16 @@
   text-align: center;
 }
 
+/* Scarcity line under the quantity row, shown only when stock is genuinely low. */
+.stock-left {
+  margin: -14px 0 20px;
+  color: #9a5b2d;
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 /* ── Quantity ── */
 .qty-row {
   justify-content: space-between;

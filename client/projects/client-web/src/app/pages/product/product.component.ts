@@ -53,6 +53,15 @@ interface ReviewFieldErrors {
 
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 
+/**
+ * At or below this many left, the stock line switches from silence to "Only n left".
+ *
+ * A front-end constant on purpose: the admin has its own low-stock threshold, but that is for
+ * staff restocking decisions and `/api/config` does not publish it. Wiring it through would mean
+ * a server change for a number that reads differently to a shopper than to a warehouse.
+ */
+const LOW_STOCK_AT = 5;
+
 @Component({
     selector: 'cw-product',
     imports: [CommonModule, SizeSheetComponent],
@@ -338,13 +347,19 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly hasSizeOptions = computed(() => this.availableSizes().some((option) => option.available));
 
   /**
-   * Only show the stock hint once it refers to something real. Before a size is picked `maxQty`
-   * is the colour's best size, and printing "Max 3" for a size the customer has not chosen would
-   * be a promise about the wrong variant.
+   * How many are left, but only when that is worth saying.
+   *
+   * Silent while stock is comfortable: "Max 10" told a shopper a number they have no use for,
+   * and it sat between the quantity stepper and the buy button as a stray line. It also stays
+   * silent until a size is chosen, because before that `maxQty` is the colour's best size and
+   * would be a promise about the wrong variant. Reuses `cart.stock.onlyLeft`, which the cart
+   * drawer already shows in both languages.
    */
-  readonly showStockHint = computed(
-    () => (!this.hasSizeOptions() || this.selectedSize() !== null) && this.maxQty() > 0,
-  );
+  readonly lowStockLeft = computed(() => {
+    if (this.hasSizeOptions() && this.selectedSize() === null) return 0;
+    const left = this.maxQty();
+    return left > 0 && left <= LOW_STOCK_AT ? left : 0;
+  });
 
   readonly canPurchaseProduct = computed(() => {
     const p = this.product();

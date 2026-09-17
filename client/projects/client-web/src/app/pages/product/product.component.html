@@ -324,7 +324,9 @@
             </div>
           </div>
 
-          @if (showStockHint()) { <small>{{ t("stock.maxQty", {qty: maxQty()}) }}</small> }
+          @if (lowStockLeft(); as left) {
+            <p class="stock-left" aria-live="polite">{{ t("cart.stock.onlyLeft", { count: left }) }}</p>
+          }
           @if (productSoldOut(p)) { <p class="stock-status">{{ t("stock.outOfStock") }}</p> }
           <div class="cta-stack">
             @if (canPurchaseProduct()) {

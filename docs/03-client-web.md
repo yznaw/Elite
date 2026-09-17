@@ -539,8 +539,7 @@ Three things had to be fixed first, because they all assumed a size was always s
   rendered the restock panel on every sized product. `colorStock(product, colour)` now answers
   "stock across every size of this colour" — deliberately a max, not a sum, because a cart line is
   one variant — and `colorState()` is a wrapper over it, so there is one definition. `maxQty` uses
-  it while no size is chosen, and `showStockHint` keeps "Max n" hidden until it refers to a real
-  size.
+  it while no size is chosen.
 - **`availableSizes()` bailed out on an empty `product.sizes`**, but `sizeOptions()` also derives
   sizes from the variants. A product whose sizes live only on its variants therefore rendered no
   size UI at all, and — once the default size was gone — would have gone into the cart with size
@@ -553,6 +552,15 @@ Three things had to be fixed first, because they all assumed a size was always s
 Two smaller ones: hovering a colour swatch on a card used to write a size into the selection (it
 fired on `mouseenter` and `focus`, and could store the literal `0`), and a dismissed size sheet now
 keeps its message, because closing it without picking does not answer the question.
+
+**The stock line says something useful or nothing (September 2026):** the quantity row used to be
+followed by "Max 10", a stray `<small>` outside both the quantity row and the CTA stack, so it
+floated between the stepper and the buy button. Nobody wants ten pairs, and the `+` already stops at
+the ceiling. `lowStockLeft` now returns a count only when it is at or below `LOW_STOCK_AT` (5, a
+front-end constant: the admin's own low-stock threshold is a restocking signal and `/api/config`
+does not publish it), and the line renders as "Only n left" via the existing `cart.stock.onlyLeft`
+key. It also stays silent until a size is chosen, since before that `maxQty` is the colour's best
+size. `stock.maxQty` is gone from both locales.
 
 Two presentation fixes on the desktop size chips, both from the same work:
 
