@@ -490,7 +490,7 @@ Structured around what a visitor to a physical retailer actually wants: where th
 
 - **Branches** come from `contact.branches` in the storefront CMS. Hours are stored as whole hours on a 24h clock, not a display string, which is what lets the page compute the `Open now` badge (in Doha time, fixed UTC+3) and emit the same values as `openingHoursSpecification`.
 - **Stockists** (`contact.stockists`) are shops that carry Elite but are not Elite's premises, such as the counter inside Printemps. They get a lighter treatment, no map of their own, and are **deliberately excluded from the `Store` structured data** — describing them as Elite locations, or reusing the host's map link in `sameAs`, would tell search engines the two businesses are one.
-- **`LocalBusiness` / `Store` JSON-LD** is built from the same CMS data, so the page and the structured data cannot drift.
+- **`LocalBusiness` / `Store` JSON-LD** is built from the same CMS data, so the page and the structured data cannot drift. `priceRange` is the one field that is not CMS-driven: it is the symbol `$$$`, because the catalogue is not loaded on this page (loading it cost every content page roughly 800 kB) and a hard-coded number range would go stale.
 
 > **Bidirectional text:** Latin runs and digits inside Arabic copy need the `.num` utility (`direction: ltr; unicode-bidi: isolate`). Without it a phone number renders as `4475 8172 974+` and trailing full stops jump to the head of the line. This bug is not unique to this page; apply `.num` anywhere a number sits in RTL copy.
 

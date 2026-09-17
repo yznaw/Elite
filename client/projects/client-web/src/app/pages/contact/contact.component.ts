@@ -126,6 +126,12 @@ export class ContactComponent implements OnInit {
         : {}),
       ...(b.mapUrl ? { hasMap: b.mapUrl, sameAs: [b.mapUrl] } : {}),
       currenciesAccepted: 'QAR',
+      // Google shows this beside a shop in the local pack, and a listing
+      // without it is the one that looks incomplete. Written as a symbol
+      // rather than a number range on purpose: the catalogue is not loaded on
+      // this page (it used to be, and cost every content page ~800 kB), so a
+      // computed range would either be stale or reintroduce that cost.
+      priceRange: '$$$',
     }));
   }
 
