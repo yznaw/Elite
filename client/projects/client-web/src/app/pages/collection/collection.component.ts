@@ -14,10 +14,10 @@ import { SeoService } from '../../services/seo.service';
 import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
 import { colorKey, colorSlug } from '../../utils/color-slug';
-import { sizeOptions, colorState, productSoldOut, defaultColor, defaultSize, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+import { sizeOptions, colorState, productSoldOut, defaultColor, colorStock, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
 import { SizeSheetComponent, SizeOption } from '../../shared/size-sheet/size-sheet.component';
 import { RestockFormComponent } from '../../shared/restock/restock-form.component';
-import { MOBILE_SHEET_QUERY } from '../../shared/overlay/body-scroll-lock';
+import { MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
@@ -166,6 +166,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
     };
   });
   private addedTimer: number | undefined;
+  private sizeErrorTimer: number | undefined;
   private mobileMediaQuery?: MediaQueryList;
   private mobileMediaQueryHandler?: () => void;
   private sheetMediaQuery?: MediaQueryList;
@@ -178,6 +179,8 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly addedProductId = signal<string | null>(null);
   /** At most one card shows the alert form or the size sheet, so both are page-level. */
   readonly notifyTarget = signal<Product | null>(null);
+  /** The one card currently being told to pick a size. */
+  readonly sizeErrorProductId = signal<string | null>(null);
   readonly sizeSheetTarget = signal<Product | null>(null);
   /** Below this width the card swaps its native select for the same sheet the product page uses. */
   readonly isSheetView = signal(false);
@@ -448,6 +451,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   selectSize(product: Product, size: number): void {
     this.selectedSizes.update((sizes) => ({ ...sizes, [product.id]: size }));
+    if (this.sizeErrorProductId() === product.id) this.sizeErrorProductId.set(null);
   }
 
   sizeSelectValue(event: Event): number {
@@ -458,12 +462,17 @@ export class CollectionComponent implements OnInit, OnDestroy {
     event?.preventDefault();
     event?.stopPropagation();
     this.selectedColors.update((colors) => ({ ...colors, [product.id]: color }));
+    // This runs on hover and on focus, so it must not choose anything: it only drops a size the
+    // new colour does not offer. It used to write the first available size, or the literal 0,
+    // which meant brushing past a swatch silently picked a size for the customer.
     this.selectedSizes.update((sizes) => {
-      const available = this.availableSizes(product, color);
       const current = sizes[product.id];
-      if (current && available.includes(current)) return sizes;
-      const nextSize = available[0] ?? 0;
-      return { ...sizes, [product.id]: nextSize };
+      if (current === undefined) return sizes;
+      const offered = this.sizeOptions(product, color).map((option) => option.size);
+      if (offered.includes(current)) return sizes;
+      const next = { ...sizes };
+      delete next[product.id];
+      return next;
     });
   }
 
@@ -486,6 +495,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   addToCart(product: Product): void {
     if (!this.canPurchase(product)) return;
+    if (!this.requireCardSize(product)) return;
     this.cart.add(this.cartItem(product));
 
     this.addedProductId.set(product.id);
@@ -495,19 +505,22 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   buyNow(product: Product): void {
     if (!this.canPurchase(product)) return;
+    if (!this.requireCardSize(product)) return;
     this.cart.add(this.cartItem(product));
     this.cart.closeDrawer();
     void this.router.navigate(['/checkout']);
     window.scrollTo(0, 0);
   }
 
+  /**
+   * Only what the customer picked. Nothing is chosen for them, and a sold-out size counts as a
+   * pick, because picking one is how they ask to be told when it returns.
+   */
   selectedSize(product: Product): number | null {
     const selected = this.selectedSizes()[product.id];
-    // Any size offered for this colour counts, sold out or not: picking a sold-out size is
-    // how a customer asks to be told when it returns. `canPurchase` still gates the cart.
+    if (selected === undefined) return null;
     const offered = this.sizeOptions(product, this.selectedProductColor(product)).map((option) => option.size);
-    if (selected && offered.includes(selected)) return selected;
-    return defaultSize(product, this.selectedProductColor(product));
+    return offered.includes(selected) ? selected : null;
   }
 
   selectedProductColor(product: Product): string | null {
@@ -549,16 +562,25 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly sizeOptions = sizeOptions;
   readonly productSoldOut = productSoldOut;
   colorSoldOut(product: Product, color: string | null): boolean { return colorState(product, color) === 'sold-out'; }
-  canPurchase(product: Product): boolean { return availableStock(product, this.selectedProductColor(product), this.selectedSize(product)) > 0; }
+  /**
+   * Whether this card can lead to a sale at all.
+   *
+   * Colour-level while no size is picked: asking `availableStock` with a null size answers 0 for
+   * every sized product, which would hide Add to Cart on the whole grid. The size itself is
+   * required at the moment of purchase instead, by `requireCardSize`.
+   */
+  canPurchase(product: Product): boolean {
+    const color = this.selectedProductColor(product);
+    const size = this.selectedSize(product);
+    return size === null ? colorStock(product, color) > 0 : availableStock(product, color, size) > 0;
+  }
 
   /**
-   * Three states, not two. Once a sold-out size can be picked from the sheet, "cannot buy"
-   * stops meaning "sold out": the colour may still have other sizes on the shelf, and
-   * offering a back-in-stock alert there would talk a customer out of a sale we can make.
+   * Two states. A customer who picked a sold-out size gets an alert for that exact size; one who
+   * picked nothing gets the buy buttons and is asked for a size when they press.
    */
-  cardCta(product: Product): 'buy' | 'choose-size' | 'notify' {
-    if (this.canPurchase(product)) return 'buy';
-    return this.availableSizes(product).length > 0 ? 'choose-size' : 'notify';
+  cardCta(product: Product): 'buy' | 'notify' {
+    return this.canPurchase(product) ? 'buy' : 'notify';
   }
 
   /** Sold-out sizes offered for the selected colour; the only ones the API accepts. */
@@ -587,6 +609,38 @@ export class CollectionComponent implements OnInit, OnDestroy {
   onSheetSizePicked(product: Product, size: number): void {
     this.selectSize(product, size);
     this.sizeSheetTarget.set(null);
+  }
+
+  /**
+   * Refuse to buy without a size, and put the size picker in front of the customer.
+   *
+   * There is no toast anywhere in the storefront, so the message is an inline line in this card's
+   * own purchase panel, which keeps it next to the control it is about.
+   */
+  private requireCardSize(product: Product): boolean {
+    if (this.sizeOptions(product, this.selectedProductColor(product)).length === 0) return true;
+    if (this.selectedSize(product) !== null) return true;
+
+    this.sizeErrorProductId.set(product.id);
+    if (this.sizeErrorTimer) window.clearTimeout(this.sizeErrorTimer);
+    this.sizeErrorTimer = window.setTimeout(() => this.sizeErrorProductId.set(null), 6000);
+
+    if (typeof window === 'undefined') return false;
+
+    if (this.isSheetView()) {
+      this.openSizeSheet(product);
+      return false;
+    }
+
+    requestAnimationFrame(() => {
+      const picker = document.getElementById(`size-select-${product.id}`);
+      picker?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+      });
+      picker?.focus({ preventScroll: true });
+    });
+    return false;
   }
 
   /** The alert was refused because the selection is buyable again; reload and let the card update. */

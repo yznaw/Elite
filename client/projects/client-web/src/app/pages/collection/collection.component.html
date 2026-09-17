@@ -435,6 +435,12 @@
                         }
                       </div>
 
+                      @if (sizeErrorProductId() === p.id) {
+                        <p class="size-required-message" role="alert">
+                          {{ t("product.size.required") }}
+                        </p>
+                      }
+
                       @if (canPurchase(p)) {
                         <button
                           type="button"
@@ -455,11 +461,6 @@
                           <span>{{ t("collection.buyNow") }}</span>
                           <span class="quick-add-arrow">→</span>
                         </button>
-                      } @else if (cardCta(p) === 'choose-size') {
-                        <button type="button" class="quick-add notify-only" (click)="openSizeSheet(p)">
-                          {{ t('product.size.choose') }}
-                        </button>
-                        <span class="other-sizes-note">{{ t('stock.otherSizesAvailable') }}</span>
                       } @else {
                         <button
                           type="button"
@@ -497,6 +498,7 @@
                   [open]="true"
                   [sizes]="sheetSizes(sp)"
                   [selected]="selectedSize(sp)"
+                  [error]="sizeErrorProductId() === sp.id ? t('product.size.required') : ''"
                   (picked)="onSheetSizePicked(sp, $event)"
                   (closed)="sizeSheetTarget.set(null)"
                 />

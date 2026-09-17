@@ -24,9 +24,7 @@ export function sizeOptions(product: Product, color: string | null): { size: num
     .sort((a, b) => Number(a.state === 'sold-out') - Number(b.state === 'sold-out') || a.size - b.size);
 }
 export function colorState(product: Product, color: string | null): 'available' | 'sold-out' {
-  if (!product.variants?.length) return (product.stock || 0) > 0 ? 'available' : 'sold-out';
-  return product.variants.some(v => colorKey(v.color) === colorKey(color) && v.isActive !== false && v.stock > 0)
-    ? 'available' : 'sold-out';
+  return colorStock(product, color) > 0 ? 'available' : 'sold-out';
 }
 export function productSoldOut(product: Product): boolean {
   return product.variants?.length ? !product.variants.some(v => v.isActive !== false && v.stock > 0) : !(Number(product.stock) > 0);
@@ -36,6 +34,16 @@ export function defaultColor(product: Product, requested?: string | null): strin
   return (requested && colors.find(c => colorKey(c) === colorKey(requested) || colorSlug(c) === colorSlug(requested)))
     || colors.find(c => colorState(product, c) === 'available') || colors[0] || null;
 }
-export function defaultSize(product: Product, color: string | null): number | null {
-  return sizeOptions(product, color).find(s => s.state === 'available')?.size ?? null;
+/**
+ * Stock for a colour across every size it offers.
+ *
+ * This is not the same question as `availableStock(product, color, null)`: a null size there means
+ * "a variant with no size of its own", so it answers 0 for anything sized. Use this one to ask
+ * whether a colour can be bought at all, before the customer has picked a size.
+ */
+export function colorStock(product: Product, color: string | null): number {
+  if (!product.variants?.length) return Math.max(0, product.stock || 0);
+  return (product.variants || [])
+    .filter(v => colorKey(v.color) === colorKey(color) && v.isActive !== false)
+    .reduce((most, v) => Math.max(most, v.stock || 0), 0);
 }

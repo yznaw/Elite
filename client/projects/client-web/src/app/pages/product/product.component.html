@@ -235,7 +235,7 @@
             }
           </dl> -->
 
-          @if (p.sizes && p.sizes.length > 0) {
+          @if (hasSizeOptions()) {
             <div id="size-section" class="size-section">
               <div class="section-label">
                 <span>{{ t("product.size.label") }}</span>
@@ -267,7 +267,14 @@
                     [attr.aria-pressed]="selectedSize() === s.size"
                     (click)="selectSize(s.size)"
                   >
-                    <span class="size-value">{{ s.size }} {{ s.available && !s.inStock ? t("stock.soldOutOption") : "" }}</span>
+                    <!-- The chip shows the number only. Printing "(Sold out)" inside a 46px square
+                         stretched every sold-out chip into a three-line block and pushed the row
+                         into a wall of text; the muted `.out-of-stock` styling carries the meaning.
+                         The words stay for screen readers, which cannot see the styling. -->
+                    <span class="size-value">{{ s.size }}</span>
+                    @if (s.available && !s.inStock) {
+                      <span class="sr-only">{{ t("stock.soldOutOption") }}</span>
+                    }
                     <span class="size-state" aria-hidden="true">
                       {{ selectedSize() === s.size ? "✓" : "" }}
                     </span>
@@ -317,7 +324,7 @@
             </div>
           </div>
 
-          @if (maxQty() > 0) { <small>{{ t("stock.maxQty", {qty: maxQty()}) }}</small> }
+          @if (showStockHint()) { <small>{{ t("stock.maxQty", {qty: maxQty()}) }}</small> }
           @if (productSoldOut(p)) { <p class="stock-status">{{ t("stock.outOfStock") }}</p> }
           <div class="cta-stack">
             @if (canPurchaseProduct()) {
@@ -352,9 +359,9 @@
                 (click)="openRestockForm()"
               >
                 <span>{{ t("product.restock.notify") }}</span>
-                <small>{{
-                  t("product.restock.size", { size: selectedSize() ?? " " })
-                }}</small>
+                @if (selectedSize() !== null) {
+                  <small>{{ t("product.restock.size", { size: selectedSize() ?? "" }) }}</small>
+                }
               </button>
             }
           </div>
@@ -371,7 +378,7 @@
                 </p>
               } @else if (restockFormOpen()) {
                 <form (submit)="submitRestockRequest($event)">
-                  @if (p.sizes.length) {
+                  @if (hasSizeOptions()) {
                     <label for="restock-size">{{ t('product.size.label') }}</label>
                     <!-- `selected` per option rather than `[value]` on the select: the select
                          exists before its options do, so the value binding is discarded and the

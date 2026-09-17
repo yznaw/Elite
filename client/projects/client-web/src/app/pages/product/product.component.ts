@@ -14,9 +14,9 @@ import { colorKey, colorSlug } from '../../utils/color-slug';
 import { SeoService } from '../../services/seo.service';
 import { API_BASE } from '../../core/api-base';
 
-import { sizeOptions, productSoldOut, defaultColor, defaultSize, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+import { sizeOptions, productSoldOut, defaultColor, colorStock, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
 import { SizeSheetComponent } from '../../shared/size-sheet/size-sheet.component';
-import { BodyScrollLock, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
+import { BodyScrollLock, MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
 import { RestockService } from '../../shared/restock/restock.service';
 
 interface Accordion {
@@ -200,7 +200,13 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productSoldOut = productSoldOut;
   readonly maxQty = computed(() => {
     const p = this.product();
-    return p ? availableStock(p, this.selectedColor(), this.selectedSize()) : 0;
+    if (!p) return 0;
+    // Before a size is picked, the colour's best stock stands in. Asking `availableStock` with a
+    // null size would answer 0 for every sized product, which would freeze the quantity stepper
+    // and render the restock panel on a product that is perfectly in stock. `selectSize` clamps
+    // the quantity down once a specific size is known.
+    const size = this.selectedSize();
+    return size === null ? colorStock(p, this.selectedColor()) : availableStock(p, this.selectedColor(), size);
   });
   readonly restockSizes = computed(() => this.availableSizes().filter(s => s.available && !s.inStock));
   readonly restockSubmitting = signal(false);
@@ -259,12 +265,15 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   readonly availableSizes = computed<AvailableSize[]>(() => {
     const p = this.product();
-    if (!p?.sizes?.length) return [];
+    if (!p) return [];
 
+    // Driven by `sizeOptions`, not `product.sizes`: a product can carry its sizes only on its
+    // variants. Bailing out on an empty `product.sizes` used to render no size UI at all for
+    // those, which left the purchase ungated.
     const offered = sizeOptions(p, this.selectedColor());
     return [
       ...offered.map(s => ({ size: s.size, available: true, inStock: s.state === 'available' })),
-      ...p.sizes.filter(size => !offered.some(s => s.size === size)).sort((a, b) => a - b)
+      ...(p.sizes ?? []).filter(size => !offered.some(s => s.size === size)).sort((a, b) => a - b)
         .map(size => ({ size, available: false, inStock: false })),
     ];
   });
@@ -318,10 +327,31 @@ export class ProductComponent implements OnInit, OnDestroy {
     return this.maxQty() > 0;
   });
 
+  /**
+   * Whether there is a size here the customer could actually pick.
+   *
+   * Counts selectable sizes, not rows: `availableSizes()` also lists sizes the product has but
+   * this colour does not offer, as struck-out disabled chips. A colour whose variants carry no
+   * size at all lists every size that way, and counting rows made the purchase gate demand a
+   * size that no chip could satisfy. 30 of the 43 products in the catalogue have such a colour.
+   */
+  readonly hasSizeOptions = computed(() => this.availableSizes().some((option) => option.available));
+
+  /**
+   * Only show the stock hint once it refers to something real. Before a size is picked `maxQty`
+   * is the colour's best size, and printing "Max 3" for a size the customer has not chosen would
+   * be a promise about the wrong variant.
+   */
+  readonly showStockHint = computed(
+    () => (!this.hasSizeOptions() || this.selectedSize() !== null) && this.maxQty() > 0,
+  );
+
   readonly canPurchaseProduct = computed(() => {
     const p = this.product();
     if (!p) return false;
-    if (!p.sizes?.length) return this.selectedSizeInStock();
+    // `hasSizeOptions`, not `p.sizes`, so a product whose sizes live on its variants is treated
+    // as sized here too.
+    if (!this.hasSizeOptions()) return this.selectedSizeInStock();
     if (this.selectedSize() === null) {
       return this.availableSizes().some((item) => item.available && item.inStock);
     }
@@ -473,7 +503,8 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.analytics.track('product_view', { productId: nextProduct.id });
     this.galleryIdx.set(0);
     this.selectedColor.set(defaultColor(nextProduct, this.route.snapshot.queryParamMap.get('color')));
-    this.selectedSize.set(defaultSize(nextProduct, this.selectedColor()));
+    // No size is chosen for the customer: a shoe size is their decision, not the first one in stock.
+    this.selectedSize.set(null);
     this.sizeSelectionError.set(false);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
@@ -598,7 +629,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   selectProductColor(color: string): void {
     this.selectedColor.set(color);
     this.selectGalleryIndex(0);
-    this.selectedSize.set(this.product() ? defaultSize(this.product()!, color) : null);
+    this.selectedSize.set(null);
     this.qty.set(1);
     this.sizeSelectionError.set(false);
     this.resetRestockForm();
@@ -622,6 +653,8 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   closeSizePicker(): void {
     this.sizePickerOpen.set(false);
+    // `sizeSelectionError` is deliberately left set: dismissing the sheet without picking does not
+    // answer the question, and the inline message under the trigger is what keeps asking it.
   }
 
   async openSizeGuide(): Promise<void> {
@@ -663,7 +696,9 @@ export class ProductComponent implements OnInit, OnDestroy {
       this.openRestockForm();
       return;
     }
-    this.cart.add(this.cartItem(p));
+    const size = this.selectedSize();
+    if (size === null && this.hasSizeOptions()) return;
+    this.cart.add(this.cartItem(p, size ?? 0));
     this.addedFeedback.set(true);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     this.feedbackTimer = window.setTimeout(() => this.addedFeedback.set(false), 2200);
@@ -677,7 +712,9 @@ export class ProductComponent implements OnInit, OnDestroy {
       this.openRestockForm();
       return;
     }
-    this.cart.add(this.cartItem(p));
+    const size = this.selectedSize();
+    if (size === null && this.hasSizeOptions()) return;
+    this.cart.add(this.cartItem(p, size ?? 0));
     this.cart.closeDrawer();
     void this.router.navigate(['/checkout']);
     window.scrollTo(0, 0);
@@ -760,7 +797,7 @@ export class ProductComponent implements OnInit, OnDestroy {
         behavior: prefersReducedMotion() ? 'auto' : 'smooth',
         block: 'center',
       });
-      document.getElementById(this.product()?.sizes.length && this.restockSize() === null ? 'restock-size' : 'restock-email')?.focus({ preventScroll: true });
+      document.getElementById(this.hasSizeOptions() && this.restockSize() === null ? 'restock-size' : 'restock-email')?.focus({ preventScroll: true });
     });
   }
 
@@ -779,7 +816,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     const result = await this.restock.submit({
       productId: p.id,
       size,
-      hasSizes: p.sizes.length > 0,
+      hasSizes: this.hasSizeOptions(),
       soldOutSizes: this.restockSizes().map((s) => s.size),
       color: this.selectedColor(),
       email: this.restockEmail(),
@@ -923,7 +960,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.resetReviewForm();
   }
 
-  private cartItem(p: Product) {
+  private cartItem(p: Product, size: number) {
     const variant = this.selectedVariant(p);
     return {
       id: p.id,
@@ -934,7 +971,7 @@ export class ProductComponent implements OnInit, OnDestroy {
       image: this.gallery()[this.galleryIdx()] ?? p.image,
       leather: p.leather,
       color: this.selectedColor(),
-      size: this.selectedSize() ?? p.sizes?.[0] ?? 0,
+      size,
       qty: this.qty(),
     };
   }
@@ -950,7 +987,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     if (!match || this.colorSelected(match)) return;
 
     this.selectedColor.set(match);
-    this.selectedSize.set(defaultSize(product, match));
+    this.selectedSize.set(null);
     this.qty.set(1);
     this.selectGalleryIndex(0);
     this.resetRestockForm();
@@ -969,16 +1006,39 @@ export class ProductComponent implements OnInit, OnDestroy {
       this.selectedSize.set(Number(size));
       this.qty.set(1);
     }
-    if (params.get('notify') === '1' && (this.restockSizes().length || !this.product()!.sizes.length && !this.selectedSizeInStock())) {
+    if (params.get('notify') === '1' && (this.restockSizes().length || (!this.hasSizeOptions() && !this.selectedSizeInStock()))) {
       this.openRestockForm();
     }
   }
 
+  /**
+   * Refuse to buy without a size, and put the size picker where the customer is looking.
+   *
+   * Keyed off the sizes actually offered rather than `product.sizes`: `sizeOptions` also derives
+   * sizes from the variants, and a product whose sizes come only from variants used to pass this
+   * guard and then silently open the restock form instead of adding to the cart.
+   */
   private requireSizeSelection(): boolean {
-    const p = this.product();
-    if (!p?.sizes?.length || this.selectedSize() !== null) return true;
+    if (!this.hasSizeOptions() || this.selectedSize() !== null) return true;
     this.sizeSelectionError.set(true);
-    this.openSizePicker();
+
+    if (typeof window === 'undefined') return false;
+
+    // On a phone the sheet *is* the size picker. On a laptop the sizes are already on the page, so
+    // opening a panel over them would hide the thing we are asking them to look at.
+    if (window.matchMedia(MOBILE_SHEET_QUERY).matches) {
+      this.openSizePicker();
+      return false;
+    }
+
+    requestAnimationFrame(() => {
+      const section = document.getElementById('size-section');
+      section?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+      });
+      section?.querySelector<HTMLElement>('.size-options .size-btn:not([disabled])')?.focus({ preventScroll: true });
+    });
     return false;
   }
 

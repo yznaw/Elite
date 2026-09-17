@@ -275,7 +275,6 @@ const EN = {
   'stock.restockPrivacy': 'We will only use this email to tell you when this size is back.',
   'stock.rateLimit': 'Too many requests. Please try again in 15 minutes.',
   'stock.notifyMeSize': 'Notify me - size {size}',
-  'stock.otherSizesAvailable': 'Other sizes are in stock',
   'collection.notify.heading': 'Back-in-stock alert',
   'collection.aria.notifyDialog': 'Back-in-stock alert for {product}',
 
@@ -796,7 +795,6 @@ const AR: Record<keyof typeof EN, string> = {
   'stock.restockPrivacy': 'سنستخدم هذا البريد الإلكتروني فقط لإبلاغك عند توفر هذا المقاس.',
   'stock.rateLimit': 'طلبات كثيرة. يرجى المحاولة بعد 15 دقيقة.',
   'stock.notifyMeSize': 'أبلغني - مقاس {size}',
-  'stock.otherSizesAvailable': 'مقاسات أخرى متوفرة',
   'collection.notify.heading': 'تنبيه عند التوفر',
   'collection.aria.notifyDialog': 'تنبيه توفر {product}',
 

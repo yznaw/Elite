@@ -771,6 +771,8 @@
 .size-picker {
   display: grid;
   gap: 9px;
+  /* Same reason as the product page's `.size-section`. */
+  scroll-margin-block: 110px;
 }
 
 .size-label {
@@ -1368,12 +1370,14 @@ html[dir='rtl'] .product-tile {
   font-size: 13px;
 }
 
-.other-sizes-note {
+/* "Please choose a size", inline in the card's purchase panel. */
+.size-required-message {
   grid-column: 1 / -1;
-  color: #6f6659;
+  margin: 0;
+  color: #a33a32;
   font-family: var(--ff-sans);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-align: center;
+  line-height: 1.35;
+  text-align: start;
 }

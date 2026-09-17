@@ -522,6 +522,48 @@ private readonly seoTags = this.seo.watch(() => ({
   - `ensureLoaded() / refresh()` — Force-reload from API
 - **Image normalization:** All products returned from the API pass through `normalizeProductImages()` which resolves `/uploads/…` paths via `resolveMediaUrl()` (→ `/api/uploads/…`), deduplicates the `images[]` array, and applies `colorImages` normalization. Missing images fall back to `this.defaultImage`.
 
+**No size is chosen for the customer (September 2026):** `defaultSize()` used to preselect the
+first in-stock size on product load, on every colour change and on every collection card, so a
+shopper who never touched the size control still bought whatever size happened to be in stock first.
+Nothing is preselected now, and `add()` / `buyNow()` refuse to proceed without one: below 760px the
+size sheet opens carrying `product.size.required` in its head, and above it the page scrolls the
+size picker into view, shows the same message inline and focuses the first available size. The
+collection card does the same through `requireCardSize()`, with the message inline in the card's
+purchase panel, since the storefront has no toast of any kind.
+
+Three things had to be fixed first, because they all assumed a size was always set:
+
+- **`availableStock(product, colour, null)` is 0 for anything sized.** A null size means "a variant
+  with no size of its own", not "any size" (`matchingVariants` in `shared/stock-availability.ts`).
+  Left alone it would have hidden Add to Cart on the whole grid, frozen the quantity stepper and
+  rendered the restock panel on every sized product. `colorStock(product, colour)` now answers
+  "stock across every size of this colour" — deliberately a max, not a sum, because a cart line is
+  one variant — and `colorState()` is a wrapper over it, so there is one definition. `maxQty` uses
+  it while no size is chosen, and `showStockHint` keeps "Max n" hidden until it refers to a real
+  size.
+- **`availableSizes()` bailed out on an empty `product.sizes`**, but `sizeOptions()` also derives
+  sizes from the variants. A product whose sizes live only on its variants therefore rendered no
+  size UI at all, and — once the default size was gone — would have gone into the cart with size
+  `0`. Both it and the template gate now follow `hasSizeOptions()`.
+- **`cartItem()` could invent a size.** It fell back to `selectedSize() ?? p.sizes?.[0] ?? 0`, which
+  is a plausible-looking wrong size on a real order. The size is now a required argument, and `0`
+  survives only for genuinely sizeless products. No variant in the catalogue uses size `0`, so it
+  stays unambiguous in `CartService.itemKey` (`id|variantId|size|colour`) and in the delete query.
+
+Two smaller ones: hovering a colour swatch on a card used to write a size into the selection (it
+fired on `mouseenter` and `focus`, and could store the literal `0`), and a dismissed size sheet now
+keeps its message, because closing it without picking does not answer the question.
+
+Two presentation fixes on the desktop size chips, both from the same work:
+
+- A sold-out chip shows its number only. `(Sold out)` inside a 46px square stretched each one into
+  a three-line block and turned the row into a wall of text; the muted `.out-of-stock` styling
+  carries the meaning instead, and the words stay in an `.sr-only` span for screen readers.
+- Hovering the selected chip used to blank out its number. `.size-btn:not(:disabled):hover` sets
+  `color` and sits one specificity step above `.size-btn.active`, so it repainted the text green on
+  the green background `.active` had just given it. The hover lift now applies to every enabled
+  chip and the colour change only to chips that are not selected.
+
 **Back-in-stock alerts from the collection card (September 2026):** the card's `NOTIFY ME`
 button used to navigate to `/product/:id?color=…&notify=1` so the customer could type one
 email address on the product page, losing the size they had just picked on the way. It now

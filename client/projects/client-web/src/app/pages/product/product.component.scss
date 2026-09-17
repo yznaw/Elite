@@ -577,6 +577,8 @@
   margin-bottom: 26px;
   padding-top: 26px;
   border-top: 1px solid var(--pdp-line);
+  /* Pressing Add with no size scrolls this block into view; keep it clear of the sticky header. */
+  scroll-margin-block: 110px;
 }
 
 .size-required-message {
@@ -877,10 +879,18 @@
   display: none;
 }
 
+/*
+ * The lift is for any enabled chip. The colour change is not: `.size-btn.active` already paints
+ * the chip green, and this rule is one specificity step above it, so on hover the selected chip
+ * got green text on its own green background and the size vanished.
+ */
 .size-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.size-btn:not(:disabled):not(.active):hover {
   border-color: var(--pdp-green);
   color: var(--pdp-green);
-  transform: translateY(-2px);
 }
 
 .size-btn:disabled {
