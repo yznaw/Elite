@@ -1,10 +1,10 @@
 # 36 — Customer identity collision: storefront checkout 500
 
-**Status:** specification. No code has been written against it. Written 2026-09-18, after the incident described in §1 took storefront checkout down in production.
+**Status:** implemented and regression-tested locally on 2026-09-18; production rollout is pending. Written after the incident described in §1 took storefront checkout down in production. See §11 for implementation and verification notes.
 
 **For the implementer:** this is a complete spec. Every schema fact in §3 was verified against the migrations rather than inferred — you should not need to re-derive them, but §9 tells you what to verify on the live database before deploying.
 
-**Starting state of the tree:** clean. `server/lib/customer-identity.js` is at its committed state, where the header comment and the code agree (both email-first). If you find that header describing *phone-first* matching or `NOT EXISTS` guards, someone has started this work — check `git status` before continuing.
+**Original starting state:** clean, with email-first matching in `server/lib/customer-identity.js`. The implementation now uses phone-first matching and guarded identifier writes.
 
 ---
 
@@ -155,7 +155,7 @@ Pass the digits form as its own parameter (`$8`) computed by `normalizePhone` in
 **d. Concurrent-race retry.** Two checkouts for the same new person can both pass `NOT EXISTS` and both insert. Wrap the body of `resolveCustomer`:
 
 - `SAVEPOINT resolve_customer` on entry. **This is required** — callers already hold an open transaction (`carts.route.js:475`, `pos.route.js:358`) and a 23505 poisons it.
-- Catch `err.code === '23505'`; if `err.constraint` is `customers_tenant_email_key` or `customers_tenant_phone_key_idx`, `ROLLBACK TO SAVEPOINT resolve_customer` and re-run once from the lookup.
+- Catch `err.code === '23505'`; if `err.constraint` is `customers_tenant_id_email_key`, `customers_tenant_email_key`, or `customers_tenant_phone_key_idx`, `ROLLBACK TO SAVEPOINT resolve_customer` and re-run once from the lookup. The `_tenant_id_` spelling is PostgreSQL's actual generated name for migration 001's unnamed email constraint, verified during implementation; accept the originally documented spelling too.
 - One retry only. A second failure rethrows.
 
 This mirrors the existing, working pattern in `server/lib/order-number.js` (`insertWithRetry`) — read it first and follow its savepoint discipline.
@@ -228,7 +228,7 @@ SELECT to_regclass('customers_tenant_phone_key_idx');
 -- likely split identities: same name, one row email-only, one row phone-only
 SELECT a.id, b.id, a.email, b.phone_key
   FROM customers a JOIN customers b
-    ON a.tenant_id = b.tenant_id AND a.id < b.id
+    ON a.tenant_id = b.tenant_id
  WHERE a.deleted_at IS NULL AND b.deleted_at IS NULL
    AND a.email IS NOT NULL AND a.phone_key IS NULL
    AND b.email IS NULL     AND b.phone_key IS NOT NULL
@@ -290,3 +290,30 @@ pm2 list   # confirm fresh uptime and restart count +1 on both
 If `SELECT to_regclass('customers_tenant_phone_key_idx')` returns NULL, migration 023 skipped index creation because duplicate live phones already existed. In that state the phone guard is a harmless no-op and no 500 occurs on the phone path — but duplicates keep accumulating.
 
 Creating the index is a **separate, later change**, not part of this deploy: it requires merging the existing duplicates first (§7), which is a human decision. Record the finding and hand it back to the owner.
+
+---
+
+## 11. Implementation and local verification — 2026-09-18
+
+- Reproduced test A against an isolated local PostgreSQL database before changing the resolver: the UPDATE threw `23505` on `customers_tenant_phone_key_idx`, exactly as reported.
+- Implemented phone-first lookup, guarded fills, deleted-email INSERT fallback, and one retry inside savepoints. `adopted.email` / `adopted.phone` mean a previously missing identifier was stored during this call; existing or skipped identifiers return false. A phone fill is true if either previously-null phone column was filled.
+- The email guard includes deleted rows; the phone guard only includes live rows. A deleted email holder can receive the order without being restored or otherwise edited by the resolver.
+- Admin create/edit return 409 for identifier collisions. Create preserves existing live-email upsert behavior but returns 409 for a deleted email holder instead of silently restoring it. Explicit restore locks the target, checks live blockers, and names the blocking customer's ID and name. A concurrent uniqueness failure also returns 409.
+- The shared admin HTTP interceptor displays the specific conflict message as a warning for create, edit, and restore. Form edits remain available for correction.
+- Normalization now accepts any nonempty digits, matching the generated column. **A 3-digit phone is now matchable.** Input validation and POS search rules were deliberately left unchanged.
+- 33 checks passed across `customer-identity-collision.test.js`, `customer-link-and-race-e2e.test.js`, `admin-orders-customers-e2e.test.js`, and `order-number.test.js`. Coverage includes real concurrent inserts and UPDATE conflicts, bounded retry, deleted identifiers, tenant isolation, short phones, missing-index legacy duplicates, and HTTP 409 responses.
+- Admin production build and POS precache generation passed using the installed Node 24.15.0 runtime. The build reported warnings for the unchanged POS stylesheet size and `jsbarcode` CommonJS dependency. The local shell's default Node 24.10.0 inside `client/` is below Angular's minimum; use a supported runtime for deployment.
+
+### Production baseline remains required
+
+After taking the §9 snapshot, run the read-only diagnostic and save its output:
+
+```bash
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f server/scripts/diagnose-customer-identities.sql \
+  > customer-identity-baseline.txt
+```
+
+The script records actual constraint names, phone-index presence/validity, duplicate live phone groups, deleted email holder count, and possible split identities. Its split-identity query omits the original UUID ordering filter: the email-only/phone-only predicates already distinguish the two sides, and UUID ordering would hide valid candidates. Shared names are only a review hint, never authorization to merge.
+
+No production baseline, snapshot, deployment, smoke test, or monitoring has been performed by this local fix. No migration, merge, deletion, or backfill is included. The reporting view and unfiltered deleted-customer joins listed in §4 remain follow-up work. If the production phone index is missing, record it and resolve existing duplicates separately before creating it.

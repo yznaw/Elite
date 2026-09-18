@@ -76,7 +76,11 @@
             "csr": { "buildTarget": "client-web:build:development,csr" }
           },
           "defaultConfiguration": "development",
-          "options": { "host": "0.0.0.0", "port": 4200 }
+          "options": {
+            "host": "0.0.0.0",
+            "port": 4200,
+            "allowedHosts": ["localhost", "127.0.0.1", "[::1]"]
+          }
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",

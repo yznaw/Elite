@@ -419,6 +419,8 @@ async function seedCollections(client, tenantId, productIdsBySku) {
 }
 
 async function seedCustomers(client, tenantId) {
+  // Dev fixtures intentionally upsert by email; runtime identity is phone-first
+  // and must go through lib/customer-identity.js instead.
   const idsByEmail = new Map();
   for (const c of CUSTOMERS) {
     const inserted = await client.query(

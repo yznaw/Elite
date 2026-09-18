@@ -1,9 +1,36 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
-const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
+const { customerIdentifierConflictField } = require('../lib/customer-identity');
+const { asyncHandler, conflict, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
+
+function identifierConflict(res, field, blocker) {
+  const label = field === 'phone' ? 'phone number' : 'email address';
+  const message = blocker
+    ? `Cannot restore: this ${label} belongs to ${blocker.full_name} (${blocker.id}). Review these customers before restoring.`
+    : `This ${label} is already used by another customer. Review the existing customer or use a different ${label}.`;
+  return conflict(res, 'CUSTOMER_IDENTIFIER_TAKEN', message, {
+    field,
+    ...(blocker ? { blockingCustomer: { id: blocker.id, name: blocker.full_name } } : {}),
+  });
+}
+
+async function findRestoreBlocker(client, tenantId, customerId) {
+  const result = await client.query(
+    `SELECT other.id, other.full_name,
+            CASE WHEN other.email = target.email THEN 'email' ELSE 'phone' END AS field
+       FROM customers target JOIN customers other
+         ON other.tenant_id = target.tenant_id AND other.id <> target.id
+        AND other.deleted_at IS NULL
+        AND (other.email = target.email OR other.phone_key = target.phone_key)
+      WHERE target.tenant_id = $1 AND target.id = $2
+      ORDER BY other.created_at, other.id LIMIT 1`,
+    [tenantId, customerId],
+  );
+  return result.rows[0];
+}
 
 function mapCustomer(row) {
   return {
@@ -239,8 +266,8 @@ router.post('/', asyncHandler(async (req, res) => {
               phone_number    = COALESCE(EXCLUDED.phone_number, customers.phone_number),
               city            = COALESCE(EXCLUDED.city, customers.city),
               size_preference = COALESCE(EXCLUDED.size_preference, customers.size_preference),
-              notes           = EXCLUDED.notes,
-              deleted_at      = NULL
+              notes           = EXCLUDED.notes
+        WHERE customers.deleted_at IS NULL
         RETURNING *
       `,
       [
@@ -256,7 +283,16 @@ router.post('/', asyncHandler(async (req, res) => {
         Number.parseInt(req.body.orders, 10) || 0,
       ],
     );
+    if (result.rowCount === 0) {
+      return conflict(res, 'CUSTOMER_IDENTIFIER_TAKEN',
+        'This email address belongs to a deleted customer. Restore that customer explicitly before editing it.',
+        { field: 'email' });
+    }
     created(res, mapCustomer(result.rows[0]), 'Customer saved.');
+  } catch (error) {
+    const field = customerIdentifierConflictField(error);
+    if (field) return identifierConflict(res, field);
+    throw error;
   } finally {
     client.release();
   }
@@ -314,6 +350,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     );
     if (result.rowCount === 0) return notFound(res, 'Customer not found.');
     ok(res, mapCustomer(result.rows[0]), 'Customer updated.');
+  } catch (error) {
+    const field = customerIdentifierConflictField(error);
+    if (field) return identifierConflict(res, field);
+    throw error;
   } finally {
     client.release();
   }
@@ -340,16 +380,41 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 // ── PATCH /:id/restore — undo soft-delete ──
 router.patch('/:id/restore', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
+  let tenant;
   try {
-    const tenant = await ensureDefaultTenant(client);
+    tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
+    const target = await client.query(
+      'SELECT id FROM customers WHERE tenant_id = $1 AND id = $2 FOR UPDATE',
+      [tenant.id, req.params.id],
+    );
+    if (!target.rowCount) {
+      await client.query('ROLLBACK');
+      return notFound(res, 'Customer not found.');
+    }
+    const blocker = await findRestoreBlocker(client, tenant.id, req.params.id);
+    if (blocker) {
+      await client.query('ROLLBACK');
+      return identifierConflict(res, blocker.field, blocker);
+    }
     const result = await client.query(
       `UPDATE customers SET deleted_at = NULL
        WHERE tenant_id = $1 AND id = $2
        RETURNING *`,
       [tenant.id, req.params.id],
     );
-    if (result.rowCount === 0) return notFound(res, 'Customer not found.');
+    await client.query('COMMIT');
     ok(res, mapCustomer(result.rows[0]), 'Customer restored.');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    const field = customerIdentifierConflictField(error);
+    if (field) {
+      // A different row can claim the identifier after the precheck. The
+      // constraint is the final arbiter; look up the winner after rollback.
+      const blocker = await findRestoreBlocker(client, tenant.id, req.params.id);
+      return identifierConflict(res, field, blocker);
+    }
+    throw error;
   } finally {
     client.release();
   }

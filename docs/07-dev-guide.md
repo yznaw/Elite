@@ -54,6 +54,8 @@ This starts all three processes concurrently:
 | Client Web | http://localhost:4200 | Yes (ng serve) |
 | Admin Portal | http://localhost:4300 | Yes (ng serve, with proxy) |
 
+The storefront's `serve.options.allowedHosts` in `client/angular.json` permits local loopback hostnames for SSR. Angular's development server replaces the build's `security.allowedHosts`, so local hosts must be listed under `serve` too. Restart `npm run dev` after changing these settings. To access the storefront from another device, add your machine's current LAN IP to this development allowlist.
+
 > **Dev proxy** — `client/proxy.conf.json` proxies `/api` and `/uploads` from the Angular dev server (port 4300) to Express (port 3000). This means `<img src="/uploads/...">` in the admin portal correctly resolves to the Express static file server in development. No proxy changes needed in production (same origin).
 
 ### Start Individually

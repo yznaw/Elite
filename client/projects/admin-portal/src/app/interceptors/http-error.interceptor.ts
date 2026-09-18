@@ -17,6 +17,7 @@ import { ClientLoggerService } from '../services/client-logger.service';
  *   401 → Session expired, except locally handled PIN/device rejections
  *   403 → Permission denied
  *   404 → Resource not found
+ *   409 → Customer identifier conflict (server message)
  *   422 → Validation error
  *   429 → Rate limited
  *   500+ → Server error
@@ -166,6 +167,10 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           t('error.404.title'),
           err.error?.message || t('error.404.sub'),
         );
+      } else if (err.status === 409 && err.error?.code === 'CUSTOMER_IDENTIFIER_TAKEN') {
+        // Create, edit, and undo-delete all use this interceptor. Keep the
+        // server's actionable message, including the blocking customer on restore.
+        toast.warning(t('error.422.title'), err.error.message);
       } else if (err.status === 422) {
         const msg = err.error?.message || err.error?.error || '';
         toast.warning(

@@ -71,13 +71,33 @@ test('CORS keeps explicit production origins and treats denied origins as client
 
   await t.test('the public site is allowed; localhost and unlisted sites are denied', async (t) => {
     const url = await serve(t, 'production', 'https://elitecollections.qa, https://www.elitecollections.qa,https://admin.elitecollections.qa');
-    for (const origin of ['https://elitecollections.qa', 'https://www.elitecollections.qa', 'https://admin.elitecollections.qa', 'https://sadadqa.com']) {
+    for (const origin of ['https://elitecollections.qa', 'https://www.elitecollections.qa', 'https://admin.elitecollections.qa', 'https://sadadqa.com', 'https://payment.sadadqa.com']) {
       await assertAllowed(url, origin);
     }
-    for (const origin of ['http://localhost:5173', 'https://elitecollections.qa.evil.example', 'null']) {
+    for (const origin of ['http://localhost:5173', 'https://elitecollections.qa.evil.example', 'https://payment.sadadqa.com.evil.example', 'null']) {
       await assertDenied(await preflight(url, origin));
     }
     await assertDenied(await fetch(url, { headers: { Origin: 'http://localhost:5173' } }));
+  });
+
+  await t.test('the SADAD payment host reaches callback signature validation, including with a CSRF cookie', async (t) => {
+    const url = await serve(t, 'production', 'https://elitecollections.qa');
+    t.mock.method(console, 'warn', () => {});
+    for (const cookie of ['', 'elite.csrf=diagnostic-test-token']) {
+      const response = await fetch(new URL('/api/payments/sadad/callback', url), {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          Origin: 'https://payment.sadadqa.com',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+        body: 'checksumhash=invalid',
+      });
+      assert.equal(response.status, 302);
+      assert.equal(new URL(response.headers.get('location')).pathname, '/checkout/failure');
+      assert.equal(new URL(response.headers.get('location')).searchParams.get('reason'), 'invalid_signature');
+    }
   });
 
   await t.test('production can opt in to one exact local origin', async (t) => {
@@ -97,7 +117,7 @@ test('CORS keeps explicit production origins and treats denied origins as client
   assert.equal(connect.mock.callCount(), 0);
   assert.equal(serverErrorSurge().count, 0, 'denied origins must not trigger server error surge alerts');
   assert.equal(error.mock.callCount(), 0);
-  assert.equal(warning.mock.callCount(), 6);
+  assert.equal(warning.mock.callCount(), 7);
   for (const call of warning.mock.calls) {
     assert.equal(call.arguments[0].status, 403);
     assert.ok(call.arguments[0].requestId);

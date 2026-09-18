@@ -62,6 +62,8 @@ const defaultAllowedOrigins = isProd ? [] : ['http://localhost:4200', 'http://lo
 const sadadAllowedOrigins = new Set([
   'https://sadadqa.com',
   'https://www.sadadqa.com',
+  // The legacy checkout endpoint forwards the browser to this payment host.
+  'https://payment.sadadqa.com',
   originFromUrl(process.env.SADAD_ENDPOINT || 'https://sadadqa.com/webpurchase'),
   ...csv(process.env.SADAD_CORS_ORIGINS),
 ].filter(Boolean));
