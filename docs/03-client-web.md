@@ -518,7 +518,39 @@ purpose; it is a separate feature.
 
 **A `<select>` inside an overlay must set `selected` on its options**, not `[value]` on the
 select. The select is created before its options exist, so the value binding is discarded and
-the browser falls back to the first enabled option. Both restock forms hit this.
+the browser falls back to the first enabled option. Both restock forms hit this, and so did the
+collection card's size select, which is why its "Choose size" placeholder is always rendered
+and bound with `[selected]` rather than inserted only when the size is cleared.
+
+**Desktop scroll lock hides only the body's overflow.** With `html, body { height: 100% }`
+and `body { overflow-x: hidden }` in `styles.scss`, hiding the root's overflow as well turns
+the body into its own scroller and the viewport snaps to the top: the collection page jumped to
+its start with the card overlay left off-screen. The root is hidden only on the mobile path,
+where the body is pinned with `position: fixed`.
+
+**Stacking.** `.ovl` is `z-index: 85`: above the fixed nav (80) so the backdrop dims it and a
+click there closes the overlay, below the mobile menu (90) and the cart drawer (100). A `card`
+overlay scrolls its panel into view on open with `scroll-margin-top: 120px` so the nav never
+covers its heading. The product page's size guide is not a `cw-overlay` yet; it takes the same
+`BodyScrollLock` and closes on Escape.
+
+### Colour and size selection (September 2026)
+
+One rule on both the collection card and the product page, in `carriedSize()`
+(`shared/stock-availability.ts`):
+
+- A picked size follows the customer to another colour **only while it is in stock there**.
+- A sold-out size (picked to ask for a restock alert) stays on the colour it was picked on.
+
+On the collection card, hovering or focusing a swatch only **previews** (`previewColors`);
+clicking **selects** (`selectedColors`). Leaving the swatch row drops the preview. Leaving the
+card no longer resets anything, so opening "Notify me" (which covers the card) keeps the colour.
+With a colour filter on, each card opens on the matching colour. The card's product link
+carries `?color=` and, when in stock, `?size=`; the product page applies `?size` only if it is
+in stock. A colour whose every size is sold out is drawn faded and struck through on both pages.
+
+**Tests.** `npm run test:stock-availability` (logic) and `npm run test:storefront`
+(Playwright, `e2e-storefront/`, desktop 1400 and phone 390 against a fixture product).
 
 ---
 

@@ -420,9 +420,9 @@
                             (change)="selectSize(p, sizeSelectValue($event))"
                             [attr.aria-label]="t('collection.quickAdd.size')"
                           >
-                            @if (selectedSize(p) === null) {
-                              <option value="" selected>{{ p.sizes.length ? t('product.size.choose') : t('stock.oneSize') }}</option>
-                            }
+                            <!-- Always present and bound: inserted only when the size cleared, it was
+                                 not selected, and the select kept showing the size just dropped. -->
+                            <option value="" disabled [selected]="selectedSize(p) === null">{{ p.sizes.length ? t('product.size.choose') : t('stock.oneSize') }}</option>
                             @for (option of sizeOptions(p, selectedProductColor(p)); track option.size) {
                               <option [value]="option.size" [selected]="selectedSize(p) === option.size">{{ option.size }} {{ option.state === 'sold-out' ? t('stock.soldOutOption') : '' }}</option>
                             }
