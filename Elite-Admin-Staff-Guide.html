@@ -283,7 +283,7 @@
       <div><b>Prepared for:</b> Elite Collection staff &amp; new hires</div>
       <div><b>Covers:</b> Dashboard, Catalog (product copy fields, variants, size notes), Collections, Media, Storefront, Point of Sale (choosing a till, daily opening, shared stock, offline operation, hardware, approvals, cash movements, Z-reports), Card Settlement Reconciliation, Orders, Customers, Feedback, Policies, Analytics, Reference Lists, Settings, Reports, Stocktake, Diagnostics &amp; Troubleshooting</div>
       <div><b>Document type:</b> HTML — open in any browser, edit the text directly, then print to PDF (Cmd/Ctrl + P → Save as PDF)</div>
-      <div><b>Last updated:</b> 23 August 2026 — POS setup no longer needs a one-time token: a computer opening the till now asks &ldquo;Which till is this?&rdquo; and staff pick their counter from a list (new Section 8.0, plus two new troubleshooting entries). Product copy was split into four purpose-built fields — Hook, Short description, Product note, and Material &amp; Care — with the old long Description now read-only (new Section 4.2a), and variants gained a per-size <strong>Size note</strong> (Section 4.5). Prior update: 7 August 2026 (Staff Roles &amp; Permissions rewrite; the sidebar now hides links your role can't use, and any Owner can grant the Owner role from the Team Members role dropdown). Before that: 3 August 2026 (multi-branch receipt profiles, Devices &amp; Security tab) and 1 August 2026 (production POS release, two-shop shared inventory, morning shift recovery, persistent hardware/reconnect, offline safety, Stocktake, Diagnostics).</div>
+      <div><b>Last updated:</b> 19 September 2026: new Section 4.5a, SKU rules for products and sizes, with the mistakes that block saving; Duplicate now gives the copy its own <code>-COPY</code> codes (Section 4.4). Prior update: 23 August 2026 — POS setup no longer needs a one-time token: a computer opening the till now asks &ldquo;Which till is this?&rdquo; and staff pick their counter from a list (new Section 8.0, plus two new troubleshooting entries). Product copy was split into four purpose-built fields — Hook, Short description, Product note, and Material &amp; Care — with the old long Description now read-only (new Section 4.2a), and variants gained a per-size <strong>Size note</strong> (Section 4.5). Prior update: 7 August 2026 (Staff Roles &amp; Permissions rewrite; the sidebar now hides links your role can't use, and any Owner can grant the Owner role from the Team Members role dropdown). Before that: 3 August 2026 (multi-branch receipt profiles, Devices &amp; Security tab) and 1 August 2026 (production POS release, two-shop shared inventory, morning shift recovery, persistent hardware/reconnect, offline safety, Stocktake, Diagnostics).</div>
     </div>
   </div>
 
@@ -564,7 +564,8 @@
     </ol>
 
     <h3>Duplicating a product</h3>
-    <p>To create a near-identical new product (e.g. same shoe in a new colorway), open the product and use <strong>Duplicate</strong>. The copy is created hidden, with an auto-generated SKU, so you can edit it safely before publishing.</p>
+    <p>To create a near-identical new product (e.g. same shoe in a new colorway), open the product and use <strong>Duplicate</strong>. The copy is created hidden, with the SKU <code>&lt;original&gt;-COPY</code> and every size rebased onto it (<code>2756-GF-COPY-G-10</code>), so it never shares a code with the original.</p>
+    <div class="callout warn"><b>Right after duplicating</b>Change the copy's <strong>SKU</strong> to its real code first (for example <code>2789-GF</code>). All its sizes follow automatically. Do not leave <code>-COPY</code> in a live product, and do not rename the sizes one by one. See <a href="#catalog-sku">4.5a</a>.</div>
 
     <h2 id="catalog-variants">4.5 — Working with variants (sizes, colors, materials)</h2>
     <p>Variants let one product ("Croco Sandal") have multiple sellable versions ("Croco Sandal, size 42, Black"), each tracked separately for stock and price.</p>
@@ -577,6 +578,47 @@
       <li>Stock turns <strong>red</strong> when a variant hits 0, and <strong>amber</strong> when below 5 — a quick visual cue to reorder stock.</li>
       <li>Use <strong>Print barcode label</strong> on a single row, or <strong>Print Labels</strong> at the bottom of the Variants section to print labels for every variant at once.</li>
     </ol>
+
+    <h2 id="catalog-sku">4.5a SKU rules: how to write product and size codes</h2>
+    <p>Every size of every product has its own SKU. The same code is printed as the barcode, scanned at the POS, and used in stock files. Two products can never share a code: if you type a code that another product already uses, saving stops with <em>&ldquo;Variant SKU &hellip; already belongs to &hellip;&rdquo;</em>.</p>
+
+    <h3>The format</h3>
+    <table class="grid">
+      <tr><th>Part</th><th>Example</th><th>Where it is typed</th></tr>
+      <tr><td>Model number</td><td><code>2434</code></td><td rowspan="2">Product <strong>SKU</strong> field: <code>2434-SM</code></td></tr>
+      <tr><td>Line / leather code</td><td><code>SM</code></td></tr>
+      <tr><td>Colour code</td><td><code>CPR</code></td><td>Colour group, <strong>Variant base SKU for this colour</strong>: <code>2434-SM-CPR</code></td></tr>
+      <tr><td>Size</td><td><code>10</code></td><td>Added automatically by <strong>Generate</strong>: <code>2434-SM-CPR-10</code></td></tr>
+    </table>
+
+    <h3>Adding a new product, step by step</h3>
+    <ol class="steps">
+      <li>Type the product <strong>SKU</strong> as <em>model-line</em> only, e.g. <code>2434-SM</code>. No colour and no size in this field.</li>
+      <li>Add a colour. In that colour's group, type the <strong>Variant base SKU for this colour</strong>: product SKU plus the colour code, e.g. <code>2434-SM-CPR</code>.</li>
+      <li>Pick a size chart in <strong>Generate sizes&hellip;</strong> and click <strong>Generate</strong>. Every size gets <code>2434-SM-CPR-5</code>, <code>2434-SM-CPR-5.5</code> &hellip; automatically.</li>
+      <li>Repeat steps 2 and 3 for each colour. Each colour needs its own colour code.</li>
+      <li>Click <strong>Save Changes</strong>. If an error names another product, stop and tell a manager. Do not invent a new code to get past it.</li>
+    </ol>
+
+    <h3>Changing a code later</h3>
+    <ul class="plain">
+      <li><strong>Wrong product code</strong> (e.g. <code>2431</code> should be <code>2432</code>): change only the product <strong>SKU</strong> field. Every size that starts with the old code is renamed for you, and its stock and sales history stay attached.</li>
+      <li><strong>Wrong colour code</strong>: change the colour's <strong>Variant base SKU</strong>. All sizes of that colour follow.</li>
+      <li>Only edit a single size's SKU by hand for a real one-off exception.</li>
+    </ul>
+
+    <div class="callout danger"><b>Never do this</b>
+      <ul class="plain">
+        <li>No spaces: <code>3293 GNCCROC</code> is wrong, <code>3293-GNCCROC</code> is right.</li>
+        <li>No dash at the end of the product SKU: <code>1493-GFGE-</code> is wrong, <code>1493-GFGE</code> is right.</li>
+        <li>No double-typed digits: check <code>88823</code> / <code>22738</code> against the box before saving.</li>
+        <li>Do not use another product's model number for your sizes. Sizes must start with <strong>their own</strong> product's SKU.</li>
+        <li>Do not give two different products the same product SKU (e.g. <code>8822</code> and <code>8822-</code>). Add the line code so they differ.</li>
+        <li>Do not make up a new code for a colour that already has one. Ask a manager for the approved colour code list.</li>
+        <li>Do not reuse an old code for a different item. Old codes stay linked to the item they were first used on.</li>
+      </ul>
+    </div>
+    <div class="callout note"><b>Before printing labels</b>Open the product and read the SKU column once. Every size should start with the product SKU, use capital letters, and contain no spaces. Fix codes <em>before</em> printing: once labels are on the shelf, changing a code means reprinting them.</div>
 
     <h2>4.6 — Import, export &amp; bulk stock updates</h2>
     <ul class="plain">
