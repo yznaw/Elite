@@ -358,16 +358,17 @@
                     @if (productColorNames(p).length > 0) {
                       <div class="product-colors" [attr.aria-label]='t("collection.aria.availableColors")'
                         (mouseleave)="clearProductColorPreview(p)" (focusout)="clearProductColorPreview(p)">
-                        @for (color of productColorNames(p); track color) {
+                        @for (color of visibleColorNames(p); track color) {
+                          <!-- The button is the tap target (24px, 44px on touch); the dot inside it is
+                               the visible swatch and carries the ring, the border and the sold-out
+                               strike. Painting those on the target itself would draw them around the
+                               whole 44px box. Same split as the home hero's `.hero-swatch__dot`. -->
                           <button
                             type="button"
                             class="product-color-swatch"
                             [class.is-selected]="colorSelected(p, color)"
                             [class.is-sold-out]="colorSoldOut(p, color)"
                             [class.has-image]="colorSwatchImage(color)"
-                            [style.background]="
-                              colorSwatchImage(color) ? null : colorHex(color)
-                            "
                             [attr.title]="colorLabel(color)"
                             [attr.aria-label]="colorSoldOut(p, color) ? t('stock.colorSoldOut', {color: colorLabel(color)}) : colorLabel(color)"
                             [attr.aria-pressed]="colorSelected(p, color)"
@@ -375,15 +376,33 @@
                             (focus)="previewProductColor(p, color, $event)"
                             (click)="selectProductColor(p, color, $event)"
                           >
-                            @if (colorSwatchImage(color); as swatchImage) {
-                              <img
-                                [src]="swatchImage"
-                                [alt]="colorLabel(color)"
-                                loading="lazy"
-                                decoding="async"
-                              />
-                            }
+                            <span
+                              class="product-color-swatch__dot"
+                              [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
+                            >
+                              @if (colorSwatchImage(color); as swatchImage) {
+                                <img
+                                  [src]="swatchImage"
+                                  [alt]="colorLabel(color)"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              }
+                            </span>
                           </button>
+                        }
+                        @if (hiddenColorCount(p) > 0) {
+                          <!-- A link, not a button: it navigates, and the project's rule is that
+                               navigation is an anchor, a sibling of the card's own link. -->
+                          <a
+                            class="product-color-swatch product-color-swatch--more"
+                            [routerLink]="['/product', p.slug]"
+                            [queryParams]="productQueryParams(p)"
+                            [attr.aria-label]="t('collection.card.moreColours', { count: hiddenColorCount(p) })"
+                            (click)="onProductLinkClick($event)"
+                          >
+                            <span class="product-color-swatch__dot" dir="ltr" aria-hidden="true">+{{ hiddenColorCount(p) }}</span>
+                          </a>
                         }
                       </div>
                     }

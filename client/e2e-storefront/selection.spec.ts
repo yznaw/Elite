@@ -1,100 +1,16 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  ID, SLUG, MANY_COLORS, MANY_SLUG, card, cta, gotoCollection, manyColorProduct, moreLink,
+  pointerAway, selectedColor, shownSize, sizeSelect, swatch, swatches, useFixture, variantId,
+} from './fixture';
 
 /**
  * Colour and size selection on the collection card and the product page, and the overlays
  * that sit on top of them. Written against the scenario matrix in the storefront selection
  * plan: each test names the scenarios it covers (D = collection desktop, M = collection
- * phone, P = product page).
- *
- * `/api/products` is replaced with one fixture product whose stock the assertions depend on:
- *
- *   Black  40 41 42 in stock, 43 sold out
- *   Brown  40 42 in stock,    41 sold out
- *   Sand   40 41 sold out (the whole colour)
+ * phone, P = product page). Geometry of the tap targets lives in `tap-targets.*.spec.ts`.
  */
-const ID = '6f1c2a90-1b2c-4d3e-8f40-5a6b7c8d9e01';
-const SLUG = 'selection-test-sandal';
-const art = '/assets/hero-scroll/elite-hero-sandals-cutout.png';
 
-const stock: Record<string, Record<number, number>> = {
-  Black: { 40: 3, 41: 2, 42: 4, 43: 0 },
-  Brown: { 40: 1, 41: 0, 42: 2 },
-  Sand: { 40: 0, 41: 0 },
-};
-const variantId = (color: string, size: number) =>
-  `6f1c2a90-1b2c-4d3e-8f40-${color === 'Black' ? 'b' : color === 'Brown' ? 'c' : 'd'}${String(size).padStart(11, '0')}`;
-
-const product = {
-  id: ID,
-  slug: SLUG,
-  name: 'Selection Test Sandal',
-  nameAr: '',
-  brand: 'Elite',
-  price: 950,
-  tag: '',
-  leather: '',
-  style: '',
-  sizes: [40, 41, 42, 43],
-  colors: ['Black', 'Brown', 'Sand'],
-  materials: [],
-  image: art,
-  images: [art],
-  colorImages: {},
-  stock: 12,
-  variants: Object.entries(stock).flatMap(([color, sizes]) =>
-    Object.entries(sizes).map(([size, qty]) => ({
-      id: variantId(color, Number(size)),
-      sku: `SEL-${color}-${size}`,
-      size: Number(size),
-      color,
-      material: '',
-      price: 950,
-      stock: qty,
-      isActive: true,
-    })),
-  ),
-  relatedProductIds: [],
-};
-
-type CartAdd = { productId: string; variantId?: string | null; color?: string | null; size?: number | string };
-
-async function useFixture(page: Page): Promise<CartAdd[]> {
-  const adds: CartAdd[] = [];
-  const json = (route: Route, data: unknown) => route.fulfill({ json: { success: true, data } });
-  await page.route((url) => url.pathname === '/api/products', (route) => json(route, [product]));
-  await page.route(
-    (url) => url.pathname === `/api/products/${SLUG}` || url.pathname === `/api/products/${ID}`,
-    (route) => json(route, product),
-  );
-  await page.route((url) => url.pathname === '/api/carts/current', (route) => json(route, { id: 'cart', subtotal: 0, items: [] }));
-  await page.route((url) => url.pathname === '/api/carts/current/items', async (route) => {
-    const body = route.request().postDataJSON() as CartAdd;
-    adds.push(body);
-    await json(route, {
-      id: 'cart',
-      subtotal: 950,
-      items: [{ id: ID, variantId: body.variantId, name: product.name, price: 950, color: body.color, size: Number(body.size), qty: 1, image: art }],
-    });
-  });
-  return adds;
-}
-
-// ── Collection card helpers ───────────────────────────────────────────────────
-const card = (page: Page) => page.locator('.product-cell').filter({ hasText: product.name });
-const swatch = (page: Page, color: string) => card(page).locator(`.product-color-swatch[title="${color}"]`);
-const selectedColor = (page: Page) => card(page).locator('.product-color-swatch.is-selected').getAttribute('title');
-const sizeSelect = (page: Page) => card(page).locator('select.size-select');
-const shownSize = (page: Page) => sizeSelect(page).evaluate((el: HTMLSelectElement) => el.selectedOptions[0]?.textContent?.trim() ?? '');
-const cta = (page: Page) => card(page).locator('.quick-add').first();
-
-async function gotoCollection(page: Page, width: number, height: number) {
-  await page.setViewportSize({ width, height });
-  await page.goto('/collection/all-products');
-  await expect(card(page)).toBeVisible({ timeout: 30_000 });
-}
-
-/** Moves the pointer somewhere with no card under it. */
-const pointerAway = (page: Page) => page.mouse.move(2, 2);
 
 test.describe('collection card, desktop', () => {
   test.beforeEach(async ({ page }) => {
@@ -106,14 +22,14 @@ test.describe('collection card, desktop', () => {
     await swatch(page, 'Black').click();
     await sizeSelect(page).selectOption('42');
     await pointerAway(page);
-    expect(await selectedColor(page)).toBe('Black');
+    await expect.poll(() => selectedColor(page)).toBe('Black');
     await expect.poll(() => shownSize(page)).toBe('42');
 
     // D4: a hover previews another colour and leaving puts the clicked one back.
     await swatch(page, 'Brown').hover();
-    expect(await selectedColor(page)).toBe('Brown');
+    await expect.poll(() => selectedColor(page)).toBe('Brown');
     await pointerAway(page);
-    expect(await selectedColor(page)).toBe('Black');
+    await expect.poll(() => selectedColor(page)).toBe('Black');
 
     // D14: Sand does not offer 42 at all.
     await swatch(page, 'Sand').click();
@@ -158,7 +74,7 @@ test.describe('collection card, desktop', () => {
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     expect(await page.evaluate(() => window.scrollY)).toBe(before);
-    expect(await selectedColor(page)).toBe('Black');
+    await expect.poll(() => selectedColor(page)).toBe('Black');
     await expect.poll(() => shownSize(page)).toMatch(/^43/);
     // Focus goes back to the button that opened it.
     await expect(cta(page)).toBeFocused();
@@ -194,10 +110,49 @@ test.describe('collection card, desktop', () => {
   test('D13: keyboard previews on focus and selects on Enter', async ({ page }) => {
     await swatch(page, 'Black').click();
     await swatch(page, 'Brown').focus();
-    expect(await selectedColor(page)).toBe('Brown');
+    await expect.poll(() => selectedColor(page)).toBe('Brown');
     await page.keyboard.press('Enter');
     await sizeSelect(page).focus(); // focus leaves the swatch row
-    expect(await selectedColor(page)).toBe('Brown');
+    await expect.poll(() => selectedColor(page)).toBe('Brown');
+  });
+});
+
+test.describe('the +N colour link', () => {
+  test.beforeEach(async ({ page }) => {
+    await useFixture(page);
+    await gotoCollection(page, 1400, 900);
+  });
+
+  test('a card shows six colours and links the rest to the product page', async ({ page }) => {
+    const loafer = manyColorProduct.name;
+    await expect(swatches(page, loafer)).toHaveCount(6);
+    const link = moreLink(page, loafer);
+    await expect(link).toHaveAttribute('aria-label', new RegExp(`${MANY_COLORS.length - 6} more colours`, 'i'));
+    await expect(link).toHaveText(`+${MANY_COLORS.length - 6}`);
+    await expect(link).toHaveAttribute('href', new RegExp(`/product/${MANY_SLUG}`));
+    // The product with three colours keeps all three and has no link.
+    await expect(swatches(page)).toHaveCount(3);
+    await expect(moreLink(page)).toHaveCount(0);
+  });
+
+  test('the colour on show is never hidden behind the cap', async ({ page }) => {
+    const loafer = manyColorProduct.name;
+    const late = MANY_COLORS[MANY_COLORS.length - 1]; // tenth colour, past the sixth slot
+    await expect(card(page, loafer).locator(`.product-color-swatch[title="${late}"]`)).toHaveCount(0);
+
+    // The colour filter lives in the sidebar, not the URL.
+    await page.getByRole('button', { name: /^colors$/i }).click();
+    await page.getByRole('checkbox', { name: new RegExp(`^${late}`, 'i') }).check();
+
+    const shown = card(page, loafer).locator('.product-color-swatch.is-selected');
+    await expect(shown).toHaveAttribute('title', late);
+    await expect(swatches(page, loafer)).toHaveCount(6);
+  });
+
+  test('following the link opens the product page with every colour', async ({ page }) => {
+    await moreLink(page, manyColorProduct.name).click();
+    await expect(page).toHaveURL(new RegExp(`/product/${MANY_SLUG}`));
+    await expect(page.locator('.color-swatch')).toHaveCount(MANY_COLORS.length);
   });
 });
 

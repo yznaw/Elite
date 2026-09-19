@@ -93,7 +93,11 @@
 }
 
 .breadcrumb button {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 6px;
+  margin-inline: -6px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -764,8 +768,14 @@
   text-transform: uppercase;
 }
 
+/* 10px uppercase text is ~13px tall. The padding buys a 24px target and the negative
+   margin keeps the label sitting where it was (WCAG 2.5.8). */
 .section-label button {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 6px;
+  margin-inline: -6px;
   border: 0;
   border-bottom: 1px solid rgba(184, 146, 74, 0.5);
   background: transparent;
@@ -815,7 +825,27 @@
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   object-fit: cover;
+}
+
+/*
+ * 34px reads well beside the gallery but is under Apple's 44px. On touch the disc keeps its
+ * size and an invisible ::before carries the target out to 44. `overflow` has to give way for
+ * it, so the image rounds itself instead of being clipped by the button.
+ */
+@media (pointer: coarse) {
+  .color-swatch {
+    position: relative;
+    overflow: visible;
+  }
+
+  .color-swatch::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+  }
 }
 
 .color-swatch:hover {

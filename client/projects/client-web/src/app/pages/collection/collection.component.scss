@@ -348,6 +348,8 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
+  /* 10px uppercase text is ~13px tall; the row is padded out to a 32px target (WCAG 2.5.8). */
+  min-height: 32px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -459,7 +461,8 @@
   align-self: flex-start;
   flex: 0 0 auto;
   min-height: 28px;
-  padding: 0 2px;
+  padding: 0 6px;
+  margin-inline: -6px;
   border: 0;
   border-bottom: 1px solid rgba(36, 36, 36, 0.32);
   background: transparent;
@@ -669,8 +672,15 @@
   transform: scale(1.035);
 }
 
+/* Swatches sit 8px apart, so the shared 4px offset would put a focus ring on top of the
+   neighbour's tap target. */
+.product-color-swatch:focus-visible {
+  outline: 2px solid #2d2d2d;
+  outline-offset: -2px;
+  border-radius: 999px;
+}
+
 .product-link:focus-visible,
-.product-color-swatch:focus-visible,
 .size-chip:focus-visible,
 .quick-add:focus-visible,
 .buy-now:focus-visible {
@@ -721,25 +731,40 @@
 .product-colors {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  min-height: 18px;
-  padding: 8px 16px 0;
+  gap: 8px;
+  /* Holds the row's height so a card does not resize when its swatches render. */
+  min-height: 24px;
+  padding: 4px 16px 0;
 }
 
+/*
+ * The swatch is two elements: a transparent button that is only a tap target, and the dot
+ * inside it that is the whole of what is drawn. WCAG 2.5.8 asks for 24x24 CSS px and Apple
+ * for 44; the dot itself stays 14px, because a row of 44px discs would take over the card.
+ */
 .product-color-swatch {
   display: inline-grid;
   place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.product-color-swatch__dot {
+  display: block;
   width: 14px;
   height: 14px;
   overflow: hidden;
-  padding: 0;
   border: 1px solid rgba(36, 36, 36, 0.18);
   border-radius: 999px;
   background-position: center;
   background-size: cover;
-  box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(30, 28, 24, 0.16);
-  cursor: pointer;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(30, 28, 24, 0.16);
 }
 
 .product-color-swatch img {
@@ -749,11 +774,60 @@
   object-fit: cover;
 }
 
-.product-color-swatch:hover,
-.product-color-swatch.is-selected {
+.product-color-swatch:hover .product-color-swatch__dot,
+.product-color-swatch.is-selected .product-color-swatch__dot {
   border-color: rgba(36, 36, 36, 0.72);
   box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(36, 36, 36, 0.2), 0 4px 10px rgba(30, 28, 24, 0.18);
   transform: translateY(-1px);
+}
+
+/* Unfilled and outlined: a solid disc beside the colour dots would read as one more colour. */
+.product-color-swatch--more .product-color-swatch__dot {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(36, 36, 36, 0.35);
+  color: rgba(36, 36, 36, 0.72);
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.product-color-swatch--more:hover .product-color-swatch__dot {
+  box-shadow: inset 0 0 0 1px rgba(36, 36, 36, 0.72);
+  transform: translateY(-1px);
+}
+
+/* A finger needs the full 44px, and the dot grows a little with it. */
+@media (pointer: coarse) {
+  .product-colors {
+    gap: 10px;
+    min-height: 44px;
+    padding-top: 0;
+  }
+
+  .product-color-swatch {
+    width: 44px;
+    height: 44px;
+  }
+
+  .product-color-swatch__dot {
+    width: 16px;
+    height: 16px;
+  }
+
+  .product-color-swatch--more .product-color-swatch__dot {
+    width: auto;
+    min-width: 26px;
+    height: 20px;
+    font-size: 10px;
+  }
 }
 
 .purchase-panel {
@@ -1274,7 +1348,8 @@ html[dir='rtl'] .product-tile {
   }
 
   .clear-filters {
-    min-height: 0;
+    /* Was min-height: 0, which left a 10px-tall target on desktop. */
+    min-height: 28px;
   }
 
   .catalog-area {
@@ -1336,8 +1411,10 @@ html[dir='rtl'] .product-tile {
 }
 
 .stock-status { display: block; min-height: 1.25rem; font-size: .75rem; }
-.product-color-swatch.is-sold-out { opacity: .45; position: relative; }
-.product-color-swatch.is-sold-out::after { content: ''; position: absolute; inset: 50% -2px auto; height: 1px; background: #272727; transform: rotate(-45deg); }
+/* On the dot, not the button: on the button the strike would be drawn across the whole
+   24/44px tap target instead of across the 14px swatch. */
+.product-color-swatch.is-sold-out .product-color-swatch__dot { opacity: .45; position: relative; }
+.product-color-swatch.is-sold-out .product-color-swatch__dot::after { content: ''; position: absolute; inset: 50% -2px auto; height: 1px; background: #272727; transform: rotate(-45deg); }
 .purchase-panel { grid-template-rows: minmax(59px, auto) 40px 40px; align-content: start; }
 .notify-only { grid-column: 1 / -1; }
 

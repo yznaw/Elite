@@ -21,7 +21,21 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    // Desktop Chrome reports `pointer: fine`, so the 44px touch sizing never applies there.
+    // The phone project exists to exercise it: `Pixel 7` carries hasTouch/isMobile, which is
+    // what makes `(pointer: coarse)` match. It runs the touch tap-target file only.
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: /tap-targets\.touch\.spec\.ts/,
+    },
+    {
+      name: 'phone',
+      use: { ...devices['Pixel 7'] },
+      testMatch: /tap-targets\.touch\.spec\.ts/,
+    },
+  ],
   webServer: [
     {
       command: 'npm run dev',

@@ -22,6 +22,18 @@ import { MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/b
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 /**
+ * Swatches a card shows before the `+N` link takes over; the rest are one tap away on the
+ * product page. Some products carry thirty colourways, and a full row of finger-sized
+ * targets would be taller than the card's photo. The home hero makes the same trade at four
+ * (`HERO_MAX_SWATCHES`).
+ *
+ * Two numbers because the targets are 24px under a mouse and 44px under a finger: at 375px
+ * a card has 321px of row, which takes six 24px targets and the link easily, but only five
+ * 44px ones (5x44 + 4x10 gaps + the link = 314px). Six would wrap to a second row.
+ */
+const MAX_CARD_SWATCHES = 6;
+const MAX_CARD_SWATCHES_TOUCH = 5;
+/**
  * Translation key per filter group.
  *
  * These were English literals rendered straight into the sidebar, so an Arabic
@@ -171,6 +183,8 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private mobileMediaQueryHandler?: () => void;
   private sheetMediaQuery?: MediaQueryList;
   private sheetMediaQueryHandler?: () => void;
+  private pointerMediaQuery?: MediaQueryList;
+  private pointerMediaQueryHandler?: () => void;
   private routeSyncSub?: Subscription;
 
   readonly sortOptions = SORT_OPTIONS;
@@ -184,6 +198,8 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly sizeSheetTarget = signal<Product | null>(null);
   /** Below this width the card swaps its native select for the same sheet the product page uses. */
   readonly isSheetView = signal(false);
+  /** Mirrors the `(pointer: coarse)` swatch sizing in the stylesheet. */
+  readonly isCoarsePointer = signal(false);
   readonly loadedProductImages = signal<Record<string, boolean>>({});
   readonly collections = signal<StorefrontCollection[]>([]);
   readonly collectionsLoaded = signal(false);
@@ -357,6 +373,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.routeSyncSub?.unsubscribe();
     if (this.sheetMediaQuery && this.sheetMediaQueryHandler) {
       this.sheetMediaQuery.removeEventListener('change', this.sheetMediaQueryHandler);
+    }
+    if (this.pointerMediaQuery && this.pointerMediaQueryHandler) {
+      this.pointerMediaQuery.removeEventListener('change', this.pointerMediaQueryHandler);
     }
     if (this.mobileMediaQuery && this.mobileMediaQueryHandler) {
       this.mobileMediaQuery.removeEventListener('change', this.mobileMediaQueryHandler);
@@ -635,6 +654,35 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   productColorNames(product: Product): string[] {
     return this.productColors(product);
+  }
+
+  /**
+   * Swatches shown on a card. Some products carry thirty colourways, and a full row of
+   * finger-sized targets would be taller than the card's photo; the rest are one tap away
+   * behind the `+N` link, the same bargain the home hero makes.
+   *
+   * The colour on show is never hidden behind the cap: it takes the last visible slot when
+   * its own position is past it, so clicking a swatch, or filtering by a colour that sorts
+   * late, still shows the colour the card is displaying.
+   */
+  visibleColorNames(product: Product): string[] {
+    const colors = this.productColorNames(product);
+    const max = this.maxCardSwatches();
+    if (colors.length <= max) return colors;
+    const visible = colors.slice(0, max);
+    const shown = this.selectedProductColor(product);
+    if (shown && !visible.some((color) => this.colorKey(color) === this.colorKey(shown))) {
+      visible[visible.length - 1] = shown;
+    }
+    return visible;
+  }
+
+  hiddenColorCount(product: Product): number {
+    return Math.max(0, this.productColorNames(product).length - this.maxCardSwatches());
+  }
+
+  private maxCardSwatches(): number {
+    return this.isCoarsePointer() ? MAX_CARD_SWATCHES_TOUCH : MAX_CARD_SWATCHES;
   }
 
   availableSizes(product: Product, color = this.selectedProductColor(product)): number[] {
@@ -1225,5 +1273,12 @@ export class CollectionComponent implements OnInit, OnDestroy {
     };
     this.sheetMediaQueryHandler();
     this.sheetMediaQuery.addEventListener('change', this.sheetMediaQueryHandler);
+
+    // Swatch targets grow to 44px under a finger, so one fewer fits before the `+N` link.
+    // Same query as the stylesheet, so the count and the layout cannot disagree.
+    this.pointerMediaQuery = window.matchMedia('(pointer: coarse)');
+    this.pointerMediaQueryHandler = () => this.isCoarsePointer.set(this.pointerMediaQuery?.matches ?? false);
+    this.pointerMediaQueryHandler();
+    this.pointerMediaQuery.addEventListener('change', this.pointerMediaQueryHandler);
   }
 }
