@@ -306,8 +306,16 @@ router.post('/', asyncHandler(async (req, res) => {
       const unit = toCents(item.price || item.p || 0);
       await client.query(
         `
-          INSERT INTO order_items (tenant_id, order_id, product_id, variant_id, sku, product_name, size, quantity, unit_price_cents, total_cents)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          INSERT INTO order_items (
+            tenant_id, order_id, product_id, variant_id, sku, product_name, size,
+            quantity, unit_price_cents, total_cents,
+            unit_cost_cents, shipping_cost_cents, total_cost_cents, cost_snapshot_source
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+            (SELECT cost_price_cents FROM product_variants WHERE id = $4),
+            (SELECT shipping_cost_cents FROM product_variants WHERE id = $4),
+            (SELECT total_cost_cents FROM product_variants WHERE id = $4),
+            CASE WHEN (SELECT total_cost_cents FROM product_variants WHERE id = $4) IS NULL THEN 'missing' ELSE 'captured' END)
         `,
         [tenant.id, order.rows[0].id, item.productId || null, item.variantId || null, item.sku || '', item.name || item.n || '', item.size || item.s || null, qty, unit, unit * qty],
       );

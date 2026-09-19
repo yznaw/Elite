@@ -128,6 +128,37 @@ test('admin products: create, save, duplicate and delete never touch the wrong d
     assert.notEqual(copyVariant.barcode, (await variantRow(variantA.sku)).barcode);
     assert.equal((await variantRow(variantA.sku)).product_id, idA);
 
+    // Re-keying a duplicate updates the same variant row (stock/history keep
+    // their UUID), moves its automatic barcode, and applies product defaults
+    // without requiring cost entry on every size.
+    const copyOldSku = copy.variants[0].sku;
+    const copyNewBase = `AUD-C-${runId}`;
+    const copyNewVariantSku = copyOldSku.replace(copy.sku, copyNewBase);
+    const rekeyed = await patch(copy.id, {
+      sku: copyNewBase,
+      defaultCostPrice: 125.5,
+      defaultShippingCost: 9.25,
+      variants: copy.variants.map((variant) => ({
+        ...variant,
+        sku: variant.sku.replace(copy.sku, copyNewBase),
+        barcode: variant.barcode,
+        barcodeSource: 'auto',
+      })),
+      expectedStock: { [copy.variants[0].id]: 0 },
+    });
+    assert.equal(rekeyed.response.status, 200);
+    assert.equal(rekeyed.body.data.variants[0].id, copy.variants[0].id);
+    assert.equal(rekeyed.body.data.variants[0].sku, copyNewVariantSku);
+    assert.equal(rekeyed.body.data.variants[0].barcode, copyNewVariantSku);
+    assert.equal(rekeyed.body.data.variants[0].costPrice, 125.5);
+    assert.equal(rekeyed.body.data.variants[0].shippingCost, 9.25);
+    const alias = await db.query(
+      `SELECT 1 FROM catalog_identifier_aliases
+        WHERE tenant_id=$1 AND variant_id=$2 AND identifier_type='variant_sku' AND value=$3`,
+      [tenantId, copy.variants[0].id, copyOldSku],
+    );
+    assert.equal(alias.rowCount, 1);
+
     // Bulk delete archives (history kept), ignores unknown ids, and can be undone.
     const bulk = await api('/admin/products/bulk-delete', {
       method: 'POST',

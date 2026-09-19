@@ -8,6 +8,8 @@ export interface SaveProductPayload {
   sku: string;
   brand: string;
   price: number;
+  defaultCostPrice: number | null;
+  defaultShippingCost: number | null;
   stock: number;
   hidden: boolean;
   posHidden: boolean;

@@ -58,7 +58,11 @@ async function searchProducts(context, query) {
     AND p2.status <> 'archived'
     AND p2.pos_status = 'active'
     AND pv2.is_active = true
-    AND ($2 = '%%' OR p2.name ILIKE $2 OR pv2.sku ILIKE $2 OR pv2.barcode ILIKE $2)
+    AND ($2 = '%%' OR p2.name ILIKE $2 OR pv2.sku ILIKE $2 OR pv2.barcode ILIKE $2
+      OR EXISTS (
+        SELECT 1 FROM catalog_identifier_aliases cia
+         WHERE cia.tenant_id = p2.tenant_id AND cia.variant_id = pv2.id AND cia.value ILIKE $2
+      ))
     AND ($3::boolean OR pv2.stock_quantity > 0)
     AND ($4 = '' OR pv2.size = $4)
     AND ($5 = '' OR pv2.color = $5)
@@ -90,7 +94,8 @@ async function searchProducts(context, query) {
            ORDER BY (rc.id = pv.color_ref_id) DESC
            LIMIT 1
          ), '') AS color_ar,
-         pv.price_cents, pv.stock_quantity, pv.is_active,
+         pv.price_cents, pv.cost_price_cents, pv.shipping_cost_cents,
+         pv.total_cost_cents, pv.stock_quantity, pv.is_active,
          COALESCE(pm.preview_url, pm.storage_url, '') AS image_url
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
@@ -100,7 +105,11 @@ async function searchProducts(context, query) {
          AND p.status <> 'archived'
          AND p.pos_status = 'active'
          AND pv.is_active = true
-         AND ($2 = '%%' OR p.name ILIKE $2 OR pv.sku ILIKE $2 OR pv.barcode ILIKE $2)
+         AND ($2 = '%%' OR p.name ILIKE $2 OR pv.sku ILIKE $2 OR pv.barcode ILIKE $2
+           OR EXISTS (
+             SELECT 1 FROM catalog_identifier_aliases cia
+              WHERE cia.tenant_id = p.tenant_id AND cia.variant_id = pv.id AND cia.value ILIKE $2
+           ))
          AND ($3::boolean OR pv.stock_quantity > 0)
          AND ($4 = '' OR pv.size = $4)
          AND ($5 = '' OR pv.color = $5)
@@ -172,7 +181,13 @@ async function findByBarcode(context, barcodeValue) {
        JOIN products p ON p.id = pv.product_id AND p.tenant_id = pv.tenant_id
        LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.locale = 'ar'
        LEFT JOIN media_assets pm ON pm.id = p.primary_media_id
-       WHERE pv.tenant_id = $1 AND lower(pv.barcode) = lower($2)
+       WHERE pv.tenant_id = $1
+         AND (lower(pv.barcode) = lower($2) OR EXISTS (
+           SELECT 1 FROM catalog_identifier_aliases cia
+            WHERE cia.tenant_id = pv.tenant_id AND cia.variant_id = pv.id
+              AND cia.identifier_type IN ('barcode', 'variant_sku')
+              AND cia.normalized_value = lower(btrim($2))
+         ))
          AND p.status <> 'archived' AND p.pos_status = 'active' AND pv.is_active = true`,
       [context.tenantId, barcode],
     );
@@ -422,7 +437,8 @@ async function createSale(context, body, options = {}) {
            ORDER BY (rc.id = pv.color_ref_id) DESC
            LIMIT 1
          ), '') AS color_ar,
-         pv.price_cents, pv.stock_quantity, pv.is_active,
+         pv.price_cents, pv.cost_price_cents, pv.shipping_cost_cents,
+         pv.total_cost_cents, pv.stock_quantity, pv.is_active,
          p.name AS product_name, p.status AS product_status, p.pos_status AS product_pos_status,
          -- Snapshotted onto the sale below, not joined at print time: a receipt
          -- reprinted later must show what was sold, not what the catalogue says
@@ -597,8 +613,9 @@ async function createSale(context, body, options = {}) {
       const orderItem = await client.query(
         `INSERT INTO order_items (
            tenant_id, order_id, product_id, variant_id, sku, product_name,
-           variant_title, size, quantity, unit_price_cents, total_cents, media_url, metadata
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+           variant_title, size, quantity, unit_price_cents, total_cents, media_url, metadata,
+           unit_cost_cents, shipping_cost_cents, total_cost_cents, cost_snapshot_source
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17)
          RETURNING id`,
         [
           context.tenantId,
@@ -614,6 +631,10 @@ async function createSale(context, body, options = {}) {
           line.lineTotalCents,
           v.image_url || null,
           JSON.stringify({ color: v.color || null, material: v.material || null, source: 'pos', offline }),
+          v.cost_price_cents,
+          v.shipping_cost_cents,
+          v.total_cost_cents,
+          v.total_cost_cents == null ? 'missing' : 'captured',
         ],
       );
       await client.query(

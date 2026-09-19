@@ -449,9 +449,9 @@ router.get('/profit-summary', asyncHandler(async (req, res) => {
       client.query(
         `
           SELECT
-            COALESCE(SUM(oi.quantity * pv.total_cost_cents), 0)::bigint            AS cogs_cents,
+            COALESCE(SUM(oi.quantity * COALESCE(oi.total_cost_cents, pv.total_cost_cents)), 0)::bigint AS cogs_cents,
             COUNT(*)::int                                                          AS line_items,
-            COUNT(*) FILTER (WHERE pv.total_cost_cents IS NULL)::int               AS line_items_without_cost
+            COUNT(*) FILTER (WHERE COALESCE(oi.total_cost_cents, pv.total_cost_cents) IS NULL)::int AS line_items_without_cost
           FROM order_items oi
           JOIN orders o ON o.id = oi.order_id
           LEFT JOIN product_variants pv ON pv.id = oi.variant_id

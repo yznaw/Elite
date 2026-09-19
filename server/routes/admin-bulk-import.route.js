@@ -315,13 +315,23 @@ router.post('/stock/preview', csvUpload.single('csv'), async (req, res) => {
     const tenant = await ensureDefaultTenant(client);
     const skus = parsed.rows.filter(row => row.sku).map(row => row.sku);
     const existing = await client.query(
-      `SELECT pv.id AS variant_id, pv.product_id, pv.sku, pv.stock_quantity
-         FROM product_variants pv
+      `SELECT DISTINCT ON (input.input_sku)
+              input.input_sku, pv.id AS variant_id, pv.product_id, pv.sku, pv.stock_quantity
+         FROM unnest($2::text[]) AS input(input_sku)
+         JOIN product_variants pv ON pv.tenant_id=$1 AND (
+           pv.sku=input.input_sku OR EXISTS (
+             SELECT 1 FROM catalog_identifier_aliases cia
+              WHERE cia.tenant_id=$1 AND cia.variant_id=pv.id
+                AND cia.identifier_type='variant_sku'
+                AND cia.normalized_value=lower(btrim(input.input_sku))
+           )
+         )
          JOIN products p ON p.id=pv.product_id
-        WHERE pv.tenant_id=$1 AND pv.sku=ANY($2::text[]) AND p.status<>'archived'`,
+        WHERE p.status<>'archived'
+        ORDER BY input.input_sku, (pv.sku=input.input_sku) DESC`,
       [tenant.id, skus],
     );
-    const bySku = new Map(existing.rows.map(row => [row.sku, row]));
+    const bySku = new Map(existing.rows.map(row => [row.input_sku, row]));
     const reviewed = parsed.rows.map(row => {
       const match = bySku.get(row.sku);
       const errors = [...row.errors];
@@ -992,6 +1002,19 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
         );
 
         const existingProduct = existing.rows[0] || null;
+        const reservedProductSku = await client.query(
+          `SELECT p.name
+             FROM catalog_identifier_aliases cia
+             JOIN products p ON p.id=cia.product_id
+            WHERE cia.tenant_id=$1 AND cia.identifier_type='product_sku'
+              AND cia.normalized_value=lower(btrim($2))
+              AND cia.product_id IS DISTINCT FROM $3::uuid
+            LIMIT 1`,
+          [tenant.id, baseProductSku, existingProduct?.id || null],
+        );
+        if (reservedProductSku.rowCount > 0) {
+          throw new Error(`Product SKU "${baseProductSku}" was previously used by "${reservedProductSku.rows[0].name}".`);
+        }
         // Captured regardless of dryRun so a preview's summary carries the
         // baseline findStaleGroups() compares a later commit attempt against.
         catalogSnapshot.push({
@@ -1044,6 +1067,15 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
              JSON.stringify(description), JSON.stringify(careInstructions), basePriceCents,
              metaTitle, metaDesc]
           );
+          if (existingProduct.sku !== baseProductSku) {
+            await client.query(
+              `INSERT INTO catalog_identifier_aliases
+                 (tenant_id,product_id,identifier_type,value,reason,created_by_user_id)
+               VALUES ($1,$2,'product_sku',$3,'bulk_import',$4)
+               ON CONFLICT (tenant_id,identifier_type,normalized_value) DO NOTHING`,
+              [tenant.id, productId, existingProduct.sku, userId],
+            );
+          }
         } else {
           const ins = await client.query(
             `INSERT INTO products
@@ -1148,10 +1180,19 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
         // from another product. Report the conflict and keep both products intact.
         const incomingVariantSkus = groupRows.map(row => row.variantSku);
         const foreignVariants = await client.query(
-          `SELECT sku FROM product_variants
+          `(SELECT sku FROM product_variants
             WHERE tenant_id=$1 AND sku=ANY($2::text[]) AND product_id<>$3
+            LIMIT 1)
+           UNION ALL
+           (SELECT cia.value AS sku
+              FROM catalog_identifier_aliases cia
+              JOIN product_variants pv ON pv.id=cia.variant_id
+             WHERE cia.tenant_id=$1 AND pv.product_id<>$3
+               AND cia.identifier_type='variant_sku'
+               AND cia.normalized_value=ANY($4::text[])
+             LIMIT 1)
             LIMIT 1`,
-          [tenant.id, incomingVariantSkus, productId]
+          [tenant.id, incomingVariantSkus, productId, incomingVariantSkus.map(sku => sku.toLowerCase())]
         );
         if (foreignVariants.rowCount > 0) {
           throw new Error(`Variant SKU "${foreignVariants.rows[0].sku}" already belongs to another product.`);
@@ -1178,11 +1219,12 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
             `INSERT INTO product_variants
                (tenant_id, product_id, sku, barcode, color, size, material,
                 price_cents, cost_price_cents, shipping_cost_cents, stock_quantity,
-                sort_order, note_en, note_ar, color_ref_id)
-             VALUES ($1,$2,$3,COALESCE($4,$3),$5,$6,$7,$8,$9,$10,COALESCE($11,0),$12,$13,$14,
+                sort_order, note_en, note_ar, barcode_source, color_ref_id)
+             VALUES ($1,$2,$3,COALESCE($4,$3),$5,$6,$7,$8,$9,$10,COALESCE($11,0),$12,$13,$14,$15,
                (SELECT id FROM ref_colors WHERE tenant_id=$1 AND lower(trim(name_en))=lower(trim($5)) LIMIT 1))
              ON CONFLICT (tenant_id, sku) DO UPDATE SET
                product_id=$2, barcode=COALESCE($4, product_variants.barcode, $3),
+               barcode_source=CASE WHEN $4 IS NULL THEN product_variants.barcode_source ELSE 'manual' END,
                color=COALESCE($5, product_variants.color),
                size=COALESCE($6, product_variants.size),
                material=COALESCE($7, product_variants.material), price_cents=$8,
@@ -1197,7 +1239,7 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
              RETURNING id, stock_quantity, (xmax=0) AS inserted`,
             [tenant.id, productId, row.variantSku, barcodeVal, colorVal, sizeVal, row.material || null,
              priceCents, costCents, shippingCents, stockQty, varIdx,
-             row.variantNoteEn || null, row.variantNoteAr || null]
+             row.variantNoteEn || null, row.variantNoteAr || null, barcodeVal ? 'manual' : 'auto']
           );
           const variantId = varResult.rows[0].id;
           const variantInserted = varResult.rows[0].inserted;
@@ -1330,6 +1372,16 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
         await client.query(
           `UPDATE products
               SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1),
+                  default_cost_price_cents = COALESCE(default_cost_price_cents, (
+                    SELECT CASE WHEN count(*)=count(cost_price_cents) AND count(DISTINCT cost_price_cents)=1
+                      THEN min(cost_price_cents) END
+                      FROM product_variants WHERE product_id=$1 AND is_active
+                  )),
+                  default_shipping_cost_cents = COALESCE(default_shipping_cost_cents, (
+                    SELECT CASE WHEN count(*)=count(shipping_cost_cents) AND count(DISTINCT shipping_cost_cents)=1
+                      THEN min(shipping_cost_cents) END
+                      FROM product_variants WHERE product_id=$1 AND is_active
+                  )),
                   updated_at = now()
             WHERE id = $1`,
           [productId],

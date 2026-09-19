@@ -2,6 +2,7 @@ export interface ProductVariant {
   id: string;
   sku: string;
   barcode?: string;
+  barcodeSource?: 'auto' | 'manual';
   size: string;
   color: string;
   material: string;
@@ -23,6 +24,11 @@ export interface Product {
   sku: string;
   brand: string;
   price: number;
+  /** Defaults copied onto newly-created size variants. */
+  defaultCostPrice?: number | null;
+  defaultShippingCost?: number | null;
+  duplicatedFromProductId?: string | null;
+  catalogRevision?: number;
   stock: number;
   hidden: boolean;
   /** Independent POS visibility. Storefront-hidden products may still be sold

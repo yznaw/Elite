@@ -52,7 +52,16 @@ const COLOR_IMAGES_SELECT = `
                   FROM media_links ml
                   JOIN media_assets m ON m.id = ml.media_id
                   LEFT JOIN product_variants linked_variant ON linked_variant.id = ml.variant_id
-                  LEFT JOIN product_variants sku_variant ON sku_variant.product_id = p.id AND sku_variant.sku = m.metadata->>'variantSku'
+                  LEFT JOIN product_variants sku_variant ON sku_variant.product_id = p.id AND (
+                    sku_variant.sku = m.metadata->>'variantSku'
+                    OR EXISTS (
+                      SELECT 1 FROM catalog_identifier_aliases cia
+                       WHERE cia.tenant_id = p.tenant_id
+                         AND cia.variant_id = sku_variant.id
+                         AND cia.identifier_type = 'variant_sku'
+                         AND cia.normalized_value = lower(btrim(m.metadata->>'variantSku'))
+                    )
+                  )
                   WHERE ml.role IN ('gallery', 'primary')
                     AND (ml.product_id = p.id OR linked_variant.product_id = p.id)
                 ) color_media

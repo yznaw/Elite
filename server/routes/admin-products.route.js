@@ -106,6 +106,12 @@ function validateProduct(body) {
   if (!String(body.sku || '').trim()) errors.push('SKU is required.');
   if (!String(body.brand || '').trim()) errors.push('Brand is required.');
   if (Number(body.price) < 0) errors.push('Price cannot be negative.');
+  if (body.defaultCostPrice != null && body.defaultCostPrice !== '' && Number(body.defaultCostPrice) < 0) {
+    errors.push('Default product cost cannot be negative.');
+  }
+  if (body.defaultShippingCost != null && body.defaultShippingCost !== '' && Number(body.defaultShippingCost) < 0) {
+    errors.push('Default shipping cost cannot be negative.');
+  }
   // Prices are whole QAR (owner decision 2026-09-15); a fraction or text would
   // otherwise be rounded or zeroed silently.
   if (body.price != null && body.price !== '' && !Number.isInteger(Number(body.price))) {
@@ -139,8 +145,21 @@ function validateProduct(body) {
 
 async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true, actorUserId = null, expectedStock = null } = {}) {
   await ensureVariantNoteColumns(client);
-  // SKU generation belongs to the catalog editor. The API deliberately
-  // rejects blanks instead of inventing an unrelated productId-Vn identifier.
+
+  // Lock first and identify rows by UUID. SKU is editable catalog data, not a
+  // row identity: using it as identity used to delete/recreate a variant when
+  // its SKU changed, severing stock history and making duplicated products
+  // collide with their source product.
+  const existingVariants = await client.query(
+    `SELECT id, sku, barcode, barcode_source, stock_quantity
+       FROM product_variants
+      WHERE tenant_id = $1 AND product_id = $2
+      FOR UPDATE`,
+    [tenantId, productId],
+  );
+  const existingById = new Map(existingVariants.rows.map((row) => [row.id, row]));
+  const existingBySku = new Map(existingVariants.rows.map((row) => [row.sku, row]));
+
   const resolved = variants.map((variant) => {
     const sku = String(variant.sku || '').trim();
     if (!sku) {
@@ -148,11 +167,25 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
       err.status = 400;
       throw err;
     }
-    // Barcode defaults to the variant's own SKU (printed as a Code128 label
-    // and scanned back at POS) unless a real supplier-issued barcode was
-    // entered — see docs/12-pos-system.md for the POS barcode lookup flow.
-    const barcode = String(variant.barcode || '').trim() || sku;
-    return { variant, sku, barcode };
+
+    const requestedId = UUID_RE.test(String(variant.id || '')) ? String(variant.id) : null;
+    if (requestedId && !existingById.has(requestedId)) {
+      const err = new Error(`Variant ${requestedId} does not belong to this product.`);
+      err.status = 400;
+      throw err;
+    }
+    // Older clients did not reliably send the id. Retain compatibility by
+    // matching the current SKU only when no persisted UUID is present.
+    const existing = requestedId ? existingById.get(requestedId) : existingBySku.get(sku);
+    const typedBarcode = String(variant.barcode || '').trim();
+    const existingBarcodeWasAuto = existing?.barcode_source === 'auto'
+      || (!!existing && String(existing.barcode || '').trim() === String(existing.sku || '').trim());
+    const shouldUseAutoBarcode = variant.barcodeSource === 'auto'
+      || !typedBarcode
+      || (!!existing && existingBarcodeWasAuto && typedBarcode === String(existing.barcode || '').trim());
+    const barcodeSource = shouldUseAutoBarcode ? 'auto' : 'manual';
+    const barcode = barcodeSource === 'auto' ? sku : typedBarcode;
+    return { variant, sku, barcode, barcodeSource, existing: existing || null };
   });
   const incomingSkus = resolved.map((r) => r.sku);
 
@@ -160,11 +193,21 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     // ON CONFLICT (tenant_id, sku) below would silently move another product's
     // variant onto this one, taking its stock and stocktake history with it.
     const taken = await client.query(
-      `SELECT pv.sku, p.name, p.status FROM product_variants pv
+      `(SELECT pv.sku, p.name, p.status FROM product_variants pv
          JOIN products p ON p.id = pv.product_id
         WHERE pv.tenant_id = $1 AND pv.product_id <> $2 AND pv.sku = ANY($3::text[])
-        LIMIT 1`,
-      [tenantId, productId, incomingSkus],
+        LIMIT 1)
+       UNION ALL
+       (SELECT cia.value AS sku, p.name, p.status
+          FROM catalog_identifier_aliases cia
+          JOIN product_variants pv ON pv.id = cia.variant_id
+          JOIN products p ON p.id = pv.product_id
+         WHERE cia.tenant_id = $1 AND pv.product_id <> $2
+           AND cia.identifier_type = 'variant_sku'
+           AND cia.normalized_value = ANY($4::text[])
+         LIMIT 1)
+       LIMIT 1`,
+      [tenantId, productId, incomingSkus, incomingSkus.map((value) => value.toLowerCase())],
     );
     if (taken.rowCount > 0) {
       const row = taken.rows[0];
@@ -201,25 +244,32 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
 
   // Stock held by this product's variants before the save. Every change made
   // below is posted to inventory_movements as a signed delta against these
-  // values (docs/25 Phase 1b) — including stock that disappears because a
-  // variant was deleted, which would otherwise vanish with no trace and show
-  // up later as unexplained drift.
-  const previousStockBySku = new Map();
-  // Locked so a sale cannot change stock between the check below and the write.
-  const existingVariants = await client.query(
-    'SELECT id, sku, stock_quantity FROM product_variants WHERE tenant_id = $1 AND product_id = $2 FOR UPDATE',
+  // values (docs/25 Phase 1b).
+  const previousStockById = new Map();
+  const productDefaultsResult = await client.query(
+    `SELECT default_cost_price_cents, default_shipping_cost_cents
+       FROM products WHERE tenant_id = $1 AND id = $2`,
     [tenantId, productId],
   );
+  const productDefaults = productDefaultsResult.rows[0] || {};
   if (expectedStock && typeof expectedStock === 'object') {
     // The editor sends the stock it loaded. If a sale, stocktake or bulk update
     // changed a variant since then and this save would overwrite or remove it,
     // refuse rather than silently undo that change (owner decision 2026-09-15).
-    const incomingStock = new Map(resolved.map(({ variant, sku }) => [sku, Math.max(0, Number.parseInt(variant.stock, 10) || 0)]));
+    const incomingStock = new Map();
+    for (const item of resolved) {
+      const stock = Math.max(0, Number.parseInt(item.variant.stock, 10) || 0);
+      incomingStock.set(item.sku, stock);
+      if (item.existing) incomingStock.set(item.existing.id, stock);
+    }
     const changed = existingVariants.rows.filter((row) => {
-      if (!Object.prototype.hasOwnProperty.call(expectedStock, row.sku)) return false;
+      const expectedKey = Object.prototype.hasOwnProperty.call(expectedStock, row.id)
+        ? row.id
+        : Object.prototype.hasOwnProperty.call(expectedStock, row.sku) ? row.sku : null;
+      if (!expectedKey) return false;
       const current = Number(row.stock_quantity) || 0;
-      if (Number(expectedStock[row.sku]) === current) return false;
-      return !incomingStock.has(row.sku) || incomingStock.get(row.sku) !== current;
+      if (Number(expectedStock[expectedKey]) === current) return false;
+      return !incomingStock.has(row.id) || incomingStock.get(row.id) !== current;
     });
     if (changed.length > 0) {
       const err = new Error(`Stock changed while this product was open: ${changed.map((row) => `${row.sku} is now ${row.stock_quantity}`).join(', ')}. The editor reloaded the latest stock; review it and save again.`);
@@ -229,9 +279,10 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     }
   }
   for (const row of existingVariants.rows) {
-    previousStockBySku.set(row.sku, { id: row.id, stock: Number(row.stock_quantity) || 0 });
+    previousStockById.set(row.id, Number(row.stock_quantity) || 0);
   }
-  const removedVariants = existingVariants.rows.filter((row) => !incomingSkus.includes(row.sku));
+  const retainedIds = new Set(resolved.map((item) => item.existing?.id).filter(Boolean));
+  const removedVariants = existingVariants.rows.filter((row) => !retainedIds.has(row.id));
 
   // Recorded BEFORE the delete, while the rows still exist — inventory_movements
   // has ON DELETE SET NULL on variant_id, so a movement written afterwards
@@ -269,9 +320,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
   // that history and the whole save used to fail. Hide it instead: it drops out
   // of the editor, storefront and POS, and re-adding its SKU revives it through
   // the upsert below (owner decision 2026-09-14).
-  const removedIds = existingVariants.rows
-    .filter((row) => !incomingSkus.includes(row.sku))
-    .map((row) => row.id);
+  const removedIds = removedVariants.map((row) => row.id);
   let countedIds = [];
   if (removedIds.length > 0) {
     const counted = await client.query(
@@ -296,77 +345,108 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     await client.query('DELETE FROM product_variants WHERE id = ANY($1::uuid[])', [deletableIds]);
   }
 
-  for (const [index, { variant, sku, barcode }] of resolved.entries()) {
+  // Free all changing identifiers before assigning their final values. This
+  // makes an intentional A<->B SKU swap safe under the unique indexes.
+  for (const item of resolved.filter((entry) => entry.existing && entry.existing.sku !== entry.sku)) {
+    const temporarySku = `__REKEY__${item.existing.id}`;
+    const temporaryBarcode = item.existing.barcode_source === 'auto'
+      || item.existing.barcode === item.existing.sku
+      ? `__REKEY_BARCODE__${item.existing.id}`
+      : item.existing.barcode;
+    // eslint-disable-next-line no-await-in-loop
+    await client.query(
+      'UPDATE product_variants SET sku = $1, barcode = $2, updated_at = NOW() WHERE id = $3',
+      [temporarySku, temporaryBarcode, item.existing.id],
+    );
+  }
+
+  for (const [index, { variant, sku, barcode, barcodeSource, existing }] of resolved.entries()) {
     const costCents = variant.costPrice != null && variant.costPrice !== ''
       ? Math.max(0, Math.round(Number(variant.costPrice) * 100))
-      : null;
+      : productDefaults.default_cost_price_cents ?? null;
 
     const shippingCents = variant.shippingCost != null && variant.shippingCost !== ''
       ? Math.max(0, Math.round(Number(variant.shippingCost) * 100))
-      : null;
+      : productDefaults.default_shipping_cost_cents ?? null;
 
     const colorText = String(variant.color || '').trim() || null;
     const incomingStock = Math.max(0, Number.parseInt(variant.stock, 10) || 0);
 
-    const upserted = await client.query(
-      `
-        INSERT INTO product_variants (
-          tenant_id, product_id, sku, barcode, size, color, material,
-          price_cents, cost_price_cents, shipping_cost_cents, stock_quantity, sort_order, is_active,
-          note_en, note_ar,
-          color_ref_id
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, $14,
-          (SELECT id FROM ref_colors
-           WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($6))
-           LIMIT 1))
-        ON CONFLICT (tenant_id, sku) DO UPDATE SET
-          product_id         = EXCLUDED.product_id,
-          barcode            = EXCLUDED.barcode,
-          size               = EXCLUDED.size,
-          color              = EXCLUDED.color,
-          material           = EXCLUDED.material,
-          note_en            = EXCLUDED.note_en,
-          note_ar            = EXCLUDED.note_ar,
-          price_cents        = EXCLUDED.price_cents,
-          cost_price_cents   = EXCLUDED.cost_price_cents,
-          shipping_cost_cents = EXCLUDED.shipping_cost_cents,
-          sort_order         = EXCLUDED.sort_order,
-          is_active          = true,
-          color_ref_id       = EXCLUDED.color_ref_id,
-          -- Preserve existing stock when the editor sends 0 but DB already has a real value
-          -- (protects against a product save overwriting a bulk-stock-update)
-          stock_quantity     = CASE
-            WHEN ${trustZeroStock} THEN EXCLUDED.stock_quantity
-            WHEN EXCLUDED.stock_quantity > 0 THEN EXCLUDED.stock_quantity
-            ELSE product_variants.stock_quantity
-          END,
-          updated_at = NOW()
-        RETURNING id, stock_quantity
-      `,
-      [
-        tenantId,
-        productId,
-        sku,
-        barcode,
-        String(variant.size || '').trim() || null,
-        colorText,
-        String(variant.material || '').trim() || null,
-        toCents(variant.price),
-        costCents,
-        shippingCents,
-        incomingStock,
-        index,
-        String(variant.noteEn || '').trim() || null,
-        String(variant.noteAr || '').trim() || null,
-      ],
-    );
+    const values = [
+      tenantId,
+      productId,
+      sku,
+      barcode,
+      String(variant.size || '').trim() || null,
+      colorText,
+      String(variant.material || '').trim() || null,
+      toCents(variant.price),
+      costCents,
+      shippingCents,
+      incomingStock,
+      index,
+      String(variant.noteEn || '').trim() || null,
+      String(variant.noteAr || '').trim() || null,
+      barcodeSource,
+    ];
+    const upserted = existing
+      ? await client.query(
+        `UPDATE product_variants
+            SET sku = $3, barcode = $4, size = $5, color = $6, material = $7,
+                price_cents = $8, cost_price_cents = $9, shipping_cost_cents = $10,
+                stock_quantity = CASE
+                  WHEN ${trustZeroStock} THEN $11
+                  WHEN $11 > 0 THEN $11
+                  ELSE product_variants.stock_quantity
+                END,
+                sort_order = $12, is_active = true, note_en = $13, note_ar = $14,
+                barcode_source = $15,
+                color_ref_id = (SELECT id FROM ref_colors
+                  WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($6)) LIMIT 1),
+                updated_at = NOW()
+          WHERE tenant_id = $1 AND product_id = $2 AND id = $16
+          RETURNING id, stock_quantity`,
+        [...values, existing.id],
+      )
+      : await client.query(
+        `INSERT INTO product_variants (
+           tenant_id, product_id, sku, barcode, size, color, material,
+           price_cents, cost_price_cents, shipping_cost_cents, stock_quantity,
+           sort_order, is_active, note_en, note_ar, barcode_source, color_ref_id
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,$13,$14,$15,
+           (SELECT id FROM ref_colors
+             WHERE tenant_id = $1 AND lower(trim(name_en)) = lower(trim($6)) LIMIT 1))
+         RETURNING id, stock_quantity`,
+        values,
+      );
+
+    if (existing && existing.sku !== sku) {
+      // Old labels/import files can still resolve this row without making the
+      // old identifier active or reusable as another product's SKU.
+      await client.query(
+        `INSERT INTO catalog_identifier_aliases
+           (tenant_id, variant_id, identifier_type, value, reason, created_by_user_id)
+         VALUES ($1,$2,'variant_sku',$3,'catalog_rekey',$4)
+         ON CONFLICT (tenant_id, identifier_type, normalized_value) DO NOTHING`,
+        [tenantId, existing.id, existing.sku, actorUserId],
+      );
+      if (existing.barcode && existing.barcode !== barcode) {
+        await client.query(
+          `INSERT INTO catalog_identifier_aliases
+             (tenant_id, variant_id, identifier_type, value, reason, created_by_user_id)
+           VALUES ($1,$2,'barcode',$3,'catalog_rekey',$4)
+           ON CONFLICT (tenant_id, identifier_type, normalized_value) DO NOTHING`,
+          [tenantId, existing.id, existing.barcode, actorUserId],
+        );
+      }
+    }
 
     // The upsert's CASE means the stored stock is not always what was sent, so
     // the delta is computed from what the database actually ended up with.
     const saved = upserted.rows[0];
     if (saved) {
-      const previous = previousStockBySku.get(sku)?.stock ?? 0;
+      const previous = existing ? previousStockById.get(existing.id) ?? 0 : 0;
       const delta = (Number(saved.stock_quantity) || 0) - previous;
       if (delta !== 0) {
         await recordMovement(client, { tenantId, userId: actorUserId }, {
@@ -378,7 +458,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
           referenceId: productId,
           metadata: {
             sku,
-            action: previousStockBySku.has(sku) ? 'variant_updated' : 'variant_created',
+            action: existing ? 'variant_updated' : 'variant_created',
             previousStock: previous,
             newStock: Number(saved.stock_quantity) || 0,
           },
@@ -633,6 +713,14 @@ function mapAdminProduct(row) {
     sku: row.sku,
     brand: row.brand,
     price: Math.round(Number(row.base_price_cents || 0) / 100),
+    defaultCostPrice: row.default_cost_price_cents == null
+      ? null
+      : Number(row.default_cost_price_cents) / 100,
+    defaultShippingCost: row.default_shipping_cost_cents == null
+      ? null
+      : Number(row.default_shipping_cost_cents) / 100,
+    duplicatedFromProductId: row.duplicated_from_product_id || null,
+    catalogRevision: Number(row.catalog_revision || 1),
     stock: Number(row.stock_quantity || 0),
     hidden: row.status === 'hidden',
     posHidden: row.pos_status === 'hidden',
@@ -676,15 +764,16 @@ async function loadAdminProduct(client, tenantId, productId) {
             'id', pv.id,
             'sku', pv.sku,
             'barcode', pv.barcode,
+            'barcodeSource', pv.barcode_source,
             'size', pv.size,
             'color', pv.color,
             'material', pv.material,
             'noteEn', pv.note_en,
             'noteAr', pv.note_ar,
             'price', round(pv.price_cents / 100.0),
-            'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
-            'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
-            'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
+            'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0, 2) ELSE NULL END,
+            'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0, 2) ELSE NULL END,
+            'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0, 2) ELSE NULL END,
             'stock', pv.stock_quantity
           ) ORDER BY pv.sort_order, pv.created_at)
           FROM product_variants pv
@@ -747,11 +836,35 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
 
   const metaTitle = String(product.metaTitle || '').trim() || null;
   const metaDesc = String(product.metaDesc || '').trim() || null;
+  const nullableCents = (value) => value == null || value === ''
+    ? null
+    : Math.max(0, Math.round(Number(value) * 100));
+  const defaultCostPriceCents = nullableCents(product.defaultCostPrice);
+  const defaultShippingCostCents = nullableCents(product.defaultShippingCost);
+  const duplicatedFromProductId = UUID_RE.test(String(product.duplicatedFromProductId || ''))
+    ? String(product.duplicatedFromProductId)
+    : null;
 
   const variants = Array.isArray(product.variants) ? product.variants : [];
   const stockQty = variants.length > 0
     ? variants.reduce((sum, v) => sum + (Math.max(0, Number.parseInt(v.stock, 10) || 0)), 0)
     : Math.max(0, Number.parseInt(product.stock, 10) || 0);
+
+  const reservedSku = await client.query(
+    `SELECT p.name
+       FROM catalog_identifier_aliases cia
+       JOIN products p ON p.id = cia.product_id
+      WHERE cia.tenant_id = $1 AND cia.identifier_type = 'product_sku'
+        AND cia.normalized_value = lower(btrim($2))
+        AND cia.product_id IS DISTINCT FROM $3::uuid
+      LIMIT 1`,
+    [tenant.id, sku, product.id || null],
+  );
+  if (reservedSku.rowCount > 0) {
+    const err = new Error(`Product SKU "${sku}" was previously used by "${reservedSku.rows[0].name}". Use a different SKU.`);
+    err.status = 409;
+    throw err;
+  }
 
   // Slugs are unique per tenant, archived products included. Suffix instead of
   // failing the whole save with a constraint error.
@@ -780,7 +893,19 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
     metaTitle,   // $12
     metaDesc,    // $13
     posStatus,   // $14
+    defaultCostPriceCents,     // $15
+    defaultShippingCostCents,  // $16
+    duplicatedFromProductId,   // $17
   ];
+
+  let previousSku = null;
+  if (product.id) {
+    const previous = await client.query(
+      'SELECT sku FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE',
+      [tenant.id, product.id],
+    );
+    previousSku = previous.rows[0]?.sku || null;
+  }
 
   const upserted = product.id
     ? await client.query(
@@ -799,8 +924,12 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
             meta_title = $12,
             meta_desc = $13,
             pos_status = $14,
+            default_cost_price_cents = $15,
+            default_shipping_cost_cents = $16,
+            duplicated_from_product_id = COALESCE(duplicated_from_product_id, $17),
+            catalog_revision = catalog_revision + 1,
             updated_at = now()
-        WHERE tenant_id = $1 AND id = $15
+        WHERE tenant_id = $1 AND id = $18
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       [...params, product.id],
@@ -810,15 +939,25 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
         INSERT INTO products (
           tenant_id, sku, brand, name, slug, status, description, care_instructions,
           base_price_cents, currency, stock_quantity,
-          meta_title, meta_desc, pos_status
+          meta_title, meta_desc, pos_status,
+          default_cost_price_cents, default_shipping_cost_cents, duplicated_from_product_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id, sku, name, slug, status, base_price_cents, stock_quantity, meta_title, meta_desc
       `,
       params,
     );
 
   const saved = upserted.rows[0];
+  if (previousSku && previousSku !== sku) {
+    await client.query(
+      `INSERT INTO catalog_identifier_aliases
+         (tenant_id, product_id, identifier_type, value, reason, created_by_user_id)
+       VALUES ($1,$2,'product_sku',$3,'catalog_rekey',$4)
+       ON CONFLICT (tenant_id, identifier_type, normalized_value) DO NOTHING`,
+      [tenant.id, saved.id, previousSku, actorUserId],
+    );
+  }
   // A PATCH that does not send variants (hide toggle, name edit) must not
   // rewrite them: that would reset stock sold in the meantime.
   if (!product.skipVariants) {
@@ -873,15 +1012,16 @@ router.get('/', asyncHandler(async (_req, res) => {
               'id', pv.id,
               'sku', pv.sku,
               'barcode', pv.barcode,
+              'barcodeSource', pv.barcode_source,
               'size', pv.size,
               'color', pv.color,
               'material', pv.material,
               'noteEn', pv.note_en,
               'noteAr', pv.note_ar,
               'price', round(pv.price_cents / 100.0),
-              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
-              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
-              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
+              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0, 2) ELSE NULL END,
+              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0, 2) ELSE NULL END,
+              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0, 2) ELSE NULL END,
               'stock', pv.stock_quantity
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
@@ -937,15 +1077,16 @@ router.get('/:id', asyncHandler(async (req, res) => {
               'id', pv.id,
               'sku', pv.sku,
               'barcode', pv.barcode,
+              'barcodeSource', pv.barcode_source,
               'size', pv.size,
               'color', pv.color,
               'material', pv.material,
               'noteEn', pv.note_en,
               'noteAr', pv.note_ar,
               'price', round(pv.price_cents / 100.0),
-              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0) ELSE NULL END,
-              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0) ELSE NULL END,
-              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0) ELSE NULL END,
+              'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0, 2) ELSE NULL END,
+              'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0, 2) ELSE NULL END,
+              'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0, 2) ELSE NULL END,
               'stock', pv.stock_quantity
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
@@ -1047,7 +1188,12 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
         `UPDATE product_variants pv
             SET stock_quantity = $1, updated_at = now()
            FROM (SELECT id, stock_quantity AS previous FROM product_variants
-                  WHERE tenant_id = $2 AND lower(sku) = lower($3) AND is_active
+          WHERE tenant_id = $2 AND is_active
+            AND (lower(sku) = lower($3) OR id IN (
+              SELECT variant_id FROM catalog_identifier_aliases
+               WHERE tenant_id = $2 AND identifier_type = 'variant_sku'
+                 AND normalized_value = lower(btrim($3))
+            ))
                   ORDER BY (sku = $3) DESC LIMIT 1 FOR UPDATE) prev
           WHERE pv.id = prev.id
         RETURNING pv.product_id, pv.id AS variant_id, prev.previous`,
@@ -1114,10 +1260,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     let patchVariants = req.body.variants;
     if (!Array.isArray(patchVariants)) {
       const existingVariants = await client.query(
-        `SELECT id, sku, barcode, size, color, material, note_en AS "noteEn", note_ar AS "noteAr",
+        `SELECT id, sku, barcode, barcode_source AS "barcodeSource", size, color, material, note_en AS "noteEn", note_ar AS "noteAr",
                 round(price_cents / 100.0) AS price,
-                CASE WHEN cost_price_cents IS NULL THEN NULL ELSE round(cost_price_cents / 100.0) END AS "costPrice",
-                CASE WHEN shipping_cost_cents IS NULL THEN NULL ELSE round(shipping_cost_cents / 100.0) END AS "shippingCost",
+                CASE WHEN cost_price_cents IS NULL THEN NULL ELSE round(cost_price_cents / 100.0, 2) END AS "costPrice",
+                CASE WHEN shipping_cost_cents IS NULL THEN NULL ELSE round(shipping_cost_cents / 100.0, 2) END AS "shippingCost",
                 stock_quantity AS stock
            FROM product_variants
           WHERE tenant_id = $1 AND product_id = $2 AND is_active
@@ -1136,6 +1282,11 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       sku: req.body.sku ?? existing.sku,
       brand: req.body.brand ?? existing.brand,
       price: req.body.price ?? Math.round(Number(existing.base_price_cents) / 100),
+      defaultCostPrice: req.body.defaultCostPrice
+        ?? (existing.default_cost_price_cents == null ? null : Number(existing.default_cost_price_cents) / 100),
+      defaultShippingCost: req.body.defaultShippingCost
+        ?? (existing.default_shipping_cost_cents == null ? null : Number(existing.default_shipping_cost_cents) / 100),
+      duplicatedFromProductId: existing.duplicated_from_product_id || null,
       stock: patchStock,
       hidden: req.body.hidden ?? existing.status === 'hidden',
       posHidden: req.body.posHidden ?? existing.pos_status === 'hidden',
@@ -1426,18 +1577,29 @@ router.post('/:id/duplicate', asyncHandler(async (req, res) => {
       id: undefined,
       sku: newSku,
       slug: newSku,
+      duplicatedFromProductId: source.id,
       hidden: true,
       stock: 0,
-      // A copy starts empty: no stock, and barcodes fall back to the new SKUs so
-      // they cannot clash with the source's labels. A variant SKU that does not
-      // contain the product SKU still gets a new one instead of the source's.
-      variants: (source.variants || []).map((v, index) => ({
-        ...v,
-        id: undefined,
-        barcode: '',
-        stock: 0,
-        sku: v.sku.includes(source.sku) ? v.sku.replaceAll(source.sku, newSku) : `${newSku}-${index + 1}`,
-      })),
+      // A copy starts empty. Rebase every variant SKU onto the copy's product
+      // namespace and clean the boundary, so legacy "3336-MC--5" separators
+      // are not carried forward.
+      variants: (source.variants || []).map((v, index) => {
+        const oldSku = String(v.sku || '').trim();
+        const legacySuffix = oldSku.startsWith(source.sku)
+          ? oldSku.slice(source.sku.length).replace(/^-+/, '')
+          : '';
+        const suffix = legacySuffix
+          || [String(v.color || '').trim(), String(v.size || '').trim()].filter(Boolean).join('-')
+          || String(index + 1);
+        return {
+          ...v,
+          id: undefined,
+          barcode: '',
+          barcodeSource: 'auto',
+          stock: 0,
+          sku: `${newSku}-${suffix}`,
+        };
+      }),
     });
     const product = await loadAdminProduct(client, tenant.id, saved.id);
     await client.query('COMMIT');

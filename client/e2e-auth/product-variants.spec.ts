@@ -8,7 +8,11 @@ const user = {
   role: 'owner', tenantId: 'tenant-a', tenantSlug: 'test',
 };
 
-type Variant = { id: string; sku: string; barcode?: string; size: string; color: string; material: string; price: number; stock: number };
+type Variant = {
+  id: string; sku: string; barcode?: string; barcodeSource?: 'auto' | 'manual';
+  size: string; color: string; material: string; price: number; stock: number;
+  costPrice?: number; shippingCost?: number;
+};
 
 function makeVariants(): Variant[] {
   return ['Black', 'Brown'].flatMap(color => ['40', '41', '42'].map(size => ({
@@ -275,4 +279,33 @@ test('a row without a size blocks saving and is pointed at', async ({ page }) =>
 
   await expect(page.locator('[data-variant-id="srv-new"]')).toHaveClass(/vc--flash/);
   expect(api.patches).toHaveLength(0);
+});
+
+test('changing product SKU rekeys prefixed variants and their automatic barcodes', async ({ page }) => {
+  const variants = makeVariants().map(v => ({ ...v, barcode: v.sku, barcodeSource: 'auto' as const }));
+  const api = await prepare(page, { products: [product(variants, { duplicatedFromProductId: 'source-product' })] });
+  await openDrawer(page);
+
+  const skuField = page.locator('label.lbl').filter({ hasText: /^SKU$/ }).locator('..').locator('input');
+  await skuField.fill('3336');
+  await saveBar(page).getByRole('button', { name: /save/i }).click();
+
+  await expect.poll(() => api.patches.length).toBe(1);
+  expect(api.patches[0].variants.map(v => v.sku)).toEqual([
+    '3336-BL-40', '3336-BL-41', '3336-BL-42',
+    '3336-BR-40', '3336-BR-41', '3336-BR-42',
+  ]);
+  expect(api.patches[0].variants.every(v => v.barcode === v.sku && v.barcodeSource === 'auto')).toBe(true);
+});
+
+test('product cost defaults fill blank variants in one edit', async ({ page }) => {
+  const api = await prepare(page);
+  await openDrawer(page);
+
+  await page.getByText('Default product cost (QAR)', { exact: true }).locator('..').locator('input').fill('120.5');
+  await page.getByText('Default shipping cost (QAR)', { exact: true }).locator('..').locator('input').fill('15');
+  await saveBar(page).getByRole('button', { name: /save/i }).click();
+
+  await expect.poll(() => api.patches.length).toBe(1);
+  expect(api.patches[0].variants.every(v => v.costPrice === 120.5 && v.shippingCost === 15)).toBe(true);
 });
