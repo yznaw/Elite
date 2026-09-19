@@ -172,11 +172,11 @@ See `server/routes/carts.route.js`. Session-cookie cart, no auth.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/carts/current` | The session cart. Each item carries `available`: the variant's stock (0 when inactive), or `null` for a line with no variant. |
-| `POST` | `/api/carts/current/items` | Add or increment a line. **409 `INSUFFICIENT_STOCK`** when the bag quantity for that variant + size would exceed stock; the bag is left unchanged. |
+| `POST` | `/api/carts/current/items` | Add or increment a line. Price, name and SKU come from the catalog; the request's `price` is ignored. **409 `ITEM_UNAVAILABLE`** when the product is not active, the variant is inactive or belongs to another product, its colour/numeric size differ from those sent, or a product with sizes arrives without `variantId`. **409 `INSUFFICIENT_STOCK`** when the bag quantity for that variant + size would exceed stock; the bag is left unchanged. |
 | `DELETE` | `/api/carts/current/items/:productId` | Remove a line (`size`, `variantId`, `color` query params). |
 | `DELETE` | `/api/carts/current/items` | Empty the bag. |
 | `POST` | `/api/carts/shipping-quote` | NBOX delivery quote. |
-| `POST` | `/api/carts/checkout` | Create the pending order. Re-checks stock under row locks and returns **409 `INSUFFICIENT_STOCK`** before any order exists. |
+| `POST` | `/api/carts/checkout` | Create the pending order. Every line is re-priced from the catalog (same rules and **409 `ITEM_UNAVAILABLE`** as the bag), quantities below 1 count as 1, the delivery fee is re-quoted server-side through NBOX (free when NBOX is not configured), and the order is always `pending`: `payment.status` in the request is ignored, only the payment gateway confirms payment. Re-checks stock under row locks and returns **409 `INSUFFICIENT_STOCK`** before any order exists. |
 
 Both 409s share one shape, so the storefront can match the failing bag line:
 

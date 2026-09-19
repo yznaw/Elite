@@ -132,6 +132,9 @@ export class CartService {
       if (shortage) {
         this._rejectedAdd.set(shortage);
         void this.products.refresh();
+      } else if (err instanceof HttpErrorResponse && err.error?.code === 'ITEM_UNAVAILABLE') {
+        // The page was showing a catalog that has since changed; reload it.
+        void this.products.refresh();
       }
       await this.refresh();
     }

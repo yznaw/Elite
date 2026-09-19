@@ -447,6 +447,12 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       return s.available ? this.tp('checkout.stock.short', params) : this.tp('checkout.stock.soldOut', params);
     }
     if (err instanceof HttpErrorResponse) {
+      if (err.status === 409 && err.error?.code === 'ITEM_UNAVAILABLE') {
+        // The catalog changed under the bag (hidden product, removed size, new price).
+        await this.cart.refresh();
+        const [line] = Array.isArray(err.error.details) ? err.error.details : [];
+        return this.tp('checkout.error.itemUnavailable', { name: this.itemName({ id: '', name: line?.name || '' }) });
+      }
       if (err.status === 0) return this.t('checkout.error.network');
       if (err.status === 422) return this.t('checkout.error.validation');
     }

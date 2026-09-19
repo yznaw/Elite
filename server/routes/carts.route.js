@@ -91,6 +91,109 @@ function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
+function lineQty(item) {
+  return Math.max(1, Number.parseInt(item.qty ?? item.quantity, 10) || 1);
+}
+
+// Storefront sizes are numeric; a variant whose size is not a number reaches the
+// browser without one and comes back as 0, so only numeric sizes are compared.
+function sizesConflict(variantSize, sentSize) {
+  const stored = String(variantSize ?? '').trim();
+  if (!stored || !Number.isFinite(Number(stored))) return false;
+  return Number(stored) !== Number(sentSize);
+}
+
+function colorsConflict(variantColor, sentColor) {
+  const stored = String(variantColor || '').trim().toLowerCase();
+  const sent = String(sentColor || '').trim().toLowerCase();
+  return !!stored && !!sent && stored !== sent;
+}
+
+/**
+ * Prices, names and SKUs for bag lines, read from the catalog.
+ *
+ * Everything about a line used to be taken from the request, price included, and the
+ * order total (which is what the payment gateway charges) was summed from it. A variant
+ * id was also accepted without checking it belonged to the product, colour and size sent
+ * with it. Now the catalog is the only source of what a line costs and what it is; the
+ * request only chooses which product/variant and how many.
+ *
+ * Returns `{ lines, problems }`. A problem is a line that cannot be sold as sent.
+ */
+async function resolveLines(client, tenantId, items) {
+  const lines = [];
+  const problems = [];
+  for (const item of items) {
+    const productId = item.productId || item.id;
+    const variantId = isUuid(item.variantId) ? item.variantId : null;
+    const size = item.size ?? item.s ?? null;
+    const color = item.color || null;
+    const reject = (reason, name) => problems.push({
+      productId: productId || null, variantId, size, color, sku: item.sku || '', name: name || item.name || 'Item', reason,
+    });
+    if (!isUuid(productId)) { reject('unknown_product'); continue; }
+
+    // eslint-disable-next-line no-await-in-loop -- a bag is a handful of lines.
+    const product = await client.query(
+      `SELECT p.id, p.name, p.sku, p.status, p.base_price_cents,
+              EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active) AS has_variants
+         FROM products p WHERE p.tenant_id = $1 AND p.id = $2`,
+      [tenantId, productId],
+    );
+    const p = product.rows[0];
+    if (!p || p.status !== 'active') { reject('unavailable', p?.name); continue; }
+
+    let unitCents = Number(p.base_price_cents) || 0;
+    let sku = p.sku || String(productId);
+    let storedColor = color;
+    if (variantId) {
+      // eslint-disable-next-line no-await-in-loop
+      const variant = await client.query(
+        `SELECT sku, size, color, price_cents, is_active FROM product_variants
+          WHERE tenant_id = $1 AND id = $2 AND product_id = $3`,
+        [tenantId, variantId, productId],
+      );
+      const v = variant.rows[0];
+      if (!v || !v.is_active) { reject('unavailable', p.name); continue; }
+      if (sizesConflict(v.size, size) || colorsConflict(v.color, color)) { reject('mismatch', p.name); continue; }
+      // Same rule as the storefront's `variant.price || product.price`.
+      if (Number(v.price_cents) > 0) unitCents = Number(v.price_cents);
+      sku = v.sku || sku;
+      storedColor = v.color || color;
+    } else if (p.has_variants) {
+      // Every size the storefront sells carries a variant id, so a line without one on a
+      // product that has variants was not chosen on the storefront.
+      reject('choose_size', p.name);
+      continue;
+    }
+
+    lines.push({
+      ...item,
+      productId,
+      variantId,
+      name: p.name,
+      sku,
+      size,
+      color: storedColor,
+      qty: lineQty(item),
+      unitCents,
+    });
+  }
+  return { lines, problems };
+}
+
+function unavailableResponse(res, req, problems) {
+  return res.status(409).json({
+    success: false,
+    code: 'ITEM_UNAVAILABLE',
+    message: problems.length === 1
+      ? `${problems[0].name} is no longer available as selected. Please choose it again.`
+      : 'Some items in your bag are no longer available as selected. Please choose them again.',
+    details: problems,
+    requestId: req.requestId,
+  });
+}
+
 function normalizeCheckout(req) {
   const customer = req.body.customer || {};
   const shippingAddress = req.body.shippingAddress || {};
@@ -131,10 +234,6 @@ function normalizeCheckout(req) {
     payment: req.body.payment || {},
     shippingQuote,
   };
-}
-
-function isPaidPayment(payment) {
-  return String(payment?.status || '').trim().toLowerCase() === 'paid';
 }
 
 /**
@@ -205,6 +304,13 @@ router.post('/current/items', asyncHandler(async (req, res) => {
     const size = req.body.size == null ? null : String(req.body.size);
     const variantId = isUuid(req.body.variantId) ? req.body.variantId : null;
 
+    const { lines, problems } = await resolveLines(client, cart.tenant_id, [{ ...req.body, productId, variantId }]);
+    if (problems.length > 0) {
+      await client.query('ROLLBACK');
+      return unavailableResponse(res, req, problems);
+    }
+    const line = lines[0];
+
     // Refuse to put more in the bag than exists. The product page already hides
     // sold-out sizes, but it cannot see what is already in the bag, so adding
     // the last pair twice used to succeed and only fail at checkout.
@@ -268,16 +374,16 @@ router.post('/current/items', asyncHandler(async (req, res) => {
         cart.id,
         productId,
         variantId,
-        String(req.body.name || 'Item'),
-        String(req.body.sku || productId),
+        line.name,
+        line.sku,
         size,
         qty,
-        toCents(req.body.price),
+        line.unitCents,
         cart.currency,
         JSON.stringify({
           image: req.body.image || null,
           leather: req.body.leather || null,
-          color: req.body.color || null,
+          color: line.color || null,
         }),
       ],
     );
@@ -418,6 +524,39 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       }
     }
 
+    // What the order contains and costs comes from the catalog, never the request.
+    const { lines, problems } = await resolveLines(client, tenant.id, checkout.items);
+    if (problems.length > 0) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+      return unavailableResponse(res, req, problems);
+    }
+
+    // The delivery fee is quoted here rather than trusted from the request, for the same
+    // reason as the prices: it is part of what the gateway charges.
+    let shippingQuote = null;
+    if (nbox.isConfigured()) {
+      try {
+        shippingQuote = await nbox.getDeliveryQuote({
+          customer: checkout.customer,
+          shippingAddress: checkout.shippingAddress,
+          items: lines.map((line) => ({ ...line, price: line.unitCents / 100, quantity: line.qty })),
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        if (err.name === 'NboxError') {
+          return res.status(502).json({ success: false, message: err.message, details: err.details || {} });
+        }
+        throw err;
+      }
+      if (!shippingQuote?.available) {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        return validationError(res, ['Delivery is not available to this address.']);
+      }
+    }
+
     // Stock check BEFORE the order exists, so a customer who cannot be served
     // is told now rather than after paying.
     //
@@ -430,10 +569,10 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     // case — paying for something that was already out of stock when the
     // checkout button was pressed.
     const outOfStock = [];
-    for (const item of checkout.items) {
-      const variantId = isUuid(item.variantId) ? item.variantId : null;
+    for (const item of lines) {
+      const { variantId } = item;
       if (!variantId) continue;
-      const wanted = Number(item.qty || item.quantity) || 1;
+      const wanted = item.qty;
       // eslint-disable-next-line no-await-in-loop -- one row per cart line, and
       // the lock has to be taken per row anyway.
       const variant = await client.query(
@@ -473,13 +612,13 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     }
 
     const customerId = await upsertCustomer(client, tenant.id, checkout.customer, checkout.shippingAddress);
-    const subtotalCents = checkout.items.reduce((sum, item) => {
-      const qty = Number(item.qty || item.quantity) || 1;
-      return sum + toCents(item.price) * qty;
-    }, 0);
-    const shippingCents = toCents(checkout.shippingQuote?.amount || 0);
+    const subtotalCents = lines.reduce((sum, line) => sum + line.unitCents * line.qty, 0);
+    const shippingCents = toCents(shippingQuote?.amount || 0);
     const totalCents = subtotalCents + shippingCents;
-    const paymentStatus = isPaidPayment(checkout.payment) ? 'paid' : 'pending';
+    // Only the payment gateway's confirmation may mark an order paid. The request used to
+    // be able to say `payment.status: 'paid'`, which booked delivery and sent a receipt for
+    // an order nobody paid for.
+    const paymentStatus = 'pending';
     const paidAt = paymentStatus === 'paid' ? new Date() : null;
 
     const order = await insertWithRetry(client, (publicNumber) => client.query(
@@ -509,7 +648,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         JSON.stringify({
           source: 'client-web-checkout',
           nbox: {
-            quote: nboxQuoteMetadata(checkout.shippingQuote),
+            quote: nboxQuoteMetadata(shippingQuote),
           },
           paymentGateway: {
             provider: req.body.payment?.provider || 'pending_gateway',
@@ -540,9 +679,9 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       console.warn('[checkout] Could not cancel prior pending orders:', err.message);
     });
 
-    for (const item of checkout.items) {
-      const qty = Number(item.qty || item.quantity) || 1;
-      const unit = toCents(item.price);
+    for (const item of lines) {
+      const { qty } = item;
+      const unit = item.unitCents;
       await client.query(
         `
           INSERT INTO order_items (
@@ -559,10 +698,10 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         [
           tenant.id,
           order.rows[0].id,
-          isUuid(item.id || item.productId) ? (item.id || item.productId) : null,
-          isUuid(item.variantId) ? item.variantId : null,
-          String(item.sku || item.id || ''),
-          String(item.name || item.n || 'Item'),
+          item.productId,
+          item.variantId,
+          item.sku,
+          item.name,
           item.size || item.s || null,
           qty,
           unit,
@@ -599,7 +738,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         tenant.currency,
         JSON.stringify({
           integrationPending: paymentStatus !== 'paid',
-          nboxQuote: nboxQuoteMetadata(checkout.shippingQuote),
+          nboxQuote: nboxQuoteMetadata(shippingQuote),
         }),
       ],
     );
@@ -635,7 +774,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       delivery: fromCents(createdOrder.shipping_cents),
       payment: paymentStatus,
       fulfillment: nboxShipment ? 'processing' : createdOrder.fulfillment_status,
-      nbox: nboxShipment ? { shipment: nboxShipment } : { quote: nboxQuoteMetadata(checkout.shippingQuote) },
+      nbox: nboxShipment ? { shipment: nboxShipment } : { quote: nboxQuoteMetadata(shippingQuote) },
     }, 'Checkout order created.');
   } catch (err) {
     if (inTransaction) await client.query('ROLLBACK');
