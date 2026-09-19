@@ -139,6 +139,8 @@
   border-radius: 8px;
   box-shadow: 0 24px 56px rgba(30, 28, 24, 0.22);
   animation: ovl-fade 0.18s ease;
+  /* Clears the fixed site header when the panel is scrolled into view on open. */
+  scroll-margin-top: 120px;
 }
 
 /* Centred dialog: the default above the sheet breakpoint. */

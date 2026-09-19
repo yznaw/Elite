@@ -53,10 +53,18 @@ export class BodyScrollLock {
     const scrollbar = window.innerWidth - document.documentElement.clientWidth;
     if (scrollbar > 0) document.body.style.paddingInlineEnd = `${scrollbar}px`;
 
-    document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
 
     if (window.matchMedia(MOBILE_SHEET_QUERY).matches) {
+      /*
+       * Only safe here, where the body is pinned below. `html, body { height: 100% }` plus
+       * the body's `overflow-x: hidden` mean that hiding the root's overflow stops the
+       * body's overflow reaching the viewport: the body becomes a 100%-tall scroller of its
+       * own, the viewport has nothing left to scroll, and it snaps to the top. On desktop
+       * that threw the customer to the top of the collection with the card overlay left
+       * behind off-screen. Hiding the body's overflow alone locks the viewport in place.
+       */
+      document.documentElement.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
       document.body.style.top = `-${this.scrollY}px`;
       document.body.style.width = '100%';

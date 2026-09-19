@@ -150,6 +150,10 @@ export class OverlayComponent implements OnDestroy {
   }
 
   private focusPanel(panel: HTMLElement): void {
+    // A card layer covers its card, which may be partly scrolled off-screen when the
+    // customer taps the button at its foot. Bring the whole panel into view; the scroll
+    // lock restores the original position on close.
+    if (this.variant === 'card') panel.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
     const target = panel.querySelector<HTMLElement>(FOCUSABLE);
     (target ?? panel).focus({ preventScroll: true });
   }
