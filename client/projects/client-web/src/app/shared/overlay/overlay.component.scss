@@ -15,7 +15,10 @@
 .ovl {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /* Above the fixed site nav (80) so the backdrop dims it and a click there closes the
+     overlay instead of navigating away with it open; below the mobile menu (90) and the
+     cart drawer (100). */
+  z-index: 85;
   overflow: hidden;
   overscroll-behavior: none;
 }

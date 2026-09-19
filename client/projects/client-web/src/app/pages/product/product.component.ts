@@ -467,12 +467,14 @@ export class ProductComponent implements OnInit, OnDestroy {
     if (this.gallerySyncFrame) cancelAnimationFrame(this.gallerySyncFrame);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     if (this.reviewOpen()) this.scrollLock.release();
+    if (this.sizeGuideOpen()) this.scrollLock.release();
   }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
     // The size sheet closes itself; cw-overlay owns Escape for everything it renders.
     if (this.reviewOpen()) this.closeReview();
+    else if (this.sizeGuideOpen()) this.closeSizeGuide();
   }
 
   async goCollection(): Promise<void> {
@@ -562,7 +564,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.sizeSelectionError.set(false);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
-    this.sizeGuideOpen.set(false);
+    this.closeSizeGuide();
     this.resetRestockForm();
     this.resetReviewForm();
     void this.referenceData.ensureColors();
@@ -597,7 +599,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.selectedColor.set(null);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
-    this.sizeGuideOpen.set(false);
+    this.closeSizeGuide();
     this.resetRestockForm();
     this.resetReviewForm();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -741,6 +743,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   async openSizeGuide(): Promise<void> {
+    // The guide is a modal; without the lock the page scrolled behind it.
+    if (!this.sizeGuideOpen()) this.scrollLock.acquire();
     this.sizeGuideOpen.set(true);
     this.sizeGuideError.set('');
     if (this.sizeSets().length > 0) return;
@@ -757,7 +761,9 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   closeSizeGuide(): void {
+    if (!this.sizeGuideOpen()) return;
     this.sizeGuideOpen.set(false);
+    this.scrollLock.release();
   }
 
   decQty(): void { this.qty.update((q) => Math.max(1, q - 1)); }

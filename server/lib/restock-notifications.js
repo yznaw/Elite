@@ -9,7 +9,9 @@ async function validateRestockSelection(client, tenantId, productId, input) {
   if (!product) throw invalid('Product not found.', 404, 'PRODUCT_NOT_FOUND');
   const variants = (await client.query('SELECT size, color, stock_quantity, is_active FROM product_variants WHERE tenant_id = $1 AND product_id = $2 FOR SHARE', [tenantId, productId])).rows;
   const size = normalizeSize(input.size);
-  const key = colorKey(input.color);
+  // A product without variants has no colours to choose between, but the storefront still
+  // sends the product's display colour; that used to reject every alert for such products.
+  const key = variants.length ? colorKey(input.color) : '';
   const matches = variants.filter(v => normalizeSize(v.size) === size && colorKey(v.color) === key);
   if (variants.length ? !matches.length : size !== ONE_SIZE || key !== '') throw invalid('Choose a size and colour offered for this product.');
   if (variants.length ? matches.some(v => v.is_active && v.stock_quantity > 0) : product.stock_quantity > 0) {

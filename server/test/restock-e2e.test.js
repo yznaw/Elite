@@ -51,6 +51,10 @@ test('restock API, worker, stock channels, consent and admin demand', {timeout:1
       assert.equal((await db.query('SELECT size FROM restock_notifications WHERE product_id=$1',[one.id])).rows[0].size,'ONE_SIZE');
       for(let i=7;i<10;i++) assert.notEqual((await request(`/products/${one.id}/restock-notifications`,'POST',{email:'one@example.test'})).status,429);
       assert.equal((await request(`/products/${one.id}/restock-notifications`,'POST',{email:'one@example.test'})).status,429);
+      // The storefront sends the product's display colour even when it has no variants.
+      const plain=await fixture({noVariants:true,size:undefined,color:''});
+      await createRestockNotification(db.pool,tenantId,{productId:plain.id,email:'plain@example.test',color:'Black',locale:'en'});
+      assert.equal((await db.query('SELECT color_key FROM restock_notifications WHERE product_id=$1',[plain.id])).rows[0].color_key,'');
       for(const alias of Object.keys(COLOR_ALIASES)) assert.equal((await db.query('SELECT restock_color_key($1) AS key',[` ${alias.toUpperCase()} `])).rows[0].key,colorKey(alias));
     });
     await t.test('concurrent dispatch claims each request once and rechecks stock',async()=>{
