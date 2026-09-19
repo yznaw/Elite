@@ -172,11 +172,11 @@ See `server/routes/carts.route.js`. Session-cookie cart, no auth.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/carts/current` | The session cart. Each item carries `available`: the variant's stock (0 when inactive), or `null` for a line with no variant. |
-| `POST` | `/api/carts/current/items` | Add or increment a line. Price, name and SKU come from the catalog; the request's `price` is ignored. **409 `ITEM_UNAVAILABLE`** when the product is not active, the variant is inactive or belongs to another product, its colour/numeric size differ from those sent, or a product with sizes arrives without `variantId`. **409 `INSUFFICIENT_STOCK`** when the bag quantity for that variant + size would exceed stock; the bag is left unchanged. |
+| `POST` | `/api/carts/current/items` | Add or increment a line. Price, name and SKU come from the catalog; the request's `price` is ignored. **409 `ITEM_UNAVAILABLE`** when the product is not active, the variant is inactive or belongs to another product, its colour/numeric size differ from those sent, or a product with sizes arrives without `variantId`. **409 `INSUFFICIENT_STOCK`** when the combined bag quantity for that inventory item would exceed stock; the bag is left unchanged. |
 | `DELETE` | `/api/carts/current/items/:productId` | Remove a line (`size`, `variantId`, `color` query params). |
 | `DELETE` | `/api/carts/current/items` | Empty the bag. |
 | `POST` | `/api/carts/shipping-quote` | NBOX delivery quote. |
-| `POST` | `/api/carts/checkout` | Create the pending order. Every line is re-priced from the catalog (same rules and **409 `ITEM_UNAVAILABLE`** as the bag), quantities below 1 count as 1, the delivery fee is re-quoted server-side through NBOX (free when NBOX is not configured), and the order is always `pending`: `payment.status` in the request is ignored, only the payment gateway confirms payment. Re-checks stock under row locks and returns **409 `INSUFFICIENT_STOCK`** before any order exists. |
+| `POST` | `/api/carts/checkout` | Create the pending order. Every line is re-priced from the catalog (same rules and **409 `ITEM_UNAVAILABLE`** as the bag), quantities must be integers from 1 to 100 (invalid values return 422), the delivery fee is re-quoted server-side through NBOX (free when NBOX is not configured), and the order is always `pending`: `payment.status` in the request is ignored, only the payment gateway confirms payment. Aggregates duplicate inventory identities (including UUID/size spelling variants), checks base-product stock too, and re-checks stock under row locks. Returns **409 `INSUFFICIENT_STOCK`** before any order exists. |
 
 Both 409s share one shape, so the storefront can match the failing bag line:
 
@@ -188,6 +188,12 @@ Both 409s share one shape, so the storefront can match the failing bag line:
 ```
 
 `inBag` is only present on the add-to-bag response. Covered by `server/test/cart-stock-e2e.test.js`.
+
+**Security contract (September 2026):** Legacy `POST /api/carts` and all cart-ID read/write/checkout endpoints return 410. Use the session-scoped `/current` routes and the single `/checkout` service. Checkout persists a signed-cookie session and stores only a one-way ownership binding in order metadata; payment initiation and order-status requests require that same session. Retry keys and supersession are session-scoped. Old orders without a binding cannot start a new public payment; provider callbacks remain signature-authenticated. Cart/payment responses are not cacheable. Maximum 100 lines and 100 units per inventory identity. Separate unpaid orders do not reserve inventory.
+
+Public `GET/HEAD /api/contact` is removed; `POST /api/contact` still submits enquiries. Authorized owner/admin/manager users can list their tenant's enquiries at `GET /api/admin/contact?limit=25&offset=0` (maximum 100 records). All admin mutations now require owner/admin/manager at the shared boundary; existing narrower owner/admin gates still apply.
+
+Uploaded raster images are decoded and re-encoded to WebP before storage, with a 50 MB input cap, 40 million total pixels and 100 frames. SVG/HTML and corrupt images are rejected. Untrusted names never choose the stored extension. Both Express and nginx block active legacy upload types and serve images with `nosniff` and a sandbox CSP. Deploy the nginx change along with the API because nginx serves production uploads directly.
 
 ### Public — Sitemap (`/api/sitemap.xml`)
 

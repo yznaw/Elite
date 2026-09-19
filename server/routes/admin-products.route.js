@@ -1487,7 +1487,7 @@ router.post(
             RETURNING id
           `,
           [
-            tenant.id, file.originalname, stored.mimeType, file.size,
+            tenant.id, file.originalname, stored.mimeType, stored.sizeBytes || file.size,
             stored.width, stored.height,
             stored.url, stored.previewUrl, userId,
             JSON.stringify({

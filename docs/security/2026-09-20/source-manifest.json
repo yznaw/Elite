@@ -1,0 +1,22 @@
+{
+  "local_revision": "6926ad17641859e98a30098f7cd054a3e03355b2",
+  "remote_tracking_revision": "6926ad17641859e98a30098f7cd054a3e03355b2",
+  "files": {
+    "server/routes/carts.route.js": "b7fdd9e36b70137a9ba68d10512141e889f3aa0f6ee7d3a9a63fbc8604b866c5",
+    "server/routes/payments.route.js": "66c4b9e9850aed563ab534306e06cdea3f7fa9b6f57dea902d7645a549f1faa7",
+    "server/routes/contact.route.js": "335bb7446d426b5172ae94efb2f3dee510e6373a4cd4b0e95a22baf5fc269070",
+    "server/routes/index.js": "5c252c7fda8e43a9e53e73980d8d844caeb9935e2bc31d2a009cf6e5f14521c4",
+    "server/routes/sadad-webhook.route.js": "6e807e7382f9f75052e0512127b99f9e844bd9c244f512408a75348e699cbb86",
+    "server/routes/auth.route.js": "e0d2d367f046cf78421410482681f7807ad4783eb76b52e18f3aebe5d2f7c426",
+    "server/routes/admin-policies.route.js": "23b730c2a5ac62e9a790f65489154339da4f610af404c9af6e05db83ebd22dc6",
+    "server/routes/admin-products.route.js": "93c4a7844b6935b3b2fab107cd68b8a8e6de387fae684f30b664b52cf61be22c",
+    "server/middleware/upload.js": "78b9515b4419d8ae807bd814ed7eb1d4ba80aabd98ca4abdbef3f8979fa3bc80",
+    "server/lib/storage.js": "5e816605f02ec052aaebcc8688743ae7c4e1a708b401a782ee79709b902008f1",
+    "server/lib/customer-identity.js": "f671a935e03b28f00eb72a10830c943d1b4c577f3c084ea22964a0e99de21f0e",
+    "server/index.js": "3cf003cbb376de319cf752ecd1a4f9c586e5b53a0ead231a2842512fca711c92",
+    "deploy/nginx/elite.conf": "21a127f8c13d80627c8aa9ef5050ee06e2607785950ec1b2ced8fe689e1c0857",
+    "client/projects/admin-portal/src/app/shared/rich-text/rich-text.component.ts": "f7784e3952f423332462b93bfa2284225d09cc3cb2d9506f5853fc8db7fc1973",
+    "server/package-lock.json": "2c37ba650b1b1a3e2ae253666e02606786a74bde4cf2bb33835bcf687ad8bc6c",
+    "client/package-lock.json": "78ecc5b5ac104ea27e25a2485911703dac131bdea04a0d912c55713b4f28340f"
+  }
+}

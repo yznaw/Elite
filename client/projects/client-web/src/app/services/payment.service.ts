@@ -36,6 +36,7 @@ export class PaymentService {
       this.http.post<ApiResponse<SadadInitiateResponse>>(
         `${this.apiBase}/payments/sadad/initiate`,
         { orderId },
+        { withCredentials: true },
       ),
     );
 

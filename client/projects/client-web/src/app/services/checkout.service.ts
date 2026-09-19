@@ -74,7 +74,7 @@ export class CheckoutService {
           method: 'gateway_placeholder',
           status: 'pending',
         },
-      }),
+      }, { withCredentials: true }),
     ).then((res) => res.data);
   }
 

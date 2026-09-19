@@ -14,8 +14,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-let sharp;
-try { sharp = require('sharp'); } catch { sharp = null; }
+const sharp = require('sharp');
+const MAX_INPUT_PIXELS = 40_000_000;
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
+const IMAGE_FORMATS = new Set(['jpeg', 'png', 'webp', 'gif', 'heif']);
 
 const IMAGE_VARIANTS = [
   { key: 'thumb', width: 240, quality: 74 },
@@ -42,29 +44,41 @@ class DiskStorage {
    * filename uploaded twice never collides and so the original (potentially
    * unsafe) name never lands on disk.
    */
-  async save({ buffer, filename, mimeType }) {
-    const ext = (path.extname(filename || '') || extFromMime(mimeType) || '').toLowerCase();
-    const baseSlug = `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
-    const slug = `${baseSlug}${ext}`;
+  async save({ buffer }) {
+    // Decode and rewrite before storage. Neither the MIME declaration nor the
+    // filename can select an executable format or preserve unvalidated bytes.
+    if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > MAX_IMAGE_BYTES) {
+      throw Object.assign(new Error('An image must be between 1 byte and 50 MB.'), { status: 413 });
+    }
+    let encoded;
+    try {
+      const input = sharp(buffer, { animated: true, limitInputPixels: MAX_INPUT_PIXELS, failOn: 'warning' });
+      const meta = await input.metadata();
+      if (!IMAGE_FORMATS.has(meta.format) || !meta.width || !meta.height ||
+          meta.width * (meta.pageHeight || meta.height) * (meta.pages || 1) > MAX_INPUT_PIXELS || (meta.pages || 1) > 100) {
+        throw new Error('Unsupported image');
+      }
+      // Strips metadata and trailing content; preserves supported animation.
+      const normalized = (meta.pages || 1) > 1 ? input : input.rotate();
+      encoded = await normalized.webp({ quality: 90 }).toBuffer({ resolveWithObject: true });
+    } catch {
+      throw Object.assign(new Error('Upload a valid JPEG, PNG, WebP, GIF or AVIF image within the image limits.'), {
+        status: 415, code: 'INVALID_IMAGE',
+      });
+    }
+    const baseSlug = `${Date.now().toString(36)}-${crypto.randomBytes(16).toString('hex')}`;
+    const slug = `${baseSlug}.webp`;
     const fullPath = path.join(this.uploadsDir, slug);
-    await fs.promises.writeFile(fullPath, buffer);
-    const dimensions = (sharp && isOptimizableImage(mimeType, ext))
-      ? await sharp(buffer, { animated: false }).metadata().then((meta) => ({
-        width: meta.width || null,
-        height: meta.height || null,
-      })).catch(() => ({ width: null, height: null }))
-      : { width: null, height: null };
-    const variants = (sharp && isOptimizableImage(mimeType, ext))
-      ? await this.createImageVariants({ buffer, baseSlug }).catch(() => ({}))
-      : {};
-
+    await fs.promises.writeFile(fullPath, encoded.data, { flag: 'wx' });
+    const variants = await this.createImageVariants({ buffer: encoded.data, baseSlug }).catch(() => ({}));
     return {
       url: `${this.publicBase}/${slug}`,
       previewUrl: variants.card?.url || variants.grid?.url || `${this.publicBase}/${slug}`,
       storagePath: fullPath,
-      mimeType: mimeType || mimeFromExt(ext) || 'application/octet-stream',
-      width: dimensions.width,
-      height: dimensions.height,
+      mimeType: 'image/webp',
+      sizeBytes: encoded.data.length,
+      width: encoded.info.width,
+      height: encoded.info.height,
       variants,
     };
   }
@@ -122,36 +136,6 @@ class DiskStorage {
   }
 }
 
-function isOptimizableImage(mime, ext) {
-  const normalizedMime = String(mime || '').toLowerCase();
-  const normalizedExt = String(ext || '').toLowerCase();
-  if (normalizedMime === 'image/gif' || normalizedExt === '.gif') return false;
-  return ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(normalizedMime)
-    || ['.jpg', '.jpeg', '.png', '.webp', '.avif'].includes(normalizedExt);
-}
-
-function extFromMime(mime) {
-  if (!mime) return '';
-  if (mime === 'image/jpeg') return '.jpg';
-  if (mime === 'image/png') return '.png';
-  if (mime === 'image/webp') return '.webp';
-  if (mime === 'image/gif') return '.gif';
-  if (mime === 'image/avif') return '.avif';
-  return '';
-}
-
-function mimeFromExt(ext) {
-  switch ((ext || '').toLowerCase()) {
-    case '.jpg':
-    case '.jpeg': return 'image/jpeg';
-    case '.png':  return 'image/png';
-    case '.webp': return 'image/webp';
-    case '.gif':  return 'image/gif';
-    case '.avif': return 'image/avif';
-    default: return null;
-  }
-}
-
 const driver = (process.env.STORAGE_DRIVER || 'disk').toLowerCase();
 
 let instance;
@@ -171,6 +155,7 @@ if (driver === 'disk') {
 }
 
 module.exports = {
+  DiskStorage,
   storage: instance,
   uploadsDir: instance.uploadsDir,
   publicBase: instance.publicBase,

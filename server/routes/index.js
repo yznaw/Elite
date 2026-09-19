@@ -73,6 +73,9 @@ const ADMIN_WRITE_ROLES = ['owner', 'admin', 'manager'];
 
 const admin = Router();
 admin.use(requireAuth());
+// Default-deny mutations for read-only staff, including newly added routers.
+admin.use(requireWriteRole(ADMIN_WRITE_ROLES));
+admin.use('/contact', require('./admin-contact.route'));
 admin.use('/products', adminProductsRouter);
 // Same authenticated catalog access as /products.
 admin.use('/restock-requests', require('./admin-restock-requests.route'));

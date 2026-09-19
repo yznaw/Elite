@@ -1,4 +1,6 @@
 const { Router } = require('express');
+const { checkoutOwnerHash } = require('../lib/checkout-ownership');
+const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
@@ -33,7 +35,8 @@ function storefrontBase(req) {
 router.post('/sadad/initiate', asyncHandler(async (req, res) => {
   const { orderId } = req.body;
 
-  if (!orderId) {
+  res.set('Cache-Control', 'no-store');
+  if (!isUuid(orderId)) {
     return res.status(400).json({ success: false, message: 'orderId is required' });
   }
 
@@ -43,8 +46,9 @@ router.post('/sadad/initiate', asyncHandler(async (req, res) => {
       `SELECT id, total_cents, currency, payment_status,
               customer_email, customer_name, customer_phone
          FROM orders
-        WHERE id = $1`,
-      [orderId],
+        WHERE id = $1 AND metadata->>'checkoutOwnerHash' = $2
+          AND metadata->>'source' = 'client-web-checkout'`,
+      [orderId, checkoutOwnerHash(req)],
     );
 
     if (rows.length === 0) {
@@ -53,8 +57,8 @@ router.post('/sadad/initiate', asyncHandler(async (req, res) => {
 
     const order = rows[0];
 
-    if (order.payment_status === 'paid') {
-      return res.status(409).json({ success: false, message: 'Order is already paid' });
+    if (!['pending', 'failed'].includes(order.payment_status)) {
+      return res.status(409).json({ success: false, message: 'This order cannot start a payment.' });
     }
 
     const request = sadad.buildPaymentRequest({
@@ -308,15 +312,17 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
 router.get('/order-status/:orderId', asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
-  if (!orderId) {
+  res.set('Cache-Control', 'no-store');
+  if (!isUuid(orderId)) {
     return res.status(400).json({ success: false, message: 'orderId is required' });
   }
 
   const { rows } = await db.pool.query(
     `SELECT id, payment_status, public_number
        FROM orders
-      WHERE id = $1::uuid`,
-    [orderId],
+      WHERE id = $1::uuid AND metadata->>'checkoutOwnerHash' = $2
+        AND metadata->>'source' = 'client-web-checkout'`,
+    [orderId, checkoutOwnerHash(req)],
   );
 
   if (rows.length === 0) {

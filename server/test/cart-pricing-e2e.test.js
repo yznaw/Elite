@@ -9,7 +9,7 @@ process.env.DEFAULT_TENANT_NAME = 'Cart Pricing E2E';
 process.env.SESSION_SECRET = `cart-pricing-e2e-session-${runId}`;
 // The delivery fee is quoted server-side through NBOX when it is configured; this
 // test covers the unconfigured path, where delivery is free.
-for (const key of ['NBOX_API_BASE_URL', 'NBOX_API_TOKEN', 'NBOX_LOGIN_EMAIL', 'NBOX_LOGIN_PASSWORD']) delete process.env[key];
+for (const key of ['NBOX_API_BASE_URL', 'NBOX_API_TOKEN', 'NBOX_LOGIN_EMAIL', 'NBOX_LOGIN_PASSWORD']) process.env[key] = '';
 
 const db = require('../db/client');
 const { startServer } = require('../index');
@@ -102,12 +102,14 @@ test('cart pricing: the catalog prices every line, never the request', { timeout
     assert.equal(added.body.data.items[0].price, 1050, 'the bag shows the catalog price');
 
     // ── Checkout: forged price, forged "paid", forged zero-cost quantity ────
-    const order = await checkout([{ ...line, qty: -3 }], {
+    const invalid = await checkout([{ ...line, qty: -3 }]);
+    assert.equal(invalid.status, 422, 'negative quantities are rejected');
+    const order = await checkout([{ ...line, qty: 1 }], {
       payment: { provider: 'forged', method: 'forged', status: 'paid' },
       idempotencyKey: `pricing-${runId}`,
     });
     assert.equal(order.status, 201, JSON.stringify(order.body));
-    assert.equal(order.body.data.total, 1050, 'total is catalog price x 1 (a negative quantity counts as 1)');
+    assert.equal(order.body.data.total, 1050, 'total is catalog price x validated quantity');
     assert.equal(order.body.data.payment, 'pending', 'only the gateway can mark an order paid');
     const stored = await db.query(
       `SELECT o.total_cents, o.payment_status, oi.unit_price_cents, oi.quantity, oi.product_name, oi.sku
@@ -148,7 +150,10 @@ test('cart pricing: the catalog prices every line, never the request', { timeout
     assert.equal(casual.status, 201, JSON.stringify(casual.body));
   } finally {
     await new Promise((resolve) => server.close(resolve));
-    if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);
+    if (tenantId) {
+      await db.query('DELETE FROM carts WHERE tenant_id = $1', [tenantId]);
+      await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
+    }
     await db.pool.end();
   }
 });

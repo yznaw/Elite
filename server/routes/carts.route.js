@@ -1,14 +1,15 @@
 const { Router } = require('express');
+const { persistCheckoutSession, scopedIdempotencyKey } = require('../lib/checkout-ownership');
 const db = require('../db/client');
 const nbox = require('../lib/nbox');
-const { bookNboxForPaidOrder, nboxQuoteMetadata } = require('../lib/order-delivery');
-const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { nboxQuoteMetadata } = require('../lib/order-delivery');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { resolveCustomer } = require('../lib/customer-identity');
 const { insertWithRetry } = require('../lib/order-number');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
+router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
 async function loadCart(client, cartId) {
   const cart = await client.query('SELECT * FROM carts WHERE id = $1', [cartId]);
@@ -91,8 +92,15 @@ function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
+const MAX_CART_LINES = 100;
+const MAX_ITEM_QUANTITY = 100;
 function lineQty(item) {
-  return Math.max(1, Number.parseInt(item.qty ?? item.quantity, 10) || 1);
+  const raw = item.qty ?? item.quantity ?? 1;
+  const qty = typeof raw === 'number' || typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(qty) || qty < 1 || qty > MAX_ITEM_QUANTITY) {
+    throw Object.assign(new Error('Item quantity must be an integer between 1 and 100.'), { status: 422 });
+  }
+  return qty;
 }
 
 // Storefront sizes are numeric; a variant whose size is not a number reaches the
@@ -123,9 +131,16 @@ function colorsConflict(variantColor, sentColor) {
 async function resolveLines(client, tenantId, items) {
   const lines = [];
   const problems = [];
+  if (!Array.isArray(items) || items.length < 1 || items.length > MAX_CART_LINES) {
+    throw Object.assign(new Error('A cart must contain between 1 and 100 lines.'), { status: 422 });
+  }
   for (const item of items) {
-    const productId = item.productId || item.id;
-    const variantId = isUuid(item.variantId) ? item.variantId : null;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw Object.assign(new Error('Invalid cart item.'), { status: 422 });
+    }
+    const qty = lineQty(item);
+    const productId = String(item.productId || item.id || '').toLowerCase();
+    const variantId = isUuid(item.variantId) ? String(item.variantId).toLowerCase() : null;
     const size = item.size ?? item.s ?? null;
     const color = item.color || null;
     const reject = (reason, name) => problems.push({
@@ -136,7 +151,7 @@ async function resolveLines(client, tenantId, items) {
     // eslint-disable-next-line no-await-in-loop -- a bag is a handful of lines.
     const product = await client.query(
       `SELECT p.id, p.name, p.sku, p.status, p.base_price_cents,
-              EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active) AS has_variants
+              EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.tenant_id = p.tenant_id) AS has_variants
          FROM products p WHERE p.tenant_id = $1 AND p.id = $2`,
       [tenantId, productId],
     );
@@ -175,7 +190,7 @@ async function resolveLines(client, tenantId, items) {
       sku,
       size,
       color: storedColor,
-      qty: lineQty(item),
+      qty,
       unitCents,
     });
   }
@@ -261,25 +276,12 @@ async function upsertCustomer(client, tenantId, customer, shippingAddress) {
   return customerId;
 }
 
-router.post('/', asyncHandler(async (req, res) => {
-  const client = await db.pool.connect();
-  try {
-    const tenant = await ensureDefaultTenant(client);
-    const result = await client.query(
-      `
-        INSERT INTO carts (tenant_id, customer_id, session_id, currency, expires_at)
-        VALUES ($1, $2, $3, $4, now() + interval '30 days')
-        ON CONFLICT (tenant_id, session_id) WHERE session_id IS NOT NULL AND status = 'active'
-        DO UPDATE SET updated_at = now()
-        RETURNING *
-      `,
-      [tenant.id, req.body.customerId || null, req.body.sessionId || null, req.body.currency || tenant.currency],
-    );
-    created(res, result.rows[0], 'Cart ready.');
-  } finally {
-    client.release();
-  }
-}));
+// Obsolete APIs are deliberately closed rather than maintained as a second
+// pricing/authorization implementation. The storefront uses /current + /checkout.
+const retiredCart = (_req, res) => res.status(410).json({
+  success: false, code: 'LEGACY_CART_RETIRED', message: 'This cart API is no longer available. Reload the shop.',
+});
+router.post('/', retiredCart);
 
 router.get('/current', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
@@ -300,7 +302,7 @@ router.post('/current/items', asyncHandler(async (req, res) => {
     await client.query('BEGIN');
     const cart = await ensureSessionCart(client, req);
     const productId = req.body.productId || req.body.id;
-    const qty = Math.max(1, Number.parseInt(req.body.quantity || req.body.qty, 10) || 1);
+    const qty = lineQty(req.body);
     const size = req.body.size == null ? null : String(req.body.size);
     const variantId = isUuid(req.body.variantId) ? req.body.variantId : null;
 
@@ -314,45 +316,37 @@ router.post('/current/items', asyncHandler(async (req, res) => {
     // Refuse to put more in the bag than exists. The product page already hides
     // sold-out sizes, but it cannot see what is already in the bag, so adding
     // the last pair twice used to succeed and only fail at checkout.
-    if (variantId) {
-      const variant = await client.query(
-        `SELECT pv.stock_quantity, pv.is_active, pv.sku, p.name
-           FROM product_variants pv
-           JOIN products p ON p.id = pv.product_id
-          WHERE pv.tenant_id = $1 AND pv.id = $2`,
-        [cart.tenant_id, variantId],
-      );
-      if (variant.rowCount) {
-        const inBag = await client.query(
-          `SELECT COALESCE(sum(quantity), 0) AS qty FROM cart_items
-            WHERE cart_id = $1 AND variant_id = $2 AND size IS NOT DISTINCT FROM $3`,
-          [cart.id, variantId, size],
-        );
-        const already = Number(inBag.rows[0].qty) || 0;
-        const row = variant.rows[0];
-        const available = row.is_active ? Math.max(0, Number(row.stock_quantity) || 0) : 0;
-        if (already + qty > available) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({
-            success: false,
-            code: 'INSUFFICIENT_STOCK',
-            message: available === 0
-              ? `${row.name} is sold out in this size.`
-              : `Only ${available} of ${row.name} available in this size.`,
-            details: [{
-              variantId,
-              sku: row.sku || '',
-              name: row.name,
-              size,
-              color: req.body.color || null,
-              requested: already + qty,
-              inBag: already,
-              available,
-            }],
-            requestId: req.requestId,
-          });
-        }
-      }
+    const inventory = variantId ? await client.query(
+      `SELECT stock_quantity, is_active FROM product_variants
+        WHERE tenant_id = $1 AND product_id = $2 AND id = $3`,
+      [cart.tenant_id, productId, variantId],
+    ) : await client.query(
+      `SELECT stock_quantity, (status = 'active') AS is_active FROM products
+        WHERE tenant_id = $1 AND id = $2`, [cart.tenant_id, productId],
+    );
+    // ensureSessionCart's upsert locks the cart until COMMIT, serializing adds.
+    const inBag = await client.query(
+      `SELECT COALESCE(sum(quantity), 0) AS qty FROM cart_items
+        WHERE cart_id = $1 AND product_id = $2 AND variant_id IS NOT DISTINCT FROM $3::uuid`,
+      [cart.id, productId, variantId],
+    );
+    const already = Number(inBag.rows[0].qty) || 0;
+    const row = inventory.rows[0];
+    const available = row?.is_active ? Math.max(0, Number(row.stock_quantity) || 0) : 0;
+    if (already + qty > Math.min(available, MAX_ITEM_QUANTITY)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false, code: 'INSUFFICIENT_STOCK',
+        message: available === 0 ? `${line.name} is sold out in this size.`
+          : `Only ${Math.min(available, MAX_ITEM_QUANTITY)} of ${line.name} available per order.`,
+        details: [{ variantId, sku: line.sku, name: line.name, size, color: line.color,
+          requested: already + qty, inBag: already, available }],
+        requestId: req.requestId,
+      });
+    }
+    const itemCount = await client.query('SELECT count(*) AS count FROM cart_items WHERE cart_id = $1', [cart.id]);
+    if (Number(itemCount.rows[0].count) >= MAX_CART_LINES) {
+      throw Object.assign(new Error('The bag is full. Remove an item before adding another.'), { status: 422 });
     }
 
     await client.query(
@@ -491,12 +485,12 @@ router.post('/checkout', asyncHandler(async (req, res) => {
   // Idempotency: the client sends a stable key per checkout attempt. If the same
   // key was already used (double-tap, retry, network re-send), return the
   // existing order instead of creating a duplicate.
-  const idempotencyKey = String(req.body.idempotencyKey || '').trim() || null;
+  const ownerHash = await persistCheckoutSession(req);
+  const idempotencyKey = scopedIdempotencyKey(ownerHash, req.body.idempotencyKey);
 
   const client = await db.pool.connect();
   let createdOrder = null;
   let tenantId = null;
-  let nboxShipment = null;
   let inTransaction = false;
   try {
     await client.query('BEGIN');
@@ -505,9 +499,12 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     tenantId = tenant.id;
 
     if (idempotencyKey) {
+      // Serialize retries before checking existence, so concurrent submissions
+      // cannot create two orders or surface a uniqueness failure.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [idempotencyKey]);
       const existing = await client.query(
-        'SELECT * FROM orders WHERE tenant_id = $1 AND idempotency_key = $2',
-        [tenant.id, idempotencyKey],
+        "SELECT * FROM orders WHERE tenant_id = $1 AND idempotency_key = $2 AND metadata->>'checkoutOwnerHash' = $3",
+        [tenant.id, idempotencyKey, ownerHash],
       );
       if (existing.rowCount > 0) {
         await client.query('ROLLBACK');
@@ -569,29 +566,40 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     // case — paying for something that was already out of stock when the
     // checkout button was pressed.
     const outOfStock = [];
-    for (const item of lines) {
+    const totals = new Map();
+    for (const line of lines) {
+      const key = line.variantId || line.productId;
+      const total = totals.get(key);
+      if (total) total.qty += line.qty;
+      else totals.set(key, { ...line });
+    }
+    // Stable lock order and one check per inventory identity, irrespective of
+    // how many request lines or textual size representations identify it.
+    for (const item of [...totals.values()].sort((a, b) =>
+      (a.variantId || a.productId).localeCompare(b.variantId || b.productId))) {
       const { variantId } = item;
-      if (!variantId) continue;
       const wanted = item.qty;
       // eslint-disable-next-line no-await-in-loop -- one row per cart line, and
       // the lock has to be taken per row anyway.
-      const variant = await client.query(
-        `SELECT pv.stock_quantity, pv.is_active, p.name
-           FROM product_variants pv
-           JOIN products p ON p.id = pv.product_id
-          WHERE pv.tenant_id = $1 AND pv.id = $2
-          FOR UPDATE OF pv`,
-        [tenant.id, variantId],
+      const variant = variantId ? await client.query(
+        `SELECT pv.stock_quantity, (pv.is_active AND p.status = 'active') AS is_active, p.name
+           FROM product_variants pv JOIN products p ON p.id = pv.product_id
+          WHERE pv.tenant_id = $1 AND pv.id = $2 AND pv.product_id = $3
+          FOR UPDATE OF pv`, [tenant.id, variantId, item.productId],
+      ) : await client.query(
+        `SELECT stock_quantity, (status = 'active') AS is_active, name
+           FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenant.id, item.productId],
       );
-      if (!variant.rowCount) continue; // unlinked line: nothing to check against
-      const available = Number(variant.rows[0].stock_quantity) || 0;
-      if (!variant.rows[0].is_active || available < wanted) {
+      const row = variant.rows[0];
+      const available = Number(row?.stock_quantity) || 0;
+      if (!row?.is_active || available < wanted || wanted > MAX_ITEM_QUANTITY) {
         outOfStock.push({
           variantId,
           size: item.size ?? item.s ?? null,
           color: item.color || null,
           sku: item.sku || '',
-          name: variant.rows[0].name,
+          name: row?.name || item.name,
           requested: wanted,
           available: Math.max(0, available),
         });
@@ -619,7 +627,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     // be able to say `payment.status: 'paid'`, which booked delivery and sent a receipt for
     // an order nobody paid for.
     const paymentStatus = 'pending';
-    const paidAt = paymentStatus === 'paid' ? new Date() : null;
+    const paidAt = null;
 
     const order = await insertWithRetry(client, (publicNumber) => client.query(
       `
@@ -647,12 +655,13 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         JSON.stringify(checkout.shippingAddress),
         JSON.stringify({
           source: 'client-web-checkout',
+          checkoutOwnerHash: ownerHash,
           nbox: {
             quote: nboxQuoteMetadata(shippingQuote),
           },
           paymentGateway: {
-            provider: req.body.payment?.provider || 'pending_gateway',
-            method: req.body.payment?.method || 'gateway_placeholder',
+            provider: 'sadad',
+            method: 'web_checkout',
             status: paymentStatus,
           },
         }),
@@ -661,7 +670,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     ));
     createdOrder = order.rows[0];
 
-    // Cancel any other pending orders from the same customer that were created
+    // Cancel only this shopping session's other pending orders that were created
     // before this one. Handles the case where the user went back from Sadad,
     // changed their details, and submitted a new order — the previous pending
     // order is cancelled immediately instead of waiting for the 6h cleanup job.
@@ -670,10 +679,10 @@ router.post('/checkout', asyncHandler(async (req, res) => {
           SET payment_status = 'cancelled',
               updated_at     = NOW()
         WHERE tenant_id      = $1
-          AND customer_email = $2
+          AND metadata->>'checkoutOwnerHash' = $2
           AND payment_status = 'pending'
           AND id            != $3`,
-      [tenantId, checkout.customer.email, createdOrder.id],
+      [tenantId, ownerHash, createdOrder.id],
     ).catch((err) => {
       // Non-critical — cleanup job will handle them at the 6h mark.
       console.warn('[checkout] Could not cancel prior pending orders:', err.message);
@@ -718,9 +727,7 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         tenant.id,
         order.rows[0].id,
         'placed',
-        paymentStatus === 'paid'
-          ? 'Checkout submitted and payment confirmed.'
-          : 'Checkout submitted; payment gateway pending integration.',
+        'Checkout submitted; awaiting verified payment.',
       ],
     );
     await client.query(
@@ -731,8 +738,8 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       [
         tenant.id,
         order.rows[0].id,
-        req.body.payment?.provider || 'pending_gateway',
-        req.body.payment?.method || 'gateway_placeholder',
+        'sadad',
+        'web_checkout',
         paymentStatus,
         totalCents,
         tenant.currency,
@@ -759,22 +766,14 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     await client.query('COMMIT');
     inTransaction = false;
 
-    if (paymentStatus === 'paid') {
-      const deliveryResult = await bookNboxForPaidOrder(client, tenantId, createdOrder.id);
-      nboxShipment = deliveryResult.created ? deliveryResult.shipment : null;
-      await sendReceiptForPaidOrder(client, tenantId, createdOrder.id).catch((err) => {
-        console.warn('[checkout] Receipt email failed:', err.message);
-      });
-    }
-
     created(res, {
       id: createdOrder.id,                   // UUID — used for payment initiation
       orderNumber: createdOrder.public_number, // human-readable display reference
       total: fromCents(createdOrder.total_cents),
       delivery: fromCents(createdOrder.shipping_cents),
       payment: paymentStatus,
-      fulfillment: nboxShipment ? 'processing' : createdOrder.fulfillment_status,
-      nbox: nboxShipment ? { shipment: nboxShipment } : { quote: nboxQuoteMetadata(shippingQuote) },
+      fulfillment: createdOrder.fulfillment_status,
+      nbox: { quote: nboxQuoteMetadata(shippingQuote) },
     }, 'Checkout order created.');
   } catch (err) {
     if (inTransaction) await client.query('ROLLBACK');
@@ -784,128 +783,9 @@ router.post('/checkout', asyncHandler(async (req, res) => {
   }
 }));
 
-router.get('/:id', asyncHandler(async (req, res) => {
-  // Guard: this route is matched by any unmatched /carts/* GET (e.g. a stray
-  // GET to /carts/shipping-quote, which is POST-only). Without this check the
-  // non-UUID value reaches Postgres and throws "invalid input syntax for uuid".
-  if (!isUuid(req.params.id)) return notFound(res, 'Cart not found.');
-  const client = await db.pool.connect();
-  try {
-    const cart = await loadCart(client, req.params.id);
-    if (!cart) return notFound(res, 'Cart not found.');
-    ok(res, cart);
-  } finally {
-    client.release();
-  }
-}));
-
-router.post('/:id/items', asyncHandler(async (req, res) => {
-  if (!req.body.productId || !req.body.sku || !req.body.name) return validationError(res, ['Product id, SKU, and name are required.']);
-  const client = await db.pool.connect();
-  try {
-    await client.query('BEGIN');
-    const cart = await client.query('SELECT * FROM carts WHERE id = $1', [req.params.id]);
-    if (cart.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return notFound(res, 'Cart not found.');
-    }
-
-    await client.query(
-      `
-        INSERT INTO cart_items (cart_id, product_id, variant_id, product_name, sku, size, quantity, unit_price_cents, currency)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (cart_id, product_id, variant_id, size)
-        DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity, updated_at = now()
-      `,
-      [req.params.id, req.body.productId, req.body.variantId || null, req.body.name, req.body.sku, req.body.size || null, req.body.quantity || 1, toCents(req.body.price), cart.rows[0].currency],
-    );
-    await client.query(
-      `
-        UPDATE carts
-        SET subtotal_cents = COALESCE((SELECT sum(quantity * unit_price_cents) FROM cart_items WHERE cart_id = $1), 0)
-        WHERE id = $1
-      `,
-      [req.params.id],
-    );
-    await client.query('COMMIT');
-    ok(res, await loadCart(client, req.params.id), 'Cart item saved.');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}));
-
-router.delete('/:id/items/:itemId', asyncHandler(async (req, res) => {
-  const client = await db.pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('DELETE FROM cart_items WHERE cart_id = $1 AND id = $2', [req.params.id, req.params.itemId]);
-    await client.query(
-      'UPDATE carts SET subtotal_cents = COALESCE((SELECT sum(quantity * unit_price_cents) FROM cart_items WHERE cart_id = $1), 0) WHERE id = $1',
-      [req.params.id],
-    );
-    await client.query('COMMIT');
-    ok(res, await loadCart(client, req.params.id), 'Cart item removed.');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}));
-
-router.post('/:id/checkout', asyncHandler(async (req, res) => {
-  const client = await db.pool.connect();
-  try {
-    await client.query('BEGIN');
-    const cart = await loadCart(client, req.params.id);
-    if (!cart) {
-      await client.query('ROLLBACK');
-      return notFound(res, 'Cart not found.');
-    }
-    if (cart.items.length === 0) {
-      await client.query('ROLLBACK');
-      return validationError(res, ['Cart is empty.']);
-    }
-
-    const publicNumber = `EC-${new Date().getFullYear().toString().slice(2)}-${Date.now().toString().slice(-5)}`;
-    const order = await client.query(
-      `
-        INSERT INTO orders (tenant_id, public_number, customer_id, customer_email, customer_name, customer_phone, subtotal_cents, total_cents, shipping_address, billing_address)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8::jsonb, $9::jsonb)
-        RETURNING *
-      `,
-      [cart.tenant_id, publicNumber, cart.customer_id, req.body.email || null, req.body.name || 'Guest', req.body.phone || null, cart.subtotal_cents, JSON.stringify(req.body.shippingAddress || {}), JSON.stringify(req.body.billingAddress || req.body.shippingAddress || {})],
-    );
-
-    for (const item of cart.items) {
-      await client.query(
-        `
-          INSERT INTO order_items (
-            tenant_id, order_id, product_id, variant_id, sku, product_name, size,
-            quantity, unit_price_cents, total_cents,
-            unit_cost_cents, shipping_cost_cents, total_cost_cents, cost_snapshot_source
-          )
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-            (SELECT cost_price_cents FROM product_variants WHERE id = $4),
-            (SELECT shipping_cost_cents FROM product_variants WHERE id = $4),
-            (SELECT total_cost_cents FROM product_variants WHERE id = $4),
-            CASE WHEN (SELECT total_cost_cents FROM product_variants WHERE id = $4) IS NULL THEN 'missing' ELSE 'captured' END)
-        `,
-        [cart.tenant_id, order.rows[0].id, item.product_id, item.variant_id, item.sku, item.product_name, item.size, item.quantity, item.unit_price_cents, item.quantity * item.unit_price_cents],
-      );
-    }
-    await client.query("UPDATE carts SET status = 'converted' WHERE id = $1", [req.params.id]);
-    await client.query('COMMIT');
-    created(res, order.rows[0], 'Checkout complete.');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}));
+router.all('/:id', retiredCart);
+router.all('/:id/items', retiredCart);
+router.all('/:id/items/:itemId', retiredCart);
+router.all('/:id/checkout', retiredCart);
 
 module.exports = router;

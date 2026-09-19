@@ -121,7 +121,7 @@ router.post(
               file.originalname,
               kind,
               stored.mimeType,
-              file.size,
+              stored.sizeBytes || file.size,
               stored.width,
               stored.height,
               stored.url,
@@ -537,7 +537,7 @@ router.post(
              (tenant_id, filename, kind, mime_type, size_bytes, width, height, storage_url, preview_url, uploaded_by_user_id, metadata)
            VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8,$9,$10::jsonb) RETURNING *`,
           [
-            tenant.id, filename, contentType, buffer.length,
+            tenant.id, filename, stored.mimeType, stored.sizeBytes,
             stored.width, stored.height,
             stored.url, stored.previewUrl, userId,
             JSON.stringify({

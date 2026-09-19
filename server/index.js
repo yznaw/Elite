@@ -191,6 +191,8 @@ const staticOpts = {
   immutable: true,
   fallthrough: false,
   setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     // Express's mime table predates AVIF, so an .avif upload goes out as
     // application/octet-stream. Chrome sniffs and renders it anyway; Safari
     // does not, and neither does anything that trusts the header (link
@@ -198,8 +200,15 @@ const staticOpts = {
     if (filePath.toLowerCase().endsWith('.avif')) res.type('image/avif');
   },
 };
-app.use(uploadsPublicBase, express.static(uploadsDir, staticOpts));
-app.use('/api/uploads', express.static(uploadsDir, staticOpts));
+// Old uploads may predate validation. Never serve active file types.
+function imageOnly(req, res, next) {
+  let pathname;
+  try { pathname = decodeURIComponent(req.path); } catch { return res.sendStatus(404); }
+  if (!/\.(?:jpe?g|png|webp|gif|avif)$/i.test(pathname)) return res.sendStatus(404);
+  return next();
+}
+app.use(uploadsPublicBase, imageOnly, express.static(uploadsDir, staticOpts));
+app.use('/api/uploads', imageOnly, express.static(uploadsDir, staticOpts));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/webhooks/nbox', nboxWebhookRouter);
