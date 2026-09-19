@@ -827,6 +827,22 @@
   transform: translateY(-2px);
 }
 
+/* Matches the collection card's sold-out swatch. Still selectable: choosing it is how a
+   customer asks to be told when a size returns. */
+.color-swatch.is-sold-out {
+  position: relative;
+  opacity: 0.45;
+}
+
+.color-swatch.is-sold-out::after {
+  content: '';
+  position: absolute;
+  inset: 50% -2px auto;
+  height: 1px;
+  background: #272727;
+  transform: rotate(-45deg);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

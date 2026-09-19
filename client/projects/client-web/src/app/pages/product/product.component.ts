@@ -14,7 +14,7 @@ import { colorKey, colorSlug } from '../../utils/color-slug';
 import { SeoService } from '../../services/seo.service';
 import { API_BASE } from '../../core/api-base';
 
-import { sizeOptions, productSoldOut, defaultColor, colorStock, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+import { sizeOptions, productSoldOut, defaultColor, colorStock, colorState, availableStock, selectedVariant, productColors, carriedSize } from '../../shared/stock-availability';
 import { SizeSheetComponent } from '../../shared/size-sheet/size-sheet.component';
 import { BodyScrollLock, MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
 import { RestockService } from '../../shared/restock/restock.service';
@@ -700,18 +700,28 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   selectProductColor(color: string): void {
+    const product = this.product();
+    // Same rule as the collection card: a size follows to the new colour while it is in
+    // stock there, so the customer does not pick their own size again for every colour.
+    const size = product ? carriedSize(product, this.selectedSize(), this.selectedColor(), color) : null;
     this.selectedColor.set(color);
     this.selectGalleryIndex(0);
-    this.selectedSize.set(null);
+    this.selectedSize.set(size);
     this.qty.set(1);
     this.sizeSelectionError.set(false);
     this.resetRestockForm();
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { color: this.colorSlug(color) || null, size: null, notify: null },
+      queryParams: { color: this.colorSlug(color) || null, size: size === null ? null : String(size), notify: null },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
+  }
+
+  /** Every size of this colour is sold out; drawn struck through, as on the collection card. */
+  colorSoldOut(color: string): boolean {
+    const product = this.product();
+    return !!product && colorState(product, color) === 'sold-out';
   }
 
   onProductColorKeydown(color: string, event: KeyboardEvent): void {

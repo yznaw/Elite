@@ -186,13 +186,16 @@
                     type="button"
                     class="color-swatch"
                     [class.is-selected]="colorSelected(color)"
+                    [class.is-sold-out]="colorSoldOut(color)"
                     [class.has-image]="colorSwatchImage(color)"
                     [style.background]="
                       colorSwatchImage(color) ? null : colorHex(color)
                     "
                     [attr.title]="colorLabel(color)"
                     [attr.aria-label]="
-                      t('product.color.choose', { color: colorLabel(color) })
+                      colorSoldOut(color)
+                        ? t('stock.colorSoldOut', { color: colorLabel(color) })
+                        : t('product.color.choose', { color: colorLabel(color) })
                     "
                     [attr.aria-pressed]="colorSelected(color)"
                     (click)="selectProductColor(color)"
