@@ -14,7 +14,7 @@ import { SeoService } from '../../services/seo.service';
 import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
 import { colorKey, colorSlug } from '../../utils/color-slug';
-import { sizeOptions, colorState, productSoldOut, defaultColor, colorStock, availableStock, selectedVariant, productColors } from '../../shared/stock-availability';
+import { sizeOptions, colorState, productSoldOut, defaultColor, colorStock, availableStock, selectedVariant, productColors, carriedSize } from '../../shared/stock-availability';
 import { SizeSheetComponent, SizeOption } from '../../shared/size-sheet/size-sheet.component';
 import { RestockFormComponent } from '../../shared/restock/restock-form.component';
 import { MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
@@ -200,7 +200,12 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly mobilePage = signal(0);
   readonly mobilePageSize = 10;
   readonly selectedSizes = signal<Record<string, number>>({});
+  /** The colour each size above was picked on (colour key). */
+  private readonly selectedSizeColors = signal<Record<string, string>>({});
+  /** Colours the customer clicked. They stay until another colour is clicked. */
   readonly selectedColors = signal<Record<string, string>>({});
+  /** Colours under the pointer or keyboard focus: shown while there, never kept. */
+  private readonly previewColors = signal<Record<string, string>>({});
   readonly selectedFilters = signal<SelectedFilters>(this.emptySelectedFilters());
   private readonly productQueryParamsCache = new Map<string, { key: string; value: Record<string, string> | null }>();
 
@@ -376,12 +381,16 @@ export class CollectionComponent implements OnInit, OnDestroy {
     const active = this.activeCollection();
     const sub = this.activeSubCollection();
     const selectedColor = this.selectedProductColor(p);
+    const size = this.selectedSize(p);
+    // The product page applies ?size only when it is in stock, so only send one that is.
+    const carrySize = size !== null && availableStock(p, selectedColor, size) > 0 ? size : null;
     const cacheKey = [
       p.id,
       active?.id ?? '',
       sub?.id ?? '',
       this.activeSubCollectionKey() ?? '',
       selectedColor ?? '',
+      carrySize ?? '',
     ].join('|');
 
     const cached = this.productQueryParamsCache.get(p.id);
@@ -403,6 +412,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
       queryParams['colName'] = active.title;
     }
     if (selectedColor) queryParams['color'] = this.colorSlug(selectedColor);
+    if (carrySize !== null) queryParams['size'] = String(carrySize);
 
     const value = Object.keys(queryParams).length ? queryParams : null;
     this.productQueryParamsCache.set(p.id, { key: cacheKey, value });
@@ -510,6 +520,8 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   selectSize(product: Product, size: number): void {
     this.selectedSizes.update((sizes) => ({ ...sizes, [product.id]: size }));
+    const color = this.colorKey(this.selectedProductColor(product) || '');
+    this.selectedSizeColors.update((colors) => ({ ...colors, [product.id]: color }));
     if (this.sizeErrorProductId() === product.id) this.sizeErrorProductId.set(null);
   }
 
@@ -520,27 +532,22 @@ export class CollectionComponent implements OnInit, OnDestroy {
   previewProductColor(product: Product, color: string, event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
-    this.selectedColors.update((colors) => ({ ...colors, [product.id]: color }));
-    // This runs on hover and on focus, so it must not choose anything: it only drops a size the
-    // new colour does not offer. It used to write the first available size, or the literal 0,
-    // which meant brushing past a swatch silently picked a size for the customer.
-    this.selectedSizes.update((sizes) => {
-      const current = sizes[product.id];
-      if (current === undefined) return sizes;
-      const offered = this.sizeOptions(product, color).map((option) => option.size);
-      if (offered.includes(current)) return sizes;
-      const next = { ...sizes };
-      delete next[product.id];
-      return next;
-    });
+    // Hover and focus only preview. They used to write the chosen colour, and leaving the tile
+    // then reset it to the first colour, so opening "Notify me" (which covers the tile) or just
+    // moving the pointer away threw away the colour the customer had clicked.
+    this.previewColors.update((colors) => ({ ...colors, [product.id]: color }));
   }
 
   selectProductColor(product: Product, color: string, event?: Event): void {
-    this.previewProductColor(product, color, event);
+    event?.preventDefault();
+    event?.stopPropagation();
+    this.selectedColors.update((colors) => ({ ...colors, [product.id]: color }));
+    this.clearProductColorPreview(product);
   }
 
   clearProductColorPreview(product: Product): void {
-    this.selectedColors.update((colors) => {
+    if (!(product.id in this.previewColors())) return;
+    this.previewColors.update((colors) => {
       const next = { ...colors };
       delete next[product.id];
       return next;
@@ -576,14 +583,30 @@ export class CollectionComponent implements OnInit, OnDestroy {
    * pick, because picking one is how they ask to be told when it returns.
    */
   selectedSize(product: Product): number | null {
-    const selected = this.selectedSizes()[product.id];
-    if (selected === undefined) return null;
-    const offered = this.sizeOptions(product, this.selectedProductColor(product)).map((option) => option.size);
-    return offered.includes(selected) ? selected : null;
+    return carriedSize(
+      product,
+      this.selectedSizes()[product.id],
+      this.selectedSizeColors()[product.id],
+      this.selectedProductColor(product),
+    );
   }
 
   selectedProductColor(product: Product): string | null {
-    return this.selectedColors()[product.id] || defaultColor(product);
+    return this.previewColors()[product.id]
+      || this.selectedColors()[product.id]
+      || defaultColor(product, this.filterDefaultColor(product));
+  }
+
+  /**
+   * With a colour filter on, a card opens on the colour that matched it, preferring one in
+   * stock. It used to open on the product's first colour, so filtering for Brown showed a
+   * page of black shoes whose links also pointed at black.
+   */
+  private filterDefaultColor(product: Product): string | null {
+    const wanted = this.selectedFilters().color;
+    if (!wanted.length) return null;
+    const matches = this.productColors(product).filter((color) => wanted.includes(this.canonicalColor(color)));
+    return matches.find((color) => colorStock(product, color) > 0) ?? matches[0] ?? null;
   }
 
   selectedProductImage(product: Product): string {

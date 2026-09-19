@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sizeOptions, defaultColor, colorStock, colorState, productSoldOut, availableStock, selectedVariant } from '../projects/client-web/src/app/shared/stock-availability.ts';
+import { sizeOptions, defaultColor, colorStock, colorState, productSoldOut, availableStock, selectedVariant, carriedSize } from '../projects/client-web/src/app/shared/stock-availability.ts';
 import { colorKey, colorSlug } from '../../shared/color-key.js';
 const product = { id:'test', name:'Shoe', price:50, tag:'', leather:'', style:'', image:'', sizes:[40,41,42,43], colors:['Green','Brown'], stock:99, variants:[
   {id:'g40',color:'Green',size:40,stock:0}, {id:'g41',color:'Green',size:41,stock:2,isActive:false},
@@ -60,4 +60,22 @@ test('a product can carry its sizes only on its variants', () => {
   const sizeless = { ...product, sizes: [], variants: [{ id: 's1', color: 'Brown', stock: 4 }] };
   assert.deepEqual(sizeOptions(sizeless, 'Brown'), []);
   assert.equal(colorStock(sizeless, 'Brown'), 4);
+});
+
+test('a picked size follows the customer to a colour only while it is in stock there', () => {
+  // Brown 41 is in stock: picked on Brown it stays, and it follows to a colour where 41 is in stock.
+  assert.equal(carriedSize(product, 41, 'Brown', 'Brown'), 41);
+  const twin = {...product, variants:[...product.variants, {id:'k41',color:'Black',size:41,stock:1}]};
+  assert.equal(carriedSize(twin, 41, 'Brown', 'Black'), 41);
+  // Green 41 exists but cannot be bought (inactive): the size does not follow there.
+  assert.equal(carriedSize(product, 41, 'Brown', 'Green'), null);
+  // Brown 42 is sold out: kept on Brown where it was picked (a notify request)…
+  assert.equal(carriedSize(product, 42, 'Brown', 'Brown'), 42);
+  assert.equal(carriedSize(product, 42, ' brwon ', 'Brown'), 42, 'colour aliases and spacing do not matter');
+  // …but not carried to Green, which does not offer 42 at all, nor anywhere it is sold out.
+  assert.equal(carriedSize(product, 42, 'Brown', 'Green'), null);
+  assert.equal(carriedSize(product, 40, 'Brown', 'Green'), null);
+  assert.equal(carriedSize(product, 40, 'Green', 'Green'), 40);
+  assert.equal(carriedSize(product, null, 'Brown', 'Brown'), null);
+  assert.equal(carriedSize(product, undefined, undefined, 'Brown'), null);
 });

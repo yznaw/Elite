@@ -47,3 +47,20 @@ export function colorStock(product: Product, color: string | null): number {
     .filter(v => colorKey(v.color) === colorKey(color) && v.isActive !== false)
     .reduce((most, v) => Math.max(most, v.stock || 0), 0);
 }
+
+/**
+ * The size a customer picked, as it applies to the colour now showing.
+ *
+ * A size follows them to another colour only while it is in stock there: a shoe size is
+ * the customer's, not the colour's, so there is no reason to make them pick it again. A
+ * sold-out size is different. Picking one is how they ask to be told when it returns, so
+ * it belongs to the colour it was picked on; carried elsewhere it read as a sold-out pick
+ * on a colour they never chose a size for.
+ */
+export function carriedSize(product: Product, size: number | null | undefined, pickedOn: string | null | undefined, color: string | null): number | null {
+  if (size == null) return null;
+  const option = sizeOptions(product, color).find(o => o.size === size);
+  if (!option) return null;
+  if (option.state === 'available') return size;
+  return colorKey(pickedOn) === colorKey(color) ? size : null;
+}
