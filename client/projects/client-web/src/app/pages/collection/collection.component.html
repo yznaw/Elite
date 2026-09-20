@@ -522,29 +522,18 @@
                 />
               }
 
-              @if (showMobilePagination()) {
-                <div class="mobile-pagination" [attr.aria-label]='t("collection.aria.pages")'>
-                  <button
-                    type="button"
-                    class="mobile-page-btn"
-                    (click)="prevMobilePage()"
-                    [disabled]="mobilePage() === 0"
-                    [attr.aria-label]='t("collection.aria.previousPage")'
-                  >
-                    ←
-                  </button>
-                  <span class="mobile-page-status">
-                    {{ mobilePage() + 1 }} / {{ mobileTotalPages() }}
-                  </span>
-                  <button
-                    type="button"
-                    class="mobile-page-btn"
-                    (click)="nextMobilePage()"
-                    [disabled]="mobilePage() >= mobileTotalPages() - 1"
-                    [attr.aria-label]='t("collection.aria.nextPage")'
-                  >
-                    →
-                  </button>
+              @if (isMobileView() && filtered().length > mobilePageSize) {
+                <div class="load-more">
+                  @if (showLoadMore()) {
+                    <button type="button" class="load-more-btn" (click)="loadMore()">
+                      {{ t("collection.loadMore") }}
+                    </button>
+                  }
+                  <!-- Announced, not just drawn: the new cards arrive below the fold, so a
+                       screen reader needs to be told the list grew. -->
+                  <p class="load-more-count" aria-live="polite">
+                    {{ t("collection.showingCount", { shown: visibleProducts().length, total: filtered().length }) }}
+                  </p>
                 </div>
               }
             }

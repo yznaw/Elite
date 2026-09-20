@@ -568,6 +568,34 @@ slot, so clicking a swatch, or filtering by a colour that sorts late, still show
 the colour the card is displaying. The product page has no cap; it is where `+N`
 goes.
 
+### The phone grid grows, it does not page (September 2026)
+
+Under 768px the grid renders `mobileShown()` products, starting at ten, and **Load more**
+adds ten. Desktop is untouched: it renders the whole collection.
+
+This replaced a pager. Its arrows sat below ten full-width cards, so changing page left
+the customer at the bottom of the document, looking at the footer, with ten products they
+had never seen above them — the handler only changed a page number and nothing scrolled.
+Growing the list keeps them where they are, which is the point; **nothing about Load more
+may scroll the page**, and `load-more.spec.ts` asserts `scrollY` is unchanged across a
+press. Infinite scroll was rejected deliberately: the footer carries the policy and
+contact links, and it must stay reachable.
+
+Two details are easy to lose:
+
+- **Focus moves to the first new card** through `afterNextRender`, not a frame count (one
+  or two `requestAnimationFrame`s were sometimes ahead of the render). Without it a
+  keyboard or screen-reader user is left on a button whose meaning just changed. The count
+  line is `aria-live="polite"` for the same reason.
+- **The window is remembered per view** in `sessionStorage`, keyed by collection, sort and
+  filters, and capped at `MOBILE_WINDOW_MAX` (60). Opening a product re-creates this
+  component, and without the memory the grid snapped back to ten, leaving the browser with
+  nowhere to restore the customer's scroll to. `syncRouteState()` therefore does **not**
+  reset the window itself: `restoreMobileWindow()` at the end of it resets and then re-reads,
+  and an early reset would write ten over the memory before it is read. Every other path
+  that changes what the grid lists (filter, sort, collection, clear, leaving mobile) calls
+  `resetMobileWindow()`.
+
 ---
 
 ## Contact Page

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Injector, OnDestroy, OnInit, afterNextRender, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -33,6 +33,10 @@ const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
  */
 const MAX_CARD_SWATCHES = 6;
 const MAX_CARD_SWATCHES_TOUCH = 5;
+/** Products added per "Load more" on the phone grid, and the size of the first window. */
+const MOBILE_PAGE_SIZE = 10;
+/** Ceiling when restoring a remembered window after a visit to a product page. */
+const MOBILE_WINDOW_MAX = 60;
 /**
  * Translation key per filter group.
  *
@@ -132,6 +136,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private readonly seo = inject(SeoService);
   private readonly apiBase = inject(API_BASE);
   private readonly publicApiBase = inject(PUBLIC_API_BASE);
+  private readonly injector = inject(Injector);
 
   /**
    * Head tags for whichever collection the route is pointing at. Returns null
@@ -213,8 +218,14 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly filtersOpen = signal(false);
   readonly expandedFilterGroups = signal<Partial<Record<CollapsibleFilterGroupId, boolean>>>({});
   readonly isMobileView = signal(false);
-  readonly mobilePage = signal(0);
-  readonly mobilePageSize = 10;
+  /**
+   * How many products the phone grid is showing. It replaced a page number: the pager's
+   * arrows sat under ten full-width cards and changing page left the customer at the bottom
+   * of the page looking at the footer, with ten products they had never seen above them.
+   * Growing the list keeps them where they are, which is the whole point.
+   */
+  readonly mobileShown = signal(MOBILE_PAGE_SIZE);
+  readonly mobilePageSize = MOBILE_PAGE_SIZE;
   readonly selectedSizes = signal<Record<string, number>>({});
   /** The colour each size above was picked on (colour key). */
   private readonly selectedSizeColors = signal<Record<string, string>>({});
@@ -347,16 +358,11 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly visibleProducts = computed<Product[]>(() => {
     const list = this.filtered();
     if (!this.isMobileView()) return list;
-    const start = this.mobilePage() * this.mobilePageSize;
-    return list.slice(start, start + this.mobilePageSize);
+    return list.slice(0, this.mobileShown());
   });
 
-  readonly mobileTotalPages = computed(() => (
-    this.isMobileView() ? Math.max(1, Math.ceil(this.filtered().length / this.mobilePageSize)) : 1
-  ));
-
-  readonly showMobilePagination = computed(() => (
-    this.isMobileView() && this.filtered().length > this.mobilePageSize
+  readonly showLoadMore = computed(() => (
+    this.isMobileView() && this.filtered().length > this.visibleProducts().length
   ));
 
   ngOnInit(): void {
@@ -446,7 +452,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   setSort(s: SortOption): void {
     this.sort.set(s);
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
   }
 
   toggleFilterGroup(groupId: CollapsibleFilterGroupId): void {
@@ -526,7 +532,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   onCollectionLinkClick(event: MouseEvent): void {
     if (!this.navigatesInPlace(event)) return;
     this.selectedFilters.set(this.emptySelectedFilters());
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -808,7 +814,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
       return { ...current, [groupId]: nextValues };
     });
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
   }
 
   isFilterSelected(groupId: FilterGroupId, value: string): boolean {
@@ -823,19 +829,78 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.selectedFilters.set(this.emptySelectedFilters());
     this.sort.set('Featured');
     this.filtersOpen.set(false);
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
   }
 
   retryProducts(): void {
     void this.products.refresh();
   }
 
-  prevMobilePage(): void {
-    this.mobilePage.update((page) => Math.max(0, page - 1));
+  /**
+   * Ten more products, and focus onto the first of them.
+   *
+   * Nothing scrolls: the customer stays exactly where they were and the new cards appear
+   * below. Focus has to move by hand, though — without it a keyboard or screen-reader user
+   * is left on a button that has just changed meaning, with no way to know what appeared.
+   */
+  loadMore(): void {
+    const firstNew = this.visibleProducts().length;
+    this.mobileShown.update((shown) => shown + MOBILE_PAGE_SIZE);
+    this.rememberMobileWindow();
+    if (typeof window === 'undefined') return;
+    // `afterNextRender`, not a frame count: the new cards have to be in the DOM before there
+    // is anything to focus, and one or two `requestAnimationFrame`s were sometimes early.
+    afterNextRender(() => {
+      const card = document.querySelectorAll<HTMLElement>('.product-cell')[firstNew];
+      card?.querySelector<HTMLElement>('a, button')?.focus({ preventScroll: true });
+    }, { injector: this.injector });
   }
 
-  nextMobilePage(): void {
-    this.mobilePage.update((page) => Math.min(this.mobileTotalPages() - 1, page + 1));
+  /** Back to the first ten. Every filter, sort or collection change calls this. */
+  private resetMobileWindow(): void {
+    this.mobileShown.set(MOBILE_PAGE_SIZE);
+    this.rememberMobileWindow();
+  }
+
+  /**
+   * How far the customer had got, kept for the length of the tab.
+   *
+   * Opening a product and coming back re-creates this component, and the grid used to
+   * snap to the first ten: the piece they had just been looking at was no longer on the
+   * page, so the browser had nowhere to restore their scroll to. The window is keyed by
+   * collection, sort and filters, so a different view starts at ten again.
+   */
+  private mobileWindowKey(): string {
+    return [
+      'elite.collection.shown',
+      this.activeCollectionKey() ?? '',
+      this.activeSubCollectionKey() ?? '',
+      this.sort(),
+      JSON.stringify(this.selectedFilters()),
+    ].join('|');
+  }
+
+  private rememberMobileWindow(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem(this.mobileWindowKey(), String(this.mobileShown()));
+    } catch {
+      // Private mode, or storage is full. Losing the position is not worth an error.
+    }
+  }
+
+  private restoreMobileWindow(): void {
+    this.mobileShown.set(MOBILE_PAGE_SIZE);
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = Number(sessionStorage.getItem(this.mobileWindowKey()));
+      if (!Number.isFinite(stored)) return;
+      // Capped: restoring three hundred cards at once on the phone that was slow enough to
+      // need paging in the first place is not a favour.
+      this.mobileShown.set(Math.min(Math.max(MOBILE_PAGE_SIZE, stored), MOBILE_WINDOW_MAX));
+    } catch {
+      // Same as above.
+    }
   }
 
   /**
@@ -887,7 +952,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.activeSubCollectionKey.set(childKey);
     this.selectedFilters.set(this.emptySelectedFilters());
     this.filtersOpen.set(false);
-    this.mobilePage.set(0);
+    // The window is not reset here: `restoreMobileWindow()` at the end of this method resets
+    // it and then re-reads what this view was last showing. Resetting here would write ten
+    // back over that memory before it is read.
 
     const sort = query.get('sort');
     if (sort) {
@@ -904,6 +971,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
         tag: [this.normalizeTag(tag)],
       }));
     }
+
+    // Last, so the key matches the view the route just settled on.
+    this.restoreMobileWindow();
   }
 
   onImgError(e: Event): void {
@@ -1253,7 +1323,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.mobileMediaQuery = window.matchMedia('(max-width: 767px)');
     this.mobileMediaQueryHandler = () => {
       this.isMobileView.set(this.mobileMediaQuery?.matches ?? false);
-      if (!this.isMobileView()) this.mobilePage.set(0);
+      if (!this.isMobileView()) this.resetMobileWindow();
     };
 
     this.mobileMediaQueryHandler();

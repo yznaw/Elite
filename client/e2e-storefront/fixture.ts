@@ -83,19 +83,45 @@ export const manyColorProduct = {
   })),
 };
 
+/**
+ * Twenty-five one-size products, enough to exercise the phone grid's "Load more" three
+ * windows deep (10, 20, 25).
+ */
+export const BULK_COUNT = 25;
+export const bulkProducts = Array.from({ length: BULK_COUNT }, (_, i) => ({
+  ...base,
+  id: `6f1c2a90-1b2c-4d3e-8f40-f${String(i).padStart(11, '0')}`,
+  slug: `selection-bulk-${i + 1}`,
+  name: `Selection Bulk ${String(i + 1).padStart(2, '0')}`,
+  sizes: [42],
+  colors: ['Black'],
+  stock: 1,
+  variants: [{
+    id: `6f1c2a90-1b2c-4d3e-8f40-a${String(i).padStart(11, '0')}`,
+    sku: `BULK-${i + 1}`,
+    size: 42,
+    color: 'Black',
+    material: '',
+    price: 950,
+    stock: 1,
+    isActive: true,
+  }],
+}));
+
 export type CartAdd = { productId: string; variantId?: string | null; color?: string | null; size?: number | string };
 
 /** Serves the fixture catalogue and collects what the bag was asked to add. */
-export async function useFixture(page: Page): Promise<CartAdd[]> {
+export async function useFixture(page: Page, catalogue: unknown[] = [product, manyColorProduct]): Promise<CartAdd[]> {
   const adds: CartAdd[] = [];
   const json = (route: Route, data: unknown) => route.fulfill({ json: { success: true, data } });
-  const byPath: Record<string, unknown> = {
-    [`/api/products/${SLUG}`]: product,
-    [`/api/products/${ID}`]: product,
-    [`/api/products/${MANY_SLUG}`]: manyColorProduct,
-    [`/api/products/${MANY_ID}`]: manyColorProduct,
-  };
-  await page.route((url) => url.pathname === '/api/products', (route) => json(route, [product, manyColorProduct]));
+  const byPath: Record<string, unknown> = Object.fromEntries([
+    [`/api/products/${SLUG}`, product],
+    [`/api/products/${ID}`, product],
+    [`/api/products/${MANY_SLUG}`, manyColorProduct],
+    [`/api/products/${MANY_ID}`, manyColorProduct],
+    ...bulkProducts.flatMap((p) => [[`/api/products/${p.slug}`, p], [`/api/products/${p.id}`, p]]),
+  ]);
+  await page.route((url) => url.pathname === '/api/products', (route) => json(route, catalogue));
   await page.route((url) => url.pathname in byPath, (route) => json(route, byPath[new URL(route.request().url()).pathname]));
   await page.route((url) => url.pathname === '/api/carts/current', (route) => json(route, { id: 'cart', subtotal: 0, items: [] }));
   await page.route((url) => url.pathname === '/api/carts/current/items', async (route) => {

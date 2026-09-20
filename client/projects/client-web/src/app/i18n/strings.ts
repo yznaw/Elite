@@ -229,9 +229,8 @@ const EN = {
   'collection.aria.expandAll': 'Expand all filters',
   'collection.aria.collapseAll': 'Collapse all filters',
   'collection.aria.availableColors': 'Available colors',
-  'collection.aria.pages': 'Collection pages',
-  'collection.aria.previousPage': 'Previous page',
-  'collection.aria.nextPage': 'Next page',
+  'collection.loadMore': 'Load more',
+  'collection.showingCount': 'Showing {shown} of {total}',
 
   // ─────────────────────────────────────────────────────────────────────
   //  Product page
@@ -752,9 +751,8 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.aria.expandAll': 'توسيع كل التصفيات',
   'collection.aria.collapseAll': 'طيّ كل التصفيات',
   'collection.aria.availableColors': 'الألوان المتوفرة',
-  'collection.aria.pages': 'صفحات المجموعة',
-  'collection.aria.previousPage': 'الصفحة السابقة',
-  'collection.aria.nextPage': 'الصفحة التالية',
+  'collection.loadMore': 'عرض المزيد',
+  'collection.showingCount': 'عرض {shown} من {total}',
 
   // Product
   'product.breadcrumb.collection': 'المجموعة',

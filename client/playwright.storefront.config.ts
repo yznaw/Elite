@@ -28,12 +28,12 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /tap-targets\.touch\.spec\.ts/,
+      testIgnore: /(tap-targets\.touch|load-more)\.spec\.ts/,
     },
     {
       name: 'phone',
       use: { ...devices['Pixel 7'] },
-      testMatch: /tap-targets\.touch\.spec\.ts/,
+      testMatch: /(tap-targets\.touch|load-more)\.spec\.ts/,
     },
   ],
   webServer: [
