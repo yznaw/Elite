@@ -15,6 +15,7 @@ import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
 import { colorKey, colorSlug } from '../../utils/color-slug';
 import { sizeOptions, colorState, productSoldOut, defaultColor, colorStock, availableStock, selectedVariant, productColors, carriedSize } from '../../shared/stock-availability';
+import { displayPrice, sortPrice } from '../../shared/product-price';
 import { SizeSheetComponent, SizeOption } from '../../shared/size-sheet/size-sheet.component';
 import { RestockFormComponent } from '../../shared/restock/restock-form.component';
 import { MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
@@ -349,8 +350,11 @@ export class CollectionComponent implements OnInit, OnDestroy {
     let list = this.collectionScopedProducts().filter((product) => this.matchesFilters(product, selected));
     const so = this.sort();
 
-    if (so === 'Price: Low–High') list = [...list].sort((a, b) => a.price - b.price);
-    if (so === 'Price: High–Low') list = [...list].sort((a, b) => b.price - a.price);
+    // Sorted and filtered by what the product can actually be bought for. On the product's
+    // own price, a product whose sizes start at 1,000 sat behind one that costs 1,200, and a
+    // "under 2,000" filter could hide something the customer could afford.
+    if (so === 'Price: Low–High') list = [...list].sort((a, b) => sortPrice(a) - sortPrice(b));
+    if (so === 'Price: High–Low') list = [...list].sort((a, b) => sortPrice(b) - sortPrice(a));
 
     return list;
   });
@@ -656,6 +660,11 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   productImageSrcset(product: Product): string | null {
     return this.srcsetFor(this.selectedProductImage(product), product);
+  }
+
+  /** The price of the colour on show, narrowing to one number as soon as it can. */
+  cardPrice(product: Product): string {
+    return this.i18n.priceSpan(displayPrice(product, this.selectedProductColor(product), this.selectedSize(product)));
   }
 
   productColorNames(product: Product): string[] {
@@ -993,7 +1002,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
       && this.matchesTextFilter(selected.size, product.sizes.map(String))
       && this.matchesTextFilter(selected.brand, this.compact([product.brand]))
       && this.matchesTextFilter(selected.tag, this.compact([product.tag]))
-      && this.matchesPriceFilter(selected.price, product.price);
+      && this.matchesPriceFilter(selected.price, sortPrice(product));
   }
 
   private cartItem(product: Product) {
@@ -1109,7 +1118,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   private priceOptions(products: Product[]): FilterOption[] {
     const prices = products
-      .map((product) => product.price)
+      .map((product) => sortPrice(product))
       .filter((price) => Number.isFinite(price))
       .sort((a, b) => a - b);
 
@@ -1128,16 +1137,18 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
     const lowEnd = this.roundPrice(min + ((max - min) / 3));
     const midEnd = this.roundPrice(min + (((max - min) / 3) * 2));
+    // Labels through `t()`: these were English literals, so an Arabic visitor read
+    // "Under QAR 1,500" under a translated heading.
     const ranges = [
-      { value: `${min}:${lowEnd}`, label: `Under ${this.price(lowEnd)}` },
-      { value: `${lowEnd + 1}:${midEnd}`, label: `${this.price(lowEnd + 1)} - ${this.price(midEnd)}` },
-      { value: `${midEnd + 1}:`, label: `${this.price(midEnd + 1)}+` },
+      { value: `${min}:${lowEnd}`, label: this.t('collection.filter.priceUnder', { price: this.price(lowEnd) }) },
+      { value: `${lowEnd + 1}:${midEnd}`, label: this.i18n.priceSpan({ min: lowEnd + 1, max: midEnd, isRange: true }) },
+      { value: `${midEnd + 1}:`, label: this.t('collection.filter.priceOver', { price: this.price(midEnd + 1) }) },
     ];
 
     return ranges
       .map((range) => ({
         ...range,
-        count: products.filter((product) => this.matchesPriceFilter([range.value], product.price)).length,
+        count: products.filter((product) => this.matchesPriceFilter([range.value], sortPrice(product))).length,
       }))
       .filter((range) => range.count > 0);
   }

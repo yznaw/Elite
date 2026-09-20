@@ -55,6 +55,7 @@ const EN = {
   'common.scroll': 'Scroll',
   'common.dragRotate': 'Drag · Rotate · Explore',
   'common.currency.qar': 'QAR',
+  'common.priceRange': '{currency} {min} – {max}',
   'common.dot': '·',
 
   // ─────────────────────────────────────────────────────────────────────
@@ -198,6 +199,8 @@ const EN = {
   'collection.filters.reset': 'Reset filters',
   'collection.filter.category': 'Categories',
   'collection.filter.price': 'Price',
+  'collection.filter.priceUnder': 'Under {price}',
+  'collection.filter.priceOver': '{price} and above',
   'collection.filter.color': 'Colors',
   'collection.filter.leather': 'Leather',
   'collection.filter.material': 'Materials',
@@ -596,6 +599,7 @@ const AR: Record<keyof typeof EN, string> = {
   'common.scroll': 'مرّر',
   'common.dragRotate': 'اسحب · دوّر · استكشف',
   'common.currency.qar': 'ر.ق',
+  'common.priceRange': 'من {min} إلى {max} {currency}',
   'common.dot': '·',
 
   // Cart
@@ -723,6 +727,8 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.filters.reset': 'إعادة ضبط التصفية',
   'collection.filter.category': 'الفئات',
   'collection.filter.price': 'السعر',
+  'collection.filter.priceUnder': 'أقل من {price}',
+  'collection.filter.priceOver': '{price} فأكثر',
   'collection.filter.color': 'الألوان',
   'collection.filter.leather': 'الجلد',
   'collection.filter.material': 'الخامات',
