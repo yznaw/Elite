@@ -320,7 +320,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   <div class="prod-name">{{ p.name }}</div>
                   <div class="prod-sku">{{ p.sku }} · {{ p.brand }}</div>
                   <div class="prod-meta">
-                    <span class="prod-price">{{ QAR(p.price) }}</span>
+                    <span class="prod-price">{{ priceLabel(p) }}</span>
                     @if (!selectionMode()) {
                       <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < lowStockThreshold()" [class.out]="p.stock === 0">
                         {{ stockLabel(p) }}
@@ -377,7 +377,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   <span class="lv-brand muted small">{{ p.brand }}</span>
                 </div>
                 <div class="lv-c-sku hide-mobile mono small muted">{{ p.sku }}</div>
-                <div class="lv-c-price mono">{{ QAR(p.price) }}</div>
+                <div class="lv-c-price mono">{{ priceLabel(p) }}</div>
                 <div class="lv-c-stock hide-mobile">
                   <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < lowStockThreshold()" [class.out]="p.stock === 0">
                     {{ p.stock === 0 ? t('catalog.outOfStock') : p.stock }}
@@ -714,6 +714,17 @@ export class CatalogComponent implements OnInit {
   readonly noImageLogo = NO_IMAGE_LOGO;
 
   readonly QAR = QAR;
+
+  /**
+   * The selling price as staff would quote it: one number, or the span when the sizes are
+   * priced differently. The column used to show the product's own price, which on a product
+   * whose sizes run 1,000 to 1,300 is neither what it costs nor what it sells for.
+   */
+  priceLabel(product: Product): string {
+    const min = product.priceMin ?? product.price;
+    const max = product.priceMax ?? product.price;
+    return min === max ? QAR(min) : `${QAR(min)} – ${max.toLocaleString()}`;
+  }
   readonly collections = signal<Collection[]>([]);
 
   private readonly _products = signal<Product[]>([]);

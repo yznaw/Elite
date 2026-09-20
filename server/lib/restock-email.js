@@ -24,7 +24,10 @@ function buildRestockEmail(n, base = storefrontBaseUrl()) {
   unsubscribe.searchParams.set('token', n.unsubscribe_token);
   const size = n.size === 'ONE_SIZE' ? (ar ? 'مقاس واحد' : 'One size') : n.size;
   const color = ar ? n.color_name_ar || n.color : n.color;
-  const price = new Intl.NumberFormat(ar ? 'ar-QA' : 'en-QA', { style: 'currency', currency: 'QAR' }).format(Number(n.base_price_cents || 0) / 100);
+  // The subscribed size's own price, falling back to the product's for a product that has
+  // no variants (or none with a price of their own) — the same rule the bag prices by.
+  const priceCents = Number(n.variant_price_cents) > 0 ? Number(n.variant_price_cents) : Number(n.base_price_cents || 0);
+  const price = new Intl.NumberFormat(ar ? 'ar-QA' : 'en-QA', { style: 'currency', currency: 'QAR' }).format(priceCents / 100);
   const subject = ar ? `${name} متوفر من جديد` : `${name} is back in stock`;
   const detail = ar ? `المقاس: ${size}${color ? ` · اللون: ${color}` : ''} · ${price}` : `Size: ${size}${color ? ` · Color: ${color}` : ''} · ${price}`;
   const limited = ar ? 'الكميات محدودة وتخضع للتوفر وقت الشراء.' : 'Quantities are limited and subject to availability when you buy.';

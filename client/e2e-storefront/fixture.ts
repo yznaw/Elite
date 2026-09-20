@@ -108,10 +108,43 @@ export const bulkProducts = Array.from({ length: BULK_COUNT }, (_, i) => ({
   }],
 }));
 
+/**
+ * A product priced per variant: Black at 1,000, Brown at 1,200, and Sand split across its
+ * own sizes (1,150 / 1,250) — the three shapes real data has.
+ */
+export const PRICED_ID = '6f1c2a90-1b2c-4d3e-8f40-5a6b7c8d9e03';
+export const PRICED_SLUG = 'selection-test-priced';
+const pricedStock: Record<string, Record<number, number>> = { Black: { 40: 2, 41: 2 }, Brown: { 40: 2 }, Sand: { 40: 2, 41: 2 } };
+const pricedPrice = (color: string, size: number) =>
+  (color === 'Black' ? 1000 : color === 'Brown' ? 1200 : size === 40 ? 1150 : 1250);
+
+export const pricedProduct = {
+  ...base,
+  id: PRICED_ID,
+  slug: PRICED_SLUG,
+  name: 'Selection Test Priced',
+  price: 1250, // deliberately not the cheapest: the old bug advertised this number
+  sizes: [40, 41],
+  colors: ['Black', 'Brown', 'Sand'],
+  stock: 8,
+  variants: Object.entries(pricedStock).flatMap(([color, sizes], colorIndex) =>
+    Object.entries(sizes).map(([size, qty], sizeIndex) => ({
+      id: `6f1c2a90-1b2c-4d3e-8f40-c${String(colorIndex * 10 + sizeIndex).padStart(11, '0')}`,
+      sku: `PRICED-${color}-${size}`,
+      size: Number(size),
+      color,
+      material: '',
+      price: pricedPrice(color, Number(size)),
+      stock: qty,
+      isActive: true,
+    })),
+  ),
+};
+
 export type CartAdd = { productId: string; variantId?: string | null; color?: string | null; size?: number | string };
 
 /** Serves the fixture catalogue and collects what the bag was asked to add. */
-export async function useFixture(page: Page, catalogue: unknown[] = [product, manyColorProduct]): Promise<CartAdd[]> {
+export async function useFixture(page: Page, catalogue: unknown[] = [product, manyColorProduct, pricedProduct]): Promise<CartAdd[]> {
   const adds: CartAdd[] = [];
   const json = (route: Route, data: unknown) => route.fulfill({ json: { success: true, data } });
   const byPath: Record<string, unknown> = Object.fromEntries([
@@ -119,6 +152,8 @@ export async function useFixture(page: Page, catalogue: unknown[] = [product, ma
     [`/api/products/${ID}`, product],
     [`/api/products/${MANY_SLUG}`, manyColorProduct],
     [`/api/products/${MANY_ID}`, manyColorProduct],
+    [`/api/products/${PRICED_SLUG}`, pricedProduct],
+    [`/api/products/${PRICED_ID}`, pricedProduct],
     ...bulkProducts.flatMap((p) => [[`/api/products/${p.slug}`, p], [`/api/products/${p.id}`, p]]),
   ]);
   await page.route((url) => url.pathname === '/api/products', (route) => json(route, catalogue));

@@ -127,6 +127,18 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 - **File:** `services/auth.service.ts`
 - **Purpose:** Login, logout, session user — wraps `/api/auth/*` endpoints and exposes the current user signal
 
+### Product price vs variant prices
+
+The shop sells at the **variant's** price: that is what the storefront shows, what the bag
+charges and what the till rings up. The product's own price is a fallback for variants that
+carry none, plus a sorting key.
+
+A new size copies the product price when it is created, so editing the product price
+afterwards leaves the two disagreeing with nothing to show for it. The product drawer now
+says so whenever the product price is not the cheapest variant price, with a one-click
+"use the cheapest size price". The catalog list shows `priceMin – priceMax` rather than the
+product price alone, for the same reason.
+
 ### `AdminProductsService`
 
 - **File:** `services/admin-products.service.ts`

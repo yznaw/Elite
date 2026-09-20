@@ -568,6 +568,32 @@ slot, so clicking a swatch, or filtering by a colour that sorts late, still show
 the colour the card is displaying. The product page has no cap; it is where `+N`
 goes.
 
+### Pricing is per variant (September 2026)
+
+`shared/product-price.ts` is the only place the storefront decides what something costs, and
+it restates the server's rule: **a variant's price wins, the product's is the fallback**. The
+card and the product page used to print `product.price` while the bag charged the variant's,
+so a product whose sizes run 1,000 to 1,300 was advertised at whichever number the product
+row happened to hold — above its cheapest size on two live products, below its dearest on a
+third.
+
+`displayPrice(product, colour, size)` narrows with the customer: the colour's price, then,
+once a size is chosen, **the price of the exact variant the bag will add**. That last part is
+not pedantry — live data has two active variants for one colour and size under different SKUs
+at different prices, and a range there would quote a price nobody can be charged. A range is
+drawn only when the two ends differ, matching the till's product grid.
+
+- `sortPrice()` (the cheapest sellable price) drives sorting, the price filter and its
+  buckets. The product row put a shoe starting at 1,000 behind one costing 1,200 and could
+  filter it out of a bucket the customer could afford.
+- JSON-LD becomes an `AggregateOffer` (`lowPrice`/`highPrice`) when variants disagree. A
+  single `price` that contradicts the page is what gets a product rejected from a feed.
+- Formatting goes through `i18n.priceSpan()`, whose range template is authored per locale:
+  Arabic reads "من X إلى Y" with the currency last, so a string built for English comes out
+  backwards.
+- **Tests:** `npm run test:product-price`, and `e2e-storefront/pricing.spec.ts`, which ends on
+  the assertion that matters — the number on screen is the number the bag charges.
+
 ### The phone grid grows, it does not page (September 2026)
 
 Under 768px the grid renders `mobileShown()` products, starting at ten, and **Load more**

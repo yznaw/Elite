@@ -54,7 +54,16 @@ async function runRestockDispatch({ pool = db.pool, sendMail = mailer.sendMail, 
     for (const row of claimed.rows) {
       if (beforeSend) await beforeSend(row.id);
       const result = await pool.query(`SELECT rn.*, p.name AS product_name, p.slug AS product_slug, pt.name AS product_name_ar,
-        p.base_price_cents, COALESCE(m.preview_url, m.storage_url, (SELECT COALESCE(ma.preview_url, ma.storage_url)
+        p.base_price_cents,
+        -- The price of the size and colour this alert is for, not the product's own: the
+        -- email names one variant, so quoting the product price sent the wrong number for
+        -- any product whose sizes are priced differently.
+        (SELECT max(v.price_cents) FROM product_variants v
+          WHERE v.product_id = p.id AND v.tenant_id = p.tenant_id AND v.is_active
+            AND COALESCE(NULLIF(btrim(v.size), ''), 'ONE_SIZE') = rn.size
+            AND restock_color_key(v.color) = rn.color_key
+            AND v.price_cents > 0) AS variant_price_cents,
+        COALESCE(m.preview_url, m.storage_url, (SELECT COALESCE(ma.preview_url, ma.storage_url)
           FROM media_links ml JOIN media_assets ma ON ma.id = ml.media_id WHERE ml.product_id = p.id ORDER BY ml.sort_order LIMIT 1)) AS product_image,
         (SELECT rc.name_ar FROM ref_colors rc WHERE rc.tenant_id = p.tenant_id AND restock_color_key(rc.name_en) = rn.color_key LIMIT 1) AS color_name_ar,
         p.status = 'active' AND ${stockSql()} > 0 AS in_stock

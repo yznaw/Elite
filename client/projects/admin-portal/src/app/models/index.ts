@@ -24,6 +24,9 @@ export interface Product {
   sku: string;
   brand: string;
   price: number;
+  /** Cheapest and dearest active variant, or the product's price when it has none. */
+  priceMin?: number;
+  priceMax?: number;
   /** Defaults copied onto newly-created size variants. */
   defaultCostPrice?: number | null;
   defaultShippingCost?: number | null;

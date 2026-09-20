@@ -211,7 +211,7 @@ See `server/routes/admin-products.route.js`. Full CRUD, bulk delete, media galle
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/admin/products` | List all products (tenant-scoped) |
+| `GET` | `/api/admin/products` | List all products (tenant-scoped). Each row carries `priceMin`/`priceMax` (the cheapest and dearest active variant, or the product's own price when it has none) beside `price`, because the shop sells at the variant's price and a column showing only `price` reads as a selling price that may not exist. |
 | `GET` | `/api/admin/products/:id` | Single product with variants + images |
 | `POST` | `/api/admin/products` | Create product (upsert by SKU) |
 | `PUT` | `/api/admin/products/:id` | Replace product |

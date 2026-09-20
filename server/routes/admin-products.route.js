@@ -713,6 +713,16 @@ function mapAdminProduct(row) {
     sku: row.sku,
     brand: row.brand,
     price: Math.round(Number(row.base_price_cents || 0) / 100),
+    // What a customer can actually pay. The storefront and the till both sell at the
+    // variant's price, so a list column showing only the product's own price reads as a
+    // selling price the shop may not have.
+    ...(() => {
+      const prices = (row.variants || []).map((v) => Number(v.price) || 0).filter((n) => n > 0);
+      const base = Math.round(Number(row.base_price_cents || 0) / 100);
+      return prices.length
+        ? { priceMin: Math.min(...prices), priceMax: Math.max(...prices) }
+        : { priceMin: base, priceMax: base };
+    })(),
     defaultCostPrice: row.default_cost_price_cents == null
       ? null
       : Number(row.default_cost_price_cents) / 100,
