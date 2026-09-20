@@ -1372,6 +1372,12 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
         await client.query(
           `UPDATE products
               SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1),
+                  -- Same derivation as a product save: the cheapest sellable variant. A sheet
+                  -- that re-prices the sizes must not leave the product row behind.
+                  base_price_cents = COALESCE((
+                    SELECT min(price_cents) FROM product_variants
+                     WHERE product_id = $1 AND is_active AND price_cents > 0
+                  ), base_price_cents),
                   default_cost_price_cents = COALESCE(default_cost_price_cents, (
                     SELECT CASE WHEN count(*)=count(cost_price_cents) AND count(DISTINCT cost_price_cents)=1
                       THEN min(cost_price_cents) END

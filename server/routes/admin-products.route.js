@@ -975,9 +975,22 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
   }
   // Re-sum variant stock onto the product row so the catalog total is always
   // accurate even when the stock-preservation branch kept a different value.
+  //
+  // The price is derived the same way, for the same reason. The shop sells at the variant's
+  // price; `base_price_cents` is a fallback for variants that carry none, the default a new
+  // size is created with, and the key the admin list sorts and filters by. Left to be typed
+  // by hand it drifted — three live products advertised a price no size actually had, and a
+  // size added afterwards would have inherited the stale number.
   if (variants.length > 0) {
     await client.query(
-      'UPDATE products SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1), updated_at = now() WHERE id = $1',
+      `UPDATE products
+          SET stock_quantity = (SELECT COALESCE(SUM(stock_quantity),0) FROM product_variants WHERE product_id = $1),
+              base_price_cents = COALESCE((
+                SELECT min(price_cents) FROM product_variants
+                 WHERE product_id = $1 AND is_active AND price_cents > 0
+              ), base_price_cents),
+              updated_at = now()
+        WHERE id = $1`,
       [saved.id],
     );
   }

@@ -133,11 +133,21 @@ The shop sells at the **variant's** price: that is what the storefront shows, wh
 charges and what the till rings up. The product's own price is a fallback for variants that
 carry none, plus a sorting key.
 
-A new size copies the product price when it is created, so editing the product price
-afterwards leaves the two disagreeing with nothing to show for it. The product drawer now
-says so whenever the product price is not the cheapest variant price, with a one-click
-"use the cheapest size price". The catalog list shows `priceMin – priceMax` rather than the
-product price alone, for the same reason.
+**The product price is derived, not typed.** While a product has variants, the server sets
+`base_price_cents` to the cheapest active variant price on every save and every catalog
+import, exactly as it already re-sums the stock total — and the drawer shows the field
+read-only with "the cheapest size price, kept in step automatically", beside the stock total
+that reads the same way. Migration `042_base_price_from_variants.sql` is the one-time
+catch-up for rows written before that.
+
+It was editable, and it drifted: three live products carried a price no size actually had,
+which fed the default price of every size added afterwards, the admin price filter and the
+dashboard's price chart. A product with no variants keeps its own typed price, since that is
+what its single line is sold at.
+
+The catalog list shows `priceMin – priceMax` rather than one number, because a product's
+sizes can be priced differently and one number would read as a selling price the shop may
+not have.
 
 ### `AdminProductsService`
 

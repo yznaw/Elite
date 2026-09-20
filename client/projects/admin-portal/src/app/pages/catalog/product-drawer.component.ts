@@ -369,16 +369,14 @@ function readPreview(file: File): Promise<string> {
           <div class="grid-2">
             <div>
               <label class="lbl">{{ t('product.field.price') }}</label>
-              <input class="inp mono" type="number" min="0" step="1" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
-              <!-- A new size copies this field, so editing it afterwards leaves the two
-                   disagreeing silently. The storefront sells at the size's price. -->
-              @if (basePriceMismatch(); as gap) {
-                <div class="price-mismatch mt-8">
-                  <div>{{ t('product.price.mismatch').replace('{min}', gap.min.toLocaleString()) }}</div>
-                  <button class="btn btn-outline btn-sm" type="button" (click)="alignBasePrice()">
-                    {{ t('product.price.useLowest') }}
-                  </button>
-                </div>
+              <!-- Derived like the stock total beside it: the shop sells at the size's price,
+                   so this field follows the cheapest size rather than being typed. Left
+                   editable it drifted, and a size added later inherited the stale number. -->
+              @if (hasVariants()) {
+                <div class="inp mono" style="background:var(--bg);cursor:default;color:var(--ink-2);">{{ variantsLowestPrice() }}</div>
+                <div class="muted small mt-8">{{ t('product.field.price.fromVariants') }}</div>
+              } @else {
+                <input class="inp mono" type="number" min="0" step="1" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
               }
             </div>
             <div>
@@ -1178,18 +1176,6 @@ function readPreview(file: File): Promise<string> {
     @media (max-width: 700px) { .short-desc-grid { grid-template-columns: 1fr; } }
     .short-desc-count { float: inline-end; font-size: 11px; color: var(--muted); font-weight: 400; }
     .short-desc-count.over { color: var(--warning, #b8860b); font-weight: 600; }
-    .price-mismatch {
-      display: grid;
-      justify-items: start;
-      gap: 8px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--warning, #d97706);
-      background: color-mix(in srgb, var(--warning, #d97706) 8%, transparent);
-      color: var(--ink);
-      font-size: 12px;
-      line-height: 1.4;
-    }
     .short-desc-hint { margin: -16px 0 24px; font-size: 12px; color: var(--muted); }
 
     /* Google Drive import modal — mirrors media.component.ts's own gdrive-*
@@ -3326,23 +3312,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return min === max ? `QAR ${min.toLocaleString()}` : `QAR ${min.toLocaleString()} – ${max.toLocaleString()}`;
   }
 
-  /**
-   * Set when the product's own price is not the cheapest a customer can pay.
-   *
-   * The storefront prices from the variant, so this field mostly feeds sorting, the admin
-   * list and older reports; leaving it above the cheapest size understates nothing but
-   * overstates the product, and leaving it below advertises a price that does not exist.
-   */
-  basePriceMismatch(): { min: number } | null {
+  /** What the server will store as the product price: the cheapest sellable size. */
+  variantsLowestPrice(): string {
     const prices = this.form().variants.map(v => Number(v.price) || 0).filter(n => n > 0);
-    if (prices.length === 0) return null;
-    const min = Math.min(...prices);
-    return min === (Number(this.form().price) || 0) ? null : { min };
-  }
-
-  alignBasePrice(): void {
-    const gap = this.basePriceMismatch();
-    if (gap) this.setNum('price', gap.min);
+    return prices.length ? Math.min(...prices).toLocaleString() : String(this.form().price || 0);
   }
 
   variantsSummary(): string {

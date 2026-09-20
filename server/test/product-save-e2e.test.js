@@ -91,7 +91,11 @@ test('product create + read still works after the has_3d/views_3d column removal
       method: 'PATCH',
       body: JSON.stringify({ name: 'E2E Test Loafer', sku: `E2E-${runId}`, brand: 'Elite Test', price: 475, stock: 5, id: created.id }),
     });
-    assert.equal(updated.price, 475);
+    // The product price is derived from the sizes, as the stock total already was: this
+    // product's only size costs 450, so 475 does not stick. It used to, and the two drifted
+    // apart — live products advertised a price no size had, and a size added later inherited
+    // it. The drawer no longer offers the field while a product has sizes.
+    assert.equal(updated.price, 450, 'the product price follows the cheapest size');
 
     // Per-variant bilingual note (migration 031). The whole point is that two
     // size ranges of one product can differ in construction without needing

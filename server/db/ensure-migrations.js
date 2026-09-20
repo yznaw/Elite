@@ -439,6 +439,7 @@ async function ensureAllMigrations(client) {
   await client.query('DROP FUNCTION IF EXISTS enforce_product_has_variant()');
   await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/039_restock_dispatch.sql'), 'utf8'));
   await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/041_catalog_cost_identity_lifecycle.sql'), 'utf8'));
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/042_base_price_from_variants.sql'), 'utf8'));
   _done = true;
 }
 
