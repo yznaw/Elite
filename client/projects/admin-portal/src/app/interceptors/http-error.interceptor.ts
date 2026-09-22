@@ -36,6 +36,20 @@ function recentlyRedirectedToLogin(): boolean {
   return Date.now() - lastLoginRedirectAt < LOGIN_REDIRECT_COOLDOWN_MS;
 }
 
+/**
+ * The one "session expired" path: toast, then /login with a returnUrl so the
+ * operator lands back on the same page after signing in again. Shared with the
+ * tab-resume session check (app.component.ts) so both honour one cooldown and
+ * the toast never shows twice.
+ */
+export function sendToLoginAfterSessionExpiry(router: Router, toast: ToastService, i18n: I18nService): void {
+  if (router.url.startsWith('/login') || recentlyRedirectedToLogin()) return;
+  // Use error (not warning) so the banner is clearly visible.
+  toast.error(i18n.t('error.401.title'), i18n.t('error.401.sub'));
+  lastLoginRedirectAt = Date.now();
+  void router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+}
+
 export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const i18n = inject(I18nService);
@@ -127,7 +141,6 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           );
         }
       } else if (err.status === 401) {
-        const onLogin = router.url.startsWith('/login');
         if (isManagerPinVerify) {
           // Let pos.component.ts's own catch block show the specific
           // "Manager PIN is incorrect" / "temporarily locked" message instead
@@ -135,13 +148,8 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
         } else if (isRegisterBinding) {
           // Handled by pos.component.ts, which sends the cashier to the till
           // picker — the actual fix for a register that no longer matches.
-        } else if (!isAuthProbe && !onLogin && !recentlyRedirectedToLogin()) {
-          // Use error (not warning) so the banner is clearly visible.
-          // The redirect to login carries the returnUrl so the admin
-          // lands back on the same page after re-authenticating.
-          toast.error(t('error.401.title'), t('error.401.sub'));
-          lastLoginRedirectAt = Date.now();
-          router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+        } else if (!isAuthProbe) {
+          sendToLoginAfterSessionExpiry(router, toast, i18n);
         }
       } else if (err.status === 403) {
         // SELF_APPROVAL_BLOCKED also lands here. Its message names the actual

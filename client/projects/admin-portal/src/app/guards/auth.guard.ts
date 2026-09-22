@@ -15,12 +15,14 @@ function createAuthGuard(allowedRoles?: readonly UserRole[]): CanMatchFn {
     const router = inject(Router);
     const isPos = segments[0]?.path === 'pos';
 
-    // Only POS may resume a cached identity during an outage. Role checks
-    // still apply, and every queued write is authorized again by the API.
+    // A POS known to be offline skips the probe and resumes its cached
+    // identity. Elsewhere me() keeps the cached user on a network or server
+    // error and clears it only on 401/403. Role checks still apply, and every
+    // write is authorized again by the API.
     const cachedUser = auth.user();
     const user = !navigator.onLine && isPos && cachedUser
       ? cachedUser
-      : await auth.me({ allowCachedOnNetworkError: isPos });
+      : await auth.me();
 
     if (!user) {
       const returnUrl = '/' + segments.map((s) => s.path).join('/');

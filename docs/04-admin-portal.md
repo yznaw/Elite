@@ -126,6 +126,14 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **File:** `services/auth.service.ts`
 - **Purpose:** Login, logout, session user — wraps `/api/auth/*` endpoints and exposes the current user signal
+- **`me()`** clears the cached user only when the server rejects the session (401/403). On a network drop or a 5xx it keeps the cached user, so waking a laptop no longer bounces a valid session to `/login` and back. `LoginComponent` passes `{ keepCachedOnError: false }` because its "already signed in" bounce must only follow a server-confirmed session.
+
+### Session expiry & new builds (2026-09)
+
+- **Session:** 12h rolling idle timeout on the server (`SESSION_MAX_AGE_MS`). Any API call or route change after expiry sends the operator to `/login?returnUrl=…` with the *Session expired* toast (`sendToLoginAfterSessionExpiry()` in `http-error.interceptor.ts`, one redirect per 10s).
+- **Resume check:** `AppComponent` listens to `visibilitychange`. When a shell page comes back after more than 5 minutes in the background it calls `auth.me()` and, if the session is gone, runs the same redirect straight away instead of waiting for a click to fail. The POS and the auth pages are skipped.
+- **Service worker reloads are POS-only:** `pos-sw.js` is registered on every page, but the `controllerchange` reload in `pos-service-worker.service.ts` now runs only on `/pos`, and waits until the till is idle (`setPosServiceWorkerUpdateSafe(true)`). It used to reload any admin page after a deploy, including `/login` while someone was typing.
+- **Stale chunks after a deploy:** a deploy deletes the old hashed page chunks, so a tab opened before it got a 404 on its next lazy page and the click did nothing. `withNavigationErrorHandler(reloadOnStaleBuild)` (`services/stale-build.ts`) turns a failed dynamic import into one full reload of the target URL (at most once per URL per 10s) and shows *Updated to the latest version* after the reload.
 
 ### Product price vs variant prices
 

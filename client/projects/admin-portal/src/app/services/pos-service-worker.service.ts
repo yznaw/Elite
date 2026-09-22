@@ -1,6 +1,14 @@
 let registration: ServiceWorkerRegistration | null = null;
 let posUpdateSafe = !window.location.pathname.startsWith('/pos');
 let reloadStarted = false;
+/** A new worker took over while the till was busy; reload once it is safe. */
+let reloadPending = false;
+
+function reloadOnce(): void {
+  if (reloadStarted) return;
+  reloadStarted = true;
+  window.location.reload();
+}
 
 function activateWaitingUpdate(): void {
   if (posUpdateSafe && registration?.waiting) {
@@ -28,14 +36,28 @@ export async function registerPosServiceWorker(): Promise<void> {
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController || reloadStarted) return;
-    reloadStarted = true;
-    window.location.reload();
+    // Only the POS runs from the worker's cache, so only the POS needs a reload
+    // to pick up a new build. Reloading an admin page here refreshed /login
+    // under a typing user after every deploy, and could drop unsaved edits.
+    // Admin tabs pick up the new build on their next navigation instead (see
+    // the chunk-load recovery in app.config.ts).
+    if (!window.location.pathname.startsWith('/pos')) return;
+    // Another tab can activate the worker while this till is mid-sale.
+    if (!posUpdateSafe) {
+      reloadPending = true;
+      return;
+    }
+    reloadOnce();
   });
 }
 
 /** Called by the POS whenever cart/queue/payment state changes. */
 export function setPosServiceWorkerUpdateSafe(safe: boolean): void {
   posUpdateSafe = safe;
+  if (safe && reloadPending) {
+    reloadOnce();
+    return;
+  }
   activateWaitingUpdate();
 }
 

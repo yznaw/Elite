@@ -271,6 +271,8 @@ Every request gets one correlation id, shared by the response, the log line, the
 
 Errors are grouped by fingerprint, so a fault that happened 300 times is one row with a count, not 300 rows.
 
+**Admin "links do nothing" / page refreshed itself:** usually a tab left open across a deploy. It now recovers by itself on the next click (one reload plus an *Updated to the latest version* toast). If the Errors tab shows `Failed to fetch dynamically imported module` repeating for the same page, the chunk really is missing from `dist`, so check the deploy. See [04 › Session expiry & new builds](./04-admin-portal.md#session-expiry--new-builds-2026-09).
+
 ### Log something from new code
 
 **Server:**
