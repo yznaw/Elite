@@ -27,7 +27,7 @@ The result is one source of truth. Products, stock, customers, sales, refunds, a
 - One active shift per register.
 - Server-reserved, tenant-wide receipt number blocks.
 - Product search and USB HID barcode input.
-- Cash and manually confirmed card checkout.
+- Cash, manually confirmed card, and manually confirmed Sadad checkout.
 - Atomic order, payment, POS transaction, receipt, and stock creation.
 - Local ESC/POS receipt rendering with QR/lookup data.
 - QZ Tray printing and cash-drawer pulse support.
@@ -52,7 +52,7 @@ The result is one source of truth. Products, stock, customers, sales, refunds, a
 
 ### Not yet complete or intentionally deferred
 
-- Card payment is manually confirmed by the cashier. No payment terminal or gateway authorization is performed by POS.
+- Card and Sadad payments are manually confirmed by the cashier. No payment terminal or gateway authorization is performed by POS; the storefront's Sadad gateway integration is not used by the till.
 - Split tender and discounts are not implemented. **POS tax calculation was cut deliberately** — Qatar has no sales tax, so there is nothing to calculate (docs/25 Phase 6).
 - Camera barcode scanning and barcode label printing are not implemented.
 - SSE replay detection currently needs an additional empty-buffer check: if retention removes every event for a tenant, a stale nonzero browser cursor is not classified as expired.
@@ -163,6 +163,15 @@ Card payments require:
 - All cash tender fields equal to zero.
 - Cashier confirmation that an external/manual card payment succeeded.
 
+Sadad payments (migration `043_pos_sadad_payment.sql`) require:
+
+- `sadadAmountCents` equal to the sale total; cash and card fields all zero. Cash and card sales must send `sadadAmountCents` as 0 or omit it (older offline-queued payloads have no such field and are read as 0).
+- `payment.terminalReference` holding the **Sadad transaction ID** the cashier reads from the Sadad merchant app once it shows the payment as Paid. The server trims and uppercases it and accepts only `^[A-Z0-9-]{4,40}$` (`422 PAYMENT_REFERENCE_INVALID`). It is stored in `payments.terminal_reference`, like a card slip reference.
+- A Sadad transaction ID that has not paid for another sale: `409 PAYMENT_REFERENCE_USED`, checked in `sale-service.js` for a readable message (it names the receipt) and backed by the partial unique index `payments_pos_sadad_reference_uq`. Card references are not checked for reuse.
+- DB backstop: `pos_transactions_payment_shape_check` enforces the same cash/card/sadad allocation rules, so a row that claims two tenders cannot be written by any code path.
+
+On the till the payment sheet shows three tenders (Cash, Card, Sadad) as a radio group. Choosing Sadad shows the exact amount to charge in the Sadad app, the instruction to confirm Paid, and the transaction ID field. The field uppercases as typed, flags a malformed ID inline, and **Complete sale** stays disabled until the ID is well-formed. A reused ID comes back inline on the field, not as a toast; the cashier corrects it and completes again under the same idempotency key. Offline, a Sadad sale queues like a card sale (the reuse check runs when it syncs). Sadad never opens the drawer and never counts toward expected cash.
+
 ### Customers and CRM
 
 The checkout can link an existing Elite customer or quick-create one while online; walk-in remains the default. Website and POS identity matching share normalized email/phone logic so the same person is not split by sales channel. Refunds reduce LTV and voids remove the sale's LTV effect. Offline quick-create is intentionally unavailable, while an already linked customer can travel with the queued sale.
@@ -174,17 +183,28 @@ The checkout can link an existing Elite customer or quick-create one while onlin
 - Both operations are idempotent and audited.
 - Refund receipts contain cashier, register, item/SKU, amount, method, reason, receipt number, and QR lookup data.
 - **A card refund requires its own terminal reference** (`pos_refunds.terminal_reference`, migration 030), separate from the original sale's — the card terminal is standalone with no API link (docs/15 Phase 4), so refunding to a card is a second, distinct action on that terminal and needs its own proof of having happened. Enforced in `correction-service.js`'s `createRefund` the same way `sale-service.js` requires one for the original card sale; null for a cash refund, where there's nothing to reference.
+- **A Sadad refund works the same way.** It is issued in the Sadad merchant panel, and its refund transaction ID is required (same format rule as the sale). `REFUND_METHOD_MISMATCH` already forces the refund method to equal the original tender, so a Sadad sale can only be refunded as Sadad.
 
 ### Reporting
 
 The current shift summary calculates:
 
 - Opening float.
-- Gross, cash, and card sales.
+- Gross, cash, card, and Sadad sales (`pos_z_reports.sadad_sales_cents`; older Z-reports read as 0).
 - Refund and void totals.
 - Net sales.
 - Expected drawer cash.
 - Transaction, refund, and void counts.
+
+Every Z-report gets a **closing number** `Z-DDMM-YYYY-NNN` and a **business date** (migration `044_pos_z_report_number.sql`). The date is the Qatar day the shift was opened, so a shift closed after midnight or through morning recovery belongs to the day it sold. `NNN` counts that branch's closings on that day, so with one register per branch it is normally `001`. The number is assigned inside `closeShift` while the register row is locked, and the unique index `pos_z_reports_branch_number_uq` backs it up. It is printed under the Z title and in the Z footer (in place of the UUID), and shown in both Z-history lists and CSVs.
+
+**Item breakdown (daily sales report).** `GET /api/pos/shifts/z-reports/:id/items` (for the register that closed it) and `GET /api/admin/pos-reports/z-reports/:id/items` (owner/admin/manager) return the closing's item lines. Each line has SKU, description, color, size, sold / returned / net quantity, unit price, payment method and total, grouped by SKU + color + size + unit price + method, so one product paid by cash and by card is two lines.
+- Sold counts completed (not voided) sales rung in the shift.
+- Returned counts completed refunds issued in the shift, attributed to the refund's method.
+- The totals equal the Z's net sales, and `byMethod` gives the cash / card / Sadad split.
+- The header lists every staff member who rang a sale or refund in the shift (several after a till takeover).
+
+The **Excel** button in the POS Z-history dialog and on Reports → Z-Reports builds the team's "Daily Sales Report (Z-Report)" sheet in the browser (`services/z-report-excel.service.ts`). `exceljs` is loaded with a dynamic import on click, so it stays out of the POS bundle and its offline precache.
 
 Closing a shift requires a physical cash count and manager approval. The immutable Z report stores expected cash, physical cash, and generated variance. A shift cannot close while local sales are pending or rejected.
 
@@ -399,7 +419,7 @@ All paths below are under `/api/pos` and require an authenticated allowed role. 
 | `POST` | `/shifts/open` | Open the register's shift with an opening float |
 | `GET` | `/shifts/current` | Return the current/X-style shift summary |
 | `POST` | `/shifts/z-report` | Close shift and store immutable Z report; manager override omitted on a self-close |
-| `POST` | `/transactions` | Complete one online sale |
+| `POST` | `/transactions` | Complete one online sale. `payment.method` is `cash`, `card` or `sadad`; see Sadad rules above (`PAYMENT_REFERENCE_INVALID` 422, `PAYMENT_REFERENCE_USED` 409) |
 | `POST` | `/transactions/sync` | Synchronize an offline transaction batch |
 | `PUT` | `/sync-state` | Report local pending/rejected counts for shift-close enforcement |
 | `GET` | `/transactions/:id` | Load a transaction and receipt data |
@@ -475,7 +495,7 @@ Monetary fields are always integer cents. Do not send decimal currency values to
 - `pos_sync_conflicts`
 - `pos_events`
 
-POS and launch-readiness schema is introduced by migrations `015` through `025`. `server/db/pos-schema.js` applies them in order under a PostgreSQL advisory lock during API startup. They are additive/idempotent, and the API refuses to start if database preparation fails. Production must back up first and verify migrations `022`–`025`; `npm run db:migrate` is the legacy initial-schema command, not the incremental runner.
+POS and launch-readiness schema is introduced by migrations `015` through `025` (later POS files, up to `043_pos_sadad_payment.sql`, are appended to the same list). `server/db/pos-schema.js` applies them in order under a PostgreSQL advisory lock during API startup. They are additive/idempotent, and the API refuses to start if database preparation fails. Production must back up first and verify migrations `022`–`025`; `npm run db:migrate` is the legacy initial-schema command, not the incremental runner.
 
 ## 13. Receipt and Lookup Contract
 

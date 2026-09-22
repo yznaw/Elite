@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from './api-client.service';
+import type { PosZReportItems } from './pos.service';
 
 export interface PosReportFilter {
   from?: string;
@@ -10,6 +11,8 @@ export interface PosReportFilter {
   reason?: string;
   branchId?: string;
   channel?: 'pos' | 'website';
+  /** Card settlement exceptions only: which settled tender to show. */
+  method?: 'card' | 'sadad';
 }
 
 export interface PosDailySalesReport {
@@ -72,6 +75,7 @@ export interface PosCashMovementsReport {
 
 export interface PosCardExceptionRow {
   reconciliationId: string;
+  method: 'card' | 'sadad';
   businessDate: string;
   registerId: string;
   registerName: string;
@@ -109,6 +113,8 @@ export interface PosRefundVoidReport {
 }
 
 export interface PosZReportRow {
+  zNumber: string | null;
+  businessDate: string | null;
   zReportId: string;
   registerId: string;
   registerName: string;
@@ -118,6 +124,7 @@ export interface PosZReportRow {
   grossSalesCents: number;
   cashSalesCents: number;
   cardSalesCents: number;
+  sadadSalesCents: number;
   refundTotalCents: number;
   voidTotalCents: number;
   netSalesCents: number;
@@ -144,6 +151,7 @@ function toQuery(filter: PosReportFilter): string {
   if (filter.reason) params.set('reason', filter.reason);
   if (filter.branchId) params.set('branchId', filter.branchId);
   if (filter.channel) params.set('channel', filter.channel);
+  if (filter.method) params.set('method', filter.method);
   const query = params.toString();
   return query ? `?${query}` : '';
 }
@@ -178,6 +186,10 @@ export class PosReportsService {
 
   refundVoidExceptions(filter: PosReportFilter): Promise<PosRefundVoidReport> {
     return firstValueFrom(this.api.get<PosRefundVoidReport>(`/admin/pos-reports/refund-void-exceptions${toQuery(filter)}`));
+  }
+
+  zReportItems(zReportId: string): Promise<PosZReportItems> {
+    return firstValueFrom(this.api.get<PosZReportItems>(`/admin/pos-reports/z-reports/${encodeURIComponent(zReportId)}/items`));
   }
 
   zReportHistory(filter: PosReportFilter): Promise<PosZReportRow[]> {

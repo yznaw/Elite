@@ -6,6 +6,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { PillComponent, PillKind } from '../../shared/pill/pill.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
+import { ZReportExcelService } from '../../services/z-report-excel.service';
 import { PosReconciliationService, PosReconciliationRegister } from '../../services/pos-reconciliation.service';
 import {
   PosReportsService,
@@ -96,6 +97,7 @@ type ReportTab = 'daily-sales' | 'product-sales' | 'cash-movements' | 'card-exce
           <div class="card">
             <div class="card-header"><div class="card-title">{{ t('reports.dailySales.byPayment') }}</div></div>
             <ap-sortable-table [columns]="dailyByPaymentColumns" [rows]="r.byPaymentMethod">
+              <ng-template apCellTpl="paymentMethod" let-row>{{ paymentLabel(row.paymentMethod) }}</ng-template>
               <ng-template apCellTpl="totalCents" let-row>{{ formatMoney(row.totalCents) }}</ng-template>
             </ap-sortable-table>
           </div>
@@ -176,11 +178,18 @@ type ReportTab = 'daily-sales' | 'product-sales' | 'cash-movements' | 'card-exce
       }
 
       @if (tab() === 'card-exceptions' && cardExceptions(); as rows) {
-        <div class="row gap-sm mb-8">
-          <button class="btn btn-outline btn-sm" (click)="exportCardExceptions(rows)">{{ t('reports.exportCsv') }}</button>
+        <div class="row gap-sm mb-8" style="flex-wrap:wrap;align-items:center;">
+          <div class="row gap-sm" role="radiogroup" [attr.aria-label]="t('reports.tab.cardExceptions')">
+            @for (m of settlementMethods; track m.value) {
+              <button type="button" class="chip" role="radio" [attr.aria-checked]="settlementMethod() === m.value"
+                      [class.active]="settlementMethod() === m.value" (click)="setSettlementMethod(m.value)">{{ t(m.labelKey) }}</button>
+            }
+          </div>
+          <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" (click)="exportCardExceptions(rows)">{{ t('reports.exportCsv') }}</button>
         </div>
         <div class="card">
           <ap-sortable-table [columns]="cardExceptionColumns" [rows]="rows">
+            <ng-template apCellTpl="method" let-row>{{ paymentLabel(row.method) }}</ng-template>
             <ng-template apCellTpl="businessDate" let-row>{{ row.businessDate | date:'MMM d, y' }}</ng-template>
             <ng-template apCellTpl="posTotalCents" let-row>{{ formatMoney(row.posTotalCents) }}</ng-template>
             <ng-template apCellTpl="settlementTotalCents" let-row>{{ row.settlementTotalCents === null ? '—' : formatMoney(row.settlementTotalCents) }}</ng-template>
@@ -226,6 +235,7 @@ type ReportTab = 'daily-sales' | 'product-sales' | 'cash-movements' | 'card-exce
         <div class="card mt-16">
           <div class="card-header"><div class="card-title">{{ t('reports.refundVoid.refunds') }}</div></div>
           <ap-sortable-table [columns]="refundColumns" [rows]="r.refunds">
+            <ng-template apCellTpl="method" let-row>{{ paymentLabel(row.method) }}</ng-template>
             <ng-template apCellTpl="createdAt" let-row>{{ row.createdAt | date:'MMM d, HH:mm' }}</ng-template>
             <ng-template apCellTpl="amountCents" let-row>{{ formatMoney(row.amountCents) }}</ng-template>
           </ap-sortable-table>
@@ -239,6 +249,13 @@ type ReportTab = 'daily-sales' | 'product-sales' | 'cash-movements' | 'card-exce
         <div class="card">
           <ap-sortable-table [columns]="zHistoryColumns" [rows]="rows">
             <ng-template apCellTpl="createdAt" let-row>{{ row.createdAt | date:'MMM d, y HH:mm' }}</ng-template>
+            <ng-template apCellTpl="zNumber" let-row>{{ row.zNumber || '-' }}</ng-template>
+            <ng-template apCellTpl="excel" let-row>
+              <button class="btn btn-outline btn-sm" type="button" [disabled]="exportingZReportId() !== null"
+                      (click)="downloadZReportExcel(row)">
+                {{ exportingZReportId() === row.zReportId ? t('reports.zHistory.preparing') : t('reports.zHistory.excel') }}
+              </button>
+            </ng-template>
             <ng-template apCellTpl="netSalesCents" let-row>{{ formatMoney(row.netSalesCents) }}</ng-template>
             <ng-template apCellTpl="expectedCashCents" let-row>{{ formatMoney(row.expectedCashCents) }}</ng-template>
             <ng-template apCellTpl="physicalCashCents" let-row>{{ formatMoney(row.physicalCashCents) }}</ng-template>
@@ -360,6 +377,7 @@ export class ReportsComponent implements OnInit {
   ];
   readonly cardExceptionColumns: TableColumn[] = [
     { key: 'businessDate', label: 'Date' },
+    { key: 'method', label: 'Method' },
     { key: 'registerName', label: 'Register' },
     { key: 'posTotalCents', label: 'POS Total', align: 'right' },
     { key: 'settlementTotalCents', label: 'Settlement', align: 'right' },
@@ -403,6 +421,7 @@ export class ReportsComponent implements OnInit {
     { key: 'registerName', label: 'Register' },
   ];
   readonly zHistoryColumns: TableColumn[] = [
+    { key: 'zNumber', label: 'Z Number', labelKey: 'reports.zHistory.zNumber' },
     { key: 'createdAt', label: 'Closed' },
     { key: 'branchName', label: 'Branch' },
     { key: 'registerName', label: 'Register' },
@@ -413,7 +432,24 @@ export class ReportsComponent implements OnInit {
     { key: 'expectedCashCents', label: 'Expected', align: 'right' },
     { key: 'physicalCashCents', label: 'Physical', align: 'right' },
     { key: 'varianceCents', label: 'Variance', align: 'right' },
+    { key: 'excel', label: '', noSort: true, align: 'right' },
   ];
+
+  private readonly zReportExcel = inject(ZReportExcelService);
+  readonly exportingZReportId = signal<string | null>(null);
+
+  /** The item-level daily sales report for one closing, as the shop files it. */
+  async downloadZReportExcel(row: PosZReportRow): Promise<void> {
+    if (this.exportingZReportId()) return;
+    this.exportingZReportId.set(row.zReportId);
+    try {
+      await this.zReportExcel.download(await this.reportsApi.zReportItems(row.zReportId));
+    } catch (error) {
+      this.toast.error(this.t('reports.zHistory.excelFailed'), this.errorMessage(error));
+    } finally {
+      this.exportingZReportId.set(null);
+    }
+  }
 
   async ngOnInit(): Promise<void> {
     try {
@@ -448,9 +484,27 @@ export class ReportsComponent implements OnInit {
     return date.toISOString().slice(0, 10);
   }
 
+  readonly settlementMethods: Array<{ value: '' | 'card' | 'sadad'; labelKey: string }> = [
+    { value: '', labelKey: 'reports.settlement.all' },
+    { value: 'card', labelKey: 'payment.method.card' },
+    { value: 'sadad', labelKey: 'payment.method.sadad' },
+  ];
+  readonly settlementMethod = signal<'' | 'card' | 'sadad'>('');
+
+  setSettlementMethod(method: '' | 'card' | 'sadad'): void {
+    if (this.settlementMethod() === method) return;
+    this.settlementMethod.set(method);
+    this.loadActiveTab();
+  }
+
+  paymentLabel(method: string): string {
+    return ['cash', 'card', 'sadad'].includes(method) ? this.t(`payment.method.${method}`) : method;
+  }
+
   private filter() {
     const selectedLocation = this.salesLocationId();
     return {
+      ...(this.settlementMethod() ? { method: this.settlementMethod() as 'card' | 'sadad' } : {}),
       from: this.from(),
       to: this.to(),
       registerId: this.registerId() || undefined,
@@ -590,8 +644,8 @@ export class ReportsComponent implements OnInit {
 
   exportCardExceptions(rows: PosCardExceptionRow[]): void {
     this.downloadCsv(`card-settlement-exceptions-${this.from()}-${this.to()}.csv`,
-      ['Date', 'Register', 'POS Total', 'Settlement', 'Variance', 'Status'],
-      rows.map((r) => [this.formatDate(r.businessDate), r.registerName, this.formatMoney(r.posTotalCents), r.settlementTotalCents === null ? '' : this.formatMoney(r.settlementTotalCents), r.varianceCents === null ? '' : this.formatMoney(r.varianceCents), r.status]));
+      ['Date', 'Method', 'Register', 'POS Total', 'Settlement', 'Variance', 'Status'],
+      rows.map((r) => [this.formatDate(r.businessDate), this.paymentLabel(r.method), r.registerName, this.formatMoney(r.posTotalCents), r.settlementTotalCents === null ? '' : this.formatMoney(r.settlementTotalCents), r.varianceCents === null ? '' : this.formatMoney(r.varianceCents), r.status]));
   }
 
   exportInventory(r: PosInventoryReport): void {
@@ -611,8 +665,8 @@ export class ReportsComponent implements OnInit {
 
   exportZHistory(rows: PosZReportRow[]): void {
     this.downloadCsv(`z-report-history-${this.from()}-${this.to()}.csv`,
-      ['Closed', 'Branch', 'Register', 'Sold Items', 'Returned Items', 'Net Items', 'Net Sales', 'Expected Cash', 'Physical Cash', 'Variance'],
-      rows.map((r) => [this.formatDateTime(r.createdAt), r.branchName || '', r.registerName, r.soldItemQuantity, r.returnedItemQuantity, r.netItemQuantity, this.formatMoney(r.netSalesCents), this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents)]));
+      ['Z Number', 'Closed', 'Branch', 'Register', 'Sold Items', 'Returned Items', 'Net Items', 'Net Sales', 'Expected Cash', 'Physical Cash', 'Variance'],
+      rows.map((r) => [r.zNumber || '', this.formatDateTime(r.createdAt), r.branchName || '', r.registerName, r.soldItemQuantity, r.returnedItemQuantity, r.netItemQuantity, this.formatMoney(r.netSalesCents), this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents)]));
   }
 
   private errorMessage(error: unknown): string {

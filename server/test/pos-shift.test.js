@@ -123,6 +123,9 @@ function mockCloseShiftPool({ selfCloseEnabled, shiftCashierId }) {
           }],
         };
       }
+      if (sql.startsWith('WITH day AS')) {
+        return { rowCount: 1, rows: [{ business_date: '2026-06-22', z_number: 'Z-2206-2026-001' }] };
+      }
       if (sql.startsWith('INSERT INTO pos_z_reports')) {
         zReportParams.push(params);
         return { rowCount: 1, rows: [{ id: 'z-1', shift_id: '11111111-1111-4111-8111-111111111111', register_id: closeContext.registerId }] };
@@ -151,6 +154,7 @@ test('the cashier who opened the shift closes it without a manager override', as
     assert.ok(!statements.some((sql) => sql.startsWith('SELECT * FROM pos_manager_overrides')));
     // manager_id follows the branch snapshot: the operator approved it.
     assert.equal(zReportParams[0][4], OWNER_ID);
+    assert.deepEqual(zReportParams[0].slice(26, 28), ['2026-06-22', 'Z-2206-2026-001'], 'closing number is stored with the report');
     assert.equal(statements.at(-1), 'COMMIT');
   } finally {
     db.pool.connect = originalConnect;

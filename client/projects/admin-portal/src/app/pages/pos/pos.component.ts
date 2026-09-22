@@ -16,7 +16,10 @@ import {
   PosCurrentRegister,
   PosCustomer,
   PosParkedCart,
+  PosPaymentMethod,
   PosSaleResult,
+  POS_PAYMENT_LABELS,
+  SADAD_REFERENCE_PATTERN,
   PosSelectableRegister,
   PosService,
   PosShiftSummary,
@@ -31,9 +34,11 @@ import { ClientLoggerService } from '../../services/client-logger.service';
 import { PaginationComponent } from '../../shared/pagination/pagination.component';
 import { checkForPosUpdate, posBuildVersions, setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
 import { PosReceiptData } from '../../services/pos-receipt-renderer.service';
+import { ZReportExcelService } from '../../services/z-report-excel.service';
+import { I18nService } from '../../services/i18n.service';
 
 type PosPhase = 'loading' | 'enrollment' | 'resume-failed' | 'shift' | 'shift-recovery' | 'selling';
-type PaymentMethod = 'cash' | 'card';
+type PaymentMethod = PosPaymentMethod;
 interface CartLine { item: PosCatalogItem; quantity: number }
 interface ProductGroup {
   id: string;
@@ -68,6 +73,7 @@ export class PosComponent implements OnInit, OnDestroy {
   private readonly local = inject(PosLocalStore);
   private readonly router = inject(Router);
   readonly hardware = inject(PosHardwareService);
+  private readonly zReportExcel = inject(ZReportExcelService);
   readonly auth = inject(AuthService);
   private readonly refApi = inject(AdminRefService);
   private readonly toast = inject(ToastService);
@@ -113,6 +119,14 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly cart = signal<CartLine[]>([]);
   readonly paymentOpen = signal(false);
   readonly paymentMethod = signal<PaymentMethod>('cash');
+  readonly paymentOptions: ReadonlyArray<PaymentMethod> = ['cash', 'card', 'sadad'];
+  /** The payment tiles follow the admin portal's language (EN / AR). */
+  private readonly i18n = inject(I18nService);
+  readonly t = (key: string): string => this.i18n.t(key);
+  /** Inline error under the card/Sadad reference field. Set by format checks
+      and by the server's PAYMENT_REFERENCE_USED / _INVALID answers, so a
+      reused Sadad ID is shown where the cashier is typing, not in a toast. */
+  readonly paymentReferenceError = signal<string | null>(null);
   readonly lastSale = signal<PosSaleResult | null>(null);
   readonly receiptBlock = signal<PosReceiptBlock | null>(null);
   readonly pendingSales = signal(0);
@@ -177,6 +191,7 @@ export class PosComponent implements OnInit, OnDestroy {
   readonly zReportHistory = signal<PosZReport[]>([]);
   readonly loadingZHistory = signal(false);
   readonly printingZReportId = signal<string | null>(null);
+  readonly exportingZReportId = signal<string | null>(null);
   readonly posBuildRunning = signal<string | null>(null);
   readonly posBuildDeployed = signal<string | null>(null);
   readonly checkingPosUpdate = signal(false);
@@ -291,8 +306,8 @@ export class PosComponent implements OnInit, OnDestroy {
   parkLabel = '';
   transactionLookup = '';
   correctionReason = '';
-  /** Only used for a card refund — the terminal is standalone, so this is
-      the sole proof the refund was actually run on it (docs/12, "Card"). */
+  /** Only used for a card or Sadad refund — neither has an API link, so this
+      is the sole proof the refund was actually run there (docs/12, "Card"). */
   refundTerminalReference = '';
   managerPin = '';
   takeoverPin = '';
@@ -1132,6 +1147,7 @@ export class PosComponent implements OnInit, OnDestroy {
     this.paymentMethod.set('cash');
     this.tendered = (this.totalCents() / 100).toFixed(2);
     this.terminalReference = '';
+    this.paymentReferenceError.set(null);
     this.customerQuery = '';
     this.customerResults.set([]);
     this.customerCreateOpen.set(false);
@@ -1222,8 +1238,42 @@ export class PosComponent implements OnInit, OnDestroy {
 
   selectPayment(method: PaymentMethod): void {
     this.paymentMethod.set(method);
+    this.paymentReferenceError.set(null);
+    // A reference typed for one tender is never carried over to another.
     if (method === 'cash') this.tendered = (this.totalCents() / 100).toFixed(2);
     else this.terminalReference = '';
+  }
+
+  paymentLabel(method: PaymentMethod | string | null | undefined): string {
+    return POS_PAYMENT_LABELS[method as PaymentMethod] ?? String(method || '');
+  }
+
+  /** Card and Sadad both need cashier-entered proof of payment. */
+  needsReference(method: PaymentMethod | string | null | undefined): boolean {
+    return method === 'card' || method === 'sadad';
+  }
+
+  /** Sadad IDs are normalized as typed (trim, uppercase) so what the cashier
+      sees is exactly what the server stores and checks for reuse. */
+  onPaymentReferenceInput(value: string): void {
+    this.terminalReference = this.paymentMethod() === 'sadad' ? value.toUpperCase().replace(/\s+/g, '') : value;
+    this.paymentReferenceError.set(null);
+  }
+
+  /** Guidance only; the server re-validates (sale-service.js paymentReference). */
+  paymentReferenceProblem(method: PaymentMethod, value: string): string | null {
+    const reference = value.trim();
+    if (!this.needsReference(method) || !reference) return null;
+    if (method === 'sadad' && !SADAD_REFERENCE_PATTERN.test(reference.toUpperCase())) {
+      return 'Use the transaction ID shown in the Sadad app: 4 to 40 letters, digits or dashes.';
+    }
+    return null;
+  }
+
+  paymentReady(): boolean {
+    const method = this.paymentMethod();
+    if (!this.needsReference(method)) return true;
+    return Boolean(this.terminalReference.trim()) && !this.paymentReferenceProblem(method, this.terminalReference);
   }
 
   async completeSale(): Promise<void> {
@@ -1237,10 +1287,21 @@ export class PosComponent implements OnInit, OnDestroy {
       this.toast.warning('Tendered cash is less than the total.');
       return;
     }
-    const terminalReference = this.terminalReference.trim();
+    const terminalReference = method === 'sadad'
+      ? this.terminalReference.trim().toUpperCase()
+      : this.terminalReference.trim();
     if (method === 'card' && !terminalReference) {
       this.toast.warning('Enter the terminal reference or approval code before completing a card sale.');
       return;
+    }
+    if (method === 'sadad') {
+      const problem = terminalReference
+        ? this.paymentReferenceProblem(method, terminalReference)
+        : 'Enter the Sadad transaction ID after the customer has paid.';
+      if (problem) {
+        this.paymentReferenceError.set(problem);
+        return;
+      }
     }
     const amountTenderedCents = tenderedCents ?? 0;
 
@@ -1270,9 +1331,10 @@ export class PosComponent implements OnInit, OnDestroy {
           method,
           cashAmountCents: method === 'cash' ? totalCents : 0,
           cardAmountCents: method === 'card' ? totalCents : 0,
+          sadadAmountCents: method === 'sadad' ? totalCents : 0,
           amountTenderedCents,
           changeGivenCents: method === 'cash' ? amountTenderedCents - totalCents : 0,
-          terminalReference: method === 'card' ? terminalReference : undefined,
+          terminalReference: this.needsReference(method) ? terminalReference : undefined,
         },
         clientCreatedAt,
       };
@@ -1313,7 +1375,14 @@ export class PosComponent implements OnInit, OnDestroy {
         queuedIdempotencyKey: result.status === 'pending-sync' ? result.transactionId : null,
       };
     } catch (error) {
-      this.toast.error("Couldn't complete sale", this.errorMessage(error));
+      const code = this.errorCode(error);
+      if (code === 'PAYMENT_REFERENCE_USED' || code === 'PAYMENT_REFERENCE_INVALID') {
+        // The sheet stays open with the field flagged; the cashier corrects
+        // the ID and completes again under the same idempotency key.
+        this.paymentReferenceError.set(this.errorMessage(error));
+      } else {
+        this.toast.error("Couldn't complete sale", this.errorMessage(error));
+      }
     } finally {
       this.busy.set(false);
     }
@@ -1581,12 +1650,14 @@ export class PosComponent implements OnInit, OnDestroy {
         restock: this.refundRestock[item.id] !== false,
       }))
       .filter((line) => line.quantity > 0);
-    const refundTerminalReference = this.refundTerminalReference.trim();
+    const refundTerminalReference = transaction?.paymentMethod === 'sadad'
+      ? this.refundTerminalReference.trim().toUpperCase()
+      : this.refundTerminalReference.trim();
     if (
       !transaction || !shiftId || !lines.length
       || (this.managerPinConfigured() && !this.managerPin)
       || !this.correctionReason.trim()
-      || (transaction.paymentMethod === 'card' && !refundTerminalReference)
+      || (this.needsReference(transaction.paymentMethod) && !refundTerminalReference)
     ) return;
     let completedRefund: { receiptData: unknown; openDrawer: boolean } | null = null;
     this.busy.set(true);
@@ -1602,7 +1673,7 @@ export class PosComponent implements OnInit, OnDestroy {
         originalTransactionId: transaction.transactionId,
         lines,
         refundMethod: transaction.paymentMethod,
-        ...(transaction.paymentMethod === 'card' ? { terminalReference: refundTerminalReference } : {}),
+        ...(this.needsReference(transaction.paymentMethod) ? { terminalReference: refundTerminalReference } : {}),
         reason: this.correctionReason.trim(),
         managerOverrideId: override.overrideId,
         managerOverrideToken: override.token,
@@ -1896,6 +1967,19 @@ export class PosComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** The item-level daily sales report the office files for this closing. */
+  async downloadZReportExcel(report: PosZReport): Promise<void> {
+    if (this.exportingZReportId()) return;
+    this.exportingZReportId.set(report.zReportId);
+    try {
+      await this.zReportExcel.download(await this.pos.getZReportItems(report.zReportId));
+    } catch (error) {
+      this.toast.warning("Couldn't prepare the Excel report", this.errorMessage(error));
+    } finally {
+      this.exportingZReportId.set(null);
+    }
+  }
+
   async reprintZReport(report: PosZReport): Promise<void> {
     if (this.printingZReportId()) return;
     this.printingZReportId.set(report.zReportId);
@@ -1913,14 +1997,14 @@ export class PosComponent implements OnInit, OnDestroy {
     const rows = this.zReportHistory();
     if (!rows.length) return;
     const header = [
-      'Z Report ID', 'Created At', 'Branch', 'Register', 'Opening Float', 'Gross Sales', 'Cash Sales', 'Card Sales',
+      'Z Number', 'Z Report ID', 'Created At', 'Branch', 'Register', 'Opening Float', 'Gross Sales', 'Cash Sales', 'Card Sales', 'Sadad Sales',
       'Refunds', 'Voids', 'Net Sales', 'Cash In', 'Cash Out', 'Expected Cash', 'Physical Cash',
       'Variance', 'Transactions', 'Items Sold', 'Items Returned', 'Net Items', 'Refund Count', 'Void Count',
     ];
     const csvRows = rows.map((r) => [
-      r.zReportId, this.formatDateTime(r.createdAt), r.branchName || '', r.registerName || '',
+      r.zNumber || '', r.zReportId, this.formatDateTime(r.createdAt), r.branchName || '', r.registerName || '',
       this.formatMoney(r.openingFloatCents), this.formatMoney(r.grossSalesCents),
-      this.formatMoney(r.cashSalesCents), this.formatMoney(r.cardSalesCents),
+      this.formatMoney(r.cashSalesCents), this.formatMoney(r.cardSalesCents), this.formatMoney(r.sadadSalesCents ?? 0),
       this.formatMoney(r.refundTotalCents), this.formatMoney(r.voidTotalCents),
       this.formatMoney(r.netSalesCents), this.formatMoney(r.cashInCents), this.formatMoney(r.cashOutCents),
       this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents),
@@ -2395,6 +2479,7 @@ export class PosComponent implements OnInit, OnDestroy {
       receiptNumber: String(payload.receiptNumber).padStart(8, '0'),
       status: 'pending-sync',
       paymentMethod: payload.payment.method,
+      terminalReference: payload.payment.terminalReference ?? null,
       subtotalCents: this.totalCents(),
       taxCents: 0,
       totalCents: this.totalCents(),

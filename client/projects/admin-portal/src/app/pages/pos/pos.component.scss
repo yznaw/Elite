@@ -1505,19 +1505,20 @@ label input:focus {
 
 .payment-methods {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
 }
 
 .payment-methods button {
-  min-height: 92px;
-  padding: 15px;
+  min-height: 88px;
+  padding: 13px 12px;
   display: grid;
   align-content: center;
   gap: 5px;
   border: 1px solid var(--pos-line);
   background: #f5f3ec;
-  text-align: left;
+  /* start, not left: in Arabic the tile text aligns right. */
+  text-align: start;
   cursor: pointer;
 }
 
@@ -1560,6 +1561,42 @@ label input:focus {
   font-family: Georgia, serif;
   font-size: 21px;
   font-weight: 500;
+}
+
+/* Sadad has no link to the till, so the amount the cashier must key into
+   the Sadad app is the loudest figure on the sheet. */
+.sadad-charge {
+  margin-top: 24px;
+  padding: 13px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-top: 1px solid var(--pos-line);
+  border-bottom: 1px solid var(--pos-line);
+}
+
+.sadad-charge span {
+  color: #6e7773;
+  font-size: 11px;
+}
+
+.sadad-charge strong {
+  color: var(--pos-green);
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.sadad-charge + .card-confirmation {
+  margin-top: 12px;
+}
+
+.payment-reference-error {
+  display: block;
+  margin-top: 6px;
+  color: var(--pos-danger, #a8322a);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .card-confirmation {
@@ -1833,6 +1870,7 @@ label input:focus {
 }
 .z-history-row span { display: grid; gap: 3px; }
 .z-history-row small { color: #79817e; font-size: 10px; }
+.z-history-actions { display: flex; gap: 6px; }
 .z-history-row button {
   padding: 8px 14px;
   border: 1px solid var(--pos-line);

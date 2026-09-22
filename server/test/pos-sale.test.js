@@ -105,6 +105,72 @@ test('card payment cannot carry cash tender fields', () => {
   }, 3000), (error) => error instanceof PosError && error.code === 'PAYMENT_TOTAL_MISMATCH');
 });
 
+function sadadSale(overrides = {}) {
+  const body = validSale();
+  body.payment = {
+    method: 'sadad',
+    cashAmountCents: 0,
+    cardAmountCents: 0,
+    sadadAmountCents: 3000,
+    amountTenderedCents: 0,
+    changeGivenCents: 0,
+    terminalReference: ' sd-20260922-7731 ',
+    ...overrides,
+  };
+  return body;
+}
+
+function rejectsWith(fn, code) {
+  assert.throws(fn, (error) => {
+    assert.ok(error instanceof PosError);
+    assert.equal(error.code, code);
+    return true;
+  });
+}
+
+test('normalizeSale accepts a Sadad sale and normalizes its transaction ID', () => {
+  const sale = normalizeSale(sadadSale());
+  assert.equal(sale.payment.method, 'sadad');
+  assert.equal(sale.payment.sadadAmountCents, 3000);
+  assert.equal(sale.payment.terminalReference, 'SD-20260922-7731');
+  assert.doesNotThrow(() => validatePayment(sale.payment, 3000));
+});
+
+test('normalizeSale requires a well-formed Sadad transaction ID', () => {
+  rejectsWith(() => normalizeSale(sadadSale({ terminalReference: undefined })), 'INVALID_FIELD');
+  rejectsWith(() => normalizeSale(sadadSale({ terminalReference: '   ' })), 'INVALID_FIELD');
+  rejectsWith(() => normalizeSale(sadadSale({ terminalReference: 'AB1' })), 'PAYMENT_REFERENCE_INVALID');
+  rejectsWith(() => normalizeSale(sadadSale({ terminalReference: 'ID with spaces' })), 'PAYMENT_REFERENCE_INVALID');
+  rejectsWith(() => normalizeSale(sadadSale({ terminalReference: '<script>1</script>' })), 'PAYMENT_REFERENCE_INVALID');
+  rejectsWith(() => normalizeSale(sadadSale({ terminalReference: 'A'.repeat(41) })), 'FIELD_TOO_LONG');
+});
+
+test('normalizeSale rejects unknown payment methods', () => {
+  rejectsWith(() => normalizeSale(sadadSale({ method: 'SADAD' })), 'PAYMENT_METHOD_INVALID');
+  rejectsWith(() => normalizeSale(sadadSale({ method: 'wallet' })), 'PAYMENT_METHOD_INVALID');
+});
+
+test('normalizeSale defaults sadadAmountCents to 0 for sales queued before Sadad existed', () => {
+  const sale = normalizeSale(validSale());
+  assert.equal(sale.payment.sadadAmountCents, 0);
+  rejectsWith(() => normalizeSale(sadadSale({ sadadAmountCents: -1 })), 'INVALID_MONEY');
+});
+
+test('Sadad payment must cover the total and carry no cash or card amounts', () => {
+  const base = normalizeSale(sadadSale()).payment;
+  rejectsWith(() => validatePayment({ ...base, sadadAmountCents: 2999 }, 3000), 'PAYMENT_TOTAL_MISMATCH');
+  rejectsWith(() => validatePayment({ ...base, cardAmountCents: 3000 }, 3000), 'PAYMENT_TOTAL_MISMATCH');
+  rejectsWith(() => validatePayment({ ...base, cashAmountCents: 3000 }, 3000), 'PAYMENT_TOTAL_MISMATCH');
+  rejectsWith(() => validatePayment({ ...base, amountTenderedCents: 3000 }, 3000), 'PAYMENT_TOTAL_MISMATCH');
+});
+
+test('cash and card payments cannot carry a Sadad amount', () => {
+  const cash = { ...validSale().payment, sadadAmountCents: 3000 };
+  rejectsWith(() => validatePayment(cash, 3000), 'PAYMENT_TOTAL_MISMATCH');
+  const card = { method: 'card', cashAmountCents: 0, cardAmountCents: 3000, sadadAmountCents: 1, amountTenderedCents: 0, changeGivenCents: 0 };
+  rejectsWith(() => validatePayment(card, 3000), 'PAYMENT_TOTAL_MISMATCH');
+});
+
 test('refund receipts preserve bilingual product, colour and size snapshots', () => {
   const result = mapRefund({
     id: 'refund-1',

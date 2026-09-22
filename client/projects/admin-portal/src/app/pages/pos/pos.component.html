@@ -601,13 +601,19 @@
           }
         </div>
 
-        <div class="payment-methods">
-          <button type="button" [class.active]="paymentMethod() === 'cash'" (click)="selectPayment('cash')">
-            <b>Cash</b><span>Record drawer tender</span>
-          </button>
-          <button type="button" [class.active]="paymentMethod() === 'card'" (click)="selectPayment('card')">
-            <b>Card</b><span>Manual terminal confirmation</span>
-          </button>
+        <div class="payment-methods" role="radiogroup" aria-label="Payment method">
+          @for (method of paymentOptions; track method) {
+            <button
+              type="button"
+              role="radio"
+              [attr.aria-checked]="paymentMethod() === method"
+              [class.active]="paymentMethod() === method"
+              (click)="selectPayment(method)"
+            >
+              <b>{{ t('payment.method.' + method) }}</b>
+              <span>{{ t('pos.payment.hint.' + method) }}</span>
+            </button>
+          }
         </div>
         @if (paymentMethod() === 'cash') {
           <label class="money-field tendered-field">
@@ -615,20 +621,50 @@
             <div><b>QAR</b><input [(ngModel)]="tendered" inputmode="decimal" /></div>
           </label>
           <div class="change-row"><span>Change due</span><strong>{{ formatMoney(changeCents()) }}</strong></div>
-        } @else {
+        } @else if (paymentMethod() === 'card') {
           <div class="card-confirmation">
             Confirm the payment on the external card terminal before completing this sale.
             @if (!online()) { <b> Offline card confirmation cannot be verified by Elite until synchronization.</b> }
           </div>
           <label class="money-field terminal-reference-field">
             <span>Terminal reference / approval code</span>
-            <input [(ngModel)]="terminalReference" placeholder="From the terminal receipt slip" />
+            <input [ngModel]="terminalReference" (ngModelChange)="onPaymentReferenceInput($event)" placeholder="From the terminal receipt slip" autocomplete="off" />
           </label>
+          @if (paymentReferenceError(); as problem) { <small class="payment-reference-error" role="alert">{{ problem }}</small> }
+        } @else {
+          <!-- Sadad has no link to the till: the cashier charges this exact
+               amount in the Sadad merchant app and types back its transaction
+               ID. The server requires the ID and rejects one already used. -->
+          <div class="sadad-charge">
+            <span>Charge in Sadad</span>
+            <strong>{{ formatMoney(totalCents()) }}</strong>
+          </div>
+          <div class="card-confirmation">
+            Ask the customer to pay by Sadad, then check it shows Paid in the Sadad merchant app.
+            @if (!online()) { <b> Offline Sadad confirmation cannot be verified by Elite until synchronization.</b> }
+          </div>
+          <label class="money-field terminal-reference-field">
+            <span>Sadad transaction ID</span>
+            <input
+              [ngModel]="terminalReference"
+              (ngModelChange)="onPaymentReferenceInput($event)"
+              placeholder="From the Sadad merchant app"
+              maxlength="40"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              [attr.aria-invalid]="!!(paymentReferenceError() || paymentReferenceProblem('sadad', terminalReference))"
+              aria-describedby="sadad-reference-error"
+            />
+          </label>
+          @if (paymentReferenceError() || paymentReferenceProblem('sadad', terminalReference); as problem) {
+            <small id="sadad-reference-error" class="payment-reference-error" role="alert">{{ problem }}</small>
+          }
         }
         <button
           class="primary-action"
           type="button"
-          [disabled]="busy() || offlineCatalogBlocked() || (paymentMethod() === 'card' && !terminalReference.trim())"
+          [disabled]="busy() || offlineCatalogBlocked() || !paymentReady()"
           (click)="completeSale()"
         >
           {{ busy() ? 'Posting sale...' : 'Complete sale' }}
@@ -646,7 +682,10 @@
         <dl>
           <div><dt>Receipt</dt><dd>#{{ sale.receiptNumber }}</dd></div>
           <div><dt>Order</dt><dd>{{ sale.orderNumber }}</dd></div>
-          <div><dt>Payment</dt><dd>{{ sale.paymentMethod === 'cash' ? 'Cash' : 'Card' }}</dd></div>
+          <div><dt>Payment</dt><dd>{{ paymentLabel(sale.paymentMethod) }}</dd></div>
+          @if (sale.paymentMethod === 'sadad' && sale.terminalReference) {
+            <div><dt>Sadad ID</dt><dd>{{ sale.terminalReference }}</dd></div>
+          }
           @if (sale.changeGivenCents > 0) {
             <div><dt>Change</dt><dd>{{ formatMoney(sale.changeGivenCents) }}</dd></div>
           }
@@ -737,6 +776,10 @@
                  refund needs its own action on it, and this reference is the
                  only proof it actually happened, same as the original sale. -->
             <label>Refund terminal reference<input [(ngModel)]="refundTerminalReference" name="refundTerminalReference" placeholder="From the terminal's refund slip" autocomplete="off" /></label>
+          } @else if (transaction.paymentMethod === 'sadad') {
+            <!-- Sadad refunds are issued in the Sadad merchant panel; its
+                 refund transaction ID is the proof, same as the card slip. -->
+            <label>Sadad refund transaction ID<input [(ngModel)]="refundTerminalReference" name="refundTerminalReference" placeholder="From the Sadad merchant panel" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" /></label>
           }
           <!-- autocomplete="one-time-code" is the only value Chrome honours on a
                password input: with plain autocomplete="off" the password manager
@@ -748,7 +791,7 @@
             <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
           }
           <div class="correction-actions">
-            <button type="button" [disabled]="busy() || transaction.status !== 'completed' || (transaction.paymentMethod === 'card' && !refundTerminalReference.trim())" (click)="refundCurrentTransaction()">Refund selected</button>
+            <button type="button" [disabled]="busy() || transaction.status !== 'completed' || (needsReference(transaction.paymentMethod) && !refundTerminalReference.trim())" (click)="refundCurrentTransaction()">Refund selected</button>
             <button class="danger-action" type="button" [disabled]="busy() || transaction.status !== 'completed' || !!transaction.refunds?.length" (click)="voidCurrentTransaction()">Void entire sale</button>
           </div>
         }
@@ -823,6 +866,9 @@
             <span>Refunds <b>{{ formatMoney(summary.refundTotalCents) }}</b></span>
             <span>Voids <b>{{ formatMoney(summary.voidTotalCents) }}</b></span>
             <span>Net <b>{{ formatMoney(summary.netSalesCents) }}</b></span>
+            <span>Cash sales <b>{{ formatMoney(summary.cashSalesCents) }}</b></span>
+            <span>Card sales <b>{{ formatMoney(summary.cardSalesCents) }}</b></span>
+            <span>Sadad sales <b>{{ formatMoney(summary.sadadSalesCents ?? 0) }}</b></span>
             <span>Cash in <b>{{ formatMoney(summary.cashInCents) }}</b></span>
             <span>Cash out <b>{{ formatMoney(summary.cashOutCents) }}</b></span>
             <span>Expected cash <b>{{ formatMoney(summary.expectedCashCents) }}</b></span>
@@ -930,12 +976,17 @@
             @for (report of zReportHistory(); track report.zReportId) {
               <div class="z-history-row">
                 <span>
-                  <b>{{ report.createdAt | date:'MMM d, y · HH:mm' }}</b>
-                  <small>Net {{ formatMoney(report.netSalesCents) }} · Variance {{ formatMoney(report.varianceCents) }}</small>
+                  <b>{{ report.zNumber || (report.createdAt | date:'MMM d, y · HH:mm') }}</b>
+                  <small>{{ report.createdAt | date:'MMM d, y · HH:mm' }} · Net {{ formatMoney(report.netSalesCents) }} · Variance {{ formatMoney(report.varianceCents) }}</small>
                 </span>
-                <button type="button" [disabled]="printingZReportId() !== null" (click)="reprintZReport(report)">
-                  {{ printingZReportId() === report.zReportId ? 'Printing…' : 'Reprint' }}
-                </button>
+                <div class="z-history-actions">
+                  <button type="button" [disabled]="exportingZReportId() !== null" (click)="downloadZReportExcel(report)">
+                    {{ exportingZReportId() === report.zReportId ? 'Preparing…' : 'Excel' }}
+                  </button>
+                  <button type="button" [disabled]="printingZReportId() !== null" (click)="reprintZReport(report)">
+                    {{ printingZReportId() === report.zReportId ? 'Printing…' : 'Reprint' }}
+                  </button>
+                </div>
               </div>
             }
           </div>

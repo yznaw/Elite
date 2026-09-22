@@ -9,6 +9,7 @@ const {
   inventoryMovements,
   refundVoidExceptions,
   zReportHistory,
+  zReportItems,
 } = require('../lib/pos/reports-service');
 
 const router = Router();
@@ -47,6 +48,10 @@ router.get('/refund-void-exceptions', asyncHandler(async (req, res) => {
 
 router.get('/z-reports', asyncHandler(async (req, res) => {
   ok(res, await zReportHistory(context(req), req.query));
+}));
+
+router.get('/z-reports/:id/items', asyncHandler(async (req, res) => {
+  ok(res, await zReportItems(context(req), req.params.id));
 }));
 
 module.exports = router;

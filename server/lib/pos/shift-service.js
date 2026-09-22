@@ -29,6 +29,7 @@ async function loadShiftSummary(client, tenantId, shiftId) {
          COALESCE(sum(total_cents), 0)::bigint AS gross_sales_cents,
          COALESCE(sum(total_cents) FILTER (WHERE payment_method = 'cash'), 0)::bigint AS cash_sales_cents,
          COALESCE(sum(total_cents) FILTER (WHERE payment_method = 'card'), 0)::bigint AS card_sales_cents,
+         COALESCE(sum(total_cents) FILTER (WHERE payment_method = 'sadad'), 0)::bigint AS sadad_sales_cents,
          COALESCE(sum(total_cents) FILTER (WHERE status = 'voided'), 0)::bigint AS void_total_cents,
          COALESCE(sum(total_cents) FILTER (WHERE status = 'voided' AND payment_method = 'cash'), 0)::bigint AS voided_cash_cents,
          count(*)::integer AS transaction_count,
@@ -77,6 +78,7 @@ async function loadShiftSummary(client, tenantId, shiftId) {
     grossSalesCents: numeric(row, 'gross_sales_cents'),
     cashSalesCents,
     cardSalesCents: numeric(row, 'card_sales_cents'),
+    sadadSalesCents: numeric(row, 'sadad_sales_cents'),
     refundTotalCents: numeric(row, 'refund_total_cents'),
     cashRefundCents,
     voidTotalCents: numeric(row, 'void_total_cents'),
@@ -223,7 +225,8 @@ async function closeShift(context, body) {
     );
     const summary = await loadShiftSummary(client, context.tenantId, shift.id);
     const branch = await resolveRegisterBranch(client, context.tenantId, register);
-    const reportData = { ...summary, physicalCashCents };
+    const { businessDate, zNumber } = await nextZNumber(client, context.tenantId, branch.id, shift.opened_at);
+    const reportData = { ...summary, physicalCashCents, businessDate, zNumber };
     const report = await client.query(
       `INSERT INTO pos_z_reports (
          tenant_id, shift_id, register_id, branch_id, manager_id, idempotency_key,
@@ -231,9 +234,9 @@ async function closeShift(context, body) {
          refund_total_cents, cash_refund_cents, void_total_cents, voided_cash_cents,
          net_sales_cents, expected_cash_cents, physical_cash_cents,
          transaction_count, refund_count, void_count, sold_item_quantity, returned_item_quantity, report_data,
-         cash_in_cents, cash_out_cents
+         cash_in_cents, cash_out_cents, sadad_sales_cents, business_date, z_number
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24,$25
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24,$25,$26,$27::date,$28
        ) RETURNING *`,
       [
         context.tenantId,
@@ -261,6 +264,9 @@ async function closeShift(context, body) {
         JSON.stringify(reportData),
         summary.cashInCents,
         summary.cashOutCents,
+        summary.sadadSalesCents,
+        businessDate,
+        zNumber,
       ],
     );
     await client.query(
@@ -287,9 +293,44 @@ async function closeShift(context, body) {
   });
 }
 
+/** YYYY-MM-DD for a `date` column. node-postgres turns `date` into a Date at
+    local midnight, so the local calendar parts are the stored day. */
+function isoDate(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+/**
+ * The closing number the shop reads and files by: Z-DDMM-YYYY-NNN, where the
+ * date is the Qatar day the shift was opened (a shift closed after midnight
+ * or by morning recovery belongs to the day it sold) and NNN counts that
+ * branch's closings on that day. Called inside closeShift's transaction with
+ * the register row locked; pos_z_reports_branch_number_uq (migration 044) is
+ * the backstop.
+ */
+async function nextZNumber(client, tenantId, branchId, openedAt) {
+  const result = await client.query(
+    `WITH day AS (
+       SELECT ((($3::timestamptz) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Qatar')::date AS d
+     )
+     SELECT to_char(day.d, 'YYYY-MM-DD') AS business_date,
+            'Z-' || to_char(day.d, 'DDMM-YYYY') || '-' || lpad((count(z.id) + 1)::text, 3, '0') AS z_number
+       FROM day
+       LEFT JOIN pos_z_reports z
+         ON z.tenant_id = $1 AND z.branch_id IS NOT DISTINCT FROM $2::uuid AND z.business_date = day.d
+      GROUP BY day.d`,
+    [tenantId, branchId || null, openedAt],
+  );
+  return { businessDate: result.rows[0].business_date, zNumber: result.rows[0].z_number };
+}
+
 function mapZReport(row) {
   return {
     zReportId: row.id,
+    zNumber: row.z_number || null,
+    businessDate: isoDate(row.business_date),
     shiftId: row.shift_id,
     registerId: row.register_id,
     registerName: row.register_name || null,
@@ -300,6 +341,7 @@ function mapZReport(row) {
     grossSalesCents: Number(row.gross_sales_cents),
     cashSalesCents: Number(row.cash_sales_cents),
     cardSalesCents: Number(row.card_sales_cents),
+    sadadSalesCents: Number(row.sadad_sales_cents || 0),
     refundTotalCents: Number(row.refund_total_cents),
     voidTotalCents: Number(row.void_total_cents),
     netSalesCents: Number(row.net_sales_cents),
@@ -339,26 +381,133 @@ async function listZReports(context, { limit = 30 } = {}) {
   });
 }
 
-async function getZReport(context, zReportId) {
+async function loadZReportRow(client, tenantId, zReportId) {
   uuid(zReportId, 'zReportId');
+  const result = await client.query(
+    `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name,
+            b.name AS branch_name
+     FROM pos_z_reports z
+     JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
+     JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
+     LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
+     LEFT JOIN pos_branches b ON b.id = z.branch_id AND b.tenant_id = z.tenant_id
+     WHERE z.tenant_id = $1 AND z.id = $2`,
+    [tenantId, zReportId],
+  );
+  assertPos(result.rowCount, 404, 'Z_REPORT_NOT_FOUND', 'Z-report not found.');
+  return result.rows[0];
+}
+
+async function getZReport(context, zReportId) {
   return inTransaction(async (client) => {
     const register = await requireRegister(client, context);
-    const result = await client.query(
-      `SELECT z.*, pr.display_name AS register_name, cashier.full_name AS cashier_name,
-              b.name AS branch_name
-       FROM pos_z_reports z
-       JOIN pos_registers pr ON pr.id = z.register_id AND pr.tenant_id = z.tenant_id
-       JOIN pos_shifts s ON s.id = z.shift_id AND s.tenant_id = z.tenant_id
-       LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = z.tenant_id
-       LEFT JOIN pos_branches b ON b.id = z.branch_id AND b.tenant_id = z.tenant_id
-       WHERE z.tenant_id = $1 AND z.id = $2`,
-      [context.tenantId, zReportId],
-    );
-    const row = result.rows[0];
-    assertPos(row, 404, 'Z_REPORT_NOT_FOUND', 'Z-report not found.');
+    const row = await loadZReportRow(client, context.tenantId, zReportId);
     assertPos(row.register_id === register.id, 403, 'Z_REPORT_REGISTER_MISMATCH', 'Z-report belongs to another register.');
     return mapZReport(row);
   });
 }
 
-module.exports = { closeShift, currentSummary, getZReport, listZReports, loadShiftSummary, openShift };
+/**
+ * The item breakdown behind one closing, in the layout the shop files as its
+ * daily sales report. Sales are completed (not voided) sales rung in the
+ * shift; returns are completed refunds issued in the shift, attributed to the
+ * refund's own method. Lines group by SKU, colour, size, unit price and
+ * method, so the same shoe paid by cash and by card is two rows. Totals equal
+ * the Z's net sales by construction.
+ */
+async function buildZReportItems(client, row) {
+  const items = await client.query(
+    `WITH lines AS (
+       SELECT i.sku, i.product_name, i.color, i.size, i.unit_price_cents, t.payment_method AS method,
+              i.quantity AS sold, 0 AS returned, i.line_total_cents AS amount
+         FROM pos_transaction_items i
+         JOIN pos_transactions t ON t.id = i.transaction_id
+        WHERE t.tenant_id = $1 AND t.shift_id = $2 AND t.status = 'completed'
+       UNION ALL
+       SELECT i.sku, i.product_name, i.color, i.size, i.unit_price_cents, rf.method,
+              0, ri.quantity, -ri.refund_amount_cents
+         FROM pos_refund_items ri
+         JOIN pos_refunds rf ON rf.id = ri.refund_id
+         JOIN pos_transaction_items i ON i.id = ri.original_transaction_item_id
+        WHERE rf.tenant_id = $1 AND rf.shift_id = $2 AND rf.status = 'completed'
+     )
+     SELECT sku, product_name, color, size, unit_price_cents, method,
+            sum(sold)::integer AS sold, sum(returned)::integer AS returned, sum(amount)::bigint AS amount
+       FROM lines
+      GROUP BY sku, product_name, color, size, unit_price_cents, method
+      ORDER BY product_name, size NULLS LAST, sku, method`,
+    [row.tenant_id, row.shift_id],
+  );
+  const staff = await client.query(
+    `SELECT au.full_name
+       FROM (
+         SELECT cashier_id, min(server_received_at) AS first_at FROM pos_transactions
+          WHERE tenant_id = $1 AND shift_id = $2 GROUP BY cashier_id
+         UNION ALL
+         SELECT cashier_id, min(created_at) FROM pos_refunds
+          WHERE tenant_id = $1 AND shift_id = $2 GROUP BY cashier_id
+       ) people
+       JOIN admin_users au ON au.id = people.cashier_id
+      GROUP BY au.id, au.full_name
+      ORDER BY min(people.first_at)`,
+    [row.tenant_id, row.shift_id],
+  );
+
+  const lines = items.rows.map((r) => {
+    const sold = Number(r.sold);
+    const returned = Number(r.returned);
+    return {
+      sku: r.sku,
+      description: r.product_name,
+      color: r.color || null,
+      size: r.size || null,
+      soldQty: sold,
+      returnQty: returned,
+      netQty: sold - returned,
+      unitPriceCents: Number(r.unit_price_cents),
+      paymentMethod: r.method,
+      totalCents: Number(r.amount),
+    };
+  });
+  const byMethod = new Map();
+  for (const line of lines) byMethod.set(line.paymentMethod, (byMethod.get(line.paymentMethod) || 0) + line.totalCents);
+  const staffNames = staff.rows.map((s) => s.full_name).filter(Boolean);
+
+  return {
+    header: {
+      zReportId: row.id,
+      zNumber: row.z_number || null,
+      businessDate: isoDate(row.business_date),
+      branchName: row.branch_name || null,
+      registerName: row.register_name || null,
+      staffNames: staffNames.length ? staffNames : [row.cashier_name].filter(Boolean),
+      closedAt: row.created_at,
+      generatedAt: new Date().toISOString(),
+    },
+    items: lines,
+    totals: {
+      soldQty: lines.reduce((sum, l) => sum + l.soldQty, 0),
+      returnQty: lines.reduce((sum, l) => sum + l.returnQty, 0),
+      netQty: lines.reduce((sum, l) => sum + l.netQty, 0),
+      totalCents: lines.reduce((sum, l) => sum + l.totalCents, 0),
+    },
+    byMethod: ['cash', 'card', 'sadad']
+      .filter((method) => byMethod.has(method))
+      .map((method) => ({ method, totalCents: byMethod.get(method) })),
+  };
+}
+
+/** POS side: the register that closed it may read its breakdown. */
+async function getZReportItems(context, zReportId) {
+  return inTransaction(async (client) => {
+    const register = await requireRegister(client, context);
+    const row = await loadZReportRow(client, context.tenantId, zReportId);
+    assertPos(row.register_id === register.id, 403, 'Z_REPORT_REGISTER_MISMATCH', 'Z-report belongs to another register.');
+    return buildZReportItems(client, row);
+  });
+}
+
+module.exports = {
+  buildZReportItems, closeShift, isoDate, currentSummary, getZReport, getZReportItems, listZReports,
+  loadShiftSummary, loadZReportRow, openShift,
+};

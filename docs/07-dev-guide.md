@@ -393,7 +393,7 @@ Then the client side: `SaveProductPayload` and `Product` in `admin-portal`, `For
 
 `expenses` (migration 033) is the worked example. A new page touches more files than it looks, and the two easiest to forget are both navigation:
 
-1. **Migration** — `server/db/migrations/0NN_name.sql` *and* the same statements in `server/db/ensure-migrations.js`. There is no migration runner; `ensure-migrations.js` is what actually runs on boot. Restart twice and confirm the second boot is a clean no-op.
+1. **Migration** — `server/db/migrations/0NN_name.sql` *and* the same statements in `server/db/ensure-migrations.js`. There is no migration runner; `ensure-migrations.js` is what actually runs on boot. Restart twice and confirm the second boot is a clean no-op. POS-table migrations are the exception: append the file to `migrationPaths` in `server/db/pos-schema.js`, which executes the file itself on boot. When such a file swaps a CHECK or UNIQUE constraint, guard the swap on the new constraint name (see `043_pos_sadad_payment.sql`) so a restart does not re-validate the table.
 2. **Route** — `server/routes/admin-<name>.route.js` copying `admin-policies.route.js`, plus three edits in `server/routes/index.js`: the `require`, the mount, and a comment saying why the role scope is what it is. Restrict with `requireAuth({ roles: [...] })` on the mount.
 3. **Service + models** — `services/admin-<name>.service.ts` copying `admin-policies.service.ts`, types in the `models/index.ts` barrel.
 4. **i18n** — both `EN` and `AR` blocks of `i18n/strings.ts` in the same commit. `AR` is typed `Record<keyof typeof EN, string>`, so a missing Arabic key fails the build.

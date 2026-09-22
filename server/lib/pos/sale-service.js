@@ -5,6 +5,9 @@ const db = require('../../db/client');
 const { sendReceiptForPaidOrder } = require('../order-receipt');
 
 const MAX_ORDER_CENTS = 2_147_483_647;
+const POS_PAYMENT_METHODS = ['cash', 'card', 'sadad'];
+const SADAD_REFERENCE_MAX = 40;
+const SADAD_REFERENCE_PATTERN = /^[A-Z0-9-]{4,40}$/;
 
 function variantTitle(row) {
   return [row.color, row.size, row.material].filter(Boolean).join(' / ');
@@ -217,14 +220,14 @@ function normalizeSale(body) {
   });
 
   const method = String(body?.payment?.method || '');
-  assertPos(['cash', 'card'].includes(method), 422, 'PAYMENT_METHOD_INVALID', 'Payment method must be cash or card.');
-  // The card terminal at this shop is a standalone unit with no cable/API link
-  // to the POS (docs/15 Phase 4) — the only paper trail available is whatever
-  // reference/approval code the cashier reads off the terminal's own receipt,
-  // so it is captured here and required rather than accepted as a bare "paid".
-  const terminalReference = method === 'card'
-    ? nonEmpty(body?.payment?.terminalReference, 'payment.terminalReference', 80)
-    : null;
+  assertPos(POS_PAYMENT_METHODS.includes(method), 422, 'PAYMENT_METHOD_INVALID', 'Payment method must be cash, card or sadad.');
+  // Neither the card terminal nor Sadad has a cable/API link to the POS
+  // (docs/15 Phase 4) — the only paper trail is the reference the cashier
+  // reads off the terminal slip or the Sadad merchant app, so it is captured
+  // here and required rather than accepted as a bare "paid".
+  const terminalReference = method === 'cash'
+    ? null
+    : paymentReference(method, body?.payment?.terminalReference, 'payment.terminalReference');
   const clientCreatedAt = body?.clientCreatedAt ? new Date(body.clientCreatedAt) : null;
   assertPos(!clientCreatedAt || !Number.isNaN(clientCreatedAt.getTime()), 422, 'INVALID_TIMESTAMP', 'clientCreatedAt must be a valid timestamp.');
   return {
@@ -237,6 +240,8 @@ function normalizeSale(body) {
       method,
       cashAmountCents: cents(body?.payment?.cashAmountCents, 'payment.cashAmountCents'),
       cardAmountCents: cents(body?.payment?.cardAmountCents, 'payment.cardAmountCents'),
+      // Absent on sales queued offline before Sadad existed; those are cash or card.
+      sadadAmountCents: cents(body?.payment?.sadadAmountCents ?? 0, 'payment.sadadAmountCents'),
       amountTenderedCents: cents(body?.payment?.amountTenderedCents, 'payment.amountTenderedCents'),
       changeGivenCents: cents(body?.payment?.changeGivenCents, 'payment.changeGivenCents'),
       terminalReference,
@@ -273,6 +278,9 @@ async function loadSale(client, tenantId, transactionId) {
        -- sale has no customer and must still load (docs/25 Phase 5).
        cust.full_name AS customer_name,
        COALESCE(cust.phone_number, cust.phone) AS customer_phone,
+       (SELECT p.terminal_reference FROM payments p
+         WHERE p.tenant_id = t.tenant_id AND p.order_id = t.order_id
+         ORDER BY p.created_at LIMIT 1) AS terminal_reference,
        COALESCE(jsonb_agg(jsonb_build_object(
          'id', i.id,
          'variantId', i.variant_id,
@@ -338,6 +346,7 @@ async function loadSale(client, tenantId, transactionId) {
     receiptNumber: String(receiptNumber).padStart(8, '0'),
     status: row.status,
     paymentMethod: row.payment_method,
+    terminalReference: row.terminal_reference || null,
     subtotalCents: Number(row.subtotal_cents),
     taxCents: Number(row.tax_cents),
     totalCents: Number(row.total_cents),
@@ -366,6 +375,7 @@ async function loadSale(client, tenantId, transactionId) {
         registerId: row.register_id,
         registerName: row.register_name || '',
         paymentMethod: row.payment_method,
+        terminalReference: row.terminal_reference || null,
         items,
         subtotalCents: Number(row.subtotal_cents),
         taxCents: Number(row.tax_cents),
@@ -509,6 +519,7 @@ async function createSale(context, body, options = {}) {
     assertPos(subtotalCents <= MAX_ORDER_CENTS, 422, 'ORDER_TOTAL_TOO_LARGE', 'Order total exceeds the supported limit.');
     const totalCents = subtotalCents;
     validatePayment(sale.payment, totalCents);
+    if (sale.payment.method === 'sadad') await assertSadadReferenceUnused(client, context.tenantId, sale.payment.terminalReference);
 
     let customer = null;
     // Set when an offline sale referenced a customer that no longer exists;
@@ -580,8 +591,8 @@ async function createSale(context, body, options = {}) {
          tenant_id, order_id, receipt_id, register_id, branch_id, shift_id, cashier_id, customer_id,
          idempotency_key, payment_method, subtotal_cents, tax_cents, total_cents,
          cash_amount_cents, card_amount_cents, amount_tendered_cents, change_given_cents,
-         client_created_at, metadata
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$11,$12,$13,$14,$15,$16,$17::jsonb)
+         client_created_at, metadata, sadad_amount_cents
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$11,$12,$13,$14,$15,$16,$17::jsonb,$18)
        RETURNING id`,
       [
         context.tenantId,
@@ -601,6 +612,7 @@ async function createSale(context, body, options = {}) {
         sale.payment.changeGivenCents,
         sale.clientCreatedAt,
         JSON.stringify({ offline }),
+        sale.payment.sadadAmountCents,
       ],
     );
     const transactionId = transactionResult.rows[0].id;
@@ -770,9 +782,11 @@ async function createSale(context, body, options = {}) {
 }
 
 function validatePayment(payment, totalCents) {
+  const sadadAmountCents = payment.sadadAmountCents ?? 0;
   if (payment.method === 'cash') {
     assertPos(payment.cashAmountCents === totalCents, 422, 'PAYMENT_TOTAL_MISMATCH', 'Cash amount must equal the sale total.');
     assertPos(payment.cardAmountCents === 0, 422, 'PAYMENT_TOTAL_MISMATCH', 'Card amount must be zero for a cash sale.');
+    assertPos(sadadAmountCents === 0, 422, 'PAYMENT_TOTAL_MISMATCH', 'Sadad amount must be zero for a cash sale.');
     assertPos(payment.amountTenderedCents >= totalCents, 422, 'PAYMENT_INSUFFICIENT', 'Tendered cash is less than the sale total.');
     assertPos(
       payment.changeGivenCents === payment.amountTenderedCents - totalCents,
@@ -782,8 +796,52 @@ function validatePayment(payment, totalCents) {
     );
     return;
   }
+  if (payment.method === 'sadad') {
+    assertPos(sadadAmountCents === totalCents, 422, 'PAYMENT_TOTAL_MISMATCH', 'Sadad amount must equal the sale total.');
+    assertPos(payment.cardAmountCents === 0, 422, 'PAYMENT_TOTAL_MISMATCH', 'Card amount must be zero for a Sadad sale.');
+    assertPos(payment.cashAmountCents === 0 && payment.amountTenderedCents === 0 && payment.changeGivenCents === 0, 422, 'PAYMENT_TOTAL_MISMATCH', 'Cash fields must be zero for a Sadad sale.');
+    return;
+  }
   assertPos(payment.cardAmountCents === totalCents, 422, 'PAYMENT_TOTAL_MISMATCH', 'Card amount must equal the sale total.');
+  assertPos(sadadAmountCents === 0, 422, 'PAYMENT_TOTAL_MISMATCH', 'Sadad amount must be zero for a card sale.');
   assertPos(payment.cashAmountCents === 0 && payment.amountTenderedCents === 0 && payment.changeGivenCents === 0, 422, 'PAYMENT_TOTAL_MISMATCH', 'Cash fields must be zero for a card sale.');
 }
 
-module.exports = { claimReceipt, createSale, findByBarcode, listProductFilters, loadSale, normalizeSale, searchProducts, validatePayment };
+/**
+ * Card and Sadad references are cashier-typed proof of payment. A Sadad
+ * transaction ID has a known shape, so it is normalized (trim, uppercase) and
+ * checked; a card slip reference stays free-form as it always has been.
+ */
+function paymentReference(method, value, field) {
+  const reference = nonEmpty(value, field, method === 'sadad' ? SADAD_REFERENCE_MAX : 80);
+  if (method !== 'sadad') return reference;
+  const normalized = reference.toUpperCase();
+  assertPos(SADAD_REFERENCE_PATTERN.test(normalized), 422, 'PAYMENT_REFERENCE_INVALID', 'Sadad transaction ID must be 4 to 40 letters, digits or dashes.');
+  return normalized;
+}
+
+/**
+ * One Sadad confirmation backs exactly one sale; without this a single paid
+ * Sadad transaction could be typed into any number of sales. Checked here for
+ * a readable error; payments_pos_sadad_reference_uq (migration 043) is the
+ * backstop under concurrency.
+ */
+async function assertSadadReferenceUnused(client, tenantId, reference) {
+  const used = await client.query(
+    `SELECT r.receipt_number
+       FROM payments p
+       JOIN pos_transactions t ON t.order_id = p.order_id AND t.tenant_id = p.tenant_id
+       JOIN pos_receipts r ON r.id = t.receipt_id
+      WHERE p.tenant_id = $1 AND p.provider = 'pos-manual' AND p.method = 'sadad' AND p.terminal_reference = $2
+      LIMIT 1`,
+    [tenantId, reference],
+  );
+  assertPos(
+    !used.rowCount,
+    409,
+    'PAYMENT_REFERENCE_USED',
+    `This Sadad transaction ID was already used on receipt #${String(used.rows[0]?.receipt_number || '').padStart(8, '0')}.`,
+  );
+}
+
+module.exports = { POS_PAYMENT_METHODS, claimReceipt, paymentReference, createSale, findByBarcode, listProductFilters, loadSale, normalizeSale, searchProducts, validatePayment };

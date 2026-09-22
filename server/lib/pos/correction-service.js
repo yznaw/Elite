@@ -2,7 +2,7 @@ const { kickRestockDispatch } = require('../restock-dispatch-job');
 const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
-const { claimReceipt, loadSale } = require('./sale-service');
+const { POS_PAYMENT_METHODS, claimReceipt, loadSale, paymentReference } = require('./sale-service');
 const { recordMovement } = require('../inventory-ledger');
 
 async function updateProductTotals(client, tenantId, productIds) {
@@ -276,14 +276,14 @@ async function createRefund(context, body) {
   const shiftId = uuid(body?.shiftId, 'shiftId');
   const receiptNumber = positiveInt(body?.receiptNumber, 'receiptNumber');
   const method = String(body?.refundMethod || '');
-  assertPos(['cash', 'card'].includes(method), 422, 'REFUND_METHOD_INVALID', 'Refund method must be cash or card.');
-  // Same reasoning as the original sale (sale-service.js): the card terminal
-  // here is standalone with no API link, so a card refund needs its own
-  // terminal action and the approval/reference code off that slip is the
-  // only proof it happened — required, not optional, mirroring the sale.
-  const terminalReference = method === 'card'
-    ? nonEmpty(body?.terminalReference, 'terminalReference', 80)
-    : null;
+  assertPos(POS_PAYMENT_METHODS.includes(method), 422, 'REFUND_METHOD_INVALID', 'Refund method must be cash, card or sadad.');
+  // Same reasoning as the original sale (sale-service.js): neither the card
+  // terminal nor Sadad has an API link, so a card or Sadad refund needs its
+  // own action there and the reference off that slip or the Sadad merchant
+  // app is the only proof it happened — required, mirroring the sale.
+  const terminalReference = method === 'cash'
+    ? null
+    : paymentReference(method, body?.terminalReference, 'terminalReference');
   const reason = nonEmpty(body?.reason, 'reason', 500);
   assertPos(Array.isArray(body?.lines) && body.lines.length > 0 && body.lines.length <= 100, 422, 'REFUND_LINES_INVALID', 'Refund must contain 1 to 100 lines.');
   const seen = new Set();

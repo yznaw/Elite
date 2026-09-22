@@ -80,13 +80,18 @@ export interface PosShift {
   openedAt: string;
 }
 
+import type { PosPaymentMethod } from './pos-payment';
+export { POS_PAYMENT_LABELS, SADAD_REFERENCE_PATTERN } from './pos-payment';
+export type { PosPaymentMethod } from './pos-payment';
+
 export interface PosSaleResult {
   transactionId: string;
   orderId: string;
   orderNumber: string;
   receiptNumber: string;
   status: string;
-  paymentMethod: 'cash' | 'card';
+  paymentMethod: PosPaymentMethod;
+  terminalReference?: string | null;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -119,7 +124,7 @@ export interface PosTransactionItem {
 export interface PosRefundSummary {
   refundId: string;
   amountCents: number;
-  method: 'cash' | 'card';
+  method: PosPaymentMethod;
   reason: string;
   status: string;
   receiptNumber: string;
@@ -165,6 +170,7 @@ export interface PosShiftSummary {
   grossSalesCents: number;
   cashSalesCents: number;
   cardSalesCents: number;
+  sadadSalesCents: number;
   refundTotalCents: number;
   voidTotalCents: number;
   netSalesCents: number;
@@ -214,8 +220,39 @@ export interface PosCustomer {
   matchedOn?: 'email' | 'phone' | null;
 }
 
+/** One closing's item breakdown (GET .../z-reports/:id/items). */
+export interface PosZReportItems {
+  header: {
+    zReportId: string;
+    zNumber: string | null;
+    businessDate: string | null;
+    branchName: string | null;
+    registerName: string | null;
+    staffNames: string[];
+    closedAt: string;
+    generatedAt: string;
+  };
+  items: Array<{
+    sku: string;
+    description: string;
+    color: string | null;
+    size: string | null;
+    soldQty: number;
+    returnQty: number;
+    netQty: number;
+    unitPriceCents: number;
+    paymentMethod: PosPaymentMethod;
+    totalCents: number;
+  }>;
+  totals: { soldQty: number; returnQty: number; netQty: number; totalCents: number };
+  byMethod: Array<{ method: PosPaymentMethod; totalCents: number }>;
+}
+
 export interface PosZReport {
   zReportId: string;
+  /** Z-DDMM-YYYY-NNN; null only if the migration has not run yet. */
+  zNumber: string | null;
+  businessDate: string | null;
   shiftId: string;
   registerId: string;
   registerName: string | null;
@@ -226,6 +263,7 @@ export interface PosZReport {
   grossSalesCents: number;
   cashSalesCents: number;
   cardSalesCents: number;
+  sadadSalesCents: number;
   refundTotalCents: number;
   voidTotalCents: number;
   netSalesCents: number;
@@ -250,11 +288,13 @@ export interface PosSaleInput {
   customerId: string | null;
   items: Array<{ variantId: string; quantity: number; unitPriceCents: number }>;
   payment: {
-    method: 'cash' | 'card';
+    method: PosPaymentMethod;
     cashAmountCents: number;
     cardAmountCents: number;
+    sadadAmountCents?: number;
     amountTenderedCents: number;
     changeGivenCents: number;
+    terminalReference?: string;
   };
   clientCreatedAt: string;
 }
@@ -453,15 +493,15 @@ export class PosService {
     shiftId: string;
     originalTransactionId: string;
     lines: Array<{ transactionItemId: string; quantity: number; restock: boolean }>;
-    refundMethod: 'cash' | 'card';
-    /** Required by the server when refundMethod is 'card' — the card
-        terminal here is standalone, so this is the only proof the refund
-        was actually run on it. */
+    refundMethod: PosPaymentMethod;
+    /** Required by the server when refundMethod is 'card' or 'sadad' — the
+        card terminal and Sadad are standalone, so this is the only proof the
+        refund was actually run there. */
     terminalReference?: string;
     reason: string;
     managerOverrideId: string;
     managerOverrideToken: string;
-  }): Promise<PosSaleResult & { refundId: string; refundReceiptNumber: string; amountCents: number; method: 'cash' | 'card'; terminalReference: string | null }> {
+  }): Promise<PosSaleResult & { refundId: string; refundReceiptNumber: string; amountCents: number; method: PosPaymentMethod; terminalReference: string | null }> {
     return firstValueFrom(this.api.post('/pos/refunds', input));
   }
 
@@ -527,6 +567,10 @@ export class PosService {
 
   getZReport(zReportId: string): Promise<PosZReport> {
     return firstValueFrom(this.api.get<PosZReport>(`/pos/shifts/z-reports/${zReportId}`));
+  }
+
+  getZReportItems(zReportId: string): Promise<PosZReportItems> {
+    return firstValueFrom(this.api.get<PosZReportItems>(`/pos/shifts/z-reports/${encodeURIComponent(zReportId)}/items`));
   }
 
   /** Phone-first lookup, but a name or an email also matches. */

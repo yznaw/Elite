@@ -10,6 +10,7 @@ import {
   PosReconciliationRegister,
   PosReconciliationService,
   PosReconciliationStatus,
+  PosSettledMethod,
 } from '../../services/pos-reconciliation.service';
 
 @Component({
@@ -17,9 +18,19 @@ import {
     imports: [CommonModule, DatePipe, FormsModule, PillComponent, SpinnerComponent],
     template: `
     <div class="page-fade">
+      <!-- Card and Sadad settle through different parties (bank vs Sadad
+           merchant panel), so each is reconciled on its own; the switch
+           drives entry and history together. -->
+      <div class="tabs" role="tablist">
+        @for (m of methods; track m) {
+          <button class="tab" type="button" role="tab" [attr.aria-selected]="method() === m"
+                  [class.active]="method() === m" (click)="setMethod(m)">{{ t('reconciliation.method.' + m) }}</button>
+        }
+      </div>
+
       <div class="card card-pad mb-24" style="max-width:720px;">
         <div class="card-title mb-16">{{ t('reconciliation.entry.title') }}</div>
-        <div class="card-sub mb-16">{{ t('reconciliation.entry.sub') }}</div>
+        <div class="card-sub mb-16">{{ mt('reconciliation.entry.sub') }}</div>
 
         <div class="grid-3">
           <div>
@@ -35,7 +46,7 @@ import {
             <input class="inp" type="date" [ngModel]="businessDate()" (ngModelChange)="businessDate.set($event)"/>
           </div>
           <div>
-            <label class="lbl">{{ t('reconciliation.settlementTotal') }}</label>
+            <label class="lbl">{{ mt('reconciliation.settlementTotal') }}</label>
             <div class="row" style="align-items:center;gap:6px;">
               <span class="muted small">QAR</span>
               <input class="inp" inputmode="decimal" [ngModel]="settlementInput()" (ngModelChange)="settlementInput.set($event)"/>
@@ -44,7 +55,7 @@ import {
         </div>
 
         @if (livePosTotalCents(); as posTotal) {
-          <div class="muted small mt-16">{{ t('reconciliation.posTotalHint') }} {{ formatMoney(posTotal) }}</div>
+          <div class="muted small mt-16">{{ mt('reconciliation.posTotalHint') }} {{ formatMoney(posTotal) }}</div>
         }
 
         <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
@@ -154,6 +165,11 @@ export class PosReconciliationComponent implements OnInit {
   private readonly api = inject(PosReconciliationService);
 
   readonly t = (k: string): string => this.i18n.t(k);
+  /** Method-specific copy: card keeps the original keys, Sadad adds `.sadad`. */
+  readonly mt = (k: string): string => this.i18n.t(this.method() === 'sadad' ? `${k}.sadad` : k);
+
+  readonly methods: PosSettledMethod[] = ['card', 'sadad'];
+  readonly method = signal<PosSettledMethod>('card');
 
   readonly registers = signal<PosReconciliationRegister[]>([]);
   readonly selectedRegisterId = signal('');
@@ -190,12 +206,25 @@ export class PosReconciliationComponent implements OnInit {
   async loadHistory(): Promise<void> {
     this.loadingHistory.set(true);
     try {
-      this.history.set(await this.api.list(this.statusFilter() ? { status: this.statusFilter() as PosReconciliationStatus } : {}));
+      this.history.set(await this.api.list({
+        method: this.method(),
+        ...(this.statusFilter() ? { status: this.statusFilter() as PosReconciliationStatus } : {}),
+      }));
     } catch {
       // Global interceptor surfaces the error.
     } finally {
       this.loadingHistory.set(false);
     }
+  }
+
+  setMethod(method: PosSettledMethod): void {
+    if (this.method() === method) return;
+    this.method.set(method);
+    // A total checked for the other tender must not be shown under this one.
+    this.livePosTotalCents.set(null);
+    this.settlementInput.set('');
+    this.cancelResolve();
+    this.loadHistory();
   }
 
   setStatusFilter(value: PosReconciliationStatus | ''): void {
@@ -207,7 +236,7 @@ export class PosReconciliationComponent implements OnInit {
     if (!this.selectedRegisterId() || !this.businessDate()) return;
     this.refreshing.set(true);
     try {
-      const result = await this.api.refresh(this.selectedRegisterId(), this.businessDate());
+      const result = await this.api.refresh(this.selectedRegisterId(), this.businessDate(), this.method());
       this.livePosTotalCents.set(result.posTotalCents);
     } catch (error) {
       this.toast.warning("Couldn't check POS total", this.errorMessage(error));
@@ -222,7 +251,7 @@ export class PosReconciliationComponent implements OnInit {
     if (settlementCents === null) return;
     this.submitting.set(true);
     try {
-      const result = await this.api.submitSettlement(this.selectedRegisterId(), this.businessDate(), settlementCents);
+      const result = await this.api.submitSettlement(this.selectedRegisterId(), this.businessDate(), settlementCents, this.method());
       this.livePosTotalCents.set(result.posTotalCents);
       this.settlementInput.set('');
       this.toast.success(

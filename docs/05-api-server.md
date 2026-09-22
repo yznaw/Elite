@@ -544,11 +544,11 @@ The register binding is resolved from `req.session.posRegisterId` first and then
 | `POST` | `/api/pos/registers/receipt-number-blocks` | Reserve 100 tenant-wide receipt numbers |
 | `GET` | `/api/pos/products/search?q=` | Search active variants by name, SKU, or barcode |
 | `GET` | `/api/pos/products/barcode/:barcode` | Exact active barcode lookup |
-| `POST` | `/api/pos/transactions` | Create/finalize a sale atomically |
+| `POST` | `/api/pos/transactions` | Create/finalize a sale atomically. `payment.method`: `cash` \| `card` \| `sadad`. Card and Sadad require `payment.terminalReference`; Sadad also sends `sadadAmountCents` = total, and its ID is normalized to uppercase and must match `^[A-Z0-9-]{4,40}$` (`422 PAYMENT_REFERENCE_INVALID`) and be unused (`409 PAYMENT_REFERENCE_USED`). The sale result includes `terminalReference`. |
 | `POST` | `/api/pos/transactions/sync` | Synchronize offline sale batches |
 | `GET` | `/api/pos/transactions/lookup/:lookup` | Resolve receipt, sale QR, refund QR, or transaction reference |
 | `POST` | `/api/pos/transactions/:id/void` | Same-shift manager-approved void |
-| `POST` | `/api/pos/refunds` | Full/partial manager-approved refund |
+| `POST` | `/api/pos/refunds` | Full/partial manager-approved refund. `refundMethod` must equal the sale's method; card and Sadad refunds require `terminalReference` (Sadad: same format rule). |
 | `GET/POST/DELETE` | `/api/pos/parked-carts` | List, create, or consume parked carts |
 | `GET` | `/api/pos/shifts/current` | Current X-style shift summary |
 | `POST` | `/api/pos/shifts/z-report` | Manager-approved shift close and immutable Z report |
@@ -694,6 +694,12 @@ All API responses follow this standard shape (defined in `shared/interfaces/api-
   "message": "Optional message"
 }
 ```
+
+### Admin — POS Reconciliation & Reports (`/api/admin/pos-reconciliation`, `/api/admin/pos-reports`)
+
+Owner/admin/manager only. Reconciliation is per settled tender: `GET /api/admin/pos-reconciliation` accepts `?method=card|sadad`, and `POST /refresh` and `POST /settlement` accept `method` in the body (default `card`; `cash` or anything else is `422`). The POS total for Sadad is `sadad_amount_cents` of completed sales minus completed Sadad refunds for that register and Qatar business day. Rows carry `method`. `GET /api/admin/pos-reports/card-settlement-exceptions` accepts `?method=card|sadad` and returns `method` per row. Shift summaries, Z-reports and Z-history return `sadadSalesCents`; `daily-sales.byPaymentMethod` returns `sadad` as its own group. Z-reports and Z-history also return `zNumber` (`Z-DDMM-YYYY-NNN`) and `businessDate`.
+
+`GET /api/admin/pos-reports/z-reports/:id/items` (and the register-scoped `GET /api/pos/shifts/z-reports/:id/items`) returns one closing's item breakdown: `{ header: { zReportId, zNumber, businessDate, branchName, registerName, staffNames[], closedAt, generatedAt }, items: [{ sku, description, color, size, soldQty, returnQty, netQty, unitPriceCents, paymentMethod, totalCents }], totals: { soldQty, returnQty, netQty, totalCents }, byMethod: [{ method, totalCents }] }`. The POS variant answers `403 Z_REPORT_REGISTER_MISMATCH` for another register's closing. Both answer `404 Z_REPORT_NOT_FOUND` for an unknown id and `422` for a malformed one.
 
 ### Error Response
 

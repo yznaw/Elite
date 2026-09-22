@@ -61,6 +61,7 @@ function createComponent(kind: 'sale' | 'refund' | 'void' = 'sale') {
     busy: signal(false), online: signal(true), shiftId: () => 'shift-1',
     cart: signal([{ item: { variantId: 'variant-1', priceCents: 2500 }, quantity: 1 }]),
     paymentMethod: () => 'cash', tendered: '30.00', terminalReference: '',
+    paymentReferenceError: signal(null),
     totalCents: () => 2500, canSellFromOfflineCatalog: () => true,
     ensureReceiptBlock: async () => {}, receiptBlock: signal(block),
     pendingIdempotencyKey: null, selectedCustomer: signal(null),
