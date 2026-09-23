@@ -2511,8 +2511,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         this.t('storefront.editor.createColour.success'),
         this.t('storefront.editor.createColour.successSub'),
       );
-    } catch {
-      this.toast.error(
+    } catch (caught) {
+      this.toast.errorFrom(caught,
         this.t('storefront.editor.createColour.failed'),
         this.t('storefront.editor.createColour.failedSub'),
       );
@@ -2621,8 +2621,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       // Products may have finished first, in which case their load already ran
       // this and found no content. Whichever lands last does the work.
       this.backfillLinkedSlides();
-    } catch {
-      this.toast.warning(this.t('storefront.editor.toast.loadWarning'), this.t('storefront.editor.toast.loadWarning.sub'));
+    } catch (caught) {
+      this.toast.warningFrom(caught, this.t('storefront.editor.toast.loadWarning'), this.t('storefront.editor.toast.loadWarning.sub'));
     }
   }
 
@@ -2639,8 +2639,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.contentDirty.set(false);
       this.draftUnpublished.set(true);
       this.showPreviewHint.set(true);
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.saveFailed'), this.t('storefront.editor.toast.saveFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.saveFailed'), this.t('storefront.editor.toast.saveFailed.sub'));
     } finally {
       this.savingDraft.set(false);
     }
@@ -2666,8 +2666,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.contentDirty.set(false);
       this.showPreviewHint.set(false);
       this.toast.success(this.t('storefront.editor.toast.draftDiscarded'), this.t('storefront.editor.toast.draftDiscarded.sub'));
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.revertFailed'), this.t('storefront.editor.toast.revertFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.revertFailed'), this.t('storefront.editor.toast.revertFailed.sub'));
     } finally {
       this.revertingDraft.set(false);
     }
@@ -2721,8 +2721,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/publish', {}));
       this.draftUnpublished.set(false);
       this.toast.success(this.t('storefront.editor.toast.contentPublished'), this.t('storefront.editor.toast.contentPublished.sub'));
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.publishFailed'), this.t('storefront.editor.toast.publishFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.publishFailed'), this.t('storefront.editor.toast.publishFailed.sub'));
     } finally {
       this.publishingContent.set(false);
     }
@@ -2742,8 +2742,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this._previewUrl.set(`${base}${sep}preview=${token}&embedded=1`);
       this.previewOpen.set(true);
       this.previewDevice.set('desktop');
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.previewFailed'), this.t('storefront.editor.toast.previewFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.previewFailed'), this.t('storefront.editor.toast.previewFailed.sub'));
     } finally {
       this.generatingToken.set(false);
     }
@@ -2770,8 +2770,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         this.content.set(live);
       }
       this.contentDirty.set(false);
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.discardFailed'), this.t('storefront.editor.toast.discardFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.discardFailed'), this.t('storefront.editor.toast.discardFailed.sub'));
     }
   }
 
@@ -3376,8 +3376,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       await this.storefront.publishRemote();
       this.blocks.set(blocks);
       this.toast.success(this.t('storefront.publish.toast.title'), this.t('storefront.publish.toast.sub'));
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.layoutPublishFailed'), this.t('storefront.editor.toast.layoutPublishFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.layoutPublishFailed'), this.t('storefront.editor.toast.layoutPublishFailed.sub'));
     } finally {
       this.publishing.set(false);
     }
@@ -3527,9 +3527,9 @@ export class StorefrontComponent implements OnInit, OnDestroy {
             resolve(null);
           }
         },
-        error: () => {
+        error: (caught) => {
           this.uploading.set(false);
-          this.toast.error(this.t('storefront.editor.toast.uploadFailed'), this.t('storefront.editor.toast.uploadFailed.sub'));
+          this.toast.errorFrom(caught, this.t('storefront.editor.toast.uploadFailed'), this.t('storefront.editor.toast.uploadFailed.sub'));
           resolve(null);
         },
       });

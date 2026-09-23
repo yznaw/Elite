@@ -76,7 +76,7 @@ export class RestockRequestsComponent implements OnInit {
   async act(r: RestockRequest, action: 'resend' | 'cancel') {
     this.busy.set(r.id);
     try { await this.api.action(r.id, action); this.toast.success(this.t('restock.saved')); await this.load(); }
-    catch { this.toast.error(this.t('restock.actionError')); }
+    catch (caught) { this.toast.errorFrom(caught, this.t('restock.actionError')); }
     finally { this.busy.set(''); }
   }
 }

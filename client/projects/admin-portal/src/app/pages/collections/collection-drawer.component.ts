@@ -796,9 +796,9 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     try {
       const products = await this.productsApi.list();
       this.products.set(products.filter((product) => !product.hidden));
-    } catch {
+    } catch (caught) {
       this.products.set([]);
-      this.toast.warning(this.t('collections.toast.productsUnavailableTitle'), this.t('collections.toast.productsUnavailable'));
+      this.toast.warningFrom(caught, this.t('collections.toast.productsUnavailableTitle'), this.t('collections.toast.productsUnavailable'));
     }
   }
 
@@ -950,9 +950,9 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
           );
         }
       },
-      error: () => {
+      error: (caught) => {
         this.uploading.set(false);
-        this.toast.error(
+        this.toast.errorFrom(caught,
           this.t('storefront.editor.toast.uploadFailed'),
           this.t('storefront.editor.toast.uploadFailed.sub'),
         );

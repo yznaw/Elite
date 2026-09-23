@@ -1256,9 +1256,9 @@ export class SettingsComponent implements OnInit {
     try {
       state.set(read(await this.settingsApi.updatePosPolicy(payload(next))));
       this.toast.success(this.t('settings.security.approvals.saved'));
-    } catch {
+    } catch (caught) {
       state.set(!next);
-      this.toast.error(this.t('settings.security.approvals.failed'));
+      this.toast.errorFrom(caught, this.t('settings.security.approvals.failed'));
     } finally {
       this.savingPosPolicy.set(false);
     }

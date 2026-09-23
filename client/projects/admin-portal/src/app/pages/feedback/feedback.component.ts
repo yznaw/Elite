@@ -295,8 +295,8 @@ export class FeedbackComponent implements OnInit {
         this.general.set(data.general);
         this.products.set(data.products);
       }
-    } catch {
-      this.toast.error(this.t('feedback.toast.loadError.title'), this.t('feedback.toast.loadError.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('feedback.toast.loadError.title'), this.t('feedback.toast.loadError.sub'));
     } finally {
       this.loading.set(false);
     }

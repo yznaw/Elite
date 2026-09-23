@@ -28,7 +28,7 @@ The **admin-portal** is a comprehensive back-office dashboard for managing the e
   </div>
 </div>
 
-<ap-toast/>              <!-- Global toast notification stack -->
+<ap-toast/>              <!-- Global toast stack: de-duplicated (×N), max 3, self-dismissing; see docs/38 -->
 <ap-confirm-dialog/>     <!-- Global confirmation modal -->
 ```
 

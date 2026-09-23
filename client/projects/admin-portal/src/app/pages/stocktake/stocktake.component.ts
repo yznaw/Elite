@@ -627,7 +627,7 @@ export class StocktakeComponent implements OnInit {
       this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
       this.toast.success('Counts imported', `${updated} updated${skipped ? ` · ${skipped} skipped` : ''}`);
     } catch (error) {
-      this.toast.warning('Could not import counts', error instanceof Error ? error.message : 'Use a CSV exported from this stocktake.');
+      this.toast.warningFrom(error, 'Could not import counts', error instanceof Error ? error.message : 'Use a CSV exported from this stocktake.');
     } finally {
       this.importing.set(false);
     }

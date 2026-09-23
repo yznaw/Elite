@@ -321,8 +321,8 @@ export class ExpensesComponent implements OnInit {
     try {
       const res = await this.svc.list({ from: this.from, to: this.to });
       this.expenses.set(res.expenses);
-    } catch {
-      this.toast.error(this.t('expenses.loadError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('expenses.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -366,8 +366,8 @@ export class ExpensesComponent implements OnInit {
         to: this.to,
         category: this.categoryFilter,
       });
-    } catch {
-      this.toast.error(this.t('expenses.exportError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('expenses.exportError'));
     } finally {
       this.exporting.set(false);
     }
@@ -383,8 +383,8 @@ export class ExpensesComponent implements OnInit {
           : `${this.t('expenses.importDone')} (${res.imported})`,
       );
       if (res.imported > 0) await this.reload();
-    } catch {
-      this.toast.error(this.t('expenses.importError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('expenses.importError'));
     } finally {
       this.importing.set(false);
     }

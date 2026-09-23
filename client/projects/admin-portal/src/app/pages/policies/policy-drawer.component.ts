@@ -746,7 +746,7 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
         this.duplicateError.set(true);
       }
       this.saveState.set('error');
-      this.toast.error(this.t('policies.duplicate.error'));
+      this.toast.errorFrom(err, this.t('policies.duplicate.error'));
     }
   }
 
@@ -765,8 +765,8 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
       this.original.set({ ...this.form() });
       this.deleted.emit(this.policy!.id);
       this.closeDrawer.emit();
-    } catch {
-      this.toast.error(this.t('policies.deleteError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('policies.deleteError'));
     }
   }
 }

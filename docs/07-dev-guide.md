@@ -342,6 +342,10 @@ Render the HTML and print it from a hidden same-page `<iframe>`; see
   `text-align` from the direction rather than hardcoding `left`.
 - Clean the iframe up on `afterprint`, with a timeout as a backstop.
 
+### Show a Notification (Toast)
+
+Read [38 – Notifications](./38-notification-audit.md) first. In short: the HTTP interceptor already reports every failed request (and `ConnectivityService` owns "connection lost"), so in a `catch` around an API call use `toast.errorFrom(err, title, sub)`, which only shows if the global message did not. Toasts dismiss themselves; pass `duration: null` only with an `action` that really does something; give repeated states a `key` and clear it with `dismissKey`. Tests: `npm run test:notifications`.
+
 ### Add a New i18n Key
 
 1. Open the appropriate `i18n/strings.ts` file

@@ -265,9 +265,9 @@ export class MediaPickerComponent {
           );
         }
       },
-      error: () => {
+      error: (caught) => {
         this.uploading.set(false);
-        this.toast.error(
+        this.toast.errorFrom(caught,
           this.t('storefront.editor.toast.uploadFailed'),
           this.t('storefront.editor.toast.uploadFailed.sub'),
         );
@@ -280,8 +280,8 @@ export class MediaPickerComponent {
     this.loading.set(true);
     try {
       this.files.set(await this.mediaApi.list());
-    } catch {
-      this.toast.error(this.t('storefront.editor.mediaPicker.noImages'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.mediaPicker.noImages'));
     } finally {
       this.loading.set(false);
     }

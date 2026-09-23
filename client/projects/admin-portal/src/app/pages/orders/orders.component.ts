@@ -321,8 +321,8 @@ export class OrdersComponent implements OnInit, OnDestroy {
     try {
       const full = await this.ordersApi.get(id);
       this.active.set(full);
-    } catch {
-      this.toast.error(this.t('orders.deepLink.notFound.title'), id);
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('orders.deepLink.notFound.title'), id);
     }
   }
 

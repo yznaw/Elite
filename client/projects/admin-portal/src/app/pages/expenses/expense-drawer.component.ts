@@ -356,8 +356,8 @@ export class ExpenseDrawerComponent implements OnChanges {
       const asset = Array.isArray(data) ? data[0] : data;
       if (!asset?.id) throw new Error('no asset returned');
       this.patch({ receiptMediaId: asset.id, receiptUrl: asset.url ?? null });
-    } catch {
-      this.toast.error(this.t('expenses.receiptError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('expenses.receiptError'));
     } finally {
       this.uploading.set(false);
       input.value = '';
@@ -417,9 +417,9 @@ export class ExpenseDrawerComponent implements OnChanges {
       setTimeout(() => {
         if (this.saveState() === 'saved') this.saveState.set('idle');
       }, 2000);
-    } catch {
+    } catch (caught) {
       this.saveState.set('error');
-      this.toast.error(this.t('expenses.toast.saveError'));
+      this.toast.errorFrom(caught, this.t('expenses.toast.saveError'));
     }
   }
 
@@ -444,8 +444,8 @@ export class ExpenseDrawerComponent implements OnChanges {
       this.original.set({ ...this.form() });
       this.deleted.emit(this.expense!.id);
       this.closeDrawer.emit();
-    } catch {
-      this.toast.error(this.t('expenses.toast.deleteError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('expenses.toast.deleteError'));
     }
   }
 

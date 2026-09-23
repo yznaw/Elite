@@ -2582,8 +2582,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     try {
       const files = await this.mediaApi.list();
       this.mediaFiles.set(files);
-    } catch {
-      this.toast.error(this.t('product.gallery.loadError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('product.gallery.loadError'));
     } finally {
       this.mediaLoading.set(false);
     }
@@ -3706,8 +3706,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       // failure must not leave the drawer on a stale id or a nameless new row.
       try {
         await this.syncCollections(previousId, saved.id, f.collectionIds);
-      } catch {
-        this.toast.error(this.t('product.toast.collectionsFailed.title'), this.t('product.toast.collectionsFailed.sub'));
+      } catch (caught) {
+        this.toast.errorFrom(caught, this.t('product.toast.collectionsFailed.title'), this.t('product.toast.collectionsFailed.sub'));
       }
       this.toast.success(this.t('product.toast.saved.title'), `${f.name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
@@ -3719,7 +3719,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       if (body?.code === 'STOCK_CHANGED') {
         await this.reloadVariantStock();
       } else if (body?.errors?.length) {
-        this.toast.error(this.t('product.toast.saveInvalid'), body.errors.join('; '));
+        this.toast.errorFrom(err, this.t('product.toast.saveInvalid'), body.errors.join('; '));
       }
     }
   }

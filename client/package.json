@@ -16,6 +16,7 @@
     "test:stocktake-csv": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/stocktake-csv.test.ts",
     "test:pos-printing": "node --test test/pos-printing.test.mjs",
     "test:z-report-excel": "node --test test/z-report-excel.test.mjs",
+    "test:notifications": "node --test test/toast-notifications.test.mjs",
     "serve:ssr:client-web": "node dist/client-web/server/server.mjs",
     "test:stock-availability": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/stock-availability.test.ts",
     "test:storefront": "playwright test --config=playwright.storefront.config.ts",

@@ -480,8 +480,8 @@ export class TopbarComponent {
       } else if (result === 'updating') {
         this.toast.success(this.t('topbar.update.updating.title'), this.t('topbar.update.updating.sub'));
       }
-    } catch {
-      this.toast.error(this.t('topbar.update.error.title'), this.t('topbar.update.error.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('topbar.update.error.title'), this.t('topbar.update.error.sub'));
     } finally {
       this.checkingUpdate.set(false);
     }

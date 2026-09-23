@@ -793,7 +793,7 @@ export class BulkImportDialogComponent {
         }
       });
     } catch (err: any) {
-      this.zone.run(() => this.toast.error('Color repair failed', err.message || 'Network error'));
+      this.zone.run(() => this.toast.errorFrom(err, 'Color repair failed', err.message || 'Network error'));
     } finally {
       this.repairingColors.set(false);
     }

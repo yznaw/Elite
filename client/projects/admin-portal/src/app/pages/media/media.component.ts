@@ -438,8 +438,8 @@ export class MediaComponent implements OnInit {
       await this.mediaApi.setDefaultImage(m.preview || '');
       this.defaultImageUrl.set(m.preview || '');
       this.toast.success(this.t('media.toast.defaultSet'), `"${m.name}" ${this.t('media.toast.defaultSet.sub')}`);
-    } catch {
-      this.toast.error(this.t('media.toast.defaultError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('media.toast.defaultError'));
     } finally {
       this.settingDefault.set(false);
     }
@@ -725,9 +725,9 @@ export class MediaComponent implements OnInit {
       this.toast.success(
         `${deleted} ${deleted === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')} — ${this.t('common.delete').toLowerCase()}`,
       );
-    } catch {
+    } catch (caught) {
       this.media.update((all) => [...removed, ...all]);
-      this.toast.error(this.t('media.toast.bulkDeleteError'));
+      this.toast.errorFrom(caught, this.t('media.toast.bulkDeleteError'));
     }
   }
 

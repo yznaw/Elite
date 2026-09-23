@@ -239,7 +239,7 @@ export class PosReconciliationComponent implements OnInit {
       const result = await this.api.refresh(this.selectedRegisterId(), this.businessDate(), this.method());
       this.livePosTotalCents.set(result.posTotalCents);
     } catch (error) {
-      this.toast.warning("Couldn't check POS total", this.errorMessage(error));
+      this.toast.warningFrom(error, "Couldn't check POS total", this.errorMessage(error));
     } finally {
       this.refreshing.set(false);
     }
@@ -259,7 +259,7 @@ export class PosReconciliationComponent implements OnInit {
       );
       await this.loadHistory();
     } catch (error) {
-      this.toast.error("Couldn't submit settlement", this.errorMessage(error));
+      this.toast.errorFrom(error, "Couldn't submit settlement", this.errorMessage(error));
     } finally {
       this.submitting.set(false);
     }
@@ -283,7 +283,7 @@ export class PosReconciliationComponent implements OnInit {
       this.cancelResolve();
       await this.loadHistory();
     } catch (error) {
-      this.toast.error("Couldn't resolve exception", this.errorMessage(error));
+      this.toast.errorFrom(error, "Couldn't resolve exception", this.errorMessage(error));
     }
   }
 

@@ -445,7 +445,7 @@ export class ReportsComponent implements OnInit {
     try {
       await this.zReportExcel.download(await this.reportsApi.zReportItems(row.zReportId));
     } catch (error) {
-      this.toast.error(this.t('reports.zHistory.excelFailed'), this.errorMessage(error));
+      this.toast.errorFrom(error, this.t('reports.zHistory.excelFailed'), this.errorMessage(error));
     } finally {
       this.exportingZReportId.set(null);
     }
@@ -542,7 +542,7 @@ export class ReportsComponent implements OnInit {
           break;
       }
     } catch (error) {
-      this.toast.warning("Couldn't load report", this.errorMessage(error));
+      this.toast.warningFrom(error, "Couldn't load report", this.errorMessage(error));
     } finally {
       this.loading.set(false);
     }

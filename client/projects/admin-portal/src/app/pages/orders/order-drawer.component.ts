@@ -806,9 +806,9 @@ export class OrderDrawerComponent {
       try {
         win.focus();
         win.print();
-      } catch {
+      } catch (caught) {
         cleanup();
-        this.toast.error(this.t('orders.invoice.failed.title'), this.t('orders.invoice.failed.sub'));
+        this.toast.errorFrom(caught, this.t('orders.invoice.failed.title'), this.t('orders.invoice.failed.sub'));
       }
     };
 

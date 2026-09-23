@@ -740,9 +740,9 @@ export class CatalogComponent implements OnInit {
       this._products.set(list);
       this.collections.set(collections.filter((collection) => !collection.hidden));
       this.refColors.set(colors);
-    } catch {
+    } catch (caught) {
       this._products.set([]);
-      this.toast.error(this.t('catalog.toast.loadError'));
+      this.toast.errorFrom(caught, this.t('catalog.toast.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -982,12 +982,12 @@ export class CatalogComponent implements OnInit {
         this.productsApi.update(id, { hidden }),
       ));
       this.toast.success(`${ids.length} ${ids.length === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${hidden ? this.t('catalog.status.hidden') : this.t('catalog.status.active')}`);
-    } catch {
+    } catch (caught) {
       // Reload the truth (some calls may have succeeded); if that fails too,
       // go back to the list as it was before the change.
       const list = await this.productsApi.list().catch(() => snapshot);
       this._products.set(list);
-      this.toast.error(this.t('catalog.toast.statusError'));
+      this.toast.errorFrom(caught, this.t('catalog.toast.statusError'));
     }
   }
 
@@ -1007,10 +1007,10 @@ export class CatalogComponent implements OnInit {
         undefined,
         { label: this.t('common.undo'), run: () => { void this.restoreProducts(removed); } },
       );
-    } catch {
+    } catch (caught) {
       const list = await this.productsApi.list().catch(() => snapshot);
       this._products.set(list);
-      this.toast.error(this.t('catalog.toast.deleteError'));
+      this.toast.errorFrom(caught, this.t('catalog.toast.deleteError'));
     }
   }
 
@@ -1116,8 +1116,8 @@ export class CatalogComponent implements OnInit {
     for (const product of products) {
       try {
         restored.push(await this.productsApi.restore(product.id, product.hidden));
-      } catch {
-        this.toast.error(this.t('product.toast.restoreFailed'), product.name);
+      } catch (caught) {
+        this.toast.errorFrom(caught, this.t('product.toast.restoreFailed'), product.name);
       }
     }
     if (restored.length === 0) return restored;

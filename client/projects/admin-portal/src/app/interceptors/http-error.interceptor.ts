@@ -1,16 +1,20 @@
-import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpInterceptorFn, HttpErrorResponse, HttpResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, throwError } from 'rxjs';
-import { ToastService } from '../services/toast.service';
+import { catchError, tap, throwError } from 'rxjs';
+import { ToastService, markToastShown } from '../services/toast.service';
+import { ConnectivityService } from '../services/connectivity.service';
 import { I18nService } from '../services/i18n.service';
 import { ClientLoggerService } from '../services/client-logger.service';
 
 /**
  * Global HTTP error interceptor.
- * Shows a toast for every failed HTTP request with contextual messaging
- * based on the status code. Errors are re-thrown so individual components
- * can still handle them if needed.
+ * Shows one message per kind of failure, not one per request: identical
+ * toasts collapse in ToastService (×N), and "can't reach the API" is owned by
+ * ConnectivityService, which shows a single message and clears it when the
+ * connection is back. Every error it surfaces is marked (markToastShown) so a
+ * component's own catch can use toast.errorFrom/warningFrom and not repeat it.
+ * Errors are re-thrown so individual components can still handle them.
  *
  * Status mapping:
  *   0   → Network / CORS issue
@@ -56,6 +60,7 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
   const clientLogger = inject(ClientLoggerService);
   const t = (k: string) => i18n.t(k);
+  const connectivity = inject(ConnectivityService);
 
   // The log endpoint's own traffic must never be reported through the log
   // endpoint. Without this guard, one failing request becomes an endless
@@ -81,7 +86,11 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const isRegisterBinding = /\/api\/pos\/registers\/(check-in|claim|enroll|release)$/.test(req.url);
 
   return next(req).pipe(
+    // Any answer from the API proves it is reachable again.
+    tap((event) => { if (event instanceof HttpResponse) connectivity.reportSuccess(); }),
     catchError((err: HttpErrorResponse) => {
+      // Any HTTP status (even an error) also means the API answered.
+      if (err.status !== 0) connectivity.reportSuccess();
       // Ship the failure before any toast logic: this is the record that makes
       // a phone call from the shop diagnosable. Skipped for expected rejections
       // (a mistyped manager PIN, a "not logged in" probe, a register probe
@@ -134,11 +143,8 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
       // status 0 covers network failures, CORS blocks, DNS errors, and timeouts
       if (err.status === 0) {
         if (!isPosRequest) {
-          toast.error(
-            t('error.network.title'),
-            t('error.network.sub'),
-            { label: t('common.retry'), run: () => {} },
-          );
+          connectivity.reportFailure();
+          markToastShown(err);
         }
       } else if (err.status === 401) {
         if (isManagerPinVerify) {
@@ -180,7 +186,10 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
         // server's actionable message, including the blocking customer on restore.
         toast.warning(t('error.422.title'), err.error.message);
       } else if (err.status === 422) {
-        const msg = err.error?.message || err.error?.error || '';
+        // validationError() (server/routes/lib.js) sends the real problems in
+        // `errors` under a generic "Validation failed." message; show them.
+        const list = Array.isArray(err.error?.errors) ? err.error.errors.filter(Boolean).join(' ') : '';
+        const msg = list || err.error?.message || err.error?.error || '';
         toast.warning(
           t('error.422.title'),
           msg || t('error.422.sub'),
@@ -200,11 +209,9 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           err.error?.message || t('error.429.sub'),
         );
       } else if (err.status >= 500) {
-        toast.error(
-          t('error.server.title'),
-          t('error.server.sub'),
-          { label: t('common.retry'), run: () => {} },
-        );
+        // One message for however many requests failed at once. No Retry:
+        // there is nothing it could safely re-send on the user's behalf.
+        toast.push({ key: 'server-error', kind: 'error', title: t('error.server.title'), sub: t('error.server.sub') });
       } else if (!(err.status === 428 && isRegisterProbe)) {
         // Prefer the backend's own friendly `message` (e.g. "Only CSV files are
         // accepted.") over the raw HTTP status line — the latter is only shown
@@ -214,6 +221,14 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           err.error?.message || `${err.status} — ${err.statusText || t('error.unknown.sub')}`,
         );
       }
+
+      // Everything above except silent cases (auth probe, handled 401s, a
+      // mistyped PIN, the pre-enrollment 428) put a message on screen.
+      const silent = (err.status === 401 && (isAuthProbe || isManagerPinVerify || isRegisterBinding))
+        || (err.status === 403 && isManagerPinVerify)
+        || (err.status === 428 && isRegisterProbe)
+        || (err.status === 0 && isPosRequest);
+      if (!silent) markToastShown(err);
 
       return throwError(() => err);
     }),
