@@ -26,9 +26,9 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
  * produces the same correction with the count, the discrepancy and the person
  * behind it all recorded.
  *
- * Counting is blind by default: the counter cannot see what the system expects.
- * A count taken while looking at the expected figure tends to agree with it,
- * which makes the exercise worthless.
+ * A new stocktake shows the expected quantity by default, as the shop asked.
+ * Blind mode (the counter cannot see what the system expects) is still offered:
+ * a count taken while looking at the expected figure tends to agree with it.
  */
 @Component({
     selector: 'ap-stocktake',
@@ -48,8 +48,8 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
             <div>
               <label class="lbl">{{ t('stocktake.mode') }}</label>
               <select class="inp" [ngModel]="newBlind()" (ngModelChange)="newBlind.set($event === 'true' || $event === true)">
-                <option [value]="true">{{ t('stocktake.mode.blind') }}</option>
                 <option [value]="false">{{ t('stocktake.mode.open') }}</option>
+                <option [value]="true">{{ t('stocktake.mode.blind') }}</option>
               </select>
             </div>
           </div>
@@ -315,7 +315,9 @@ export class StocktakeComponent implements OnInit {
   readonly fillingZeros = signal(false);
 
   readonly newReference = signal('');
-  readonly newBlind = signal(true);
+  // The shop counts against the expected figure by default (their request,
+  // 2026-09-23); Blind stays one pick away in the same dropdown.
+  readonly newBlind = signal(false);
   readonly filter = signal('');
   readonly scanCode = signal('');
   readonly draft = signal<Record<string, string>>({});
