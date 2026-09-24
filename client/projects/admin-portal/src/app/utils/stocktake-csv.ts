@@ -14,12 +14,84 @@ export interface ParsedStocktakeCsv {
   skipped: number;
 }
 
+/** The parts of a stocktake the sheets need. Structural, so this file stays
+    free of Angular and can be unit-tested under plain Node. */
+export interface SheetLine {
+  sku: string;
+  barcode: string;
+  productName: string;
+  color: string;
+  size: string;
+  /** null while a blind count is open: the sheet must not reveal it. */
+  expectedQuantity: number | null;
+  /** The saved count of a stocktake without location runs (older stocktakes). */
+  countedQuantity: number | null;
+  locationCounts: Record<string, number>;
+}
+
+export interface SheetLocation {
+  locationId: string;
+  name: string;
+}
+
+export const ALL_LOCATIONS_TOTAL_HEADER = 'Total counted';
+
+/**
+ * One location's count sheet. Counted holds the SAVED count for that location
+ * (blank = not counted yet, 0 = counted as zero), so exporting mid-count and
+ * re-importing never loses or doubles a count. Expected is included only when
+ * the stocktake is not blind.
+ */
+export function buildLocationSheet(lines: SheetLine[], location: SheetLocation | null, showExpected: boolean): unknown[][] {
+  const expected = (line: SheetLine) => (showExpected ? [line.expectedQuantity ?? ''] : []);
+  const expectedHeader = showExpected ? ['Expected'] : [];
+  if (!location) {
+    return [
+      ['SKU', 'Barcode', 'Product', 'Color', 'Size', ...expectedHeader, 'Counted'],
+      ...lines.map((line) => [line.sku, line.barcode, line.productName, line.color, line.size, ...expected(line), line.countedQuantity ?? '']),
+    ];
+  }
+  return [
+    ['Location ID', 'Location', 'SKU', 'Barcode', 'Product', 'Color', 'Size', ...expectedHeader, 'Counted'],
+    ...lines.map((line) => [
+      location.locationId, location.name, line.sku, line.barcode, line.productName, line.color, line.size,
+      ...expected(line), line.locationCounts[location.locationId] ?? '',
+    ]),
+  ];
+}
+
+/**
+ * Every location side by side, for review (not for import): one column per
+ * location, the total, and Expected + Difference when the count is not blind.
+ * Difference is left blank until at least one location has counted the item.
+ */
+export function buildAllLocationsSheet(lines: SheetLine[], locations: SheetLocation[], showExpected: boolean): unknown[][] {
+  return [
+    ['SKU', 'Barcode', 'Product', 'Color', 'Size', ...locations.map((l) => l.name), ALL_LOCATIONS_TOTAL_HEADER,
+      ...(showExpected ? ['Expected', 'Difference'] : [])],
+    ...lines.map((line) => {
+      const counts = locations.map((l) => line.locationCounts[l.locationId]);
+      const counted = counts.filter((c): c is number => typeof c === 'number');
+      const total = counted.length ? counted.reduce((sum, c) => sum + c, 0) : '';
+      const expected = line.expectedQuantity;
+      return [
+        line.sku, line.barcode, line.productName, line.color, line.size,
+        ...counts.map((c) => c ?? ''), total,
+        ...(showExpected ? [expected ?? '', total === '' || expected === null ? '' : total - expected] : []),
+      ];
+    }),
+  ];
+}
+
 /** Parse a count sheet exported from Stocktake, or a simple SKU/Barcode + Counted sheet. */
 export function parseStocktakeCountCsv(text: string, context: StocktakeCsvContext = {}): ParsedStocktakeCsv {
   const rows = parseCsv(text.replace(/^\uFEFF/, ''));
   if (rows.length < 2) throw new Error('The file must contain a header and at least one count row.');
 
   const headers = rows[0].map(normalize);
+  if (headers.includes(normalize(ALL_LOCATIONS_TOTAL_HEADER))) {
+    throw new Error('This is an all-locations sheet. Export a single location to import counts.');
+  }
   const skuIndex = headers.indexOf('sku');
   const barcodeIndex = headers.indexOf('barcode');
   const countIndex = findHeader(headers, ['counted', 'count', 'quantity']);
@@ -34,8 +106,8 @@ export function parseStocktakeCountCsv(text: string, context: StocktakeCsvContex
   const counts: StocktakeCsvCount[] = [];
   let skipped = 0;
   for (const row of rows.slice(1)) {
-    const sku = skuIndex >= 0 ? String(row[skuIndex] ?? '').trim() : '';
-    const barcode = barcodeIndex >= 0 ? String(row[barcodeIndex] ?? '').trim() : '';
+    const sku = skuIndex >= 0 ? unguard(String(row[skuIndex] ?? '').trim()) : '';
+    const barcode = barcodeIndex >= 0 ? unguard(String(row[barcodeIndex] ?? '').trim()) : '';
     const rawQuantity = String(row[countIndex] ?? '').trim();
     if ((!sku && !barcode) || !/^\d+$/.test(rawQuantity)) {
       skipped++;
@@ -51,8 +123,22 @@ export function parseStocktakeCountCsv(text: string, context: StocktakeCsvContex
   return { counts, skipped };
 }
 
+/**
+ * A text cell starting with = + - @ (or a tab / carriage return) is run as a
+ * formula by Excel and Sheets. Product names are typed by staff, so text cells
+ * get a leading apostrophe; numbers (counts, a negative difference) stay numbers.
+ */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
 export function csvCell(value: unknown): string {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const text = typeof value === 'number' ? String(value) : String(value ?? '');
+  const safe = typeof value !== 'number' && FORMULA_START.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
+/** Reverse csvCell's guard so an exported SKU or barcode matches on import. */
+function unguard(value: string): string {
+  return value.startsWith("'") && FORMULA_START.test(value.slice(1)) ? value.slice(1) : value;
 }
 
 export function csvRows(rows: unknown[][]): string {

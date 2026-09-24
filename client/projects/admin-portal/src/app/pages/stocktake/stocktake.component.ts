@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -15,7 +15,8 @@ import {
   StocktakeSummary,
 } from '../../services/inventory.service';
 import { LocationSelectorComponent, LocationOption } from '../../shared/location-selector/location-selector.component';
-import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
+import { buildAllLocationsSheet, buildLocationSheet, csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
+import { CountAutosave, RowSaveState, parseCount } from '../../utils/stocktake-autosave';
 
 /**
  * Stocktake: count the shelf, post the difference (docs/25 Phase 8).
@@ -109,9 +110,17 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
             <button class="btn btn-outline" (click)="reload()">
               <ap-icon name="sync" [size]="14"/> {{ t('common.refresh') }}
             </button>
-            <button class="btn btn-outline" (click)="exportCsv()" [disabled]="!stocktake.lines.length">
-              <ap-icon name="download" [size]="14"/> {{ t('stocktake.csv.export') }}
+            <button class="btn btn-outline" (click)="exportCsv('location')" [disabled]="!stocktake.lines.length"
+                    [title]="t('stocktake.csv.export.location.hint')">
+              <ap-icon name="download" [size]="14"/>
+              {{ stocktake.locations.length ? t('stocktake.csv.export.location') : t('stocktake.csv.export') }}
             </button>
+            @if (stocktake.locations.length > 1) {
+              <button class="btn btn-outline" (click)="exportCsv('all')" [disabled]="!stocktake.lines.length"
+                      [title]="t('stocktake.csv.export.all.hint')">
+                <ap-icon name="download" [size]="14"/> {{ t('stocktake.csv.export.all') }}
+              </button>
+            }
             <label class="btn btn-outline" [class.disabled]="importing() || !canEditSelectedLocation()"
                    [title]="canEditSelectedLocation() ? '' : t('stocktake.csv.import.hint')">
               <ap-icon name="upload" [size]="14"/> {{ t('stocktake.csv.import') }}
@@ -126,11 +135,15 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
 
           @if (stocktake.locations.length) {
             <div class="location-toolbar mt-16">
-              <ap-location-selector
-                [label]="t('stocktake.location.active')"
-                [options]="activeLocationOptions()"
-                [value]="selectedLocationId()"
-                (valueChange)="selectLocation($event)"/>
+              <!-- Re-created when a switch is cancelled, so the picker shows the
+                   location still being counted, not the one that was refused. -->
+              @for (rev of [pickerRev()]; track rev) {
+                <ap-location-selector
+                  [label]="t('stocktake.location.active')"
+                  [options]="activeLocationOptions()"
+                  [value]="selectedLocationId()"
+                  (valueChange)="selectLocation($event)"/>
+              }
               <span class="muted small">
                 {{ completedLocationCount() }} / {{ stocktake.locations.length }} {{ t('stocktake.locations.completed') }}
               </span>
@@ -181,6 +194,18 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
                    [placeholder]="t('stocktake.filter.placeholder')"/>
           </div>
 
+          @if (pendingCount() > 0) {
+            <!-- Nothing typed can quietly go missing: this stays until every
+                 typed count is stored (or cleared). -->
+            <div class="unsaved-bar" role="status">
+              <span><b>{{ pendingCount() }}</b> {{ pendingCount() === 1 ? t('stocktake.autosave.pending.one') : t('stocktake.autosave.pending') }}</span>
+              <button class="btn btn-gold btn-sm" [disabled]="savingAll()" (click)="saveAll()">
+                @if (savingAll()) { <ap-spinner [size]="12"/> }
+                {{ t('stocktake.autosave.saveAll') }}
+              </button>
+            </div>
+          }
+
           @if (loading()) {
             <div class="row gap-sm" style="padding:24px;justify-content:center;">
               <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
@@ -211,16 +236,32 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
                   }
                 </div>
                 <div class="count-input">
-                  <input class="inp" type="number" min="0" inputmode="numeric"
-                         [ngModel]="draft()[line.variantId] ?? ''"
+                  <!-- Enter saves and moves to the next row; leaving the field
+                       saves too. The row says whether it is stored. -->
+                  <input class="inp count-field" type="text" inputmode="numeric" autocomplete="off"
+                         [attr.data-variant]="line.variantId"
+                         [attr.aria-label]="t('stocktake.count.aria').replace('{item}', line.productName + ' ' + (line.variant || line.sku))"
+                         [attr.aria-invalid]="rowState(line.variantId) === 'invalid' || rowState(line.variantId) === 'error'"
+                         [ngModel]="draft(line.variantId) ?? ''"
                          (ngModelChange)="setDraft(line.variantId, $event)"
+                         (keydown.enter)="commitAndNext(line.variantId, $event)"
+                         (change)="commit(line.variantId)"
                          [disabled]="!canEditSelectedLocation()"
                          [placeholder]="t('stocktake.enterCount')"/>
-                  <button class="btn btn-outline btn-sm"
-                          [disabled]="!canEditSelectedLocation() || saving() === line.variantId || draft()[line.variantId] === undefined || draft()[line.variantId] === ''"
-                          (click)="saveCount(line.variantId)">
-                    {{ line.countedQuantity === null ? t('stocktake.save') : t('stocktake.recount.action') }}
-                  </button>
+                  <span class="row-state" [class]="'row-state row-state--' + (rowState(line.variantId) ?? 'idle')" aria-live="polite">
+                    @switch (rowState(line.variantId)) {
+                      @case ('unsaved') { {{ t('stocktake.autosave.unsaved') }} }
+                      @case ('invalid') { {{ t('stocktake.autosave.invalid') }} }
+                      @case ('saving') { <ap-spinner [size]="11"/> {{ t('stocktake.autosave.saving') }} }
+                      @case ('saved') { ✓ {{ t('stocktake.autosave.saved') }} }
+                      @case ('error') { {{ t('stocktake.autosave.error') }} }
+                    }
+                  </span>
+                  @if (rowState(line.variantId) === 'error' || rowState(line.variantId) === 'unsaved') {
+                    <button class="btn btn-outline btn-sm" [disabled]="!canEditSelectedLocation()" (click)="commit(line.variantId)">
+                      {{ rowState(line.variantId) === 'error' ? t('stocktake.autosave.retry') : (locationCount(line) === null ? t('stocktake.save') : t('stocktake.recount.action')) }}
+                    </button>
+                  }
                 </div>
               </div>
             } @empty {
@@ -266,6 +307,15 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
     .count-figures { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
     .count-input { display: flex; gap: 8px; align-items: center; }
     .count-input .inp { width: 110px; }
+    .row-state { min-width: 92px; font-size: 12px; display: inline-flex; gap: 5px; align-items: center; }
+    .row-state--unsaved { color: #8a5a00; }
+    .row-state--invalid, .row-state--error { color: #b3261e; font-weight: 600; }
+    .row-state--saving { color: var(--muted); }
+    .row-state--saved { color: #0f7b3f; }
+    .unsaved-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 20px; background: #fff7e6; border-bottom: 1px solid #f1d9a8; font-size: 13px;
+    }
     .disagree { color: #b3261e; font-weight: 600; }
     .history-row {
       display: grid;
@@ -293,7 +343,7 @@ import { csvRows, parseStocktakeCountCsv } from '../../utils/stocktake-csv';
     }
   `]
 })
-export class StocktakeComponent implements OnInit {
+export class StocktakeComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly api = inject(InventoryService);
@@ -309,7 +359,6 @@ export class StocktakeComponent implements OnInit {
   readonly loading = signal(false);
   readonly starting = signal(false);
   readonly posting = signal(false);
-  readonly saving = signal<string | null>(null);
   readonly scanning = signal(false);
   readonly importing = signal(false);
   readonly fillingZeros = signal(false);
@@ -320,7 +369,16 @@ export class StocktakeComponent implements OnInit {
   readonly newBlind = signal(false);
   readonly filter = signal('');
   readonly scanCode = signal('');
-  readonly draft = signal<Record<string, string>>({});
+  /** Bumped on every autosave change so the template and computeds refresh. */
+  private readonly autosaveTick = signal(0);
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly savingAll = signal(false);
+  /** Every count typed on this screen goes through here (see stocktake-autosave.ts). */
+  private readonly autosave = new CountAutosave({
+    save: (variantId, quantity) => this.persistCount(variantId, quantity),
+    onChange: () => this.autosaveTick.update((n) => n + 1),
+  });
+  readonly pendingCount = computed(() => { this.autosaveTick(); return this.autosave.pendingCount(); });
 
   readonly countedCount = computed(() => {
     const stocktake = this.active();
@@ -384,9 +442,16 @@ export class StocktakeComponent implements OnInit {
     this.selectedStartLocations.set([...next]);
   }
 
-  selectLocation(locationId: string): void {
+  readonly pickerRev = signal(0);
+
+  async selectLocation(locationId: string): Promise<void> {
+    if (locationId === this.selectedLocationId()) return;
+    if (!(await this.ensureSaved())) {
+      this.pickerRev.update((n) => n + 1);
+      return;
+    }
     this.selectedLocationId.set(locationId);
-    this.draft.set({});
+    this.autosave.reset();
   }
 
   canEditSelectedLocation(): boolean {
@@ -409,8 +474,106 @@ export class StocktakeComponent implements OnInit {
     return 'grey';
   }
 
-  setDraft(variantId: string, value: string): void {
-    this.draft.set({ ...this.draft(), [variantId]: value });
+  draft(variantId: string): string | undefined {
+    this.autosaveTick();
+    return this.autosave.draft(variantId);
+  }
+
+  rowState(variantId: string): RowSaveState | undefined {
+    this.autosaveTick();
+    return this.autosave.state(variantId);
+  }
+
+  setDraft(variantId: string, value: string | number | null): void {
+    this.autosave.setDraft(variantId, value);
+  }
+
+  commit(variantId: string): void {
+    if (!this.canEditSelectedLocation()) return;
+    void this.autosave.commit(variantId);
+  }
+
+  /** Enter saves the row and moves to the next count box (fast counting). */
+  commitAndNext(variantId: string, event: Event): void {
+    event.preventDefault();
+    this.commit(variantId);
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input.count-field')];
+    const index = fields.findIndex((field) => field.dataset['variant'] === variantId);
+    fields[index + 1]?.focus();
+  }
+
+  async saveAll(): Promise<boolean> {
+    this.savingAll.set(true);
+    try {
+      const result = await this.autosave.saveAll();
+      if (result.failed || result.invalid) {
+        this.toast.warning(this.t('stocktake.autosave.notAllSaved'),
+          this.t('stocktake.autosave.notAllSaved.sub').replace('{count}', String(result.failed + result.invalid)));
+      }
+      return !this.autosave.hasPending();
+    } finally {
+      this.savingAll.set(false);
+    }
+  }
+
+  /**
+   * Before anything that reads or replaces saved counts (export, import,
+   * switching location, leaving): offer to save what is typed. Resolves true
+   * when it is safe to continue.
+   */
+  async ensureSaved(): Promise<boolean> {
+    await this.autosave.settle();
+    const pending = this.autosave.pendingCount();
+    if (!pending) return true;
+    const saveFirst = await this.confirm.ask({
+      title: this.t('stocktake.autosave.guard.title'),
+      message: this.t(pending === 1 ? 'stocktake.autosave.guard.message.one' : 'stocktake.autosave.guard.message').replace('{count}', String(pending)),
+      confirmLabel: this.t('stocktake.autosave.guard.save'),
+      cancelLabel: this.t('common.cancel'),
+      variant: 'warning',
+    });
+    return saveFirst ? this.saveAll() : false;
+  }
+
+  /** Route guard hook (app.routes.ts): typed counts are never left behind silently. */
+  canLeave(): boolean | Promise<boolean> {
+    return this.autosave.hasPending() ? this.ensureSaved() : true;
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  warnBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.autosave.hasPending()) event.preventDefault();
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+  }
+
+  /** One count to the server, reflected on screen at once, list refreshed once per burst. */
+  private async persistCount(variantId: string, quantity: number): Promise<void> {
+    const stocktake = this.active();
+    if (!stocktake) throw new Error('No open stocktake.');
+    const locationId = this.selectedLocationId() || undefined;
+    await this.api.saveCount(stocktake.stocktakeId, variantId, quantity, locationId);
+    // Update the row now: a second scan before the refresh must build on this count.
+    this.active.update((current) => current && current.stocktakeId === stocktake.stocktakeId ? {
+      ...current,
+      lines: current.lines.map((line) => line.variantId !== variantId ? line : locationId
+        ? { ...line, locationCounts: { ...line.locationCounts, [locationId]: quantity } }
+        : line.countedQuantity === null ? { ...line, countedQuantity: quantity } : { ...line, recountQuantity: quantity }),
+    } : current);
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => void this.refreshActive(), 400);
+  }
+
+  private async refreshActive(): Promise<void> {
+    const stocktake = this.active();
+    if (!stocktake) return;
+    try {
+      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
+    } catch {
+      // Reported by the interceptor; the locally applied counts stay visible.
+    }
   }
 
   async reload(): Promise<void> {
@@ -449,29 +612,8 @@ export class StocktakeComponent implements OnInit {
     }
   }
 
-  async saveCount(variantId: string): Promise<void> {
-    const raw = this.draft()[variantId];
-    const quantity = Number.parseInt(String(raw), 10);
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      this.toast.warning(this.t('stocktake.invalidCount'));
-      return;
-    }
-    const stocktake = this.active();
-    if (!stocktake) return;
-
-    this.saving.set(variantId);
-    try {
-      await this.api.saveCount(stocktake.stocktakeId, variantId, quantity, this.selectedLocationId() || undefined);
-      this.draft.set({ ...this.draft(), [variantId]: '' });
-      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
-    } catch {
-      /* reported by the interceptor */
-    } finally {
-      this.saving.set(null);
-    }
-  }
-
   async completeLocation(): Promise<void> {
+    if (!(await this.ensureSaved())) return;
     const stocktake = this.active();
     const location = this.selectedLocation();
     if (!stocktake || !location) return;
@@ -493,6 +635,7 @@ export class StocktakeComponent implements OnInit {
   }
 
   async fillMissingWithZero(): Promise<void> {
+    if (!(await this.ensureSaved())) return;
     const stocktake = this.active();
     const location = this.selectedLocation();
     if (!stocktake || !location || !this.canEditSelectedLocation() || this.remainingCount() === 0) return;
@@ -547,59 +690,51 @@ export class StocktakeComponent implements OnInit {
       return;
     }
 
-    const current = Number.parseInt(this.draft()[line.variantId] ?? String(this.locationCount(line) ?? 0), 10) || 0;
-    this.draft.set({ ...this.draft(), [line.variantId]: String(current + 1) });
+    // Builds on whatever is typed or already saved for this row, then goes
+    // through the same autosave as typing, so rapid scans never collide.
+    const current = parseCount(this.autosave.draft(line.variantId)) ?? this.locationCount(line) ?? 0;
+    this.autosave.setDraft(line.variantId, current + 1);
+    this.scanCode.set('');
     this.scanning.set(true);
     try {
-      await this.api.saveCount(stocktake.stocktakeId, line.variantId, current + 1, this.selectedLocationId() || undefined);
-      this.draft.set({ ...this.draft(), [line.variantId]: '' });
-      this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
-      this.scanCode.set('');
-    } catch {
-      /* reported by the interceptor */
+      await this.autosave.commit(line.variantId);
     } finally {
       this.scanning.set(false);
     }
   }
 
-  exportCsv(): void {
+  /**
+   * "location": the selected location's sheet, with its SAVED counts (and
+   * Expected when not blind); it imports back unchanged. "all": every
+   * location side by side with a total, for review only.
+   */
+  async exportCsv(kind: 'location' | 'all'): Promise<void> {
+    if (!(await this.ensureSaved())) return;
     const stocktake = this.active();
     if (!stocktake) return;
-    const location = this.selectedLocation();
-    const rows = location
-      ? [
-          ['Location ID', 'Location', 'SKU', 'Barcode', 'Product', 'Color', 'Size', 'Counted'],
-          ...stocktake.lines.map((line) => [
-            location.locationId,
-            location.name,
-            line.sku,
-            line.barcode,
-            line.productName,
-            line.color,
-            line.size,
-            line.locationCounts[location.locationId] ?? '',
-          ]),
-        ]
-      : [
-          ['SKU', 'Barcode', 'Product', 'Color', 'Size', 'Counted'],
-          ...stocktake.lines.map((line) => [line.sku, line.barcode, line.productName, line.color, line.size, line.countedQuantity ?? '']),
-        ];
-    const csv = csvRows(rows);
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const showExpected = !(stocktake.blind && stocktake.status === 'counting');
+    const location = kind === 'location' ? this.selectedLocation() : null;
+    const rows = kind === 'all'
+      ? buildAllLocationsSheet(stocktake.lines, stocktake.locations, showExpected)
+      : buildLocationSheet(stocktake.lines, location, showExpected);
+    const url = URL.createObjectURL(new Blob([csvRows(rows)], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    const safeName = `${stocktake.reference}${location ? `-${location.name}` : ''}`.replace(/[^a-z0-9\u0600-\u06ff._-]+/gi, '-');
+    const scope = kind === 'all' ? '-all-locations' : location ? `-${location.name}` : '';
+    const safeName = `${stocktake.reference}${scope}`.replace(/[^a-z0-9\u0600-\u06ff._-]+/gi, '-');
     link.download = `stocktake-${safeName}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   async importCounts(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
+    if (!file || this.importing() || !this.canEditSelectedLocation()) return;
+    if (!(await this.ensureSaved())) return;
     const stocktake = this.active();
-    if (!file || !stocktake || this.importing() || !this.canEditSelectedLocation()) return;
+    if (!stocktake) return;
 
     this.importing.set(true);
     try {
@@ -615,6 +750,7 @@ export class StocktakeComponent implements OnInit {
         if (line.barcode) byKey.set(line.barcode.toLowerCase(), line);
       }
       let updated = 0;
+      let unchanged = 0;
       let skipped = parsed.skipped;
       for (const count of parsed.counts) {
         const line = byKey.get(count.barcode.toLowerCase()) ?? byKey.get(count.sku.toLowerCase());
@@ -622,20 +758,28 @@ export class StocktakeComponent implements OnInit {
           skipped++;
           continue;
         }
+        // Re-importing an exported sheet must not rewrite counts that did not
+        // change (or record them as a recount).
+        if (this.locationCount(line) === count.quantity) {
+          unchanged++;
+          continue;
+        }
         await this.api.saveCount(stocktake.stocktakeId, line.variantId, count.quantity, this.selectedLocationId() || undefined);
         updated++;
       }
-      if (updated === 0) throw new Error('No valid product counts matched this stocktake.');
+      if (updated === 0 && unchanged === 0) throw new Error(this.t('stocktake.csv.import.noMatch'));
       this.active.set(await this.api.getStocktake(stocktake.stocktakeId));
-      this.toast.success('Counts imported', `${updated} updated${skipped ? ` · ${skipped} skipped` : ''}`);
+      this.toast.success(this.t('stocktake.csv.import.done'), this.t('stocktake.csv.import.summary')
+        .replace('{updated}', String(updated)).replace('{unchanged}', String(unchanged)).replace('{skipped}', String(skipped)));
     } catch (error) {
-      this.toast.warningFrom(error, 'Could not import counts', error instanceof Error ? error.message : 'Use a CSV exported from this stocktake.');
+      this.toast.warningFrom(error, this.t('stocktake.csv.import.failed'), error instanceof Error ? error.message : this.t('stocktake.csv.import.failed.sub'));
     } finally {
       this.importing.set(false);
     }
   }
 
   async post(): Promise<void> {
+    if (!(await this.ensureSaved())) return;
     const stocktake = this.active();
     if (!stocktake) return;
     // Only ever sent after the operator has been shown which lines disagree.

@@ -75,6 +75,10 @@ The remaining direct `error`/`warning` calls outside the POS were checked one by
 
 **Open item, POS.** The POS keeps its own messages (they carry the request reference the shop reads out on the phone). It already skips the network toast, and it benefits from de-duplication and the cap. For a POS request that fails with 5xx or 422, the interceptor's message and the POS's own can still both appear. Converting those catch sites needs a decision about which of the two to keep, because only the POS message carries the "Ref" code.
 
+## Inline state instead of toasts
+
+Per-item progress belongs on the item, not in the toast stack. Stocktake rows (2026-09-24) show *Not saved / Saving / Saved / Not saved + Retry* next to the count box, and a single "N counts not saved" bar with **Save all**; saving forty rows produces no toasts at all. Only a real problem that needs a decision (unsaved counts before export, import, switching location or leaving) raises a dialog.
+
 ## Rules for new code
 
 1. **Don't toast HTTP failures you didn't add information to.** The interceptor already said it. In a `catch` around an API call, use `toast.errorFrom(err, title, sub)`; it only shows when the global message didn't.

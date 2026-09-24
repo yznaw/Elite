@@ -131,6 +131,8 @@ export const routes: Routes = [
         canMatch: [roleGuard(['owner', 'admin', 'manager'])],
         loadComponent: () =>
           import('./pages/stocktake/stocktake.component').then((m) => m.StocktakeComponent),
+        // Leaving with typed counts that are not saved yet asks first.
+        canDeactivate: [(component: { canLeave?: () => boolean | Promise<boolean> }) => component.canLeave?.() ?? true],
       },
       {
         // Application errors (server, register browsers, CSP) and the audit

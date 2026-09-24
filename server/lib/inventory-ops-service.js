@@ -95,7 +95,10 @@ async function listStocktakeLocations(context) {
 }
 
 function parseQuantity(value, field) {
-  const quantity = Number.parseInt(value, 10);
+  // Strict: parseInt accepted "1.5" as 1 and "5pcs" as 5, silently storing a
+  // count nobody entered. Only a whole number (optionally signed) passes.
+  const text = typeof value === 'number' ? String(value) : String(value ?? '').trim();
+  const quantity = /^-?\d+$/.test(text) ? Number(text) : Number.NaN;
   assertPos(Number.isSafeInteger(quantity), 422, 'INVALID_QUANTITY', `${field} must be a whole number.`);
   return quantity;
 }
@@ -767,7 +770,11 @@ async function getStocktake(context, stocktakeId) {
        JOIN product_variants pv ON pv.id = l.variant_id
        JOIN products p ON p.id = pv.product_id
       WHERE l.stocktake_id = $1
-      ORDER BY p.name, pv.sku`,
+      -- Sizes sort as numbers (5, 5.5 ... 15), not text (10 ... 15, 5 ... 9);
+      -- named or ranged sizes (S, M, 5-10) follow in text order.
+      ORDER BY p.name, pv.color NULLS LAST,
+               (CASE WHEN pv.size ~ '^[0-9]+([.][0-9]+)?$' THEN pv.size::numeric END) NULLS LAST,
+               pv.size NULLS LAST, pv.sku`,
     [id],
   );
 

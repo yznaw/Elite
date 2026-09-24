@@ -1111,7 +1111,11 @@
     <h2>17.1 — Stocktake</h2>
     <ol class="steps">
       <li>Owner/Admin opens <strong>Stocktake</strong>, enters a reference, and chooses the mode: <strong>Show expected</strong> (the default, the expected quantity is visible while counting) or <strong>Blind</strong> (expected quantity hidden while counting).</li>
-      <li>Count each variant and submit. If two counters disagree, recount and explicitly resolve the discrepancy before posting.</li>
+      <li>Choose the <strong>location</strong> you are counting at the top (each shop and the Warehouse are counted separately).</li>
+      <li>Type each count and press <strong>Enter</strong> (or move to the next box): it is <strong>saved automatically</strong> and the row shows <strong>Saved</strong>, then <strong>Counted N</strong>. A row that says <strong>Not saved</strong> is not stored yet; press <strong>Retry</strong> or <strong>Save all</strong>. Scanning a barcode adds one to that item.</li>
+      <li>If anything is still unsaved, the portal asks before exporting, importing, switching location or leaving the page.</li>
+      <li><strong>Export this location</strong> gives the saved counts of the selected location (with the Expected quantity when the count is not blind); this file can be edited and imported back, and unchanged rows are left as they are. <strong>Export all locations</strong> shows every location side by side with the total and the difference, for review only (it cannot be imported). Sizes are listed in number order (5, 5.5 … 15).</li>
+      <li>If two counters disagree, recount and explicitly resolve the discrepancy before posting.</li>
       <li>Posting applies only the counted discrepancy against current stock, so sales made during the count are preserved. A posted stocktake is immutable and remains in history.</li>
     </ol>
     <div class="callout note">
