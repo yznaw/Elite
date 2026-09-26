@@ -21,6 +21,11 @@ const { logger } = require('./logger');
  */
 
 const MAX_RECIPIENTS = 10;
+// Stock per location: remind staff when a paid website order is still not
+// approved after this long (Settings → Notifications).
+const REMINDER_DEFAULT = 120;
+const REMINDER_MIN = 15;
+const REMINDER_MAX = 1440;
 // Deliberately strict: no whitespace, commas or angle brackets, so a stored
 // value can never smuggle an extra header or recipient into the mail.
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -68,9 +73,12 @@ async function readNotificationSettings(client, tenantId) {
     // A hand-edited bad value must not stop the bell row from being written.
     orderEmails = [];
   }
+  const minutes = Number(stored.reminderAfterMinutes);
   return {
     orderEmails,
     adminOrigin: typeof stored.adminOrigin === 'string' ? stored.adminOrigin : null,
+    reminderAfterMinutes: Number.isSafeInteger(minutes) && minutes >= REMINDER_MIN && minutes <= REMINDER_MAX
+      ? minutes : REMINDER_DEFAULT,
   };
 }
 
@@ -188,6 +196,78 @@ async function notifyNewWebOrder(client, tenantId, orderId) {
   }
 }
 
+/**
+ * One reminder per order that is still waiting for approval after the
+ * configured delay. The reminder_sent_at claim is atomic, so two server
+ * processes cannot both send it.
+ */
+async function sendApprovalReminders(client) {
+  const tenants = await client.query(
+    `SELECT id FROM tenants WHERE is_active AND COALESCE((config->'inventory'->>'perLocation')::boolean, false)`,
+  );
+  let sent = 0;
+  for (const tenant of tenants.rows) {
+    const settings = await readNotificationSettings(client, tenant.id);
+    const due = await client.query(
+      `UPDATE orders o SET reminder_sent_at = now()
+        WHERE o.id IN (
+          SELECT o2.id FROM orders o2
+           WHERE o2.tenant_id = $1 AND o2.payment_status = 'paid' AND o2.approved_at IS NULL
+             AND o2.reminder_sent_at IS NULL AND o2.status <> 'cancelled'
+             AND o2.paid_at < now() - ($2::int * interval '1 minute')
+             AND EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id = o2.id AND h.status = 'held')
+           ORDER BY o2.paid_at LIMIT 20
+        )
+        RETURNING o.id, o.public_number, o.paid_at`,
+      [tenant.id, settings.reminderAfterMinutes],
+    );
+    if (!due.rowCount) continue;
+    for (const order of due.rows) {
+      await client.query(
+        `INSERT INTO admin_notifications (tenant_id, kind, title, body, route, entity_type, entity_id)
+         VALUES ($1, 'order_reminder', $2, $3, $4, 'order', $5)
+         ON CONFLICT (tenant_id, kind, entity_id) WHERE entity_id IS NOT NULL DO NOTHING`,
+        [tenant.id, `Waiting for approval: ${order.public_number}`,
+          `Paid ${Math.round((Date.now() - new Date(order.paid_at).getTime()) / 60000)} min ago and not approved yet.`,
+          `/orders?id=${order.id}`, order.id],
+      );
+    }
+    sent += due.rowCount;
+    if (!settings.orderEmails.length) continue;
+    const base = adminBaseUrl(settings);
+    const list = due.rows.map((o) => [o.public_number, `${Math.round((Date.now() - new Date(o.paid_at).getTime()) / 60000)} min`]);
+    try {
+      await mailer.sendMail({
+        to: settings.orderEmails.join(', '),
+        subject: `${due.rowCount} website order${due.rowCount === 1 ? '' : 's'} waiting for approval`,
+        text: [`These paid website orders are waiting for approval:`, '', ...list.map(([n, age]) => `${n} (paid ${age} ago)`), '', `${base}/orders`].join('\n'),
+        html: staffEmailHtml({
+          heading: 'Orders waiting for approval',
+          intro: 'These paid website orders have not been approved yet. Choose where each ships from.',
+          rows: list.map(([n, age]) => [n, `paid ${age} ago`]),
+          ctaLabel: 'Open orders',
+          ctaUrl: `${base}/orders`,
+        }),
+      });
+    } catch (err) {
+      logger.warn({ tenantId: tenant.id, err: err.message }, 'approval reminder email failed');
+    }
+  }
+  return { sent };
+}
+
+function startApprovalReminderJob({ intervalMs = 5 * 60 * 1000 } = {}) {
+  if (!process.env.DATABASE_URL) return () => {};
+  const db = require('../db/client');
+  let stopped = false;
+  const timer = setInterval(() => {
+    if (stopped) return;
+    sendApprovalReminders(db.pool).catch((err) => logger.warn({ err: err.message }, 'approval reminder job failed'));
+  }, intervalMs);
+  timer.unref();
+  return () => { stopped = true; clearInterval(timer); };
+}
+
 /** Throws when SMTP is missing or the send fails, so the Settings page can say why. */
 async function sendTestEmail(recipients, { adminOrigin } = {}) {
   const url = adminBaseUrl({ adminOrigin });
@@ -206,6 +286,11 @@ async function sendTestEmail(recipients, { adminOrigin } = {}) {
 }
 
 module.exports = {
+  REMINDER_DEFAULT,
+  REMINDER_MIN,
+  REMINDER_MAX,
+  sendApprovalReminders,
+  startApprovalReminderJob,
   MAX_RECIPIENTS,
   NotificationSettingsError,
   normalizeRecipients,

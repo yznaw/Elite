@@ -3,6 +3,9 @@ const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const { notifyNewWebOrder } = require('../lib/staff-notify');
+const { getAllocation, approveOrder, orderAwaitsApproval } = require('../lib/order-approval');
+const { sendOrderConfirmedEmail } = require('../lib/order-confirmation');
+const { perLocationEnabled } = require('../lib/location-stock');
 const { ensurePaidOrderStock, reversePaidOrderStock } = require('../lib/order-stock');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { insertWithRetry } = require('../lib/order-number');
@@ -38,6 +41,10 @@ function mapOrder(row, detailed = false) {
     ),
     nboxBookingError: row.metadata?.nbox?.bookingError || undefined,
     delivery: mapDelivery(row),
+    // Stock per location: paid website order waiting for staff to choose
+    // where it ships from; then the chosen location (staff-only).
+    needsApproval: Boolean(row.needs_approval),
+    pickupLocation: row.pickup_location_name || undefined,
     ...(detailed ? { timeline: row.timeline || [], notes: row.notes || [] } : {}),
   };
 }
@@ -98,6 +105,8 @@ async function loadAdminOrder(client, tenantId, id) {
     `
       SELECT o.*,
         (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
+        EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id = o.id AND h.status = 'held') AS needs_approval,
+        (SELECT sl.name FROM stocktake_locations sl WHERE sl.id = o.fulfillment_location_id) AS pickup_location_name,
         s.carrier, s.service, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail, 'actor', tu.full_name) ORDER BY t.occurred_at) FROM order_timeline_entries t LEFT JOIN admin_users tu ON tu.id = t.actor_user_id WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
@@ -170,6 +179,9 @@ router.get('/', asyncHandler(async (req, res) => {
       params.push(req.query.to);
       where.push(`o.placed_at < ($${params.length}::date + INTERVAL '1 day')`);
     }
+    if (req.query.needsApproval === 'true') {
+      where.push(`EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id = o.id AND h.status = 'held')`);
+    }
     if (req.query.q) {
       params.push(`%${req.query.q}%`);
       where.push(`(o.customer_name ILIKE $${params.length} OR o.public_number ILIKE $${params.length} OR o.customer_email ILIKE $${params.length})`);
@@ -191,6 +203,8 @@ router.get('/', asyncHandler(async (req, res) => {
         SELECT
           o.*,
           (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
+        EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id = o.id AND h.status = 'held') AS needs_approval,
+        (SELECT sl.name FROM stocktake_locations sl WHERE sl.id = o.fulfillment_location_id) AS pickup_location_name,
           s.carrier, s.service, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
           COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items
         FROM orders o
@@ -209,8 +223,14 @@ router.get('/', asyncHandler(async (req, res) => {
       params,
     );
 
+    // For the "Needs approval" chip, independent of the current filters.
+    const approvalCount = await client.query(
+      `SELECT COUNT(DISTINCT h.order_id)::integer AS n FROM order_stock_holds h WHERE h.tenant_id = $1 AND h.status = 'held'`,
+      [tenant.id],
+    );
     ok(res, {
       orders: result.rows.map((row) => mapOrder(row)),
+      needsApprovalCount: approvalCount.rows[0].n,
       total,
       page,
       limit,
@@ -337,6 +357,41 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 }));
 
+// ── Approval (stock per location) ──────────────────────────────────────────
+function orderContext(req) {
+  return {
+    tenantId: req.user.tenantId,
+    userId: req.user.id,
+    role: req.user.role,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || null,
+    requestId: req.requestId || null,
+  };
+}
+
+router.get('/:id/allocation', asyncHandler(async (req, res) => {
+  ok(res, await getAllocation(orderContext(req), req.params.id));
+}));
+
+router.post('/:id/approve', asyncHandler(async (req, res) => {
+  const approved = await approveOrder(orderContext(req), req.params.id, req.body);
+  const client = await db.pool.connect();
+  try {
+    // After commit: the courier is booked from the chosen location, then the
+    // customer is told the order is confirmed. Neither can undo the approval.
+    try {
+      const delivery = await bookNboxForPaidOrder(client, req.user.tenantId, approved.orderId);
+      if (delivery.failed) console.warn('NBOX booking failed after approval.', delivery);
+    } catch (err) {
+      console.warn('NBOX booking failed after approval.', err.message);
+    }
+    await sendOrderConfirmedEmail(client, req.user.tenantId, approved.orderId);
+    ok(res, await loadAdminOrder(client, req.user.tenantId, approved.orderId), `Order approved. Pickup: ${approved.location.name}.`);
+  } finally {
+    client.release();
+  }
+}));
+
 router.patch('/:id/status', asyncHandler(async (req, res) => {
   const errors = [
     invalidEnum('payment', req.body.payment, PAYMENT_STATUSES),
@@ -348,6 +403,7 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
 
   const client = await db.pool.connect();
   let shouldBookNbox = false;
+  let markedPaid = false;
   let updatedOrderId = null;
   let tenantId = null;
   // Everything after COMMIT (NBOX booking, receipt email, stock helpers) runs
@@ -367,6 +423,13 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
     );
     const previousPaymentStatus = previous.rows[0]?.payment_status || null;
     const previousStatus = previous.rows[0]?.status || null;
+    // Stock per location: a paid website order ships only after approval,
+    // which is also where it picks the location stock leaves from.
+    if (previous.rowCount && ['processing', 'shipped', 'delivered'].includes(String(req.body.fulfillment || ''))
+      && await orderAwaitsApproval(client, tenant.id, previous.rows[0].id)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'NEEDS_APPROVAL', message: 'Approve this order and choose where it ships from first.' });
+    }
     const order = await client.query(
       `
         UPDATE orders
@@ -387,15 +450,21 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
       return notFound(res, 'Order not found.');
     }
     updatedOrderId = order.rows[0].id;
-    shouldBookNbox = String(req.body.payment || '').trim().toLowerCase() === 'paid';
+    markedPaid = String(req.body.payment || '').trim().toLowerCase() === 'paid';
+    // With stock per location on, the courier is booked at approval instead,
+    // from the chosen location, once stock is confirmed there.
+    shouldBookNbox = markedPaid && !(await perLocationEnabled(client, tenant.id));
 
     if (trackingNumber) {
       const shipment = await client.query(
         `
           UPDATE shipments
           SET tracking_number = $3,
-              status = COALESCE($4, status),
-              shipped_at = CASE WHEN $4 = 'shipped' THEN COALESCE(shipped_at, now()) ELSE shipped_at END,
+              -- Explicit casts: $4 is compared to a text literal below, so
+              -- Postgres typed it as text and refused to store it in the enum
+              -- column (every "mark shipped with tracking" failed with a 500).
+              status = COALESCE($4::order_fulfillment_status, status),
+              shipped_at = CASE WHEN $4::order_fulfillment_status = 'shipped' THEN COALESCE(shipped_at, now()) ELSE shipped_at END,
               updated_at = now()
           WHERE tenant_id = $1 AND order_id = $2
           RETURNING id
@@ -406,7 +475,8 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
         await client.query(
           `
             INSERT INTO shipments (tenant_id, order_id, tracking_number, status, shipped_at, address)
-            VALUES ($1, $2, $3, COALESCE($4, 'awaiting'), CASE WHEN $4 = 'shipped' THEN now() ELSE NULL END, $5::jsonb)
+            VALUES ($1, $2, $3, COALESCE($4::order_fulfillment_status, 'awaiting'),
+                    CASE WHEN $4::order_fulfillment_status = 'shipped' THEN now() ELSE NULL END, $5::jsonb)
           `,
         [
           tenant.id,
@@ -452,6 +522,8 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
           ],
         );
       }
+    }
+    if (markedPaid) {
       await sendReceiptForPaidOrder(client, tenantId, updatedOrderId).catch((err) => {
         console.warn('[admin-orders] Receipt email failed:', err.message);
       });

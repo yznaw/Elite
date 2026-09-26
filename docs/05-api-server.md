@@ -325,8 +325,8 @@ See `server/routes/admin-settings.route.js`. All endpoints require an active adm
 | `GET` | `/api/admin/settings/invitations` | List pending (non-expired) invitations |
 | `POST` | `/api/admin/settings/invitations` | Create invitation — body: `{ email, role }`. Generates 32-byte hex token, stores SHA-256 hash, returns raw `inviteLink` URL. Token valid 48 h, single-use. |
 | `DELETE` | `/api/admin/settings/invitations/:id` | Revoke a pending invitation |
-| `GET` | `/api/admin/settings/notifications` | Owner/admin. `{ orderEmails, maxRecipients, smtpConfigured }` |
-| `PUT` | `/api/admin/settings/notifications` | Owner/admin. Body `{ orderEmails: string[] }`: trimmed, lower-cased, de-duplicated, strict address check (no whitespace/commas/brackets, so no header injection), max 10. Stored in `tenants.config.notifications` together with the admin's request origin (used for links in emails sent from webhooks). Audited as `settings.notifications.update` with before/after. `GET /store` strips `notifications` from `config`, since every role can read it. |
+| `GET` | `/api/admin/settings/notifications` | Owner/admin. `{ orderEmails, maxRecipients, smtpConfigured, reminderAfterMinutes }` |
+| `PUT` | `/api/admin/settings/notifications` | Owner/admin. Body `{ orderEmails: string[], reminderAfterMinutes?: 15-1440 }` (default 120; outside the range → 422): trimmed, lower-cased, de-duplicated, strict address check (no whitespace/commas/brackets, so no header injection), max 10. Stored in `tenants.config.notifications` together with the admin's request origin (used for links in emails sent from webhooks). Audited as `settings.notifications.update` with before/after. `GET /store` strips `notifications` from `config`, since every role can read it. |
 | `POST` | `/api/admin/settings/notifications/test-email` | Owner/admin, rate-limited (5 per 15 min). Body `{ orderEmails? }` tests the given list, otherwise the saved one. `424 SMTP_NOT_CONFIGURED` / `424 EMAIL_SEND_FAILED` (424, not 5xx, so the admin interceptor shows the message instead of a generic "Server error"). |
 
 ### Admin — Notifications (`/api/admin/notifications`)
@@ -385,7 +385,7 @@ While the switch is on:
 
 - **POS sale:** deducts the register's branch location. An online sale needs `min(branch balance, sellable total) >= qty`, so a unit held for a paid website order cannot be sold at the till. An offline sale floors at zero, like the total, and keeps its sync conflict row.
 - **POS void and refund with restock:** go back to the **selling** branch's location (`pos_transactions.branch_id`). A unit physically returned at another shop is moved with a transfer.
-- **Paid website order:** `ensurePaidOrderStock` reduces the total and records `order_stock_holds` (`held`, no location). Staff approval (plan Phase 5) allocates it to a location.
+- **Paid website order:** `ensurePaidOrderStock` reduces the total and records `order_stock_holds` (`held`, no location). Staff approval allocates it to a location (see "Website order approval" below).
 - **Order reversal:** held units are released, allocated units return to their location, and anything with no hold (paid before activation) goes to the warehouse.
 - **Writers that still cannot name a location** refuse with `409 LOCATION_REQUIRED` instead of drifting: `PATCH /admin/products/bulk-stock` and stock values in the full catalog import. Stock file import, the product editor and stocktake posting are location-aware since Phase 3.
 - **`inventory_movements.location_id`** records the location of every location write.
@@ -406,6 +406,22 @@ The POS screen:
 - `applyMissingPaidOrderStock` is finally scheduled (every 10 min, `startPaidOrderStockSweep`).
 - The Sadad webhook repairs stock and notification on an already-paid delivery.
 - Checkout, stock CSV commit, catalog save and order reversal now lock variants in id order, like every other writer.
+
+### Website order approval (`server/lib/order-approval.js`, plan Phase 5)
+
+Only while stock per location is on. A paid website order is **held** (it reduces the sellable total, no location yet) until staff pick ONE pickup location that has every item.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/admin/orders?needsApproval=true` | Only orders with held units. Every list response carries `needsApprovalCount`; each order carries `needsApproval` and `pickupLocation`. |
+| `GET` | `/api/admin/orders/:id/allocation` | `{ enabled, needsApproval, approvedAt, pickupLocation, lines, locations: [{ id, name, type, allAvailable, missing: [{ ...line, available, elsewhere: [{ locationId, name, quantity }] }] }] }`. Locations that can ship everything come first, the warehouse first among equals. |
+| `POST` | `/api/admin/orders/:id/approve` | Body `{ locationId }`. Owner/admin/manager. One transaction: locks the order, its held holds, the variants (id order) and the location rows; `409 LOCATION_SHORT` (with `shortages`) if anything is missing there, `409 ALREADY_APPROVED`, `ORDER_NOT_PAID`, `ORDER_CANCELLED`, `PER_LOCATION_OFF`. On success: deducts the location, posts two movements per line (`web_order_allocated` −qty at the location and +qty with no location, so the ledger total is unchanged and the history hides the balancing row), marks holds `allocated`, sets status `confirmed` / fulfilment `processing`, `fulfillment_location_id`, `approved_at`, `approved_by_user_id`, a timeline entry and audit `order.approved`. After commit it books NBOX and sends the customer "Your order is confirmed" (`server/lib/order-confirmation.js`, once, via `metadata.confirmation.sentAt`, never mentions branches). Returns the order. |
+
+- `PATCH /:id/status` answers `409 NEEDS_APPROVAL` for processing/shipped/delivered while the order still has held units. Cancelling works at any time: held units are released, allocated units return to the pickup location.
+- With the switch on, NBOX is booked at approval, not at payment (Sadad webhook, payment return, admin "mark paid"). With it off, nothing changed.
+- **Reminders:** `startApprovalReminderJob` (every 5 min) finds paid orders still waiting longer than `reminderAfterMinutes`, and sends one email to the order recipients plus one bell notification (`kind = 'order_reminder'`), then sets `orders.reminder_sent_at`. Never twice.
+- Fixed with it: marking an order shipped with a tracking number returned 500 (missing `::order_fulfillment_status` cast in the shipment update).
+- Tests: `server/test/order-approval-e2e.test.js`.
 
 ### Public — Invitations (`/api/invitations`)
 

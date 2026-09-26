@@ -21,6 +21,7 @@ const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
 const { startInventoryConsistencyJob } = require('./lib/pos/inventory-consistency-job');
 const { startPaidOrderStockSweep } = require('./lib/order-stock');
+const { startApprovalReminderJob } = require('./lib/staff-notify');
 const { assertProductionEnv, DEV_SESSION_SECRET } = require('./config/assert-env');
 const { csrfProtection } = require('./middleware/csrf');
 const { requestId } = require('./middleware/request-id');
@@ -370,6 +371,8 @@ async function startServer(port = PORT) {
   // Paid website orders whose stock deduction was missed (a webhook that
   // crashed after setting the paid flag).
   const stopPaidOrderStockSweep = startPaidOrderStockSweep();
+  // Stock per location: reminds staff about paid website orders nobody has approved.
+  const stopApprovalReminderJob = startApprovalReminderJob();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, () => {
       const address = server.address();
@@ -383,6 +386,7 @@ async function startServer(port = PORT) {
       stopRestockDispatchJob();
       stopQueueWatchJob();
       stopPaidOrderStockSweep();
+      stopApprovalReminderJob();
     });
     server.once('error', reject);
   });

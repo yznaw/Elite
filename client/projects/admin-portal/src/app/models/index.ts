@@ -171,6 +171,10 @@ export interface Order {
   nboxBookingError?: string;
   /** Carrier/shipment details. Absent when nothing has been booked yet. */
   delivery?: OrderDelivery;
+  /** Stock per location: paid online, waiting for staff to pick where it ships from. */
+  needsApproval?: boolean;
+  /** Stock per location: where it ships from once approved (staff only). */
+  pickupLocation?: string;
   /** Undefined until GET /admin/orders/:id has resolved — the list endpoint
       does not carry these, so undefined means "loading", not "none". */
   timeline?: OrderTimelineEntry[];

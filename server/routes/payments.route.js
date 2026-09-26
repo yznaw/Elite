@@ -3,6 +3,7 @@ const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
 const { notifyNewWebOrder } = require('../lib/staff-notify');
+const { perLocationEnabled } = require('../lib/location-stock');
 const { ensurePaidOrderStock } = require('../lib/order-stock');
 const sadad = require('../lib/sadad');
 
@@ -248,7 +249,9 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
         });
       });
 
-      await bookNboxForPaidOrder(client, updatedOrder.tenant_id, orderId)
+      // Stock per location: the courier is booked at approval, from the
+      // chosen location (routes/admin-orders.route.js POST /:id/approve).
+      if (!(await perLocationEnabled(client, updatedOrder.tenant_id))) await bookNboxForPaidOrder(client, updatedOrder.tenant_id, orderId)
         .then((deliveryResult) => {
           if (deliveryResult.failed) {
             console.warn('[sadad-callback] NBOX booking failed after payment confirmation', {

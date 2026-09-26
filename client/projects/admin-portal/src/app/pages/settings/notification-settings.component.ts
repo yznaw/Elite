@@ -85,6 +85,15 @@ const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
           </div>
         }
 
+        <label class="lbl ns-reminder-lbl" for="ns-reminder">{{ t('settings.notif.reminder') }}</label>
+        <div class="ns-reminder">
+          <input id="ns-reminder" class="inp" type="number" min="15" max="1440" step="15" inputmode="numeric"
+                 [ngModel]="reminder()" (ngModelChange)="reminder.set(+$event)"
+                 [class.inp-error]="reminderInvalid()" aria-describedby="ns-reminder-help"/>
+          <span class="muted small">{{ t('settings.notif.minutes') }}</span>
+        </div>
+        <div id="ns-reminder-help" [class]="reminderInvalid() ? 'inp-msg-error' : 'muted small'">{{ t('settings.notif.reminder.help') }}</div>
+
         <div class="ns-actions">
           <button type="button" class="btn btn-outline" (click)="sendTest()" [disabled]="testing() || !emails().length">
             <ap-icon name="mail" [size]="13"/>
@@ -167,6 +176,9 @@ const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
       border-radius: 10px;
       color: var(--muted); font-size: 13px;
     }
+    .ns-reminder-lbl { margin-top: 12px; }
+    .ns-reminder { display: flex; align-items: center; gap: 8px; }
+    .ns-reminder .inp { width: 110px; }
     .ns-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
     .ns-notice {
       display: flex; align-items: flex-start; gap: 8px;
@@ -215,7 +227,11 @@ export class NotificationSettingsComponent implements OnInit {
   readonly draft = signal('');
   readonly inputError = signal('');
 
-  readonly dirty = computed(() => this.emails().join('\n') !== this.saved().join('\n') || this.draft().trim() !== '');
+  readonly reminder = signal(120);
+  private readonly savedReminder = signal(120);
+  readonly reminderInvalid = computed(() => !Number.isInteger(this.reminder()) || this.reminder() < 15 || this.reminder() > 1440);
+  readonly dirty = computed(() => this.emails().join('\n') !== this.saved().join('\n') || this.draft().trim() !== ''
+    || this.reminder() !== this.savedReminder());
   readonly atLimit = computed(() => this.emails().length >= this.maxRecipients());
 
   ngOnInit(): void {
@@ -231,6 +247,8 @@ export class NotificationSettingsComponent implements OnInit {
       this.saved.set(res.orderEmails);
       this.smtpConfigured.set(res.smtpConfigured);
       this.maxRecipients.set(res.maxRecipients);
+      this.reminder.set(res.reminderAfterMinutes ?? 120);
+      this.savedReminder.set(res.reminderAfterMinutes ?? 120);
     } catch {
       this.loadError.set(true);
     } finally {
@@ -273,6 +291,7 @@ export class NotificationSettingsComponent implements OnInit {
   }
 
   discard(): void {
+    this.reminder.set(this.savedReminder());
     this.emails.set(this.saved());
     this.draft.set('');
     this.inputError.set('');
@@ -281,11 +300,14 @@ export class NotificationSettingsComponent implements OnInit {
   async save(): Promise<void> {
     // A typed but un-added address is almost always meant to be saved.
     if (!this.add()) return;
+    if (this.reminderInvalid()) return;
     this.saving.set(true);
     try {
-      const res = await this.api.saveNotificationSettings(this.emails());
+      const res = await this.api.saveNotificationSettings(this.emails(), this.reminder());
       this.emails.set(res.orderEmails);
       this.saved.set(res.orderEmails);
+      this.reminder.set(res.reminderAfterMinutes ?? this.reminder());
+      this.savedReminder.set(res.reminderAfterMinutes ?? this.reminder());
       this.smtpConfigured.set(res.smtpConfigured);
       this.toast.success(this.t('settings.notif.saved'));
     } catch (err) {

@@ -8,6 +8,8 @@ const { requireAuth } = require('../middleware/require-auth');
 const { PosError } = require('../lib/pos/errors');
 const {
   MAX_RECIPIENTS,
+  REMINDER_MIN,
+  REMINDER_MAX,
   NotificationSettingsError,
   normalizeRecipients,
   readNotificationSettings,
@@ -117,7 +119,12 @@ function requestOrigin(req) {
 
 router.get('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
   const settings = await readNotificationSettings(db, req.user.tenantId);
-  ok(res, { orderEmails: settings.orderEmails, maxRecipients: MAX_RECIPIENTS, smtpConfigured: smtpConfigured() });
+  ok(res, {
+    orderEmails: settings.orderEmails,
+    reminderAfterMinutes: settings.reminderAfterMinutes,
+    maxRecipients: MAX_RECIPIENTS,
+    smtpConfigured: smtpConfigured(),
+  });
 }));
 
 router.put('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
@@ -127,6 +134,12 @@ router.put('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
   } catch (err) {
     if (err instanceof NotificationSettingsError) return validationError(res, [err.message]);
     throw err;
+  }
+  const reminderRaw = req.body?.reminderAfterMinutes;
+  const reminderAfterMinutes = reminderRaw === undefined || reminderRaw === null || reminderRaw === '' ? undefined : Number(reminderRaw);
+  if (reminderAfterMinutes !== undefined
+    && (!Number.isSafeInteger(reminderAfterMinutes) || reminderAfterMinutes < REMINDER_MIN || reminderAfterMinutes > REMINDER_MAX)) {
+    return validationError(res, [`The reminder must be between ${REMINDER_MIN} and ${REMINDER_MAX} minutes.`]);
   }
   const client = await db.pool.connect();
   try {
@@ -138,7 +151,11 @@ router.put('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
           SET config = jsonb_set(COALESCE(config, '{}'::jsonb), '{notifications}',
                 COALESCE(config->'notifications', '{}'::jsonb) || $2::jsonb, true)
         WHERE id = $1`,
-      [req.user.tenantId, JSON.stringify({ orderEmails, ...(adminOrigin ? { adminOrigin } : {}) })],
+      [req.user.tenantId, JSON.stringify({
+        orderEmails,
+        ...(reminderAfterMinutes !== undefined ? { reminderAfterMinutes } : {}),
+        ...(adminOrigin ? { adminOrigin } : {}),
+      })],
     );
     await client.query(
       `INSERT INTO audit_events
@@ -155,7 +172,10 @@ router.put('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
       ],
     );
     await client.query('COMMIT');
-    ok(res, { orderEmails, maxRecipients: MAX_RECIPIENTS, smtpConfigured: smtpConfigured() }, 'Notification settings saved.');
+    const after = await readNotificationSettings(db, req.user.tenantId);
+    ok(res, {
+      orderEmails, reminderAfterMinutes: after.reminderAfterMinutes, maxRecipients: MAX_RECIPIENTS, smtpConfigured: smtpConfigured(),
+    }, 'Notification settings saved.');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

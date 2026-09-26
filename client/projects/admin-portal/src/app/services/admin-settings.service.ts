@@ -25,6 +25,8 @@ export interface StoreSettingsResponse {
 /** Settings → Notifications: who receives the new-order email. */
 export interface NotificationSettings {
   orderEmails: string[];
+  /** Stock per location: remind staff about unapproved paid website orders after this long. */
+  reminderAfterMinutes?: number;
   maxRecipients: number;
   /** False when the server has no SMTP configured; emails cannot be sent. */
   smtpConfigured: boolean;
@@ -38,8 +40,8 @@ export class AdminSettingsService {
     return firstValueFrom(this.api.get<NotificationSettings>('/admin/settings/notifications'));
   }
 
-  saveNotificationSettings(orderEmails: string[]): Promise<NotificationSettings> {
-    return firstValueFrom(this.api.put<NotificationSettings>('/admin/settings/notifications', { orderEmails }));
+  saveNotificationSettings(orderEmails: string[], reminderAfterMinutes?: number): Promise<NotificationSettings> {
+    return firstValueFrom(this.api.put<NotificationSettings>('/admin/settings/notifications', { orderEmails, reminderAfterMinutes }));
   }
 
   /** Sends to the given (possibly unsaved) list, so an address can be checked before saving. */

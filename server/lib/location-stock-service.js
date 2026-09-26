@@ -329,7 +329,7 @@ async function listTransfers(context, query = {}) {
 // view (every staff role can add/move/remove stock, so every change must be
 // traceable to a person and a reason).
 const HISTORY_TYPES = {
-  sale: "m.reason IN ('pos_sale', 'web_order')",
+  sale: "m.reason IN ('pos_sale', 'web_order', 'web_order_allocated')",
   return: "m.reason IN ('pos_refund', 'pos_void', 'web_order_reversed')",
   added: "m.reason = 'manual_adjustment' AND m.delta > 0",
   removed: "m.reason = 'manual_adjustment' AND m.delta < 0",
@@ -343,7 +343,9 @@ async function listMovements(context, query = {}) {
   const offset = Math.max(0, Number.parseInt(query.offset, 10) || 0);
   const params = [context.tenantId];
   const bind = (value) => { params.push(value); return `$${params.length}`; };
-  const where = ['m.tenant_id = $1'];
+  // The +qty half of an approval pair only balances the ledger total; the
+  // stock history shows the -qty leaving the chosen location.
+  const where = ['m.tenant_id = $1', "NOT (m.reason = 'web_order_allocated' AND m.location_id IS NULL)"];
   if (query.locationId) where.push(`m.location_id = ${bind(uuid(query.locationId, 'locationId'))}`);
   if (query.userId) where.push(`m.created_by_user_id = ${bind(uuid(query.userId, 'userId'))}`);
   if (query.type) {
