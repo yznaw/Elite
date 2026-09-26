@@ -77,15 +77,98 @@ export interface StocktakeDetail extends StocktakeSummary {
   lines: StocktakeLine[];
 }
 
+// ── Stock per location (server/lib/location-stock*.js) ──────────────────────
+
+export interface StockLocation {
+  id: string;
+  branchId: string | null;
+  name: string;
+  type: 'store' | 'warehouse';
+}
+
+export interface PerLocationStatus {
+  enabled: boolean;
+  locations: StockLocation[];
+  drift: { variantId: string; sku: string; stock: number; locationTotal: number; held: number }[];
+}
+
+export interface StockRow {
+  variantId: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode: string | null;
+  color: string | null;
+  size: string | null;
+  /** Sellable total: every location minus units held for paid website orders. */
+  total: number;
+  held: number;
+  /** Only locations holding stock appear; a missing id means 0. */
+  byLocation: Record<string, number>;
+}
+
+export interface StockPage {
+  enabled: boolean;
+  locations: StockLocation[];
+  total: number;
+  items: StockRow[];
+}
+
+export type ReceiveReason = 'received' | 'found' | 'returned' | 'correction';
+
+export interface StockLineInput { variantId: string; quantity: number }
+
+export interface TransferSummary {
+  transferId: string;
+  createdAt: string;
+  note: string | null;
+  lineCount: number;
+  unitCount: number;
+  from: string;
+  to: string;
+  createdByName: string | null;
+  lines: { sku: string; productName: string; color: string | null; size: string | null; quantity: number }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
   private readonly api = inject(ApiClient);
+
+  perLocationStatus(): Promise<PerLocationStatus> {
+    return firstValueFrom(this.api.get<PerLocationStatus>('/admin/inventory/per-location'));
+  }
+
+  activatePerLocation(): Promise<{ alreadyOn: boolean; seeded: number }> {
+    return firstValueFrom(this.api.post<{ alreadyOn: boolean; seeded: number }>('/admin/inventory/per-location/activate', {}));
+  }
+
+  listStock(query: { search?: string; locationId?: string; state?: 'low' | 'out' | ''; lowThreshold?: number; limit?: number; offset?: number }): Promise<StockPage> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    }
+    return firstValueFrom(this.api.get<StockPage>(`/admin/inventory/stock?${params.toString()}`));
+  }
+
+  receive(input: { locationId: string; reason: ReceiveReason; note?: string; lines: StockLineInput[] }): Promise<{ receiptId: string }> {
+    return firstValueFrom(this.api.post<{ receiptId: string }>('/admin/inventory/receipts', input));
+  }
+
+  transfer(input: { fromLocationId: string; toLocationId: string; note?: string; lines: StockLineInput[] }): Promise<{ transferId: string }> {
+    return firstValueFrom(this.api.post<{ transferId: string }>('/admin/inventory/transfers', input));
+  }
+
+  listTransfers(limit = 30): Promise<TransferSummary[]> {
+    return firstValueFrom(this.api.get<TransferSummary[]>(`/admin/inventory/transfers?limit=${limit}`));
+  }
 
   adjust(input: {
     variantId: string;
     delta: number;
     reason: AdjustmentReason;
     note?: string;
+    /** Per-location stock: which location changes (warehouse when omitted). */
+    locationId?: string;
   }): Promise<StockAdjustmentResult> {
     return firstValueFrom(this.api.post<StockAdjustmentResult>('/admin/inventory/adjustments', input));
   }

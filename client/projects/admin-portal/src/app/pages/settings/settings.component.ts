@@ -7,6 +7,7 @@ import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { PermHintComponent } from '../../shared/perm-hint/perm-hint.component';
+import { NotificationSettingsComponent } from './notification-settings.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
@@ -19,11 +20,11 @@ import { INTEGRATIONS } from '../../data/mock';
 import { TeamMember, TeamMemberRole, TeamMemberStatus } from '../../models';
 import { rolePillKind, registerStatusPillKind, tokenStatusPillKind, teamStatusPillKind, PillInfo } from '../../shared/pill/status-pill';
 
-type Tab = 'general' | 'team' | 'security' | 'integrations';
+type Tab = 'general' | 'team' | 'security' | 'notifications' | 'integrations';
 
 @Component({
     selector: 'ap-settings',
-    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent],
+    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent, NotificationSettingsComponent],
     template: `
     <div class="page-fade">
       @if (tab() === 'general') {
@@ -741,6 +742,10 @@ type Tab = 'general' | 'team' | 'security' | 'integrations';
         </div>
       }
 
+      @if (tab() === 'notifications') {
+        <ap-notification-settings/>
+      }
+
       @if (tab() === 'integrations') {
         <div class="grid-3">
           @for (itg of integrations; track itg.id) {
@@ -803,6 +808,7 @@ export class SettingsComponent implements OnInit {
     { key: 'general',      labelKey: 'settings.tab.general' },
     { key: 'team',         labelKey: 'settings.tab.team' },
     { key: 'security',     labelKey: 'settings.tab.security' },
+    { key: 'notifications', labelKey: 'settings.tab.notifications' },
     { key: 'integrations', labelKey: 'settings.tab.integrations' },
   ];
 

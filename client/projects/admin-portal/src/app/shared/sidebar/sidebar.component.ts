@@ -393,7 +393,6 @@ export class SidebarComponent {
     {
       labelKey: 'nav.section.storefront',
       links: [
-        { path: '/restock-requests', labelKey: 'restock.title', subKey: 'restock.demand', icon: 'catalog' },
         { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
         { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
         { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
@@ -408,6 +407,7 @@ export class SidebarComponent {
         // Excludes viewer, matching roleGuard(['owner','admin','manager','cashier']) on /pos.
         { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode', roles: ['owner', 'admin', 'manager', 'cashier'] },
         { path: '/orders',         labelKey: 'nav.orders',         subKey: 'nav.orders.sub',         icon: 'orders' },
+        { path: '/inventory',      labelKey: 'nav.inventory',      subKey: 'nav.inventory.sub',      icon: 'cube', roles: ['owner', 'admin', 'manager'] },
         { path: '/customers',      labelKey: 'nav.customers',      subKey: 'nav.customers.sub',      icon: 'users' },
         // 'scale' (a balance) for reconciling two totals against each other —
         // previously reused 'chart', identical to Analytics' icon.

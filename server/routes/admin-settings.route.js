@@ -6,6 +6,14 @@ const { asyncHandler, created, notFound, ok, validationError } = require('./lib'
 const { sendInvitationEmail } = require('../lib/invitation-email');
 const { requireAuth } = require('../middleware/require-auth');
 const { PosError } = require('../lib/pos/errors');
+const {
+  MAX_RECIPIENTS,
+  NotificationSettingsError,
+  normalizeRecipients,
+  readNotificationSettings,
+  sendTestEmail,
+} = require('../lib/staff-notify');
+const { notificationTestLimiter } = require('../middleware/rate-limit');
 
 const router = Router();
 
@@ -25,7 +33,7 @@ router.get('/store', asyncHandler(async (_req, res) => {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
       `
-        SELECT t.slug, t.name, t.currency, t.timezone, t.config, bp.*, ss.*
+        SELECT t.slug, t.name, t.currency, t.timezone, t.config - 'notifications' AS config, bp.*, ss.*
         FROM tenants t
         LEFT JOIN brand_profiles bp ON bp.tenant_id = t.id
         LEFT JOIN store_settings ss ON ss.tenant_id = t.id
@@ -88,6 +96,108 @@ router.patch('/store', ownerOrAdmin, asyncHandler(async (req, res) => {
   } finally {
     client.release();
   }
+}));
+
+// ─── Notifications (Settings → Notifications) ────────────────────────────────
+// Who gets the new-order email. Owner/admin only on read as well as write:
+// the list is staff email addresses, and GET /store (readable by every role)
+// strips it from `config` for the same reason. Changes are audited, because
+// adding an outside address would forward every order to it.
+
+function smtpConfigured() {
+  return Boolean(process.env.SMTP_HOST);
+}
+
+// Recorded so emails sent from a webhook (no browser origin to borrow) can
+// still link back into this admin portal. Only a plain http(s) origin is kept.
+function requestOrigin(req) {
+  const origin = req.get('origin');
+  return origin && /^https?:\/\/[^/\s]+$/i.test(origin) ? origin : null;
+}
+
+router.get('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
+  const settings = await readNotificationSettings(db, req.user.tenantId);
+  ok(res, { orderEmails: settings.orderEmails, maxRecipients: MAX_RECIPIENTS, smtpConfigured: smtpConfigured() });
+}));
+
+router.put('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
+  let orderEmails;
+  try {
+    orderEmails = normalizeRecipients(req.body?.orderEmails);
+  } catch (err) {
+    if (err instanceof NotificationSettingsError) return validationError(res, [err.message]);
+    throw err;
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const before = await readNotificationSettings(client, req.user.tenantId);
+    const adminOrigin = requestOrigin(req) || before.adminOrigin;
+    await client.query(
+      `UPDATE tenants
+          SET config = jsonb_set(COALESCE(config, '{}'::jsonb), '{notifications}',
+                COALESCE(config->'notifications', '{}'::jsonb) || $2::jsonb, true)
+        WHERE id = $1`,
+      [req.user.tenantId, JSON.stringify({ orderEmails, ...(adminOrigin ? { adminOrigin } : {}) })],
+    );
+    await client.query(
+      `INSERT INTO audit_events
+         (tenant_id, actor_user_id, action, entity_type, entity_id, before_state, after_state, ip_address, user_agent, request_id)
+       VALUES ($1,$2,'settings.notifications.update','tenant',$1,$3::jsonb,$4::jsonb,$5,$6,$7)`,
+      [
+        req.user.tenantId,
+        req.user.id,
+        JSON.stringify({ orderEmails: before.orderEmails }),
+        JSON.stringify({ orderEmails }),
+        req.ip || null,
+        req.headers['user-agent'] || null,
+        req.requestId || null,
+      ],
+    );
+    await client.query('COMMIT');
+    ok(res, { orderEmails, maxRecipients: MAX_RECIPIENTS, smtpConfigured: smtpConfigured() }, 'Notification settings saved.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/notifications/test-email', ownerOrAdmin, notificationTestLimiter, asyncHandler(async (req, res) => {
+  let recipients;
+  try {
+    // Tests the list on screen (possibly unsaved) so staff can check an
+    // address before committing to it; falls back to the saved list.
+    recipients = req.body?.orderEmails !== undefined
+      ? normalizeRecipients(req.body.orderEmails)
+      : (await readNotificationSettings(db, req.user.tenantId)).orderEmails;
+  } catch (err) {
+    if (err instanceof NotificationSettingsError) return validationError(res, [err.message]);
+    throw err;
+  }
+  if (!recipients.length) return validationError(res, ['Add at least one email address first.']);
+  try {
+    const saved = await readNotificationSettings(db, req.user.tenantId);
+    await sendTestEmail(recipients, { adminOrigin: requestOrigin(req) || saved.adminOrigin });
+  } catch (err) {
+    // 424 rather than 5xx: the admin portal's error interceptor collapses
+    // every 5xx into a generic "Server error", which would hide the one thing
+    // the owner needs to know here (SMTP is missing / the address bounced).
+    if (err.code === 'SMTP_NOT_CONFIGURED') {
+      return res.status(424).json({
+        success: false,
+        code: 'SMTP_NOT_CONFIGURED',
+        message: 'Email sending is not set up on the server yet (SMTP). Ask your developer to configure it.',
+      });
+    }
+    return res.status(424).json({
+      success: false,
+      code: 'EMAIL_SEND_FAILED',
+      message: 'The email server rejected the message. Check the addresses and try again.',
+    });
+  }
+  ok(res, { sentTo: recipients }, 'Test email sent.');
 }));
 
 router.get('/team', asyncHandler(async (_req, res) => {

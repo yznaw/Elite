@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { notifyNewWebOrder } = require('../lib/staff-notify');
 const { ensurePaidOrderStock } = require('../lib/order-stock');
 const sadad = require('../lib/sadad');
 
@@ -165,6 +166,7 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
         const tenant = await client.query('SELECT tenant_id FROM orders WHERE id = $1::uuid', [orderId]);
         if (tenant.rowCount) {
           await ensurePaidOrderStock(tenant.rows[0].tenant_id, orderId, { source: 'sadad-callback-repair' });
+          await notifyNewWebOrder(client, tenant.rows[0].tenant_id, orderId);
         }
       }
       return res.redirect(`${storefrontBase(req)}/thank-you?order=${encodeURIComponent(alreadyPaid.public_number)}`);
@@ -265,6 +267,8 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
       await sendReceiptForPaidOrder(client, updatedOrder.tenant_id, orderId).catch((err) => {
         console.warn('[sadad-callback] Receipt email failed:', err.message);
       });
+      // Idempotent and never throws; the webhook may have notified already.
+      await notifyNewWebOrder(client, updatedOrder.tenant_id, orderId);
 
       // Inventory. Until docs/25 Phase 1 a paid web order never touched stock
       // at all, so the shop could sell the same unit online and again at the

@@ -15,6 +15,11 @@ export interface ProductVariant {
   shippingCost?: number;
   totalCost?: number;
   stock: number;
+  /** Per-location stock (location id -> quantity) when stock per location is
+   *  on. `stock` is then the sellable total: these minus `held`. */
+  locationStock?: Record<string, number>;
+  /** Units paid for on the website and not yet approved (sellable nowhere). */
+  held?: number;
 }
 
 export interface Product {

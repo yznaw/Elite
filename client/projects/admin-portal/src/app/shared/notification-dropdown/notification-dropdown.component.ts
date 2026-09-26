@@ -27,7 +27,8 @@ const KIND_COLOR: Record<NotifKind, string> = {
     template: `
     <div class="notif-wrap">
       <!-- Bell trigger -->
-      <button class="icon-btn notif-bell" (click)="toggle()" [attr.title]="t('topbar.notifications')">
+      <button class="icon-btn notif-bell" (click)="toggle()" [attr.title]="t('topbar.notifications')"
+              [attr.aria-label]="t('topbar.notifications')" [attr.aria-expanded]="open()">
         <ap-icon name="bell" [size]="16"/>
         @if (notifs.unreadCount() > 0) {
           <span class="notif-badge">{{ notifs.unreadCount() > 9 ? '9+' : notifs.unreadCount() }}</span>
@@ -36,20 +37,27 @@ const KIND_COLOR: Record<NotifKind, string> = {
 
       <!-- Dropdown -->
       @if (open()) {
-        <div class="notif-dropdown">
+        <div class="notif-dropdown" role="dialog" [attr.aria-label]="t('notif.title')">
           <div class="notif-head">
             <span class="notif-head-title">{{ t('notif.title') }}</span>
-            @if (notifs.unreadCount() > 0) {
-              <button class="notif-mark-all" (click)="notifs.markAllRead()">{{ t('notif.markAllRead') }}</button>
-            }
           </div>
 
           <div class="notif-list">
-            @if (notifs.items().length === 0) {
-              <div class="notif-empty">{{ t('notif.empty') }}</div>
+            @if (!notifs.loaded()) {
+              @for (i of [1, 2, 3]; track i) {
+                <div class="notif-item notif-skel" aria-hidden="true">
+                  <div class="notif-icon skel-block"></div>
+                  <div class="notif-content"><div class="skel-line w60"></div><div class="skel-line w40"></div></div>
+                </div>
+              }
+            } @else if (notifs.items().length === 0) {
+              <div class="notif-empty">
+                <ap-icon name="bell" [size]="20"/>
+                <div>{{ t('notif.emptyOrders') }}</div>
+              </div>
             }
             @for (n of notifs.items(); track n.id) {
-              <div class="notif-item" [class.unread]="!n.read" (click)="onItemClick(n.id, n.route)">
+              <button type="button" class="notif-item" [class.unread]="unreadAtOpen().has(n.id)" (click)="onItemClick(n.route)">
                 <div class="notif-icon" [style.background]="kindColor(n.kind)">
                   <ap-icon [name]="kindIcon(n.kind)" [size]="12"/>
                 </div>
@@ -58,11 +66,30 @@ const KIND_COLOR: Record<NotifKind, string> = {
                   <div class="notif-item-body">{{ n.body }}</div>
                   <div class="notif-item-time">{{ notifs.timeAgo(n.ts) }}</div>
                 </div>
-                <button class="notif-dismiss" (click)="$event.stopPropagation(); notifs.dismiss(n.id)" aria-label="Dismiss">
-                  <ap-icon name="x" [size]="10"/>
-                </button>
-              </div>
+              </button>
             }
+          </div>
+
+          <!-- Alert preferences for this browser -->
+          <div class="notif-foot">
+            <label class="notif-pref">
+              <span>{{ t('notif.sound') }}</span>
+              <input type="checkbox" class="notif-switch" [checked]="notifs.soundEnabled()"
+                     (change)="notifs.setSound($any($event.target).checked)"/>
+            </label>
+            <div class="notif-pref">
+              <span>{{ t('notif.desktop') }}</span>
+              @switch (notifs.desktopState()) {
+                @case ('granted') { <span class="notif-state on">{{ t('notif.desktop.on') }}</span> }
+                @case ('denied') { <span class="notif-state off" [attr.title]="t('notif.desktop.blockedHelp')">{{ t('notif.desktop.blocked') }}</span> }
+                @case ('unsupported') { <span class="notif-state off">{{ t('notif.desktop.unsupported') }}</span> }
+                @default { <button type="button" class="notif-enable" (click)="notifs.enableDesktopAlerts()">{{ t('notif.desktop.enable') }}</button> }
+              }
+            </div>
+            @if (notifs.desktopState() === 'denied') {
+              <div class="notif-hint">{{ t('notif.desktop.blockedHelp') }}</div>
+            }
+            <div class="notif-hint">{{ t('notif.openTabHint') }}</div>
           </div>
         </div>
       }
@@ -94,7 +121,9 @@ const KIND_COLOR: Record<NotifKind, string> = {
       top: calc(100% + 8px);
       inset-inline-end: 0;
       width: 380px;
-      max-height: 480px;
+      max-height: 560px;
+      display: flex;
+      flex-direction: column;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -133,19 +162,25 @@ const KIND_COLOR: Record<NotifKind, string> = {
 
     .notif-list {
       overflow-y: auto;
-      max-height: 400px;
+      max-height: 360px;
     }
 
     .notif-item {
+      width: 100%;
+      background: none;
+      border: 0;
+      border-bottom: 1px solid var(--border-2);
+      font: inherit;
+      text-align: start;
       display: flex;
       align-items: flex-start;
       gap: 12px;
       padding: 14px 18px;
       cursor: pointer;
       transition: background 0.12s;
-      border-bottom: 1px solid var(--border-2);
       position: relative;
     }
+    .notif-item:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
     .notif-item:last-child { border-bottom: none; }
     .notif-item:hover { background: var(--bg); }
     .notif-item.unread { background: rgba(2, 70, 56, 0.03); }
@@ -192,25 +227,58 @@ const KIND_COLOR: Record<NotifKind, string> = {
       opacity: 0.7;
     }
 
-    .notif-dismiss {
-      background: none; border: none; cursor: pointer;
-      color: var(--muted);
-      padding: 4px;
-      border-radius: 6px;
-      opacity: 0;
-      transition: all 0.12s;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-    .notif-item:hover .notif-dismiss { opacity: 1; }
-    .notif-dismiss:hover { background: var(--bg); color: var(--danger); }
 
     .notif-empty {
-      padding: 40px 18px;
+      padding: 36px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
       text-align: center;
       color: var(--muted);
       font-size: 13px;
     }
+
+    .notif-skel { cursor: default; }
+    .skel-block { background: var(--border-2) !important; }
+    .skel-line { height: 10px; border-radius: 4px; background: var(--border-2); margin: 4px 0 8px; }
+    .skel-line.w60 { width: 60%; }
+    .skel-line.w40 { width: 40%; }
+
+    .notif-foot {
+      border-top: 1px solid var(--border-2);
+      padding: 10px 18px 12px;
+      display: grid;
+      gap: 8px;
+      background: var(--bg);
+    }
+    .notif-pref {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--ink);
+      min-height: 28px;
+    }
+    .notif-switch { width: 16px; height: 16px; accent-color: var(--green); cursor: pointer; }
+    .notif-enable {
+      background: var(--green);
+      color: #fff;
+      border: 0;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .notif-enable:active { transform: translateY(1px); }
+    .notif-state { font-size: 11px; font-weight: 600; }
+    .notif-state.on { color: var(--success, var(--green)); }
+    .notif-state.off { color: var(--muted); }
+    .notif-hint { font-size: 11px; line-height: 1.5; color: var(--muted); }
 
     @media (max-width: 480px) {
       .notif-dropdown {
@@ -228,16 +296,25 @@ export class NotificationDropdownComponent {
 
   readonly t = (k: string): string => this.i18n.t(k);
   readonly open = signal(false);
+  /** What was unread when the panel opened; stays highlighted until it closes. */
+  readonly unreadAtOpen = signal<ReadonlySet<number>>(new Set());
 
   kindIcon = (k: NotifKind): IconName => KIND_ICON[k];
   kindColor = (k: NotifKind): string => KIND_COLOR[k];
 
-  toggle(): void { this.open.update(v => !v); }
+  toggle(): void {
+    if (this.open()) {
+      this.open.set(false);
+      return;
+    }
+    this.unreadAtOpen.set(new Set(this.notifs.items().filter((n) => !n.read).map((n) => n.id)));
+    this.open.set(true);
+    void this.notifs.markAllRead();
+  }
 
-  onItemClick(id: string, route?: string): void {
-    this.notifs.markRead(id);
+  onItemClick(route?: string): void {
     this.open.set(false);
-    if (route) this.router.navigateByUrl(route);
+    if (route) void this.router.navigateByUrl(route);
   }
 
   /** Close on outside click */

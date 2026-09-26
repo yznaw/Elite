@@ -37,6 +37,9 @@ async function recordMovement(client, context, {
   referenceType,
   referenceId,
   metadata,
+  // Which stock location this change touched (migration 046). Omitted for
+  // total-only changes and whenever per-location stock is off.
+  locationId = null,
 }) {
   if (variantId) {
     const preDeltaStock = await currentStock(client, context.tenantId, variantId);
@@ -56,8 +59,8 @@ async function recordMovement(client, context, {
   await client.query(
     `INSERT INTO inventory_movements (
        tenant_id, product_id, variant_id, delta, reason,
-       reference_type, reference_id, created_by_user_id, metadata
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
+       reference_type, reference_id, created_by_user_id, metadata, location_id
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
     [
       context.tenantId,
       productId,
@@ -68,6 +71,7 @@ async function recordMovement(client, context, {
       referenceId,
       context.userId,
       JSON.stringify(metadata ?? {}),
+      locationId,
     ],
   );
 }

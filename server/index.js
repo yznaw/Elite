@@ -20,6 +20,7 @@ const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
 const { startInventoryConsistencyJob } = require('./lib/pos/inventory-consistency-job');
+const { startPaidOrderStockSweep } = require('./lib/order-stock');
 const { assertProductionEnv, DEV_SESSION_SECRET } = require('./config/assert-env');
 const { csrfProtection } = require('./middleware/csrf');
 const { requestId } = require('./middleware/request-id');
@@ -366,6 +367,9 @@ async function startServer(port = PORT) {
   // draining — unsynced money sitting in a browser is the top offline risk
   // (docs/24, Phase E).
   const stopQueueWatchJob = startQueueWatchJob();
+  // Paid website orders whose stock deduction was missed (a webhook that
+  // crashed after setting the paid flag).
+  const stopPaidOrderStockSweep = startPaidOrderStockSweep();
   return new Promise((resolve, reject) => {
     const server = app.listen(port, () => {
       const address = server.address();
@@ -378,6 +382,7 @@ async function startServer(port = PORT) {
       stopInventoryConsistencyJob();
       stopRestockDispatchJob();
       stopQueueWatchJob();
+      stopPaidOrderStockSweep();
     });
     server.once('error', reject);
   });

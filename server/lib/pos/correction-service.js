@@ -4,6 +4,17 @@ const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
 const { POS_PAYMENT_METHODS, claimReceipt, loadSale, paymentReference } = require('./sale-service');
 const { recordMovement } = require('../inventory-ledger');
+const { perLocationEnabled, locationForBranch, applyLocationDelta } = require('../location-stock');
+
+/**
+ * Where returned units go when per-location stock is on: back to the branch
+ * that sold them (client decision 2026-09-26). A unit physically returned at
+ * another shop is then moved with a transfer. Null while the switch is off.
+ */
+async function returnLocationFor(client, tenantId, transaction) {
+  if (!(await perLocationEnabled(client, tenantId))) return null;
+  return locationForBranch(client, tenantId, transaction.branch_id);
+}
 
 async function updateProductTotals(client, tenantId, productIds) {
   if (!productIds.size) return;
@@ -127,6 +138,7 @@ async function voidTransaction(context, transactionIdValue, body) {
     );
     const stockRestored = [];
     const products = new Set();
+    const returnLocationId = await returnLocationFor(client, context.tenantId, transaction);
     for (const item of items.rows) {
       if (!item.variant_id) continue;
       const stock = await client.query(
@@ -136,6 +148,11 @@ async function voidTransaction(context, transactionIdValue, body) {
       );
       if (stock.rowCount) {
         const value = Number(stock.rows[0].stock_quantity);
+        if (returnLocationId) {
+          await applyLocationDelta(client, context.tenantId, {
+            variantId: item.variant_id, locationId: returnLocationId, delta: item.quantity,
+          });
+        }
         stockRestored.push({ variantId: item.variant_id, stock: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
@@ -147,6 +164,7 @@ async function voidTransaction(context, transactionIdValue, body) {
           referenceType: 'pos_void',
           referenceId: voidResult.rows[0].id,
           metadata: { originalTransactionId: transaction.id },
+          locationId: returnLocationId,
         });
       }
     }
@@ -355,6 +373,7 @@ async function createRefund(context, body) {
     );
     assertPos(itemResult.rowCount === lines.length, 422, 'REFUND_ITEM_INVALID', 'One or more refund lines do not belong to the original sale.');
     const itemMap = new Map(itemResult.rows.map((item) => [item.id, item]));
+    const returnLocationId = await returnLocationFor(client, context.tenantId, transaction);
     let amountCents = 0;
     for (const line of lines) {
       const item = itemMap.get(line.transactionItemId);
@@ -418,6 +437,11 @@ async function createRefund(context, body) {
         );
         assertPos(stock.rowCount === 1, 409, 'REFUND_VARIANT_MISSING', `${item.product_name} variant no longer exists.`);
         const value = Number(stock.rows[0].stock_quantity);
+        if (returnLocationId) {
+          await applyLocationDelta(client, context.tenantId, {
+            variantId: item.variant_id, locationId: returnLocationId, delta: line.quantity,
+          });
+        }
         stockUpdates.push({ variantId: item.variant_id, stock: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
@@ -429,6 +453,7 @@ async function createRefund(context, body) {
           referenceType: 'pos_refund',
           referenceId: refund.id,
           metadata: { originalTransactionId: transaction.id },
+          locationId: returnLocationId,
         });
       }
     }

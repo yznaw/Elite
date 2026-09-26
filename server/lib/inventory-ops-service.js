@@ -3,6 +3,7 @@ const db = require('../db/client');
 const { recordMovement, publishStockEvent } = require('./inventory-ledger');
 const { PosError, assertPos, nonEmpty, uuid } = require('./pos/errors');
 const { logger } = require('./logger');
+const { syncLocations, perLocationEnabled, defaultLocationId, requireLocation, applyLocationDelta, assertTotalOnlyWriteAllowed } = require('./location-stock');
 
 /**
  * Inventory operations: manual adjustments and stocktakes (docs/25 Phase 8).
@@ -37,33 +38,8 @@ const ADJUSTMENT_REASONS = new Set([
 const NEGATIVE_ONLY = new Set(['damaged', 'lost', 'returned_to_supplier', 'sample']);
 
 /** Keep count locations aligned with configured shops and guarantee one
- * warehouse row. These locations label a count only; they do not own stock. */
-async function syncStocktakeLocations(client, tenantId) {
-  await client.query(
-    `INSERT INTO stocktake_locations (tenant_id, branch_id, name, location_type, sort_order)
-     SELECT b.tenant_id, b.id, b.name, 'store',
-            row_number() OVER (ORDER BY b.is_default DESC, b.created_at)::integer - 1
-       FROM pos_branches b
-      WHERE b.tenant_id = $1
-     ON CONFLICT DO NOTHING`,
-    [tenantId],
-  );
-  await client.query(
-    `INSERT INTO stocktake_locations (tenant_id, name, location_type, sort_order)
-     SELECT $1, 'Warehouse', 'warehouse', 100
-      WHERE NOT EXISTS (
-        SELECT 1 FROM stocktake_locations WHERE tenant_id = $1 AND location_type = 'warehouse'
-      )`,
-    [tenantId],
-  );
-  // A branch rename should be reflected wherever the next count is shown.
-  await client.query(
-    `UPDATE stocktake_locations l SET name = b.name
-       FROM pos_branches b
-      WHERE l.tenant_id = $1 AND l.branch_id = b.id AND l.name <> b.name`,
-    [tenantId],
-  );
-}
+ * warehouse row. Lives in location-stock.js now that locations also hold stock. */
+const syncStocktakeLocations = syncLocations;
 
 async function listStocktakeLocations(context) {
   const client = await db.pool.connect();
@@ -121,11 +97,12 @@ function parseQuantity(value, field) {
  * system is register-bound and does not apply outside a till session.)
  */
 async function adjustStock(context, body) {
+  // Managers too (client decision 2026-09-26); cashiers never reach this.
   assertPos(
-    ['owner', 'admin'].includes(context.role),
+    ['owner', 'admin', 'manager'].includes(context.role),
     403,
     'INSUFFICIENT_PERMISSIONS',
-    'Only owners and admins can adjust stock.',
+    'Only owners, admins and managers can adjust stock.',
   );
 
   const variantId = uuid(body?.variantId, 'variantId');
@@ -172,6 +149,16 @@ async function adjustStock(context, body) {
       `${variant.rows[0].sku} holds ${before}; removing ${Math.abs(delta)} would take it below zero.`,
     );
 
+    // Per-location stock: the adjustment lands on the chosen location
+    // (warehouse when none is given) and must be covered there.
+    let locationId = null;
+    if (await perLocationEnabled(client, context.tenantId)) {
+      locationId = body?.locationId
+        ? (await requireLocation(client, context.tenantId, uuid(body.locationId, 'locationId'))).id
+        : await defaultLocationId(client, context.tenantId);
+      await applyLocationDelta(client, context.tenantId, { variantId, locationId, delta, sku: variant.rows[0].sku });
+    }
+
     await client.query(
       'UPDATE product_variants SET stock_quantity = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2',
       [context.tenantId, variantId, after],
@@ -188,11 +175,12 @@ async function adjustStock(context, body) {
       // (pos_sale, web_order, manual_adjustment). The shrinkage report groups
       // on this.
       metadata: { adjustmentReason: reason, note, sku: variant.rows[0].sku, before, after },
+      locationId,
     });
     await publishStockEvent(client, context.tenantId, variantId, after);
     await recomputeProductTotal(client, variant.rows[0].product_id);
     await writeAudit(client, context, 'inventory.adjusted', 'product_variant', variantId, {
-      delta, reason, note, before, after, sku: variant.rows[0].sku,
+      delta, reason, note, before, after, sku: variant.rows[0].sku, locationId,
     });
 
     await client.query('COMMIT');
@@ -604,6 +592,9 @@ async function postStocktake(context, stocktakeId, body = {}) {
   try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '10s'");
+    // Per-location posting (counted - expected per location) arrives in plan
+    // Phase 3; until then a combined post must not run with the switch on.
+    await assertTotalOnlyWriteAllowed(client, context.tenantId, 'Posting a stocktake');
 
     const stocktake = await client.query(
       'SELECT * FROM stocktakes WHERE tenant_id = $1 AND id = $2 FOR UPDATE',

@@ -2,6 +2,7 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
 const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { notifyNewWebOrder } = require('../lib/staff-notify');
 const { ensurePaidOrderStock, reversePaidOrderStock } = require('../lib/order-stock');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { insertWithRetry } = require('../lib/order-number');
@@ -454,6 +455,8 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
       await sendReceiptForPaidOrder(client, tenantId, updatedOrderId).catch((err) => {
         console.warn('[admin-orders] Receipt email failed:', err.message);
       });
+      // Only website checkout orders notify; a manual admin order does not.
+      await notifyNewWebOrder(client, tenantId, updatedOrderId);
     }
 
     // Stock follows the transition, not the requested value (docs/25 Phase 1).

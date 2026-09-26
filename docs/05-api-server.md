@@ -325,6 +325,63 @@ See `server/routes/admin-settings.route.js`. All endpoints require an active adm
 | `GET` | `/api/admin/settings/invitations` | List pending (non-expired) invitations |
 | `POST` | `/api/admin/settings/invitations` | Create invitation — body: `{ email, role }`. Generates 32-byte hex token, stores SHA-256 hash, returns raw `inviteLink` URL. Token valid 48 h, single-use. |
 | `DELETE` | `/api/admin/settings/invitations/:id` | Revoke a pending invitation |
+| `GET` | `/api/admin/settings/notifications` | Owner/admin. `{ orderEmails, maxRecipients, smtpConfigured }` |
+| `PUT` | `/api/admin/settings/notifications` | Owner/admin. Body `{ orderEmails: string[] }`: trimmed, lower-cased, de-duplicated, strict address check (no whitespace/commas/brackets, so no header injection), max 10. Stored in `tenants.config.notifications` together with the admin's request origin (used for links in emails sent from webhooks). Audited as `settings.notifications.update` with before/after. `GET /store` strips `notifications` from `config`, since every role can read it. |
+| `POST` | `/api/admin/settings/notifications/test-email` | Owner/admin, rate-limited (5 per 15 min). Body `{ orderEmails? }` tests the given list, otherwise the saved one. `424 SMTP_NOT_CONFIGURED` / `424 EMAIL_SEND_FAILED` (424, not 5xx, so the admin interceptor shows the message instead of a generic "Server error"). |
+
+### Admin — Notifications (`/api/admin/notifications`)
+
+See `server/routes/admin-notifications.route.js` and `server/lib/staff-notify.js`. Every signed-in role; tenant from the session.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/notifications?after=<id>` | Newest 30 rows, or only rows with `id > after`. Returns `{ items: [{ id, kind, title, body, route, createdAt }], lastReadId }`. |
+| `POST` | `/api/admin/notifications/read` | Body `{ upToId }`. Moves the caller's read cursor forward (never back), clamped to the newest existing id. |
+
+**New-order notification.** `notifyNewWebOrder(client, tenantId, orderId)` runs next to `sendReceiptForPaidOrder` in the Sadad webhook, the Sadad browser callback (including its already-paid repair branch) and the admin mark-paid path. It only fires for paid orders with `metadata.source = 'client-web-checkout'` (POS and manual orders never notify). Idempotency is the unique index `admin_notifications (tenant_id, kind, entity_id)`: every caller tries the insert and only the one whose insert lands sends the email, so duplicate webhooks cannot double-send. The email and the bell carry order number, item count, items and total only (no customer name, address or phone) because they show on shared counter screens. It never throws. Tables: migration `045_staff_notifications.sql`.
+
+### Per-location stock (`server/lib/location-stock.js`, migration 046)
+
+Each store (one per `pos_branches` row) and the warehouse hold their own quantity in `variant_location_stock`. Locations reuse `stocktake_locations`. The model:
+
+`product_variants.stock_quantity = SUM(variant_location_stock) - SUM(order_stock_holds WHERE status = 'held')`
+
+`stock_quantity` stays the **sellable total** that the storefront, carts, restock alerts and reports read, so none of them changed. Everything is behind a per-tenant switch, `tenants.config.inventory.perLocation`. While it is off, no location balance or hold is written and every writer behaves exactly as before.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/inventory/per-location` | `{ enabled, locations: [{ id, branchId, name, type }], drift }`. Syncs locations with branches first. |
+| `POST` | `/api/admin/inventory/per-location/activate` | Owner/admin. Locks the tenant and every variant, then seeds each variant's current total into the warehouse and turns the switch on. Idempotent (`alreadyOn`). Audited `inventory.per_location.activate`. The opening stocktake then moves units to where they really are. |
+| `POST` | `/api/admin/inventory/per-location/deactivate` | Owner/admin. Emergency switch back to one shared figure. Balances stop being maintained, and a later activation rebuilds them. |
+| `POST` | `/api/admin/inventory/adjustments` | Owner/admin/manager (managers added 2026-09-26). Now also takes an optional `locationId` (default: warehouse). While the switch is on, the location must cover a negative delta (`409 LOCATION_INSUFFICIENT_STOCK`). |
+| `GET` | `/api/admin/inventory/stock` | The stock table. Query: `search` (name, SKU, colour, exact barcode), `locationId`, `state=low\|out\|in` (applies to that location, else to the sellable total), `lowThreshold`, `limit` (max 200), `offset`. Returns `{ enabled, locations, total, items: [{ variantId, productName, sku, barcode, color, size, total, held, byLocation }] }`. Sizes are sorted numerically. |
+| `POST` | `/api/admin/inventory/receipts` | Add stock to one location: `{ locationId, reason: received\|found\|returned\|correction, note?, lines: [{ variantId, quantity }] }`. Raises the location and the total together, merges duplicate lines, max 200 lines. `409 PER_LOCATION_OFF` while the switch is off. Audited `inventory.received`. |
+| `POST` | `/api/admin/inventory/transfers` | `{ fromLocationId, toLocationId, note?, lines }`. Strict: the source must hold the units (`409 LOCATION_INSUFFICIENT_STOCK`), the total never changes. Header in `stock_transfers`, and two movements per line (`reason = 'transfer'`). |
+| `GET` | `/api/admin/inventory/transfers` | Recent transfers with their lines and who made them. |
+
+**Product editor with the switch on.** `GET /admin/products/:id` variants carry `locationStock` (location id → quantity) and `held`. The `PATCH`/`POST` body accepts, per variant, `locationStock` (absolute per location), plus top-level `expectedLocationStock` (`{ variantId: { locationId: qty } }`, what the editor loaded) and `stockReason`.
+- The server derives the total as the current total plus the location changes, and ignores the legacy `stock` field.
+- It writes one `manual_adjustment` movement per changed location with `adjustmentReason`.
+- It refuses with:
+  - `409 STOCK_CHANGED` when a location changed since load.
+  - `409 STOCK_HELD` when the change would remove units held for paid website orders.
+  - `409 SIZE_HAS_STOCK` when removing a size that still has stock.
+
+
+While the switch is on:
+
+- **POS sale:** deducts the register's branch location. An online sale needs `min(branch balance, sellable total) >= qty`, so a unit held for a paid website order cannot be sold at the till. An offline sale floors at zero, like the total, and keeps its sync conflict row.
+- **POS void and refund with restock:** go back to the **selling** branch's location (`pos_transactions.branch_id`). A unit physically returned at another shop is moved with a transfer.
+- **Paid website order:** `ensurePaidOrderStock` reduces the total and records `order_stock_holds` (`held`, no location). Staff approval (plan Phase 5) allocates it to a location.
+- **Order reversal:** held units are released, allocated units return to their location, and anything with no hold (paid before activation) goes to the warehouse.
+- **Writers not yet location-aware** refuse with `409 LOCATION_REQUIRED` instead of drifting: product editor stock changes, removing a size that has stock, `PATCH /admin/products/bulk-stock`, stock CSV commit, stock in the catalog import, and stocktake posting. Plan Phase 3 converts them.
+- **`inventory_movements.location_id`** records the location of every location write.
+- **Drift check:** the hourly consistency job also alerts on `findLocationDrift` (alert only, never repairs).
+
+**Hardening that shipped with it:**
+- `applyMissingPaidOrderStock` is finally scheduled (every 10 min, `startPaidOrderStockSweep`).
+- The Sadad webhook repairs stock and notification on an already-paid delivery.
+- Checkout, stock CSV commit, catalog save and order reversal now lock variants in id order, like every other writer.
 
 ### Public — Invitations (`/api/invitations`)
 

@@ -1,5 +1,9 @@
 const { Router } = require('express');
 const { asyncHandler, created, ok } = require('./lib');
+const db = require('../db/client');
+const { requireAuth } = require('../middleware/require-auth');
+const locationStock = require('../lib/location-stock');
+const { listStock, receiveStock, transferStock, listTransfers } = require('../lib/location-stock-service');
 const {
   adjustStock,
   cancelStocktake,
@@ -75,6 +79,70 @@ router.post('/stocktakes/:id/post', asyncHandler(async (req, res) => {
 
 router.post('/stocktakes/:id/cancel', asyncHandler(async (req, res) => {
   ok(res, await cancelStocktake(context(req), req.params.id), 'Stocktake cancelled.');
+}));
+
+// ─── Stock per location (plan Phase 3) ──────────────────────────────────────
+// Owner/admin/manager (the router's own gate); cashiers have no access.
+
+router.get('/stock', asyncHandler(async (req, res) => {
+  ok(res, await listStock(context(req), req.query));
+}));
+
+router.post('/receipts', asyncHandler(async (req, res) => {
+  created(res, await receiveStock(context(req), req.body), 'Stock added.');
+}));
+
+router.get('/transfers', asyncHandler(async (req, res) => {
+  ok(res, await listTransfers(context(req), req.query));
+}));
+
+router.post('/transfers', asyncHandler(async (req, res) => {
+  created(res, await transferStock(context(req), req.body), 'Stock moved.');
+}));
+
+// ─── Per-location stock switch (migration 046, lib/location-stock.js) ───────
+// Owner/admin only. Turning it on seeds every variant's current total into the
+// warehouse; the opening stocktake then moves units to where they are. See
+// the go-live runbook before using it on a live shop.
+
+const ownerOrAdmin = requireAuth({ roles: ['owner', 'admin'] });
+
+async function inTransaction(fn) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+router.get('/per-location', asyncHandler(async (req, res) => {
+  const tenantId = req.user.tenantId;
+  ok(res, await inTransaction(async (client) => {
+    await locationStock.syncLocations(client, tenantId);
+    const enabled = await locationStock.perLocationEnabled(client, tenantId);
+    return {
+      enabled,
+      locations: await locationStock.listLocations(client, tenantId),
+      drift: enabled ? (await locationStock.findLocationDrift(client, tenantId, 20)) : [],
+    };
+  }));
+}));
+
+router.post('/per-location/activate', ownerOrAdmin, asyncHandler(async (req, res) => {
+  const result = await inTransaction((client) => locationStock.activatePerLocation(client, context(req)));
+  ok(res, result, result.alreadyOn ? 'Per-location stock is already on.' : 'Per-location stock is on. All stock starts in the warehouse.');
+}));
+
+router.post('/per-location/deactivate', ownerOrAdmin, asyncHandler(async (req, res) => {
+  await inTransaction((client) => locationStock.deactivatePerLocation(client, context(req)));
+  ok(res, { enabled: false }, 'Per-location stock is off. Stock is one shared figure again.');
 }));
 
 module.exports = router;

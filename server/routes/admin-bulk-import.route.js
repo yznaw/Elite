@@ -25,6 +25,7 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { slugify, toCents } = require('./lib');
 const { storage } = require('../lib/storage');
 const { recordMovement, publishStockEvent, publishCatalogEvent } = require('../lib/inventory-ledger');
+const { assertTotalOnlyWriteAllowed } = require('../lib/location-stock');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 
 const router = Router();
@@ -395,6 +396,8 @@ router.post('/stock/:id/commit', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: 'This stock review was already committed.' });
     }
+    // Per-location stock: a stock file must name its location (plan Phase 3).
+    await assertTotalOnlyWriteAllowed(client, tenant.id, 'A stock file');
     const rows = job.source_rows || [];
     if (!rows.length || rows.some(row => Array.isArray(row.errors) && row.errors.length)) {
       await client.query('ROLLBACK');
@@ -405,6 +408,13 @@ router.post('/stock/:id/commit', async (req, res) => {
     await client.query('DELETE FROM catalog_import_items WHERE job_id=$1', [job.id]);
     const changedProducts = new Set();
     let updated = 0;
+    // Take every row lock up front in variant-id order (the order every stock
+    // writer uses), instead of in file order inside the loop, so a commit
+    // cannot deadlock against a till sale touching the same variants.
+    await client.query(
+      'SELECT id FROM product_variants WHERE tenant_id = $1 AND sku = ANY($2::text[]) ORDER BY id FOR UPDATE',
+      [tenant.id, rows.map((row) => row.sku)],
+    );
     for (const row of rows) {
       const changed = await client.query(
         `UPDATE product_variants pv
@@ -1253,6 +1263,9 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           const previousStock = previousStockBySku.get(row.variantSku) ?? 0;
           const newStock = Number(varResult.rows[0].stock_quantity) || 0;
           const stockDelta = newStock - previousStock;
+          // Any stock change (a new variant created with stock included) needs
+          // a location while per-location stock is on.
+          if (stockDelta !== 0) await assertTotalOnlyWriteAllowed(client, tenant.id, 'Importing stock');
           if (stockDelta !== 0) {
             await recordMovement(client, { tenantId: tenant.id, userId }, {
               productId,

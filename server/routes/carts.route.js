@@ -569,7 +569,10 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     // case — paying for something that was already out of stock when the
     // checkout button was pressed.
     const outOfStock = [];
-    for (const item of lines) {
+    // Locked in variant-id order, like every other stock writer, so checkout
+    // and a till sale touching the same two variants cannot deadlock.
+    const lockOrder = [...lines].sort((a, b) => String(a.variantId || '').localeCompare(String(b.variantId || '')));
+    for (const item of lockOrder) {
       const { variantId } = item;
       if (!variantId) continue;
       const wanted = item.qty;

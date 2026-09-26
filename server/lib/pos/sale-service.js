@@ -1,6 +1,7 @@
 const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, cents, nonEmpty, positiveInt, uuid } = require('./errors');
 const { recordMovement } = require('../inventory-ledger');
+const { perLocationEnabled, locationForBranch, lockLocationQuantity, applyLocationDelta } = require('../location-stock');
 const db = require('../../db/client');
 const { sendReceiptForPaidOrder } = require('../order-receipt');
 
@@ -472,6 +473,21 @@ async function createSale(context, body, options = {}) {
     assertPos(variantsResult.rowCount === variantIds.length, 422, 'VARIANT_NOT_FOUND', 'One or more product variants no longer exist.');
     const variants = new Map(variantsResult.rows.map((row) => [row.id, row]));
 
+    // Per-location stock (migration 046): the till sells from its own
+    // branch's balance. A unit must be both on this branch's shelf and not
+    // held for a paid website order (the total already excludes those).
+    // Location rows are locked after the variant rows, same order as every
+    // other writer.
+    const saleLocationId = await perLocationEnabled(client, context.tenantId)
+      ? await locationForBranch(client, context.tenantId, branch.id)
+      : null;
+    const locationStock = new Map();
+    if (saleLocationId) {
+      for (const variantId of [...variants.keys()].sort()) {
+        locationStock.set(variantId, await lockLocationQuantity(client, context.tenantId, variantId, saleLocationId));
+      }
+    }
+
     let subtotalCents = 0;
     const pendingConflicts = [];
     const saleLines = sale.items.map((item) => {
@@ -482,7 +498,9 @@ async function createSale(context, body, options = {}) {
         'VARIANT_INACTIVE',
         `${variant.sku} is not available for sale.`,
       );
-      const availableStock = Number(variant.stock_quantity);
+      const availableStock = saleLocationId
+        ? Math.min(Number(variant.stock_quantity), locationStock.get(variant.id))
+        : Number(variant.stock_quantity);
       const catalogPriceCents = Number(variant.price_cents);
       if (availableStock < item.quantity) {
         assertPos(offline, 409, 'INSUFFICIENT_STOCK', `${variant.sku} has insufficient stock.`, {
@@ -683,6 +701,13 @@ async function createSale(context, body, options = {}) {
       );
       assertPos(stockResult.rowCount === 1, 409, 'INSUFFICIENT_STOCK', `${v.sku} has insufficient stock.`);
       const stock = Number(stockResult.rows[0].stock_quantity);
+      if (saleLocationId) {
+        // Online sales were already checked against the branch above; an
+        // offline sale is a completed fact and floors at zero instead.
+        await applyLocationDelta(client, context.tenantId, {
+          variantId: v.id, locationId: saleLocationId, delta: -line.quantity, strict: !offline, sku: v.sku,
+        });
+      }
       stockUpdates.push({ variantId: v.id, stock });
       affectedProducts.add(v.product_id);
       await recordMovement(client, context, {
@@ -693,6 +718,7 @@ async function createSale(context, body, options = {}) {
         referenceType: 'pos_transaction',
         referenceId: transactionId,
         metadata: { offline, sku: v.sku },
+        locationId: saleLocationId,
       });
       await client.query(
         `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
