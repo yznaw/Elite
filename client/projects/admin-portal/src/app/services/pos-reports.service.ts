@@ -95,6 +95,7 @@ export interface PosInventoryReport {
   movements: Array<{
     movementId: string; occurredAt: string; reason: string; delta: number;
     referenceType: string | null; referenceId: string | null; productName: string; sku: string | null;
+    locationName?: string | null; userName?: string | null; adjustmentReason?: string | null;
   }>;
   driftAlerts: Array<{ sku: string; currentStock: number; baselineStock: number; ledgerDeltaTotal: number; drift: number }>;
 }

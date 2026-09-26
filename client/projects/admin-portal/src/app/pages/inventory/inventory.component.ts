@@ -13,6 +13,7 @@ import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
 import { StockEntryComponent } from './stock-entry.component';
 import { StockHistoryComponent } from './stock-history.component';
+import { downloadCsv, todayStamp } from '../../utils/download-csv';
 
 type Tab = 'stock' | 'receive' | 'transfer' | 'history';
 type StateFilter = '' | 'low' | 'out';
@@ -85,6 +86,9 @@ const PAGE = 50;
                 <button type="button" class="chip" [class.active]="state() === 'out'" (click)="setState('out')">{{ t('inv.filter.out') }}</button>
               </div>
               <span class="muted small inv-count">{{ t('inv.count').replace('{n}', '' + totalRows()) }}</span>
+              <button type="button" class="btn btn-outline btn-sm" (click)="exportStock()" [disabled]="exporting() || !totalRows()">
+                <ap-icon name="download" [size]="12"/> {{ exporting() ? t('common.loading') : t('inv.export') }}
+              </button>
             </div>
 
             <div class="inv-table-wrap">
@@ -315,6 +319,36 @@ export class InventoryComponent implements OnInit {
   readonly tableLoading = signal(false);
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private loadSeq = 0;
+
+  readonly exporting = signal(false);
+
+  /** Every row matching the current filters, one column per location. */
+  async exportStock(): Promise<void> {
+    this.exporting.set(true);
+    try {
+      const all: StockRow[] = [];
+      for (let offset = 0; ; offset += 200) {
+        const page = await this.api.listStock({
+          search: this.search().trim(), locationId: this.filterLocation() || undefined, state: this.state(),
+          lowThreshold: this.storeConfig.lowStockThreshold(), limit: 200, offset,
+        });
+        all.push(...page.items);
+        if (all.length >= page.total || !page.items.length) break;
+      }
+      const locations = this.locations();
+      downloadCsv(`stock-by-location-${todayStamp()}.csv`, [
+        ['Product', 'Color', 'Size', 'SKU', 'Barcode', ...locations.map((l) => l.name), 'Held online', 'Available to sell'],
+        ...all.map((row) => [
+          row.productName, row.color ?? '', row.size ?? '', row.sku, row.barcode ?? '',
+          ...locations.map((l) => row.byLocation[l.id] ?? 0), row.held, row.total,
+        ]),
+      ]);
+    } catch (err) {
+      this.toast.errorFrom(err, this.t('inv.exportFailed'));
+    } finally {
+      this.exporting.set(false);
+    }
+  }
 
   readonly preset = signal<StockRow | null>(null);
   readonly presetLocation = signal<string | null>(null);

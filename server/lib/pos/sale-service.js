@@ -692,32 +692,41 @@ async function createSale(context, body, options = {}) {
           line.lineTotalCents,
         ],
       );
+      // Per-location stock: the branch is deducted first and the sellable
+      // total moves by what the branch actually covered. An offline sale that
+      // sold more than the branch had on record floors the branch at zero; the
+      // units really were on its shelf, so the other locations (and therefore
+      // the total) must not lose them too. The shortfall is the sync conflict
+      // recorded below.
+      let deduct = line.quantity;
+      if (saleLocationId) {
+        const loc = await applyLocationDelta(client, context.tenantId, {
+          variantId: v.id, locationId: saleLocationId, delta: -line.quantity, strict: !offline, sku: v.sku,
+        });
+        deduct = -loc.applied;
+      }
       const stockResult = await client.query(
         `UPDATE product_variants
          SET stock_quantity = ${offline ? 'GREATEST(stock_quantity - $3, 0)' : 'stock_quantity - $3'}
          WHERE tenant_id = $1 AND id = $2 ${offline ? '' : 'AND stock_quantity >= $3'}
          RETURNING stock_quantity`,
-        [context.tenantId, v.id, line.quantity],
+        [context.tenantId, v.id, deduct],
       );
       assertPos(stockResult.rowCount === 1, 409, 'INSUFFICIENT_STOCK', `${v.sku} has insufficient stock.`);
       const stock = Number(stockResult.rows[0].stock_quantity);
-      if (saleLocationId) {
-        // Online sales were already checked against the branch above; an
-        // offline sale is a completed fact and floors at zero instead.
-        await applyLocationDelta(client, context.tenantId, {
-          variantId: v.id, locationId: saleLocationId, delta: -line.quantity, strict: !offline, sku: v.sku,
-        });
-      }
+      // The ledger records the change that actually happened, so an offline
+      // oversell (which floors at zero) does not show up as drift.
+      const appliedDelta = stock - Number(v.stock_quantity);
       stockUpdates.push({ variantId: v.id, stock });
       affectedProducts.add(v.product_id);
       await recordMovement(client, context, {
         productId: v.product_id,
         variantId: v.id,
-        delta: -line.quantity,
+        delta: appliedDelta,
         reason: 'pos_sale',
         referenceType: 'pos_transaction',
         referenceId: transactionId,
-        metadata: { offline, sku: v.sku },
+        metadata: { offline, sku: v.sku, ...(appliedDelta !== -line.quantity ? { soldQuantity: line.quantity } : {}) },
         locationId: saleLocationId,
       });
       await client.query(

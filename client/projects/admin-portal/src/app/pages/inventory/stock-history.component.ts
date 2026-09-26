@@ -5,6 +5,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { InventoryService, MovementType, StockLocation, StockMovement } from '../../services/inventory.service';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
+import { downloadCsv, todayStamp } from '../../utils/download-csv';
 
 const TYPES: MovementType[] = ['sale', 'return', 'added', 'removed', 'transfer', 'stocktake', 'catalog'];
 const PAGE = 50;
@@ -42,6 +43,9 @@ const PAGE = 50;
           <span class="sr-only">{{ t('inv.hist.to') }}</span>
           <input class="inp" type="date" [ngModel]="to()" (ngModelChange)="to.set($event); reload()" [attr.aria-label]="t('inv.hist.to')"/>
         </label>
+        <button type="button" class="btn btn-outline btn-sm sh-export" (click)="exportHistory()" [disabled]="exporting() || !total()">
+          <ap-icon name="download" [size]="12"/> {{ exporting() ? t('common.loading') : t('inv.export') }}
+        </button>
       </div>
       <div class="sh-chips" role="group" [attr.aria-label]="t('inv.hist.type')">
         <button type="button" class="chip" [class.active]="type() === ''" (click)="setType('')">{{ t('inv.filter.all') }}</button>
@@ -107,6 +111,7 @@ const PAGE = 50;
     .sh-search ap-icon { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
     .sh-search .inp { padding-inline-start: 34px; }
     .sh-date .inp { width: 150px; }
+    .sh-export { margin-inline-start: auto; white-space: nowrap; align-self: center; }
     .sh-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 14px; border-bottom: 1px solid var(--border); }
     .sh-table-wrap { overflow-x: auto; }
     .sh-table th { cursor: default; }
@@ -142,6 +147,7 @@ export class StockHistoryComponent implements OnInit {
   readonly users = signal<{ id: string; name: string }[]>([]);
   readonly total = signal(0);
   readonly loading = signal(false);
+  readonly exporting = signal(false);
   private seq = 0;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -177,6 +183,33 @@ export class StockHistoryComponent implements OnInit {
       if (seq === this.seq) this.toast.errorFrom(err, this.t('inv.hist.loadError'));
     } finally {
       if (seq === this.seq) this.loading.set(false);
+    }
+  }
+
+  /** Everything matching the filters (capped at 5,000 rows). */
+  async exportHistory(): Promise<void> {
+    this.exporting.set(true);
+    try {
+      const all: StockMovement[] = [];
+      for (let offset = 0; offset < 5000; offset += 200) {
+        const page = await this.api.listMovements({
+          search: this.search().trim(), locationId: this.locationId(), userId: this.userId(), type: this.type(),
+          from: this.from(), to: this.to(), limit: 200, offset,
+        });
+        all.push(...page.items);
+        if (all.length >= page.total || !page.items.length) break;
+      }
+      downloadCsv(`stock-history-${todayStamp()}.csv`, [
+        ['When', 'Product', 'Color', 'Size', 'SKU', 'Location', 'Change', 'Reason', 'Detail', 'Person'],
+        ...all.map((m) => [
+          new Date(m.occurredAt).toLocaleString('en-GB'), m.productName, m.color ?? '', m.size ?? '', m.sku ?? '',
+          m.locationName ?? '', m.delta, this.reasonLabel(m), this.detail(m), m.userName ?? this.t('inv.hist.system'),
+        ]),
+      ]);
+    } catch (err) {
+      this.toast.errorFrom(err, this.t('inv.exportFailed'));
+    } finally {
+      this.exporting.set(false);
     }
   }
 

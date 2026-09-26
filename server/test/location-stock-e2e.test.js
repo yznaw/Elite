@@ -207,6 +207,60 @@ test('location stock: switch off is a no-op, activation, branch sales, holds, re
     assert.equal(await at(variantA, store1Location), 2);
     await assertNoDrift('after void');
 
+    // Refund with restock: back to the branch that sold it.
+    const refundSale = await sell(variantA);
+    assert.equal(refundSale.status, 201);
+    assert.equal(await at(variantA, store1Location), 1);
+    const loaded = await api(`/pos/transactions/${refundSale.body.data.transactionId}`);
+    const refundOverride = await api('/pos/manager/verify-pin', { method: 'POST', body: JSON.stringify({ pin: approverPin, action: 'refund' }) });
+    await api('/pos/refunds', {
+      method: 'POST',
+      body: JSON.stringify({
+        idempotencyKey: `loc-refund-${runId}`,
+        receiptNumber: receipt++,
+        shiftId: shift.shiftId,
+        originalTransactionId: refundSale.body.data.transactionId,
+        lines: [{ transactionItemId: loaded.items[0].id, quantity: 1, restock: true }],
+        refundMethod: 'cash',
+        reason: 'test return',
+        managerOverrideId: refundOverride.overrideId,
+        managerOverrideToken: refundOverride.token,
+      }),
+    });
+    assert.equal(await at(variantA, store1Location), 2, 'refund restocked the selling branch');
+    assert.equal(await at(variantA, warehouse), 4, 'warehouse untouched by the refund');
+    await assertNoDrift('after refund');
+
+    // Offline sale that sold more than the branch had on record: the branch
+    // floors at zero, the total only loses what the branch covered, the
+    // shortfall is a sync conflict, and nothing drifts.
+    const totalBefore = await total(variantA);
+    const offlinePayload = {
+      idempotencyKey: `loc-offline-${runId}`,
+      receiptNumber: receipt++,
+      shiftId: shift.shiftId,
+      customerId: null,
+      items: [{ variantId: variantA, quantity: 5, unitPriceCents: 1000 }],
+      payment: { method: 'cash', cashAmountCents: 5000, cardAmountCents: 0, amountTenderedCents: 5000, changeGivenCents: 0 },
+      clientCreatedAt: new Date().toISOString(),
+    };
+    const synced = await api('/pos/transactions/sync', {
+      method: 'POST',
+      body: JSON.stringify({ transactions: [{
+        idempotencyKey: offlinePayload.idempotencyKey, receiptNumber: offlinePayload.receiptNumber,
+        clientCreatedAt: offlinePayload.clientCreatedAt, payload: offlinePayload,
+      }] }),
+    });
+    assert.equal(synced.acceptedWithConflicts.length, 1, 'the oversell is recorded as a conflict');
+    assert.equal(await at(variantA, store1Location), 0);
+    assert.equal(await at(variantA, warehouse), 4, 'the warehouse keeps its units');
+    assert.equal(await total(variantA), totalBefore - 2, 'the total loses only what the branch covered');
+    await assertNoDrift('after offline oversell');
+    // Put the branch back to 2 for the rest of the test.
+    await api('/admin/inventory/adjustments', {
+      method: 'POST', body: JSON.stringify({ variantId: variantA, delta: 2, reason: 'found', locationId: store1Location }),
+    });
+
     // ── Website orders are held against the total, not a location ─────────
     const webOrder = await paidWebOrder(variantA, 2, 'hold');
     await ensurePaidOrderStock(tenantId, webOrder);
