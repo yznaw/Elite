@@ -4,7 +4,7 @@ const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
 const { POS_PAYMENT_METHODS, claimReceipt, loadSale, paymentReference } = require('./sale-service');
 const { recordMovement } = require('../inventory-ledger');
-const { perLocationEnabled, locationForBranch, applyLocationDelta } = require('../location-stock');
+const { perLocationEnabled, locationForBranch, applyLocationDelta, stockEventPayload } = require('../location-stock');
 
 /**
  * Where returned units go when per-location stock is on: back to the branch
@@ -36,7 +36,7 @@ async function publishStock(client, context, variantId, stock) {
   await client.query(
     `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
      VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,
-    [context.tenantId, JSON.stringify({ variantId, stock, sourceRegisterId: context.registerId })],
+    [context.tenantId, JSON.stringify({ ...(await stockEventPayload(client, context.tenantId, variantId, stock)), sourceRegisterId: context.registerId })],
   );
 }
 
@@ -148,12 +148,14 @@ async function voidTransaction(context, transactionIdValue, body) {
       );
       if (stock.rowCount) {
         const value = Number(stock.rows[0].stock_quantity);
+        let branchAfter = null;
         if (returnLocationId) {
-          await applyLocationDelta(client, context.tenantId, {
+          const loc = await applyLocationDelta(client, context.tenantId, {
             variantId: item.variant_id, locationId: returnLocationId, delta: item.quantity,
           });
+          branchAfter = loc.after;
         }
-        stockRestored.push({ variantId: item.variant_id, stock: value });
+        stockRestored.push({ variantId: item.variant_id, stock: branchAfter === null ? value : Math.min(branchAfter, value), total: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
         await recordMovement(client, context, {
@@ -437,12 +439,14 @@ async function createRefund(context, body) {
         );
         assertPos(stock.rowCount === 1, 409, 'REFUND_VARIANT_MISSING', `${item.product_name} variant no longer exists.`);
         const value = Number(stock.rows[0].stock_quantity);
+        let branchAfter = null;
         if (returnLocationId) {
-          await applyLocationDelta(client, context.tenantId, {
+          const loc = await applyLocationDelta(client, context.tenantId, {
             variantId: item.variant_id, locationId: returnLocationId, delta: line.quantity,
           });
+          branchAfter = loc.after;
         }
-        stockUpdates.push({ variantId: item.variant_id, stock: value });
+        stockUpdates.push({ variantId: item.variant_id, stock: branchAfter === null ? value : Math.min(branchAfter, value), total: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
         await recordMovement(client, context, {

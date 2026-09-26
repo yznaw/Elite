@@ -1,7 +1,9 @@
 const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, cents, nonEmpty, positiveInt, uuid } = require('./errors');
 const { recordMovement } = require('../inventory-ledger');
-const { perLocationEnabled, locationForBranch, lockLocationQuantity, applyLocationDelta } = require('../location-stock');
+const {
+  perLocationEnabled, locationForBranch, lockLocationQuantity, applyLocationDelta, stockEventPayload, withBranchAvailability,
+} = require('../location-stock');
 const db = require('../../db/client');
 const { sendReceiptForPaidOrder } = require('../order-receipt');
 
@@ -132,7 +134,7 @@ async function searchProducts(context, query) {
     );
 
     return {
-      products: result.rows.map(mapCatalogRow),
+      products: await withBranchAvailability(client, context.tenantId, context.registerId, result.rows.map(mapCatalogRow)),
       total,
       page,
       limit,
@@ -196,7 +198,8 @@ async function findByBarcode(context, barcodeValue) {
       [context.tenantId, barcode],
     );
     assertPos(result.rowCount === 1, 404, 'BARCODE_NOT_FOUND', `No active product uses barcode ${barcode}.`);
-    return mapCatalogRow(result.rows[0]);
+    const [item] = await withBranchAvailability(client, context.tenantId, context.registerId, [mapCatalogRow(result.rows[0])]);
+    return item;
   });
 }
 
@@ -699,11 +702,13 @@ async function createSale(context, body, options = {}) {
       // the total) must not lose them too. The shortfall is the sync conflict
       // recorded below.
       let deduct = line.quantity;
+      let branchAfter = null;
       if (saleLocationId) {
         const loc = await applyLocationDelta(client, context.tenantId, {
           variantId: v.id, locationId: saleLocationId, delta: -line.quantity, strict: !offline, sku: v.sku,
         });
         deduct = -loc.applied;
+        branchAfter = loc.after;
       }
       const stockResult = await client.query(
         `UPDATE product_variants
@@ -717,7 +722,9 @@ async function createSale(context, body, options = {}) {
       // The ledger records the change that actually happened, so an offline
       // oversell (which floors at zero) does not show up as drift.
       const appliedDelta = stock - Number(v.stock_quantity);
-      stockUpdates.push({ variantId: v.id, stock });
+      // What this till can now sell: its branch's balance (capped by the
+      // sellable total) while stock per location is on, the total otherwise.
+      stockUpdates.push({ variantId: v.id, stock: branchAfter === null ? stock : Math.min(branchAfter, stock), total: stock });
       affectedProducts.add(v.product_id);
       await recordMovement(client, context, {
         productId: v.product_id,
@@ -732,7 +739,7 @@ async function createSale(context, body, options = {}) {
       await client.query(
         `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
          VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,
-        [context.tenantId, JSON.stringify({ variantId: v.id, stock, sourceRegisterId: context.registerId })],
+        [context.tenantId, JSON.stringify({ ...(await stockEventPayload(client, context.tenantId, v.id, stock)), sourceRegisterId: context.registerId })],
       );
     }
 

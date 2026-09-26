@@ -19,9 +19,24 @@ export interface PosCatalogItem {
   sku: string;
   barcode: string;
   priceCents: number;
+  /** What this till can sell. With stock per location on: its branch's
+   *  balance, never more than the sellable total. */
   stock: number;
   imageUrl: string;
   isActive: boolean;
+  /** Stock per location only: the sellable total across all locations. */
+  total?: number;
+  /** Stock per location only: units paid online and awaiting approval. */
+  heldOnline?: number;
+  /** Stock per location only: other locations holding this size. */
+  availability?: PosLocationStock[];
+}
+
+export interface PosLocationStock {
+  locationId: string;
+  name: string;
+  type?: 'store' | 'warehouse';
+  quantity: number;
 }
 
 export interface PosProductSearchResult {
@@ -57,6 +72,9 @@ export interface PosCurrentRegister {
   /** Same register → default → oldest fallback used for receipt printing,
       so this always matches the branch identity on a printed receipt. */
   branchName: string | null;
+  branchId?: string | null;
+  /** Stock per location: the location this till sells from (null while off). */
+  locationId?: string | null;
   /** False when no owner/admin/manager has ever set a manager PIN for this
       tenant — protected actions (void/refund/drawer-open/z-report/
       sync-conflict) then skip asking for one and auto-approve. */

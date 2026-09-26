@@ -190,6 +190,23 @@ test('location stock: switch off is a no-op, activation, branch sales, holds, re
     assert.equal(saleMovement.rows[0].location_id, store1Location, 'the ledger names the location');
     await assertNoDrift('after sale');
 
+    // ── What the till sees ─────────────────────────────────────────────────
+    const current = await api('/pos/registers/current');
+    assert.equal(current.locationId, store1Location, 'the till knows its stock location');
+    const found = await api(`/pos/products/search?q=LOC-${runId}-A&includeOutOfStock=true`);
+    const itemA = found.products.find((p) => p.variantId === variantA);
+    assert.equal(itemA.stock, 1, 'stock = what this branch can sell');
+    assert.equal(itemA.total, 5);
+    assert.deepEqual(itemA.availability.map((a) => [a.locationId, a.quantity]), [[warehouse, 4]], 'other locations holding it');
+    const scanned = await api(`/pos/products/barcode/${encodeURIComponent((await db.query('SELECT barcode FROM product_variants WHERE id = $1', [variantA])).rows[0].barcode)}`);
+    assert.equal(scanned.stock, 1);
+    const event = await db.query(
+      `SELECT payload FROM pos_events WHERE tenant_id = $1 AND event_type = 'stock.updated' ORDER BY id DESC LIMIT 1`,
+      [tenantId],
+    );
+    assert.equal(event.rows[0].payload.locations[store1Location], 1, 'live events carry per-location stock');
+    assert.equal(event.rows[0].payload.locations[warehouse], 4);
+
     // Void returns the unit to the branch that sold it.
     const approverPin = '7391';
     await db.query(

@@ -391,6 +391,17 @@ While the switch is on:
 - **`inventory_movements.location_id`** records the location of every location write.
 - **Drift check:** the hourly consistency job also alerts on `findLocationDrift` (alert only, never repairs).
 
+**What the till sees (plan Phase 4).** With the switch on:
+- `GET /pos/products/search` and `/pos/products/barcode/:code` return `stock` as what THIS till can sell (its branch's balance capped by the sellable total), plus `total`, `heldOnline` and `availability` (the other locations holding the size, largest first). Items at 0 here but held elsewhere stay in the results.
+- `GET /pos/registers/current` adds `branchId` and `locationId`.
+- Every `stock.updated` event carries `locations` (location id → quantity) and `held`, so each till derives its own branch's number live.
+- Sale, refund and void results report the till's branch figure in `stock` and the total in `total`.
+
+The POS screen:
+- A product sold out here but held elsewhere shows "Other locations" instead of "Sold out", and still opens.
+- Each size shows "N here" (or "None here") with "Store 2: 1 · Warehouse: 3" underneath, and "N held online" when applicable.
+- Cashiers cannot sell or move stock from another location. Staff move it with a transfer from the Inventory page.
+
 **Hardening that shipped with it:**
 - `applyMissingPaidOrderStock` is finally scheduled (every 10 min, `startPaidOrderStockSweep`).
 - The Sadad webhook repairs stock and notification on an already-paid delivery.

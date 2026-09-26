@@ -830,3 +830,8 @@ Audit-sensitive actions include enrollment, receipt allocation, shift open/close
 - [Developer Guide](./07-dev-guide.md)
 - [Database and API Implementation](./08-database-api-implementation.md)
 - [Nginx and HTTPS](./09-nginx-https.md)
+
+
+## Stock per location (2026-09-26)
+
+When the shop switches on stock per location (Inventory page), each till sells from its own branch's stock only. The size picker shows the quantity here and where else the size is ("Warehouse: 3"). A size that is not here cannot be added. Staff confirm with the other shop and record a transfer from the admin Inventory page, and then the size can be sold. Voids and refunds put the units back in the branch that made the sale. Offline sales that sell more than the branch had on record floor the branch at zero and are listed as sync conflicts. See `docs/05-api-server.md`, "Per-location stock".

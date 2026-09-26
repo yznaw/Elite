@@ -1384,6 +1384,18 @@ label input:focus {
   opacity: 0.5;
 }
 
+// Stock per location: where else a size is, readable even on a disabled tile.
+.variant-size-button:disabled:has(.variant-elsewhere) { opacity: 0.85; }
+.variant-elsewhere, .variant-held {
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  font-style: normal;
+}
+.variant-elsewhere { color: var(--pos-green); font-weight: 600; }
+.variant-held { color: var(--pos-orange); }
+.product-visual i.elsewhere { background: var(--pos-green); color: #fff; }
+
 .variant-size-grid {
   display: grid;
   // Was a fixed 5 columns, which squeezed tiles narrow on a smaller till

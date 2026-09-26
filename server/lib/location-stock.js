@@ -200,6 +200,63 @@ async function getAvailability(client, tenantId, variantIds) {
   return result;
 }
 
+/**
+ * Payload for a POS `stock.updated` event. With stock per location on, it
+ * also carries every location's balance and the unallocated website holds,
+ * so each till can show its own branch's number without another request.
+ */
+async function stockEventPayload(client, tenantId, variantId, stock) {
+  const payload = { variantId, stock };
+  if (!(await perLocationEnabled(client, tenantId))) return payload;
+  const availability = (await getAvailability(client, tenantId, [variantId])).get(variantId);
+  return { ...payload, locations: availability.locations, held: availability.held };
+}
+
+/** The stock location of a POS register's branch, or null while the switch is off. */
+async function registerLocationId(client, tenantId, registerId) {
+  if (!registerId || !(await perLocationEnabled(client, tenantId))) return null;
+  const { rows } = await client.query(
+    `SELECT COALESCE(
+       r.branch_id,
+       (SELECT d.id FROM pos_branches d WHERE d.tenant_id = r.tenant_id AND d.is_default = true),
+       (SELECT f.id FROM pos_branches f WHERE f.tenant_id = r.tenant_id ORDER BY f.created_at LIMIT 1)
+     ) AS branch_id
+       FROM pos_registers r WHERE r.tenant_id = $1 AND r.id = $2`,
+    [tenantId, registerId],
+  );
+  return locationForBranch(client, tenantId, rows[0]?.branch_id || null);
+}
+
+/**
+ * POS catalogue items with per-location stock: `stock` becomes what THIS
+ * till can sell (its branch's balance, never more than the sellable total),
+ * `total` the sellable total, `availability` the other locations holding it,
+ * and `heldOnline` the units waiting for website-order approval. Unchanged
+ * while the switch is off.
+ */
+async function withBranchAvailability(client, tenantId, registerId, items) {
+  const locationId = await registerLocationId(client, tenantId, registerId);
+  if (!locationId || !items.length) return items;
+  const locations = new Map((await listLocations(client, tenantId)).map((l) => [l.id, l]));
+  const availability = await getAvailability(client, tenantId, items.map((item) => item.variantId));
+  return items.map((item) => {
+    const entry = availability.get(item.variantId) || { held: 0, locations: {} };
+    const here = entry.locations[locationId] || 0;
+    const total = Number(item.stock) || 0;
+    return {
+      ...item,
+      stock: Math.min(here, total),
+      total,
+      locationId,
+      heldOnline: entry.held,
+      availability: Object.entries(entry.locations)
+        .filter(([id, qty]) => id !== locationId && qty > 0 && locations.has(id))
+        .map(([id, qty]) => ({ locationId: id, name: locations.get(id).name, type: locations.get(id).type, quantity: qty }))
+        .sort((a, b) => b.quantity - a.quantity),
+    };
+  });
+}
+
 // ── Web-order holds ─────────────────────────────────────────────────────────
 
 async function addHold(client, tenantId, { orderId, variantId, quantity }) {
@@ -383,6 +440,9 @@ module.exports = {
   lockLocationQuantity,
   applyLocationDelta,
   getAvailability,
+  stockEventPayload,
+  registerLocationId,
+  withBranchAvailability,
   addHold,
   releaseOrderHolds,
   findLocationDrift,

@@ -97,10 +97,13 @@ async function currentStock(client, tenantId, variantId) {
  * back together.
  */
 async function publishStockEvent(client, tenantId, variantId, stock) {
+  // Required lazily: location-stock.js does not depend on this file, but
+  // keeping the require here avoids a load-order cycle if it ever does.
+  const { stockEventPayload } = require('./location-stock');
   await client.query(
     `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
      VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,
-    [tenantId, JSON.stringify({ variantId, stock })],
+    [tenantId, JSON.stringify(await stockEventPayload(client, tenantId, variantId, stock))],
   );
 }
 
