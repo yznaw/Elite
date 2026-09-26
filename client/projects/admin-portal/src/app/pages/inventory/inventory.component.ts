@@ -12,8 +12,9 @@ import { StoreConfigService } from '../../services/store-config.service';
 import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
 import { StockEntryComponent } from './stock-entry.component';
+import { StockHistoryComponent } from './stock-history.component';
 
-type Tab = 'stock' | 'receive' | 'transfer';
+type Tab = 'stock' | 'receive' | 'transfer' | 'history';
 type StateFilter = '' | 'low' | 'out';
 
 const REMOVE_REASONS: AdjustmentReason[] = ['damaged', 'lost', 'returned_to_supplier', 'sample', 'correction'];
@@ -27,7 +28,7 @@ const PAGE = 50;
  */
 @Component({
   selector: 'ap-inventory',
-  imports: [DatePipe, FormsModule, IconComponent, StockEntryComponent],
+  imports: [DatePipe, FormsModule, IconComponent, StockEntryComponent, StockHistoryComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page-fade inv">
@@ -63,6 +64,7 @@ const PAGE = 50;
           <button class="tab" role="tab" [class.active]="tab() === 'stock'" [attr.aria-selected]="tab() === 'stock'" (click)="setTab('stock')">{{ t('inv.tab.stock') }}</button>
           <button class="tab" role="tab" [class.active]="tab() === 'receive'" [attr.aria-selected]="tab() === 'receive'" (click)="setTab('receive')">{{ t('inv.tab.receive') }}</button>
           <button class="tab" role="tab" [class.active]="tab() === 'transfer'" [attr.aria-selected]="tab() === 'transfer'" (click)="setTab('transfer')">{{ t('inv.tab.transfer') }}</button>
+          <button class="tab" role="tab" [class.active]="tab() === 'history'" [attr.aria-selected]="tab() === 'history'" (click)="setTab('history')">{{ t('inv.tab.history') }}</button>
         </div>
 
         @if (tab() === 'stock') {
@@ -154,6 +156,10 @@ const PAGE = 50;
 
         @if (tab() === 'receive') {
           <ap-stock-entry mode="receive" [locations]="locations()" [preset]="preset()" [presetLocationId]="presetLocation()" (done)="onEntryDone()"/>
+        }
+
+        @if (tab() === 'history') {
+          <ap-stock-history [locations]="locations()"/>
         }
 
         @if (tab() === 'transfer') {
@@ -327,7 +333,7 @@ export class InventoryComponent implements OnInit {
 
   ngOnInit(): void {
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    if (tab === 'receive' || tab === 'transfer') this.tab.set(tab);
+    if (tab === 'receive' || tab === 'transfer' || tab === 'history') this.tab.set(tab);
     void this.init();
   }
 

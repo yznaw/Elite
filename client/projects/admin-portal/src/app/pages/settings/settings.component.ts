@@ -8,6 +8,7 @@ import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { PermHintComponent } from '../../shared/perm-hint/perm-hint.component';
 import { NotificationSettingsComponent } from './notification-settings.component';
+import { WarehouseNameComponent } from './warehouse-name.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
@@ -24,7 +25,7 @@ type Tab = 'general' | 'team' | 'security' | 'notifications' | 'integrations';
 
 @Component({
     selector: 'ap-settings',
-    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent, NotificationSettingsComponent],
+    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent, NotificationSettingsComponent, WarehouseNameComponent],
     template: `
     <div class="page-fade">
       @if (tab() === 'general') {
@@ -225,6 +226,7 @@ type Tab = 'general' | 'team' | 'security' | 'notifications' | 'integrations';
               }
             </div>
 
+            @if (canEditBranches()) { <ap-warehouse-name/> }
             <div class="muted small mt-16">{{ t('settings.receiptProfile.disclaimer') }}</div>
           }
         </div>

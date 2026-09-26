@@ -10,6 +10,7 @@ import { ConfirmService } from '../../services/confirm.service';
 import {
   InventoryService,
   StocktakeDetail,
+  StocktakeLine,
   StocktakeLocation,
   StocktakeStatus,
   StocktakeSummary,
@@ -218,8 +219,8 @@ import { CountAutosave, RowSaveState, parseCount } from '../../utils/stocktake-a
                   <span class="muted small">{{ line.variant || line.sku }} · {{ line.sku }}</span>
                 </div>
                 <div class="count-figures">
-                  @if (line.expectedQuantity !== null) {
-                    <span class="muted small">{{ t('stocktake.expected') }} {{ line.expectedQuantity }}</span>
+                  @if (expectedFor(line) !== null) {
+                    <span class="muted small">{{ t('stocktake.expected') }} {{ expectedFor(line) }}</span>
                   }
                   @if (locationCount(line) !== null) {
                     <span class="small">{{ t('stocktake.count') }} {{ locationCount(line) }}</span>
@@ -356,6 +357,13 @@ export class StocktakeComponent implements OnInit, OnDestroy {
   readonly availableLocations = signal<StocktakeLocation[]>([]);
   readonly selectedStartLocations = signal<string[]>([]);
   readonly selectedLocationId = signal('');
+
+  /** What the selected location should hold (stock per location on), else the combined figure. */
+  expectedFor(line: StocktakeLine): number | null {
+    const locationId = this.selectedLocationId();
+    const perLocation = locationId ? line.expectedByLocation?.[locationId] : undefined;
+    return perLocation ?? line.expectedQuantity;
+  }
   readonly loading = signal(false);
   readonly starting = signal(false);
   readonly posting = signal(false);

@@ -27,6 +27,8 @@ export interface SheetLine {
   /** The saved count of a stocktake without location runs (older stocktakes). */
   countedQuantity: number | null;
   locationCounts: Record<string, number>;
+  /** Per-location expected when stock per location is on. */
+  expectedByLocation?: Record<string, number> | null;
 }
 
 export interface SheetLocation {
@@ -55,7 +57,8 @@ export function buildLocationSheet(lines: SheetLine[], location: SheetLocation |
     ['Location ID', 'Location', 'SKU', 'Barcode', 'Product', 'Color', 'Size', ...expectedHeader, 'Counted'],
     ...lines.map((line) => [
       location.locationId, location.name, line.sku, line.barcode, line.productName, line.color, line.size,
-      ...expected(line), line.locationCounts[location.locationId] ?? '',
+      ...(showExpected ? [line.expectedByLocation?.[location.locationId] ?? line.expectedQuantity ?? ''] : []),
+      line.locationCounts[location.locationId] ?? '',
     ]),
   ];
 }

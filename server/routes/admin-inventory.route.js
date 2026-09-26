@@ -3,7 +3,7 @@ const { asyncHandler, created, ok } = require('./lib');
 const db = require('../db/client');
 const { requireAuth } = require('../middleware/require-auth');
 const locationStock = require('../lib/location-stock');
-const { listStock, receiveStock, transferStock, listTransfers } = require('../lib/location-stock-service');
+const { listStock, receiveStock, transferStock, listTransfers, listMovements } = require('../lib/location-stock-service');
 const {
   adjustStock,
   cancelStocktake,
@@ -92,6 +92,10 @@ router.post('/receipts', asyncHandler(async (req, res) => {
   created(res, await receiveStock(context(req), req.body), 'Stock added.');
 }));
 
+router.get('/movements', asyncHandler(async (req, res) => {
+  ok(res, await listMovements(context(req), req.query));
+}));
+
 router.get('/transfers', asyncHandler(async (req, res) => {
   ok(res, await listTransfers(context(req), req.query));
 }));
@@ -133,6 +137,33 @@ router.get('/per-location', asyncHandler(async (req, res) => {
       drift: enabled ? (await locationStock.findLocationDrift(client, tenantId, 20)) : [],
     };
   }));
+}));
+
+// Stores take their names from their branch (Settings → Branches); the
+// warehouse has no branch, so it is named here.
+router.patch('/locations/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
+  const name = String(req.body?.name ?? '').trim();
+  if (!name || name.length > 60) {
+    return res.status(422).json({ success: false, message: 'The name must be 1 to 60 characters.' });
+  }
+  const result = await db.query(
+    `UPDATE stocktake_locations SET name = $3
+      WHERE tenant_id = $1 AND id = $2 AND location_type = 'warehouse'
+      RETURNING id, name`,
+    [req.user.tenantId, req.params.id, name],
+  ).catch((err) => {
+    if (err.code === '22P02') return { rowCount: 0 };
+    if (err.code === '23505') {
+      const conflict = new Error('Another location already uses that name.');
+      conflict.status = 409;
+      throw conflict;
+    }
+    throw err;
+  });
+  if (!result.rowCount) {
+    return res.status(404).json({ success: false, message: 'Only the warehouse is renamed here. Stores are renamed from their branch.' });
+  }
+  ok(res, result.rows[0], 'Location renamed.');
 }));
 
 router.post('/per-location/activate', ownerOrAdmin, asyncHandler(async (req, res) => {

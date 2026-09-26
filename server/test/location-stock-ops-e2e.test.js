@@ -129,6 +129,32 @@ test('location stock ops: stock table, receipts, transfers, product editor', { t
     res = await call('/admin/inventory/receipts', { method: 'POST', body: JSON.stringify({ locationId: shop, lines: [{ variantId: v41, quantity: 0 }] }) });
     assert.equal(res.status, 422, 'zero quantity refused');
 
+    // ── Stock file for one location ────────────────────────────────────────
+    async function uploadStock(csv, locationId) {
+      const form = new FormData();
+      form.append('csv', new Blob([csv], { type: 'text/csv' }), 'stock.csv');
+      if (locationId) form.append('locationId', locationId);
+      // Not via call(): that helper forces a JSON content type on any body.
+      const response = await fetch(`${base}/admin/bulk-import/stock/preview`, {
+        method: 'POST',
+        body: form,
+        headers: { cookie: `${cookie}; elite.csrf=${csrfToken}`, 'x-csrf-token': csrfToken },
+      });
+      return { status: response.status, body: await response.json() };
+    }
+    let file = await uploadStock(`SKU,Stock\nOPS-${runId}-42,1\n`, null);
+    assert.equal(file.status, 422, 'a stock file must name its location');
+    assert.equal(file.body.code, 'LOCATION_REQUIRED');
+    file = await uploadStock(`SKU,Stock\nOPS-${runId}-42,1\n`, shop);
+    assert.equal(file.status, 200);
+    assert.equal(file.body.data.rows[0].currentStock, 5, 'preview compares against the chosen location');
+    assert.equal(file.body.data.location.id, shop);
+    await api(`/admin/bulk-import/stock/${file.body.data.jobId}/commit`, { method: 'POST', body: '{}' });
+    assert.equal(await at(v42, shop), 1, 'the file set the shop to 1');
+    assert.equal(await at(v42, warehouse), 2, 'the warehouse was not touched');
+    assert.equal(await total(v42), 3);
+    await assertNoDrift('after stock file');
+
     // ── Transfers ──────────────────────────────────────────────────────────
     const transfer = await api('/admin/inventory/transfers', {
       method: 'POST',
@@ -149,6 +175,15 @@ test('location stock ops: stock table, receipts, transfers, product editor', { t
       method: 'POST', body: JSON.stringify({ fromLocationId: shop, toLocationId: shop, lines: [{ variantId: v41, quantity: 1 }] }),
     });
     assert.equal(res.status, 422, 'same location refused');
+
+    const moves = await api('/admin/inventory/movements?type=transfer');
+    assert.equal(moves.items.length, 2, 'one out and one in per transferred line');
+    assert.deepEqual(moves.items.map((m) => m.delta).sort((a, b) => a - b), [-3, 3]);
+    assert.ok(moves.items.every((m) => m.userName === 'Location Ops Owner' && m.locationName));
+    const received = await api(`/admin/inventory/movements?type=added&locationId=${shop}`);
+    assert.ok(received.items.length >= 2 && received.items.every((m) => m.adjustmentReason === 'received' && m.note === 'Shipment 12'));
+    let bad = await call('/admin/inventory/movements?type=nope');
+    assert.equal(bad.status, 422);
 
     const history = await api('/admin/inventory/transfers');
     assert.equal(history.length, 1);

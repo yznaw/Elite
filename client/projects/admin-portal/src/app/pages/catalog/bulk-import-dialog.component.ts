@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { ApiClient } from '../../services/api-client.service';
+import { InventoryService, StockLocation } from '../../services/inventory.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
@@ -44,6 +45,8 @@ interface StockResult {
   committed?: boolean;
   updated?: number;
   notFound: string[];
+  /** Stock per location: the location this file set. */
+  locationName?: string | null;
 }
 
 @Component({
@@ -165,6 +168,20 @@ interface StockResult {
               </div>
             </div>
 
+            @if (stockLocations().length) {
+              <!-- Stock per location: a file sets the numbers of one location. -->
+              <div class="stock-loc">
+                <div class="stock-loc-label">{{ t('bulkImport.stockLocation') }}</div>
+                <div class="stock-loc-options" role="radiogroup">
+                  @for (loc of stockLocations(); track loc.id) {
+                    <button type="button" class="stock-loc-btn" role="radio" [attr.aria-checked]="stockLocationId() === loc.id"
+                            [class.active]="stockLocationId() === loc.id" (click)="stockLocationId.set(loc.id)">{{ loc.name }}</button>
+                  }
+                </div>
+                <div class="sub">{{ t('bulkImport.stockLocationHint') }}</div>
+              </div>
+            }
+
             <div class="drop-zone" [class.has-file]="csvFile()" [class.drag-over]="dragOver()"
                  (dragover)="onDragOver($event)" (dragleave)="dragOver.set(false)" (drop)="onDrop($event)"
                  (click)="si.click()">
@@ -191,7 +208,7 @@ interface StockResult {
             <button class="btn btn-outline btn-sm" (click)="downloadStockTemplate()">
               <ap-icon name="download" [size]="13"/> {{ t('bulkImport.template') }}
             </button>
-            <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startStockImport()">
+            <button class="btn btn-gold" [disabled]="!csvFile() || (stockLocations().length > 0 && !stockLocationId())" (click)="startStockImport()">
               <ap-icon name="upload" [size]="14"/> {{ t('bulkImport.btn.updateStock') }}
             </button>
           </div>
@@ -317,6 +334,7 @@ interface StockResult {
             <div class="sum-bar">
               <div class="chip green">{{ r.committed ? (r.updated || 0) : r.summary.valid }} {{ r.committed ? t('bulkImport.chip.updated') : 'valid' }}</div>
               @if (r.summary.failed) { <div class="chip red">{{ r.summary.failed }} validation errors</div> }
+              @if (r.locationName) { <div class="chip">{{ t('bulkImport.stockLocation') }}: {{ r.locationName }}</div> }
               <div class="sub" style="margin-inline-start:auto;">{{ r.summary.total }} {{ t('bulkImport.chip.rowsProcessed') }}</div>
             </div>
           }
@@ -398,6 +416,12 @@ interface StockResult {
     </div>
   `,
     styles: [`
+    .stock-loc { margin-bottom: 14px; display: grid; gap: 8px; }
+    .stock-loc-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .stock-loc-options { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stock-loc-btn { min-height: 40px; padding: 0 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font: inherit; font-weight: 600; cursor: pointer; }
+    .stock-loc-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+
     /* Layout */
     .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px;}
     .modal-panel{background:var(--surface,#fff);border:1px solid var(--border,#e4e4e7);border-radius:16px;width:100%;max-width:920px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.15);}
@@ -536,6 +560,10 @@ export class BulkImportDialogComponent {
   @ViewChild('logWrap') logWrap?: ElementRef<HTMLDivElement>;
 
   private readonly api  = inject(ApiClient);
+  private readonly inventoryApi = inject(InventoryService);
+  /** Filled only while stock per location is on. */
+  readonly stockLocations = signal<StockLocation[]>([]);
+  readonly stockLocationId = signal('');
   private readonly zone = inject(NgZone);
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
@@ -612,6 +640,13 @@ export class BulkImportDialogComponent {
 
   switchMode(toStock: boolean): void {
     this.stockMode.set(toStock);
+    if (toStock) {
+      this.inventoryApi.perLocationStatus().then((status) => {
+        const locations = status?.enabled && Array.isArray(status.locations) ? status.locations : [];
+        this.stockLocations.set(locations);
+        if (!locations.some((l) => l.id === this.stockLocationId())) this.stockLocationId.set('');
+      }).catch(() => this.stockLocations.set([]));
+    }
     this.step.set('upload');
     this.csvFile.set(null);
     this.uploadError.set('');
@@ -808,6 +843,7 @@ export class BulkImportDialogComponent {
     try {
       const form = new FormData();
       form.append('csv', file, file.name);
+      if (this.stockLocationId()) form.append('locationId', this.stockLocationId());
       const resp = await fetch(this.api.url('/admin/bulk-import/stock/preview'), {
         method: 'POST',
         credentials: 'include',
@@ -829,6 +865,7 @@ export class BulkImportDialogComponent {
           summary: data.summary ?? { total: 0, valid: 0, failed: 0 },
           canCommit: !!data.canCommit,
           notFound: [],
+          locationName: data.location?.name ?? null,
         });
         this.step.set('stock-results');
       });

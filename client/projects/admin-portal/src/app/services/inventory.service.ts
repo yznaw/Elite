@@ -69,6 +69,8 @@ export interface StocktakeLine {
   countedAt: string | null;
   note: string | null;
   locationCounts: Record<string, number>;
+  /** Per-location expected (stock per location on); null otherwise or while blind. */
+  expectedByLocation?: Record<string, number> | null;
 }
 
 export interface StocktakeDetail extends StocktakeSummary {
@@ -130,9 +132,43 @@ export interface TransferSummary {
   lines: { sku: string; productName: string; color: string | null; size: string | null; quantity: number }[];
 }
 
+export type MovementType = 'sale' | 'return' | 'added' | 'removed' | 'transfer' | 'stocktake' | 'catalog';
+
+export interface StockMovement {
+  id: string;
+  occurredAt: string;
+  delta: number;
+  reason: string;
+  adjustmentReason: string | null;
+  note: string | null;
+  orderNumber: string | null;
+  transferFrom: string | null;
+  transferTo: string | null;
+  productName: string;
+  sku: string | null;
+  color: string | null;
+  size: string | null;
+  locationName: string | null;
+  userName: string | null;
+}
+
+export interface MovementPage {
+  total: number;
+  users: { id: string; name: string }[];
+  items: StockMovement[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
   private readonly api = inject(ApiClient);
+
+  listMovements(query: { search?: string; locationId?: string; userId?: string; type?: MovementType | ''; from?: string; to?: string; limit?: number; offset?: number }): Promise<MovementPage> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    }
+    return firstValueFrom(this.api.get<MovementPage>(`/admin/inventory/movements?${params.toString()}`));
+  }
 
   perLocationStatus(): Promise<PerLocationStatus> {
     return firstValueFrom(this.api.get<PerLocationStatus>('/admin/inventory/per-location'));

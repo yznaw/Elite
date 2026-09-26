@@ -325,4 +325,86 @@ async function listTransfers(context, query = {}) {
   }));
 }
 
-module.exports = { RECEIVE_REASONS, listStock, receiveStock, transferStock, listTransfers };
+// Movement history: who changed stock, where, and why. The anti-tampering
+// view (every staff role can add/move/remove stock, so every change must be
+// traceable to a person and a reason).
+const HISTORY_TYPES = {
+  sale: "m.reason IN ('pos_sale', 'web_order')",
+  return: "m.reason IN ('pos_refund', 'pos_void', 'web_order_reversed')",
+  added: "m.reason = 'manual_adjustment' AND m.delta > 0",
+  removed: "m.reason = 'manual_adjustment' AND m.delta < 0",
+  transfer: "m.reason = 'transfer'",
+  stocktake: "m.reason = 'stocktake'",
+  catalog: "m.reason IN ('catalog_edit', 'bulk_import')",
+};
+
+async function listMovements(context, query = {}) {
+  const limit = Math.min(200, Math.max(1, Number.parseInt(query.limit, 10) || 50));
+  const offset = Math.max(0, Number.parseInt(query.offset, 10) || 0);
+  const params = [context.tenantId];
+  const bind = (value) => { params.push(value); return `$${params.length}`; };
+  const where = ['m.tenant_id = $1'];
+  if (query.locationId) where.push(`m.location_id = ${bind(uuid(query.locationId, 'locationId'))}`);
+  if (query.userId) where.push(`m.created_by_user_id = ${bind(uuid(query.userId, 'userId'))}`);
+  if (query.type) {
+    assertPos(Object.prototype.hasOwnProperty.call(HISTORY_TYPES, query.type), 422, 'INVALID_FIELD', 'Unknown movement type.');
+    where.push(HISTORY_TYPES[query.type]);
+  }
+  const search = String(query.search || '').trim().slice(0, 100);
+  if (search) {
+    const like = bind(`%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+    where.push(`(p.name ILIKE ${like} OR pv.sku ILIKE ${like})`);
+  }
+  for (const [field, op] of [['from', '>='], ['to', '<']]) {
+    if (!query[field]) continue;
+    const date = new Date(String(query[field]));
+    assertPos(!Number.isNaN(date.getTime()), 422, 'INVALID_FIELD', `${field} must be a date.`);
+    if (field === 'to') date.setUTCDate(date.getUTCDate() + 1); // inclusive end day
+    where.push(`m.occurred_at ${op} ${bind(date.toISOString())}`);
+  }
+  const limitSql = bind(limit);
+  const offsetSql = bind(offset);
+
+  const { rows } = await db.pool.query(
+    `SELECT m.id, m.occurred_at, m.delta, m.reason, m.reference_type, m.reference_id, m.metadata,
+            p.name AS product_name, pv.sku, pv.color, pv.size,
+            l.name AS location_name, u.full_name AS user_name,
+            count(*) OVER () AS total_rows
+       FROM inventory_movements m
+       JOIN products p ON p.id = m.product_id
+       LEFT JOIN product_variants pv ON pv.id = m.variant_id
+       LEFT JOIN stocktake_locations l ON l.id = m.location_id
+       LEFT JOIN admin_users u ON u.id = m.created_by_user_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY m.occurred_at DESC, m.id
+      LIMIT ${limitSql} OFFSET ${offsetSql}`,
+    params,
+  );
+  const users = await db.pool.query(
+    `SELECT id, full_name FROM admin_users WHERE tenant_id = $1 AND role <> 'viewer' ORDER BY full_name`,
+    [context.tenantId],
+  );
+  return {
+    total: rows.length ? Number(rows[0].total_rows) : 0,
+    users: users.rows.map((u) => ({ id: u.id, name: u.full_name })),
+    items: rows.map((row) => ({
+      id: row.id,
+      occurredAt: row.occurred_at,
+      delta: Number(row.delta),
+      reason: row.reason,
+      adjustmentReason: row.metadata?.adjustmentReason ?? null,
+      note: row.metadata?.note ?? null,
+      orderNumber: row.metadata?.orderNumber ?? null,
+      transferFrom: row.metadata?.from ?? null,
+      transferTo: row.metadata?.to ?? null,
+      productName: row.product_name,
+      sku: row.sku,
+      color: row.color,
+      size: row.size,
+      locationName: row.location_name,
+      userName: row.user_name,
+    })),
+  };
+}
+
+module.exports = { RECEIVE_REASONS, listStock, receiveStock, transferStock, listTransfers, listMovements };

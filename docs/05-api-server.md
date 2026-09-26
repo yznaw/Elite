@@ -358,6 +358,19 @@ Each store (one per `pos_branches` row) and the warehouse hold their own quantit
 | `POST` | `/api/admin/inventory/receipts` | Add stock to one location: `{ locationId, reason: received\|found\|returned\|correction, note?, lines: [{ variantId, quantity }] }`. Raises the location and the total together, merges duplicate lines, max 200 lines. `409 PER_LOCATION_OFF` while the switch is off. Audited `inventory.received`. |
 | `POST` | `/api/admin/inventory/transfers` | `{ fromLocationId, toLocationId, note?, lines }`. Strict: the source must hold the units (`409 LOCATION_INSUFFICIENT_STOCK`), the total never changes. Header in `stock_transfers`, and two movements per line (`reason = 'transfer'`). |
 | `GET` | `/api/admin/inventory/transfers` | Recent transfers with their lines and who made them. |
+| `GET` | `/api/admin/inventory/movements` | Stock history. Filters: `locationId`, `userId`, `type` (`sale\|return\|added\|removed\|transfer\|stocktake\|catalog`), `search`, `from`/`to` (dates, inclusive), `limit`/`offset`. Each row has the person, location, signed change, reason (`adjustmentReason` for manual changes), note, order number and transfer route. Also returns the staff list for the filter. |
+| `PATCH` | `/api/admin/inventory/locations/:id` | Owner/admin. Renames the **warehouse** only (`{ name }`, 1-60 chars). Stores follow their branch name. |
+
+**Stocktakes while stock per location is on.**
+- `POST /stocktakes` requires `locationIds` (`422 NO_LOCATIONS`) and snapshots each location's expected quantity into `stocktake_location_expected`.
+- `GET /stocktakes/:id` lines carry `expectedByLocation`, hidden while a blind count is open.
+- On post, each location moves by its own `counted - expected`, applied to its current balance, so a sale or transfer made during the count is kept (`soldDuringCount` in the movement metadata). The total moves by the sum.
+- A location with no snapshot is set to exactly what was counted. That happens when the count started before the switch was on (go-live night), and the movement metadata carries `setToCounted`.
+
+**Stock file (CSV) while the switch is on.**
+- `POST /bulk-import/stock/preview` needs a `locationId` form field (`422 LOCATION_REQUIRED`), and compares against that location.
+- The commit sets that location to the file's numbers and moves the total by the difference. It refuses with `409 STOCK_HELD` when that would remove units held for website orders.
+- A review made before the switch was on must be uploaded again (`409 LOCATION_REQUIRED`).
 
 **Product editor with the switch on.** `GET /admin/products/:id` variants carry `locationStock` (location id → quantity) and `held`. The `PATCH`/`POST` body accepts, per variant, `locationStock` (absolute per location), plus top-level `expectedLocationStock` (`{ variantId: { locationId: qty } }`, what the editor loaded) and `stockReason`.
 - The server derives the total as the current total plus the location changes, and ignores the legacy `stock` field.
@@ -374,7 +387,7 @@ While the switch is on:
 - **POS void and refund with restock:** go back to the **selling** branch's location (`pos_transactions.branch_id`). A unit physically returned at another shop is moved with a transfer.
 - **Paid website order:** `ensurePaidOrderStock` reduces the total and records `order_stock_holds` (`held`, no location). Staff approval (plan Phase 5) allocates it to a location.
 - **Order reversal:** held units are released, allocated units return to their location, and anything with no hold (paid before activation) goes to the warehouse.
-- **Writers not yet location-aware** refuse with `409 LOCATION_REQUIRED` instead of drifting: product editor stock changes, removing a size that has stock, `PATCH /admin/products/bulk-stock`, stock CSV commit, stock in the catalog import, and stocktake posting. Plan Phase 3 converts them.
+- **Writers that still cannot name a location** refuse with `409 LOCATION_REQUIRED` instead of drifting: `PATCH /admin/products/bulk-stock` and stock values in the full catalog import. Stock file import, the product editor and stocktake posting are location-aware since Phase 3.
 - **`inventory_movements.location_id`** records the location of every location write.
 - **Drift check:** the hourly consistency job also alerts on `findLocationDrift` (alert only, never repairs).
 
