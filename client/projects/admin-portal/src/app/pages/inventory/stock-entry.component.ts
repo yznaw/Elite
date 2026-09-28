@@ -57,16 +57,18 @@ function beep(): void {
       <!-- Where -->
       <div class="card card-pad se-where">
         @if (mode === 'receive') {
-          <div class="lbl">{{ t('inv.entry.location') }}</div>
-          <div class="se-seg" role="radiogroup" [attr.aria-label]="t('inv.entry.location')">
-            @for (loc of locations; track loc.id) {
-              <button type="button" class="se-seg-btn" role="radio" [attr.aria-checked]="locationId() === loc.id"
-                      [class.active]="locationId() === loc.id" (click)="setLocation(loc.id)">
-                {{ loc.name }}
-              </button>
-            }
-          </div>
-          <div class="lbl mt-12">{{ t('inv.entry.reason') }}</div>
+          @if (!fixedLocationId) {
+            <div class="lbl">{{ t('inv.entry.location') }}</div>
+            <div class="se-seg" role="radiogroup" [attr.aria-label]="t('inv.entry.location')">
+              @for (loc of locations; track loc.id) {
+                <button type="button" class="se-seg-btn" role="radio" [attr.aria-checked]="locationId() === loc.id"
+                        [class.active]="locationId() === loc.id" (click)="setLocation(loc.id)">
+                  {{ loc.name }}
+                </button>
+              }
+            </div>
+          }
+          <div class="lbl" [class.mt-12]="!fixedLocationId">{{ fixedLocationId ? t('inv.add.reason') : t('inv.entry.reason') }}</div>
           <div class="se-reasons">
             @for (r of reasons; track r) {
               <button type="button" class="chip" [class.active]="reason() === r" (click)="reason.set(r)">{{ t('inv.reason.' + r) }}</button>
@@ -263,6 +265,8 @@ export class StockEntryComponent implements OnChanges {
   @Input() preset: StockRow | null = null;
   /** Preferred source/target location from the stock table's filter. */
   @Input() presetLocationId: string | null = null;
+  /** Receive only: the Add stock page already chose the location. */
+  @Input() fixedLocationId: string | null = null;
   @Output() readonly done = new EventEmitter<void>();
 
   @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
@@ -307,6 +311,7 @@ export class StockEntryComponent implements OnChanges {
       else this.fromId.set(this.presetLocationId);
       this.fixTarget();
     }
+    if (changes['fixedLocationId'] && this.fixedLocationId) this.locationId.set(this.fixedLocationId);
     if (changes['preset'] && this.preset) this.addRow(this.preset, false);
   }
 

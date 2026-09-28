@@ -367,10 +367,15 @@ Each store (one per `pos_branches` row) and the warehouse hold their own quantit
 - On post, each location moves by its own `counted - expected`, applied to its current balance, so a sale or transfer made during the count is kept (`soldDuringCount` in the movement metadata). The total moves by the sum.
 - A location with no snapshot is set to exactly what was counted. That happens when the count started before the switch was on (go-live night), and the movement metadata carries `setToCounted`.
 
-**Stock file (CSV) while the switch is on.**
-- `POST /bulk-import/stock/preview` needs a `locationId` form field (`422 LOCATION_REQUIRED`), and compares against that location.
-- The commit sets that location to the file's numbers and moves the total by the difference. It refuses with `409 STOCK_HELD` when that would remove units held for website orders.
-- A review made before the switch was on must be uploaded again (`409 LOCATION_REQUIRED`).
+**Stock file (Inventory → Add stock → Upload a sheet, `server/lib/stock-file-import.js`, 2026-09-28).** Owner/admin/manager (the inventory router); cashiers get 403.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/admin/inventory/stock-file/template?locationId=` | CSV of every active size: `Location, Product, Color, Size, SKU, Barcode, Current, Stock`, sorted by product, colour and numeric size, Stock empty. Current is the location's balance (switch on; `locationId` required, else `422 LOCATION_REQUIRED`) or the shared total with Location `All locations` (switch off). File name `stock-<location>-<date>.csv` (CORS exposes `Content-Disposition`). Cells are formula-guarded. |
+| `POST` | `/api/admin/inventory/stock-file/preview` | Multipart `csv` + `locationId`. The number is the real count (absolute). An empty Stock cell means "leave it" and is counted as `skipped`. Refuses: `LOCATION_MISMATCH` (the sheet's Location column names another location; the guard against uploading one branch's count into another), a file mixing locations, `NOTHING_FILLED`. Rows below what is held for paid website orders are errors. Each row carries `currentStock`, `change` and `changedSinceDownload` (`{ was, now }` when the live number moved after the sheet was downloaded; a warning, not an error). `summary`: `changed`, `unchanged`, `skipped`, `failed`. Stored as a `catalog_import_jobs` row of kind `stock`. |
+| `POST` | `/api/admin/inventory/stock-file/:id/commit` | Locks variants in id order, sets the location (or the shared total) to each number, one `bulk_import` movement per changed size with the location and the uploader. `409 ALREADY_COMMITTED`, `409 STOCK_HELD`, `409 LOCATION_REQUIRED` / `LOCATION_OFF` when the switch changed after the review. |
+
+`/api/admin/bulk-import/stock/preview` and `/stock/:id/commit` still answer (owner/admin), delegating to the same code, for admin tabs opened before the move. Remove them after a release. `GET /admin/inventory/per-location` now also returns `units` (location id → units on hand) for the location cards.
 
 **Product editor with the switch on.** `GET /admin/products/:id` variants carry `locationStock` (location id → quantity) and `held`. The `PATCH`/`POST` body accepts, per variant, `locationStock` (absolute per location), plus top-level `expectedLocationStock` (`{ variantId: { locationId: qty } }`, what the editor loaded) and `stockReason`.
 - The server derives the total as the current total plus the location changes, and ignores the legacy `stock` field.
