@@ -1,6 +1,9 @@
 const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, cents, nonEmpty, positiveInt, uuid } = require('./errors');
 const { recordMovement } = require('../inventory-ledger');
+const {
+  perLocationEnabled, locationForBranch, lockLocationQuantity, applyLocationDelta, stockEventPayload, withBranchAvailability,
+} = require('../location-stock');
 const db = require('../../db/client');
 const { sendReceiptForPaidOrder } = require('../order-receipt');
 
@@ -131,7 +134,7 @@ async function searchProducts(context, query) {
     );
 
     return {
-      products: result.rows.map(mapCatalogRow),
+      products: await withBranchAvailability(client, context.tenantId, context.registerId, result.rows.map(mapCatalogRow)),
       total,
       page,
       limit,
@@ -195,7 +198,8 @@ async function findByBarcode(context, barcodeValue) {
       [context.tenantId, barcode],
     );
     assertPos(result.rowCount === 1, 404, 'BARCODE_NOT_FOUND', `No active product uses barcode ${barcode}.`);
-    return mapCatalogRow(result.rows[0]);
+    const [item] = await withBranchAvailability(client, context.tenantId, context.registerId, [mapCatalogRow(result.rows[0])]);
+    return item;
   });
 }
 
@@ -472,6 +476,21 @@ async function createSale(context, body, options = {}) {
     assertPos(variantsResult.rowCount === variantIds.length, 422, 'VARIANT_NOT_FOUND', 'One or more product variants no longer exist.');
     const variants = new Map(variantsResult.rows.map((row) => [row.id, row]));
 
+    // Per-location stock (migration 046): the till sells from its own
+    // branch's balance. A unit must be both on this branch's shelf and not
+    // held for a paid website order (the total already excludes those).
+    // Location rows are locked after the variant rows, same order as every
+    // other writer.
+    const saleLocationId = await perLocationEnabled(client, context.tenantId)
+      ? await locationForBranch(client, context.tenantId, branch.id)
+      : null;
+    const locationStock = new Map();
+    if (saleLocationId) {
+      for (const variantId of [...variants.keys()].sort()) {
+        locationStock.set(variantId, await lockLocationQuantity(client, context.tenantId, variantId, saleLocationId));
+      }
+    }
+
     let subtotalCents = 0;
     const pendingConflicts = [];
     const saleLines = sale.items.map((item) => {
@@ -482,7 +501,9 @@ async function createSale(context, body, options = {}) {
         'VARIANT_INACTIVE',
         `${variant.sku} is not available for sale.`,
       );
-      const availableStock = Number(variant.stock_quantity);
+      const availableStock = saleLocationId
+        ? Math.min(Number(variant.stock_quantity), locationStock.get(variant.id))
+        : Number(variant.stock_quantity);
       const catalogPriceCents = Number(variant.price_cents);
       if (availableStock < item.quantity) {
         assertPos(offline, 409, 'INSUFFICIENT_STOCK', `${variant.sku} has insufficient stock.`, {
@@ -674,30 +695,51 @@ async function createSale(context, body, options = {}) {
           line.lineTotalCents,
         ],
       );
+      // Per-location stock: the branch is deducted first and the sellable
+      // total moves by what the branch actually covered. An offline sale that
+      // sold more than the branch had on record floors the branch at zero; the
+      // units really were on its shelf, so the other locations (and therefore
+      // the total) must not lose them too. The shortfall is the sync conflict
+      // recorded below.
+      let deduct = line.quantity;
+      let branchAfter = null;
+      if (saleLocationId) {
+        const loc = await applyLocationDelta(client, context.tenantId, {
+          variantId: v.id, locationId: saleLocationId, delta: -line.quantity, strict: !offline, sku: v.sku,
+        });
+        deduct = -loc.applied;
+        branchAfter = loc.after;
+      }
       const stockResult = await client.query(
         `UPDATE product_variants
          SET stock_quantity = ${offline ? 'GREATEST(stock_quantity - $3, 0)' : 'stock_quantity - $3'}
          WHERE tenant_id = $1 AND id = $2 ${offline ? '' : 'AND stock_quantity >= $3'}
          RETURNING stock_quantity`,
-        [context.tenantId, v.id, line.quantity],
+        [context.tenantId, v.id, deduct],
       );
       assertPos(stockResult.rowCount === 1, 409, 'INSUFFICIENT_STOCK', `${v.sku} has insufficient stock.`);
       const stock = Number(stockResult.rows[0].stock_quantity);
-      stockUpdates.push({ variantId: v.id, stock });
+      // The ledger records the change that actually happened, so an offline
+      // oversell (which floors at zero) does not show up as drift.
+      const appliedDelta = stock - Number(v.stock_quantity);
+      // What this till can now sell: its branch's balance (capped by the
+      // sellable total) while stock per location is on, the total otherwise.
+      stockUpdates.push({ variantId: v.id, stock: branchAfter === null ? stock : Math.min(branchAfter, stock), total: stock });
       affectedProducts.add(v.product_id);
       await recordMovement(client, context, {
         productId: v.product_id,
         variantId: v.id,
-        delta: -line.quantity,
+        delta: appliedDelta,
         reason: 'pos_sale',
         referenceType: 'pos_transaction',
         referenceId: transactionId,
-        metadata: { offline, sku: v.sku },
+        metadata: { offline, sku: v.sku, ...(appliedDelta !== -line.quantity ? { soldQuantity: line.quantity } : {}) },
+        locationId: saleLocationId,
       });
       await client.query(
         `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
          VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,
-        [context.tenantId, JSON.stringify({ variantId: v.id, stock, sourceRegisterId: context.registerId })],
+        [context.tenantId, JSON.stringify({ ...(await stockEventPayload(client, context.tenantId, v.id, stock)), sourceRegisterId: context.registerId })],
       );
     }
 

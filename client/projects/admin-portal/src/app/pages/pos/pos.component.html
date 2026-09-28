@@ -335,7 +335,7 @@
                 <button
                   class="product-card product-card--item"
                   type="button"
-                  [disabled]="group.stock <= 0"
+                  [disabled]="group.stock <= 0 && !groupAvailableElsewhere(group)"
                   (click)="openVariantPicker(group)"
                 >
                   <div class="product-visual">
@@ -344,8 +344,8 @@
                     } @else {
                       <span>{{ group.title.slice(0, 1) }}</span>
                     }
-                    <i [class.low]="group.stock > 0 && group.stock <= 3">
-                      {{ group.stock > 0 ? group.stock + ' in stock' : 'Sold out' }}
+                    <i [class.low]="group.stock > 0 && group.stock <= 3" [class.elsewhere]="group.stock <= 0 && groupAvailableElsewhere(group)">
+                      {{ group.stock > 0 ? group.stock + ' in stock' : (groupAvailableElsewhere(group) ? 'Other locations' : 'Sold out') }}
                     </i>
                   </div>
                   <div class="product-copy">
@@ -505,6 +505,12 @@
                     ></i>
                   </div>
                   <span [class.low]="product.stock > 0 && product.stock <= 3">{{ stockGaugeLabel(product) }}</span>
+                  @if (product.availability?.length) {
+                    <small class="variant-elsewhere" [title]="elsewhereLabel(product)">{{ elsewhereLabel(product) }}</small>
+                  }
+                  @if (product.heldOnline) {
+                    <small class="variant-held">{{ product.heldOnline }} held online</small>
+                  }
                   <b>{{ formatMoney(product.priceCents) }}</b>
                 </button>
               }

@@ -10,6 +10,15 @@ const { kickRestockDispatch } = require('../lib/restock-dispatch-job');
 // same transaction — see server/lib/inventory-ledger.js for why that invariant
 // exists and what breaks when a write skips it (docs/25 Phase 1b).
 const { recordMovement, publishStockEvent, publishCatalogEvent } = require('../lib/inventory-ledger');
+const {
+  assertTotalOnlyWriteAllowed, perLocationEnabled, listLocations, lockLocationQuantity, applyLocationDelta,
+} = require('../lib/location-stock');
+
+// Reasons the product editor can attach to a per-location stock change
+// (same vocabulary as Inventory → adjustments and receipts).
+const LOCATION_EDIT_REASONS = new Set([
+  'received', 'found', 'returned', 'correction', 'damaged', 'lost', 'returned_to_supplier', 'sample',
+]);
 
 /**
  * Matches the `-card` in `mq9eqaq9-6714c560-card.webp`: the suffix `storage.js`
@@ -143,7 +152,10 @@ function validateProduct(body) {
   return errors;
 }
 
-async function replaceVariants(client, tenantId, productId, variants, { trustZeroStock = true, actorUserId = null, expectedStock = null } = {}) {
+async function replaceVariants(client, tenantId, productId, variants, {
+  trustZeroStock = true, actorUserId = null, expectedStock = null,
+  expectedLocationStock = null, stockReason = null,
+} = {}) {
   await ensureVariantNoteColumns(client);
 
   // Lock first and identify rows by UUID. SKU is editable catalog data, not a
@@ -154,11 +166,14 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     `SELECT id, sku, barcode, barcode_source, stock_quantity
        FROM product_variants
       WHERE tenant_id = $1 AND product_id = $2
+      ORDER BY id
       FOR UPDATE`,
     [tenantId, productId],
   );
   const existingById = new Map(existingVariants.rows.map((row) => [row.id, row]));
   const existingBySku = new Map(existingVariants.rows.map((row) => [row.sku, row]));
+  // Per-location stock (046): see locationStock handling below.
+  const perLocation = await perLocationEnabled(client, tenantId);
 
   const resolved = variants.map((variant) => {
     const sku = String(variant.sku || '').trim();
@@ -252,7 +267,9 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     [tenantId, productId],
   );
   const productDefaults = productDefaultsResult.rows[0] || {};
-  if (expectedStock && typeof expectedStock === 'object') {
+  // With per-location stock the conflict check runs per location instead
+  // (expectedLocationStock, below); the total also moves with website holds.
+  if (!perLocation && expectedStock && typeof expectedStock === 'object') {
     // The editor sends the stock it loaded. If a sale, stocktake or bulk update
     // changed a variant since then and this save would overwrite or remove it,
     // refuse rather than silently undo that change (owner decision 2026-09-15).
@@ -281,6 +298,13 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
   for (const row of existingVariants.rows) {
     previousStockById.set(row.id, Number(row.stock_quantity) || 0);
   }
+  // Per-location stock (046): the editor sends each size's quantity per
+  // location (`locationStock`, absolute). The sellable total is then derived
+  // here, never taken from the client: it moves by exactly the sum of the
+  // location changes, so units held for paid website orders stay held.
+  const tenantLocationIds = perLocation ? new Set((await listLocations(client, tenantId)).map((l) => l.id)) : new Set();
+  const locationReason = perLocation && stockReason && LOCATION_EDIT_REASONS.has(String(stockReason)) ? String(stockReason) : 'correction';
+
   const retainedIds = new Set(resolved.map((item) => item.existing?.id).filter(Boolean));
   const removedVariants = existingVariants.rows.filter((row) => !retainedIds.has(row.id));
 
@@ -293,6 +317,14 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     .filter((row) => (Number(row.stock_quantity) || 0) !== 0)
     .map((row) => row.id);
   if (removedWithStock.length > 0) {
+    // Per-location stock: which location's units vanish is not something a
+    // removal can say, so the size must be brought to zero first.
+    if (perLocation) {
+      const err = new Error('A size that still has stock cannot be removed. Set it to 0 at every location first.');
+      err.status = 409;
+      err.code = 'SIZE_HAS_STOCK';
+      throw err;
+    }
     await client.query(
       'UPDATE product_variants SET stock_quantity = 0, updated_at = NOW() WHERE id = ANY($1::uuid[])',
       [removedWithStock],
@@ -370,7 +402,52 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
       : productDefaults.default_shipping_cost_cents ?? null;
 
     const colorText = String(variant.color || '').trim() || null;
-    const incomingStock = Math.max(0, Number.parseInt(variant.stock, 10) || 0);
+    let incomingStock = Math.max(0, Number.parseInt(variant.stock, 10) || 0);
+
+    const locationChanges = [];
+    if (perLocation) {
+      const currentTotal = existing ? previousStockById.get(existing.id) ?? 0 : 0;
+      const provided = variant.locationStock && typeof variant.locationStock === 'object' ? variant.locationStock : {};
+      const expectedForVariant = existing && expectedLocationStock && typeof expectedLocationStock === 'object'
+        ? expectedLocationStock[existing.id] || null
+        : null;
+      let sumDelta = 0;
+      // Location rows lock after the variant rows (locked at the top), in a
+      // fixed order.
+      for (const locationId of Object.keys(provided).sort()) {
+        if (!tenantLocationIds.has(locationId)) {
+          const err = new Error('That stock location does not exist.');
+          err.status = 400;
+          throw err;
+        }
+        const next = Number(provided[locationId]);
+        if (!Number.isSafeInteger(next) || next < 0 || next > 100000) {
+          const err = new Error(`${sku}: stock must be a whole number of 0 or more.`);
+          err.status = 400;
+          throw err;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const before = existing ? await lockLocationQuantity(client, tenantId, existing.id, locationId) : 0;
+        if (expectedForVariant && Object.prototype.hasOwnProperty.call(expectedForVariant, locationId)
+          && Number(expectedForVariant[locationId]) !== before && next !== before) {
+          const err = new Error(`Stock changed while this product was open: ${sku} now has ${before} at one location. The editor reloaded the latest stock; review it and save again.`);
+          err.status = 409;
+          err.code = 'STOCK_CHANGED';
+          throw err;
+        }
+        if (next !== before) {
+          locationChanges.push({ locationId, before, next, delta: next - before });
+          sumDelta += next - before;
+        }
+      }
+      incomingStock = currentTotal + sumDelta;
+      if (incomingStock < 0) {
+        const err = new Error(`${sku}: some of these units are held for paid website orders and cannot be removed yet.`);
+        err.status = 409;
+        err.code = 'STOCK_HELD';
+        throw err;
+      }
+    }
 
     const values = [
       tenantId,
@@ -395,7 +472,7 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
             SET sku = $3, barcode = $4, size = $5, color = $6, material = $7,
                 price_cents = $8, cost_price_cents = $9, shipping_cost_cents = $10,
                 stock_quantity = CASE
-                  WHEN ${trustZeroStock} THEN $11
+                  WHEN ${trustZeroStock || perLocation} THEN $11
                   WHEN $11 > 0 THEN $11
                   ELSE product_variants.stock_quantity
                 END,
@@ -448,7 +525,31 @@ async function replaceVariants(client, tenantId, productId, variants, { trustZer
     if (saved) {
       const previous = existing ? previousStockById.get(existing.id) ?? 0 : 0;
       const delta = (Number(saved.stock_quantity) || 0) - previous;
-      if (delta !== 0) {
+      if (perLocation) {
+        // One ledger row per location changed, each naming its location.
+        for (const change of locationChanges) {
+          // eslint-disable-next-line no-await-in-loop
+          await applyLocationDelta(client, tenantId, { variantId: saved.id, locationId: change.locationId, delta: change.delta, sku });
+          // eslint-disable-next-line no-await-in-loop
+          await recordMovement(client, { tenantId, userId: actorUserId }, {
+            productId,
+            variantId: saved.id,
+            delta: change.delta,
+            reason: 'manual_adjustment',
+            referenceType: 'product',
+            referenceId: productId,
+            locationId: change.locationId,
+            metadata: {
+              sku,
+              adjustmentReason: locationReason,
+              action: existing ? 'location_edit' : 'variant_created',
+              before: change.before,
+              after: change.next,
+            },
+          });
+        }
+        if (delta !== 0) await publishStockEvent(client, tenantId, saved.id, Number(saved.stock_quantity) || 0);
+      } else if (delta !== 0) {
         await recordMovement(client, { tenantId, userId: actorUserId }, {
           productId,
           variantId: saved.id,
@@ -784,7 +885,11 @@ async function loadAdminProduct(client, tenantId, productId) {
             'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0, 2) ELSE NULL END,
             'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0, 2) ELSE NULL END,
             'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0, 2) ELSE NULL END,
-            'stock', pv.stock_quantity
+            'stock', pv.stock_quantity,
+            'locationStock', COALESCE((SELECT jsonb_object_agg(vls.location_id, vls.quantity)
+                                         FROM variant_location_stock vls WHERE vls.variant_id = pv.id), '{}'::jsonb),
+            'held', COALESCE((SELECT sum(h.quantity) FROM order_stock_holds h
+                               WHERE h.variant_id = pv.id AND h.status = 'held'), 0)::int
           ) ORDER BY pv.sort_order, pv.created_at)
           FROM product_variants pv
           WHERE pv.product_id = p.id AND pv.is_active
@@ -971,7 +1076,12 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
   // A PATCH that does not send variants (hide toggle, name edit) must not
   // rewrite them: that would reset stock sold in the meantime.
   if (!product.skipVariants) {
-    await replaceVariants(client, tenant.id, saved.id, variants, { actorUserId, expectedStock: product.expectedStock || null });
+    await replaceVariants(client, tenant.id, saved.id, variants, {
+      actorUserId,
+      expectedStock: product.expectedStock || null,
+      expectedLocationStock: product.expectedLocationStock || null,
+      stockReason: product.stockReason || null,
+    });
   }
   // Re-sum variant stock onto the product row so the catalog total is always
   // accurate even when the stock-preservation branch kept a different value.
@@ -1045,7 +1155,11 @@ router.get('/', asyncHandler(async (_req, res) => {
               'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0, 2) ELSE NULL END,
               'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0, 2) ELSE NULL END,
               'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0, 2) ELSE NULL END,
-              'stock', pv.stock_quantity
+              'stock', pv.stock_quantity,
+              'locationStock', COALESCE((SELECT jsonb_object_agg(vls.location_id, vls.quantity)
+                                           FROM variant_location_stock vls WHERE vls.variant_id = pv.id), '{}'::jsonb),
+              'held', COALESCE((SELECT sum(h.quantity) FROM order_stock_holds h
+                                 WHERE h.variant_id = pv.id AND h.status = 'held'), 0)::int
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
             WHERE pv.product_id = p.id AND pv.is_active
@@ -1110,7 +1224,11 @@ router.get('/:id', asyncHandler(async (req, res) => {
               'costPrice', CASE WHEN pv.cost_price_cents IS NOT NULL THEN round(pv.cost_price_cents / 100.0, 2) ELSE NULL END,
               'shippingCost', CASE WHEN pv.shipping_cost_cents IS NOT NULL THEN round(pv.shipping_cost_cents / 100.0, 2) ELSE NULL END,
               'totalCost', CASE WHEN pv.total_cost_cents IS NOT NULL THEN round(pv.total_cost_cents / 100.0, 2) ELSE NULL END,
-              'stock', pv.stock_quantity
+              'stock', pv.stock_quantity,
+              'locationStock', COALESCE((SELECT jsonb_object_agg(vls.location_id, vls.quantity)
+                                           FROM variant_location_stock vls WHERE vls.variant_id = pv.id), '{}'::jsonb),
+              'held', COALESCE((SELECT sum(h.quantity) FROM order_stock_holds h
+                                 WHERE h.variant_id = pv.id AND h.status = 'held'), 0)::int
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
             WHERE pv.product_id = p.id AND pv.is_active
@@ -1194,6 +1312,7 @@ router.patch('/bulk-stock', asyncHandler(async (req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     await client.query('BEGIN');
+    await assertTotalOnlyWriteAllowed(client, tenant.id, 'Bulk stock updates');
 
     let updated = 0;
     const notFound = [];
@@ -1331,6 +1450,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       variants: patchVariants,
       skipVariants: !Array.isArray(req.body.variants),
       expectedStock: req.body.expectedStock || null,
+      expectedLocationStock: req.body.expectedLocationStock || null,
+      stockReason: req.body.stockReason || null,
       images: Object.prototype.hasOwnProperty.call(req.body, 'images') ? req.body.images : existingFull?.images,
       imageColors: Object.prototype.hasOwnProperty.call(req.body, 'imageColors') ? req.body.imageColors : existingFull?.imageColors,
       relatedProductIds: Object.prototype.hasOwnProperty.call(req.body, 'relatedProductIds')

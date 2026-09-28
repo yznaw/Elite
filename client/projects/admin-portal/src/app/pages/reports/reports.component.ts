@@ -650,8 +650,11 @@ export class ReportsComponent implements OnInit {
 
   exportInventory(r: PosInventoryReport): void {
     this.downloadCsv(`inventory-movements-${this.from()}-${this.to()}.csv`,
-      ['When', 'Product', 'SKU', 'Reason', 'Delta'],
-      r.movements.map((m) => [this.formatDateTime(m.occurredAt), m.productName, m.sku || '', m.reason, m.delta]));
+      ['When', 'Product', 'SKU', 'Location', 'Reason', 'Detail', 'Delta', 'Person'],
+      r.movements.map((m) => [
+        this.formatDateTime(m.occurredAt), m.productName, m.sku || '', m.locationName || '', m.reason,
+        m.adjustmentReason || '', m.delta, m.userName || '',
+      ]));
   }
 
   exportRefundVoid(r: PosRefundVoidReport): void {

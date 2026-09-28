@@ -403,10 +403,13 @@ async function inventoryMovements(context, query) {
     );
     const movements = await client.query(
       `SELECT im.id, im.occurred_at, im.reason, im.delta, im.reference_type, im.reference_id,
-              p.name AS product_name, pv.sku
+              p.name AS product_name, pv.sku, sl.name AS location_name, u.full_name AS user_name,
+              im.metadata->>'adjustmentReason' AS adjustment_reason
        FROM inventory_movements im
        JOIN products p ON p.id = im.product_id
        LEFT JOIN product_variants pv ON pv.id = im.variant_id
+       LEFT JOIN stocktake_locations sl ON sl.id = im.location_id
+       LEFT JOIN admin_users u ON u.id = im.created_by_user_id
        WHERE ${where}
        ORDER BY im.occurred_at DESC
        LIMIT 500`,
@@ -430,6 +433,7 @@ async function inventoryMovements(context, query) {
       movements: movements.rows.map((r) => ({
         movementId: r.id, occurredAt: r.occurred_at, reason: r.reason, delta: Number(r.delta),
         referenceType: r.reference_type, referenceId: r.reference_id, productName: r.product_name, sku: r.sku,
+        locationName: r.location_name, userName: r.user_name, adjustmentReason: r.adjustment_reason,
       })),
       driftAlerts: drift.rows.map((r) => ({
         sku: r.sku, currentStock: Number(r.current_stock), baselineStock: Number(r.baseline_stock),

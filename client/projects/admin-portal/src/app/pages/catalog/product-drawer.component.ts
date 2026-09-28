@@ -24,6 +24,8 @@ import { AdminMediaService } from '../../services/admin-media.service';
 import { StorageService } from '../../services/storage.service';
 import { LabelPrinterService, arabicPrice } from '../../services/label-printer.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
+import { RouterLink } from '@angular/router';
+import { InventoryService, StockLocation } from '../../services/inventory.service';
 import { formatVariantSku, variantBaseSku } from '../../utils/variant-sku';
 import { NO_IMAGE_LOGO, onProductImgError } from '../../utils/no-image';
 
@@ -71,7 +73,7 @@ function readPreview(file: File): Promise<string> {
 
 @Component({
     selector: 'ap-product-drawer',
-    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent, BarcodeComponent],
+    imports: [CommonModule, FormsModule, RouterLink, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent, BarcodeComponent],
     template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
@@ -621,6 +623,22 @@ function readPreview(file: File): Promise<string> {
                           </div>
 
                           <!-- Stock -->
+                          @if (perLocation()) {
+                            <!-- The row shows the sellable total; the per-location
+                                 numbers open underneath (less clutter per row). -->
+                            <div class="vc-cell vc-cell--num">
+                              <button type="button" class="vc-stock-total mono"
+                                      [class.is-zero]="item.v.stock === 0"
+                                      [class.is-changed]="variantLocationsChanged(item.v)"
+                                      [class.is-open]="expandedVariants().has(item.v.id)"
+                                      [attr.aria-expanded]="expandedVariants().has(item.v.id)"
+                                      [attr.aria-label]="t('product.variants.stockByLocation') + ' · ' + (item.v.size || '')"
+                                      [title]="t('product.variants.stockByLocation')"
+                                      (click)="toggleVariantExpand(item.v.id)">
+                                {{ item.v.stock }}
+                              </button>
+                            </div>
+                          } @else {
                           <div class="vc-cell vc-cell--num">
                             <input class="inp inp-sm mono vc-stock-inp"
                                    [class.stock-out]="item.v.stock === 0"
@@ -629,6 +647,7 @@ function readPreview(file: File): Promise<string> {
                                    [ngModel]="item.v.stock"
                                    (ngModelChange)="updateVariant(item.globalIndex, { stock: +$event || 0 })"/>
                           </div>
+                          }
 
                           <!-- Price -->
                           <div class="vc-cell vc-cell--num vc-cell--price">
@@ -674,6 +693,31 @@ function readPreview(file: File): Promise<string> {
                         }
                         <!-- Expandable detail: Material | Barcode | Cost | Shipping | Total Cost · Margin -->
                         @if (expandedVariants().has(item.v.id)) {
+                          @if (perLocation()) {
+                            <div class="vc-locs" role="group" [attr.aria-label]="t('product.variants.stockByLocation')">
+                              <div class="vc-locs-head">
+                                <span class="vc-lbl">{{ t('product.variants.stockByLocation') }}</span>
+                                @if (item.v.held) {
+                                  <span class="vc-held" [title]="t('inv.col.heldHelp')">{{ t('product.variants.heldOnline').replace('{n}', '' + item.v.held) }}</span>
+                                }
+                              </div>
+                              <div class="vc-locs-grid">
+                                @for (loc of stockLocations(); track loc.id) {
+                                  <label class="vc-loc">
+                                    <span class="vc-loc-name">{{ loc.name }}</span>
+                                    <input class="inp inp-sm mono"
+                                           [class.is-changed]="locChanged(item.v, loc.id)"
+                                           type="number" min="0" inputmode="numeric"
+                                           [ngModel]="locQty(item.v, loc.id)"
+                                           (ngModelChange)="updateLocationStock(item.globalIndex, loc.id, $event)"/>
+                                    @if (locChanged(item.v, loc.id)) {
+                                      <span class="vc-loc-was">{{ t('product.variants.was').replace('{n}', '' + locWas(item.v, loc.id)) }}</span>
+                                    }
+                                  </label>
+                                }
+                              </div>
+                            </div>
+                          }
                           <div class="vc-detail vc-detail--6col">
                             <div class="vc-field">
                               <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
@@ -774,9 +818,15 @@ function readPreview(file: File): Promise<string> {
                   }
                 </div>
                 <div class="row gap-sm" style="flex-wrap:wrap;">
-                  <button class="btn btn-outline btn-sm" (click)="openBulkStock()">
-                    <ap-icon name="chart" [size]="12"/> {{ t('product.variants.bulkStock') }}
-                  </button>
+                  @if (perLocation()) {
+                    <a class="btn btn-outline btn-sm" routerLink="/inventory" [queryParams]="{ tab: 'transfer' }">
+                      <ap-icon name="sync" [size]="12"/> {{ t('product.variants.moveStock') }}
+                    </a>
+                  } @else {
+                    <button class="btn btn-outline btn-sm" (click)="openBulkStock()">
+                      <ap-icon name="chart" [size]="12"/> {{ t('product.variants.bulkStock') }}
+                    </button>
+                  }
                   <button class="btn btn-outline btn-sm" [class.is-active]="barcodeSheetOpen()" (click)="toggleBarcodeSheet()">
                     <ap-icon name="barcode" [size]="12"/>
                     {{ barcodeSheetOpen() ? t('product.variants.hideBarcodes') : t('product.variants.showBarcodes') }}
@@ -1098,6 +1148,25 @@ function readPreview(file: File): Promise<string> {
     }
 
     <!-- ── Bulk Stock Update Modal ── -->
+    @if (stockReasonPrompt()) {
+      <div class="overlay stock-reason-overlay" (click)="answerStockReason(null)"></div>
+      <div class="stock-reason" role="dialog" aria-modal="true" [attr.aria-label]="t('product.stockReason.title')"
+           (keydown.escape)="answerStockReason(null)">
+        <div class="card-title">{{ t('product.stockReason.title') }}</div>
+        <p class="muted small">{{ t('product.stockReason.sub') }}</p>
+        <div class="stock-reason-options" role="radiogroup">
+          @for (r of stockReasons; track r) {
+            <button type="button" class="chip" role="radio" [attr.aria-checked]="stockReasonChoice() === r"
+                    [class.active]="stockReasonChoice() === r" (click)="stockReasonChoice.set(r)">{{ t('inv.reason.' + r) }}</button>
+          }
+        </div>
+        <div class="stock-reason-actions">
+          <button type="button" class="btn btn-outline" (click)="answerStockReason(null)">{{ t('common.cancel') }}</button>
+          <button type="button" class="btn btn-primary" (click)="answerStockReason(stockReasonChoice())">{{ t('product.stockReason.save') }}</button>
+        </div>
+      </div>
+    }
+
     @if (bulkStockOpen()) {
       <div class="overlay" style="z-index:260;" (click)="closeBulkStock()"></div>
       <div class="media-pick-panel bulk-stock-panel" style="z-index:270;">
@@ -1703,6 +1772,41 @@ function readPreview(file: File): Promise<string> {
     .vcg-img-btn.no-color { opacity: 0.3; cursor: not-allowed; }
 
     /* Grouped size rows use narrower grid (no photo/color columns) */
+    /* Stock per location: the row shows the total; locations open below. */
+    .vc-stock-total {
+      width: 100%; height: 32px; padding: 0 8px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+      font: inherit; font-weight: 600; font-size: 13px; color: var(--ink);
+      cursor: pointer; text-align: center; transition: border-color .15s, background .15s;
+    }
+    .vc-stock-total:hover, .vc-stock-total.is-open { border-color: var(--gold); }
+    .vc-stock-total.is-zero { color: var(--muted-2); font-weight: 500; }
+    .vc-stock-total.is-changed { border-color: var(--gold); background: var(--gold-3); }
+    .vc-stock-total:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+    .vc-locs {
+      margin-top: 8px; padding: 10px 12px;
+      border: 1px solid var(--border-2); border-radius: 10px; background: var(--surface);
+      animation: vc-reveal 0.14s ease-out;
+    }
+    .vc-locs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .vc-locs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    .vc-loc { display: grid; gap: 4px; margin: 0; }
+    .vc-loc-name { font-size: 11px; font-weight: 600; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vc-loc .inp { text-align: center; }
+    .vc-loc .inp.is-changed { border-color: var(--gold); background: var(--gold-3); }
+    .vc-loc-was { font-size: 10px; color: var(--muted); }
+    .vc-held { font-size: 11px; color: var(--info); background: var(--info-bg); padding: 2px 8px; border-radius: 999px; }
+    a.btn { text-decoration: none; }
+    .stock-reason-overlay { z-index: 1100; }
+    .stock-reason {
+      position: fixed; z-index: 1101; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: min(440px, calc(100vw - 32px)); padding: 20px;
+      background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg);
+      display: grid; gap: 10px;
+    }
+    .stock-reason p { margin: 0; }
+    .stock-reason-options { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stock-reason-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
     .vc-header--group,
     .vc-row--grouped {
       grid-template-columns: 80px 80px 1fr 1fr 56px !important;
@@ -2277,6 +2381,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly productsApi = inject(AdminProductsService);
+  private readonly inventoryApi = inject(InventoryService);
+
+  // ── Stock per location (server/lib/location-stock.js) ─────────────────────
+  /** True once stock per location is switched on for this shop. */
+  readonly perLocation = signal(false);
+  readonly stockLocations = signal<StockLocation[]>([]);
+  /** Open while the "why did stock change?" question is on screen. */
+  readonly stockReasonPrompt = signal<{ resolve: (reason: string | null) => void } | null>(null);
+  readonly stockReasonChoice = signal('received');
+  readonly stockReasons = ['received', 'found', 'returned', 'correction', 'damaged', 'lost', 'returned_to_supplier', 'sample'];
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly refApi = inject(AdminRefService);
   private readonly uploads = inject(MediaUploadService);
@@ -2406,6 +2520,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     if (!this.initial()) this.resetForCurrent();
+    // Non-blocking: until this answers, the editor shows the single stock
+    // field it always had.
+    this.inventoryApi.perLocationStatus().then((status) => {
+      const locations = Array.isArray(status?.locations) ? status.locations : [];
+      this.stockLocations.set(locations);
+      this.perLocation.set(status?.enabled === true && locations.length > 0);
+    }).catch(() => undefined);
     // Load reference lists in the background — non-blocking
     Promise.all([
       this.refApi.getColors(),
@@ -2886,6 +3007,59 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     this.set('variants', [...f.variants, next]);
     // Its own group opens at the top with the colour select focused.
     this.revealVariant(id);
+  }
+
+  locQty(v: ProductVariant, locationId: string): number {
+    return v.locationStock?.[locationId] ?? 0;
+  }
+
+  locWas(v: ProductVariant, locationId: string): number {
+    return this.initial()?.variants.find((x) => x.id === v.id)?.locationStock?.[locationId] ?? 0;
+  }
+
+  variantLocationsChanged(v: ProductVariant): boolean {
+    return this.stockLocations().some((loc) => this.locChanged(v, loc.id));
+  }
+
+  /** Highlights a location field the user changed and has not saved yet. */
+  locChanged(v: ProductVariant, locationId: string): boolean {
+    const before = this.initial()?.variants.find((x) => x.id === v.id);
+    return (before?.locationStock?.[locationId] ?? 0) !== this.locQty(v, locationId);
+  }
+
+  /** Sets one location's quantity; the sellable total follows (minus held). */
+  updateLocationStock(index: number, locationId: string, value: unknown): void {
+    const current = this.form().variants[index];
+    if (!current) return;
+    const qty = Math.max(0, Math.min(100000, Math.floor(Number(value) || 0)));
+    const locationStock = { ...(current.locationStock ?? {}), [locationId]: qty };
+    const total = Object.values(locationStock).reduce((sum, n) => sum + (Number(n) || 0), 0) - (current.held ?? 0);
+    this.updateVariant(index, { locationStock, stock: Math.max(0, total) });
+  }
+
+  /** Any per-location number differs from what was loaded. */
+  private locationStockChanged(): boolean {
+    const before = new Map((this.initial()?.variants ?? []).map((v) => [v.id, v.locationStock ?? {}]));
+    return this.form().variants.some((v) => {
+      const was = before.get(v.id) ?? {};
+      return this.stockLocations().some((loc) => (was[loc.id] ?? 0) !== (v.locationStock?.[loc.id] ?? 0));
+    });
+  }
+
+  /** Asks once per save why stock changed; null = cancelled. */
+  private askStockReason(): Promise<string | null> {
+    const increased = this.form().variants.some((v) => {
+      const was = this.initial()?.variants.find((x) => x.id === v.id)?.locationStock ?? {};
+      return this.stockLocations().some((loc) => (v.locationStock?.[loc.id] ?? 0) > (was[loc.id] ?? 0));
+    });
+    this.stockReasonChoice.set(increased ? 'received' : 'correction');
+    return new Promise((resolve) => this.stockReasonPrompt.set({ resolve }));
+  }
+
+  answerStockReason(reason: string | null): void {
+    const prompt = this.stockReasonPrompt();
+    this.stockReasonPrompt.set(null);
+    prompt?.resolve(reason);
   }
 
   updateVariant(index: number, patch: Partial<ProductVariant>): void {
@@ -3620,6 +3794,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       if (clash) this.revealVariant(clash.id, true);
       return;
     }
+    // Per-location stock: every stock change carries a reason (it shows in the
+    // movement history), asked once for the whole save.
+    let stockReason: string | null = null;
+    if (this.perLocation() && this.locationStockChanged()) {
+      stockReason = await this.askStockReason();
+      if (!stockReason) return;
+    }
     // What is on screen now is what gets saved. Edits made while the request is
     // in flight (deleting a size right after pressing Save) must stay unsaved;
     // comparing against this snapshot is what keeps the save bar up for them.
@@ -3635,6 +3816,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       const payload = f.variants.length > 0
         ? { ...f, stock: this.variantsTotalStock() }
         : { ...f };
+      if (this.perLocation()) {
+        // Absolute numbers per location plus what the editor loaded, so the
+        // server refuses a save that would undo a sale or transfer since then.
+        Object.assign(payload, {
+          stockReason,
+          expectedLocationStock: Object.fromEntries(
+            this.initial().variants.filter((v) => v.id).map((v) => [v.id, { ...(v.locationStock ?? {}) }]),
+          ),
+        });
+      }
       const saved = target.id.startsWith('P-NEW-')
         ? await this.productsApi.saveProduct(payload)
         : await this.productsApi.update(target.id, {
@@ -3733,10 +3924,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     try {
       const fresh = await this.productsApi.get(id);
       if (this.product?.id !== id) return;
-      const stockBySku = new Map((fresh.variants ?? []).map(v => [v.sku, v.stock]));
+      const freshBySku = new Map((fresh.variants ?? []).map(v => [v.sku, v]));
       const withFreshStock = (shape: FormShape): FormShape => ({
         ...shape,
-        variants: shape.variants.map(v => stockBySku.has(v.sku) ? { ...v, stock: stockBySku.get(v.sku)! } : v),
+        variants: shape.variants.map(v => {
+          const latest = freshBySku.get(v.sku);
+          return latest
+            ? { ...v, stock: latest.stock, locationStock: { ...(latest.locationStock ?? {}) }, held: latest.held ?? 0 }
+            : v;
+        }),
       });
       this.initial.update(withFreshStock);
       this.form.update(withFreshStock);

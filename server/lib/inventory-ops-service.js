@@ -3,6 +3,7 @@ const db = require('../db/client');
 const { recordMovement, publishStockEvent } = require('./inventory-ledger');
 const { PosError, assertPos, nonEmpty, uuid } = require('./pos/errors');
 const { logger } = require('./logger');
+const { syncLocations, perLocationEnabled, defaultLocationId, requireLocation, applyLocationDelta, lockLocationQuantity } = require('./location-stock');
 
 /**
  * Inventory operations: manual adjustments and stocktakes (docs/25 Phase 8).
@@ -37,33 +38,8 @@ const ADJUSTMENT_REASONS = new Set([
 const NEGATIVE_ONLY = new Set(['damaged', 'lost', 'returned_to_supplier', 'sample']);
 
 /** Keep count locations aligned with configured shops and guarantee one
- * warehouse row. These locations label a count only; they do not own stock. */
-async function syncStocktakeLocations(client, tenantId) {
-  await client.query(
-    `INSERT INTO stocktake_locations (tenant_id, branch_id, name, location_type, sort_order)
-     SELECT b.tenant_id, b.id, b.name, 'store',
-            row_number() OVER (ORDER BY b.is_default DESC, b.created_at)::integer - 1
-       FROM pos_branches b
-      WHERE b.tenant_id = $1
-     ON CONFLICT DO NOTHING`,
-    [tenantId],
-  );
-  await client.query(
-    `INSERT INTO stocktake_locations (tenant_id, name, location_type, sort_order)
-     SELECT $1, 'Warehouse', 'warehouse', 100
-      WHERE NOT EXISTS (
-        SELECT 1 FROM stocktake_locations WHERE tenant_id = $1 AND location_type = 'warehouse'
-      )`,
-    [tenantId],
-  );
-  // A branch rename should be reflected wherever the next count is shown.
-  await client.query(
-    `UPDATE stocktake_locations l SET name = b.name
-       FROM pos_branches b
-      WHERE l.tenant_id = $1 AND l.branch_id = b.id AND l.name <> b.name`,
-    [tenantId],
-  );
-}
+ * warehouse row. Lives in location-stock.js now that locations also hold stock. */
+const syncStocktakeLocations = syncLocations;
 
 async function listStocktakeLocations(context) {
   const client = await db.pool.connect();
@@ -121,11 +97,12 @@ function parseQuantity(value, field) {
  * system is register-bound and does not apply outside a till session.)
  */
 async function adjustStock(context, body) {
+  // Managers too (client decision 2026-09-26); cashiers never reach this.
   assertPos(
-    ['owner', 'admin'].includes(context.role),
+    ['owner', 'admin', 'manager'].includes(context.role),
     403,
     'INSUFFICIENT_PERMISSIONS',
-    'Only owners and admins can adjust stock.',
+    'Only owners, admins and managers can adjust stock.',
   );
 
   const variantId = uuid(body?.variantId, 'variantId');
@@ -172,6 +149,16 @@ async function adjustStock(context, body) {
       `${variant.rows[0].sku} holds ${before}; removing ${Math.abs(delta)} would take it below zero.`,
     );
 
+    // Per-location stock: the adjustment lands on the chosen location
+    // (warehouse when none is given) and must be covered there.
+    let locationId = null;
+    if (await perLocationEnabled(client, context.tenantId)) {
+      locationId = body?.locationId
+        ? (await requireLocation(client, context.tenantId, uuid(body.locationId, 'locationId'))).id
+        : await defaultLocationId(client, context.tenantId);
+      await applyLocationDelta(client, context.tenantId, { variantId, locationId, delta, sku: variant.rows[0].sku });
+    }
+
     await client.query(
       'UPDATE product_variants SET stock_quantity = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2',
       [context.tenantId, variantId, after],
@@ -188,11 +175,12 @@ async function adjustStock(context, body) {
       // (pos_sale, web_order, manual_adjustment). The shrinkage report groups
       // on this.
       metadata: { adjustmentReason: reason, note, sku: variant.rows[0].sku, before, after },
+      locationId,
     });
     await publishStockEvent(client, context.tenantId, variantId, after);
     await recomputeProductTotal(client, variant.rows[0].product_id);
     await writeAudit(client, context, 'inventory.adjusted', 'product_variant', variantId, {
-      delta, reason, note, before, after, sku: variant.rows[0].sku,
+      delta, reason, note, before, after, sku: variant.rows[0].sku, locationId,
     });
 
     await client.query('COMMIT');
@@ -292,6 +280,15 @@ async function startStocktake(context, body) {
           ORDER BY sort_order, name`,
         [context.tenantId, requestedLocationIds],
       );
+    // Stock per location: a count must say where it is counting, because it
+    // posts per location.
+    const perLocation = await perLocationEnabled(client, context.tenantId);
+    assertPos(
+      !perLocation || requestedLocationIds !== null,
+      422,
+      'NO_LOCATIONS',
+      'Stock is tracked per location. Choose which locations this count covers.',
+    );
     if (requestedLocationIds !== null) {
       assertPos(locations.rowCount > 0, 422, 'NO_LOCATIONS', 'Select at least one stocktake location.');
       assertPos(
@@ -307,6 +304,21 @@ async function startStocktake(context, body) {
         `INSERT INTO stocktake_location_runs (stocktake_id, tenant_id, location_id)
          VALUES ($1,$2,$3)`,
         [stocktakeId, context.tenantId, location.id],
+      );
+    }
+
+    if (perLocation) {
+      // What each location should hold right now, so posting can apply
+      // (counted - expected) per location and keep sales made during the
+      // count (docs: plan Phase 3).
+      await client.query(
+        `INSERT INTO stocktake_location_expected (stocktake_id, location_id, variant_id, expected_quantity)
+         SELECT $1, loc.id, l.variant_id, COALESCE(vls.quantity, 0)
+           FROM stocktake_lines l
+          CROSS JOIN unnest($2::uuid[]) AS loc(id)
+           LEFT JOIN variant_location_stock vls ON vls.variant_id = l.variant_id AND vls.location_id = loc.id
+          WHERE l.stocktake_id = $1`,
+        [stocktakeId, locations.rows.map((location) => location.id)],
       );
     }
 
@@ -662,7 +674,11 @@ async function postStocktake(context, stocktakeId, body = {}) {
 
     const applied = [];
     const touchedProducts = new Set();
-    for (const line of lines.rows) {
+    const perLocation = await perLocationEnabled(client, context.tenantId);
+    if (perLocation) {
+      await postPerLocation(client, context, id, applied, touchedProducts);
+    }
+    for (const line of perLocation ? [] : lines.rows) {
       // The recount, when present, is the accepted figure.
       const counted = line.recount_quantity ?? line.counted_quantity;
       const discrepancy = counted - Number(line.expected_quantity);
@@ -733,6 +749,102 @@ async function postStocktake(context, stocktakeId, body = {}) {
   }
 }
 
+/**
+ * Posts a location-mode stocktake while stock per location is on: each
+ * location moves by its own (counted - expected), so a sale made at one shop
+ * during the count stays deducted from that shop. The sellable total moves by
+ * the sum. A location with no snapshot (the count was started before stock
+ * per location was switched on, e.g. on go-live night) is set to exactly what
+ * was counted.
+ *
+ * Lock order: the counted variants by id, then their location rows.
+ */
+async function postPerLocation(client, context, stocktakeId, applied, touchedProducts) {
+  const runs = await client.query(
+    `SELECT r.location_id, l.name FROM stocktake_location_runs r
+       JOIN stocktake_locations l ON l.id = r.location_id
+      WHERE r.stocktake_id = $1
+      ORDER BY r.location_id`,
+    [stocktakeId],
+  );
+  assertPos(runs.rowCount > 0, 409, 'NO_LOCATIONS', 'This count has no locations, so it cannot be posted per location.');
+
+  const variants = await client.query(
+    `SELECT pv.id, pv.product_id, pv.sku, pv.stock_quantity
+       FROM product_variants pv
+      WHERE pv.tenant_id = $1
+        AND pv.id IN (SELECT variant_id FROM stocktake_location_counts WHERE stocktake_id = $2)
+      ORDER BY pv.id
+      FOR UPDATE`,
+    [context.tenantId, stocktakeId],
+  );
+  const counts = await client.query(
+    'SELECT location_id, variant_id, quantity FROM stocktake_location_counts WHERE stocktake_id = $1',
+    [stocktakeId],
+  );
+  const expected = await client.query(
+    'SELECT location_id, variant_id, expected_quantity FROM stocktake_location_expected WHERE stocktake_id = $1',
+    [stocktakeId],
+  );
+  const key = (variantId, locationId) => `${variantId}:${locationId}`;
+  const countMap = new Map(counts.rows.map((row) => [key(row.variant_id, row.location_id), Number(row.quantity)]));
+  const expectedMap = new Map(expected.rows.map((row) => [key(row.variant_id, row.location_id), Number(row.expected_quantity)]));
+
+  for (const variant of variants.rows) {
+    let totalDelta = 0;
+    const perLocationResult = [];
+    for (const run of runs.rows) {
+      const counted = countMap.get(key(variant.id, run.location_id));
+      if (counted === undefined) continue; // not counted at this location: unchanged
+      const current = await lockLocationQuantity(client, context.tenantId, variant.id, run.location_id);
+      const expectedAtCount = expectedMap.get(key(variant.id, run.location_id));
+      const target = expectedAtCount === undefined
+        ? counted
+        : Math.max(0, current + (counted - expectedAtCount));
+      const delta = target - current;
+      if (delta === 0) continue;
+      await applyLocationDelta(client, context.tenantId, { variantId: variant.id, locationId: run.location_id, delta, sku: variant.sku });
+      await recordMovement(client, context, {
+        productId: variant.product_id,
+        variantId: variant.id,
+        delta,
+        reason: 'stocktake',
+        referenceType: 'stocktake',
+        referenceId: stocktakeId,
+        locationId: run.location_id,
+        metadata: {
+          sku: variant.sku,
+          location: run.name,
+          counted,
+          ...(expectedAtCount === undefined
+            ? { setToCounted: true }
+            : { expectedAtCount, discrepancy: counted - expectedAtCount }),
+          stockBefore: current,
+          stockAfter: target,
+          ...(expectedAtCount !== undefined && current !== expectedAtCount
+            ? { soldDuringCount: expectedAtCount - current }
+            : {}),
+        },
+      });
+      totalDelta += delta;
+      perLocationResult.push({ location: run.name, before: current, after: target });
+    }
+    if (totalDelta === 0) continue;
+    const before = Number(variant.stock_quantity) || 0;
+    // Units held for paid website orders are already out of the total; a
+    // count that finds fewer than are held floors at zero and shows up in the
+    // hourly location-drift check as an oversold website order.
+    const after = Math.max(0, before + totalDelta);
+    await client.query(
+      'UPDATE product_variants SET stock_quantity = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2',
+      [context.tenantId, variant.id, after],
+    );
+    await publishStockEvent(client, context.tenantId, variant.id, after);
+    touchedProducts.add(variant.product_id);
+    applied.push({ sku: variant.sku, discrepancy: totalDelta, stockBefore: before, stockAfter: after, locations: perLocationResult });
+  }
+}
+
 async function cancelStocktake(context, stocktakeId) {
   assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can cancel a stocktake.');
   const id = uuid(stocktakeId, 'stocktakeId');
@@ -794,6 +906,16 @@ async function getStocktake(context, stocktakeId) {
        FROM stocktake_location_counts WHERE stocktake_id = $1`,
     [id],
   );
+  const expectedRows = hideExpected ? { rows: [] } : await db.pool.query(
+    `SELECT location_id, variant_id, expected_quantity FROM stocktake_location_expected WHERE stocktake_id = $1`,
+    [id],
+  );
+  const expectedByVariant = new Map();
+  for (const exp of expectedRows.rows) {
+    const values = expectedByVariant.get(exp.variant_id) || {};
+    values[exp.location_id] = Number(exp.expected_quantity);
+    expectedByVariant.set(exp.variant_id, values);
+  }
   const countsByVariant = new Map();
   for (const count of locationCounts.rows) {
     const values = countsByVariant.get(count.variant_id) || {};
@@ -823,6 +945,9 @@ async function getStocktake(context, stocktakeId) {
       countedAt: line.counted_at,
       note: line.note,
       locationCounts: countsByVariant.get(line.variant_id) || {},
+      // Per-location expected, when the count started with stock per location
+      // on; null otherwise (and while a blind count is open).
+      expectedByLocation: hideExpected ? null : (expectedByVariant.get(line.variant_id) || null),
     })),
     locations: locationRuns.rows.map((location) => ({
       locationId: location.location_id,

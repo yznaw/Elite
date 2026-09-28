@@ -62,7 +62,18 @@ const restockRequestLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, handler: jsonRateLimitHandler,
 });
 
+// Settings → Notifications "Send test email": a real send per click, so keep
+// it from being used to spam an address.
+const notificationTestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: process.env.NODE_ENV === 'test' ? 1000 : 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler,
+});
+
 module.exports = {
+  notificationTestLimiter,
   restockRequestLimiter,
   authAttemptLimiter,
   posPinLimiter,

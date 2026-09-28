@@ -8,6 +8,7 @@
 const db = require('../../db/client');
 const { logger } = require('../logger');
 const { sendAlert, isTestTenant } = require('../alerts');
+const { perLocationEnabled, findLocationDrift } = require('../location-stock');
 
 const INTERVAL_MS = 60 * 60 * 1000; // run hourly
 
@@ -62,6 +63,33 @@ async function runConsistencyCheck() {
         + `${lines.join('\n')}\n\n`
         + 'Nothing has been repaired automatically — only a human with the real sales history can decide '
         + 'the correct value. Review under Reports → Inventory movement.',
+      );
+    }
+
+    // Per-location stock (046): the sellable total must equal what the
+    // locations hold minus unallocated website holds. An offline POS sale that
+    // oversold is the one expected way to land here, and it is already a sync
+    // conflict; anything else is a writer that skipped location-stock.js.
+    if (!(await perLocationEnabled(db.pool, tenant.id))) continue;
+    const locationDrift = await findLocationDrift(db.pool, tenant.id);
+    if (locationDrift.length > 0) {
+      const locationLines = locationDrift.map(
+        (r) => `${r.sku}: total=${r.stock} locations=${r.locationTotal} held=${r.held}`,
+      );
+      logger.warn(
+        { tenant: tenant.slug, driftedCount: locationDrift.length, drifted: locationLines },
+        'location stock drift detected (sellable total does not equal location balances minus website holds)',
+      );
+      if (isTestTenant(tenant.slug)) continue;
+      await sendAlert(
+        `location-drift:${tenant.slug}`,
+        `${locationDrift.length} product variant(s) whose locations do not add up`,
+        `Tenant: ${tenant.slug}\n\n`
+        + 'For these variants the sellable total does not equal the stock held across locations minus '
+        + 'units held for unapproved website orders:\n\n'
+        + `${locationLines.join('\n')}\n\n`
+        + 'An offline POS sale that sold more than the branch had explains this and shows as a sync conflict. '
+        + 'Otherwise, count the item and correct it from Inventory. Nothing was changed automatically.',
       );
     }
   }

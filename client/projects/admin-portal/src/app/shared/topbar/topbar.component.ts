@@ -27,6 +27,7 @@ const META: Record<string, PageMeta> = {
   '/media':      { crumbKey: 'page.media.crumb',      titleKey: 'page.media.title' },
   '/storefront': { crumbKey: 'page.storefront.crumb', titleKey: 'page.storefront.title' },
   '/orders':     { crumbKey: 'page.orders.crumb',     titleKey: 'page.orders.title' },
+  '/inventory':  { crumbKey: 'page.inventory.crumb',  titleKey: 'page.inventory.title' },
   '/customers':  { crumbKey: 'page.customers.crumb',  titleKey: 'page.customers.title' },
   '/analytics':  { crumbKey: 'page.analytics.crumb',  titleKey: 'page.analytics.title' },
   '/expenses':   { crumbKey: 'page.expenses.crumb',   titleKey: 'page.expenses.title' },
@@ -507,7 +508,9 @@ export class TopbarComponent {
 
   readonly meta = computed<PageMeta>(() => {
     const u = this.url();
-    const path = '/' + (u.split('/')[1] || 'dashboard');
+    // Strip ?query and #hash first: /orders?id=… or /inventory?tab=… used to
+    // miss the map and fall back to the Dashboard title.
+    const path = '/' + (u.split(/[?#]/)[0].split('/')[1] || 'dashboard');
     return META[path] ?? META['/dashboard'];
   });
 }

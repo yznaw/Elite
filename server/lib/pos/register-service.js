@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../../db/client');
 const { audit, inTransaction, requireRegister } = require('./db');
 const { assertPos, nonEmpty, uuid } = require('./errors');
+const { registerLocationId } = require('../location-stock');
 
 const ENROLLMENT_TTL_MS = 15 * 60 * 1000;
 const RECEIPT_BLOCK_SIZE = 100;
@@ -565,7 +566,7 @@ async function currentRegister(context) {
     // getEffectiveBranchProfile, so the name shown on the till always
     // matches whichever branch actually prints on the receipt.
     const branchResult = await client.query(
-      `SELECT b.name
+      `SELECT b.id, b.name
          FROM pos_branches b
         WHERE b.tenant_id = $1
           AND b.id = COALESCE(
@@ -602,6 +603,11 @@ async function currentRegister(context) {
       displayName: register.display_name,
       status: register.status,
       branchName: branchResult.rows[0]?.name || null,
+      branchId: branchResult.rows[0]?.id || null,
+      // Stock per location: which location this till sells from (null while
+      // the switch is off). The POS reads its own branch's number from each
+      // stock.updated event with it.
+      locationId: await registerLocationId(client, context.tenantId, register.id),
       managerPinConfigured: Boolean(pinResult.rows[0]?.configured),
       shift: shiftResult.rowCount
         ? {

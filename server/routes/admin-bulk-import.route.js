@@ -25,6 +25,9 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { slugify, toCents } = require('./lib');
 const { storage } = require('../lib/storage');
 const { recordMovement, publishStockEvent, publishCatalogEvent } = require('../lib/inventory-ledger');
+const {
+  assertTotalOnlyWriteAllowed, perLocationEnabled, requireLocation, lockLocationQuantity, applyLocationDelta,
+} = require('../lib/location-stock');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 
 const router = Router();
@@ -313,6 +316,16 @@ router.post('/stock/preview', csvUpload.single('csv'), async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    // Stock per location: a stock file sets the numbers of ONE location,
+    // chosen on upload. Preview then compares against that location.
+    let location = null;
+    if (await perLocationEnabled(client, tenant.id)) {
+      const locationId = String(req.body?.locationId || '').trim();
+      if (!/^[0-9a-f-]{36}$/i.test(locationId)) {
+        return res.status(422).json({ success: false, code: 'LOCATION_REQUIRED', message: 'Choose which location this stock file is for.' });
+      }
+      location = await requireLocation(client, tenant.id, locationId);
+    }
     const skus = parsed.rows.filter(row => row.sku).map(row => row.sku);
     const existing = await client.query(
       `SELECT DISTINCT ON (input.input_sku)
@@ -332,6 +345,14 @@ router.post('/stock/preview', csvUpload.single('csv'), async (req, res) => {
       [tenant.id, skus],
     );
     const bySku = new Map(existing.rows.map(row => [row.input_sku, row]));
+    if (location && existing.rows.length) {
+      const balances = await client.query(
+        `SELECT variant_id, quantity FROM variant_location_stock WHERE location_id = $1 AND variant_id = ANY($2::uuid[])`,
+        [location.id, existing.rows.map(row => row.variant_id)],
+      );
+      const atLocation = new Map(balances.rows.map(row => [row.variant_id, Number(row.quantity)]));
+      for (const row of existing.rows) row.stock_quantity = atLocation.get(row.variant_id) ?? 0;
+    }
     const reviewed = parsed.rows.map(row => {
       const match = bySku.get(row.sku);
       const errors = [...row.errors];
@@ -352,7 +373,10 @@ router.post('/stock/preview', csvUpload.single('csv'), async (req, res) => {
        VALUES ($1,$2,'stock',$3,$4,'review_ready',$5::jsonb,$6::jsonb,now(),now()) RETURNING id`,
       [tenant.id, req.user?.id || null, req.file.originalname || 'stock.csv',
        crypto.createHash('sha256').update(req.file.buffer).digest('hex'), JSON.stringify(reviewed),
-       JSON.stringify({ total: reviewed.length, valid: reviewed.length - errorCount, failed: errorCount })],
+       JSON.stringify({
+         total: reviewed.length, valid: reviewed.length - errorCount, failed: errorCount,
+         ...(location ? { locationId: location.id, locationName: location.name } : {}),
+       })],
     );
     for (const row of reviewed) {
       const item = {
@@ -369,6 +393,7 @@ router.post('/stock/preview', csvUpload.single('csv'), async (req, res) => {
       jobId: job.rows[0].id,
       rows: reviewed,
       summary: { total: reviewed.length, valid: reviewed.length - errorCount, failed: errorCount },
+      location: location ? { id: location.id, name: location.name } : null,
       canCommit: errorCount === 0 && reviewed.length > 0,
     } });
   } finally {
@@ -395,6 +420,12 @@ router.post('/stock/:id/commit', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: 'This stock review was already committed.' });
     }
+    const perLocation = await perLocationEnabled(client, tenant.id);
+    const fileLocationId = job.summary?.locationId || null;
+    if (perLocation && !fileLocationId) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'LOCATION_REQUIRED', message: 'This file was reviewed before stock per location was on. Upload it again and choose its location.' });
+    }
     const rows = job.source_rows || [];
     if (!rows.length || rows.some(row => Array.isArray(row.errors) && row.errors.length)) {
       await client.query('ROLLBACK');
@@ -405,7 +436,64 @@ router.post('/stock/:id/commit', async (req, res) => {
     await client.query('DELETE FROM catalog_import_items WHERE job_id=$1', [job.id]);
     const changedProducts = new Set();
     let updated = 0;
-    for (const row of rows) {
+    // Take every row lock up front in variant-id order (the order every stock
+    // writer uses), instead of in file order inside the loop, so a commit
+    // cannot deadlock against a till sale touching the same variants.
+    await client.query(
+      'SELECT id FROM product_variants WHERE tenant_id = $1 AND sku = ANY($2::text[]) ORDER BY id FOR UPDATE',
+      [tenant.id, rows.map((row) => row.sku)],
+    );
+    const fileLocation = perLocation ? await requireLocation(client, tenant.id, fileLocationId) : null;
+    if (fileLocation) {
+      // Row locks in id order, taken from the variant ids the review matched
+      // (SKU aliases included).
+      await client.query(
+        'SELECT id FROM product_variants WHERE tenant_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE',
+        [tenant.id, rows.map((row) => row.variantId).filter(Boolean)],
+      );
+    }
+    for (const row of fileLocation ? rows : []) {
+      // The file's number is the new quantity AT THIS LOCATION; the sellable
+      // total moves by the difference.
+      const variant = await client.query(
+        'SELECT id, product_id, stock_quantity FROM product_variants WHERE tenant_id = $1 AND id = $2',
+        [tenant.id, row.variantId],
+      );
+      if (!variant.rowCount) throw new Error(`Variant SKU "${row.sku}" no longer exists.`);
+      const before = await lockLocationQuantity(client, tenant.id, row.variantId, fileLocation.id);
+      const delta = Number(row.stock) - before;
+      const totalBefore = Number(variant.rows[0].stock_quantity);
+      if (totalBefore + delta < 0) {
+        const err = new Error(`${row.sku}: some units are held for paid website orders, so it cannot go that low.`);
+        err.status = 409;
+        err.code = 'STOCK_HELD';
+        throw err;
+      }
+      if (delta !== 0) {
+        await applyLocationDelta(client, tenant.id, { variantId: row.variantId, locationId: fileLocation.id, delta, sku: row.sku });
+        await client.query(
+          'UPDATE product_variants SET stock_quantity = stock_quantity + $2, updated_at = now() WHERE id = $1',
+          [row.variantId, delta],
+        );
+        await recordMovement(client, { tenantId: tenant.id, userId: req.user?.id || null }, {
+          productId: variant.rows[0].product_id,
+          variantId: row.variantId,
+          delta,
+          reason: 'bulk_import',
+          referenceType: 'stock_import',
+          referenceId: job.id,
+          locationId: fileLocation.id,
+          metadata: { sku: row.sku, location: fileLocation.name, previousStock: before, newStock: Number(row.stock), importJobId: job.id },
+        });
+        await publishStockEvent(client, tenant.id, row.variantId, totalBefore + delta);
+      }
+      changedProducts.add(variant.rows[0].product_id);
+      updated++;
+      await saveImportItem(client, job.id, row.sku, [row], {
+        name: row.sku, status: 'updated', currentStock: before, newStock: Number(row.stock),
+      });
+    }
+    for (const row of fileLocation ? [] : rows) {
       const changed = await client.query(
         `UPDATE product_variants pv
             SET stock_quantity=$1, updated_at=now()
@@ -1253,6 +1341,9 @@ router.post('/', csvUpload.single('csv'), async (req, res) => {
           const previousStock = previousStockBySku.get(row.variantSku) ?? 0;
           const newStock = Number(varResult.rows[0].stock_quantity) || 0;
           const stockDelta = newStock - previousStock;
+          // Any stock change (a new variant created with stock included) needs
+          // a location while per-location stock is on.
+          if (stockDelta !== 0) await assertTotalOnlyWriteAllowed(client, tenant.id, 'Importing stock');
           if (stockDelta !== 0) {
             await recordMovement(client, { tenantId: tenant.id, userId }, {
               productId,

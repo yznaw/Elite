@@ -406,6 +406,16 @@ Then the client side: `SaveProductPayload` and `Product` in `admin-portal`, `For
 
 Verify in the browser in **both languages** — RTL is where a new layout usually breaks first.
 
+### Write Stock From New Code
+
+Any code that changes `product_variants.stock_quantity` must, in the same transaction:
+
+1. Lock the variant rows ordered by id (`ORDER BY id FOR UPDATE`). Lock location rows only after that.
+2. Write an `inventory_movements` row through `recordMovement()` (`server/lib/inventory-ledger.js`).
+3. When `perLocationEnabled()` is true, move the matching location balance through `applyLocationDelta()` (`server/lib/location-stock.js`) and pass its `locationId` to `recordMovement()`. If the code cannot know the location, call `assertTotalOnlyWriteAllowed()` so it refuses instead of drifting.
+
+`server/test/location-stock-e2e.test.js` asserts `findLocationDrift()` is empty after every operation; add your path there.
+
 ### Add a Field to a Product Variant
 
 A variant field spans two routes and two apps. Miss one of the SQL selects and the value saves but never comes back, which looks identical to it not saving at all. `note_en` / `note_ar` (migration 031) is the worked example to copy.

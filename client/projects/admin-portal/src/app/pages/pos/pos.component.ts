@@ -40,6 +40,9 @@ import { I18nService } from '../../services/i18n.service';
 type PosPhase = 'loading' | 'enrollment' | 'resume-failed' | 'shift' | 'shift-recovery' | 'selling';
 type PaymentMethod = PosPaymentMethod;
 interface CartLine { item: PosCatalogItem; quantity: number }
+/** A stock change for one variant: from a sale result, or a live event that
+ *  (with stock per location on) carries every location's balance. */
+interface StockUpdate { variantId: string; stock: number; total?: number; locations?: Record<string, number>; held?: number }
 interface ProductGroup {
   id: string;
   title: string;
@@ -202,6 +205,10 @@ export class PosComponent implements OnInit, OnDestroy {
   });
   readonly refColors = signal<RefColor[]>([]);
   private readonly posUpdateSafetyReady = signal(false);
+  // Stock per location: keep the names of other locations for live events,
+  // which only carry location ids.
+  private readonly locationNamesEffect = effect(() => this.rememberLocationNames(this.products()));
+
   private readonly posUpdateSafetyEffect = effect(() => {
     setPosServiceWorkerUpdateSafe(
       this.posUpdateSafetyReady()
@@ -2147,6 +2154,11 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   stockGaugeLabel(item: PosCatalogItem): string {
+    // Stock per location: the number is this branch's, so say so.
+    if (item.availability !== undefined || item.total !== undefined) {
+      if (item.stock <= 0) return (item.availability?.length ?? 0) > 0 ? 'None here' : 'Sold out';
+      return `${item.stock} here`;
+    }
     if (item.stock <= 0) return 'Sold out';
     if (item.stock <= 3) return 'Low';
     return 'In stock';
@@ -2349,9 +2361,16 @@ export class PosComponent implements OnInit, OnDestroy {
     this.eventSource = new EventSource(this.pos.eventUrl, { withCredentials: true });
     this.eventSource.addEventListener('stock.updated', (event) => {
       try {
-        const payload = JSON.parse((event as MessageEvent<string>).data) as { variantId?: string; stock?: number };
+        const payload = JSON.parse((event as MessageEvent<string>).data) as {
+          variantId?: string; stock?: number; locations?: Record<string, number>; held?: number;
+        };
         if (payload.variantId && Number.isSafeInteger(payload.stock)) {
-          this.applyStockUpdates([{ variantId: payload.variantId, stock: Number(payload.stock) }]);
+          this.applyStockUpdates([{
+            variantId: payload.variantId,
+            stock: Number(payload.stock),
+            locations: payload.locations,
+            held: payload.held,
+          }]);
         }
       } catch {
         // A malformed event is ignored; the next catalog refresh remains authoritative.
@@ -2385,10 +2404,50 @@ export class PosComponent implements OnInit, OnDestroy {
     }
   }
 
-  private applyStockUpdates(updates: Array<{ variantId: string; stock: number }>): void {
-    const byVariant = new Map(updates.map((update) => [update.variantId, update.stock]));
-    this.products.update((products) => products.map((product) => byVariant.has(product.variantId)
-      ? { ...product, stock: byVariant.get(product.variantId) ?? product.stock }
+  /** Location id -> name, learned from every availability list the server sends. */
+  private readonly locationNames = new Map<string, string>();
+
+  private rememberLocationNames(products: PosCatalogItem[]): void {
+    for (const product of products) {
+      for (const entry of product.availability ?? []) this.locationNames.set(entry.locationId, entry.name);
+    }
+  }
+
+  /**
+   * Stock per location: turn an event's per-location balances into this
+   * till's number plus "where else", keeping the names the server sent.
+   */
+  private branchView(update: StockUpdate): Partial<PosCatalogItem> {
+    const myLocation = this.register()?.locationId;
+    if (!update.locations || !myLocation) return { stock: update.stock };
+    const here = update.locations[myLocation] ?? 0;
+    return {
+      stock: Math.min(here, update.stock),
+      total: update.stock,
+      heldOnline: update.held ?? 0,
+      availability: Object.entries(update.locations)
+        .filter(([id, qty]) => id !== myLocation && qty > 0)
+        .map(([id, qty]) => ({ locationId: id, name: this.locationNames.get(id) ?? 'Other location', quantity: qty }))
+        .sort((a, b) => b.quantity - a.quantity),
+    };
+  }
+
+  /** "Store 2: 1 · Warehouse: 3" for a size this branch does not have. */
+  elsewhereLabel(item: PosCatalogItem): string {
+    return (item.availability ?? []).map((entry) => `${entry.name}: ${entry.quantity}`).join(' · ');
+  }
+
+  groupAvailableElsewhere(group: { items: PosCatalogItem[] }): boolean {
+    return group.items.some((item) => (item.availability?.length ?? 0) > 0);
+  }
+
+  private applyStockUpdates(updates: StockUpdate[]): void {
+    // Sale/refund results already carry this till's number (`stock`); events
+    // carry per-location balances instead and go through branchView.
+    const views = new Map(updates.map((update) => [update.variantId, update.locations ? this.branchView(update) : { stock: update.stock }]));
+    const byVariant = new Map([...views].map(([id, view]) => [id, view.stock ?? 0]));
+    this.products.update((products) => products.map((product) => views.has(product.variantId)
+      ? { ...product, ...views.get(product.variantId) }
       : product));
     this.cart.update((lines) => lines.flatMap((line) => {
       const stock = byVariant.get(line.item.variantId);
