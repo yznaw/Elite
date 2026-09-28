@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { PosBusinessProfile } from './pos.service';
+import { POS_PAYMENT_LABELS, PosBusinessProfile, PosPaymentMethod } from './pos.service';
 
 export interface PosReceiptLine {
   name: string;
@@ -26,9 +26,9 @@ export interface PosReceiptData {
   cashierName?: string;
   registerId?: string;
   registerName?: string;
-  paymentMethod?: 'cash' | 'card';
-  method?: 'cash' | 'card';
-  terminalReference?: string;
+  paymentMethod?: PosPaymentMethod;
+  method?: PosPaymentMethod;
+  terminalReference?: string | null;
   items?: PosReceiptLine[];
   subtotalCents?: number;
   taxCents?: number;
@@ -53,6 +53,8 @@ export interface PosRenderedReceipt {
 /** Z-report print data — a cash/sales summary, not a per-item receipt. */
 export interface PosZReportPrintData {
   zReportId: string;
+  /** Z-DDMM-YYYY-NNN (migration 044); older reports fall back to the id. */
+  zNumber?: string | null;
   registerName?: string | null;
   branchName?: string | null;
   cashierName?: string | null;
@@ -61,6 +63,8 @@ export interface PosZReportPrintData {
   grossSalesCents: number;
   cashSalesCents: number;
   cardSalesCents: number;
+  /** Absent on Z-reports saved before Sadad was added. */
+  sadadSalesCents?: number;
   refundTotalCents: number;
   voidTotalCents: number;
   netSalesCents: number;
@@ -248,6 +252,11 @@ export class PosReceiptRenderer {
     ctx.textAlign = 'center';
     this.fillTextTracked(ctx, 'Z REPORT', centerX, y, 3);
     y += 26;
+    if (report.zNumber) {
+      ctx.font = `600 15px ${this.bodyFont}`;
+      ctx.fillText(report.zNumber, centerX, y);
+      y += 22;
+    }
     ctx.font = `13px ${this.bodyFont}`;
     ctx.fillStyle = this.inkMuted;
     ctx.fillText(this.formatQatarDateTime(report.createdAt), centerX, y);
@@ -269,6 +278,7 @@ export class PosReceiptRenderer {
     y = this.columns(ctx, 'Gross sales', this.money(report.grossSalesCents), y);
     y = this.columns(ctx, 'Cash sales', this.money(report.cashSalesCents), y);
     y = this.columns(ctx, 'Card sales', this.money(report.cardSalesCents), y);
+    y = this.columns(ctx, 'Sadad sales', this.money(report.sadadSalesCents ?? 0), y);
     y = this.columns(ctx, 'Refunds', this.money(-report.refundTotalCents), y);
     y = this.columns(ctx, 'Voids', this.money(-report.voidTotalCents), y);
     y += 4;
@@ -317,7 +327,7 @@ export class PosReceiptRenderer {
     this.fillTextTracked(ctx, 'END OF Z REPORT', centerX, y, 1.2);
     y += 20;
     ctx.font = `12px ${this.bodyFont}`;
-    ctx.fillText(`ID ${report.zReportId}`, centerX, y);
+    ctx.fillText(report.zNumber || `ID ${report.zReportId}`, centerX, y);
     y += 20;
 
     return y;
@@ -626,13 +636,14 @@ export class PosReceiptRenderer {
       ctx,
       'Payment',
       'طريقة الدفع',
-      String(receipt.paymentMethod || receipt.method || '').toUpperCase(),
+      this.paymentMethodEn(receipt.paymentMethod || receipt.method).toUpperCase(),
       y,
       false,
       this.paymentMethodAr(receipt.paymentMethod || receipt.method),
     );
     if (receipt.terminalReference) {
-      y = this.bilingualValue(ctx, 'Terminal ref', 'مرجع الدفع', receipt.terminalReference, y, false);
+      const sadad = (receipt.paymentMethod || receipt.method) === 'sadad';
+      y = this.bilingualValue(ctx, sadad ? 'Sadad ref' : 'Terminal ref', sadad ? 'مرجع سداد' : 'مرجع الدفع', receipt.terminalReference, y, false);
     }
     if (!correctionKind && (receipt.paymentMethod || receipt.method) === 'cash') {
       y = this.bilingualValue(ctx, 'Tendered', 'المبلغ المدفوع', this.money(receipt.amountTenderedCents ?? 0), y, false);
@@ -991,9 +1002,14 @@ export class PosReceiptRenderer {
     return value.replace(/\d/g, (digit) => '٠١٢٣٤٥٦٧٨٩'[Number(digit)]);
   }
 
-  private paymentMethodAr(method?: 'cash' | 'card'): string {
+  private paymentMethodEn(method?: PosPaymentMethod): string {
+    return method ? POS_PAYMENT_LABELS[method] ?? String(method) : '';
+  }
+
+  private paymentMethodAr(method?: PosPaymentMethod): string {
     if (method === 'cash') return 'نقداً';
     if (method === 'card') return 'بطاقة';
+    if (method === 'sadad') return 'سداد';
     return 'غير محدد';
   }
 

@@ -177,6 +177,48 @@ test('admin products: create, save, duplicate and delete never touch the wrong d
     const active = await db.query('SELECT status, name FROM products WHERE id = $1', [idA]);
     assert.equal(active.rows[0].status, 'active');
     assert.equal(active.rows[0].name, productA.name);
+
+    // ── The product price follows the cheapest size ────────────────────────
+    //
+    // It is a fallback for variants with no price, the value a new size is created with, and
+    // the admin list's sort key. Typed by hand it drifted: live products advertised a price
+    // no size had. The server now derives it, as it already does for stock.
+    const basePrice = async () => Number(
+      (await db.query('SELECT base_price_cents FROM products WHERE id = $1', [idA])).rows[0].base_price_cents,
+    );
+    const priced = await patch(idA, {
+      ...productA,
+      // A deliberately wrong product price, as a stale row would have.
+      price: 900,
+      variants: [
+        { sku: `${skuA}-40`, size: '40', color: 'Black', price: 500, stock: 2 },
+        { sku: `${skuA}-41`, size: '41', color: 'Black', price: 700, stock: 2 },
+      ],
+    });
+    assert.equal(priced.response.status, 200);
+    assert.equal(await basePrice(), 50000, 'the product price is the cheapest size, not what was sent');
+
+    // Re-pricing the cheapest size moves it again.
+    await patch(idA, {
+      ...productA,
+      price: 900,
+      variants: [
+        { sku: `${skuA}-40`, size: '40', color: 'Black', price: 650, stock: 2 },
+        { sku: `${skuA}-41`, size: '41', color: 'Black', price: 700, stock: 2 },
+      ],
+    });
+    assert.equal(await basePrice(), 65000);
+
+    // A product whose sizes carry no price of their own keeps the price it was sent: that
+    // value is what those variants are sold at.
+    const skuB = `AUD-B-${runId}`;
+    const plain = await post({
+      name: `Audit Plain ${runId}`, brand: 'Elite', sku: skuB, price: 820, hidden: false,
+      variants: [{ sku: `${skuB}-40`, size: '40', color: 'Black', price: 0, stock: 1 }],
+    });
+    assert.equal(plain.response.status, 201);
+    const plainPrice = await db.query('SELECT base_price_cents FROM products WHERE id = $1', [plain.body.data.id]);
+    assert.equal(Number(plainPrice.rows[0].base_price_cents), 82000);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (tenantId) await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]).catch(() => undefined);

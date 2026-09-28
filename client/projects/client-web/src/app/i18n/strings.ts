@@ -55,6 +55,7 @@ const EN = {
   'common.scroll': 'Scroll',
   'common.dragRotate': 'Drag · Rotate · Explore',
   'common.currency.qar': 'QAR',
+  'common.priceRange': '{currency} {min} – {max}',
   'common.dot': '·',
 
   // ─────────────────────────────────────────────────────────────────────
@@ -115,6 +116,7 @@ const EN = {
   'home.hero.colours': 'Available colours',
   'home.hero.colourOption': 'Preview {colour}',
   'home.hero.moreColours': '{count} more colours, view all',
+  'collection.card.moreColours': '{count} more colours, view the product',
   'home.hero.shopStyle': 'Shop this style',
   'home.hero.previous': 'Previous product',
   'home.hero.next': 'Next product',
@@ -197,6 +199,8 @@ const EN = {
   'collection.filters.reset': 'Reset filters',
   'collection.filter.category': 'Categories',
   'collection.filter.price': 'Price',
+  'collection.filter.priceUnder': 'Under {price}',
+  'collection.filter.priceOver': '{price} and above',
   'collection.filter.color': 'Colors',
   'collection.filter.leather': 'Leather',
   'collection.filter.material': 'Materials',
@@ -228,9 +232,8 @@ const EN = {
   'collection.aria.expandAll': 'Expand all filters',
   'collection.aria.collapseAll': 'Collapse all filters',
   'collection.aria.availableColors': 'Available colors',
-  'collection.aria.pages': 'Collection pages',
-  'collection.aria.previousPage': 'Previous page',
-  'collection.aria.nextPage': 'Next page',
+  'collection.loadMore': 'Load more',
+  'collection.showingCount': 'Showing {shown} of {total}',
 
   // ─────────────────────────────────────────────────────────────────────
   //  Product page
@@ -596,6 +599,7 @@ const AR: Record<keyof typeof EN, string> = {
   'common.scroll': 'مرّر',
   'common.dragRotate': 'اسحب · دوّر · استكشف',
   'common.currency.qar': 'ر.ق',
+  'common.priceRange': 'من {min} إلى {max} {currency}',
   'common.dot': '·',
 
   // Cart
@@ -650,6 +654,7 @@ const AR: Record<keyof typeof EN, string> = {
   'home.hero.colours': 'الألوان المتوفرة',
   'home.hero.colourOption': 'معاينة لون {colour}',
   'home.hero.moreColours': '{count} ألوان إضافية، اعرض الكل',
+  'collection.card.moreColours': '{count} ألوان إضافية، افتح صفحة المنتج',
   'home.hero.shopStyle': 'تسوّق هذا التصميم',
   'home.hero.previous': 'المنتج السابق',
   'home.hero.next': 'المنتج التالي',
@@ -722,6 +727,8 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.filters.reset': 'إعادة ضبط التصفية',
   'collection.filter.category': 'الفئات',
   'collection.filter.price': 'السعر',
+  'collection.filter.priceUnder': 'أقل من {price}',
+  'collection.filter.priceOver': '{price} فأكثر',
   'collection.filter.color': 'الألوان',
   'collection.filter.leather': 'الجلد',
   'collection.filter.material': 'الخامات',
@@ -750,9 +757,8 @@ const AR: Record<keyof typeof EN, string> = {
   'collection.aria.expandAll': 'توسيع كل التصفيات',
   'collection.aria.collapseAll': 'طيّ كل التصفيات',
   'collection.aria.availableColors': 'الألوان المتوفرة',
-  'collection.aria.pages': 'صفحات المجموعة',
-  'collection.aria.previousPage': 'الصفحة السابقة',
-  'collection.aria.nextPage': 'الصفحة التالية',
+  'collection.loadMore': 'عرض المزيد',
+  'collection.showingCount': 'عرض {shown} من {total}',
 
   // Product
   'product.breadcrumb.collection': 'المجموعة',

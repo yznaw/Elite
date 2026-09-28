@@ -19,7 +19,7 @@ const {
   setDeviceRegisterCookie,
 } = require('../lib/pos/device-cookie');
 const { setManagerPin, verifyManagerPin } = require('../lib/pos/manager-service');
-const { closeShift, currentSummary, getZReport, listZReports, openShift } = require('../lib/pos/shift-service');
+const { closeShift, currentSummary, getZReport, getZReportItems, listZReports, openShift } = require('../lib/pos/shift-service');
 const { listCashMovements, recordCashMovement } = require('../lib/pos/cash-movement-service');
 const { createSale, findByBarcode, listProductFilters, loadSale, searchProducts } = require('../lib/pos/sale-service');
 const { reportSyncState, syncTransactions } = require('../lib/pos/sync-service');
@@ -226,6 +226,10 @@ router.get('/shifts/z-reports', asyncHandler(async (req, res) => {
 
 router.get('/shifts/z-reports/:id', asyncHandler(async (req, res) => {
   ok(res, await getZReport(context(req), req.params.id));
+}));
+
+router.get('/shifts/z-reports/:id/items', asyncHandler(async (req, res) => {
+  ok(res, await getZReportItems(context(req), req.params.id));
 }));
 
 router.post('/cash-movements', asyncHandler(async (req, res) => {

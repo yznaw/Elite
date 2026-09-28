@@ -1376,8 +1376,8 @@ export class HomeContentComponent implements OnInit {
       try {
         const files = await this.mediaApi.list();
         this.mediaFiles.set(files);
-      } catch {
-        this.toast.error('Could not load media library', 'Check your connection and try again.');
+      } catch (caught) {
+        this.toast.errorFrom(caught, 'Could not load media library', 'Check your connection and try again.');
       } finally {
         this.mediaLoading.set(false);
       }
@@ -1421,8 +1421,8 @@ export class HomeContentComponent implements OnInit {
       const normalized = this.normalizeContentImages(data);
       this.content.set(normalized);
       this.savedSnapshot.set(JSON.stringify(normalized));
-    } catch {
-      this.toast.warning('Using default content', 'The API content could not be loaded.');
+    } catch (caught) {
+      this.toast.warningFrom(caught, 'Using default content', 'The API content could not be loaded.');
     }
   }
 
@@ -1627,8 +1627,8 @@ export class HomeContentComponent implements OnInit {
       this.content.set(normalized);
       this.savedSnapshot.set(JSON.stringify(normalized));
       this.toast.success('Home content saved', 'The customer home page will use this layout content.');
-    } catch {
-      this.toast.error('Save failed', 'Please check the content fields and try again.');
+    } catch (caught) {
+      this.toast.errorFrom(caught, 'Save failed', 'Please check the content fields and try again.');
     } finally {
       this.saving.set(false);
     }
@@ -1642,8 +1642,8 @@ export class HomeContentComponent implements OnInit {
       this.content.set(normalized);
       this.savedSnapshot.set(JSON.stringify(normalized));
       this.toast.info('Home content reset', 'The default hero and grid content has been restored.');
-    } catch {
-      this.toast.error('Reset failed', 'The default content could not be restored.');
+    } catch (caught) {
+      this.toast.errorFrom(caught, 'Reset failed', 'The default content could not be restored.');
     } finally {
       this.saving.set(false);
     }
@@ -1693,9 +1693,9 @@ export class HomeContentComponent implements OnInit {
           this.toast.success('Photo uploaded', `${file.name} is now used in the home layout.`);
         }
       },
-      error: () => {
+      error: (caught) => {
         this.uploadState.update((state) => ({ ...state, [key]: 'error' }));
-        this.toast.error('Upload failed', file.name);
+        this.toast.errorFrom(caught, 'Upload failed', file.name);
       },
     });
   }

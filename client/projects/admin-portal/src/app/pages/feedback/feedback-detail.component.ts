@@ -361,8 +361,8 @@ export class FeedbackDetailComponent implements OnInit {
         this.product.set(data.product);
         this.reviews.set(data.reviews);
       }
-    } catch {
-      this.toast.error(this.t('feedback.toast.loadError.title'), this.t('feedback.toast.reviewsError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('feedback.toast.loadError.title'), this.t('feedback.toast.reviewsError'));
     } finally {
       this.loading.set(false);
     }
@@ -430,8 +430,8 @@ export class FeedbackDetailComponent implements OnInit {
         p ? { ...p, reviewCount: p.reviewCount - 1 } : p,
       );
       this.toast.success(this.t('feedback.toast.deleted'), this.t('feedback.toast.deletedSub'));
-    } catch {
-      this.toast.error(this.t('error.unknown.title'), this.t('feedback.toast.deleteError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('error.unknown.title'), this.t('feedback.toast.deleteError'));
     }
   }
 }

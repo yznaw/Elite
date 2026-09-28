@@ -404,6 +404,7 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
       items: [
         // Excludes viewer, matching roleGuard(['owner','admin','manager','cashier']) on /pos.
         { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode', roles: ['owner', 'admin', 'manager', 'cashier'] },
+        { path: '/inventory',      labelKey: 'nav.inventory',      subKey: 'nav.inventory.sub',      icon: 'cube', roles: ['owner', 'admin', 'manager'] },
         // No cashier access, matching roleGuard(['owner','admin','manager']) on /reconciliation and /reports.
         { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale', roles: ['owner', 'admin', 'manager'] },
         { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv', roles: ['owner', 'admin', 'manager'] },

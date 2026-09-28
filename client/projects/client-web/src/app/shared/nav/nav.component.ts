@@ -2,6 +2,7 @@ import { Component, ElementRef, HostListener, computed, inject, signal, ChangeDe
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { Product } from '../../models/product.model';
+import { priceRange } from '../product-price';
 import { CartService } from '../../services/cart.service';
 import { I18nService } from '../../services/i18n.service';
 import { Locale, LocaleService } from '../../services/locale.service';
@@ -93,7 +94,7 @@ const FALLBACK_SEARCH_IMAGE =
                           <span class="search-copy">
                             <span class="search-name">{{ productName(item) }}</span>
                           </span>
-                          <span class="search-price">{{ price(item.price) }}</span>
+                          <span class="search-price">{{ productPrice(item) }}</span>
                         </button>
                       }
                     </div>
@@ -173,7 +174,7 @@ const FALLBACK_SEARCH_IMAGE =
                   </span>
                   <span class="mobile-search-copy">
                     <span class="mobile-search-name">{{ productName(item) }}</span>
-                    <small>{{ productStyle(item.style) }} · {{ price(item.price) }}</small>
+                    <small>{{ productStyle(item.style) }} · {{ productPrice(item) }}</small>
                   </span>
                 </button>
               } @empty {
@@ -882,6 +883,8 @@ export class NavComponent {
   private readonly router = inject(Router);
   readonly t = (key: string): string => this.i18n.t(key);
   readonly price = (value: number): string => this.i18n.price(value);
+  /** A result has no colour context, so it shows the product's span (one number when equal). */
+  readonly productPrice = (product: Product): string => this.i18n.priceSpan(priceRange(product));
   readonly productName = (product: Product): string => this.i18n.productName(product);
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
   readonly productStyle = (value: string): string => this.i18n.productStyle(value);
@@ -989,7 +992,10 @@ export class NavComponent {
       ...(product.colors || []),
       product.material,
       ...(product.materials || []),
-      product.price,
+      // Both ends, so typing the price a customer actually saw finds the product even when
+      // that price belongs to one variant.
+      priceRange(product).min,
+      priceRange(product).max,
     ].filter(Boolean).join(' '));
   }
 

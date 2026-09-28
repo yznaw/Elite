@@ -2,8 +2,19 @@ const { kickRestockDispatch } = require('../restock-dispatch-job');
 const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
-const { claimReceipt, loadSale } = require('./sale-service');
+const { POS_PAYMENT_METHODS, claimReceipt, loadSale, paymentReference } = require('./sale-service');
 const { recordMovement } = require('../inventory-ledger');
+const { perLocationEnabled, locationForBranch, applyLocationDelta, stockEventPayload } = require('../location-stock');
+
+/**
+ * Where returned units go when per-location stock is on: back to the branch
+ * that sold them (client decision 2026-09-26). A unit physically returned at
+ * another shop is then moved with a transfer. Null while the switch is off.
+ */
+async function returnLocationFor(client, tenantId, transaction) {
+  if (!(await perLocationEnabled(client, tenantId))) return null;
+  return locationForBranch(client, tenantId, transaction.branch_id);
+}
 
 async function updateProductTotals(client, tenantId, productIds) {
   if (!productIds.size) return;
@@ -25,7 +36,7 @@ async function publishStock(client, context, variantId, stock) {
   await client.query(
     `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
      VALUES ($1, NULL, 'stock.updated', $2::jsonb)`,
-    [context.tenantId, JSON.stringify({ variantId, stock, sourceRegisterId: context.registerId })],
+    [context.tenantId, JSON.stringify({ ...(await stockEventPayload(client, context.tenantId, variantId, stock)), sourceRegisterId: context.registerId })],
   );
 }
 
@@ -127,6 +138,7 @@ async function voidTransaction(context, transactionIdValue, body) {
     );
     const stockRestored = [];
     const products = new Set();
+    const returnLocationId = await returnLocationFor(client, context.tenantId, transaction);
     for (const item of items.rows) {
       if (!item.variant_id) continue;
       const stock = await client.query(
@@ -136,7 +148,14 @@ async function voidTransaction(context, transactionIdValue, body) {
       );
       if (stock.rowCount) {
         const value = Number(stock.rows[0].stock_quantity);
-        stockRestored.push({ variantId: item.variant_id, stock: value });
+        let branchAfter = null;
+        if (returnLocationId) {
+          const loc = await applyLocationDelta(client, context.tenantId, {
+            variantId: item.variant_id, locationId: returnLocationId, delta: item.quantity,
+          });
+          branchAfter = loc.after;
+        }
+        stockRestored.push({ variantId: item.variant_id, stock: branchAfter === null ? value : Math.min(branchAfter, value), total: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
         await recordMovement(client, context, {
@@ -147,6 +166,7 @@ async function voidTransaction(context, transactionIdValue, body) {
           referenceType: 'pos_void',
           referenceId: voidResult.rows[0].id,
           metadata: { originalTransactionId: transaction.id },
+          locationId: returnLocationId,
         });
       }
     }
@@ -276,14 +296,14 @@ async function createRefund(context, body) {
   const shiftId = uuid(body?.shiftId, 'shiftId');
   const receiptNumber = positiveInt(body?.receiptNumber, 'receiptNumber');
   const method = String(body?.refundMethod || '');
-  assertPos(['cash', 'card'].includes(method), 422, 'REFUND_METHOD_INVALID', 'Refund method must be cash or card.');
-  // Same reasoning as the original sale (sale-service.js): the card terminal
-  // here is standalone with no API link, so a card refund needs its own
-  // terminal action and the approval/reference code off that slip is the
-  // only proof it happened — required, not optional, mirroring the sale.
-  const terminalReference = method === 'card'
-    ? nonEmpty(body?.terminalReference, 'terminalReference', 80)
-    : null;
+  assertPos(POS_PAYMENT_METHODS.includes(method), 422, 'REFUND_METHOD_INVALID', 'Refund method must be cash, card or sadad.');
+  // Same reasoning as the original sale (sale-service.js): neither the card
+  // terminal nor Sadad has an API link, so a card or Sadad refund needs its
+  // own action there and the reference off that slip or the Sadad merchant
+  // app is the only proof it happened — required, mirroring the sale.
+  const terminalReference = method === 'cash'
+    ? null
+    : paymentReference(method, body?.terminalReference, 'terminalReference');
   const reason = nonEmpty(body?.reason, 'reason', 500);
   assertPos(Array.isArray(body?.lines) && body.lines.length > 0 && body.lines.length <= 100, 422, 'REFUND_LINES_INVALID', 'Refund must contain 1 to 100 lines.');
   const seen = new Set();
@@ -355,6 +375,7 @@ async function createRefund(context, body) {
     );
     assertPos(itemResult.rowCount === lines.length, 422, 'REFUND_ITEM_INVALID', 'One or more refund lines do not belong to the original sale.');
     const itemMap = new Map(itemResult.rows.map((item) => [item.id, item]));
+    const returnLocationId = await returnLocationFor(client, context.tenantId, transaction);
     let amountCents = 0;
     for (const line of lines) {
       const item = itemMap.get(line.transactionItemId);
@@ -418,7 +439,14 @@ async function createRefund(context, body) {
         );
         assertPos(stock.rowCount === 1, 409, 'REFUND_VARIANT_MISSING', `${item.product_name} variant no longer exists.`);
         const value = Number(stock.rows[0].stock_quantity);
-        stockUpdates.push({ variantId: item.variant_id, stock: value });
+        let branchAfter = null;
+        if (returnLocationId) {
+          const loc = await applyLocationDelta(client, context.tenantId, {
+            variantId: item.variant_id, locationId: returnLocationId, delta: line.quantity,
+          });
+          branchAfter = loc.after;
+        }
+        stockUpdates.push({ variantId: item.variant_id, stock: branchAfter === null ? value : Math.min(branchAfter, value), total: value });
         if (item.product_id) products.add(item.product_id);
         await publishStock(client, context, item.variant_id, value);
         await recordMovement(client, context, {
@@ -429,6 +457,7 @@ async function createRefund(context, body) {
           referenceType: 'pos_refund',
           referenceId: refund.id,
           metadata: { originalTransactionId: transaction.id },
+          locationId: returnLocationId,
         });
       }
     }

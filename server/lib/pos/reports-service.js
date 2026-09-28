@@ -1,4 +1,5 @@
 const db = require('../../db/client');
+const { buildZReportItems, isoDate, loadZReportRow } = require('./shift-service');
 
 // This server's Postgres session runs with TimeZone = Asia/Qatar already set
 // (confirmed via SHOW TIMEZONE — see card-reconciliation-service.js), so a
@@ -340,17 +341,19 @@ async function cashMovements(context, query) {
   });
 }
 
-/** Report 3: card settlement exceptions (from pos_card_reconciliation). */
+/** Report 3: card and Sadad settlement exceptions (from pos_card_reconciliation). */
 async function cardSettlementExceptions(context, query) {
   const { from, to, registerId } = parseFilters(query);
+  const method = ['card', 'sadad'].includes(query?.method) ? query.method : null;
   return withClient(async (client) => {
     const params = [context.tenantId];
     let where = `r.tenant_id = $1`;
     if (from) { params.push(from); where += ` AND r.business_date >= $${params.length}`; }
     if (to) { params.push(to); where += ` AND r.business_date <= $${params.length}`; }
     if (registerId) { params.push(registerId); where += ` AND r.register_id = $${params.length}`; }
+    if (method) { params.push(method); where += ` AND r.method = $${params.length}`; }
     const result = await client.query(
-      `SELECT r.id, r.business_date, r.register_id, pr.display_name AS register_name,
+      `SELECT r.id, r.method, r.business_date, r.register_id, pr.display_name AS register_name,
               r.pos_total_cents, r.settlement_total_cents, r.status, r.notes,
               r.resolved_by_user_id, au.full_name AS resolved_by_name, r.resolved_at
        FROM pos_card_reconciliation r
@@ -363,6 +366,7 @@ async function cardSettlementExceptions(context, query) {
     );
     return result.rows.map((r) => ({
       reconciliationId: r.id,
+      method: r.method,
       businessDate: r.business_date,
       registerId: r.register_id,
       registerName: r.register_name,
@@ -399,10 +403,13 @@ async function inventoryMovements(context, query) {
     );
     const movements = await client.query(
       `SELECT im.id, im.occurred_at, im.reason, im.delta, im.reference_type, im.reference_id,
-              p.name AS product_name, pv.sku
+              p.name AS product_name, pv.sku, sl.name AS location_name, u.full_name AS user_name,
+              im.metadata->>'adjustmentReason' AS adjustment_reason
        FROM inventory_movements im
        JOIN products p ON p.id = im.product_id
        LEFT JOIN product_variants pv ON pv.id = im.variant_id
+       LEFT JOIN stocktake_locations sl ON sl.id = im.location_id
+       LEFT JOIN admin_users u ON u.id = im.created_by_user_id
        WHERE ${where}
        ORDER BY im.occurred_at DESC
        LIMIT 500`,
@@ -426,6 +433,7 @@ async function inventoryMovements(context, query) {
       movements: movements.rows.map((r) => ({
         movementId: r.id, occurredAt: r.occurred_at, reason: r.reason, delta: Number(r.delta),
         referenceType: r.reference_type, referenceId: r.reference_id, productName: r.product_name, sku: r.sku,
+        locationName: r.location_name, userName: r.user_name, adjustmentReason: r.adjustment_reason,
       })),
       driftAlerts: drift.rows.map((r) => ({
         sku: r.sku, currentStock: Number(r.current_stock), baselineStock: Number(r.baseline_stock),
@@ -529,6 +537,8 @@ async function zReportHistory(context, query) {
     );
     return result.rows.map((row) => ({
       zReportId: row.id,
+      zNumber: row.z_number || null,
+      businessDate: isoDate(row.business_date),
       registerId: row.register_id,
       registerName: row.register_name,
       branchId: row.branch_id,
@@ -537,6 +547,7 @@ async function zReportHistory(context, query) {
       grossSalesCents: Number(row.gross_sales_cents),
       cashSalesCents: Number(row.cash_sales_cents),
       cardSalesCents: Number(row.card_sales_cents),
+      sadadSalesCents: Number(row.sadad_sales_cents || 0),
       refundTotalCents: Number(row.refund_total_cents),
       voidTotalCents: Number(row.void_total_cents),
       netSalesCents: Number(row.net_sales_cents),
@@ -556,7 +567,13 @@ async function zReportHistory(context, query) {
   });
 }
 
+/** Item breakdown of one closing for the back office (any register). */
+async function zReportItems(context, zReportId) {
+  return withClient(async (client) => buildZReportItems(client, await loadZReportRow(client, context.tenantId, zReportId)));
+}
+
 module.exports = {
+  zReportItems,
   dailySales,
   productSales,
   reportLocations,

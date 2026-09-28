@@ -190,12 +190,12 @@ test('unresponsive optional business profile cannot prevent printing', { timeout
   assert.equal(result, 1);
 });
 
-for (const method of ['cash', 'card']) {
+for (const method of ['cash', 'card', 'sadad']) {
   test(`${method} sale automatically prints once after the sale has committed and busy is released`, async () => {
     const result = await page.evaluate(async (method) => {
       const fixture = window.posPrinting.createComponent();
       fixture.component.paymentMethod = () => method;
-      fixture.component.terminalReference = method === 'card' ? 'approval-1001' : '';
+      fixture.component.terminalReference = { cash: '', card: 'approval-1001', sadad: 'SD-1001' }[method];
       await fixture.component.completeSale();
       return { prints: fixture.printCalls, counts: fixture.counts, saved: !!fixture.component.lastSale(), events: fixture.events };
     }, method);
@@ -207,6 +207,51 @@ for (const method of ['cash', 'card']) {
     assert.equal(result.events.length, 0);
   });
 }
+
+test('a Sadad sale without a valid transaction ID is held on the sheet, not posted', async () => {
+  const result = await page.evaluate(async () => {
+    const fixture = window.posPrinting.createComponent();
+    fixture.component.paymentMethod = () => 'sadad';
+    const outcomes = [];
+    for (const reference of ['', 'ab', 'has space']) {
+      fixture.component.terminalReference = reference;
+      await fixture.component.completeSale();
+      outcomes.push(fixture.component.paymentReferenceError());
+    }
+    return { outcomes, counts: fixture.counts, prints: fixture.printCalls.length };
+  });
+  assert.equal(result.counts.sales, 0);
+  assert.equal(result.prints, 0);
+  assert.ok(result.outcomes.every((message) => typeof message === 'string' && message.length > 0));
+});
+
+test('Sadad receipts name the tender and its reference in both languages', async () => {
+  const text = await page.evaluate(async () => {
+    const { createHardware, receipt } = window.posPrinting;
+    const { renderer } = createHardware();
+    const calls = [];
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function(value, ...args) {
+      calls.push(String(value));
+      return original.call(this, value, ...args);
+    };
+    try {
+      await renderer.render({ ...receipt, paymentMethod: 'sadad', terminalReference: 'SD-1001' }, {
+        tradeNameAr: 'مجموعة إيليت', tradeNameEn: 'Elite Collection', addressAr: '', addressEn: '', phone: '',
+        crLicenseNumber: '', returnPolicyAr: '', returnPolicyEn: '', footerStampAr: null, footerStampEn: null,
+        updatedAt: receipt.createdAt,
+      });
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = original;
+    }
+    return calls.join('\n');
+  });
+  assert.match(text, /SADAD/);
+  assert.match(text, /سداد/);
+  assert.match(text, /Sadad ref/);
+  assert.match(text, /SD-1001/);
+  assert.doesNotMatch(text, /Tendered/);
+});
 
 for (const kind of ['refund', 'void']) {
   test(`${kind} print failure is visible; retry prints the saved copy without another transaction or drawer pulse`, async () => {

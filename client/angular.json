@@ -107,7 +107,7 @@
             "browser": "projects/admin-portal/src/main.ts",
             "polyfills": ["zone.js"],
             "tsConfig": "projects/admin-portal/tsconfig.app.json",
-            "allowedCommonJsDependencies": ["qz-tray"],
+            "allowedCommonJsDependencies": ["qz-tray", "exceljs"],
             "assets": [
               "projects/admin-portal/src/favicon.ico",
               "projects/admin-portal/src/pos-sw.js",

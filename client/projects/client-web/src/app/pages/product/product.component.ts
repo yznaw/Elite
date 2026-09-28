@@ -15,6 +15,7 @@ import { SeoService } from '../../services/seo.service';
 import { API_BASE } from '../../core/api-base';
 
 import { sizeOptions, productSoldOut, defaultColor, colorStock, colorState, availableStock, selectedVariant, productColors, carriedSize } from '../../shared/stock-availability';
+import { displayPrice, priceRange, variantPrice } from '../../shared/product-price';
 import { SizeSheetComponent } from '../../shared/size-sheet/size-sheet.component';
 import { BodyScrollLock, MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
 import { RestockService } from '../../shared/restock/restock.service';
@@ -121,7 +122,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     ) || this.i18n.t('seo.product.description', {
       name,
       leather: this.i18n.productLeather(p.leather),
-      price: this.i18n.price(p.price),
+      price: this.i18n.price(priceRange(p).min),
     });
     const material = this.i18n.productLeather(p.leather).trim();
 
@@ -141,15 +142,27 @@ export class ProductComponent implements OnInit, OnDestroy {
         // Omitted rather than emitted empty: a blank property is worse than
         // an absent one, and not every product has a leather on record.
         ...(material ? { material } : {}),
-        offers: {
-          '@type': 'Offer',
-          price: p.price,
-          priceCurrency: 'QAR',
-          availability: inStock
+        // A product whose variants are priced differently is an AggregateOffer, not an
+        // Offer: a single `price` that disagrees with what the page and the checkout show
+        // is exactly what gets a product rejected from a merchant feed.
+        offers: (() => {
+          const spread = priceRange(p);
+          const url = `${this.seo.origin()}${this.productsSvc.productPath(p)}`;
+          const availability = inStock
             ? 'https://schema.org/InStock'
-            : 'https://schema.org/OutOfStock',
-          url: `${this.seo.origin()}${this.productsSvc.productPath(p)}`,
-        },
+            : 'https://schema.org/OutOfStock';
+          return spread.isRange
+            ? {
+              '@type': 'AggregateOffer',
+              lowPrice: spread.min,
+              highPrice: spread.max,
+              offerCount: (p.variants || []).filter((v) => v.isActive !== false).length,
+              priceCurrency: 'QAR',
+              availability,
+              url,
+            }
+            : { '@type': 'Offer', price: spread.min, priceCurrency: 'QAR', availability, url };
+        })(),
       },
     };
   });
@@ -377,6 +390,29 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
+
+  /**
+   * The price for what the customer has chosen: the colour's, narrowing to one size's once
+   * they pick a size. The page used to print the product's own price while the bag charged
+   * the variant's, so a product whose sizes ran 1,000 to 1,300 was advertised at 1,000.
+   */
+  readonly shownPrice = computed(() => {
+    const product = this.product();
+    if (!product) return null;
+    return displayPrice(product, this.selectedColor(), this.selectedSize());
+  });
+
+  readonly shownPriceLabel = computed(() => {
+    const span = this.shownPrice();
+    return span ? this.i18n.priceSpan(span) : '';
+  });
+
+  /** What the CTA charges: the chosen variant's price, or the cheapest on offer until then. */
+  readonly lineTotalLabel = computed(() => {
+    const span = this.shownPrice();
+    if (!span) return '';
+    return this.i18n.price(span.min * this.qty());
+  });
   readonly productName = (product: Product): string => this.i18n.productName(product);
 
   /**

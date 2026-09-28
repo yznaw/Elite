@@ -53,6 +53,13 @@ import { Order, QAR } from '../../models';
           <option value="delivered">{{ t('pill.delivered') }}</option>
           <option value="returned">{{ t('pill.returned') }}</option>
         </select>
+        @if (needsApprovalCount() > 0 || needsApprovalOnly()) {
+          <!-- Stock per location: paid website orders waiting for a pickup location. -->
+          <button type="button" class="chip approval-chip" [class.active]="needsApprovalOnly()" (click)="toggleNeedsApproval()">
+            {{ t('orders.needsApproval') }}
+            <span class="chip-count">{{ needsApprovalCount() }}</span>
+          </button>
+        }
       </div>
 
       <!-- Date range filter -->
@@ -135,7 +142,11 @@ import { Order, QAR } from '../../models';
                 </div>
               </ng-template>
               <ng-template apCellTpl="fulfillment" let-r>
-                <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
+                @if (r.needsApproval) {
+                  <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
+                } @else {
+                  <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
+                }
               </ng-template>
               <ng-template apCellTpl="actions" let-r>
                 <div class="row gap-sm" style="justify-content:flex-end;">
@@ -187,7 +198,11 @@ import { Order, QAR } from '../../models';
                 <div class="oc-row3">
                   <span class="oc-items muted">{{ o.itemsCount }} {{ o.itemsCount !== 1 ? t('orders.items') : t('orders.item') }}</span>
                   <span class="oc-total">{{ QAR(o.total) }}</span>
-                  <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
+                  @if (o.needsApproval) {
+                    <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
+                  } @else {
+                    <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
+                  }
                   <ap-pill [kind]="paymentPill(o.payment).kind">{{ t(paymentPill(o.payment).labelKey) }}</ap-pill>
                   @if (isStalePayment(o)) {
                     <span class="stale-warn" [title]="t('orders.payment.stalePendingTooltip')"><ap-icon name="warning" [size]="12"/></span>
@@ -222,6 +237,7 @@ import { Order, QAR } from '../../models';
     .date-range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
     .dr-pill { border: none; background: none; padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; color: var(--muted); transition: all 0.13s; }
     .dr-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .approval-chip { align-self: center; }
     .filter-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(2,70,56,.09); color: var(--green); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
     .filter-chip button { background: none; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; opacity: .6; }
     .filter-chip button:hover { opacity: 1; }
@@ -321,8 +337,8 @@ export class OrdersComponent implements OnInit, OnDestroy {
     try {
       const full = await this.ordersApi.get(id);
       this.active.set(full);
-    } catch {
-      this.toast.error(this.t('orders.deepLink.notFound.title'), id);
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('orders.deepLink.notFound.title'), id);
     }
   }
 
@@ -350,8 +366,10 @@ export class OrdersComponent implements OnInit, OnDestroy {
         to:          to || undefined,
         sort:        this.sort() ?? undefined,
         dir:         this.sortDir(),
+        needsApproval: this.needsApprovalOnly() || undefined,
       });
       this._ordersSignal.set(resp.orders);
+      this.needsApprovalCount.set(resp.needsApprovalCount ?? 0);
       this._serverTotal.set(resp.total);
       const active = this.active();
       if (active) {
@@ -398,6 +416,9 @@ export class OrdersComponent implements OnInit, OnDestroy {
   readonly search = signal('');
   readonly loadError = signal<string | null>(null);
   readonly paymentFilter = signal('all');
+  readonly needsApprovalOnly = signal(false);
+  readonly needsApprovalCount = signal(0);
+  toggleNeedsApproval(): void { this.needsApprovalOnly.update((v) => !v); this.page.set(0); void this.refreshOrders(); }
   readonly fulfillmentFilter = signal('all');
   readonly dateRange = signal<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
   /** null = the server's default order (newest first). */
@@ -491,6 +512,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
     this.search.set('');
     this.paymentFilter.set('all');
     this.fulfillmentFilter.set('all');
+    this.needsApprovalOnly.set(false);
     this.dateRange.set('all');
     this.dateFrom.set('');
     this.dateTo.set('');

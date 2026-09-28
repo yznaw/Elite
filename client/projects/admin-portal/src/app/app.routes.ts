@@ -125,12 +125,22 @@ export const routes: Routes = [
           import('./pages/reports/reports.component').then((m) => m.ReportsComponent),
       },
       {
+        // Stock per location: add stock, move it between locations. Cashiers
+        // have no access (client decision 2026-09-26).
+        path: 'inventory',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/inventory/inventory.component').then((m) => m.InventoryComponent),
+      },
+      {
         // Managers may enter physical counts; only owner/admin actions can
         // start, cancel, reopen or post the final stock adjustment.
         path: 'stocktake',
         canMatch: [roleGuard(['owner', 'admin', 'manager'])],
         loadComponent: () =>
           import('./pages/stocktake/stocktake.component').then((m) => m.StocktakeComponent),
+        // Leaving with typed counts that are not saved yet asks first.
+        canDeactivate: [(component: { canLeave?: () => boolean | Promise<boolean> }) => component.canLeave?.() ?? true],
       },
       {
         // Application errors (server, register browsers, CSP) and the audit

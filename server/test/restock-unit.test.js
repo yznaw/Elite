@@ -10,6 +10,9 @@ test('emails are bilingual, escaped, link the exact variant and include consent'
   const ar = buildRestockEmail({...n,locale:'ar'},'https://shop.example');
   assert.match(ar.html, /dir="rtl"/); assert.match(ar.subject,/حذاء/); assert.match(ar.text,/إلغاء الاشتراك/);
   assert.doesNotMatch(buildRestockEmail({...n,size:'ONE_SIZE'},'https://shop.example').text, /size=ONE_SIZE|size=0/);
+  // The alert is for one size, so it quotes that size's price, not the product's.
+  assert.match(buildRestockEmail({...n,variant_price_cents:13000},'https://shop.example').text, /130/);
+  assert.match(buildRestockEmail({...n,variant_price_cents:0},'https://shop.example').text, /120/, 'a product without variant pricing keeps its own price');
 });
 test('production mail refuses missing, malformed and localhost URLs', () => {
   for (const url of ['', 'bad', 'http://localhost:4200', 'http://127.0.0.1', 'http://[::1]', 'http://store.localhost', 'file:///tmp/a']) {

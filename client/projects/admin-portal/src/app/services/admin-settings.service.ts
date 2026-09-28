@@ -22,9 +22,32 @@ export interface StoreSettingsResponse {
   logo_url?: string | null;
 }
 
+/** Settings → Notifications: who receives the new-order email. */
+export interface NotificationSettings {
+  orderEmails: string[];
+  /** Stock per location: remind staff about unapproved paid website orders after this long. */
+  reminderAfterMinutes?: number;
+  maxRecipients: number;
+  /** False when the server has no SMTP configured; emails cannot be sent. */
+  smtpConfigured: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminSettingsService {
   private readonly api = inject(ApiClient);
+
+  getNotificationSettings(): Promise<NotificationSettings> {
+    return firstValueFrom(this.api.get<NotificationSettings>('/admin/settings/notifications'));
+  }
+
+  saveNotificationSettings(orderEmails: string[], reminderAfterMinutes?: number): Promise<NotificationSettings> {
+    return firstValueFrom(this.api.put<NotificationSettings>('/admin/settings/notifications', { orderEmails, reminderAfterMinutes }));
+  }
+
+  /** Sends to the given (possibly unsaved) list, so an address can be checked before saving. */
+  sendNotificationTestEmail(orderEmails: string[]): Promise<{ sentTo: string[] }> {
+    return firstValueFrom(this.api.post<{ sentTo: string[] }>('/admin/settings/notifications/test-email', { orderEmails }));
+  }
 
   getStore(): Promise<StoreSettingsResponse> {
     return firstValueFrom(this.api.get<StoreSettingsResponse>('/admin/settings/store'));

@@ -25,6 +25,11 @@ const migrationPaths = [
   path.join(__dirname, 'migrations', '037_branch_reporting_stocktake_locations.sql'),
   path.join(__dirname, 'migrations', '038_pos_item_color_size.sql'),
   path.join(__dirname, 'migrations', '040_ref_color_arabic_names.sql'),
+  path.join(__dirname, 'migrations', '043_pos_sadad_payment.sql'),
+  path.join(__dirname, 'migrations', '044_pos_z_report_number.sql'),
+  // Here rather than in ensure-migrations.js because it references
+  // stocktake_locations, which 037 above creates.
+  path.join(__dirname, 'migrations', '046_location_stock.sql'),
 ];
 
 async function ensurePosSchema(client) {

@@ -566,17 +566,10 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     // case — paying for something that was already out of stock when the
     // checkout button was pressed.
     const outOfStock = [];
-    const totals = new Map();
-    for (const line of lines) {
-      const key = line.variantId || line.productId;
-      const total = totals.get(key);
-      if (total) total.qty += line.qty;
-      else totals.set(key, { ...line });
-    }
-    // Stable lock order and one check per inventory identity, irrespective of
-    // how many request lines or textual size representations identify it.
-    for (const item of [...totals.values()].sort((a, b) =>
-      (a.variantId || a.productId).localeCompare(b.variantId || b.productId))) {
+    // Locked in variant-id order, like every other stock writer, so checkout
+    // and a till sale touching the same two variants cannot deadlock.
+    const lockOrder = [...lines].sort((a, b) => String(a.variantId || '').localeCompare(String(b.variantId || '')));
+    for (const item of lockOrder) {
       const { variantId } = item;
       const wanted = item.qty;
       // eslint-disable-next-line no-await-in-loop -- one row per cart line, and

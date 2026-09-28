@@ -10,9 +10,21 @@ const TOLERANCE_CENTS = 100; // QAR 1.00
 
 const QATAR_TIME_ZONE = 'Asia/Qatar';
 
+// Tenders settled by a third party and reconciled against its export: the
+// bank for card, the Sadad merchant panel for Sadad. Cash is counted instead.
+const SETTLED_METHODS = ['card', 'sadad'];
+const AMOUNT_COLUMN = { card: 'card_amount_cents', sadad: 'sadad_amount_cents' };
+
+function settledMethod(value) {
+  const method = value === undefined || value === null || value === '' ? 'card' : String(value);
+  assertPos(SETTLED_METHODS.includes(method), 422, 'INVALID_FIELD', 'method must be card or sadad.');
+  return method;
+}
+
 function mapRow(row) {
   return {
     reconciliationId: row.id,
+    method: row.method,
     registerId: row.register_id,
     registerName: row.register_name || null,
     businessDate: row.business_date,
@@ -28,12 +40,15 @@ function mapRow(row) {
 }
 
 /**
- * The POS-side card total for one register's business day, computed in
+ * The POS-side card or Sadad total for one register's business day, computed in
  * Qatar local time (not UTC midnight) — a card sale rung up at 1am Qatar
  * time is still "yesterday's" business for reconciliation purposes, same
  * convention this needs to match once Phase 5 reporting lands.
  */
-async function posCardTotal(client, tenantId, registerId, businessDate) {
+async function posMethodTotal(client, tenantId, registerId, businessDate, method) {
+  // Interpolated only from the fixed AMOUNT_COLUMN map; `method` itself is
+  // bound as a parameter below.
+  const amountColumn = AMOUNT_COLUMN[method];
   // This server's Postgres session already runs with `TimeZone = Asia/Qatar`
   // (confirmed via `SHOW TIMEZONE`), so a single `timestamptz AT TIME ZONE
   // 'Asia/Qatar'` double-converts: the value is already displayed in Qatar
@@ -44,23 +59,23 @@ async function posCardTotal(client, tenantId, registerId, businessDate) {
   // regardless of the session's configured timezone.
   const result = await client.query(
     `WITH sales AS (
-       SELECT COALESCE(sum(card_amount_cents), 0)::bigint AS total
+       SELECT COALESCE(sum(${amountColumn}), 0)::bigint AS total
        FROM pos_transactions
        WHERE tenant_id = $1 AND register_id = $2 AND status = 'completed'
-         AND payment_method = 'card'
+         AND payment_method = $5
          AND ((server_received_at AT TIME ZONE 'UTC') AT TIME ZONE $4)::date = $3::date
      ), refunds AS (
        SELECT COALESCE(sum(amount_cents), 0)::bigint AS total
        FROM pos_refunds
        WHERE tenant_id = $1 AND register_id = $2 AND status = 'completed'
-         AND method = 'card'
+         AND method = $5
          AND ((created_at AT TIME ZONE 'UTC') AT TIME ZONE $4)::date = $3::date
      )
-     SELECT (sales.total - refunds.total)::bigint AS net_card_total
+     SELECT (sales.total - refunds.total)::bigint AS net_total
      FROM sales CROSS JOIN refunds`,
-    [tenantId, registerId, businessDate, QATAR_TIME_ZONE],
+    [tenantId, registerId, businessDate, QATAR_TIME_ZONE, method],
   );
-  return Number(result.rows[0].net_card_total);
+  return Number(result.rows[0].net_total);
 }
 
 /**
@@ -71,29 +86,29 @@ async function posCardTotal(client, tenantId, registerId, businessDate) {
  * standalone "recompute" action for a day nobody has entered a settlement
  * for yet.
  */
-async function ensurePendingRow(client, tenantId, registerId, businessDate) {
-  const posTotalCents = await posCardTotal(client, tenantId, registerId, businessDate);
+async function ensurePendingRow(client, tenantId, registerId, businessDate, method) {
+  const posTotalCents = await posMethodTotal(client, tenantId, registerId, businessDate, method);
   const result = await client.query(
-    `INSERT INTO pos_card_reconciliation (tenant_id, register_id, business_date, pos_total_cents)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (tenant_id, register_id, business_date) DO UPDATE
+    `INSERT INTO pos_card_reconciliation (tenant_id, register_id, business_date, pos_total_cents, method)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (tenant_id, register_id, business_date, method) DO UPDATE
        SET pos_total_cents = EXCLUDED.pos_total_cents
        WHERE pos_card_reconciliation.status = 'pending'
      RETURNING *`,
-    [tenantId, registerId, businessDate, posTotalCents],
+    [tenantId, registerId, businessDate, posTotalCents, method],
   );
   if (result.rowCount) return result.rows[0];
   // Row already exists and isn't 'pending' (matched/exception/resolved) —
   // the ON CONFLICT...WHERE guard above means the UPDATE didn't fire, so
   // fetch it as-is rather than silently overwrite a settled figure.
   const existing = await client.query(
-    `SELECT * FROM pos_card_reconciliation WHERE tenant_id = $1 AND register_id = $2 AND business_date = $3`,
-    [tenantId, registerId, businessDate],
+    `SELECT * FROM pos_card_reconciliation WHERE tenant_id = $1 AND register_id = $2 AND business_date = $3 AND method = $4`,
+    [tenantId, registerId, businessDate, method],
   );
   return existing.rows[0];
 }
 
-async function listReconciliations(context, { registerId, from, to, status } = {}) {
+async function listReconciliations(context, { registerId, from, to, status, method } = {}) {
   const client = await db.pool.connect();
   try {
     const conditions = ['r.tenant_id = $1'];
@@ -102,12 +117,13 @@ async function listReconciliations(context, { registerId, from, to, status } = {
     if (from) { params.push(from); conditions.push(`r.business_date >= $${params.length}`); }
     if (to) { params.push(to); conditions.push(`r.business_date <= $${params.length}`); }
     if (status) { params.push(status); conditions.push(`r.status = $${params.length}`); }
+    if (method) { params.push(settledMethod(method)); conditions.push(`r.method = $${params.length}`); }
     const result = await client.query(
       `SELECT r.*, pr.display_name AS register_name
        FROM pos_card_reconciliation r
        JOIN pos_registers pr ON pr.id = r.register_id AND pr.tenant_id = r.tenant_id
        WHERE ${conditions.join(' AND ')}
-       ORDER BY r.business_date DESC, pr.display_name ASC
+       ORDER BY r.business_date DESC, pr.display_name ASC, r.method ASC
        LIMIT 200`,
       params,
     );
@@ -124,6 +140,7 @@ async function listReconciliations(context, { registerId, from, to, status } = {
  */
 async function refreshBusinessDay(context, body) {
   const registerId = uuid(body?.registerId, 'registerId');
+  const method = settledMethod(body?.method);
   const businessDate = nonEmpty(body?.businessDate, 'businessDate', 10);
   assertPos(/^\d{4}-\d{2}-\d{2}$/.test(businessDate), 422, 'INVALID_DATE', 'businessDate must be YYYY-MM-DD.');
   const client = await db.pool.connect();
@@ -133,7 +150,7 @@ async function refreshBusinessDay(context, body) {
       [context.tenantId, registerId],
     );
     assertPos(register.rowCount, 404, 'REGISTER_NOT_FOUND', 'POS register not found.');
-    const row = await ensurePendingRow(client, context.tenantId, registerId, businessDate);
+    const row = await ensurePendingRow(client, context.tenantId, registerId, businessDate, method);
     return mapRow({ ...row, register_name: register.rows[0].display_name });
   } finally {
     client.release();
@@ -150,6 +167,7 @@ async function submitSettlement(context, body) {
   const businessDate = nonEmpty(body?.businessDate, 'businessDate', 10);
   assertPos(/^\d{4}-\d{2}-\d{2}$/.test(businessDate), 422, 'INVALID_DATE', 'businessDate must be YYYY-MM-DD.');
   const settlementTotalCents = cents(body?.settlementTotalCents, 'settlementTotalCents');
+  const method = settledMethod(body?.method);
 
   const client = await db.pool.connect();
   try {
@@ -160,14 +178,14 @@ async function submitSettlement(context, body) {
     );
     assertPos(register.rowCount, 404, 'REGISTER_NOT_FOUND', 'POS register not found.');
 
-    const posTotalCents = await posCardTotal(client, context.tenantId, registerId, businessDate);
+    const posTotalCents = await posMethodTotal(client, context.tenantId, registerId, businessDate, method);
     const varianceCents = settlementTotalCents - posTotalCents;
     const status = Math.abs(varianceCents) <= TOLERANCE_CENTS ? 'matched' : 'exception';
 
     const result = await client.query(
-      `INSERT INTO pos_card_reconciliation (tenant_id, register_id, business_date, pos_total_cents, settlement_total_cents, status)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (tenant_id, register_id, business_date) DO UPDATE
+      `INSERT INTO pos_card_reconciliation (tenant_id, register_id, business_date, pos_total_cents, settlement_total_cents, status, method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (tenant_id, register_id, business_date, method) DO UPDATE
          SET pos_total_cents = EXCLUDED.pos_total_cents,
              settlement_total_cents = EXCLUDED.settlement_total_cents,
              status = EXCLUDED.status,
@@ -175,7 +193,7 @@ async function submitSettlement(context, body) {
              resolved_at = NULL,
              notes = NULL
        RETURNING *`,
-      [context.tenantId, registerId, businessDate, posTotalCents, settlementTotalCents, status],
+      [context.tenantId, registerId, businessDate, posTotalCents, settlementTotalCents, status, method],
     );
     await client.query('COMMIT');
     return mapRow({ ...result.rows[0], register_name: register.rows[0].display_name });

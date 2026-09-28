@@ -18,6 +18,9 @@ async function inTransaction(work) {
 
 function mapDatabaseError(error) {
   if (error instanceof PosError) return error;
+  if (error?.code === '23505' && error.constraint === 'payments_pos_sadad_reference_uq') {
+    return new PosError(409, 'PAYMENT_REFERENCE_USED', 'This Sadad transaction ID was already used on another sale.');
+  }
   if (error?.code === '23505') {
     return new PosError(409, 'POS_CONFLICT', 'This POS action conflicts with an existing record.');
   }

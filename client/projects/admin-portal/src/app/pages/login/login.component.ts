@@ -213,7 +213,9 @@ export class LoginComponent implements OnInit {
 
   ngOnInit(): void {
     // If a valid session already exists, bounce to the return URL or dashboard.
-    void this.auth.me().then((user) => {
+    // Only a server-confirmed session counts: a cached user during a network
+    // drop would bounce the operator into pages that cannot load.
+    void this.auth.me({ keepCachedOnError: false }).then((user) => {
       if (user) this.redirectAfterLogin();
     });
   }

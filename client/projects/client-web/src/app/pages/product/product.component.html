@@ -226,7 +226,7 @@
           }
 
           <div class="price-row">
-            <span>{{ price(p.price) }}</span>
+            <span>{{ shownPriceLabel() }}</span>
           </div>
 
           <!-- <dl class="attribute-grid">
@@ -344,7 +344,7 @@
                   <span>✓ {{ t("product.cta.added") }}</span>
                 } @else {
                   <span>{{ t("product.cta.addToCart") }}</span>
-                  <small>{{ price(p.price * qty()) }}</small>
+                  <small>{{ lineTotalLabel() }}</small>
                 }
               </button>
               <button
@@ -355,7 +355,7 @@
                 [attr.data-track-product]="p.id"
               >
                 <span>{{ t("product.cta.buyNow") }}</span>
-                <small>{{ price(p.price * qty()) }}</small>
+                <small>{{ lineTotalLabel() }}</small>
               </button>
             } @else {
               <button
@@ -867,6 +867,9 @@
             <ng-container>{{ t("product.sticky.added") }}</ng-container>
           } @else {
             <ng-container>{{ t("product.sticky.addToCart") }}</ng-container>
+            <!-- The bar hid the price while the panel above it showed one; on a phone the
+                 bar is often all that is on screen when the customer decides. -->
+            <small class="sticky-price">{{ lineTotalLabel() }}</small>
           }
         </button>
         <button

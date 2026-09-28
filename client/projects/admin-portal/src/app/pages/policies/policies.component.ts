@@ -311,8 +311,8 @@ export class PoliciesComponent implements OnInit {
     try {
       const list = await this.svc.list();
       this.policies.set(list.sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title)));
-    } catch {
-      this.toast.error(this.t('policies.loadError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('policies.loadError'));
     } finally {
       this.loading.set(false);
     }

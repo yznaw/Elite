@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Injector, OnDestroy, OnInit, afterNextRender, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -15,12 +15,29 @@ import { API_BASE, PUBLIC_API_BASE } from '../../core/api-base';
 
 import { colorKey, colorSlug } from '../../utils/color-slug';
 import { sizeOptions, colorState, productSoldOut, defaultColor, colorStock, availableStock, selectedVariant, productColors, carriedSize } from '../../shared/stock-availability';
+import { displayPrice, sortPrice } from '../../shared/product-price';
 import { SizeSheetComponent, SizeOption } from '../../shared/size-sheet/size-sheet.component';
 import { RestockFormComponent } from '../../shared/restock/restock-form.component';
 import { MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
 
 const SORT_OPTIONS = ['Featured', 'Price: Low–High', 'Price: High–Low', 'Newest'] as const;
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
+/**
+ * Swatches a card shows before the `+N` link takes over; the rest are one tap away on the
+ * product page. Some products carry thirty colourways, and a full row of finger-sized
+ * targets would be taller than the card's photo. The home hero makes the same trade at four
+ * (`HERO_MAX_SWATCHES`).
+ *
+ * Two numbers because the targets are 24px under a mouse and 44px under a finger: at 375px
+ * a card has 321px of row, which takes six 24px targets and the link easily, but only five
+ * 44px ones (5x44 + 4x10 gaps + the link = 314px). Six would wrap to a second row.
+ */
+const MAX_CARD_SWATCHES = 6;
+const MAX_CARD_SWATCHES_TOUCH = 5;
+/** Products added per "Load more" on the phone grid, and the size of the first window. */
+const MOBILE_PAGE_SIZE = 10;
+/** Ceiling when restoring a remembered window after a visit to a product page. */
+const MOBILE_WINDOW_MAX = 60;
 /**
  * Translation key per filter group.
  *
@@ -120,6 +137,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private readonly seo = inject(SeoService);
   private readonly apiBase = inject(API_BASE);
   private readonly publicApiBase = inject(PUBLIC_API_BASE);
+  private readonly injector = inject(Injector);
 
   /**
    * Head tags for whichever collection the route is pointing at. Returns null
@@ -171,6 +189,8 @@ export class CollectionComponent implements OnInit, OnDestroy {
   private mobileMediaQueryHandler?: () => void;
   private sheetMediaQuery?: MediaQueryList;
   private sheetMediaQueryHandler?: () => void;
+  private pointerMediaQuery?: MediaQueryList;
+  private pointerMediaQueryHandler?: () => void;
   private routeSyncSub?: Subscription;
 
   readonly sortOptions = SORT_OPTIONS;
@@ -184,6 +204,8 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly sizeSheetTarget = signal<Product | null>(null);
   /** Below this width the card swaps its native select for the same sheet the product page uses. */
   readonly isSheetView = signal(false);
+  /** Mirrors the `(pointer: coarse)` swatch sizing in the stylesheet. */
+  readonly isCoarsePointer = signal(false);
   readonly loadedProductImages = signal<Record<string, boolean>>({});
   readonly collections = signal<StorefrontCollection[]>([]);
   readonly collectionsLoaded = signal(false);
@@ -197,8 +219,14 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly filtersOpen = signal(false);
   readonly expandedFilterGroups = signal<Partial<Record<CollapsibleFilterGroupId, boolean>>>({});
   readonly isMobileView = signal(false);
-  readonly mobilePage = signal(0);
-  readonly mobilePageSize = 10;
+  /**
+   * How many products the phone grid is showing. It replaced a page number: the pager's
+   * arrows sat under ten full-width cards and changing page left the customer at the bottom
+   * of the page looking at the footer, with ten products they had never seen above them.
+   * Growing the list keeps them where they are, which is the whole point.
+   */
+  readonly mobileShown = signal(MOBILE_PAGE_SIZE);
+  readonly mobilePageSize = MOBILE_PAGE_SIZE;
   readonly selectedSizes = signal<Record<string, number>>({});
   /** The colour each size above was picked on (colour key). */
   private readonly selectedSizeColors = signal<Record<string, string>>({});
@@ -322,8 +350,11 @@ export class CollectionComponent implements OnInit, OnDestroy {
     let list = this.collectionScopedProducts().filter((product) => this.matchesFilters(product, selected));
     const so = this.sort();
 
-    if (so === 'Price: Low–High') list = [...list].sort((a, b) => a.price - b.price);
-    if (so === 'Price: High–Low') list = [...list].sort((a, b) => b.price - a.price);
+    // Sorted and filtered by what the product can actually be bought for. On the product's
+    // own price, a product whose sizes start at 1,000 sat behind one that costs 1,200, and a
+    // "under 2,000" filter could hide something the customer could afford.
+    if (so === 'Price: Low–High') list = [...list].sort((a, b) => sortPrice(a) - sortPrice(b));
+    if (so === 'Price: High–Low') list = [...list].sort((a, b) => sortPrice(b) - sortPrice(a));
 
     return list;
   });
@@ -331,16 +362,11 @@ export class CollectionComponent implements OnInit, OnDestroy {
   readonly visibleProducts = computed<Product[]>(() => {
     const list = this.filtered();
     if (!this.isMobileView()) return list;
-    const start = this.mobilePage() * this.mobilePageSize;
-    return list.slice(start, start + this.mobilePageSize);
+    return list.slice(0, this.mobileShown());
   });
 
-  readonly mobileTotalPages = computed(() => (
-    this.isMobileView() ? Math.max(1, Math.ceil(this.filtered().length / this.mobilePageSize)) : 1
-  ));
-
-  readonly showMobilePagination = computed(() => (
-    this.isMobileView() && this.filtered().length > this.mobilePageSize
+  readonly showLoadMore = computed(() => (
+    this.isMobileView() && this.filtered().length > this.visibleProducts().length
   ));
 
   ngOnInit(): void {
@@ -357,6 +383,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.routeSyncSub?.unsubscribe();
     if (this.sheetMediaQuery && this.sheetMediaQueryHandler) {
       this.sheetMediaQuery.removeEventListener('change', this.sheetMediaQueryHandler);
+    }
+    if (this.pointerMediaQuery && this.pointerMediaQueryHandler) {
+      this.pointerMediaQuery.removeEventListener('change', this.pointerMediaQueryHandler);
     }
     if (this.mobileMediaQuery && this.mobileMediaQueryHandler) {
       this.mobileMediaQuery.removeEventListener('change', this.mobileMediaQueryHandler);
@@ -427,7 +456,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   setSort(s: SortOption): void {
     this.sort.set(s);
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
   }
 
   toggleFilterGroup(groupId: CollapsibleFilterGroupId): void {
@@ -507,7 +536,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
   onCollectionLinkClick(event: MouseEvent): void {
     if (!this.navigatesInPlace(event)) return;
     this.selectedFilters.set(this.emptySelectedFilters());
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -633,8 +662,42 @@ export class CollectionComponent implements OnInit, OnDestroy {
     return this.srcsetFor(this.selectedProductImage(product), product);
   }
 
+  /** The price of the colour on show, narrowing to one number as soon as it can. */
+  cardPrice(product: Product): string {
+    return this.i18n.priceSpan(displayPrice(product, this.selectedProductColor(product), this.selectedSize(product)));
+  }
+
   productColorNames(product: Product): string[] {
     return this.productColors(product);
+  }
+
+  /**
+   * Swatches shown on a card. Some products carry thirty colourways, and a full row of
+   * finger-sized targets would be taller than the card's photo; the rest are one tap away
+   * behind the `+N` link, the same bargain the home hero makes.
+   *
+   * The colour on show is never hidden behind the cap: it takes the last visible slot when
+   * its own position is past it, so clicking a swatch, or filtering by a colour that sorts
+   * late, still shows the colour the card is displaying.
+   */
+  visibleColorNames(product: Product): string[] {
+    const colors = this.productColorNames(product);
+    const max = this.maxCardSwatches();
+    if (colors.length <= max) return colors;
+    const visible = colors.slice(0, max);
+    const shown = this.selectedProductColor(product);
+    if (shown && !visible.some((color) => this.colorKey(color) === this.colorKey(shown))) {
+      visible[visible.length - 1] = shown;
+    }
+    return visible;
+  }
+
+  hiddenColorCount(product: Product): number {
+    return Math.max(0, this.productColorNames(product).length - this.maxCardSwatches());
+  }
+
+  private maxCardSwatches(): number {
+    return this.isCoarsePointer() ? MAX_CARD_SWATCHES_TOUCH : MAX_CARD_SWATCHES;
   }
 
   availableSizes(product: Product, color = this.selectedProductColor(product)): number[] {
@@ -760,7 +823,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
       return { ...current, [groupId]: nextValues };
     });
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
   }
 
   isFilterSelected(groupId: FilterGroupId, value: string): boolean {
@@ -775,19 +838,78 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.selectedFilters.set(this.emptySelectedFilters());
     this.sort.set('Featured');
     this.filtersOpen.set(false);
-    this.mobilePage.set(0);
+    this.resetMobileWindow();
   }
 
   retryProducts(): void {
     void this.products.refresh();
   }
 
-  prevMobilePage(): void {
-    this.mobilePage.update((page) => Math.max(0, page - 1));
+  /**
+   * Ten more products, and focus onto the first of them.
+   *
+   * Nothing scrolls: the customer stays exactly where they were and the new cards appear
+   * below. Focus has to move by hand, though — without it a keyboard or screen-reader user
+   * is left on a button that has just changed meaning, with no way to know what appeared.
+   */
+  loadMore(): void {
+    const firstNew = this.visibleProducts().length;
+    this.mobileShown.update((shown) => shown + MOBILE_PAGE_SIZE);
+    this.rememberMobileWindow();
+    if (typeof window === 'undefined') return;
+    // `afterNextRender`, not a frame count: the new cards have to be in the DOM before there
+    // is anything to focus, and one or two `requestAnimationFrame`s were sometimes early.
+    afterNextRender(() => {
+      const card = document.querySelectorAll<HTMLElement>('.product-cell')[firstNew];
+      card?.querySelector<HTMLElement>('a, button')?.focus({ preventScroll: true });
+    }, { injector: this.injector });
   }
 
-  nextMobilePage(): void {
-    this.mobilePage.update((page) => Math.min(this.mobileTotalPages() - 1, page + 1));
+  /** Back to the first ten. Every filter, sort or collection change calls this. */
+  private resetMobileWindow(): void {
+    this.mobileShown.set(MOBILE_PAGE_SIZE);
+    this.rememberMobileWindow();
+  }
+
+  /**
+   * How far the customer had got, kept for the length of the tab.
+   *
+   * Opening a product and coming back re-creates this component, and the grid used to
+   * snap to the first ten: the piece they had just been looking at was no longer on the
+   * page, so the browser had nowhere to restore their scroll to. The window is keyed by
+   * collection, sort and filters, so a different view starts at ten again.
+   */
+  private mobileWindowKey(): string {
+    return [
+      'elite.collection.shown',
+      this.activeCollectionKey() ?? '',
+      this.activeSubCollectionKey() ?? '',
+      this.sort(),
+      JSON.stringify(this.selectedFilters()),
+    ].join('|');
+  }
+
+  private rememberMobileWindow(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem(this.mobileWindowKey(), String(this.mobileShown()));
+    } catch {
+      // Private mode, or storage is full. Losing the position is not worth an error.
+    }
+  }
+
+  private restoreMobileWindow(): void {
+    this.mobileShown.set(MOBILE_PAGE_SIZE);
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = Number(sessionStorage.getItem(this.mobileWindowKey()));
+      if (!Number.isFinite(stored)) return;
+      // Capped: restoring three hundred cards at once on the phone that was slow enough to
+      // need paging in the first place is not a favour.
+      this.mobileShown.set(Math.min(Math.max(MOBILE_PAGE_SIZE, stored), MOBILE_WINDOW_MAX));
+    } catch {
+      // Same as above.
+    }
   }
 
   /**
@@ -839,7 +961,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.activeSubCollectionKey.set(childKey);
     this.selectedFilters.set(this.emptySelectedFilters());
     this.filtersOpen.set(false);
-    this.mobilePage.set(0);
+    // The window is not reset here: `restoreMobileWindow()` at the end of this method resets
+    // it and then re-reads what this view was last showing. Resetting here would write ten
+    // back over that memory before it is read.
 
     const sort = query.get('sort');
     if (sort) {
@@ -856,6 +980,9 @@ export class CollectionComponent implements OnInit, OnDestroy {
         tag: [this.normalizeTag(tag)],
       }));
     }
+
+    // Last, so the key matches the view the route just settled on.
+    this.restoreMobileWindow();
   }
 
   onImgError(e: Event): void {
@@ -875,7 +1002,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
       && this.matchesTextFilter(selected.size, product.sizes.map(String))
       && this.matchesTextFilter(selected.brand, this.compact([product.brand]))
       && this.matchesTextFilter(selected.tag, this.compact([product.tag]))
-      && this.matchesPriceFilter(selected.price, product.price);
+      && this.matchesPriceFilter(selected.price, sortPrice(product));
   }
 
   private cartItem(product: Product) {
@@ -991,7 +1118,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
   private priceOptions(products: Product[]): FilterOption[] {
     const prices = products
-      .map((product) => product.price)
+      .map((product) => sortPrice(product))
       .filter((price) => Number.isFinite(price))
       .sort((a, b) => a - b);
 
@@ -1010,16 +1137,18 @@ export class CollectionComponent implements OnInit, OnDestroy {
 
     const lowEnd = this.roundPrice(min + ((max - min) / 3));
     const midEnd = this.roundPrice(min + (((max - min) / 3) * 2));
+    // Labels through `t()`: these were English literals, so an Arabic visitor read
+    // "Under QAR 1,500" under a translated heading.
     const ranges = [
-      { value: `${min}:${lowEnd}`, label: `Under ${this.price(lowEnd)}` },
-      { value: `${lowEnd + 1}:${midEnd}`, label: `${this.price(lowEnd + 1)} - ${this.price(midEnd)}` },
-      { value: `${midEnd + 1}:`, label: `${this.price(midEnd + 1)}+` },
+      { value: `${min}:${lowEnd}`, label: this.t('collection.filter.priceUnder', { price: this.price(lowEnd) }) },
+      { value: `${lowEnd + 1}:${midEnd}`, label: this.i18n.priceSpan({ min: lowEnd + 1, max: midEnd, isRange: true }) },
+      { value: `${midEnd + 1}:`, label: this.t('collection.filter.priceOver', { price: this.price(midEnd + 1) }) },
     ];
 
     return ranges
       .map((range) => ({
         ...range,
-        count: products.filter((product) => this.matchesPriceFilter([range.value], product.price)).length,
+        count: products.filter((product) => this.matchesPriceFilter([range.value], sortPrice(product))).length,
       }))
       .filter((range) => range.count > 0);
   }
@@ -1205,7 +1334,7 @@ export class CollectionComponent implements OnInit, OnDestroy {
     this.mobileMediaQuery = window.matchMedia('(max-width: 767px)');
     this.mobileMediaQueryHandler = () => {
       this.isMobileView.set(this.mobileMediaQuery?.matches ?? false);
-      if (!this.isMobileView()) this.mobilePage.set(0);
+      if (!this.isMobileView()) this.resetMobileWindow();
     };
 
     this.mobileMediaQueryHandler();
@@ -1225,5 +1354,12 @@ export class CollectionComponent implements OnInit, OnDestroy {
     };
     this.sheetMediaQueryHandler();
     this.sheetMediaQuery.addEventListener('change', this.sheetMediaQueryHandler);
+
+    // Swatch targets grow to 44px under a finger, so one fewer fits before the `+N` link.
+    // Same query as the stylesheet, so the count and the layout cannot disagree.
+    this.pointerMediaQuery = window.matchMedia('(pointer: coarse)');
+    this.pointerMediaQueryHandler = () => this.isCoarsePointer.set(this.pointerMediaQuery?.matches ?? false);
+    this.pointerMediaQueryHandler();
+    this.pointerMediaQuery.addEventListener('change', this.pointerMediaQueryHandler);
   }
 }

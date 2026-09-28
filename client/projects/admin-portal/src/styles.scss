@@ -1132,6 +1132,16 @@ textarea.inp {
   line-height: 1.35;
 }
 
+.toast-count {
+  margin-inline-start: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
 .toast-sub {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.65);

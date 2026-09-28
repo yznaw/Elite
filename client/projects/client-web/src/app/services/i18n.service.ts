@@ -31,6 +31,24 @@ export class I18nService {
     return locale === 'ar' ? `${formatted} ${currency}` : `${currency} ${formatted}`;
   };
 
+  /**
+   * One price, or a range when a product's variants disagree.
+   *
+   * The currency is printed once, and the whole phrase is a per-locale template rather than
+   * pieces glued together here: Arabic puts the currency after the number and reads "from X
+   * to Y", so a concatenation built for English comes out backwards.
+   */
+  readonly priceSpan = (span: { min: number; max: number; isRange: boolean }): string => {
+    if (!span.isRange) return this.price(span.min);
+    const locale = this.locale.locale();
+    const format = (value: number) => value.toLocaleString(locale === 'ar' ? 'ar-SA' : 'en-SA');
+    return this.t('common.priceRange', {
+      min: format(span.min),
+      max: format(span.max),
+      currency: this.t('common.currency.qar'),
+    });
+  };
+
   readonly productName = (product: Pick<Product, 'id' | 'name' | 'nameAr'>): string => {
     if (this.locale.locale() === 'ar' && product.nameAr?.trim()) return product.nameAr.trim();
     const translated = this.t(`productData.${product.id}.name`);

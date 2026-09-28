@@ -13,6 +13,7 @@ import { ConfirmService } from '../../services/confirm.service';
 import { AdminOrdersService, OrderStatusPayload } from '../../services/admin-orders.service';
 import { Order, OrderFulfillment, OrderTimelineEntry, QAR } from '../../models';
 import { NO_IMAGE_LOGO } from '../../utils/no-image';
+import { OrderApprovalPanelComponent } from './order-approval-panel.component';
 
 const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
   placed:     'orderModal.tl.placed',
@@ -37,7 +38,7 @@ function escapeHtml(value: unknown): string {
 
 @Component({
     selector: 'ap-order-drawer',
-    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent],
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, OrderApprovalPanelComponent],
     template: `
     <div class="overlay" (click)="closed.emit()"></div>
     <div class="drawer drawer-wide order-drawer" role="dialog" aria-modal="true" [attr.aria-label]="t('orderDrawer.workflow.title') + ' ' + order().id">
@@ -52,7 +53,11 @@ function escapeHtml(value: unknown): string {
           <div class="row gap-sm" style="flex-wrap:wrap;align-items:center;">
             <div class="card-title mono" style="color:var(--green);">{{ order().id }}</div>
             <ap-pill [kind]="paymentKind().kind">{{ t(paymentKind().labelKey) }}</ap-pill>
-            <ap-pill [kind]="fulfillmentKind().kind">{{ t(fulfillmentKind().labelKey) }}</ap-pill>
+            @if (order().needsApproval) {
+              <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
+            } @else {
+              <ap-pill [kind]="fulfillmentKind().kind">{{ t(fulfillmentKind().labelKey) }}</ap-pill>
+            }
           </div>
           <div class="card-sub">{{ order().date }} · {{ order().customer }}</div>
         </div>
@@ -83,6 +88,8 @@ function escapeHtml(value: unknown): string {
             </div>
           }
         </div>
+
+        <ap-order-approval-panel [order]="order()" (approved)="onApproved($event)"/>
 
         @if (isStalePayment()) {
           <div class="stale-payment-callout mb-16">
@@ -601,7 +608,15 @@ export class OrderDrawerComponent {
     return ['awaiting', 'processing', 'shipped', 'delivered'];
   }
 
+  /** The approval panel confirmed the order and chose its pickup location. */
+  onApproved(updated: Order): void {
+    this._order.set(updated);
+    this.updated.emit(updated);
+  }
+
   canTransitionTo(target: OrderFulfillment): boolean {
+    // Stock per location: nothing ships until the order is approved.
+    if (this._order().needsApproval) return false;
     const cur = this._order().fulfillment;
     if (cur === 'cancelled' || cur === 'returned') return false;
     const order = this.stepOrder();
@@ -806,9 +821,9 @@ export class OrderDrawerComponent {
       try {
         win.focus();
         win.print();
-      } catch {
+      } catch (caught) {
         cleanup();
-        this.toast.error(this.t('orders.invoice.failed.title'), this.t('orders.invoice.failed.sub'));
+        this.toast.errorFrom(caught, this.t('orders.invoice.failed.title'), this.t('orders.invoice.failed.sub'));
       }
     };
 

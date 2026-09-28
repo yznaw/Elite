@@ -30,6 +30,7 @@ router.get('/', asyncHandler(async (req, res) => {
     from: req.query.from,
     to: req.query.to,
     status: req.query.status,
+    method: req.query.method,
   }));
 }));
 

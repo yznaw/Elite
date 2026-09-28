@@ -1,6 +1,7 @@
 const { kickRestockDispatch } = require('./restock-dispatch-job');
 const db = require('../db/client');
 const { recordMovement, publishStockEvent } = require('./inventory-ledger');
+const { perLocationEnabled, addHold, releaseOrderHolds, defaultLocationId, applyLocationDelta } = require('./location-stock');
 const { logger } = require('./logger');
 const { sendAlert } = require('./alerts');
 
@@ -156,6 +157,11 @@ async function ensurePaidOrderStock(tenantId, orderId, options = {}) {
       return { applied: false, reason: 'no_order_items' };
     }
 
+    // Per-location stock (046): a paid website order has no location yet.
+    // It reduces the sellable total now and is held until staff approve it
+    // and pick where it ships from (plan Phase 5).
+    const perLocation = await perLocationEnabled(client, tenantId);
+
     const touchedProducts = new Set();
     for (const line of lines) {
       if (!line.variant_id || !line.product_id) {
@@ -194,6 +200,8 @@ async function ensurePaidOrderStock(tenantId, orderId, options = {}) {
           [tenantId, line.variant_id, applied],
         );
         newStock = Number(updated.rows[0].stock_quantity) || 0;
+        // eslint-disable-next-line no-await-in-loop
+        if (perLocation) await addHold(client, tenantId, { orderId, variantId: line.variant_id, quantity: applied });
       }
 
       // The ledger row is written even for a zero-quantity application, so the
@@ -293,22 +301,55 @@ async function reversePaidOrderStock(tenantId, orderId, options = {}) {
       return { reversed: false, reason: 'already_reversed' };
     }
 
-    // Reverse the actual applied deltas, not the ordered quantities.
+    // Reverse the actual applied deltas, not the ordered quantities. Ordered
+    // by variant, and the variant rows locked up front, because every stock
+    // writer must lock in the same sequence (and before location rows).
     const { rows: applied } = await client.query(
       `SELECT product_id, variant_id, delta, metadata
          FROM inventory_movements
-        WHERE tenant_id = $1 AND reference_type = 'order' AND reference_id = $2 AND reason = $3`,
+        WHERE tenant_id = $1 AND reference_type = 'order' AND reference_id = $2 AND reason = $3
+        ORDER BY variant_id NULLS LAST, occurred_at`,
       [tenantId, orderId, PAID_REASON],
     );
     if (!applied.length) {
       await client.query('ROLLBACK');
       return { reversed: false, reason: 'nothing_to_reverse' };
     }
+    await client.query(
+      'SELECT id FROM product_variants WHERE tenant_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE',
+      [tenantId, applied.map((m) => m.variant_id).filter(Boolean)],
+    );
+
+    // Per-location stock: held units just stop being held; units already
+    // allocated at approval go back to that location. Anything the holds do
+    // not cover (paid before per-location stock was switched on) goes to the
+    // warehouse, so the total and the locations stay in step.
+    const perLocation = await perLocationEnabled(client, tenantId);
+    const holds = perLocation ? await releaseOrderHolds(client, tenantId, orderId) : new Map();
+    const warehouseId = perLocation ? await defaultLocationId(client, tenantId) : null;
 
     const touchedProducts = new Set();
     for (const movement of applied) {
       const quantity = Math.abs(Number(movement.delta) || 0);
       if (!quantity || !movement.variant_id) continue;
+      let locationId = null;
+      if (perLocation) {
+        // releaseOrderHolds already put allocated units back on their
+        // location; here we only work out what this movement covers.
+        const hold = holds.get(movement.variant_id) || { held: 0, allocated: 0, locationId: null };
+        const fromHeld = Math.min(quantity, hold.held);
+        hold.held -= fromHeld;
+        const fromAllocated = Math.min(quantity - fromHeld, hold.allocated);
+        hold.allocated -= fromAllocated;
+        holds.set(movement.variant_id, hold);
+        if (fromAllocated > 0) locationId = hold.locationId;
+        const uncovered = quantity - fromHeld - fromAllocated;
+        if (uncovered > 0) {
+          // eslint-disable-next-line no-await-in-loop
+          await applyLocationDelta(client, tenantId, { variantId: movement.variant_id, locationId: warehouseId, delta: uncovered });
+          locationId = locationId || warehouseId;
+        }
+      }
       // eslint-disable-next-line no-await-in-loop
       const updated = await client.query(
         `UPDATE product_variants
@@ -326,6 +367,7 @@ async function reversePaidOrderStock(tenantId, orderId, options = {}) {
         referenceType: 'order',
         referenceId: orderId,
         metadata: { reversalOf: PAID_REASON, trigger: reason, sku: movement.metadata?.sku },
+        locationId,
       });
       // eslint-disable-next-line no-await-in-loop
       await publishStockEvent(client, tenantId, movement.variant_id, Number(updated.rows[0].stock_quantity) || 0);
@@ -390,7 +432,35 @@ async function applyMissingPaidOrderStock({ sinceHours = 48, limit = 100, tenant
   return { checked: rows.length, repaired };
 }
 
+/**
+ * Runs the sweep every 10 minutes. Until 2026-09-26 applyMissingPaidOrderStock
+ * existed but nothing ever scheduled it (only a test called it), so the
+ * "backstopped" guarantee described above did not actually hold.
+ */
+function startPaidOrderStockSweep({ intervalMs = 10 * 60 * 1000, initialDelayMs = 5 * 60 * 1000 } = {}) {
+  if (!process.env.DATABASE_URL) return () => {};
+  let stopped = false;
+  const run = () => {
+    if (stopped) return;
+    applyMissingPaidOrderStock()
+      .then((result) => {
+        if (result.repaired) logger.warn(result, 'paid-order stock sweep repaired orders');
+      })
+      .catch((error) => logger.warn({ err: error.message }, 'paid-order stock sweep failed'));
+  };
+  const initial = setTimeout(run, initialDelayMs);
+  initial.unref();
+  const interval = setInterval(run, intervalMs);
+  interval.unref();
+  return () => {
+    stopped = true;
+    clearTimeout(initial);
+    clearInterval(interval);
+  };
+}
+
 module.exports = {
+  startPaidOrderStockSweep,
   ensurePaidOrderStock,
   reversePaidOrderStock,
   applyMissingPaidOrderStock,

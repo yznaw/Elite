@@ -54,7 +54,14 @@ import { IconComponent } from '../icons/icon.component';
         </div>
       </div>
     }
-  `
+  `,
+    // A confirmation always belongs on top of whatever asked for it. The global
+    // .overlay/.modal share z-index 200/210 with .drawer, so a confirm opened
+    // from inside a drawer (orders: cancel, refund, approve) rendered behind it.
+    styles: [`
+      .overlay { z-index: 1000; }
+      .modal { z-index: 1001; }
+    `],
 })
 export class ConfirmDialogComponent {
   readonly svc = inject(ConfirmService);

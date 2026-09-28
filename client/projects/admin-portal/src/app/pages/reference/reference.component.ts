@@ -693,8 +693,8 @@ export class ReferenceComponent implements OnInit {
       this.colors.set(c);
       this.materials.set(m);
       this.sizeSets.set(s);
-    } catch {
-      this.toast.error(this.t('reference.toast.loadError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('reference.toast.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -749,7 +749,7 @@ export class ReferenceComponent implements OnInit {
       }
       this.editingId.set(null);
       this.toast.success(this.t('reference.toast.colorSaved'));
-    } catch (error) { this.toast.error(this.apiErrorMessage(error, this.t('reference.toast.colorSaveError'))); }
+    } catch (error) { this.toast.errorFrom(error, this.apiErrorMessage(error, this.t('reference.toast.colorSaveError'))); }
     finally { this.saving.set(false); }
   }
 
@@ -774,11 +774,11 @@ export class ReferenceComponent implements OnInit {
         try {
           await this.refApi.deleteColor(c.id, true);
         } catch (retryError) {
-          this.toast.error(this.apiErrorMessage(retryError, this.t('reference.toast.colorDeleteError')));
+          this.toast.errorFrom(retryError, this.apiErrorMessage(retryError, this.t('reference.toast.colorDeleteError')));
           return;
         }
       } else {
-        this.toast.error(this.apiErrorMessage(error, this.t('reference.toast.colorDeleteError')));
+        this.toast.errorFrom(error, this.apiErrorMessage(error, this.t('reference.toast.colorDeleteError')));
         return;
       }
     }
@@ -856,7 +856,7 @@ export class ReferenceComponent implements OnInit {
     try {
       const items = this.colors().map((c, i) => ({ id: c.id, sort_order: i }));
       await this.refApi.saveColorSortOrders(items);
-    } catch { this.toast.error(this.t('reference.toast.colorOrderError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.colorOrderError')); }
     finally { this.savingSort.set(false); }
   }
 
@@ -885,7 +885,7 @@ export class ReferenceComponent implements OnInit {
       }
       this.editingId.set(null);
       this.toast.success(this.t('reference.toast.materialSaved'));
-    } catch { this.toast.error(this.t('reference.toast.materialSaveError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.materialSaveError')); }
     finally { this.saving.set(false); }
   }
 
@@ -904,7 +904,7 @@ export class ReferenceComponent implements OnInit {
       await this.refApi.deleteMaterial(m.id, count > 0);
       this.materials.update(list => list.filter(x => x.id !== m.id));
       this.toast.success(this.t('reference.toast.materialDeleted'));
-    } catch { this.toast.error(this.t('reference.toast.materialDeleteError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.materialDeleteError')); }
   }
 
   // ── Material drag-to-reorder ──────────────────────────────────────────────
@@ -945,7 +945,7 @@ export class ReferenceComponent implements OnInit {
     try {
       const items = this.materials().map((m, i) => ({ id: m.id, sort_order: i }));
       await this.refApi.saveMaterialSortOrders(items);
-    } catch { this.toast.error(this.t('reference.toast.materialOrderError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.materialOrderError')); }
     finally { this.savingSort.set(false); }
   }
 
@@ -1008,7 +1008,7 @@ export class ReferenceComponent implements OnInit {
       const created = await this.refApi.duplicateSizeSet(id);
       this.sizeSets.update(list => [...list, created]);
       this.toast.success(this.t('reference.toast.sizeSetDuplicated'));
-    } catch { this.toast.error(this.t('reference.toast.sizeSetDuplicateError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.sizeSetDuplicateError')); }
   }
 
   async saveSizeSet(existingId?: string): Promise<void> {
@@ -1034,7 +1034,7 @@ export class ReferenceComponent implements OnInit {
       }
       this.editingId.set(null);
       this.toast.success(this.t('reference.toast.sizeSetSaved'));
-    } catch { this.toast.error(this.t('reference.toast.sizeSetSaveError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.sizeSetSaveError')); }
     finally { this.saving.set(false); }
   }
 
@@ -1051,6 +1051,6 @@ export class ReferenceComponent implements OnInit {
       await this.refApi.deleteSizeSet(id);
       this.sizeSets.update(list => list.filter(s => s.id !== id));
       this.toast.success(this.t('reference.toast.sizeSetDeleted'));
-    } catch { this.toast.error(this.t('reference.toast.sizeSetDeleteError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.sizeSetDeleteError')); }
   }
 }

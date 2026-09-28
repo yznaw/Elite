@@ -15,6 +15,11 @@ export interface ProductVariant {
   shippingCost?: number;
   totalCost?: number;
   stock: number;
+  /** Per-location stock (location id -> quantity) when stock per location is
+   *  on. `stock` is then the sellable total: these minus `held`. */
+  locationStock?: Record<string, number>;
+  /** Units paid for on the website and not yet approved (sellable nowhere). */
+  held?: number;
 }
 
 export interface Product {
@@ -24,6 +29,9 @@ export interface Product {
   sku: string;
   brand: string;
   price: number;
+  /** Cheapest and dearest active variant, or the product's price when it has none. */
+  priceMin?: number;
+  priceMax?: number;
   /** Defaults copied onto newly-created size variants. */
   defaultCostPrice?: number | null;
   defaultShippingCost?: number | null;
@@ -163,6 +171,10 @@ export interface Order {
   nboxBookingError?: string;
   /** Carrier/shipment details. Absent when nothing has been booked yet. */
   delivery?: OrderDelivery;
+  /** Stock per location: paid online, waiting for staff to pick where it ships from. */
+  needsApproval?: boolean;
+  /** Stock per location: where it ships from once approved (staff only). */
+  pickupLocation?: string;
   /** Undefined until GET /admin/orders/:id has resolved — the list endpoint
       does not carry these, so undefined means "loading", not "none". */
   timeline?: OrderTimelineEntry[];

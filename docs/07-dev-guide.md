@@ -271,6 +271,8 @@ Every request gets one correlation id, shared by the response, the log line, the
 
 Errors are grouped by fingerprint, so a fault that happened 300 times is one row with a count, not 300 rows.
 
+**Admin "links do nothing" / page refreshed itself:** usually a tab left open across a deploy. It now recovers by itself on the next click (one reload plus an *Updated to the latest version* toast). If the Errors tab shows `Failed to fetch dynamically imported module` repeating for the same page, the chunk really is missing from `dist`, so check the deploy. See [04 › Session expiry & new builds](./04-admin-portal.md#session-expiry--new-builds-2026-09).
+
 ### Log something from new code
 
 **Server:**
@@ -340,6 +342,10 @@ Render the HTML and print it from a hidden same-page `<iframe>`; see
   `text-align` from the direction rather than hardcoding `left`.
 - Clean the iframe up on `afterprint`, with a timeout as a backstop.
 
+### Show a Notification (Toast)
+
+Read [38 – Notifications](./38-notification-audit.md) first. In short: the HTTP interceptor already reports every failed request (and `ConnectivityService` owns "connection lost"), so in a `catch` around an API call use `toast.errorFrom(err, title, sub)`, which only shows if the global message did not. Toasts dismiss themselves; pass `duration: null` only with an `action` that really does something; give repeated states a `key` and clear it with `dismissKey`. Tests: `npm run test:notifications`.
+
 ### Add a New i18n Key
 
 1. Open the appropriate `i18n/strings.ts` file
@@ -391,7 +397,7 @@ Then the client side: `SaveProductPayload` and `Product` in `admin-portal`, `For
 
 `expenses` (migration 033) is the worked example. A new page touches more files than it looks, and the two easiest to forget are both navigation:
 
-1. **Migration** — `server/db/migrations/0NN_name.sql` *and* the same statements in `server/db/ensure-migrations.js`. There is no migration runner; `ensure-migrations.js` is what actually runs on boot. Restart twice and confirm the second boot is a clean no-op.
+1. **Migration** — `server/db/migrations/0NN_name.sql` *and* the same statements in `server/db/ensure-migrations.js`. There is no migration runner; `ensure-migrations.js` is what actually runs on boot. Restart twice and confirm the second boot is a clean no-op. POS-table migrations are the exception: append the file to `migrationPaths` in `server/db/pos-schema.js`, which executes the file itself on boot. When such a file swaps a CHECK or UNIQUE constraint, guard the swap on the new constraint name (see `043_pos_sadad_payment.sql`) so a restart does not re-validate the table.
 2. **Route** — `server/routes/admin-<name>.route.js` copying `admin-policies.route.js`, plus three edits in `server/routes/index.js`: the `require`, the mount, and a comment saying why the role scope is what it is. Restrict with `requireAuth({ roles: [...] })` on the mount.
 3. **Service + models** — `services/admin-<name>.service.ts` copying `admin-policies.service.ts`, types in the `models/index.ts` barrel.
 4. **i18n** — both `EN` and `AR` blocks of `i18n/strings.ts` in the same commit. `AR` is typed `Record<keyof typeof EN, string>`, so a missing Arabic key fails the build.
@@ -399,6 +405,16 @@ Then the client side: `SaveProductPayload` and `Product` in `admin-portal`, `For
 6. **Navigation — all four:** `app.routes.ts` (with a `roleGuard` matching the API mount), `shared/sidebar/sidebar.component.ts`, `shared/bottom-nav/bottom-nav.component.ts` (a separate duplicated array — miss it and the page is unreachable on mobile), and `shared/topbar/topbar.component.ts`'s `META` map (miss it and the page's breadcrumb reads "Dashboard").
 
 Verify in the browser in **both languages** — RTL is where a new layout usually breaks first.
+
+### Write Stock From New Code
+
+Any code that changes `product_variants.stock_quantity` must, in the same transaction:
+
+1. Lock the variant rows ordered by id (`ORDER BY id FOR UPDATE`). Lock location rows only after that.
+2. Write an `inventory_movements` row through `recordMovement()` (`server/lib/inventory-ledger.js`).
+3. When `perLocationEnabled()` is true, move the matching location balance through `applyLocationDelta()` (`server/lib/location-stock.js`) and pass its `locationId` to `recordMovement()`. If the code cannot know the location, call `assertTotalOnlyWriteAllowed()` so it refuses instead of drifting.
+
+`server/test/location-stock-e2e.test.js` asserts `findLocationDrift()` is empty after every operation; add your path there.
 
 ### Add a Field to a Product Variant
 

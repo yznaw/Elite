@@ -94,6 +94,8 @@ admin.use('/analytics', adminAnalyticsRouter);
 // /inventory and /expenses below (docs/34 Phase 3).
 admin.use('/bulk-import', requireAuth({ roles: ['owner', 'admin'] }), adminBulkImportRouter);
 admin.use('/ref', adminRefRouter);
+// The top-bar bell: every signed-in role reads its own tenant's feed.
+admin.use('/notifications', require('./admin-notifications.route'));
 // Settings includes role-sensitive endpoints (team management). Owners and
 // admins can manage everything; viewers/managers can read store settings.
 admin.use('/settings', adminSettingsRouter);
