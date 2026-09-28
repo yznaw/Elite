@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from './api-client.service';
 
@@ -91,7 +92,39 @@ export interface StockLocation {
 export interface PerLocationStatus {
   enabled: boolean;
   locations: StockLocation[];
+  /** Units on hand per location (location id → units). */
+  units?: Record<string, number>;
   drift: { variantId: string; sku: string; stock: number; locationTotal: number; held: number }[];
+}
+
+/** One row of a stock file review (Inventory → Update from file). */
+export interface StockFileRow {
+  line: number;
+  sku: string;
+  stock: number | null;
+  productName: string | null;
+  color: string | null;
+  size: string | null;
+  currentStock: number | null;
+  change: number | null;
+  /** The number moved between downloading the sheet and uploading it. */
+  changedSinceDownload: { was: number; now: number } | null;
+  errors: string[];
+}
+
+export interface StockFileReview {
+  jobId: string;
+  rows: StockFileRow[];
+  summary: { total: number; valid: number; failed: number; changed: number; unchanged: number; skipped: number };
+  location: { id: string; name: string } | null;
+  canCommit: boolean;
+}
+
+export interface StockFileResult {
+  jobId: string;
+  updated: number;
+  changed: number;
+  location: { id: string; name: string } | null;
 }
 
 export interface StockRow {
@@ -161,6 +194,38 @@ export interface MovementPage {
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
   private readonly api = inject(ApiClient);
+  private readonly http = inject(HttpClient);
+
+  /** The sheet of every active size for one location (all locations while per-location is off). */
+  async downloadStockFileTemplate(locationId?: string): Promise<{ blob: Blob; filename: string }> {
+    const query = locationId ? `?locationId=${encodeURIComponent(locationId)}` : '';
+    try {
+      const res = await firstValueFrom(this.http.get(this.api.url(`/admin/inventory/stock-file/template${query}`), {
+        withCredentials: true, responseType: 'blob', observe: 'response',
+      }));
+      const disposition = res.headers.get('content-disposition') || '';
+      const filename = /filename="([^"]+)"/.exec(disposition)?.[1] || 'stock.csv';
+      return { blob: res.body ?? new Blob(), filename };
+    } catch (err) {
+      // A blob error body still carries the API's JSON message.
+      if (err instanceof HttpErrorResponse && err.error instanceof Blob) {
+        const body = JSON.parse(await err.error.text().catch(() => '{}') || '{}');
+        throw new HttpErrorResponse({ error: body, status: err.status, statusText: err.statusText, url: err.url ?? undefined });
+      }
+      throw err;
+    }
+  }
+
+  previewStockFile(file: File, locationId?: string): Promise<StockFileReview> {
+    const form = new FormData();
+    form.append('csv', file, file.name);
+    if (locationId) form.append('locationId', locationId);
+    return firstValueFrom(this.api.post<StockFileReview>('/admin/inventory/stock-file/preview', form));
+  }
+
+  commitStockFile(jobId: string): Promise<StockFileResult> {
+    return firstValueFrom(this.api.post<StockFileResult>(`/admin/inventory/stock-file/${jobId}/commit`, {}));
+  }
 
   listMovements(query: { search?: string; locationId?: string; userId?: string; type?: MovementType | ''; from?: string; to?: string; limit?: number; offset?: number }): Promise<MovementPage> {
     const params = new URLSearchParams();

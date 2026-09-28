@@ -25,9 +25,7 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { slugify, toCents } = require('./lib');
 const { storage } = require('../lib/storage');
 const { recordMovement, publishStockEvent, publishCatalogEvent } = require('../lib/inventory-ledger');
-const {
-  assertTotalOnlyWriteAllowed, perLocationEnabled, requireLocation, lockLocationQuantity, applyLocationDelta,
-} = require('../lib/location-stock');
+const { assertTotalOnlyWriteAllowed } = require('../lib/location-stock');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
 
 const router = Router();
@@ -284,267 +282,25 @@ router.get('/history', async (req, res) => {
   })) });
 });
 
-function parseStockCSV(text) {
-  const rows = parseCSV(String(text || '').replace(/^\uFEFF/, '').trim());
-  if (rows.length < 2) return { rows: [], fileErrors: ['CSV is empty.'] };
-  const headers = rows[0].map(value => value.trim().toLowerCase());
-  const skuIndex = headers.indexOf('sku');
-  const stockIndex = headers.indexOf('stock');
-  if (skuIndex < 0 || stockIndex < 0) {
-    return { rows: [], fileErrors: ['Required columns are SKU and Stock.'] };
-  }
-  const seen = new Set();
-  const parsed = rows.slice(1).map((row, index) => {
-    const sku = String(row[skuIndex] || '').trim();
-    const rawStock = String(row[stockIndex] ?? '').trim();
-    const errors = [];
-    if (!sku) errors.push('SKU is required.');
-    if (!/^\d+$/.test(rawStock)) errors.push('Stock must be a whole number greater than or equal to zero.');
-    const key = sku.toLowerCase();
-    if (sku && seen.has(key)) errors.push('Duplicate SKU in file.');
-    if (sku) seen.add(key);
-    return { line: index + 2, sku, stock: /^\d+$/.test(rawStock) ? Number(rawStock) : null, errors };
-  });
-  return { rows: parsed, fileErrors: [] };
-}
+// Stock files moved to Inventory → Update from file (lib/stock-file-import.js,
+// 2026-09-28). These two routes delegate to it so an admin tab opened before
+// the move keeps working; remove them after a release.
+const { previewStockFile, commitStockFile, parseStockCSV } = require('../lib/stock-file-import');
+const stockContext = (req) => ({ tenantId: req.user.tenantId, userId: req.user.id, role: req.user.role });
 
-router.post('/stock/preview', csvUpload.single('csv'), async (req, res) => {
-  if (!req.file) return res.status(422).json({ success: false, message: 'No CSV file received.' });
-  const parsed = parseStockCSV(req.file.buffer.toString('utf-8'));
-  if (parsed.fileErrors.length) return res.status(422).json({ success: false, message: parsed.fileErrors.join(' ') });
-
-  const client = await db.pool.connect();
+router.post('/stock/preview', csvUpload.single('csv'), async (req, res, next) => {
   try {
-    const tenant = await ensureDefaultTenant(client);
-    // Stock per location: a stock file sets the numbers of ONE location,
-    // chosen on upload. Preview then compares against that location.
-    let location = null;
-    if (await perLocationEnabled(client, tenant.id)) {
-      const locationId = String(req.body?.locationId || '').trim();
-      if (!/^[0-9a-f-]{36}$/i.test(locationId)) {
-        return res.status(422).json({ success: false, code: 'LOCATION_REQUIRED', message: 'Choose which location this stock file is for.' });
-      }
-      location = await requireLocation(client, tenant.id, locationId);
-    }
-    const skus = parsed.rows.filter(row => row.sku).map(row => row.sku);
-    const existing = await client.query(
-      `SELECT DISTINCT ON (input.input_sku)
-              input.input_sku, pv.id AS variant_id, pv.product_id, pv.sku, pv.stock_quantity
-         FROM unnest($2::text[]) AS input(input_sku)
-         JOIN product_variants pv ON pv.tenant_id=$1 AND (
-           pv.sku=input.input_sku OR EXISTS (
-             SELECT 1 FROM catalog_identifier_aliases cia
-              WHERE cia.tenant_id=$1 AND cia.variant_id=pv.id
-                AND cia.identifier_type='variant_sku'
-                AND cia.normalized_value=lower(btrim(input.input_sku))
-           )
-         )
-         JOIN products p ON p.id=pv.product_id
-        WHERE p.status<>'archived'
-        ORDER BY input.input_sku, (pv.sku=input.input_sku) DESC`,
-      [tenant.id, skus],
-    );
-    const bySku = new Map(existing.rows.map(row => [row.input_sku, row]));
-    if (location && existing.rows.length) {
-      const balances = await client.query(
-        `SELECT variant_id, quantity FROM variant_location_stock WHERE location_id = $1 AND variant_id = ANY($2::uuid[])`,
-        [location.id, existing.rows.map(row => row.variant_id)],
-      );
-      const atLocation = new Map(balances.rows.map(row => [row.variant_id, Number(row.quantity)]));
-      for (const row of existing.rows) row.stock_quantity = atLocation.get(row.variant_id) ?? 0;
-    }
-    const reviewed = parsed.rows.map(row => {
-      const match = bySku.get(row.sku);
-      const errors = [...row.errors];
-      if (row.sku && !match) errors.push('Variant SKU was not found.');
-      return {
-        ...row,
-        variantId: match?.variant_id || null,
-        productId: match?.product_id || null,
-        currentStock: match ? Number(match.stock_quantity) : null,
-        change: match && row.stock !== null ? row.stock - Number(match.stock_quantity) : null,
-        errors,
-      };
+    const data = await previewStockFile(stockContext(req), {
+      buffer: req.file?.buffer, filename: req.file?.originalname, locationId: req.body?.locationId,
     });
-    const errorCount = reviewed.filter(row => row.errors.length).length;
-    const job = await client.query(
-      `INSERT INTO catalog_import_jobs
-         (tenant_id,created_by_user_id,kind,filename,file_sha256,status,source_rows,summary,started_at,completed_at)
-       VALUES ($1,$2,'stock',$3,$4,'review_ready',$5::jsonb,$6::jsonb,now(),now()) RETURNING id`,
-      [tenant.id, req.user?.id || null, req.file.originalname || 'stock.csv',
-       crypto.createHash('sha256').update(req.file.buffer).digest('hex'), JSON.stringify(reviewed),
-       JSON.stringify({
-         total: reviewed.length, valid: reviewed.length - errorCount, failed: errorCount,
-         ...(location ? { locationId: location.id, locationName: location.name } : {}),
-       })],
-    );
-    for (const row of reviewed) {
-      const item = {
-        name: row.sku || `Line ${row.line}`,
-        status: row.errors.length ? 'error' : 'updated',
-        error: row.errors.join(' '),
-        currentStock: row.currentStock,
-        newStock: row.stock,
-        line: row.line,
-      };
-      await saveImportItem(client, job.rows[0].id, item.name, [row], item);
-    }
-    res.json({ success: true, data: {
-      jobId: job.rows[0].id,
-      rows: reviewed,
-      summary: { total: reviewed.length, valid: reviewed.length - errorCount, failed: errorCount },
-      location: location ? { id: location.id, name: location.name } : null,
-      canCommit: errorCount === 0 && reviewed.length > 0,
-    } });
-  } finally {
-    client.release();
-  }
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
 });
 
-router.post('/stock/:id/commit', async (req, res) => {
-  const client = await db.pool.connect();
+router.post('/stock/:id/commit', async (req, res, next) => {
   try {
-    const tenant = await ensureDefaultTenant(client);
-    await client.query('BEGIN');
-    const jobResult = await client.query(
-      `SELECT * FROM catalog_import_jobs
-        WHERE tenant_id=$1 AND id=$2 AND kind='stock' FOR UPDATE`,
-      [tenant.id, req.params.id],
-    );
-    if (!jobResult.rowCount) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ success: false, message: 'Stock review was not found.' });
-    }
-    const job = jobResult.rows[0];
-    if (job.status !== 'review_ready') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ success: false, message: 'This stock review was already committed.' });
-    }
-    const perLocation = await perLocationEnabled(client, tenant.id);
-    const fileLocationId = job.summary?.locationId || null;
-    if (perLocation && !fileLocationId) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ success: false, code: 'LOCATION_REQUIRED', message: 'This file was reviewed before stock per location was on. Upload it again and choose its location.' });
-    }
-    const rows = job.source_rows || [];
-    if (!rows.length || rows.some(row => Array.isArray(row.errors) && row.errors.length)) {
-      await client.query('ROLLBACK');
-      return res.status(422).json({ success: false, message: 'Fix every validation error before committing stock.' });
-    }
-
-    await client.query("UPDATE catalog_import_jobs SET status='running', started_at=now() WHERE id=$1", [job.id]);
-    await client.query('DELETE FROM catalog_import_items WHERE job_id=$1', [job.id]);
-    const changedProducts = new Set();
-    let updated = 0;
-    // Take every row lock up front in variant-id order (the order every stock
-    // writer uses), instead of in file order inside the loop, so a commit
-    // cannot deadlock against a till sale touching the same variants.
-    await client.query(
-      'SELECT id FROM product_variants WHERE tenant_id = $1 AND sku = ANY($2::text[]) ORDER BY id FOR UPDATE',
-      [tenant.id, rows.map((row) => row.sku)],
-    );
-    const fileLocation = perLocation ? await requireLocation(client, tenant.id, fileLocationId) : null;
-    if (fileLocation) {
-      // Row locks in id order, taken from the variant ids the review matched
-      // (SKU aliases included).
-      await client.query(
-        'SELECT id FROM product_variants WHERE tenant_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE',
-        [tenant.id, rows.map((row) => row.variantId).filter(Boolean)],
-      );
-    }
-    for (const row of fileLocation ? rows : []) {
-      // The file's number is the new quantity AT THIS LOCATION; the sellable
-      // total moves by the difference.
-      const variant = await client.query(
-        'SELECT id, product_id, stock_quantity FROM product_variants WHERE tenant_id = $1 AND id = $2',
-        [tenant.id, row.variantId],
-      );
-      if (!variant.rowCount) throw new Error(`Variant SKU "${row.sku}" no longer exists.`);
-      const before = await lockLocationQuantity(client, tenant.id, row.variantId, fileLocation.id);
-      const delta = Number(row.stock) - before;
-      const totalBefore = Number(variant.rows[0].stock_quantity);
-      if (totalBefore + delta < 0) {
-        const err = new Error(`${row.sku}: some units are held for paid website orders, so it cannot go that low.`);
-        err.status = 409;
-        err.code = 'STOCK_HELD';
-        throw err;
-      }
-      if (delta !== 0) {
-        await applyLocationDelta(client, tenant.id, { variantId: row.variantId, locationId: fileLocation.id, delta, sku: row.sku });
-        await client.query(
-          'UPDATE product_variants SET stock_quantity = stock_quantity + $2, updated_at = now() WHERE id = $1',
-          [row.variantId, delta],
-        );
-        await recordMovement(client, { tenantId: tenant.id, userId: req.user?.id || null }, {
-          productId: variant.rows[0].product_id,
-          variantId: row.variantId,
-          delta,
-          reason: 'bulk_import',
-          referenceType: 'stock_import',
-          referenceId: job.id,
-          locationId: fileLocation.id,
-          metadata: { sku: row.sku, location: fileLocation.name, previousStock: before, newStock: Number(row.stock), importJobId: job.id },
-        });
-        await publishStockEvent(client, tenant.id, row.variantId, totalBefore + delta);
-      }
-      changedProducts.add(variant.rows[0].product_id);
-      updated++;
-      await saveImportItem(client, job.id, row.sku, [row], {
-        name: row.sku, status: 'updated', currentStock: before, newStock: Number(row.stock),
-      });
-    }
-    for (const row of fileLocation ? [] : rows) {
-      const changed = await client.query(
-        `UPDATE product_variants pv
-            SET stock_quantity=$1, updated_at=now()
-           FROM (SELECT id, product_id, stock_quantity AS previous
-                   FROM product_variants
-                  WHERE tenant_id=$2 AND sku=$3 FOR UPDATE) old
-          WHERE pv.id=old.id
-        RETURNING pv.id AS variant_id, old.product_id, old.previous`,
-        [row.stock, tenant.id, row.sku],
-      );
-      if (!changed.rowCount) throw new Error(`Variant SKU "${row.sku}" no longer exists.`);
-      const saved = changed.rows[0];
-      const delta = Number(row.stock) - Number(saved.previous);
-      if (delta !== 0) {
-        await recordMovement(client, { tenantId: tenant.id, userId: req.user?.id || null }, {
-          productId: saved.product_id,
-          variantId: saved.variant_id,
-          delta,
-          reason: 'bulk_import',
-          referenceType: 'stock_import',
-          referenceId: job.id,
-          metadata: { sku: row.sku, previousStock: Number(saved.previous), newStock: Number(row.stock), importJobId: job.id },
-        });
-        await publishStockEvent(client, tenant.id, saved.variant_id, Number(row.stock));
-      }
-      changedProducts.add(saved.product_id);
-      updated++;
-      await saveImportItem(client, job.id, row.sku, [row], {
-        name: row.sku, status: 'updated', currentStock: Number(saved.previous), newStock: Number(row.stock),
-      });
-    }
-    for (const productId of changedProducts) {
-      await client.query(
-        `UPDATE products SET stock_quantity=(SELECT COALESCE(sum(stock_quantity),0) FROM product_variants WHERE product_id=$1), updated_at=now() WHERE id=$1`,
-        [productId],
-      );
-    }
-    const summary = { total: rows.length, updated, failed: 0 };
-    await client.query(
-      `UPDATE catalog_import_jobs SET status='completed', summary=$2::jsonb, completed_at=now() WHERE id=$1`,
-      [job.id, JSON.stringify(summary)],
-    );
-    await client.query('COMMIT');
-    kickRestockDispatch([...changedProducts]);
-    res.json({ success: true, data: { jobId: job.id, updated, notFound: [], summary } });
-  } catch (error) {
-    try { await client.query('ROLLBACK'); } catch (_) {}
-    throw error;
-  } finally {
-    client.release();
-  }
+    res.json({ success: true, data: await commitStockFile(stockContext(req), req.params.id) });
+  } catch (err) { next(err); }
 });
 
 // Map of single-letter abbreviations (uppercase) found in SKU segments → color name.

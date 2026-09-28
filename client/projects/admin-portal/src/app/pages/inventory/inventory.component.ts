@@ -13,6 +13,8 @@ import { ToastService } from '../../services/toast.service';
 import { I18nService } from '../../services/i18n.service';
 import { StockEntryComponent } from './stock-entry.component';
 import { StockHistoryComponent } from './stock-history.component';
+import { StockFileComponent } from './stock-file.component';
+import { AddMethod, AddStockComponent } from './add-stock.component';
 import { downloadCsv, todayStamp } from '../../utils/download-csv';
 
 type Tab = 'stock' | 'receive' | 'transfer' | 'history';
@@ -29,7 +31,7 @@ const PAGE = 50;
  */
 @Component({
   selector: 'ap-inventory',
-  imports: [DatePipe, FormsModule, IconComponent, StockEntryComponent, StockHistoryComponent],
+  imports: [DatePipe, FormsModule, IconComponent, StockEntryComponent, StockHistoryComponent, StockFileComponent, AddStockComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page-fade inv">
@@ -60,6 +62,8 @@ const PAGE = 50;
             <p class="inv-note">{{ t('inv.off.askOwner') }}</p>
           }
         </div>
+        <!-- Stock files work on the single shared number until the switch is on. -->
+        <ap-stock-file [enabled]="false" [locations]="locations()" [units]="units()"/>
       } @else {
         <div class="tabs" role="tablist">
           <button class="tab" role="tab" [class.active]="tab() === 'stock'" [attr.aria-selected]="tab() === 'stock'" (click)="setTab('stock')">{{ t('inv.tab.stock') }}</button>
@@ -159,7 +163,8 @@ const PAGE = 50;
         }
 
         @if (tab() === 'receive') {
-          <ap-stock-entry mode="receive" [locations]="locations()" [preset]="preset()" [presetLocationId]="presetLocation()" (done)="onEntryDone()"/>
+          <ap-add-stock [locations]="locations()" [units]="units()" [preset]="preset()" [presetLocationId]="presetLocation()"
+                        [initialMethod]="initialMethod()" (saved)="onStockAdded()" (viewHistory)="setTab('history')"/>
         }
 
         @if (tab() === 'history') {
@@ -307,6 +312,7 @@ export class InventoryComponent implements OnInit {
   readonly loadError = signal(false);
   readonly enabled = signal(false);
   readonly locations = signal<StockLocation[]>([]);
+  readonly units = signal<Record<string, number>>({});
   readonly activating = signal(false);
   readonly canActivate = computed(() => this.auth.hasRole('owner', 'admin'));
 
@@ -352,6 +358,7 @@ export class InventoryComponent implements OnInit {
 
   readonly preset = signal<StockRow | null>(null);
   readonly presetLocation = signal<string | null>(null);
+  readonly initialMethod = signal<AddMethod | null>(null);
   readonly transfers = signal<TransferSummary[]>([]);
 
   readonly removing = signal<StockRow | null>(null);
@@ -368,6 +375,9 @@ export class InventoryComponent implements OnInit {
   ngOnInit(): void {
     const tab = this.route.snapshot.queryParamMap.get('tab');
     if (tab === 'receive' || tab === 'transfer' || tab === 'history') this.tab.set(tab);
+    // Old links to the separate "Update from file" tab open Add stock → Upload a sheet.
+    if (tab === 'file') { this.tab.set('receive'); this.initialMethod.set('file'); }
+    if (this.route.snapshot.queryParamMap.get('method') === 'file') this.initialMethod.set('file');
     void this.init();
   }
 
@@ -378,6 +388,7 @@ export class InventoryComponent implements OnInit {
       const status = await this.api.perLocationStatus();
       this.enabled.set(status?.enabled === true);
       this.locations.set(Array.isArray(status?.locations) ? status.locations : []);
+      this.units.set(status?.units && typeof status.units === 'object' ? status.units : {});
       if (status.enabled) {
         void this.loadRows(true);
         if (this.tab() === 'transfer') void this.loadTransfers();
@@ -406,6 +417,15 @@ export class InventoryComponent implements OnInit {
     } finally {
       this.activating.set(false);
     }
+  }
+
+  /** After stock was added: fresh unit counts for the location cards. */
+  async onStockAdded(): Promise<void> {
+    this.preset.set(null);
+    try {
+      const status = await this.api.perLocationStatus();
+      this.units.set(status?.units && typeof status.units === 'object' ? status.units : {});
+    } catch { /* the counts refresh on the next visit */ }
   }
 
   setTab(tab: Tab): void {

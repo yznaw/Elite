@@ -142,7 +142,9 @@ app.use(
     // The admin portal is cross-origin in dev (4300 → 3000). Without this the
     // browser cannot read the correlation id off a response, so the client
     // log shipper would have nothing to tie its entries to a server request.
-    exposedHeaders: ['X-Request-Id'],
+    // Content-Disposition carries a download's file name (the stock sheet is
+    // named after its location).
+    exposedHeaders: ['X-Request-Id', 'Content-Disposition'],
   })
 );
 

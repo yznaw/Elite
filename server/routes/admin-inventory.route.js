@@ -4,6 +4,7 @@ const db = require('../db/client');
 const { requireAuth } = require('../middleware/require-auth');
 const locationStock = require('../lib/location-stock');
 const { listStock, receiveStock, transferStock, listTransfers, listMovements } = require('../lib/location-stock-service');
+const { stockFileUpload, buildTemplate, previewStockFile, commitStockFile } = require('../lib/stock-file-import');
 const {
   adjustStock,
   cancelStocktake,
@@ -104,6 +105,29 @@ router.post('/transfers', asyncHandler(async (req, res) => {
   created(res, await transferStock(context(req), req.body), 'Stock moved.');
 }));
 
+// ─── Update from file (lib/stock-file-import.js) ─────────────────────────────
+// Owner/admin/manager, like the rest of this router. The sheet lists every
+// active size for one location; staff fill the Stock column and upload it.
+
+router.get('/stock-file/template', asyncHandler(async (req, res) => {
+  const { filename, csv } = await buildTemplate(context(req), req.query.locationId);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(csv);
+}));
+
+router.post('/stock-file/preview', stockFileUpload.single('csv'), asyncHandler(async (req, res) => {
+  ok(res, await previewStockFile(context(req), {
+    buffer: req.file?.buffer, filename: req.file?.originalname, locationId: req.body?.locationId,
+  }));
+}));
+
+router.post('/stock-file/:id/commit', asyncHandler(async (req, res) => {
+  const result = await commitStockFile(context(req), req.params.id);
+  ok(res, result, result.location ? `Stock updated at ${result.location.name}.` : 'Stock updated.');
+}));
+
 // ─── Per-location stock switch (migration 046, lib/location-stock.js) ───────
 // Owner/admin only. Turning it on seeds every variant's current total into the
 // warehouse; the opening stocktake then moves units to where they are. See
@@ -131,9 +155,16 @@ router.get('/per-location', asyncHandler(async (req, res) => {
   ok(res, await inTransaction(async (client) => {
     await locationStock.syncLocations(client, tenantId);
     const enabled = await locationStock.perLocationEnabled(client, tenantId);
+    const units = enabled ? await client.query(
+      `SELECT location_id, COALESCE(sum(quantity), 0)::int AS units
+         FROM variant_location_stock WHERE tenant_id = $1 GROUP BY location_id`,
+      [tenantId],
+    ) : { rows: [] };
     return {
       enabled,
       locations: await locationStock.listLocations(client, tenantId),
+      // Units on hand per location (location id → units), for the pickers.
+      units: Object.fromEntries(units.rows.map((row) => [row.location_id, row.units])),
       drift: enabled ? (await locationStock.findLocationDrift(client, tenantId, 20)) : [],
     };
   }));

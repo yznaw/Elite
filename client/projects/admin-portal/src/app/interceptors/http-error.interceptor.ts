@@ -84,6 +84,9 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   // valid, so the pair looped forever and only clearing cookies escaped it.
   // The server now answers 409/403 here, and this is the second belt.
   const isRegisterBinding = /\/api\/pos\/registers\/(check-in|claim|enroll|release)$/.test(req.url);
+  // Inventory → Update from file shows a refused sheet (wrong location,
+  // nothing filled in, already saved) in place, next to the file.
+  const isStockFileCheck = /\/api\/admin\/inventory\/stock-file\/(preview|[^/]+\/commit)$/.test(req.url);
 
   return next(req).pipe(
     // Any answer from the API proves it is reachable again.
@@ -181,6 +184,8 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
           t('error.404.title'),
           err.error?.message || t('error.404.sub'),
         );
+      } else if ((err.status === 409 || err.status === 422) && isStockFileCheck) {
+        // Shown inline by StockFileComponent.
       } else if (err.status === 409 && err.error?.code === 'CUSTOMER_IDENTIFIER_TAKEN') {
         // Create, edit, and undo-delete all use this interceptor. Keep the
         // server's actionable message, including the blocking customer on restore.
@@ -227,7 +232,8 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
       const silent = (err.status === 401 && (isAuthProbe || isManagerPinVerify || isRegisterBinding))
         || (err.status === 403 && isManagerPinVerify)
         || (err.status === 428 && isRegisterProbe)
-        || (err.status === 0 && isPosRequest);
+        || (err.status === 0 && isPosRequest)
+        || ((err.status === 409 || err.status === 422) && isStockFileCheck);
       if (!silent) markToastShown(err);
 
       return throwError(() => err);
