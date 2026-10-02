@@ -59,9 +59,12 @@ test('automatic fulfillment: secure checkout, reservations, split booking and in
     const config = (await admin('/admin/inventory/automatic-fulfillment')).body.data;
     const shops = config.stockLocations.filter(l => l.type === 'store');
     const a = shops.find(l => l.name === 'A').id, b = shops.find(l => l.name === 'B').id, w = config.stockLocations.find(l => l.type === 'warehouse').id;
-    const cfg = { enabled: true, fallbackId: w, locations: [a, b, w].map((id, i) => ({ id, origin: { address: ['Shop A', 'Shop B', 'Al Rayyan'][i], city: 'Doha', state: 'Doha', countryCode: 'QA', zip: '0000', phone: '97411111111' } })) };
+    const cfg = { fallbackId: w, locations: [a, b, w].map((id, i) => ({ id, origin: { address: ['Shop A', 'Shop B', 'Al Rayyan'][i], city: 'Doha', state: 'Doha', countryCode: 'QA', zip: '0000', phone: '97411111111' } })) };
     assert.equal((await guest('/admin/inventory/automatic-fulfillment', 'PUT', cfg)).status, 401, 'guest cannot alter origins');
-    assert.equal((await admin('/admin/inventory/automatic-fulfillment', 'PUT', cfg)).status, 200);
+    assert.equal((await admin('/admin/inventory/automatic-fulfillment', 'PUT', {locations:[],fallbackId:null})).status, 409, 'incomplete setup cannot enable delivery');
+    const savedConfig = await admin('/admin/inventory/automatic-fulfillment', 'PUT', cfg);
+    assert.equal(savedConfig.status, 200);
+    assert.equal(savedConfig.body.data.enabled, true, 'valid settings activate delivery without a toggle');
     const receive = async (locationId, lines) => { const r = await admin('/admin/inventory/receipts', 'POST', { locationId, lines }); assert.equal(r.status, 201, JSON.stringify(r.body)); };
     await receive(a, [{ variantId: x, quantity: 2 }]);
     await receive(b, [{ variantId: y, quantity: 1 }]);

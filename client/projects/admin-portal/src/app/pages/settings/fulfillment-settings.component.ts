@@ -94,7 +94,7 @@ export class FulfillmentSettingsComponent implements OnInit {
         this.error.set('');
         try {
             await firstValueFrom(this.api.put('/admin/inventory/automatic-fulfillment', {
-                enabled: c.enabled, fallbackId: c.fallbackId, locations: c.locations,
+                fallbackId: c.fallbackId, locations: c.locations,
             }));
             this.toast.success(this.t('fulfillment.saved'));
         } catch (e: any) {

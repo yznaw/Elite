@@ -11,11 +11,7 @@
     <div class="delivery-loading" role="status"><ap-spinner/> {{t('common.loading')}}</div>
   } @else if (config(); as c) {
     <div class="delivery-body">
-      <label class="delivery-toggle">
-        <span class="toggle-copy"><strong>{{t('fulfillment.automation')}}</strong><span>{{t('fulfillment.enable')}}</span></span>
-        <input type="checkbox" role="switch" [(ngModel)]="c.enabled" [disabled]="saving()" [attr.aria-label]="t('fulfillment.enable')"/>
-        <span class="switch-track" aria-hidden="true"></span>
-      </label>
+      <p class="automation-note"><ap-icon name="check" [size]="16"/>{{t('fulfillment.automaticHint')}}</p>
       @if (!c.perLocation) {
         <p class="delivery-alert" role="alert"><ap-icon name="info" [size]="16"/>{{t('fulfillment.stockRequired')}}</p>
       }

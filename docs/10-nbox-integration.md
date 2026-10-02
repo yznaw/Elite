@@ -3,7 +3,7 @@
 Elite integrates with NBOX in two directions:
 
 1. Checkout asks NBOX for delivery availability and price after the customer enters the delivery address.
-2. In the opt-in automatic flow, verified payment consumes reserved stock and creates one shipment per pickup origin. Legacy location-stock orders retain staff approval.
+2. After automatic delivery setup, verified payment consumes reserved stock and creates one shipment per pickup origin. Legacy location-stock orders retain staff approval.
 3. NBOX sends shipment status updates back to `https://elitecollections.qa/api/webhooks/nbox`.
 
 ## Required Environment
@@ -44,7 +44,7 @@ Do not use your webhook URL for any of these outbound API settings. `https://eli
 
 ## Automatic multi-location fulfillment
 
-This flow is disabled by default. Owners/admins configure it under **Settings → Integrations → Automatic delivery**. Enable stock per location first, select up to three stock locations, enter each pickup address, and choose Al Rayyan as the fallback. Entry order determines shop priority. A physical pickup address must have one stock location; reconcile any branch/warehouse stock duplication before enabling. Existing paid orders waiting for manual approval must be resolved first. NBOX credentials and its webhook signing secret are required.
+Owners/admins configure this flow under **Settings → Integrations → Automatic NBOX delivery**. There is no activation toggle: saving a valid configuration enables automatic fulfillment for new checkouts. Until configuration is saved, the existing order flow remains in place. Enable stock per location first, select the existing The Pearl and Al-Rayyan stock locations, enter their pickup addresses, and select Al-Rayyan under **Warehouse location**. Leave the unused empty Warehouse inventory record unselected. Entry order determines shop priority. A physical pickup address must have one stock location; reconcile any branch/warehouse stock duplication before enabling. Existing paid orders waiting for manual approval must be resolved first. NBOX credentials and its webhook signing secret are required.
 
 Allocation is deterministic:
 
@@ -73,7 +73,7 @@ SADAD callbacks/webhooks must pass signature verification, match the full order 
 
 For automatic orders, signed, amount-verified SADAD confirmation drives reservation consumption without admin approval. The admin bell/email includes the new order and its source preparation lists. Notification recipients use the existing Settings → Notifications configuration. The customer receives payment/confirmation emails.
 
-Migration `047_automatic_fulfillment.sql` is registered in the existing boot migration runner. New orders carry `fulfillment_version=1`. Durable booking states live on each shipment; a worker sweeps every 15 seconds and continues existing automatic orders even if the feature is disabled for new checkouts.
+Migration `047_automatic_fulfillment.sql` is registered in the existing boot migration runner. New orders carry `fulfillment_version=1`. Durable booking states live on each shipment; a worker sweeps every 15 seconds and continues existing automatic orders even if new automatic checkouts are disabled operationally. The internal `enabled` flag remains available for technical rollback; it is not an admin setting.
 
 Each shipment freezes its origin, destination, items and quote and uses a stable child reference such as `EC-…-S1`. It stores its own provider ID, tracking and booking outcome. Advisory locks and idempotent allocations prevent duplicate local work. Explicit API rejection can be retried from order details. Timeout, lost response or interrupted booking becomes **uncertain**: staff must reconcile the child reference with NBOX and either attach the existing shipment or confirm it was not created, with an audit note. A successful sibling shipment is preserved.
 
@@ -92,7 +92,7 @@ Cancellation is per shipment and only before collection. A booked shipment needs
 
 ### Enablement gate
 
-Local automated tests use an isolated PostgreSQL database, mocked carrier/payment data, and intercepted English/Arabic browser APIs. They do not prove live provider compatibility. Before enabling this feature, verify actual origin balances/addresses and notification recipients, then exercise NBOX and SADAD staging with single/split deliveries, signed payment amount/reference fields, late payments and cancellation/reconciliation.
+Local automated tests use an isolated PostgreSQL database, mocked carrier/payment data, and intercepted English/Arabic browser APIs. They do not prove live provider compatibility. Before saving the activating configuration, verify actual origin balances/addresses and notification recipients, then exercise NBOX and SADAD staging with single/split deliveries, signed payment amount/reference fields, late payments and cancellation/reconciliation.
 
 The [NBOX seller specification](https://nbox.now/api/seller/openapi-spec.json), inspected 2026-10-01, defines one origin per order, string `orderNumber` identifiers, `lat`/`lng` coordinates and `displayRate` as the customer charge. Creation is asynchronous acceptance. It also exposes `/fulfilled`; confirm whether your account requires that separate readiness step to schedule collection and agree the packing timing before rollout. This implementation does not automatically call `/fulfilled`. Origin phone/contact are stored for staff; the published address schema has no carrier pickup-contact fields. Verify NBOX's account/location setup supplies the right contact at each branch.
 

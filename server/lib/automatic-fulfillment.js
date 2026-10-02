@@ -44,7 +44,10 @@ function cleanOrigin(raw = {}) {
     return out;
 }
 async function saveSettings(client, context, body) {
-    assertPos(typeof body.enabled === 'boolean' && Array.isArray(body.locations) && body.locations.length <= 3, 422, 'INVALID_CONFIGURATION', 'Provide enabled and up to three pickup locations.');
+    // A valid configuration activates automatic fulfillment by default. Keep
+    // an explicit false available for existing clients and operational rollback.
+    const enabled = body.enabled === undefined ? true : body.enabled;
+    assertPos(typeof enabled === 'boolean' && Array.isArray(body.locations) && body.locations.length <= 3, 422, 'INVALID_CONFIGURATION', 'Provide up to three pickup locations.');
     const existing = await listLocations(client, context.tenantId);
     const ids = new Set(existing.map((l) => l.id));
     const locations = body.locations.map((loc, index) => {
@@ -54,19 +57,19 @@ async function saveSettings(client, context, body) {
     });
     assertPos(new Set(locations.map((l) => l.id)).size === locations.length, 422, 'DUPLICATE_LOCATION', 'Each stock location can be configured once.');
     const fallbackId = body.fallbackId ? uuid(body.fallbackId, 'fallbackId') : null;
-    assertPos(!fallbackId || locations.some((l) => l.id === fallbackId), 422, 'INVALID_FALLBACK', 'The fallback must be a configured pickup location.');
+    assertPos(!fallbackId || locations.some((l) => l.id === fallbackId), 422, 'INVALID_FALLBACK', 'The warehouse must be a configured pickup location.');
     // Each configured entry is one independent consignment. Prevent accidentally
     // counting a branch and its warehouse as two copies of the same origin.
     const addresses = locations.map((l) => `${l.origin.address}|${l.origin.city}`.toLowerCase().replace(/\s+/g, ' '));
     assertPos(new Set(addresses).size === addresses.length, 422, 'DUPLICATE_ORIGIN', 'Use one stock location for each pickup address; reconcile shared branch/warehouse stock first.');
-    if (body.enabled) {
-        assertPos(locations.length >= 2 && fallbackId && await perLocationEnabled(client, context.tenantId), 409, 'FULFILLMENT_NOT_READY', 'Enable stock per location and configure shops plus the Al Rayyan fallback first.');
+    if (enabled) {
+        assertPos(locations.length >= 2 && fallbackId && await perLocationEnabled(client, context.tenantId), 409, 'FULFILLMENT_NOT_READY', 'Enable stock per location and configure the shop and warehouse first.');
         assertPos(nbox.isConfigured(), 409, 'NBOX_NOT_CONFIGURED', 'Configure NBOX credentials before enabling automatic delivery.');
         assertPos(Boolean(process.env.NBOX_WEBHOOK_SECRET), 409, 'NBOX_NOT_CONFIGURED', 'Configure the NBOX webhook signing secret before enabling automatic delivery.');
         const { rows } = await client.query("SELECT id FROM orders WHERE tenant_id=$1 AND fulfillment_version IS NULL AND payment_status='paid' AND EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id=orders.id AND h.status='held') LIMIT 1", [context.tenantId]);
         assertPos(!rows.length, 409, 'LEGACY_ORDERS_PENDING', 'Resolve existing paid orders awaiting approval before enabling automatic fulfillment.');
     }
-    const value = { enabled: body.enabled, fallbackId, locations };
+    const value = { enabled, fallbackId, locations };
     await client.query("UPDATE tenants SET config=jsonb_set(COALESCE(config,'{}'),'{automaticFulfillment}',$2::jsonb,true) WHERE id=$1", [context.tenantId, JSON.stringify(value)]);
     await client.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,after_state) VALUES($1,$2,'fulfillment.settings','tenant',$1,$3::jsonb)", [context.tenantId, context.userId, JSON.stringify(value)]);
     return value;

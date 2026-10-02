@@ -5,6 +5,8 @@ Status: local implementation and automated verification completed; production en
 
 ## Implementation record
 
+- Updated 2026-10-02: admin setup has no automatic-fulfillment toggle. Saving valid origins and a warehouse activates the flow by default after readiness validation. The user-facing label is **Warehouse**, mapped to the existing Al-Rayyan location. The unused empty Warehouse stock record is not an additional origin. An internal disable flag remains for technical rollback. This supersedes the activation-toggle steps in the original plan below.
+
 - Migration 047 adds session-owned quotes, specific-location reservations, shipment allocations, provider transaction claims and deduplicated events. Existing orders retain their previous workflow.
 - The allocator selects a complete shop first, then complete Al Rayyan, then the smallest feasible origin set. Checkout displays separately quoted deliveries and requires review after a quote change.
 - Quotes expire after 15 minutes; stock reservations expire after 30 minutes. These lifetimes are currently fixed and must be checked against the actual SADAD session window before rollout.

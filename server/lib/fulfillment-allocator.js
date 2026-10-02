@@ -1,11 +1,11 @@
 const { assertPos } = require('./pos/errors');
 /** Pure, deterministic allocation. Stock is already net of reservations. */
 function allocate(lines, locations, fallbackId) {
-    assertPos(locations.length > 0 && locations.length <= 3, 409, 'ORIGINS_NOT_CONFIGURED', 'Configure two shops and the Al Rayyan fallback.');
+    assertPos(locations.length > 0 && locations.length <= 3, 409, 'ORIGINS_NOT_CONFIGURED', 'Configure the shop and warehouse pickup locations.');
     const sorted = [...locations].sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
     const regular = sorted.filter((l) => l.id !== fallbackId);
     const fallback = sorted.find((l) => l.id === fallbackId);
-    assertPos(fallback, 409, 'FALLBACK_NOT_CONFIGURED', 'Configure the Al Rayyan fallback location.');
+    assertPos(fallback, 409, 'FALLBACK_NOT_CONFIGURED', 'Configure the warehouse pickup location.');
     const complete = (subset) => lines.every((line) => subset.reduce((sum, loc) => sum + (loc.stock[line.variantId] || 0), 0) >= line.qty);
     let selected = regular.find((loc) => complete([loc]));
     selected = selected ? [selected] : complete([fallback]) ? [fallback] : null;

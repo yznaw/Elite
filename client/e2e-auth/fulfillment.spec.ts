@@ -17,7 +17,7 @@ async function prepare(page: Page, lang: 'en' | 'ar', empty = false) {
         if (path === '/api/admin/inventory/automatic-fulfillment') {
             if (route.request().method() === 'PUT') {
                 saved = route.request().postDataJSON();
-                return ok(saved);
+                return ok({...saved, enabled:true});
             }
             return ok(empty ? { ...settings, locations: [], fallbackId: null } : settings);
         }
@@ -52,9 +52,7 @@ for (const lang of ['en', 'ar'] as const) {
         await panel.getByRole('button',{name:lang === 'en' ? 'Add pickup location' : 'إضافة موقع استلام',exact:true}).click();
         await panel.locator('.origin-fields select').selectOption('a');
         await expect(panel.locator('.origin-fields input').first()).toBeVisible();
-        await panel.getByRole('switch').focus();
-        await page.keyboard.press('Space');
-        await expect(panel.getByRole('switch')).toBeChecked();
+        await expect(panel.getByRole('switch')).toHaveCount(0);
         expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
         await panel.screenshot({path:testInfo.outputPath('settings-edit-mobile.png')});
     });
@@ -69,6 +67,9 @@ for (const lang of ['en', 'ar'] as const) {
         await panel.getByRole('button', { name: lang === 'en' ? 'Save delivery settings' : 'حفظ إعدادات التوصيل', exact: true }).click();
         await expect.poll(() => mock.saved()?.fallbackId).toBe('w');
         expect(mock.saved().locations).toHaveLength(2);
+        expect(mock.saved().enabled).toBeUndefined();
+        await expect(panel.getByRole('switch')).toHaveCount(0);
+        await expect(panel.locator('label[for="delivery-fallback"]')).toHaveText(lang === 'en' ? 'Warehouse location' : 'موقع المستودع');
     });
     test(`split delivery tracking without approval (${lang})`, async ({ page }, testInfo) => {
         const mock = await prepare(page, lang);
