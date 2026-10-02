@@ -1142,8 +1142,15 @@ function readPreview(file: File): Promise<string> {
               @for (img of pickerImages(); track img) {
                 @let owner = colorLinkedToImage(img);
                 @let mine = owner === pg.colorName;
-                <div class="cp-item">
-                  <div class="cp-tile" [class.is-sel]="mine" [class.is-other]="!!owner && !mine">
+                <div class="cp-item"
+                     [class.is-drop]="mine && cpDropUrl() === img"
+                     [attr.draggable]="mine ? 'true' : null"
+                     (dragstart)="mine && onColorDragStart(img, $event)"
+                     (dragover)="mine && onColorDragOver(img, $event)"
+                     (dragleave)="cpDropUrl.set(null)"
+                     (dragend)="cpDropUrl.set(null)"
+                     (drop)="mine && onColorDrop(pg.colorName, img, $event)">
+                  <div class="cp-tile" [class.is-sel]="mine" [class.is-other]="!!owner && !mine" [class.is-draggable]="mine">
                     <button class="cp-tile-btn" type="button" (click)="toggleColorImage(pg.colorName, img)"
                             [attr.aria-pressed]="mine">
                       <img [src]="img" alt=""/>
@@ -2001,6 +2008,8 @@ function readPreview(file: File): Promise<string> {
     .cp-add:hover { border-color: var(--gold); background: var(--gold-3); color: var(--ink); }
     .cp-add-label { font-size: 13px; font-weight: 700; line-height: 1.3; }
     .cp-add-sub { font-size: 10px; line-height: 1.3; }
+    .cp-tile.is-draggable { cursor: grab; }
+    .cp-item.is-drop .cp-tile { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(0,0,0,.12); }
     .cp-owner {
       position: absolute; inset-inline: 6px; bottom: 6px; padding: 2px 6px; border-radius: 6px;
       background: rgba(255,255,255,.92); color: var(--ink); font-size: 11px; font-weight: 600;
@@ -3222,6 +3231,46 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const images = this.form().images;
     return [...images.filter((url) => first.has(url)), ...images.filter((url) => !first.has(url))];
   });
+
+  private cpDragUrl: string | null = null;
+  readonly cpDropUrl = signal<string | null>(null);
+
+  onColorDragStart(url: string, ev: DragEvent): void {
+    this.cpDragUrl = url;
+    ev.dataTransfer?.setData('text/plain', url);
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  }
+
+  onColorDragOver(url: string, ev: DragEvent): void {
+    if (!this.cpDragUrl) return;
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+    if (this.cpDropUrl() !== url) this.cpDropUrl.set(url);
+  }
+
+  onColorDrop(colorName: string, targetUrl: string, ev: DragEvent): void {
+    ev.preventDefault();
+    const from = this.cpDragUrl;
+    this.cpDragUrl = null;
+    this.cpDropUrl.set(null);
+    if (from) this.moveColorImage(colorName, from, targetUrl);
+  }
+
+  /** Moves one of the colour's photos to another's place. The colour's photos swap among the gallery
+      slots they already hold, so nothing else in the gallery moves and no new order field is needed. */
+  moveColorImage(colorName: string, fromUrl: string, toUrl: string): void {
+    if (fromUrl === toUrl) return;
+    const own = this.imagesForColor(colorName);
+    const from = own.indexOf(fromUrl);
+    const to = own.indexOf(toUrl);
+    if (from < 0 || to < 0) return;
+    const reordered = [...own];
+    reordered.splice(to, 0, ...reordered.splice(from, 1));
+    const gallery = [...this.form().images];
+    const slots = own.map((url) => gallery.indexOf(url));
+    reordered.forEach((url, i) => { gallery[slots[i]] = url; });
+    this.set('images', gallery);
+  }
 
   private snapshotPickerSelection(id: string | null): void {
     const group = id?.startsWith('group-') ? this.colorGroups().find((g) => 'group-' + g.colorKey === id) : null;
