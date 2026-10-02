@@ -581,11 +581,13 @@ position in the gallery. See [05 – API Server](./05-api-server.md#which-image-
 
 ### Color → Image Linking
 
-Each color variant can be linked to one gallery image via the photo cell in the row:
-- Click the photo cell → image picker popover opens (to the right)
-- Selecting an image stores `imageColors[imageUrl] = colorName` in the product form
-- The storefront uses this map to show the correct image for each color
-- Gallery thumbnails display a read-only color badge for linked images
+Each color can hold several gallery images (2026-10-02), with one of them as its **card cover**:
+- Click the photo cell on the color's row → image picker popover opens (to the right). Tick every photo of that color (multi-select; the popover stays open). An image belongs to one color, so ticking it moves it from another color. "None" clears the color's photos.
+- Ticked images show a **Make cover** button; the cover shows **Card cover**. Without a pick, the color's first image in gallery order is the cover.
+- Selecting stores `imageColors[imageUrl] = colorName` and `colorCovers[colorName] = imageUrl` in the product form (`colorCovers` is sent on save; the server ignores a cover whose image is no longer tagged with that color).
+- The photo count ("4 photos") shows beside each color's photo cell.
+- The storefront shows only the picked color's images (cover first) plus untagged images. A color with one image keeps the old behaviour (full gallery, its image first).
+- Gallery thumbnails display a read-only color badge for linked images, with "(Card cover)" on the cover
 - A transparent full-screen backdrop closes the picker on outside click
 
 ### Collapsible Detail

@@ -29,6 +29,7 @@ export interface SaveProductPayload {
   variants: ProductVariant[];
   images: string[];
   imageColors: Record<string, string>;
+  colorCovers: Record<string, string>;
   relatedProductIds: string[];
 }
 
@@ -57,6 +58,9 @@ export class AdminProductsService {
       images:      p.images?.map(norm) ?? p.images,
       imageColors: Object.fromEntries(
         Object.entries(p.imageColors ?? {}).map(([url, color]) => [norm(url), color])
+      ),
+      colorCovers: Object.fromEntries(
+        Object.entries(p.colorCovers ?? {}).map(([color, url]) => [color, norm(url)])
       ),
     };
   }

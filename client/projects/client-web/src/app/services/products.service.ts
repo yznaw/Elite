@@ -174,6 +174,7 @@ export class ProductsService {
       : [];
     const image = this.resolveMediaUrl(product.image) || images[0] || this.defaultImage;
     const colorImages = this.normalizeColorImages(product.colorImages);
+    const colorGalleries = this.normalizeColorGalleries(product.colorGalleries);
     const imageVariants = this.normalizeImageVariants(product.imageVariants);
     const variants = Array.isArray(product.variants)
       ? product.variants.map((variant) => ({
@@ -189,8 +190,20 @@ export class ProductsService {
       images: images.length ? [...new Set([image, ...images])] : product.images,
       imageVariants: Object.keys(imageVariants).length ? imageVariants : undefined,
       colorImages: Object.keys(colorImages).length ? colorImages : undefined,
+      colorGalleries: Object.keys(colorGalleries).length ? colorGalleries : undefined,
       variants,
     };
+  }
+
+  private normalizeColorGalleries(colorGalleries: Product['colorGalleries']): Record<string, string[]> {
+    return Object.entries(colorGalleries || {}).reduce<Record<string, string[]>>((map, [color, urls]) => {
+      const key = String(color || '').trim().toLowerCase();
+      const list = (Array.isArray(urls) ? urls : [])
+        .map((url) => this.resolveMediaUrl(String(url || '')))
+        .filter(Boolean);
+      if (key && list.length) map[key] = [...new Set(list)];
+      return map;
+    }, {});
   }
 
   private normalizeColorImages(colorImages: Product['colorImages']): Record<string, string> {

@@ -44,6 +44,7 @@ interface FormShape {
   variants: ProductVariant[];
   images: string[];
   imageColors: Record<string, string>;
+  colorCovers: Record<string, string>;
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -267,7 +268,7 @@ function readPreview(file: File): Promise<string> {
                     @if (colorLinkedToImage(img); as linkedColor) {
                       <div class="thumb-color-badge">
                         <span class="color-dot" [style.background]="colorHex(linkedColor)"></span>
-                        <span>{{ linkedColor }}</span>
+                        <span>{{ linkedColor }}{{ imageForColor(linkedColor) === img ? ' (' + t('product.variants.cardCover') + ')' : '' }}</span>
                       </div>
                     }
                     <div class="thumb-actions">
@@ -500,6 +501,9 @@ function readPreview(file: File): Promise<string> {
                           <ap-icon name="media" [size]="13"/>
                         }
                       </button>
+                      @if (imagesForColor(group.colorName).length > 0) {
+                        <span class="vcg-img-count">{{ imagesForColor(group.colorName).length }} {{ t('product.variants.photoCount') }}</span>
+                      }
 
                       @if (variantPickerOpenId() === 'group-' + group.colorKey) {
                         <div class="vc-img-picker vc-img-picker--group" (click)="$event.stopPropagation()">
@@ -510,18 +514,28 @@ function readPreview(file: File): Promise<string> {
                           @if (form().images.length === 0) {
                             <p class="vc-img-picker-empty">{{ t('product.variants.uploadFirst') }}</p>
                           } @else {
+                            <p class="vc-img-picker-hint">{{ t('product.variants.pickPhotos') }}</p>
                             <div class="vc-img-picker-grid">
                               <button class="vc-img-opt vc-img-opt--none" type="button"
-                                      [class.is-sel]="!imageForColor(group.colorName)"
-                                      (click)="setColorImage(group.colorName, ''); closeVariantPicker()">
+                                      [class.is-sel]="imagesForColor(group.colorName).length === 0"
+                                      (click)="clearColorImages(group.colorName)">
                                 <span class="vc-img-none-label">{{ t('product.variants.noneOption') }}</span>
                               </button>
                               @for (img of form().images; track img) {
-                                <button class="vc-img-opt" type="button"
-                                        [class.is-sel]="imageForColor(group.colorName) === img"
-                                        (click)="setColorImage(group.colorName, img); closeVariantPicker()">
-                                  <img [src]="img" [alt]="''"/>
-                                </button>
+                                <div class="vc-img-cell">
+                                  <button class="vc-img-opt" type="button"
+                                          [class.is-sel]="colorLinkedToImage(img) === group.colorName"
+                                          (click)="toggleColorImage(group.colorName, img)">
+                                    <img [src]="img" [alt]="''"/>
+                                  </button>
+                                  @if (colorLinkedToImage(img) === group.colorName) {
+                                    <button class="vc-img-cover" type="button"
+                                            [class.is-cover]="imageForColor(group.colorName) === img"
+                                            (click)="setColorCover(group.colorName, img)">
+                                      {{ imageForColor(group.colorName) === img ? t('product.variants.cardCover') : t('product.variants.makeCover') }}
+                                    </button>
+                                  }
+                                </div>
                               }
                             </div>
                           }
@@ -1768,6 +1782,7 @@ function readPreview(file: File): Promise<string> {
       color: var(--muted); position: relative; overflow: hidden;
       transition: border-color .12s;
     }
+    .vcg-img-count { font-size: 11px; color: var(--muted); margin-inline-start: 6px; white-space: nowrap; }
     .vcg-img-btn.has-img { border-style: solid; border-color: var(--gold); }
     .vcg-img-btn.no-color { opacity: 0.3; cursor: not-allowed; }
 
@@ -2001,6 +2016,14 @@ function readPreview(file: File): Promise<string> {
     }
     .vc-img-opt:hover:not(.is-sel) { border-color: var(--ink-2); transform: scale(1.05); }
     .vc-img-opt--none { border-style: dashed; }
+    .vc-img-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .vc-img-cover {
+      font-size: 9px; font-weight: 700; line-height: 1;
+      padding: 3px 6px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border-2); background: var(--bg); color: var(--muted);
+    }
+    .vc-img-cover.is-cover { border-color: var(--gold); background: var(--gold); color: var(--ink); cursor: default; }
+    .vc-img-picker-hint { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
     .vc-img-none-label {
       font-size: 9px; font-weight: 700;
       color: var(--muted); text-align: center;
@@ -2603,6 +2626,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       variants: [],
       images: [],
       imageColors: {},
+      colorCovers: {},
       relatedProductIds: [],
     };
   }
@@ -2644,6 +2668,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       variants: (p.variants ?? []).map(v => ({ ...v })),
       images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
       imageColors: { ...(p.imageColors ?? {}) },
+      colorCovers: { ...(p.colorCovers ?? {}) },
       relatedProductIds: [...(p.relatedProductIds ?? [])],
     };
   }
@@ -2905,6 +2930,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const images = this.form().images.filter((_, i) => i !== index);
     this.set('images', images);
     this.set('imageColors', this.pruneImageColors(this.form().imageColors, images));
+    this.pruneColorCovers();
   }
 
   setPrimaryImage(index: number): void {
@@ -3124,6 +3150,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
         .filter(([, color]) => this.colorKey(color) !== groupKey));
       if (Object.keys(imageColors).length !== Object.keys(this.form().imageColors).length) {
         this.set('imageColors', imageColors);
+        this.pruneColorCovers();
       }
     }
     this.set('variants', next);
@@ -3572,18 +3599,52 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     void this.openMediaPicker();
   }
 
-  imageForColor(colorName: string): string | null {
-    if (!colorName) return null;
-    const entry = Object.entries(this.form().imageColors).find(([, c]) => c === colorName);
-    return entry ? entry[0] : null;
+  /** Every gallery image tagged with this colour, in gallery order. */
+  imagesForColor(colorName: string): string[] {
+    if (!colorName) return [];
+    const colors = this.form().imageColors;
+    return this.form().images.filter((url) => colors[url] === colorName);
   }
 
-  setColorImage(colorName: string, imageUrl: string): void {
+  /** The colour's card cover: the picked one while it is still tagged, else its first image. */
+  imageForColor(colorName: string): string | null {
+    const own = this.imagesForColor(colorName);
+    const picked = this.form().colorCovers[colorName];
+    return picked && own.includes(picked) ? picked : own[0] ?? null;
+  }
+
+  /** Adds the image to the colour, or takes it off if it is already there. An image
+      belongs to one colour, so ticking it here moves it from any other colour. */
+  toggleColorImage(colorName: string, imageUrl: string): void {
+    const next = { ...this.form().imageColors };
+    if (next[imageUrl] === colorName) delete next[imageUrl];
+    else next[imageUrl] = colorName;
+    this.set('imageColors', next);
+    this.pruneColorCovers();
+  }
+
+  clearColorImages(colorName: string): void {
     const next = Object.fromEntries(
       Object.entries(this.form().imageColors).filter(([, c]) => c !== colorName)
     );
-    if (imageUrl) next[imageUrl] = colorName;
     this.set('imageColors', next);
+    this.pruneColorCovers();
+  }
+
+  setColorCover(colorName: string, imageUrl: string): void {
+    if (this.form().imageColors[imageUrl] !== colorName) return;
+    this.set('colorCovers', { ...this.form().colorCovers, [colorName]: imageUrl });
+  }
+
+  /** Drops covers whose image is no longer tagged with that colour. */
+  private pruneColorCovers(): void {
+    const colors = this.form().imageColors;
+    const covers = Object.fromEntries(
+      Object.entries(this.form().colorCovers).filter(([color, url]) => colors[url] === color)
+    );
+    if (Object.keys(covers).length !== Object.keys(this.form().colorCovers).length) {
+      this.set('colorCovers', covers);
+    }
   }
 
   colorLinkedToImage(imageUrl: string): string | null {
@@ -3883,6 +3944,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       target.variants = (saved.variants ?? []).map(v => ({ ...v }));
       target.images = [...(saved.images ?? f.images)];
       target.imageColors = { ...(saved.imageColors ?? f.imageColors) };
+      target.colorCovers = { ...(saved.colorCovers ?? f.colorCovers) };
       target.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
       // Keep the legacy `image` field in sync with images[0] so the catalog
       // grid, dashboard heatmap, and order rows use the new primary.

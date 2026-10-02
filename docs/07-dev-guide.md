@@ -532,7 +532,7 @@ Colour **photos** come from two unrelated datasets. Confusing them is the easies
 
 They are intentionally separate: hero art is a cutout framed for the hero stage, gallery photos are standard product photography. The home hero does **not** read `product_color_images`, and the product page does not read slide content.
 
-If you do need the product gallery mapping, note the two APIs use opposite key directions: `GET /api/products` returns `colorImages` (colour -> URL, keys lowercased) while `GET /api/admin/products` returns `imageColors` (URL -> colour, original casing).
+If you do need the product gallery mapping, note the two APIs use opposite key directions: `GET /api/products` returns `colorImages` (colour -> URL, keys lowercased) while `GET /api/admin/products` returns `imageColors` (URL -> colour, original casing). `GET /api/products` also returns `colorGalleries` (colour -> all URLs, cover first) and the admin API returns `colorCovers` (colour -> cover URL); see [05 – API Server](./05-api-server.md).
 
 ### Add a New CSS Design Token
 

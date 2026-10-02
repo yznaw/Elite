@@ -1049,6 +1049,8 @@ Full CRUD for all three reference tables. All endpoints are tenant-scoped. Requi
 
 **Color-image pivot** (`product_color_images`) — created by `010_color_images.sql`. Written by `replaceColorImages()` in `admin-products.route.js` on every product save alongside the legacy `media_assets.metadata.color` path (dual-write for zero-downtime rollout). Public `products.route.js` prefers the pivot JOIN; falls back to metadata JSONB for products not yet re-saved.
 
+**Several images per colour + card cover (`048_color_image_primary.sql`, 2026-10-02):** `product_color_images.is_primary` marks the colour's cover (`replaceColorImages()` writes one per colour: the `colorCovers` the admin sent if that image is still tagged with the colour, else the colour's first gallery image). `GET /api/admin/products` returns `colorCovers` (colour lowercased -> URL) next to `imageColors`; `POST`/`PATCH` accept `colorCovers`. Public `GET /api/products` returns `colorImages` (colour -> cover, `ORDER BY is_primary DESC, sort_order`; used by collection cards and the cart) and `colorGalleries` (colour -> every URL, cover first). Covered by `server/test/product-color-gallery-e2e.test.js`.
+
 ### Which image the storefront shows (image ordering)
 
 `GET /api/products` and `GET /api/products/:id` share two SQL constants in `products.route.js`,

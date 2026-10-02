@@ -258,6 +258,8 @@ export class ProductComponent implements OnInit, OnDestroy {
     const images = [...(p.images ?? []), p.image]
       .map((src) => String(src || '').trim())
       .filter(Boolean);
+    const colorGallery = this.colorGalleryImages(p, this.selectedColor(), images);
+    if (colorGallery) return colorGallery;
     const selectedColorImage = this.selectedColor()
       ? this.productImageForColor(p, this.selectedColor() || '', images)
       : null;
@@ -1178,6 +1180,27 @@ export class ProductComponent implements OnInit, OnDestroy {
 
     // Filename hints are a real signal; gallery position is not, so there is no positional guess.
     return galleryImages.find((image) => this.urlContainsColor(image, key)) || null;
+  }
+
+  /**
+   * A colour with its own images shows those (cover first) plus the images no colour claims,
+   * and hides the other colours' images. Returns null when the colour has fewer than two
+   * images, so products with one image per colour keep the full gallery.
+   */
+  private colorGalleryImages(product: Product, color: string | null, galleryImages: string[]): string[] | null {
+    const galleries = product.colorGalleries;
+    if (!color || !galleries) return null;
+    const key = this.colorKey(color);
+    const target = this.colorSlug(key);
+    const own = galleries[key] ?? Object.entries(galleries).find(([name]) => this.colorSlug(name) === target)?.[1];
+    if (!own || own.length < 2) return null;
+
+    const resolve = (urls: string[]) => urls.map((url) => this.resolveGalleryImage(product, url, galleryImages));
+    const ownImages = resolve(own);
+    // The same photo can sit in the gallery at two sizes (card and pdp), so compare identities.
+    const claimed = new Set(Object.values(galleries).flat().map((url) => this.mediaIdentity(url)));
+    const shared = galleryImages.filter((image) => !claimed.has(this.mediaIdentity(image)));
+    return [...new Set([...ownImages, ...shared])];
   }
 
   private mappedImageForColor(product: Product, key: string): string | null {
