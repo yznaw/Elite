@@ -1132,17 +1132,14 @@ function readPreview(file: File): Promise<string> {
           </button>
         </div>
         <div class="modal-body">
-          @if (form().images.length === 0) {
-            <p class="cp-empty">{{ t('product.variants.uploadFirst') }}</p>
-          } @else {
-            <div class="cp-summary">
+          <div class="cp-summary">
               <strong>{{ imagesForColor(pg.colorName).length }}</strong> {{ t('product.variants.photosSelected') }}
               @if (imagesForColor(pg.colorName).length > 0) {
                 <button class="cp-clear" type="button" (click)="clearColorImages(pg.colorName)">{{ t('product.variants.clearAll') }}</button>
               }
             </div>
             <div class="cp-grid">
-              @for (img of form().images; track img) {
+              @for (img of pickerImages(); track img) {
                 @let owner = colorLinkedToImage(img);
                 @let mine = owner === pg.colorName;
                 <div class="cp-item">
@@ -1169,13 +1166,15 @@ function readPreview(file: File): Promise<string> {
                   }
                 </div>
               }
+              <button class="cp-tile cp-add" type="button"
+                      (click)="openLibraryForVariantPicker('group-' + pg.colorKey)">
+                <ap-icon name="media" [size]="22"/>
+                <span class="cp-add-label">{{ t('product.variants.addMorePhotos') }}</span>
+                <span class="cp-add-sub">{{ t('product.variants.browseLibrary') }}</span>
+              </button>
             </div>
-          }
         </div>
         <div class="drawer-foot">
-          <button class="btn btn-outline" type="button" (click)="openLibraryForVariantPicker('group-' + pg.colorKey)">
-            <ap-icon name="media" [size]="13"/> {{ t('product.variants.browseLibrary') }}
-          </button>
           <button class="btn btn-gold" type="button" (click)="closeVariantPicker()">{{ t('common.done') }}</button>
         </div>
       </div>
@@ -1964,7 +1963,6 @@ function readPreview(file: File): Promise<string> {
     .cp-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
     .cp-swatch { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); flex-shrink: 0; }
     .cp-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
-    .cp-empty { margin: 0; text-align: center; color: var(--muted); padding: 24px 0; }
     .cp-summary { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); margin-bottom: 14px; }
     .cp-clear {
       margin-inline-start: auto; border: none; background: none; cursor: pointer;
@@ -1995,6 +1993,14 @@ function readPreview(file: File): Promise<string> {
     }
     .cp-star:hover { color: var(--gold); }
     .cp-star.is-cover { background: var(--gold); color: #fff; }
+    .cp-add {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+      border-style: dashed; background: var(--bg); color: var(--muted); cursor: pointer; padding: 8px;
+      text-align: center;
+    }
+    .cp-add:hover { border-color: var(--gold); background: var(--gold-3); color: var(--ink); }
+    .cp-add-label { font-size: 13px; font-weight: 700; line-height: 1.3; }
+    .cp-add-sub { font-size: 10px; line-height: 1.3; }
     .cp-owner {
       position: absolute; inset-inline: 6px; bottom: 6px; padding: 2px 6px; border-radius: 6px;
       background: rgba(255,255,255,.92); color: var(--ink); font-size: 11px; font-weight: 600;
@@ -2729,6 +2735,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const resumeId = this.variantPickerResumeId();
     if (resumeId) {
       this.variantPickerResumeId.set(null);
+      this.snapshotPickerSelection(resumeId);
       this.variantPickerOpenId.set(resumeId);
     }
   }
@@ -3205,6 +3212,22 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return this.colorGroups().find((group) => 'group-' + group.colorKey === id) ?? null;
   });
 
+  /** Photos tagged with the colour when its dialog opened. Taken once per open so a tile does
+      not jump away from under the cursor while the worker is still picking. */
+  private readonly pickerOpenedWith = signal<Set<string>>(new Set());
+
+  /** The gallery in dialog order: this colour's photos first, the rest after, both in gallery order. */
+  readonly pickerImages = computed(() => {
+    const first = this.pickerOpenedWith();
+    const images = this.form().images;
+    return [...images.filter((url) => first.has(url)), ...images.filter((url) => !first.has(url))];
+  });
+
+  private snapshotPickerSelection(id: string | null): void {
+    const group = id?.startsWith('group-') ? this.colorGroups().find((g) => 'group-' + g.colorKey === id) : null;
+    this.pickerOpenedWith.set(new Set(group ? this.imagesForColor(group.colorName) : []));
+  }
+
   @HostListener('document:keydown.escape')
   onEscape(): void {
     if (this.variantPickerOpenId()) this.closeVariantPicker();
@@ -3565,7 +3588,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   toggleVariantPicker(id: string): void {
-    this.variantPickerOpenId.set(this.variantPickerOpenId() === id ? null : id);
+    const opening = this.variantPickerOpenId() !== id;
+    if (opening) this.snapshotPickerSelection(id);
+    this.variantPickerOpenId.set(opening ? id : null);
   }
 
   closeVariantPicker(): void {
