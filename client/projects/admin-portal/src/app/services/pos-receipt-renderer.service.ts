@@ -221,6 +221,115 @@ export class PosReceiptRenderer {
     };
   }
 
+  /**
+   * The QNB terminal's own pre-formatted slip (40 columns), printed on the
+   * Bixolon because the terminal's paper printing is off for ECR merchants.
+   * Format bytes from the guide (§9.1.5): 0x1E double width, 0x11 double
+   * height, 0x12 inverse, 0x1F normal, reset after each new line; 0x0C ends a
+   * copy; 0x22 is the contactless symbol, 0x23 the DCC disclaimer. Bank
+   * branding rule: no shop logo on a payment slip, so none is drawn.
+   * `copy: 'customer'` prints only the copy marked CUSTOMER (the merchant
+   * copy is kept digitally); falls back to the last copy when unmarked.
+   */
+  async renderTerminalSlip(text: string, copy: 'customer' | 'all' = 'customer'): Promise<PosRenderedReceipt> {
+    const copies = text.split('\f').map((part) => part.replace(/^[\r\n]+|[\r\n]+$/g, '')).filter((part) => part.trim());
+    let chosen = copies;
+    if (copy === 'customer' && copies.length > 1) {
+      const customer = copies.filter((part) => /CUSTOMER/i.test(part));
+      chosen = customer.length ? customer : [copies[copies.length - 1]];
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = this.widthPx;
+    canvas.height = 6000;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+    const y = this.paintTerminalSlip(ctx, chosen);
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = this.widthPx;
+    finalCanvas.height = Math.ceil(y) + this.marginPx;
+    const finalCtx = finalCanvas.getContext('2d');
+    if (!finalCtx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+    this.paintTerminalSlip(finalCtx, chosen);
+    this.binarizeCanvas(finalCtx);
+    return {
+      imageDataUrl: finalCanvas.toDataURL('image/png'),
+      footerCommands: this.feedAndCutCommands(),
+      paperHeightMm: this.paperHeightMm(finalCanvas.height, false),
+    };
+  }
+
+  private paintTerminalSlip(ctx: CanvasRenderingContext2D, copies: string[]): number {
+    const width = this.widthPx;
+    const columns = 40;
+    const usable = width - 16;
+    const charWidth = usable / columns;
+    const fontPx = Math.floor(charWidth / 0.6);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, ctx.canvas.height);
+    ctx.textBaseline = 'top';
+    let y = this.marginPx;
+    copies.forEach((slip, index) => {
+      if (index > 0) { y = this.rule(ctx, y + 10) + 18; }
+      for (const raw of slip.split(/\r?\n|\r/)) {
+        let doubleWidth = false;
+        let doubleHeight = false;
+        let inverse = false;
+        let x = 8;
+        const lineHeight = () => (doubleHeight ? fontPx * 2 : fontPx) + 6;
+        const segments: Array<{ text: string; dw: boolean; dh: boolean; inv: boolean; symbol?: 'contactless' }> = [];
+        let current = '';
+        const flush = () => { if (current) segments.push({ text: current, dw: doubleWidth, dh: doubleHeight, inv: inverse }); current = ''; };
+        for (const ch of raw) {
+          const code = ch.charCodeAt(0);
+          if (code === 0x1e) { flush(); doubleWidth = true; }
+          else if (code === 0x11) { flush(); doubleHeight = true; }
+          else if (code === 0x12) { flush(); inverse = true; }
+          else if (code === 0x1f) { flush(); doubleWidth = false; doubleHeight = false; inverse = false; }
+          else if (code === 0x22) { flush(); segments.push({ text: '', dw: false, dh: false, inv: false, symbol: 'contactless' }); }
+          else if (code === 0x23) { flush(); }
+          else if (code >= 0x20) current += ch;
+        }
+        flush();
+        const height = segments.some((seg) => seg.dh) ? fontPx * 2 + 6 : lineHeight();
+        for (const seg of segments) {
+          if (seg.symbol === 'contactless') {
+            this.drawContactless(ctx, width / 2, y + height / 2, fontPx * 0.9);
+            continue;
+          }
+          const scaleX = seg.dw ? 2 : 1;
+          const scaleY = seg.dh ? 2 : 1;
+          const segWidth = seg.text.length * charWidth * scaleX;
+          ctx.save();
+          if (seg.inv) { ctx.fillStyle = '#000'; ctx.fillRect(x, y, segWidth, height - 2); ctx.fillStyle = '#fff'; } else { ctx.fillStyle = '#000'; }
+          ctx.translate(x, y);
+          ctx.scale(scaleX, scaleY);
+          ctx.font = `700 ${fontPx}px "Courier New", monospace`;
+          ctx.textAlign = 'left';
+          for (let i = 0; i < seg.text.length; i += 1) ctx.fillText(seg.text[i], i * charWidth, 0);
+          ctx.restore();
+          x += segWidth;
+        }
+        y += height;
+      }
+    });
+    return y;
+  }
+
+  /** Bank branding: 0x22 prints as the contactless "wave" sign. */
+  private drawContactless(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    ctx.save();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i += 1) {
+      const r = size * 0.35 + i * size * 0.28;
+      ctx.beginPath();
+      ctx.arc(cx - size * 0.6, cy, r, -Math.PI / 4, Math.PI / 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   private paintZReport(
     ctx: CanvasRenderingContext2D,
     report: PosZReportPrintData,

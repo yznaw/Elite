@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from './api-client.service';
 import { PosReceiptBlock, PosRegisterIdentity } from './pos-local-store.service';
+import type { toServerCardResult } from './pos-card-terminal.service';
 
 export interface PosCatalogItem {
   productId: string;
@@ -75,6 +76,10 @@ export interface PosCurrentRegister {
   branchId?: string | null;
   /** Stock per location: the location this till sells from (null while off). */
   locationId?: string | null;
+  /** 'integrated': this till charges the QNB terminal through the local card
+      bridge (docs/39). 'manual': the cashier types the approval code. */
+  cardMode?: 'manual' | 'integrated';
+  cardManualFallback?: boolean;
   /** False when no owner/admin/manager has ever set a manager PIN for this
       tenant — protected actions (void/refund/drawer-open/z-report/
       sync-conflict) then skip asking for one and auto-approve. */
@@ -110,6 +115,7 @@ export interface PosSaleResult {
   status: string;
   paymentMethod: PosPaymentMethod;
   terminalReference?: string | null;
+  card?: PosSaleCard | null;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -153,7 +159,7 @@ export interface PosManagerOverride {
   overrideId: string;
   token: string;
   managerId: string;
-  action: 'refund' | 'void' | 'z-report' | 'drawer-open' | 'sync-conflict-override';
+  action: 'refund' | 'void' | 'z-report' | 'drawer-open' | 'sync-conflict-override' | 'card-resolve';
   expiresAt: string;
   /** True when this override was granted without checking a PIN, because
       no owner/admin/manager has configured one for this tenant. */
@@ -270,6 +276,9 @@ export interface PosZReport {
   zReportId: string;
   /** Z-DDMM-YYYY-NNN; null only if the migration has not run yet. */
   zNumber: string | null;
+  /** Integrated till: the terminal's CloseBatch for this shift. */
+  cardBatchStatus?: 'closed' | 'empty' | 'failed' | 'skipped' | null;
+  cardBatchReceiptText?: string | null;
   businessDate: string | null;
   shiftId: string;
   registerId: string;
@@ -313,8 +322,52 @@ export interface PosSaleInput {
     amountTenderedCents: number;
     changeGivenCents: number;
     terminalReference?: string;
+    /** Integrated terminal approval; replaces terminalReference. */
+    cardAttempt?: PosCardAttemptRef;
+    /** Typed card reference on an integrated till (terminal down). */
+    manualOverride?: boolean;
   };
   clientCreatedAt: string;
+}
+
+/** A terminal approval attached to a sale, void or refund. `result` lets the
+    server create the attempt row itself when the till was offline. */
+export interface PosCardAttemptRef {
+  utn: string;
+  amountCents: number;
+  shiftId?: string | null;
+  originalUtn?: string;
+  result?: ReturnType<typeof toServerCardResult>;
+}
+
+export interface PosCardAttempt {
+  attemptId: string;
+  utn: string;
+  kind: 'sale' | 'void' | 'refund';
+  amountCents: number;
+  status: 'pending' | 'approved' | 'declined' | 'cancelled' | 'unknown' | 'reversed';
+  authCode: string | null;
+  maskedPan: string | null;
+  issuer: string | null;
+  message: string | null;
+  transactionId: string | null;
+  refundId: string | null;
+  voidId: string | null;
+  createdAt: string;
+  registerName?: string;
+}
+
+/** Card details of an integrated sale (loadSale). */
+export interface PosSaleCard {
+  utn: string;
+  authCode: string | null;
+  maskedPan: string | null;
+  issuer: string | null;
+  seqNo: string | null;
+  invoiceNo: string | null;
+  txnAt: string | null;
+  entryMethod: string | null;
+  receiptText: string | null;
 }
 
 export interface PosBusinessProfile {
@@ -494,6 +547,8 @@ export class PosService {
     voidReason: string;
     managerOverrideId: string;
     managerOverrideToken: string;
+    cardAttempt?: PosCardAttemptRef;
+    manualOverride?: boolean;
   }): Promise<{
     voidId: string;
     transactionId: string;
@@ -516,11 +571,55 @@ export class PosService {
         card terminal and Sadad are standalone, so this is the only proof the
         refund was actually run there. */
     terminalReference?: string;
+    cardAttempt?: PosCardAttemptRef;
+    manualOverride?: boolean;
     reason: string;
     managerOverrideId: string;
     managerOverrideToken: string;
   }): Promise<PosSaleResult & { refundId: string; refundReceiptNumber: string; amountCents: number; method: PosPaymentMethod; terminalReference: string | null }> {
     return firstValueFrom(this.api.post('/pos/refunds', input));
+  }
+
+  /** Elite-side checks for a void, without writing — run before the
+      terminal reverses the card. */
+  checkVoid(transactionId: string, voidReason: string): Promise<{ ok: true; amountCents: number; cardUtn: string | null }> {
+    return firstValueFrom(this.api.post(`/pos/transactions/${transactionId}/void/check`, { idempotencyKey: 'check', voidReason }));
+  }
+
+  checkRefund(input: {
+    shiftId: string;
+    receiptNumber: number;
+    originalTransactionId: string;
+    lines: Array<{ transactionItemId: string; quantity: number; restock: boolean }>;
+    refundMethod: PosPaymentMethod;
+    reason: string;
+  }): Promise<{ ok: true; amountCents: number; cardUtn: string | null }> {
+    return firstValueFrom(this.api.post('/pos/refunds/check', { idempotencyKey: 'check', ...input }));
+  }
+
+  recordCardAttempt(input: { utn: string; kind: 'sale' | 'void' | 'refund'; amountCents: number; shiftId?: string | null; originalUtn?: string }): Promise<PosCardAttempt> {
+    return firstValueFrom(this.api.post<PosCardAttempt>('/pos/card-attempts', input));
+  }
+
+  recordCardResult(utn: string, result: ReturnType<typeof toServerCardResult>): Promise<PosCardAttempt> {
+    return firstValueFrom(this.api.patch<PosCardAttempt>(`/pos/card-attempts/${encodeURIComponent(utn)}`, result));
+  }
+
+  unresolvedCardAttempts(): Promise<PosCardAttempt[]> {
+    return firstValueFrom(this.api.get<PosCardAttempt[]>('/pos/card-attempts/unresolved'));
+  }
+
+  resolveCardAttempt(utn: string, input: { outcome: 'declined' | 'reversed' | 'cancelled'; note: string; managerOverrideId: string; managerOverrideToken: string }): Promise<PosCardAttempt> {
+    return firstValueFrom(this.api.post<PosCardAttempt>(`/pos/card-attempts/${encodeURIComponent(utn)}/resolve`, input));
+  }
+
+  /** Owner/admin: which till is cabled to the QNB terminal. */
+  setRegisterCardMode(registerId: string, cardMode: 'manual' | 'integrated'): Promise<{ registerId: string; cardMode: 'manual' | 'integrated'; cardManualFallback: boolean }> {
+    return firstValueFrom(this.api.put(`/admin/pos-security/registers/${registerId}/card`, { cardMode }));
+  }
+
+  recordCardBatch(zReportId: string, input: { status: 'closed' | 'empty' | 'failed' | 'skipped'; receiptText?: string }): Promise<PosZReport> {
+    return firstValueFrom(this.api.put<PosZReport>(`/pos/shifts/z-reports/${zReportId}/card-batch`, input));
   }
 
   listParkedCarts(): Promise<PosParkedCart[]> {
@@ -559,6 +658,8 @@ export class PosService {
     // without a second manager's PIN when the shop allows that.
     managerOverrideId?: string;
     managerOverrideToken?: string;
+    /** Integrated till: result of the terminal's CloseBatch run just before. */
+    cardBatch?: { status: 'closed' | 'empty' | 'failed' | 'skipped'; receiptText?: string };
   }): Promise<PosZReport> {
     return firstValueFrom(this.api.post<PosZReport>('/pos/shifts/z-report', input));
   }

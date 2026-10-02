@@ -19,12 +19,13 @@ const {
   setDeviceRegisterCookie,
 } = require('../lib/pos/device-cookie');
 const { setManagerPin, verifyManagerPin } = require('../lib/pos/manager-service');
-const { closeShift, currentSummary, getZReport, getZReportItems, listZReports, openShift } = require('../lib/pos/shift-service');
+const { closeShift, currentSummary, getZReport, getZReportItems, listZReports, openShift, recordCardBatch } = require('../lib/pos/shift-service');
 const { listCashMovements, recordCashMovement } = require('../lib/pos/cash-movement-service');
 const { createSale, findByBarcode, listProductFilters, loadSale, searchProducts } = require('../lib/pos/sale-service');
 const { reportSyncState, syncTransactions } = require('../lib/pos/sync-service');
 const { deleteParkedCart, listParkedCarts, parkCart } = require('../lib/pos/parked-cart-service');
 const { createRefund, findTransaction, voidTransaction } = require('../lib/pos/correction-service');
+const { listUnresolved, recordAttempt, recordResult, resolveAttempt } = require('../lib/pos/card-terminal-service');
 const { listConflicts, resolveConflict } = require('../lib/pos/conflict-service');
 const { getQzCertificate, signQzRequest } = require('../lib/pos/qz-service');
 const { getEffectiveBranchProfile } = require('../lib/pos/branch-service');
@@ -232,6 +233,28 @@ router.get('/shifts/z-reports/:id/items', asyncHandler(async (req, res) => {
   ok(res, await getZReportItems(context(req), req.params.id));
 }));
 
+// Integrated QNB card terminal (docs/12, "Card terminal"). Each terminal
+// operation is recorded by its UTN before and after the terminal runs it.
+router.post('/card-attempts', asyncHandler(async (req, res) => {
+  created(res, await recordAttempt(context(req), req.body));
+}));
+
+router.patch('/card-attempts/:utn', asyncHandler(async (req, res) => {
+  ok(res, await recordResult(context(req), req.params.utn, req.body));
+}));
+
+router.get('/card-attempts/unresolved', asyncHandler(async (req, res) => {
+  ok(res, await listUnresolved(context(req)));
+}));
+
+router.post('/card-attempts/:utn/resolve', posPinLimiter, asyncHandler(async (req, res) => {
+  ok(res, await resolveAttempt(context(req), req.params.utn, req.body));
+}));
+
+router.put('/shifts/z-reports/:id/card-batch', asyncHandler(async (req, res) => {
+  ok(res, await recordCardBatch(context(req), req.params.id, req.body));
+}));
+
 router.post('/cash-movements', asyncHandler(async (req, res) => {
   created(res, await recordCashMovement(context(req), req.body));
 }));
@@ -256,12 +279,22 @@ router.get('/transactions/lookup/:lookup', asyncHandler(async (req, res) => {
   ok(res, await findTransaction(context(req), req.params.lookup));
 }));
 
+// Pre-checks run before the card terminal is driven, so a card is never
+// reversed or refunded on the terminal for a void/refund Elite would refuse.
+router.post('/transactions/:id/void/check', asyncHandler(async (req, res) => {
+  ok(res, await voidTransaction(context(req), req.params.id, { ...req.body, dryRun: true }));
+}));
+
 router.post('/transactions/:id/void', asyncHandler(async (req, res) => {
-  created(res, await voidTransaction(context(req), req.params.id, req.body));
+  created(res, await voidTransaction(context(req), req.params.id, { ...req.body, dryRun: false }));
+}));
+
+router.post('/refunds/check', asyncHandler(async (req, res) => {
+  ok(res, await createRefund(context(req), { ...req.body, dryRun: true }));
 }));
 
 router.post('/refunds', asyncHandler(async (req, res) => {
-  created(res, await createRefund(context(req), req.body));
+  created(res, await createRefund(context(req), { ...req.body, dryRun: false }));
 }));
 
 router.get('/parked-carts', asyncHandler(async (req, res) => {

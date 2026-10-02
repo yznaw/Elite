@@ -1,5 +1,21 @@
 import { Injectable } from '@angular/core';
 import type { PosCatalogItem, PosSaleInput } from './pos.service';
+import type { PosCardResult } from './pos-card-terminal.service';
+
+/** See listCardAttempts. `sale` is the exact payload (minus the card
+    approval) so an approved charge can complete its sale after a reload. */
+export interface PosLocalCardAttempt {
+  utn: string;
+  kind: 'sale' | 'void' | 'refund';
+  amountCents: number;
+  shiftId: string | null;
+  createdAt: string;
+  /** sent: terminal may be working on it. done: terminal answered. */
+  state: 'sent' | 'done';
+  result?: PosCardResult;
+  sale?: { payload: PosSaleInput; receiptNumber: number };
+  originalUtn?: string;
+}
 
 export interface PosRegisterIdentity {
   registerId: string;
@@ -152,6 +168,47 @@ export class PosLocalStore {
 
   setHardwareSettings(settings: PosHardwareSettings): Promise<void> {
     return this.put('hardware', settings);
+  }
+
+  /** Secret for the local Elite Card Bridge (127.0.0.1:8183), printed by its
+      installer and entered once per till. Kept with the register credential. */
+  /** Last known card mode of this till, so an offline resume still knows
+      whether to drive the terminal. */
+  getCardMode(): Promise<'manual' | 'integrated' | null> {
+    return this.get<'manual' | 'integrated'>('card-mode');
+  }
+
+  setCardMode(mode: 'manual' | 'integrated'): Promise<void> {
+    return this.put('card-mode', mode);
+  }
+
+  getCardBridgeKey(): Promise<string | null> {
+    return this.get<string>('card-bridge-key');
+  }
+
+  setCardBridgeKey(key: string): Promise<void> {
+    return key ? this.put('card-bridge-key', key) : this.remove('card-bridge-key');
+  }
+
+  /**
+   * Card terminal operations this browser started and has not yet seen
+   * recorded in Elite. Written before the terminal is driven, so a reload or
+   * crash after the customer paid still knows which sale the charge was for.
+   * Small (a handful at most), so one settings key holds them all.
+   */
+  async listCardAttempts(): Promise<PosLocalCardAttempt[]> {
+    return (await this.get<PosLocalCardAttempt[]>('card-attempts')) ?? [];
+  }
+
+  async saveCardAttempt(attempt: PosLocalCardAttempt): Promise<void> {
+    const list = (await this.listCardAttempts()).filter((item) => item.utn !== attempt.utn);
+    list.push(attempt);
+    await this.put('card-attempts', list);
+  }
+
+  async removeCardAttempt(utn: string): Promise<void> {
+    const list = await this.listCardAttempts();
+    await this.put('card-attempts', list.filter((item) => item.utn !== utn));
   }
 
   async commitReceipt(receiptNumber: number): Promise<void> {

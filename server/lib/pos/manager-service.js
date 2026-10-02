@@ -5,7 +5,7 @@ const { audit, inTransaction, requireRegister } = require('./db');
 const { PosError, assertPos, nonEmpty, uuid } = require('./errors');
 const { hash } = require('./register-service');
 
-const ACTIONS = new Set(['refund', 'void', 'z-report', 'drawer-open', 'sync-conflict-override']);
+const ACTIONS = new Set(['refund', 'void', 'z-report', 'drawer-open', 'sync-conflict-override', 'card-resolve']);
 // A known small shop with one till: ten wrong guesses in a row is still
 // clearly not a legitimate cashier who forgot a PIN, but five was tight
 // enough to lock the register over ordinary typos.

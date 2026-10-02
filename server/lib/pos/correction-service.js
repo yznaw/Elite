@@ -2,6 +2,7 @@ const { kickRestockDispatch } = require('../restock-dispatch-job');
 const { audit, inTransaction, requireRegister, resolveRegisterBranch } = require('./db');
 const { assertPos, nonEmpty, positiveInt, uuid } = require('./errors');
 const { consumeOverride } = require('./manager-service');
+const { claimApprovedAttempt, linkAttempt, normalizeCardAttempt } = require('./card-terminal-service');
 const { POS_PAYMENT_METHODS, claimReceipt, loadSale, paymentReference } = require('./sale-service');
 const { recordMovement } = require('../inventory-ledger');
 const { perLocationEnabled, locationForBranch, applyLocationDelta, stockEventPayload } = require('../location-stock');
@@ -55,6 +56,11 @@ async function voidTransaction(context, transactionIdValue, body) {
   const transactionId = uuid(transactionIdValue, 'transactionId');
   const idempotencyKey = nonEmpty(body?.idempotencyKey, 'idempotencyKey', 160);
   const reason = nonEmpty(body?.voidReason, 'voidReason', 500);
+  // Voiding an integrated card sale reverses it on the terminal first
+  // (VoidTransaction by the sale's UTN); the approval it returns is required
+  // here so Elite never records a void the card was not actually credited for.
+  const cardAttempt = normalizeCardAttempt(body?.cardAttempt, 'void');
+  const dryRun = body?.dryRun === true;
 
   return inTransaction(async (client) => {
     const existing = await client.query(
@@ -104,6 +110,21 @@ async function voidTransaction(context, transactionIdValue, body) {
       [context.tenantId, transaction.id],
     );
     assertPos(!refunds.rowCount, 409, 'TRANSACTION_ALREADY_REFUNDED', 'A refunded transaction cannot be voided.');
+
+    const saleCard = await client.query(
+      'SELECT utn FROM pos_card_attempts WHERE tenant_id = $1 AND pos_transaction_id = $2',
+      [context.tenantId, transaction.id],
+    );
+    const saleUtn = saleCard.rows[0]?.utn || null;
+    // Checked before the terminal is driven, so the cashier never reverses a
+    // card on the terminal for a void Elite would then refuse.
+    if (dryRun) return { ok: true, amountCents: Number(transaction.total_cents), cardUtn: saleUtn };
+    let cardAttemptRow = null;
+    if (saleUtn && !body?.manualOverride) {
+      assertPos(cardAttempt, 422, 'CARD_TERMINAL_REQUIRED', 'This sale was paid on the card terminal. Void it on the terminal first.');
+      assertPos(cardAttempt.originalUtn === saleUtn, 422, 'CARD_ATTEMPT_INVALID', 'The terminal void does not belong to this sale.');
+      cardAttemptRow = await claimApprovedAttempt(client, context, register, cardAttempt, Number(transaction.total_cents), 'pos_void_id');
+    }
 
     const override = await consumeOverride(client, context, 'void', body);
     const voidResult = await client.query(
@@ -202,6 +223,7 @@ async function voidTransaction(context, transactionIdValue, body) {
         [context.tenantId, transaction.customer_id, transaction.total_cents],
       );
     }
+    if (cardAttemptRow) await linkAttempt(client, context.tenantId, cardAttemptRow.id, 'pos_void_id', voidResult.rows[0].id);
     await audit(client, context, 'pos.transaction.voided', 'pos_void', voidResult.rows[0].id, {
       transactionId: transaction.id,
       reason,
@@ -301,9 +323,16 @@ async function createRefund(context, body) {
   // terminal nor Sadad has an API link, so a card or Sadad refund needs its
   // own action there and the reference off that slip or the Sadad merchant
   // app is the only proof it happened — required, mirroring the sale.
+  // An integrated card refund runs on the terminal first (EnhanceRefund,
+  // always card-present) and carries its approval; the auth code is then the
+  // refund's terminal reference.
+  const cardAttempt = method === 'card' ? normalizeCardAttempt(body?.cardAttempt, 'refund') : null;
+  const dryRun = body?.dryRun === true;
   const terminalReference = method === 'cash'
     ? null
-    : paymentReference(method, body?.terminalReference, 'terminalReference');
+    : cardAttempt
+      ? (cardAttempt.result?.authCode || null)
+      : dryRun ? null : paymentReference(method, body?.terminalReference, 'terminalReference');
   const reason = nonEmpty(body?.reason, 'reason', 500);
   assertPos(Array.isArray(body?.lines) && body.lines.length > 0 && body.lines.length <= 100, 422, 'REFUND_LINES_INVALID', 'Refund must contain 1 to 100 lines.');
   const seen = new Set();
@@ -391,6 +420,19 @@ async function createRefund(context, body) {
     );
     const cumulativeAmount = Number(priorRefunds.rows[0].amount) + amountCents;
     assertPos(cumulativeAmount <= Number(transaction.payment_amount_cents), 409, 'REFUND_AMOUNT_EXCEEDED', 'Refund exceeds the original payment amount.');
+
+    const saleCard = await client.query(
+      'SELECT utn FROM pos_card_attempts WHERE tenant_id = $1 AND pos_transaction_id = $2',
+      [context.tenantId, transaction.id],
+    );
+    // Checked before the terminal is driven (see voidTransaction).
+    if (dryRun) return { ok: true, amountCents, cardUtn: saleCard.rows[0]?.utn || null };
+    let cardAttemptRow = null;
+    if (cardAttempt) {
+      cardAttemptRow = await claimApprovedAttempt(client, context, register, cardAttempt, amountCents, 'pos_refund_id');
+    } else if (method === 'card' && register.card_mode === 'integrated') {
+      assertPos(body?.manualOverride === true, 422, 'CARD_TERMINAL_REQUIRED', 'This till refunds cards on the terminal. Use "Enter manually" only if the card machine is not working.');
+    }
 
     const override = await consumeOverride(client, context, 'refund', body);
     const receipt = await claimReceipt(client, context, receiptNumber, 'refund');
@@ -491,6 +533,7 @@ async function createRefund(context, body) {
       );
     }
     await client.query('UPDATE pos_receipts SET entity_id = $1 WHERE id = $2', [refund.id, receipt.id]);
+    if (cardAttemptRow) await linkAttempt(client, context.tenantId, cardAttemptRow.id, 'pos_refund_id', refund.id);
     await audit(client, context, 'pos.transaction.refunded', 'pos_refund', refund.id, {
       transactionId: transaction.id,
       amountCents,

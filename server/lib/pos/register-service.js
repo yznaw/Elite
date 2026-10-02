@@ -602,6 +602,10 @@ async function currentRegister(context) {
       registerId: register.id,
       displayName: register.display_name,
       status: register.status,
+      // 'integrated' = this till drives the QNB terminal through the local
+      // card bridge (migration 047); 'manual' keeps the typed-reference flow.
+      cardMode: register.card_mode || 'manual',
+      cardManualFallback: register.card_manual_fallback !== false,
       branchName: branchResult.rows[0]?.name || null,
       branchId: branchResult.rows[0]?.id || null,
       // Stock per location: which location this till sells from (null while
@@ -630,6 +634,7 @@ async function listAllRegisters(context) {
     const result = await client.query(
       `SELECT r.id, r.display_name, r.status, r.last_seen_at, r.created_at,
               r.branch_id, b.name AS branch_name, r.device_lease_claimed_at,
+              r.card_mode, r.card_manual_fallback,
               holder.full_name AS device_lease_claimed_by,
               s.id AS active_shift_id, s.state AS active_shift_state,
               cashier.full_name AS active_shift_cashier,
@@ -670,6 +675,8 @@ async function listAllRegisters(context) {
       activeShiftCashier: row.active_shift_cashier,
       pendingCount: Number(row.pending_count || 0),
       rejectedCount: Number(row.rejected_count || 0),
+      cardMode: row.card_mode || 'manual',
+      cardManualFallback: row.card_manual_fallback !== false,
     }));
   } finally {
     client.release();

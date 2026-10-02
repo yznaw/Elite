@@ -12,11 +12,14 @@ import {
 import {
   PosCashMovement,
   PosCashMovementKind,
+  PosCardAttempt,
+  PosCardAttemptRef,
   PosCatalogItem,
   PosCurrentRegister,
   PosCustomer,
   PosParkedCart,
   PosPaymentMethod,
+  PosSaleInput,
   PosSaleResult,
   POS_PAYMENT_LABELS,
   SADAD_REFERENCE_PATTERN,
@@ -28,6 +31,7 @@ import {
   PosZReport,
 } from '../../services/pos.service';
 import { PosHardwareService, condenseHardwareError } from '../../services/pos-hardware.service';
+import { PosCardResult, PosCardTerminalService, qatarDdMmYy, toServerCardResult } from '../../services/pos-card-terminal.service';
 import { AdminRefService, RefColor } from '../../services/admin-ref.service';
 import { ToastService } from '../../services/toast.service';
 import { ClientLoggerService } from '../../services/client-logger.service';
@@ -58,7 +62,11 @@ interface VariantColorGroup {
   stock: number;
   items: PosCatalogItem[];
 }
-type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift' | 'cash-movement' | 'z-history';
+type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift' | 'cash-movement' | 'z-history' | 'card-check';
+/** Card tender on an integrated till (docs/39): ready to charge, the
+ *  terminal is working, the answer was lost and is being checked, the
+ *  terminal said no, or nothing can confirm the outcome. */
+type CardPhase = 'ready' | 'waiting' | 'checking' | 'declined' | 'unknown';
 
 const OFFLINE_CATALOG_WARN_AFTER_MS = 8 * 60 * 60 * 1000;
 const OFFLINE_CATALOG_BLOCK_AFTER_MS = 12 * 60 * 60 * 1000;
@@ -81,6 +89,26 @@ export class PosComponent implements OnInit, OnDestroy {
   private readonly refApi = inject(AdminRefService);
   private readonly toast = inject(ToastService);
   private readonly clientLogger = inject(ClientLoggerService);
+  private readonly cardTerminal = inject(PosCardTerminalService);
+  /** 'integrated': this till charges the QNB terminal through the local
+      card bridge; 'manual': the cashier types the approval code (docs/39). */
+  readonly cardMode = signal<'manual' | 'integrated'>('manual');
+  /** Cashier chose "Enter manually" because the card machine is not working. */
+  readonly cardManualEntry = signal(false);
+  readonly cardPhase = signal<CardPhase>('ready');
+  readonly cardDecline = signal<string | null>(null);
+  readonly cardTerminalText = computed(() => this.cardTerminal.describe(this.cardTerminal.message()));
+  readonly cardBridgeReachable = this.cardTerminal.reachable;
+  readonly cardBridgeHealth = this.cardTerminal.health;
+  readonly unresolvedCards = signal<PosCardAttempt[]>([]);
+  readonly cardAdminBusy = signal(false);
+  readonly cardPorts = signal<string[]>([]);
+  /** UTN of the charge the sheet is waiting on, for "Check again". */
+  private cardPendingUtn: string | null = null;
+  cardBridgeKey = '';
+  cardPort = '';
+  cardResolveNote = '';
+  cardResolvePin = '';
 
   // ── Customer linking at checkout (docs/25 Phase 5) ────────────────────
   // Until now every POS sale sent `customerId: null`, so a till sale never
@@ -710,6 +738,8 @@ export class PosComponent implements OnInit, OnDestroy {
    */
   private async enterRegister(current: PosCurrentRegister): Promise<void> {
     this.register.set(current);
+    this.cardMode.set(current.cardMode ?? 'manual');
+    await this.local.setCardMode(current.cardMode ?? 'manual').catch(() => undefined);
     await this.hardware.initialize();
     await this.ensureReceiptBlock();
     if (!current.shift) {
@@ -1085,6 +1115,9 @@ export class PosComponent implements OnInit, OnDestroy {
       this.shiftId.set(shift.shiftId);
       await this.local.setShift(shift);
       this.toast.success('Shift opened', `Opening float ${this.formatMoney(openingFloatCents)}`);
+      // Guide Appendix C: log the terminal on to the bank at the start of a
+      // shift. Best effort: a sale also logs on by itself when needed.
+      if (this.cardIntegrated()) void this.cardTerminal.run({ type: 'logon' });
       await this.enterSelling();
     } catch (error) {
       this.toast.error("Couldn't open shift", this.errorMessage(error));
@@ -1244,8 +1277,12 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   selectPayment(method: PaymentMethod): void {
+    if (this.cardBusy()) return;
     this.paymentMethod.set(method);
     this.paymentReferenceError.set(null);
+    this.cardManualEntry.set(false);
+    this.cardPhase.set('ready');
+    this.cardDecline.set(null);
     // A reference typed for one tender is never carried over to another.
     if (method === 'cash') this.tendered = (this.totalCents() / 100).toFixed(2);
     else this.terminalReference = '';
@@ -1279,6 +1316,7 @@ export class PosComponent implements OnInit, OnDestroy {
 
   paymentReady(): boolean {
     const method = this.paymentMethod();
+    if (this.cardTerminalActive()) return this.cardPhase() === 'ready' || this.cardPhase() === 'declined';
     if (!this.needsReference(method)) return true;
     return Boolean(this.terminalReference.trim()) && !this.paymentReferenceProblem(method, this.terminalReference);
   }
@@ -1297,7 +1335,8 @@ export class PosComponent implements OnInit, OnDestroy {
     const terminalReference = method === 'sadad'
       ? this.terminalReference.trim().toUpperCase()
       : this.terminalReference.trim();
-    if (method === 'card' && !terminalReference) {
+    const onTerminal = method === 'card' && this.cardTerminalActive();
+    if (method === 'card' && !onTerminal && !terminalReference) {
       this.toast.warning('Enter the terminal reference or approval code before completing a card sale.');
       return;
     }
@@ -1313,6 +1352,8 @@ export class PosComponent implements OnInit, OnDestroy {
     const amountTenderedCents = tenderedCents ?? 0;
 
     let completedSale: { receiptData: unknown; openDrawer: boolean; queuedIdempotencyKey: string | null } | null = null;
+    let cardSlip: string | null = null;
+    let chargedUtn: string | null = null;
     this.busy.set(true);
     try {
       await this.ensureReceiptBlock();
@@ -1324,7 +1365,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.pendingIdempotencyKey ??= crypto.randomUUID();
       const totalCents = this.totalCents();
       const clientCreatedAt = new Date().toISOString();
-      const payload = {
+      const payload: PosSaleInput = {
         idempotencyKey: this.pendingIdempotencyKey,
         receiptNumber,
         shiftId,
@@ -1341,10 +1382,22 @@ export class PosComponent implements OnInit, OnDestroy {
           sadadAmountCents: method === 'sadad' ? totalCents : 0,
           amountTenderedCents,
           changeGivenCents: method === 'cash' ? amountTenderedCents - totalCents : 0,
-          terminalReference: this.needsReference(method) ? terminalReference : undefined,
+          terminalReference: this.needsReference(method) && !onTerminal ? terminalReference : undefined,
+          // Typed card reference on a till linked to the terminal: allowed as
+          // the "terminal not working" fallback, flagged for reconciliation.
+          ...(method === 'card' && !onTerminal && this.cardIntegrated() ? { manualOverride: true } : {}),
         },
         clientCreatedAt,
       };
+      if (onTerminal) {
+        // Money moves on the terminal first; the sale is only written once it
+        // approved. A decline keeps the sheet open with the reason.
+        const cardAttempt = await this.chargeCardForSale(payload, receiptNumber);
+        if (!cardAttempt) return;
+        payload.payment.cardAttempt = cardAttempt;
+        chargedUtn = cardAttempt.utn;
+        cardSlip = cardAttempt.result?.receiptText ?? null;
+      }
       const receiptData = this.localReceiptData(payload, receiptNumber);
       let result: PosSaleResult;
       if (this.online()) {
@@ -1365,6 +1418,8 @@ export class PosComponent implements OnInit, OnDestroy {
         result = await this.queueOfflineSale(payload, receiptData);
       }
       this.receiptBlock.set(await this.local.getReceiptBlock());
+      if (chargedUtn) await this.local.removeCardAttempt(chargedUtn).catch(() => undefined);
+      this.cardPhase.set('ready');
       this.applyStockUpdates(result.stockUpdates);
       this.cart.set([]);
       this.selectedLineId.set(null);
@@ -1383,7 +1438,18 @@ export class PosComponent implements OnInit, OnDestroy {
       };
     } catch (error) {
       const code = this.errorCode(error);
-      if (code === 'PAYMENT_REFERENCE_USED' || code === 'PAYMENT_REFERENCE_INVALID') {
+      if (chargedUtn) {
+        // The customer was charged but Elite refused the sale. The approval
+        // stays saved on this till and is listed under "card payments to
+        // check", so the sale can be completed or the charge voided.
+        this.toast.push({
+          kind: 'error',
+          title: 'Card charged, sale not saved',
+          sub: `${this.errorMessage(error)} Do not charge the card again. Open "Card payments to check".`,
+          duration: null,
+        });
+        void this.refreshUnresolvedCards();
+      } else if (code === 'PAYMENT_REFERENCE_USED' || code === 'PAYMENT_REFERENCE_INVALID') {
         // The sheet stays open with the field flagged; the cashier corrects
         // the ID and completes again under the same idempotency key.
         this.paymentReferenceError.set(this.errorMessage(error));
@@ -1411,6 +1477,8 @@ export class PosComponent implements OnInit, OnDestroy {
           context: { printerName: this.hardware.printerName(), openDrawer: completedSale.openDrawer },
         });
       }
+      // The bank's slip after Elite's receipt, as one hand-over.
+      if (cardSlip) void this.printCardSlip(cardSlip);
     }
   }
 
@@ -1590,13 +1658,24 @@ export class PosComponent implements OnInit, OnDestroy {
     let completedVoid: { receiptData: PosReceiptData; openDrawer: boolean } | null = null;
     this.busy.set(true);
     try {
+      const onTerminal = this.cardCorrectionOnTerminal(transaction);
+      // Elite's checks first, then the PIN: the terminal must never reverse a
+      // card for a void Elite would refuse.
+      if (onTerminal) await this.pos.checkVoid(transaction.transactionId, this.correctionReason.trim());
       const override = await this.pos.verifyManagerPin(this.managerPin, 'void');
+      let cardAttempt: PosCardAttemptRef | undefined;
+      if (onTerminal) {
+        cardAttempt = (await this.runCardCorrection('void', transaction, transaction.totalCents)) ?? undefined;
+        if (!cardAttempt) return;
+      }
       const result = await this.pos.voidTransaction(transaction.transactionId, {
         idempotencyKey: crypto.randomUUID(),
         voidReason: this.correctionReason.trim(),
         managerOverrideId: override.overrideId,
         managerOverrideToken: override.token,
+        ...(cardAttempt ? { cardAttempt } : {}),
       });
+      if (cardAttempt) await this.local.removeCardAttempt(cardAttempt.utn).catch(() => undefined);
       this.applyStockUpdates(result.stockRestored);
       this.operationTransaction.set(await this.pos.findTransaction(transaction.transactionId));
       this.managerPin = '';
@@ -1664,15 +1743,30 @@ export class PosComponent implements OnInit, OnDestroy {
       !transaction || !shiftId || !lines.length
       || (this.managerPinConfigured() && !this.managerPin)
       || !this.correctionReason.trim()
-      || (this.needsReference(transaction.paymentMethod) && !refundTerminalReference)
+      || (this.needsCorrectionReference(transaction) && !refundTerminalReference)
     ) return;
+    const onTerminal = this.cardCorrectionOnTerminal(transaction);
     let completedRefund: { receiptData: unknown; openDrawer: boolean } | null = null;
     this.busy.set(true);
     try {
       await this.ensureReceiptBlock();
       const receiptNumber = this.receiptBlock()?.next;
       if (!receiptNumber) throw new Error('No refund receipt number is available.');
+      let cardAttempt: PosCardAttemptRef | undefined;
+      let refundAmountCents = 0;
+      if (onTerminal) {
+        const check = await this.pos.checkRefund({
+          shiftId, receiptNumber, originalTransactionId: transaction.transactionId, lines,
+          refundMethod: transaction.paymentMethod, reason: this.correctionReason.trim(),
+        });
+        refundAmountCents = check.amountCents;
+      }
       const override = await this.pos.verifyManagerPin(this.managerPin, 'refund');
+      if (onTerminal) {
+        // Card-present refund on the terminal (QCB NAPS mandate).
+        cardAttempt = (await this.runCardCorrection('refund', transaction, refundAmountCents)) ?? undefined;
+        if (!cardAttempt) return;
+      }
       const result = await this.pos.refund({
         idempotencyKey: crypto.randomUUID(),
         receiptNumber,
@@ -1680,12 +1774,15 @@ export class PosComponent implements OnInit, OnDestroy {
         originalTransactionId: transaction.transactionId,
         lines,
         refundMethod: transaction.paymentMethod,
-        ...(this.needsReference(transaction.paymentMethod) ? { terminalReference: refundTerminalReference } : {}),
+        ...(this.needsCorrectionReference(transaction) ? { terminalReference: refundTerminalReference } : {}),
+        ...(cardAttempt ? { cardAttempt } : {}),
+        ...(!onTerminal && transaction.paymentMethod === 'card' && this.cardIntegrated() ? { manualOverride: true } : {}),
         reason: this.correctionReason.trim(),
         managerOverrideId: override.overrideId,
         managerOverrideToken: override.token,
       });
       await this.local.commitReceipt(receiptNumber);
+      if (cardAttempt) await this.local.removeCardAttempt(cardAttempt.utn).catch(() => undefined);
       this.receiptBlock.set(await this.local.getReceiptBlock());
       this.applyStockUpdates(result.stockUpdates || []);
       completedRefund = { receiptData: result.receipt.receiptData, openDrawer: result.method === 'cash' };
@@ -1719,6 +1816,7 @@ export class PosComponent implements OnInit, OnDestroy {
     this.hardwareDrawerPulse = settings?.drawerPulse || 'epson-pin-2';
     this.dialog.set('hardware');
     void this.loadPosBuildVersions();
+    void this.loadCardSettings();
     // Re-typing the exact QZ printer name from memory is the main friction
     // point after site data gets cleared (browser "clear cookies" wipes the
     // IndexedDB-stored setting too, not just cookies). Auto-scan whenever
@@ -1836,11 +1934,13 @@ export class PosComponent implements OnInit, OnDestroy {
     try {
       await this.reportSyncState();
       const override = selfClose ? null : await this.pos.verifyManagerPin(this.managerPin, 'z-report');
+      const cardBatch = await this.closeCardBatch();
       completedReport = await this.pos.closeShift({
         shiftId: summary.shiftId,
         physicalCashCents,
         idempotencyKey: crypto.randomUUID(),
         ...(override ? { managerOverrideId: override.overrideId, managerOverrideToken: override.token } : {}),
+        ...(cardBatch ? { cardBatch } : {}),
       });
       this.dialog.set('none');
       await this.local.clearShift();
@@ -2223,6 +2323,7 @@ export class PosComponent implements OnInit, OnDestroy {
     if (this.online()) this.connectEvents();
     await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.loadReferenceColors(), this.loadProductFilters()]);
     await this.syncPendingSales();
+    void this.prepareCardTerminal();
   }
 
   private async loadProductFilters(): Promise<void> {
@@ -2602,6 +2703,483 @@ export class PosComponent implements OnInit, OnDestroy {
    * and the stack trace (`grep '"requestId":"…"'`, or the Diagnostics page).
    * Before this, "it says something went wrong" was the entire bug report.
    */
+  // ── Integrated QNB card terminal (docs/39) ─────────────────────────────
+
+  cardIntegrated(): boolean {
+    return this.cardMode() === 'integrated';
+  }
+
+  /** Card tender charges the terminal (not the typed-reference fallback). */
+  cardTerminalActive(): boolean {
+    return this.cardIntegrated() && this.paymentMethod() === 'card' && !this.cardManualEntry();
+  }
+
+  /** The terminal may be holding the customer's card: the sheet stays open. */
+  cardBusy(): boolean {
+    return this.cardPhase() === 'waiting' || this.cardPhase() === 'checking';
+  }
+
+  closePaymentSheet(): void {
+    if (this.cardBusy() || this.cardPhase() === 'unknown') return;
+    this.paymentOpen.set(false);
+  }
+
+  useManualCard(): void {
+    this.cardManualEntry.set(true);
+    this.cardPhase.set('ready');
+    this.cardDecline.set(null);
+  }
+
+  useCardTerminal(): void {
+    this.cardManualEntry.set(false);
+    this.terminalReference = '';
+  }
+
+  /** "VISA •••• 0293" for screens; the slip prints the terminal's own text. */
+  cardLabel(card: { issuer?: string | null; maskedPan?: string | null } | null | undefined): string {
+    if (!card) return '';
+    const last4 = card.maskedPan ? card.maskedPan.slice(-4) : '';
+    return [card.issuer || 'Card', last4 ? `•••• ${last4}` : ''].filter(Boolean).join(' ');
+  }
+
+  private async prepareCardTerminal(): Promise<void> {
+    if (!this.register()) {
+      const cached = await this.local.getCardMode().catch(() => null);
+      if (cached) this.cardMode.set(cached);
+    }
+    if (!this.cardIntegrated()) return;
+    await this.cardTerminal.loadKey();
+    await this.cardTerminal.checkHealth();
+    await this.recoverCardAttempts();
+    await this.refreshUnresolvedCards();
+  }
+
+  /**
+   * Charges the sale total on the terminal. The attempt is saved on this
+   * till (with the full sale) and in Elite before the terminal moves, so an
+   * approval survives a reload, a crash or the API being down.
+   */
+  private async chargeCardForSale(payload: PosSaleInput, receiptNumber: number): Promise<PosCardAttemptRef | null> {
+    const registerId = this.register()?.registerId ?? (await this.local.getRegister())?.registerId;
+    if (!registerId) throw new Error('This till is not registered.');
+    const amountCents = payload.payment.cardAmountCents;
+    const utn = this.cardTerminal.newUtn(registerId);
+    await this.local.saveCardAttempt({
+      utn, kind: 'sale', amountCents, shiftId: payload.shiftId, createdAt: new Date().toISOString(), state: 'sent',
+      sale: { payload, receiptNumber },
+    });
+    if (this.online()) {
+      try {
+        await this.pos.recordCardAttempt({ utn, kind: 'sale', amountCents, shiftId: payload.shiftId });
+      } catch (error) {
+        if (!this.isNetworkError(error)) {
+          await this.local.removeCardAttempt(utn);
+          throw error;
+        }
+      }
+    }
+    this.cardDecline.set(null);
+    this.cardPendingUtn = utn;
+    this.cardPhase.set('waiting');
+    let result = await this.cardTerminal.run({ type: 'sale', utn, amountCents });
+    if (result.outcome === 'unknown') {
+      this.cardPhase.set('checking');
+      result = await this.settleUnknownCard(utn, amountCents, result);
+    }
+    const status = await this.finishCardAttempt(utn, result);
+    if (status === 'approved') {
+      this.cardPendingUtn = null;
+      return { utn, amountCents, shiftId: payload.shiftId, result: toServerCardResult(result, 'approved') };
+    }
+    if (status === 'unknown') {
+      this.cardPhase.set('unknown');
+      this.cardDecline.set('The card machine did not confirm this payment. Look at its screen, then press "Check again". Do not charge the card again.');
+      return null;
+    }
+    this.cardPendingUtn = null;
+    this.cardPhase.set('declined');
+    this.cardDecline.set(result.message || 'The payment did not go through.');
+    return null;
+  }
+
+  /**
+   * The bridge lost the answer. Ask the terminal by UTN. An approval whose
+   * details were lost (no auth code) is voided on the terminal and the
+   * cashier charges again, rather than recording a sale nobody can refund.
+   */
+  private async settleUnknownCard(utn: string, amountCents: number, original: PosCardResult): Promise<PosCardResult> {
+    const status = await this.cardTerminal.resolve(utn);
+    if (status.status === 'approved') {
+      if (status.result?.authCode) return status.result;
+      const registerId = this.register()?.registerId ?? '';
+      const voided = await this.cardTerminal.run({ type: 'void', utn: this.cardTerminal.newUtn(registerId), originalUtn: utn, amountCents });
+      return voided.outcome === 'approved'
+        ? { outcome: 'declined', code: 'AUTO_VOIDED', message: 'The card machine lost the payment details, so the charge was reversed. Charge the card again.' }
+        : original;
+    }
+    if (status.status === 'declined' || status.status === 'reversed' || status.status === 'not_found') {
+      return { outcome: 'declined', code: status.status.toUpperCase(), message: 'The payment did not go through. Nothing was charged.' };
+    }
+    return original;
+  }
+
+  /** Records the outcome locally and in Elite. Returns the settled status. */
+  private async finishCardAttempt(utn: string, result: PosCardResult): Promise<'approved' | 'declined' | 'cancelled' | 'unknown' | 'reversed'> {
+    const status = result.outcome === 'approved' ? 'approved'
+      : result.outcome === 'unknown' ? 'unknown'
+        : result.outcome === 'cancelled' ? 'cancelled'
+          : result.code === 'AUTO_VOIDED' ? 'reversed'
+            : 'declined';
+    const attempts = await this.local.listCardAttempts();
+    const local = attempts.find((item) => item.utn === utn);
+    if (status === 'approved' || status === 'unknown') {
+      if (local) await this.local.saveCardAttempt({ ...local, state: 'done', result });
+    } else {
+      await this.local.removeCardAttempt(utn);
+    }
+    if (this.online()) {
+      try {
+        await this.pos.recordCardResult(utn, toServerCardResult(result, status));
+      } catch (error) {
+        // A sale carries the result itself; an unreachable API is fine here.
+        if (!this.isNetworkError(error)) this.clientLogger.logError('pos-client', error, { code: 'CARD_RESULT_NOT_RECORDED', severity: 'warn', context: { utn, status } });
+      }
+    }
+    return status;
+  }
+
+  /** "Check again" on a payment the terminal did not confirm. */
+  async recheckCardPayment(): Promise<void> {
+    const utn = this.cardPendingUtn;
+    if (!utn) return;
+    this.cardPhase.set('checking');
+    const local = (await this.local.listCardAttempts()).find((item) => item.utn === utn);
+    const result = await this.settleUnknownCard(utn, local?.amountCents ?? this.totalCents(), {
+      outcome: 'unknown', code: 'STILL_UNKNOWN', message: 'Still not confirmed.',
+    });
+    const status = await this.finishCardAttempt(utn, result);
+    if (status === 'approved' && local?.sale) {
+      // Approved after all: finish this very sale with the approval.
+      this.cardPhase.set('ready');
+      this.cardPendingUtn = null;
+      await this.completeRecoveredCardSale(local.sale.payload, local.sale.receiptNumber, {
+        utn, amountCents: local.amountCents, shiftId: local.shiftId, result: toServerCardResult(result, 'approved'),
+      }, result.receiptText ?? null, true);
+      return;
+    }
+    if (status === 'unknown') {
+      this.cardPhase.set('unknown');
+      return;
+    }
+    this.cardPendingUtn = null;
+    this.cardPhase.set('declined');
+    this.cardDecline.set(result.message || 'The payment did not go through.');
+  }
+
+  /**
+   * Finishes a sale whose card was approved but whose sale was never written
+   * (reload, crash, API down). Same idempotency key, so a sale that was in
+   * fact written is returned instead of duplicated.
+   */
+  private async completeRecoveredCardSale(
+    payload: PosSaleInput,
+    receiptNumber: number,
+    cardAttempt: PosCardAttemptRef,
+    slip: string | null,
+    currentCart: boolean,
+  ): Promise<boolean> {
+    const withCard: PosSaleInput = { ...payload, payment: { ...payload.payment, cardAttempt, terminalReference: undefined } };
+    try {
+      const result = await this.pos.createSale(withCard);
+      await this.local.commitReceipt(receiptNumber).catch(() => undefined);
+      this.receiptBlock.set(await this.local.getReceiptBlock());
+      await this.local.removeCardAttempt(cardAttempt.utn);
+      this.applyStockUpdates(result.stockUpdates);
+      if (currentCart) {
+        this.cart.set([]);
+        this.selectedLineId.set(null);
+        this.selectedCustomer.set(null);
+        this.pendingIdempotencyKey = null;
+        this.paymentOpen.set(false);
+        this.lastSale.set(result);
+      } else {
+        this.toast.success('Card sale completed', `An approved card payment from earlier was saved as receipt #${result.receiptNumber}.`);
+      }
+      try {
+        await this.hardware.printReceipt(result.receipt.receiptData, false);
+      } catch (printError) {
+        this.toast.warning('Sale saved, receipt not printed', this.errorMessage(printError));
+      }
+      if (slip) void this.printCardSlip(slip);
+      return true;
+    } catch (error) {
+      if (!this.isNetworkError(error)) {
+        this.toast.push({ kind: 'error', title: 'Approved card payment not saved', sub: this.errorMessage(error), duration: null });
+      }
+      return false;
+    }
+  }
+
+  /** On start: settle anything this till charged but never saw recorded. */
+  private async recoverCardAttempts(): Promise<void> {
+    const attempts = await this.local.listCardAttempts().catch(() => []);
+    for (const attempt of attempts) {
+      if (attempt.kind !== 'sale' || !attempt.sale) continue;
+      let result = attempt.result;
+      if (attempt.state === 'sent' || result?.outcome === 'unknown') {
+        const status = await this.cardTerminal.resolve(attempt.utn, 2);
+        if (status.status === 'approved' && status.result?.authCode) result = status.result;
+        else if (status.status === 'declined' || status.status === 'reversed' || status.status === 'not_found') {
+          await this.finishCardAttempt(attempt.utn, { outcome: 'declined', code: status.status.toUpperCase(), message: 'Not charged.' });
+          continue;
+        } else continue;
+      }
+      if (result?.outcome !== 'approved' || !this.online()) continue;
+      await this.completeRecoveredCardSale(attempt.sale.payload, attempt.sale.receiptNumber, {
+        utn: attempt.utn, amountCents: attempt.amountCents, shiftId: attempt.shiftId, result: toServerCardResult(result, 'approved'),
+      }, result.receiptText ?? null, false);
+    }
+  }
+
+  async refreshUnresolvedCards(): Promise<void> {
+    if (!this.cardIntegrated() || !this.online()) return;
+    try {
+      this.unresolvedCards.set(await this.pos.unresolvedCardAttempts());
+    } catch {
+      // Shown again on the next refresh.
+    }
+  }
+
+  async openCardCheck(): Promise<void> {
+    this.cardResolveNote = '';
+    this.cardResolvePin = '';
+    this.dialog.set('card-check');
+    await this.refreshUnresolvedCards();
+  }
+
+  /** Asks the terminal about one listed payment and records the answer. */
+  async checkCardAttempt(attempt: PosCardAttempt): Promise<void> {
+    this.cardAdminBusy.set(true);
+    try {
+      const local = (await this.local.listCardAttempts()).find((item) => item.utn === attempt.utn);
+      if (attempt.status === 'approved' && attempt.kind === 'sale' && local?.sale && local.result?.outcome === 'approved') {
+        await this.completeRecoveredCardSale(local.sale.payload, local.sale.receiptNumber, {
+          utn: attempt.utn, amountCents: attempt.amountCents, shiftId: local.shiftId, result: toServerCardResult(local.result, 'approved'),
+        }, local.result.receiptText ?? null, false);
+      } else if (attempt.status === 'approved' && attempt.kind === 'sale') {
+        // Charged, but this browser no longer has the cart: reverse it on the
+        // terminal so the customer is not charged for a sale with no receipt.
+        const registerId = this.register()?.registerId ?? '';
+        const voided = await this.cardTerminal.run({ type: 'void', utn: this.cardTerminal.newUtn(registerId), originalUtn: attempt.utn, amountCents: attempt.amountCents });
+        if (voided.outcome === 'approved') {
+          await this.pos.recordCardResult(attempt.utn, toServerCardResult({ ...voided, code: 'AUTO_VOIDED' }, 'reversed')).catch(() => undefined);
+          await this.local.removeCardAttempt(attempt.utn);
+          this.toast.success('Charge reversed', 'The card payment had no sale, so it was voided on the card machine.');
+          if (voided.receiptText) void this.printCardSlip(voided.receiptText);
+        } else {
+          this.toast.warning("Couldn't reverse the charge", voided.message);
+        }
+      } else {
+        const status = await this.cardTerminal.resolve(attempt.utn, 1);
+        const result: PosCardResult = status.status === 'approved' && status.result
+          ? status.result
+          : status.status === 'unknown' || status.status === 'in_progress'
+            ? { outcome: 'unknown', code: 'STILL_UNKNOWN', message: 'The card machine could not say.' }
+            : { outcome: 'declined', code: status.status.toUpperCase(), message: 'Not charged.' };
+        const settled = await this.finishCardAttempt(attempt.utn, result);
+        if (settled === 'unknown') this.toast.warning('Still not confirmed', 'Check the card machine\'s last receipt, then settle it with a manager PIN.');
+      }
+    } catch (error) {
+      this.toast.error("Couldn't check the payment", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+      await this.refreshUnresolvedCards();
+    }
+  }
+
+  /** Manager records what the terminal's own receipt or report shows. */
+  async resolveCardByManager(attempt: PosCardAttempt, outcome: 'declined' | 'reversed'): Promise<void> {
+    if (!this.cardResolveNote.trim() || (this.managerPinConfigured() && !this.cardResolvePin)) return;
+    this.cardAdminBusy.set(true);
+    try {
+      const override = await this.pos.verifyManagerPin(this.cardResolvePin, 'card-resolve');
+      await this.pos.resolveCardAttempt(attempt.utn, {
+        outcome, note: this.cardResolveNote.trim(), managerOverrideId: override.overrideId, managerOverrideToken: override.token,
+      });
+      await this.local.removeCardAttempt(attempt.utn);
+      this.cardResolveNote = '';
+      this.cardResolvePin = '';
+      this.toast.success('Payment settled');
+    } catch (error) {
+      this.toast.error("Couldn't settle the payment", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+      await this.refreshUnresolvedCards();
+    }
+  }
+
+  private async printCardSlip(text: string, copy: 'customer' | 'all' = 'customer'): Promise<void> {
+    try {
+      await this.hardware.printTerminalSlip(text, copy);
+    } catch (printError) {
+      this.toast.push({
+        kind: 'warning',
+        title: 'Card slip not printed',
+        sub: this.errorMessage(printError),
+        duration: null,
+        action: { label: 'Retry print', run: () => { void this.printCardSlip(text, copy); } },
+      });
+    }
+  }
+
+  /** Sale paid on the terminal of an integrated till: void/refund run there too. */
+  cardCorrectionOnTerminal(transaction: PosSaleResult | null): boolean {
+    return Boolean(transaction?.card?.utn) && this.cardIntegrated();
+  }
+
+  /** Card refund/void that still needs a typed reference (manual tills, or a
+      manually confirmed sale on an integrated till). */
+  needsCorrectionReference(transaction: PosSaleResult | null): boolean {
+    return Boolean(transaction) && this.needsReference(transaction!.paymentMethod) && !this.cardCorrectionOnTerminal(transaction);
+  }
+
+  /**
+   * Runs a void or refund on the terminal after Elite's own checks passed.
+   * Returns the approval to send with the void/refund, or null (reason toasted).
+   */
+  private async runCardCorrection(
+    kind: 'void' | 'refund',
+    transaction: PosSaleResult,
+    amountCents: number,
+  ): Promise<PosCardAttemptRef | null> {
+    const card = transaction.card!;
+    // Approved on the terminal earlier but Elite did not save the void/refund
+    // (network, PIN expiry…): reuse that approval, never run the card twice.
+    const earlier = (await this.local.listCardAttempts()).find((item) =>
+      item.kind === kind && item.originalUtn === card.utn && item.amountCents === amountCents && item.result?.outcome === 'approved');
+    if (earlier?.result) {
+      return { utn: earlier.utn, amountCents, shiftId: earlier.shiftId, originalUtn: card.utn, result: toServerCardResult(earlier.result, 'approved') };
+    }
+    const registerId = this.register()?.registerId ?? '';
+    const utn = this.cardTerminal.newUtn(registerId);
+    await this.local.saveCardAttempt({ utn, kind, amountCents, shiftId: this.shiftId(), createdAt: new Date().toISOString(), state: 'sent', originalUtn: card.utn });
+    await this.pos.recordCardAttempt({ utn, kind, amountCents, shiftId: this.shiftId(), originalUtn: card.utn });
+    const job = kind === 'void'
+      ? { type: 'void' as const, utn, originalUtn: card.utn, amountCents }
+      : {
+        type: 'refund' as const,
+        utn,
+        amountCents,
+        original: {
+          seqNo: card.seqNo || '',
+          date: card.txnAt ? qatarDdMmYy(card.txnAt) : '',
+          authCode: card.authCode || '',
+          amountCents: transaction.totalCents,
+        },
+      };
+    this.toast.info(kind === 'void' ? 'Voiding on the card machine' : 'Refund on the card machine', kind === 'refund' ? 'Ask the customer to insert or tap their card.' : 'Follow the card machine screen.');
+    const result = await this.cardTerminal.run(job);
+    const status = await this.finishCardAttempt(utn, result);
+    if (result.receiptText) void this.printCardSlip(result.receiptText);
+    if (status !== 'approved') {
+      this.toast.error(kind === 'void' ? 'Void not done on the card machine' : 'Refund not done on the card machine', result.message);
+      return null;
+    }
+    return { utn, amountCents, shiftId: this.shiftId(), originalUtn: card.utn, result: toServerCardResult(result, 'approved') };
+  }
+
+  /** Runs CloseBatch before the Z on an integrated till. Never blocks the Z. */
+  private async closeCardBatch(): Promise<{ status: 'closed' | 'empty' | 'failed' | 'skipped'; receiptText?: string } | undefined> {
+    if (!this.cardIntegrated()) return undefined;
+    const result = await this.cardTerminal.run({ type: 'closeBatch' });
+    if (result.outcome !== 'ok') {
+      this.toast.warning('Card batch not closed', `${result.message} The Z report continues; retry from Settings > Card terminal.`);
+      return { status: 'failed' };
+    }
+    if (result.receiptText) void this.printCardSlip(result.receiptText, 'all');
+    return { status: result.code === 'NO_BATCH' ? 'empty' : 'closed', receiptText: result.receiptText };
+  }
+
+  // Settings > Card terminal
+
+  async loadCardSettings(): Promise<void> {
+    this.cardBridgeKey = (await this.cardTerminal.loadKey()) ?? '';
+    const health = await this.cardTerminal.checkHealth();
+    this.cardPort = health?.comPort ?? '';
+    if (health && this.cardBridgeKey) {
+      try {
+        const ports = await this.cardTerminal.ports();
+        this.cardPorts.set(ports.ports);
+      } catch {
+        this.cardPorts.set([]);
+      }
+    }
+  }
+
+  async saveCardBridgeKey(): Promise<void> {
+    await this.cardTerminal.setKey(this.cardBridgeKey);
+    await this.loadCardSettings();
+    this.toast.success(this.cardTerminal.hasKey() ? 'Card bridge key saved' : 'Card bridge key removed');
+  }
+
+  async saveCardPort(): Promise<void> {
+    if (!this.cardPort) return;
+    this.cardAdminBusy.set(true);
+    try {
+      await this.cardTerminal.setPort(this.cardPort);
+      await this.cardTerminal.checkHealth();
+      this.toast.success('Card machine port saved', this.cardPort);
+    } catch (error) {
+      this.toast.error("Couldn't change the port", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+    }
+  }
+
+  /** Owner/admin: link this till to the terminal, or back to manual. */
+  async setTillCardMode(mode: 'manual' | 'integrated'): Promise<void> {
+    const registerId = this.register()?.registerId;
+    if (!registerId) return;
+    this.cardAdminBusy.set(true);
+    try {
+      const saved = await this.pos.setRegisterCardMode(registerId, mode);
+      this.cardMode.set(saved.cardMode);
+      await this.local.setCardMode(saved.cardMode);
+      this.register.update((register) => register ? { ...register, cardMode: saved.cardMode } : register);
+      this.toast.success(mode === 'integrated' ? 'Card machine linked to this till' : 'Card payments are manual on this till');
+      if (mode === 'integrated') await this.prepareCardTerminal();
+    } catch (error) {
+      this.toast.error("Couldn't change card mode", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+    }
+  }
+
+  canManageCardTerminal(): boolean {
+    return ['owner', 'admin'].includes(this.auth.user()?.role ?? '');
+  }
+
+  /** Terminal admin operations from Settings (logon, reports, reprint…). */
+  async cardAdmin(type: 'logon' | 'logoff' | 'summary' | 'audit' | 'reprintLast' | 'settings' | 'initialize' | 'restart' | 'closeBatch'): Promise<void> {
+    this.cardAdminBusy.set(true);
+    try {
+      const result = await this.cardTerminal.run({ type });
+      if (result.outcome !== 'ok') {
+        this.toast.warning('Card machine', result.message);
+        return;
+      }
+      if (result.receiptText) await this.printCardSlip(result.receiptText, 'all');
+      if (type === 'settings' && result.info) {
+        this.toast.success('Card machine', Object.entries(result.info).map(([key, value]) => `${key}: ${value}`).join(' · '));
+      } else {
+        this.toast.success('Card machine', result.message);
+      }
+      await this.cardTerminal.checkHealth();
+    } finally {
+      this.cardAdminBusy.set(false);
+    }
+  }
+
   private errorMessage(error: unknown): string {
     let message = 'The POS request could not be completed.';
     let reference: string | null = null;

@@ -2055,3 +2055,138 @@ label input:focus {
   .product-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .product-copy { min-height: 96px; padding: 10px; }
 }
+
+/* ── Integrated QNB card machine (docs/39) ───────────────────────────────
+   The customer pays on the terminal; this block mirrors its screen so the
+   cashier never has to lean over to read it. One message at a time, large. */
+.card-terminal {
+  margin-top: 24px;
+  padding: 18px 0 6px;
+  border-top: 1px solid var(--pos-line);
+  display: grid;
+  gap: 10px;
+
+  small { color: #6e7773; font-size: 11px; line-height: 1.5; }
+  .link-button { justify-self: start; }
+  .secondary-action { justify-self: start; }
+}
+
+.card-terminal-status { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.card-terminal-chip {
+  padding: 4px 9px;
+  border: 1px solid var(--pos-green);
+  color: var(--pos-green);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+
+  &.offline { border-color: var(--pos-danger, #a8322a); color: var(--pos-danger, #a8322a); }
+  &.sim { border-color: var(--pos-orange); color: #7a5a1e; }
+}
+
+.card-terminal-lead { margin: 0; color: var(--pos-ink); font-size: 13px; line-height: 1.5; }
+
+.card-terminal-message {
+  margin: 0;
+  color: var(--pos-green);
+  font-family: Georgia, serif;
+  font-size: 22px;
+  line-height: 1.3;
+
+  &.declined { color: var(--pos-danger, #a8322a); font-size: 17px; }
+}
+
+.card-terminal[data-phase='waiting'] .card-terminal-message,
+.card-terminal[data-phase='checking'] .card-terminal-message {
+  animation: card-terminal-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes card-terminal-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-terminal[data-phase='waiting'] .card-terminal-message,
+  .card-terminal[data-phase='checking'] .card-terminal-message { animation: none; }
+}
+
+.card-check-notice .link-button { margin-inline-start: 8px; color: inherit; text-decoration: underline; }
+
+.card-check-list {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+
+  li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--pos-line);
+  }
+  li > div:first-child { display: grid; gap: 3px; }
+  b { font-size: 13px; }
+  span { color: #6e7773; font-size: 11px; line-height: 1.4; }
+
+  @media (max-width: 640px) { li { grid-template-columns: 1fr; } }
+}
+
+.card-check-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  button { padding: 8px 12px; font-size: 12px; border: 1px solid var(--pos-line); background: #fff; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.card-terminal-settings {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--pos-line);
+  display: grid;
+  gap: 10px;
+
+  h3 { margin: 0; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: #79817e; }
+  .muted-note { padding: 0; text-align: start; line-height: 1.5; }
+}
+
+.card-mode-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--pos-line);
+
+  button {
+    padding: 10px;
+    border: 0;
+    background: #fff;
+    font-size: 12px;
+    cursor: pointer;
+
+    &.active { background: var(--pos-green); color: #fff; }
+    &:disabled { opacity: 0.6; cursor: not-allowed; }
+  }
+}
+
+.card-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  button {
+    padding: 7px 12px;
+    font-size: 12px;
+    border: 1px solid var(--pos-line);
+    background: #fff;
+    cursor: pointer;
+
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+}
+
+.correction-card-note { margin: 4px 0 12px; }

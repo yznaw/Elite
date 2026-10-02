@@ -13,6 +13,7 @@ const {
 } = require('../lib/pos/register-service');
 const { listManagerPins, clearManagerPin } = require('../lib/pos/manager-service');
 const { getPosPolicy, updatePosPolicy } = require('../lib/pos/policy-service');
+const { getRegisterCardSettings, updateRegisterCardSettings } = require('../lib/pos/card-terminal-service');
 
 const router = Router();
 
@@ -50,6 +51,15 @@ router.post('/registers/:id/replacement-token', asyncHandler(async (req, res) =>
 
 router.put('/registers/:id/branch', asyncHandler(async (req, res) => {
   ok(res, await setRegisterBranch(context(req), req.params.id, req.body?.branchId ?? null));
+}));
+
+// Which till is cabled to the QNB card terminal (migration 047).
+router.get('/registers/:id/card', asyncHandler(async (req, res) => {
+  ok(res, await getRegisterCardSettings(context(req), req.params.id));
+}));
+
+router.put('/registers/:id/card', asyncHandler(async (req, res) => {
+  ok(res, await updateRegisterCardSettings(context(req), req.params.id, req.body));
 }));
 
 router.get('/enrollment-tokens', asyncHandler(async (req, res) => {

@@ -395,6 +395,16 @@ export class PosHardwareService {
     });
   }
 
+  /** The QNB terminal's pre-formatted card slip (customer copy by default).
+      Never opens the drawer. */
+  async printTerminalSlip(text: string, copy: 'customer' | 'all' = 'customer'): Promise<void> {
+    return this.enqueuePrint(async () => {
+      logStage('printTerminalSlip — start', { printerName: this.settings?.printerName || null, copy });
+      const rendered = await this.renderer.renderTerminalSlip(text, copy);
+      await this.printRendered('printTerminalSlip', rendered, false, { qzConfig: { jobName: 'Elite POS Card Slip' } });
+    });
+  }
+
   private enqueuePrint(task: () => Promise<void>): Promise<void> {
     const run = this.printQueue.then(task, task);
     this.printQueue = run.catch(() => undefined);
