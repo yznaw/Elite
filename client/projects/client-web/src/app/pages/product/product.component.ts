@@ -1184,8 +1184,8 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   /**
    * A colour with its own images shows those (cover first) plus the images no colour claims,
-   * and hides the other colours' images. Returns null when the colour has fewer than two
-   * images, so products with one image per colour keep the full gallery.
+   * and hides the other colours' images, whatever their count. Returns null only when the
+   * colour has no tagged image, which keeps the full gallery with the product image first.
    */
   private colorGalleryImages(product: Product, color: string | null, galleryImages: string[]): string[] | null {
     const galleries = product.colorGalleries;
@@ -1193,7 +1193,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     const key = this.colorKey(color);
     const target = this.colorSlug(key);
     const own = galleries[key] ?? Object.entries(galleries).find(([name]) => this.colorSlug(name) === target)?.[1];
-    if (!own || own.length < 2) return null;
+    if (!own?.length) return null;
 
     const resolve = (urls: string[]) => urls.map((url) => this.resolveGalleryImage(product, url, galleryImages));
     const ownImages = resolve(own);

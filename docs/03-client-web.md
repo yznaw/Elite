@@ -743,7 +743,7 @@ filename hint via `urlContainsColor()`). Otherwise it returns `null` and the cal
 alphabetically-sorted colour array against a gallery array sorted by `sort_order` — two unrelated
 orders, so a card could show an image that was never assigned to the colour it displayed.
 
-**Several images per colour (2026-10-02):** `colorImages` is the colour's **cover** (admin-picked), so cards, the cart and `?color=` all start on the same image. The PDP `gallery` computed uses `colorGalleries` (colour -> every image, cover first): when the selected colour has 2+ images it shows those plus images no colour claims, and hides other colours' images; with 0-1 it keeps the full gallery with the colour's image first (legacy products).
+**Several images per colour (2026-10-02):** `colorImages` is the colour's **cover** (admin-picked), so cards, the cart and `?color=` all start on the same image. The PDP `gallery` computed uses `colorGalleries` (colour -> every image, cover first): when the selected colour has at least one tagged image it shows those plus images no colour claims, and hides other colours' images (one image, three or four: same rule); with none it keeps the full gallery with the product image first.
 
 **`resolveMediaUrl()` — Bug fix (June 2026):** The previous implementation stripped `/api/` from the base URL (`apiBase.replace(/\/api\/?$/, '')`), leaving an empty prefix in production. Now uses `${this.apiBase}${value}` directly so `/uploads/abc.jpg` becomes `/api/uploads/abc.jpg`, which routes through the Nginx proxy to Express.
 

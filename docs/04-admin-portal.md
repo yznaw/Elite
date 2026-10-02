@@ -587,7 +587,7 @@ Each color can hold several gallery images (2026-10-02), with one of them as its
 - Each selected tile has a **star**; the starred one is the **card cover** and shows a "Card cover" pill under the tile. Without a pick, the color's first image in gallery order is the cover.
 - Selecting stores `imageColors[imageUrl] = colorName` and `colorCovers[colorName] = imageUrl` in the product form (`colorCovers` is sent on save; the server ignores a cover whose image is no longer tagged with that color).
 - The photo count ("4 photos") shows beside each color's photo cell.
-- The storefront shows only the picked color's images (cover first) plus untagged images. A color with one image keeps the old behaviour (full gallery, its image first).
+- The storefront shows only the picked color's images (cover first) plus untagged images. A color with no photos keeps the old behaviour (full gallery, product image first).
 - Gallery thumbnails display a read-only color badge for linked images, with "(Card cover)" on the cover
 - A transparent full-screen backdrop closes the picker on outside click
 
