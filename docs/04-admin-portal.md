@@ -582,8 +582,8 @@ position in the gallery. See [05 – API Server](./05-api-server.md#which-image-
 ### Color → Image Linking
 
 Each color can hold several gallery images (2026-10-02), with one of them as its **card cover**:
-- Click the photo cell on the color's row → image picker popover opens (to the right). Tick every photo of that color (multi-select; the popover stays open). An image belongs to one color, so ticking it moves it from another color. "None" clears the color's photos.
-- Ticked images show a **Make cover** button; the cover shows **Card cover**. Without a pick, the color's first image in gallery order is the cover.
+- Click the photo button on the color's row → a centered **dialog** opens ("Link photo for Black"). Large tiles (~120px) show every gallery image; tap the ones that show this color (selected = gold outline + check). Photos used by another color are dimmed with that color's name; tapping one moves it here. "Clear all" removes the color's photos. Esc, the overlay, ✕ or **Done** close it; **Browse media library** adds a new photo and reopens the dialog. State: `pickerGroup` computed from `variantPickerOpenId`; classes are namespaced `.cp-*`.
+- Each selected tile has a **star**; the starred one is the **card cover** and shows a "Card cover" pill under the tile. Without a pick, the color's first image in gallery order is the cover.
 - Selecting stores `imageColors[imageUrl] = colorName` and `colorCovers[colorName] = imageUrl` in the product form (`colorCovers` is sent on save; the server ignores a cover whose image is no longer tagged with that color).
 - The photo count ("4 photos") shows beside each color's photo cell.
 - The storefront shows only the picked color's images (cover first) plus untagged images. A color with one image keeps the old behaviour (full gallery, its image first).

@@ -435,11 +435,6 @@ function readPreview(file: File): Promise<string> {
               </button>
             </div>
           } @else {
-            <!-- Transparent backdrop to close image picker on outside click -->
-            @if (variantPickerOpenId()) {
-              <div class="vc-backdrop" (click)="closeVariantPicker()"></div>
-            }
-
             <div class="variants-cards">
               <!-- ══ Color groups accordion ══ -->
               @for (group of colorGroups(); track group.colorKey) {
@@ -488,7 +483,7 @@ function readPreview(file: File): Promise<string> {
                       {{ groupStock(group.items) }} {{ t('product.variants.inStock') }}
                     </span>
 
-                    <!-- Image picker trigger + popover, wrapped so picker anchors to button -->
+                    <!-- Photo picker trigger. The picker itself is the dialog at the end of the template. -->
                     <div class="vcg-img-wrap" (click)="$event.stopPropagation()">
                       <button class="vcg-img-btn" type="button"
                               (click)="toggleVariantPicker('group-' + group.colorKey)"
@@ -505,48 +500,6 @@ function readPreview(file: File): Promise<string> {
                         <span class="vcg-img-count">{{ imagesForColor(group.colorName).length }} {{ t('product.variants.photoCount') }}</span>
                       }
 
-                      @if (variantPickerOpenId() === 'group-' + group.colorKey) {
-                        <div class="vc-img-picker vc-img-picker--group" (click)="$event.stopPropagation()">
-                          <div class="vc-img-picker-head">
-                            {{ t('product.variants.linkPhotoFor') }} <strong>{{ group.colorName }}</strong>
-                            <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
-                          </div>
-                          @if (form().images.length === 0) {
-                            <p class="vc-img-picker-empty">{{ t('product.variants.uploadFirst') }}</p>
-                          } @else {
-                            <p class="vc-img-picker-hint">{{ t('product.variants.pickPhotos') }}</p>
-                            <div class="vc-img-picker-grid">
-                              <button class="vc-img-opt vc-img-opt--none" type="button"
-                                      [class.is-sel]="imagesForColor(group.colorName).length === 0"
-                                      (click)="clearColorImages(group.colorName)">
-                                <span class="vc-img-none-label">{{ t('product.variants.noneOption') }}</span>
-                              </button>
-                              @for (img of form().images; track img) {
-                                <div class="vc-img-cell">
-                                  <button class="vc-img-opt" type="button"
-                                          [class.is-sel]="colorLinkedToImage(img) === group.colorName"
-                                          (click)="toggleColorImage(group.colorName, img)">
-                                    <img [src]="img" [alt]="''"/>
-                                  </button>
-                                  @if (colorLinkedToImage(img) === group.colorName) {
-                                    <button class="vc-img-cover" type="button"
-                                            [class.is-cover]="imageForColor(group.colorName) === img"
-                                            (click)="setColorCover(group.colorName, img)">
-                                      {{ imageForColor(group.colorName) === img ? t('product.variants.cardCover') : t('product.variants.makeCover') }}
-                                    </button>
-                                  }
-                                </div>
-                              }
-                            </div>
-                          }
-                          <!-- The grid above is this product's gallery only. The library stays one
-                               click away for the case where the colour's shot is not in it yet. -->
-                          <button class="vc-img-picker-more" type="button"
-                                  (click)="openLibraryForVariantPicker('group-' + group.colorKey)">
-                            <ap-icon name="media" [size]="12"/> {{ t('product.variants.browseLibrary') }}
-                          </button>
-                        </div>
-                      }
                     </div>
 
                     <!-- Spacer -->
@@ -1157,6 +1110,73 @@ function readPreview(file: File): Promise<string> {
               {{ mediaSelected().size !== 1 ? t('product.gallery.addImages') : t('product.gallery.addImage') }}
             </button>
           </div>
+        </div>
+      </div>
+    }
+
+    <!-- ── Colour photo picker ── -->
+    @if (pickerGroup(); as pg) {
+      <div class="overlay" (click)="closeVariantPicker()"></div>
+      <div class="modal cp-modal" role="dialog" aria-modal="true"
+           [attr.aria-label]="t('product.variants.linkPhotoFor') + ' ' + pg.colorName">
+        <div class="modal-head">
+          <div class="cp-title">
+            <span class="cp-swatch" [style.background]="colorHex(pg.colorName)"></span>
+            <div>
+              <div class="card-title">{{ t('product.variants.linkPhotoFor') }} {{ pg.colorName }}</div>
+              <p class="cp-sub">{{ t('product.variants.pickPhotos') }}</p>
+            </div>
+          </div>
+          <button class="x-btn" type="button" (click)="closeVariantPicker()" [attr.aria-label]="t('common.close')">
+            <ap-icon name="x" [size]="14"/>
+          </button>
+        </div>
+        <div class="modal-body">
+          @if (form().images.length === 0) {
+            <p class="cp-empty">{{ t('product.variants.uploadFirst') }}</p>
+          } @else {
+            <div class="cp-summary">
+              <strong>{{ imagesForColor(pg.colorName).length }}</strong> {{ t('product.variants.photosSelected') }}
+              @if (imagesForColor(pg.colorName).length > 0) {
+                <button class="cp-clear" type="button" (click)="clearColorImages(pg.colorName)">{{ t('product.variants.clearAll') }}</button>
+              }
+            </div>
+            <div class="cp-grid">
+              @for (img of form().images; track img) {
+                @let owner = colorLinkedToImage(img);
+                @let mine = owner === pg.colorName;
+                <div class="cp-item">
+                  <div class="cp-tile" [class.is-sel]="mine" [class.is-other]="!!owner && !mine">
+                    <button class="cp-tile-btn" type="button" (click)="toggleColorImage(pg.colorName, img)"
+                            [attr.aria-pressed]="mine">
+                      <img [src]="img" alt=""/>
+                    </button>
+                    @if (mine) {
+                      <span class="cp-check"><ap-icon name="check" [size]="12"/></span>
+                      <button class="cp-star" type="button"
+                              [class.is-cover]="imageForColor(pg.colorName) === img"
+                              [attr.title]="t('product.variants.makeCover')"
+                              [attr.aria-label]="t('product.variants.makeCover')"
+                              (click)="setColorCover(pg.colorName, img)">
+                        <ap-icon name="star" [size]="14"/>
+                      </button>
+                    } @else if (owner) {
+                      <span class="cp-owner">{{ owner }}</span>
+                    }
+                  </div>
+                  @if (mine && imageForColor(pg.colorName) === img) {
+                    <span class="cp-cover-pill">{{ t('product.variants.cardCover') }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+        <div class="drawer-foot">
+          <button class="btn btn-outline" type="button" (click)="openLibraryForVariantPicker('group-' + pg.colorKey)">
+            <ap-icon name="media" [size]="13"/> {{ t('product.variants.browseLibrary') }}
+          </button>
+          <button class="btn btn-gold" type="button" (click)="closeVariantPicker()">{{ t('common.done') }}</button>
         </div>
       </div>
     }
@@ -1939,103 +1959,53 @@ function readPreview(file: File): Promise<string> {
     .vc-img-placeholder { color: var(--muted); display: flex; }
 
     /* Image picker popover — opens to the right of the photo cell */
-    .vc-img-picker {
-      position: absolute;
-      top: 0;
-      left: calc(100% + 10px);
-      z-index: 300;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
-      min-width: 224px;
-      max-width: 280px;
+    /* Colour photo dialog (cp-*). Own namespace: .vc-img-cell etc. belong to the variant row. */
+    .cp-modal { width: min(720px, 96vw); }
+    .cp-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .cp-swatch { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); flex-shrink: 0; }
+    .cp-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .cp-empty { margin: 0; text-align: center; color: var(--muted); padding: 24px 0; }
+    .cp-summary { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); margin-bottom: 14px; }
+    .cp-clear {
+      margin-inline-start: auto; border: none; background: none; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: underline; padding: 4px 6px;
     }
-    /* Group picker anchors to .vcg-img-wrap (32 px button).
-       Opens downward; right edge aligns with button right edge.
-       Extends leftward so it never escapes the drawer. */
-    .vc-img-picker--group {
-      top: calc(100% + 6px);
-      left: auto;
-      right: 0;
-      min-width: 260px;
-      max-width: 300px;
+    .cp-clear:hover { color: var(--danger, #b3261e); }
+    .cp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; }
+    .cp-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .cp-tile {
+      position: relative; width: 100%; aspect-ratio: 1; border-radius: 10px;
+      border: 2px solid var(--border-2); overflow: hidden; background: var(--bg);
+      transition: border-color .12s, box-shadow .12s;
     }
-    .vc-img-picker--group .vc-img-picker-grid {
-      max-height: 220px;
-      overflow-y: auto;
+    .cp-tile:hover { border-color: var(--ink-2); }
+    .cp-tile.is-sel { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(193,154,91,.25); }
+    .cp-tile.is-other .cp-tile-btn img { opacity: .45; }
+    .cp-tile-btn { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+    .cp-tile-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cp-check {
+      position: absolute; top: 6px; inset-inline-start: 6px; width: 22px; height: 22px; border-radius: 50%;
+      background: var(--gold); color: #fff; display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
     }
-    .vc-img-picker-head {
-      display: flex; align-items: center; justify-content: space-between;
-      font-size: 11px; color: var(--muted);
-      margin-bottom: 10px; padding-bottom: 8px;
-      border-bottom: 1px solid var(--border-2);
+    .cp-star {
+      position: absolute; top: 6px; inset-inline-end: 6px; width: 28px; height: 28px; border-radius: 50%;
+      border: 0; cursor: pointer; background: rgba(255,255,255,.92); color: var(--muted);
+      display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.2);
     }
-    .vc-img-picker-head strong { color: var(--ink); }
-    .vc-img-picker-close {
-      width: 20px; height: 20px;
-      border: none; background: none; cursor: pointer;
-      color: var(--muted); font-size: 11px;
-      display: flex; align-items: center; justify-content: center;
-      border-radius: 4px;
-      transition: color 0.12s, background 0.12s;
+    .cp-star:hover { color: var(--gold); }
+    .cp-star.is-cover { background: var(--gold); color: #fff; }
+    .cp-owner {
+      position: absolute; inset-inline: 6px; bottom: 6px; padding: 2px 6px; border-radius: 6px;
+      background: rgba(255,255,255,.92); color: var(--ink); font-size: 11px; font-weight: 600;
+      text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
     }
-    .vc-img-picker-close:hover { color: var(--ink); background: var(--bg); }
-    .vc-img-picker-more {
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-      width: 100%; margin-top: 10px; padding: 7px 8px;
-      border: 1px dashed var(--border); border-radius: 8px;
-      background: none; cursor: pointer;
-      font-size: 11px; font-weight: 600; color: var(--muted);
-      transition: color 0.12s, border-color 0.12s, background 0.12s;
+    .cp-cover-pill {
+      padding: 2px 8px; border-radius: 999px; background: var(--gold); color: #fff;
+      font-size: 11px; font-weight: 700; line-height: 1.4;
     }
-    .vc-img-picker-more:hover { color: var(--ink); border-color: var(--ink-2); background: var(--bg); }
-    .vc-img-picker-empty {
-      font-size: 12px; color: var(--muted);
-      text-align: center; padding: 8px 0 4px; margin: 0;
-    }
-    .vc-img-picker-grid {
-      display: flex; flex-wrap: wrap; gap: 6px;
-    }
-    .vc-img-opt {
-      width: 56px; height: 56px;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 2px solid var(--border-2);
-      cursor: pointer;
-      padding: 0;
-      background: var(--bg);
-      display: flex; align-items: center; justify-content: center;
-      transition: border-color 0.12s, transform 0.1s, box-shadow 0.12s;
-    }
-    .vc-img-opt img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .vc-img-opt.is-sel {
-      border-color: var(--gold);
-      box-shadow: 0 0 0 3px rgba(193,154,91,0.2);
-    }
-    .vc-img-opt:hover:not(.is-sel) { border-color: var(--ink-2); transform: scale(1.05); }
-    .vc-img-opt--none { border-style: dashed; }
-    .vc-img-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-    .vc-img-cover {
-      font-size: 9px; font-weight: 700; line-height: 1;
-      padding: 3px 6px; border-radius: 6px; cursor: pointer;
-      border: 1px solid var(--border-2); background: var(--bg); color: var(--muted);
-    }
-    .vc-img-cover.is-cover { border-color: var(--gold); background: var(--gold); color: var(--ink); cursor: default; }
-    .vc-img-picker-hint { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
-    .vc-img-none-label {
-      font-size: 9px; font-weight: 700;
-      color: var(--muted); text-align: center;
-      line-height: 1.3; text-transform: uppercase; letter-spacing: 0.04em;
-    }
-
-    /* Transparent backdrop to catch outside clicks */
-    .vc-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 299;
-      background: transparent;
+    @media (max-width: 560px) {
+      .cp-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     /* Row the save check or "Add variant" just pointed at */
@@ -3228,6 +3198,18 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   // Groups the flat variants[] by color for the accordion UI.
   // The underlying flat array is preserved — this is purely a computed view.
+  /** The colour whose photo dialog is open, if any. */
+  readonly pickerGroup = computed(() => {
+    const id = this.variantPickerOpenId();
+    if (!id?.startsWith('group-')) return null;
+    return this.colorGroups().find((group) => 'group-' + group.colorKey === id) ?? null;
+  });
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.variantPickerOpenId()) this.closeVariantPicker();
+  }
+
   readonly colorGroups = computed(() => {
     const variants = this.form().variants;
     const map = new Map<string, {
