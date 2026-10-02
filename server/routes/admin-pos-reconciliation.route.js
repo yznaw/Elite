@@ -8,6 +8,7 @@ const {
   resolveException,
   submitSettlement,
 } = require('../lib/pos/card-reconciliation-service');
+const { listAttempts } = require('../lib/pos/card-terminal-service');
 
 const router = Router();
 
@@ -22,6 +23,18 @@ function context(req) {
 
 router.get('/registers', asyncHandler(async (req, res) => {
   ok(res, await listRegisters(context(req)));
+}));
+
+// Every terminal operation (charge/void/refund) with its outcome, for the
+// "Card terminal" tab: unresolved, declined and manual-override checks.
+router.get('/card-attempts', asyncHandler(async (req, res) => {
+  ok(res, await listAttempts(context(req), {
+    registerId: req.query.registerId,
+    status: req.query.status,
+    from: req.query.from,
+    to: req.query.to,
+    limit: req.query.limit,
+  }));
 }));
 
 router.get('/', asyncHandler(async (req, res) => {

@@ -20,6 +20,21 @@ async function getDefaultImage(client, tenantId) {
     return BUILT_IN_FALLBACK;
   }
 }
+// Every image of each colour, cover first, then gallery order. Same URL flavour as `images`
+// so the product page can match them to gallery entries.
+const COLOR_GALLERIES_SELECT = `
+          COALESCE((
+            SELECT jsonb_object_agg(color, urls)
+            FROM (
+              SELECT pci.color AS color,
+                     jsonb_agg(${pdpUrl('m')} ORDER BY pci.is_primary DESC, pci.sort_order) AS urls
+              FROM product_color_images pci
+              JOIN media_assets m ON m.id = pci.media_id
+              WHERE pci.product_id = p.id
+              GROUP BY pci.color
+            ) per_color
+          ), '{}'::jsonb) AS color_galleries`;
+
 const COLOR_IMAGES_SELECT = `
           COALESCE(
             -- Prefer pivot table written by migration 010 + replaceColorImages()
@@ -30,7 +45,7 @@ const COLOR_IMAGES_SELECT = `
                 FROM product_color_images pci
                 JOIN media_assets m ON m.id = pci.media_id
                 WHERE pci.product_id = p.id
-                ORDER BY pci.color, pci.sort_order
+                ORDER BY pci.color, pci.is_primary DESC, pci.sort_order
               ) primary_color_media
             ),
             -- Fall back to legacy media_assets.metadata->>'color' JSON path
@@ -174,6 +189,14 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
       return map;
     }, {})
     : {};
+  const colorGalleries = row.color_galleries && typeof row.color_galleries === 'object'
+    ? Object.entries(row.color_galleries).reduce((map, [color, urls]) => {
+      const key = String(color || '').trim().toLowerCase();
+      const list = Array.isArray(urls) ? [...new Set(urls.map((u) => String(u || '').trim()).filter(Boolean))] : [];
+      if (key && list.length) map[key] = list;
+      return map;
+    }, {})
+    : {};
   const image = row.image || media[0] || defaultImage;
   const images = [...new Set([image, ...media])];
 
@@ -216,6 +239,7 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
     images,
     imageVariants,
     colorImages,
+    colorGalleries,
     stock: Math.max(0, Number(row.stock_quantity || 0)),
     variants,
     relatedProductIds: row.related_product_ids || [],
@@ -300,6 +324,7 @@ router.get('/', async (_req, res, next) => {
           ${GALLERY_IMAGES_SELECT},
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
+          ${COLOR_GALLERIES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -384,6 +409,7 @@ router.get('/:idOrSlug', async (req, res, next) => {
           ${GALLERY_IMAGES_SELECT},
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
+          ${COLOR_GALLERIES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr

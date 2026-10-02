@@ -6,6 +6,7 @@ const {
 } = require('../location-stock');
 const db = require('../../db/client');
 const { sendReceiptForPaidOrder } = require('../order-receipt');
+const { claimApprovedAttempt, linkAttempt, normalizeCardAttempt } = require('./card-terminal-service');
 
 const MAX_ORDER_CENTS = 2_147_483_647;
 const POS_PAYMENT_METHODS = ['cash', 'card', 'sadad'];
@@ -229,9 +230,17 @@ function normalizeSale(body) {
   // (docs/15 Phase 4) — the only paper trail is the reference the cashier
   // reads off the terminal slip or the Sadad merchant app, so it is captured
   // here and required rather than accepted as a bare "paid".
+  // An integrated card sale carries the terminal's own approval (cardAttempt,
+  // keyed by its ECR UTN) instead of a typed reference; the auth code becomes
+  // the reference. manualOverride marks a typed card reference on a till that
+  // is linked to a terminal (terminal down), so it is flagged for reconciliation.
+  const cardAttempt = method === 'card' ? normalizeCardAttempt(body?.payment?.cardAttempt, 'sale') : null;
+  assertPos(!body?.payment?.cardAttempt || method === 'card', 422, 'CARD_ATTEMPT_INVALID', 'Only a card payment can carry a card terminal approval.');
   const terminalReference = method === 'cash'
     ? null
-    : paymentReference(method, body?.payment?.terminalReference, 'payment.terminalReference');
+    : cardAttempt
+      ? (cardAttempt.result?.authCode || null)
+      : paymentReference(method, body?.payment?.terminalReference, 'payment.terminalReference');
   const clientCreatedAt = body?.clientCreatedAt ? new Date(body.clientCreatedAt) : null;
   assertPos(!clientCreatedAt || !Number.isNaN(clientCreatedAt.getTime()), 422, 'INVALID_TIMESTAMP', 'clientCreatedAt must be a valid timestamp.');
   return {
@@ -249,6 +258,8 @@ function normalizeSale(body) {
       amountTenderedCents: cents(body?.payment?.amountTenderedCents, 'payment.amountTenderedCents'),
       changeGivenCents: cents(body?.payment?.changeGivenCents, 'payment.changeGivenCents'),
       terminalReference,
+      cardAttempt,
+      manualOverride: method === 'card' && !cardAttempt && body?.payment?.manualOverride === true,
     },
     clientCreatedAt,
   };
@@ -333,6 +344,27 @@ async function loadSale(client, tenantId, transactionId) {
     [tenantId, transactionId],
   );
   const refundedByItem = new Map(refundedQuantityResult.rows.map((item) => [item.item_id, Number(item.quantity)]));
+  // The terminal charge behind an integrated card sale: what the slip needs
+  // (scheme, masked card, auth code) and its UTN for a later void/refund.
+  const cardResult = await client.query(
+    `SELECT utn, auth_code, masked_pan, issuer, seq_no, invoice_no, txn_at, entry_method, receipt_text
+       FROM pos_card_attempts
+      WHERE tenant_id = $1 AND pos_transaction_id = $2`,
+    [tenantId, transactionId],
+  );
+  const card = cardResult.rows[0]
+    ? {
+      utn: cardResult.rows[0].utn,
+      authCode: cardResult.rows[0].auth_code,
+      maskedPan: cardResult.rows[0].masked_pan,
+      issuer: cardResult.rows[0].issuer,
+      seqNo: cardResult.rows[0].seq_no,
+      invoiceNo: cardResult.rows[0].invoice_no,
+      txnAt: cardResult.rows[0].txn_at,
+      entryMethod: cardResult.rows[0].entry_method,
+      receiptText: cardResult.rows[0].receipt_text,
+    }
+    : null;
   const receiptNumber = Number(row.receipt_number);
   const items = (row.items || []).map((item) => ({
     ...item,
@@ -351,6 +383,7 @@ async function loadSale(client, tenantId, transactionId) {
     status: row.status,
     paymentMethod: row.payment_method,
     terminalReference: row.terminal_reference || null,
+    card,
     subtotalCents: Number(row.subtotal_cents),
     taxCents: Number(row.tax_cents),
     totalCents: Number(row.total_cents),
@@ -380,6 +413,7 @@ async function loadSale(client, tenantId, transactionId) {
         registerName: row.register_name || '',
         paymentMethod: row.payment_method,
         terminalReference: row.terminal_reference || null,
+        card: card ? { maskedPan: card.maskedPan, issuer: card.issuer, authCode: card.authCode, receiptText: card.receiptText } : null,
         items,
         subtotalCents: Number(row.subtotal_cents),
         taxCents: Number(row.tax_cents),
@@ -395,6 +429,11 @@ async function loadSale(client, tenantId, transactionId) {
 async function createSale(context, body, options = {}) {
   const sale = normalizeSale(body);
   const offline = options.offline === true;
+  // Money already taken on the card terminal is a completed financial fact,
+  // exactly like an offline sale: a price or stock change since the cart was
+  // built must not refuse the sale after the customer was charged. The same
+  // leniency (record a conflict, keep the tendered price) applies.
+  const tendered = offline || Boolean(sale.payment.cardAttempt);
   if (offline) {
     assertPos(sale.clientCreatedAt, 422, 'INVALID_TIMESTAMP', 'Offline sales require clientCreatedAt.');
   }
@@ -506,7 +545,7 @@ async function createSale(context, body, options = {}) {
         : Number(variant.stock_quantity);
       const catalogPriceCents = Number(variant.price_cents);
       if (availableStock < item.quantity) {
-        assertPos(offline, 409, 'INSUFFICIENT_STOCK', `${variant.sku} has insufficient stock.`, {
+        assertPos(tendered, 409, 'INSUFFICIENT_STOCK', `${variant.sku} has insufficient stock.`, {
           variantId: variant.id,
           available: availableStock,
         });
@@ -519,7 +558,7 @@ async function createSale(context, body, options = {}) {
         });
       }
       if (catalogPriceCents !== item.unitPriceCents) {
-        assertPos(offline, 409, 'PRICE_CHANGED', `${variant.sku} price changed.`, {
+        assertPos(tendered, 409, 'PRICE_CHANGED', `${variant.sku} price changed.`, {
           variantId: variant.id,
           priceCents: catalogPriceCents,
         });
@@ -531,7 +570,7 @@ async function createSale(context, body, options = {}) {
           shortageQuantity: null,
         });
       }
-      const unitPriceCents = offline ? item.unitPriceCents : catalogPriceCents;
+      const unitPriceCents = tendered ? item.unitPriceCents : catalogPriceCents;
       const lineTotalCents = unitPriceCents * item.quantity;
       assertPos(Number.isSafeInteger(lineTotalCents), 422, 'ORDER_TOTAL_TOO_LARGE', 'Order total exceeds the supported limit.');
       subtotalCents += lineTotalCents;
@@ -541,6 +580,16 @@ async function createSale(context, body, options = {}) {
     const totalCents = subtotalCents;
     validatePayment(sale.payment, totalCents);
     if (sale.payment.method === 'sadad') await assertSadadReferenceUnused(client, context.tenantId, sale.payment.terminalReference);
+    let cardAttemptRow = null;
+    if (sale.payment.cardAttempt) {
+      cardAttemptRow = await claimApprovedAttempt(client, context, register, sale.payment.cardAttempt, totalCents, 'pos_transaction_id');
+    } else if (sale.payment.method === 'card' && register.card_mode === 'integrated' && !offline) {
+      // A typed reference on a till cabled to the terminal is only allowed as
+      // an explicit fallback (terminal down). Offline replays are never
+      // refused: the sale was tendered while the API was unreachable.
+      assertPos(sale.payment.manualOverride, 422, 'CARD_TERMINAL_REQUIRED', 'This till takes card payments on the terminal. Use "Enter manually" only if the card machine is not working.');
+    }
+    const paymentProvider = cardAttemptRow ? 'qnb-ecr' : 'pos-manual';
 
     let customer = null;
     // Set when an offline sale referenced a customer that no longer exists;
@@ -563,7 +612,7 @@ async function createSale(context, body, options = {}) {
       if (customerResult.rowCount === 1) {
         customer = customerResult.rows[0];
       } else {
-        assertPos(offline, 404, 'CUSTOMER_NOT_FOUND', 'Customer not found.');
+        assertPos(tendered, 404, 'CUSTOMER_NOT_FOUND', 'Customer not found.');
         droppedCustomerId = sale.customerId;
       }
     }
@@ -595,16 +644,23 @@ async function createSale(context, body, options = {}) {
     const orderId = orderResult.rows[0].id;
     const paymentResult = await client.query(
       `INSERT INTO payments
-        (tenant_id, order_id, provider, method, status, amount_cents, currency, processed_at, raw_payload, terminal_reference)
-       VALUES ($1,$2,'pos-manual',$3,'paid',$4,'QAR',now(),$5::jsonb,$6)
+        (tenant_id, order_id, provider, method, status, amount_cents, currency, processed_at, raw_payload, terminal_reference, provider_payment_id)
+       VALUES ($1,$2,$7,$3,'paid',$4,'QAR',now(),$5::jsonb,$6,$8)
        RETURNING id`,
       [
         context.tenantId,
         orderId,
         sale.payment.method,
         totalCents,
-        JSON.stringify({ source: 'pos', offline }),
-        sale.payment.terminalReference,
+        JSON.stringify({
+          source: 'pos',
+          offline,
+          ...(cardAttemptRow ? { utn: cardAttemptRow.utn } : {}),
+          ...(sale.payment.manualOverride ? { manualOverride: true } : {}),
+        }),
+        cardAttemptRow ? cardAttemptRow.auth_code : sale.payment.terminalReference,
+        paymentProvider,
+        cardAttemptRow ? cardAttemptRow.utn : null,
       ],
     );
     const transactionResult = await client.query(
@@ -705,15 +761,15 @@ async function createSale(context, body, options = {}) {
       let branchAfter = null;
       if (saleLocationId) {
         const loc = await applyLocationDelta(client, context.tenantId, {
-          variantId: v.id, locationId: saleLocationId, delta: -line.quantity, strict: !offline, sku: v.sku,
+          variantId: v.id, locationId: saleLocationId, delta: -line.quantity, strict: !tendered, sku: v.sku,
         });
         deduct = -loc.applied;
         branchAfter = loc.after;
       }
       const stockResult = await client.query(
         `UPDATE product_variants
-         SET stock_quantity = ${offline ? 'GREATEST(stock_quantity - $3, 0)' : 'stock_quantity - $3'}
-         WHERE tenant_id = $1 AND id = $2 ${offline ? '' : 'AND stock_quantity >= $3'}
+         SET stock_quantity = ${tendered ? 'GREATEST(stock_quantity - $3, 0)' : 'stock_quantity - $3'}
+         WHERE tenant_id = $1 AND id = $2 ${tendered ? '' : 'AND stock_quantity >= $3'}
          RETURNING stock_quantity`,
         [context.tenantId, v.id, deduct],
       );
@@ -797,6 +853,12 @@ async function createSale(context, body, options = {}) {
       );
     }
     await client.query('UPDATE pos_receipts SET entity_id = $1 WHERE id = $2', [transactionId, receipt.id]);
+    if (cardAttemptRow) await linkAttempt(client, context.tenantId, cardAttemptRow.id, 'pos_transaction_id', transactionId);
+    if (sale.payment.manualOverride && register.card_mode === 'integrated') {
+      await audit(client, context, 'pos.card.manual_override', 'pos_transaction', transactionId, {
+        totalCents, terminalReference: sale.payment.terminalReference,
+      });
+    }
     await audit(client, context, offline ? 'pos.sale.offline-synced' : 'pos.sale.completed', 'pos_transaction', transactionId, {
       orderId,
       paymentId: paymentResult.rows[0].id,

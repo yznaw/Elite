@@ -31,6 +31,7 @@ const migrationPaths = [
   // stocktake_locations, which 037 above creates.
   path.join(__dirname, 'migrations', '046_location_stock.sql'),
   path.join(__dirname, 'migrations', '047_automatic_fulfillment.sql'),
+  path.join(__dirname, 'migrations', '047_pos_card_terminal.sql'),
 ];
 
 async function ensurePosSchema(client) {

@@ -94,6 +94,18 @@ const IMAGE_COLORS_SELECT = `
           ) unique_gallery_colors
         ), '{}'::jsonb) AS image_colors`;
 
+// Cover image of each colour (the one flagged is_primary), keyed by lower-cased colour.
+const COLOR_COVERS_SELECT = `
+        COALESCE((
+          SELECT jsonb_object_agg(color, url)
+          FROM (
+            SELECT pci.color AS color, COALESCE(m.preview_url, m.storage_url) AS url
+            FROM product_color_images pci
+            JOIN media_assets m ON m.id = pci.media_id
+            WHERE pci.product_id = p.id AND pci.is_primary
+          ) covers
+        ), '{}'::jsonb) AS color_covers`;
+
 /** Turns a unique-constraint failure into a 409 the editor can show. */
 function productConflict(err) {
   if (err?.code !== '23505') return err;
@@ -686,7 +698,17 @@ function normalizeImageColors(imageColors) {
   }, {});
 }
 
-async function replaceImages(client, tenantId, productId, images, imageColors = {}) {
+function normalizeColorCovers(colorCovers) {
+  if (!colorCovers || typeof colorCovers !== 'object' || Array.isArray(colorCovers)) return {};
+  return Object.entries(colorCovers).reduce((map, [color, url]) => {
+    const key = String(color || '').trim().toLowerCase();
+    const value = String(url || '').trim();
+    if (key && value) map[key] = value;
+    return map;
+  }, {});
+}
+
+async function replaceImages(client, tenantId, productId, images, imageColors = {}, colorCovers = {}) {
   const urls = [...new Set((Array.isArray(images) ? images : []).map((url) => String(url || '').trim()).filter(Boolean))];
   const colorsByUrl = normalizeImageColors(imageColors);
 
@@ -724,15 +746,28 @@ async function replaceImages(client, tenantId, productId, images, imageColors = 
 
   // Dual-write: also populate product_color_images pivot (migration 010).
   // Falls back gracefully if the table doesn't exist yet on older environments.
-  await replaceColorImages(client, tenantId, productId, urls, colorsByUrl);
+  await replaceColorImages(client, tenantId, productId, urls, colorsByUrl, normalizeColorCovers(colorCovers));
 }
 
-async function replaceColorImages(client, tenantId, productId, urls, colorsByUrl) {
+async function replaceColorImages(client, tenantId, productId, urls, colorsByUrl, covers = {}) {
   try {
     await client.query(
       'DELETE FROM product_color_images WHERE tenant_id = $1 AND product_id = $2',
       [tenantId, productId],
     );
+
+    // One cover per colour: the one the editor picked if it is still tagged with that colour,
+    // otherwise the colour's first image in gallery order.
+    const firstByColor = {};
+    for (const url of urls) {
+      const key = String(colorsByUrl[url] || '').trim().toLowerCase();
+      if (key && !firstByColor[key]) firstByColor[key] = url;
+    }
+    const coverByColor = {};
+    for (const [key, first] of Object.entries(firstByColor)) {
+      const picked = covers[key];
+      coverByColor[key] = picked && String(colorsByUrl[picked] || '').trim().toLowerCase() === key ? picked : first;
+    }
 
     for (const [url, color] of Object.entries(colorsByUrl)) {
       const colorKey = String(color).trim().toLowerCase();
@@ -751,11 +786,11 @@ async function replaceColorImages(client, tenantId, productId, urls, colorsByUrl
 
       const sortOrder = urls.indexOf(url);
       await client.query(
-        `INSERT INTO product_color_images (tenant_id, product_id, color, media_id, sort_order)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO product_color_images (tenant_id, product_id, color, media_id, sort_order, is_primary)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (product_id, color, sort_order)
-         DO UPDATE SET media_id = EXCLUDED.media_id`,
-        [tenantId, productId, colorKey, rows[0].id, sortOrder >= 0 ? sortOrder : 999],
+         DO UPDATE SET media_id = EXCLUDED.media_id, is_primary = EXCLUDED.is_primary`,
+        [tenantId, productId, colorKey, rows[0].id, sortOrder >= 0 ? sortOrder : 999, coverByColor[colorKey] === url],
       );
     }
   } catch (err) {
@@ -838,6 +873,7 @@ function mapAdminProduct(row) {
     image: row.image || '',
     images: row.images || [],
     imageColors: normalizeImageColors(row.image_colors),
+    colorCovers: normalizeColorCovers(row.color_covers),
     variants: row.variants || [],
     enDesc: desc.en || '',
     arDesc: desc.ar || '',
@@ -901,6 +937,7 @@ async function loadAdminProduct(client, tenantId, productId) {
           WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
         ), ARRAY[]::text[]) AS images,
         ${IMAGE_COLORS_SELECT},
+        ${COLOR_COVERS_SELECT},
         COALESCE((
           SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
           FROM product_recommendations pr
@@ -930,6 +967,7 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
   const posStatus = product.posHidden ? 'hidden' : 'active';
   const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
   const imageColors = normalizeImageColors(product.imageColors);
+  const colorCovers = normalizeColorCovers(product.colorCovers);
   const hasRelatedProductIds = Object.prototype.hasOwnProperty.call(product, 'relatedProductIds');
   const description = {
     en: String(product.enDesc || '').trim(),
@@ -1104,7 +1142,7 @@ async function upsertProduct(client, tenant, product, { actorUserId = null } = {
       [saved.id],
     );
   }
-  await replaceImages(client, tenant.id, saved.id, images, imageColors);
+  await replaceImages(client, tenant.id, saved.id, images, imageColors, colorCovers);
   if (hasRelatedProductIds) {
     await replaceRecommendations(client, tenant.id, saved.id, product.relatedProductIds);
   }
@@ -1171,6 +1209,7 @@ router.get('/', asyncHandler(async (_req, res) => {
             WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
           ), ARRAY[]::text[]) AS images,
           ${IMAGE_COLORS_SELECT},
+          ${COLOR_COVERS_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -1240,6 +1279,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
             WHERE ml.product_id = p.id AND ml.role IN ('gallery', 'primary')
           ), ARRAY[]::text[]) AS images,
           ${IMAGE_COLORS_SELECT},
+          ${COLOR_COVERS_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -1454,6 +1494,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       stockReason: req.body.stockReason || null,
       images: Object.prototype.hasOwnProperty.call(req.body, 'images') ? req.body.images : existingFull?.images,
       imageColors: Object.prototype.hasOwnProperty.call(req.body, 'imageColors') ? req.body.imageColors : existingFull?.imageColors,
+      colorCovers: Object.prototype.hasOwnProperty.call(req.body, 'colorCovers') ? req.body.colorCovers : existingFull?.colorCovers,
       relatedProductIds: Object.prototype.hasOwnProperty.call(req.body, 'relatedProductIds')
         ? req.body.relatedProductIds
         : existingFull?.relatedProductIds,

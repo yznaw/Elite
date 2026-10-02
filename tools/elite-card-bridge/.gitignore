@@ -1,0 +1,7 @@
+bin/
+obj/
+# QNB / Ideal Solutions DLL package: bank property, never committed.
+# Copy the delivered files into lib/ on the build machine (see README).
+lib/*
+!lib/README.md
+publish/

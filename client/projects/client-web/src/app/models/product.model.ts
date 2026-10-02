@@ -60,6 +60,8 @@ export interface Product {
   images?: string[];
   imageVariants?: Record<string, Record<string, { url: string; width?: number; mimeType?: string }>>;
   colorImages?: Record<string, string>;
+  /** Every image of each colour, cover first. Keys are lower-cased colour names. */
+  colorGalleries?: Record<string, string[]>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
 }

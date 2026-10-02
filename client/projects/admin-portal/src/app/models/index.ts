@@ -49,6 +49,8 @@ export interface Product {
   images?: string[];
   /** Gallery image URL -> color name selected in the product drawer. */
   imageColors?: Record<string, string>;
+  /** Color name -> the image shown for that color on collection cards. */
+  colorCovers?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
   /** Legacy long description. No longer editable; kept as a fallback source

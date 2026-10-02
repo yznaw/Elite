@@ -279,6 +279,30 @@ payloads. In Elite Diagnostics, filter the same time window by the register and
 the `QZ_*`, `HARDWARE_*`, `PRINTER_*` or `DRAWER_*` code to correlate the local
 signer timeline with the browser and server request IDs.
 
+## 10.5 Card Terminal (QNB N910, integrated tills only)
+
+Only the till that has the branch's QNB terminal cabled to it. Full steps and the
+API are in [`tools/elite-card-bridge/README.md`](../tools/elite-card-bridge/README.md);
+design in [docs/39](./39-qnb-card-terminal-integration.md).
+
+1. Terminal on its QNB docking station; QNB serial cable to the PC (USB-to-Serial
+   adapter with an FTDI chip if there is no COM port).
+2. Device Manager > Ports (COM & LPT): note the COM number and fix it in
+   Port Settings > Advanced.
+3. Optional first check: run QNB's `Ideal.PointOfSale.Integration.Form.exe`,
+   Logon, then close it (it holds the port).
+4. Elevated PowerShell in the bridge publish folder:
+   `.\install-windows.ps1 -ComPort COM3 -PosUser 'PC\cashier'`. It verifies the
+   DLL hash, installs the `Elite POS Card Bridge` logon task and prints the
+   bridge key.
+5. `http://127.0.0.1:8183/v1/health` shows `"mode":"real"` and `"connected":true`.
+6. Owner: Settings > Devices & Security, set this till's card mode to
+   **Integrated**, and enter the bridge key on the till.
+
+Acceptance: a QAR 1.00 sale approved on the test card prints the card slip on
+the Bixolon; a void of it is approved; unplugging the cable mid-payment ends in
+"Checking with the card machine" and resolves to the terminal's real result.
+
 ## 11. Enroll the Physical Register
 
 1. Use the dedicated production browser profile.

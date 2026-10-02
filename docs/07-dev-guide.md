@@ -342,6 +342,18 @@ Render the HTML and print it from a hidden same-page `<iframe>`; see
   `text-align` from the direction rather than hardcoding `left`.
 - Clean the iframe up on `afterprint`, with a timeout as a backstop.
 
+### Run the card terminal bridge locally (no QNB hardware)
+
+The integrated card flow talks to the Elite Card Bridge on `127.0.0.1:8183`. On any OS, run it in simulator mode (needs the .NET 8 SDK):
+
+```bash
+cd tools/elite-card-bridge
+ELITE_CARD_DATA_DIR=/tmp/ecb ELITE_CARD_BRIDGE_KEY=dev-bridge-key-0123456789abcdef \
+  dotnet run --project src/EliteCardBridge -f net8.0 -- --simulator
+```
+
+Enter the same key in POS Settings, set the till to **Integrated** (`PUT /api/admin/pos-security/registers/:id/card`), and pick outcomes with `POST /v1/sim/next {"scenario":"insufficient"}` (list in the bridge README). Tests: `dotnet test tests/EliteCardBridge.Tests` and `node --test test/pos-card-terminal-e2e.test.js` in `server/`. The QNB DLL is never committed; copy it into `tools/elite-card-bridge/lib/` to build the real Windows bridge.
+
 ### Show a Notification (Toast)
 
 Read [38 – Notifications](./38-notification-audit.md) first. In short: the HTTP interceptor already reports every failed request (and `ConnectivityService` owns "connection lost"), so in a `catch` around an API call use `toast.errorFrom(err, title, sub)`, which only shows if the global message did not. Toasts dismiss themselves; pass `duration: null` only with an `action` that really does something; give repeated states a `key` and clear it with `dismissKey`. Tests: `npm run test:notifications`.
@@ -520,7 +532,7 @@ Colour **photos** come from two unrelated datasets. Confusing them is the easies
 
 They are intentionally separate: hero art is a cutout framed for the hero stage, gallery photos are standard product photography. The home hero does **not** read `product_color_images`, and the product page does not read slide content.
 
-If you do need the product gallery mapping, note the two APIs use opposite key directions: `GET /api/products` returns `colorImages` (colour -> URL, keys lowercased) while `GET /api/admin/products` returns `imageColors` (URL -> colour, original casing).
+If you do need the product gallery mapping, note the two APIs use opposite key directions: `GET /api/products` returns `colorImages` (colour -> URL, keys lowercased) while `GET /api/admin/products` returns `imageColors` (URL -> colour, original casing). `GET /api/products` also returns `colorGalleries` (colour -> all URLs, cover first) and the admin API returns `colorCovers` (colour -> cover URL); see [05 – API Server](./05-api-server.md).
 
 ### Add a New CSS Design Token
 

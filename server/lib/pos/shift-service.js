@@ -164,6 +164,7 @@ async function closeShift(context, body) {
   const shiftId = uuid(body?.shiftId, 'shiftId');
   const idempotencyKey = nonEmpty(body?.idempotencyKey, 'idempotencyKey', 160);
   const physicalCashCents = cents(body?.physicalCashCents, 'physicalCashCents');
+  const cardBatch = normalizeCardBatch(body?.cardBatch);
 
   return inTransaction(async (client) => {
     const existing = await client.query(
@@ -275,10 +276,20 @@ async function closeShift(context, body) {
        WHERE id = $1`,
       [shift.id, report.rows[0].id],
     );
+    if (cardBatch) {
+      const batched = await client.query(
+        `UPDATE pos_z_reports
+            SET card_batch_status = $2, card_batch_receipt_text = $3,
+                card_batch_closed_at = CASE WHEN $2 IN ('closed', 'empty') THEN now() END
+          WHERE id = $1 RETURNING *`,
+        [report.rows[0].id, cardBatch.status, cardBatch.receiptText],
+      );
+      report.rows[0] = batched.rows[0];
+    }
     // selfClose is recorded on the audit entry so a Z report closed without a
     // second approver is identifiable afterwards, not just inferable from
     // manager_id matching the shift's cashier.
-    await audit(client, context, 'pos.shift.closed', 'pos_z_report', report.rows[0].id, { ...reportData, selfClose });
+    await audit(client, context, 'pos.shift.closed', 'pos_z_report', report.rows[0].id, { ...reportData, selfClose, cardBatchStatus: cardBatch?.status || null });
     await client.query(
       `INSERT INTO pos_events (tenant_id, register_id, event_type, payload)
        VALUES ($1, $2, 'shift.closed', $3::jsonb)`,
@@ -290,6 +301,48 @@ async function closeShift(context, body) {
       branch_name: branch.name,
       cashier_name: shift.cashier_name,
     });
+  });
+}
+
+const CARD_BATCH_STATUSES = new Set(['closed', 'empty', 'failed', 'skipped']);
+
+/** Result of CloseBatch on an integrated till's terminal, run just before the
+    Z. A failed batch never blocks the Z (the drawer count is what matters
+    here); it is recorded and can be retried from Settings. */
+function normalizeCardBatch(value) {
+  if (value === undefined || value === null) return null;
+  const status = String(value.status || '');
+  assertPos(CARD_BATCH_STATUSES.has(status), 422, 'INVALID_FIELD', 'cardBatch.status must be closed, empty, failed or skipped.');
+  const receiptText = value.receiptText ? String(value.receiptText) : null;
+  assertPos(!receiptText || receiptText.length <= 16000, 422, 'INVALID_FIELD', 'cardBatch.receiptText is too long.');
+  return { status, receiptText };
+}
+
+/** Records a CloseBatch retried after the Z (e.g. the terminal was offline at
+    shift close). Only a missing or failed batch can be replaced. */
+async function recordCardBatch(context, zReportIdValue, body) {
+  const zReportId = uuid(zReportIdValue, 'zReportId');
+  const cardBatch = normalizeCardBatch(body);
+  assertPos(cardBatch, 422, 'INVALID_FIELD', 'Card batch result is required.');
+  return inTransaction(async (client) => {
+    const register = await requireRegister(client, context);
+    const current = await client.query(
+      'SELECT id, register_id, card_batch_status FROM pos_z_reports WHERE tenant_id = $1 AND id = $2 FOR UPDATE',
+      [context.tenantId, zReportId],
+    );
+    const row = current.rows[0];
+    assertPos(row, 404, 'Z_REPORT_NOT_FOUND', 'Z report not found.');
+    assertPos(row.register_id === register.id, 403, 'SHIFT_REGISTER_MISMATCH', 'This Z report belongs to another till.');
+    assertPos(!row.card_batch_status || row.card_batch_status === 'failed' || row.card_batch_status === 'skipped', 409, 'CARD_BATCH_ALREADY_CLOSED', 'The card batch for this Z report is already closed.');
+    await client.query(
+      `UPDATE pos_z_reports
+          SET card_batch_status = $2, card_batch_receipt_text = $3,
+              card_batch_closed_at = CASE WHEN $2 IN ('closed', 'empty') THEN now() END
+        WHERE id = $1`,
+      [zReportId, cardBatch.status, cardBatch.receiptText],
+    );
+    await audit(client, context, 'pos.card.batch_closed', 'pos_z_report', zReportId, { status: cardBatch.status, retried: true });
+    return mapZReport(await loadZReportRow(client, context.tenantId, zReportId));
   });
 }
 
@@ -330,6 +383,9 @@ function mapZReport(row) {
   return {
     zReportId: row.id,
     zNumber: row.z_number || null,
+    cardBatchStatus: row.card_batch_status || null,
+    cardBatchClosedAt: row.card_batch_closed_at || null,
+    cardBatchReceiptText: row.card_batch_receipt_text || null,
     businessDate: isoDate(row.business_date),
     shiftId: row.shift_id,
     registerId: row.register_id,
@@ -509,5 +565,5 @@ async function getZReportItems(context, zReportId) {
 
 module.exports = {
   buildZReportItems, closeShift, isoDate, currentSummary, getZReport, getZReportItems, listZReports,
-  loadShiftSummary, loadZReportRow, openShift,
+  loadShiftSummary, loadZReportRow, openShift, recordCardBatch,
 };

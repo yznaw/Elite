@@ -278,6 +278,8 @@ No new table for the inventory ledger itself — `inventory_movements` from migr
 
 ## Phase 4 — Card payment reference capture and reconciliation (terminal confirmed standalone)
 
+> **Superseded 2026-10-01.** QNB now offers ECR integration for the existing Newland N910 terminals (serial cable on a docking station, Ideal Solutions DLL). The manual reference flow below stays for tills in `manual` card mode; integrated tills are covered by [docs/39](./39-qnb-card-terminal-integration.md).
+
 **Scope simplified per Phase 0 finding:** the card terminal has no cable/software link to the POS — the cashier keys the amount into it manually and it is not integrated with any till software, old or new. There is no ECR protocol to build against, so the original "generic terminal adapter + local bridge process" design is dropped entirely. This phase is now much smaller: make the existing manual-confirmation flow capture a real, mandatory reference instead of just a "mark as paid" checkbox, and add settlement reconciliation against the bank's own statement.
 
 ### Architecture decision

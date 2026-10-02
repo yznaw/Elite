@@ -266,6 +266,12 @@
         @if (rejectedSales() > 0) {
           <div class="offline-notice rejected">{{ rejectedSales() }} rejected offline sale(s) require manager review before shift close.</div>
         }
+        @if (unresolvedCards().length > 0) {
+          <div class="offline-notice rejected card-check-notice">
+            {{ unresolvedCards().length }} card payment(s) need checking.
+            <button type="button" class="link-button" (click)="openCardCheck()">Card payments to check</button>
+          </div>
+        }
         @if (pendingSales() > 0) {
           <div class="offline-notice" [class.rejected]="oldestPendingAgeMs() > 600000" [class.warn]="oldestPendingAgeMs() > 120000 && oldestPendingAgeMs() <= 600000">
             {{ pendingSales() }} sale(s) waiting to sync — oldest queued {{ formatAge(oldestPendingAgeMs()) }} ago. Last synced {{ formatSyncTime(lastSyncAt()) }}.
@@ -542,9 +548,9 @@
   }
 
   @if (paymentOpen()) {
-    <div class="modal-backdrop" (click)="paymentOpen.set(false)">
+    <div class="modal-backdrop" (click)="closePaymentSheet()">
       <section class="payment-sheet" (click)="$event.stopPropagation()">
-        <button class="modal-close" type="button" aria-label="Close" (click)="paymentOpen.set(false)">&times;</button>
+        <button class="modal-close" type="button" aria-label="Close" [disabled]="cardBusy() || cardPhase() === 'unknown'" (click)="closePaymentSheet()">&times;</button>
         <span class="eyebrow">PAYMENT</span>
         <h2>{{ formatMoney(totalCents()) }}</h2>
 
@@ -627,7 +633,47 @@
             <div><b>QAR</b><input [(ngModel)]="tendered" inputmode="decimal" /></div>
           </label>
           <div class="change-row"><span>Change due</span><strong>{{ formatMoney(changeCents()) }}</strong></div>
+        } @else if (paymentMethod() === 'card' && cardTerminalActive()) {
+          <!-- Integrated till (docs/39): the amount goes to the QNB terminal,
+               the customer pays there, and the sale completes on approval. -->
+          <div class="card-terminal" [attr.data-phase]="cardPhase()" aria-live="polite">
+            <div class="card-terminal-status">
+              <span class="card-terminal-chip" [class.offline]="cardBridgeReachable() === false">
+                {{ cardBridgeReachable() === false ? 'Card machine not connected' : 'Card machine ready' }}
+              </span>
+              @if (cardBridgeHealth()?.mode === 'simulator') { <span class="card-terminal-chip sim">Simulator</span> }
+            </div>
+            @switch (cardPhase()) {
+              @case ('ready') {
+                <p class="card-terminal-lead">Press <b>Charge</b>, then hand the card machine to the customer.</p>
+              }
+              @case ('waiting') {
+                <p class="card-terminal-message">{{ cardTerminalText() }}</p>
+                <small>To cancel, press the red key on the card machine.</small>
+              }
+              @case ('checking') {
+                <p class="card-terminal-message">Connection lost. Checking with the card machine…</p>
+                <small>Do not charge the card again.</small>
+              }
+              @case ('declined') {
+                <p class="card-terminal-message declined" role="alert">{{ cardDecline() }}</p>
+              }
+              @case ('unknown') {
+                <p class="card-terminal-message declined" role="alert">{{ cardDecline() }}</p>
+                <button type="button" class="secondary-action" (click)="recheckCardPayment()">Check again</button>
+              }
+            }
+            @if (cardPhase() === 'ready' || cardPhase() === 'declined') {
+              <button type="button" class="link-button" (click)="useManualCard()">Card machine not working? Enter manually</button>
+            }
+          </div>
         } @else if (paymentMethod() === 'card') {
+          @if (cardIntegrated()) {
+            <div class="card-confirmation">
+              Manual entry: this sale is flagged for the card reconciliation.
+              <button type="button" class="link-button" (click)="useCardTerminal()">Use the card machine</button>
+            </div>
+          }
           <div class="card-confirmation">
             Confirm the payment on the external card terminal before completing this sale.
             @if (!online()) { <b> Offline card confirmation cannot be verified by Elite until synchronization.</b> }
@@ -673,7 +719,11 @@
           [disabled]="busy() || offlineCatalogBlocked() || !paymentReady()"
           (click)="completeSale()"
         >
-          {{ busy() ? 'Posting sale...' : 'Complete sale' }}
+          @if (cardTerminalActive()) {
+            {{ cardBusy() ? 'Waiting for the card machine…' : busy() ? 'Saving sale…' : cardPhase() === 'declined' ? 'Try again' : 'Charge ' + formatMoney(totalCents()) }}
+          } @else {
+            {{ busy() ? 'Posting sale...' : 'Complete sale' }}
+          }
         </button>
       </section>
     </div>
@@ -691,6 +741,10 @@
           <div><dt>Payment</dt><dd>{{ paymentLabel(sale.paymentMethod) }}</dd></div>
           @if (sale.paymentMethod === 'sadad' && sale.terminalReference) {
             <div><dt>Sadad ID</dt><dd>{{ sale.terminalReference }}</dd></div>
+          }
+          @if (sale.card) {
+            <div><dt>Card</dt><dd>{{ cardLabel(sale.card) }}</dd></div>
+            <div><dt>Approval</dt><dd>{{ sale.card.authCode }}</dd></div>
           }
           @if (sale.changeGivenCents > 0) {
             <div><dt>Change</dt><dd>{{ formatMoney(sale.changeGivenCents) }}</dd></div>
@@ -777,7 +831,9 @@
             }
           </div>
           <label>Reason<input [(ngModel)]="correctionReason" name="correctionReason" placeholder="Required permanent reason" autocomplete="off" /></label>
-          @if (transaction.paymentMethod === 'card') {
+          @if (cardCorrectionOnTerminal(transaction)) {
+            <div class="card-confirmation correction-card-note">Paid on the card machine ({{ cardLabel(transaction.card) }}). A void or refund runs there too; for a refund the customer presents their card.</div>
+          } @else if (transaction.paymentMethod === 'card') {
             <!-- The card terminal here is standalone (docs/12, "Card") — a
                  refund needs its own action on it, and this reference is the
                  only proof it actually happened, same as the original sale. -->
@@ -797,7 +853,7 @@
             <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
           }
           <div class="correction-actions">
-            <button type="button" [disabled]="busy() || transaction.status !== 'completed' || (needsReference(transaction.paymentMethod) && !refundTerminalReference.trim())" (click)="refundCurrentTransaction()">Refund selected</button>
+            <button type="button" [disabled]="busy() || transaction.status !== 'completed' || (needsCorrectionReference(transaction) && !refundTerminalReference.trim())" (click)="refundCurrentTransaction()">Refund selected</button>
             <button class="danger-action" type="button" [disabled]="busy() || transaction.status !== 'completed' || !!transaction.refunds?.length" (click)="voidCurrentTransaction()">Void entire sale</button>
           </div>
         }
@@ -837,6 +893,52 @@
         </label>
         <button class="primary-action" type="button" [disabled]="busy()" (click)="saveHardware()">Save and connect</button>
 
+        <div class="card-terminal-settings">
+          <h3>Card machine (QNB)</h3>
+          @if (canManageCardTerminal()) {
+            <div class="card-mode-row" role="radiogroup" aria-label="Card payments on this till">
+              <button type="button" role="radio" [attr.aria-checked]="cardMode() === 'manual'" [class.active]="cardMode() === 'manual'" [disabled]="cardAdminBusy()" (click)="setTillCardMode('manual')">Manual</button>
+              <button type="button" role="radio" [attr.aria-checked]="cardMode() === 'integrated'" [class.active]="cardMode() === 'integrated'" [disabled]="cardAdminBusy()" (click)="setTillCardMode('integrated')">Linked to this till</button>
+            </div>
+          }
+          @if (cardIntegrated()) {
+            <p class="muted-note">
+              @if (cardBridgeHealth(); as health) {
+                Card bridge {{ health.version }} on {{ health.comPort }}, {{ health.connected ? 'connected' : 'not connected' }}{{ health.mode === 'simulator' ? ' (simulator)' : '' }}.
+              } @else {
+                The card bridge is not running on this computer. Install it with install-windows.ps1 (see the hardware runbook).
+              }
+            </p>
+            <label>Bridge key
+              <div class="printer-scan-row">
+                <input [(ngModel)]="cardBridgeKey" type="password" autocomplete="off" placeholder="Printed by the bridge installer" />
+                <button type="button" (click)="saveCardBridgeKey()">Save</button>
+              </div>
+            </label>
+            @if (canManageCardTerminal() && cardPorts().length) {
+              <label>Serial port
+                <div class="printer-scan-row">
+                  <select [(ngModel)]="cardPort">
+                    @for (port of cardPorts(); track port) { <option [value]="port">{{ port }}</option> }
+                  </select>
+                  <button type="button" [disabled]="cardAdminBusy()" (click)="saveCardPort()">Use</button>
+                </div>
+              </label>
+            }
+            <div class="card-admin-actions">
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('settings')">Test connection</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('logon')">Log on to bank</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('reprintLast')">Reprint last slip</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('summary')">Summary report</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('audit')">Audit report</button>
+              @if (canManageCardTerminal()) {
+                <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('initialize')">Download profile</button>
+                <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('restart')">Restart card machine</button>
+              }
+            </div>
+          }
+        </div>
+
         <div class="pos-build">
           <h3>POS version</h3>
           <p class="muted-note">
@@ -856,6 +958,46 @@
           </button>
         </div>
 
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'card-check') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">CARD MACHINE</span>
+        <h2>Card payments to check</h2>
+        @if (!unresolvedCards().length) {
+          <p class="muted-note">Nothing to check. Every card payment on this till is settled.</p>
+        } @else {
+          <p class="muted-note">Each of these reached the card machine but has no matching receipt in Elite. Check with the card machine first; settle by hand only after reading its last slip or audit report.</p>
+          <ul class="card-check-list">
+            @for (attempt of unresolvedCards(); track attempt.utn) {
+              <li>
+                <div>
+                  <b>{{ attempt.kind === 'sale' ? 'Sale' : attempt.kind === 'void' ? 'Void' : 'Refund' }} {{ formatMoney(attempt.amountCents) }}</b>
+                  <span>{{ attempt.status === 'approved' ? (attempt.kind === 'sale' ? 'Approved, no receipt' : 'Approved on the card machine, not saved. Redo it from Refund or void; the card is not run again.') : attempt.status === 'unknown' ? 'Not confirmed' : 'Waiting' }} · {{ attempt.createdAt | date:'shortTime' }}</span>
+                  @if (attempt.maskedPan) { <span>{{ cardLabel(attempt) }} · {{ attempt.authCode }}</span> }
+                </div>
+                <div class="card-check-actions">
+                  @if (attempt.status !== 'approved' || attempt.kind === 'sale') {
+                  <button type="button" [disabled]="cardAdminBusy()" (click)="checkCardAttempt(attempt)">
+                    {{ attempt.status === 'approved' && attempt.kind === 'sale' ? 'Finish sale or reverse charge' : 'Check with card machine' }}
+                  </button>
+                  }
+                  @if (attempt.status !== 'approved') {
+                    <button type="button" class="danger-action" [disabled]="cardAdminBusy() || !cardResolveNote.trim() || (managerPinConfigured() && !cardResolvePin)" (click)="resolveCardByManager(attempt, 'declined')">Mark not charged</button>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+          <label>Note for "Mark not charged"<input [(ngModel)]="cardResolveNote" placeholder="What the card machine's slip or report shows" autocomplete="off" /></label>
+          @if (managerPinConfigured()) {
+            <label>Manager PIN<input [(ngModel)]="cardResolvePin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          }
+        }
       </section>
     </div>
   }

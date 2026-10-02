@@ -581,11 +581,14 @@ position in the gallery. See [05 – API Server](./05-api-server.md#which-image-
 
 ### Color → Image Linking
 
-Each color variant can be linked to one gallery image via the photo cell in the row:
-- Click the photo cell → image picker popover opens (to the right)
-- Selecting an image stores `imageColors[imageUrl] = colorName` in the product form
-- The storefront uses this map to show the correct image for each color
-- Gallery thumbnails display a read-only color badge for linked images
+Each color can hold several gallery images (2026-10-02), with one of them as its **card cover**:
+- Click the photo button on the color's row → a centered **dialog** opens ("Link photo for Black"). Large tiles (~120px) show every gallery image; tap the ones that show this color (selected = gold outline + check). The color's own photos come first (order fixed when the dialog opens, so tiles do not jump while picking; after a save they are first next time), the rest follow in gallery order. Photos used by another color are dimmed with that color's name; tapping one moves it here. "Clear all" removes the color's photos. Esc, the overlay, ✕ or **Done** close it; the dashed **Add more photos / Browse media library** tile is the last item of the grid (same size as the photos) and opens the media library, then reopens the dialog. State: `pickerGroup` computed from `variantPickerOpenId`; classes are namespaced `.cp-*`.
+- **Order within a color:** drag the selected tiles onto each other (`moveColorImage`). The color's photos swap among the gallery slots they already hold, so no other photo moves and no new field is stored; the storefront shows them in that order (cover first). If the color's first photo changes and no star was picked, the new first photo is the card cover. Only selected tiles are draggable.
+- Each selected tile has a **star**; the starred one is the **card cover** and shows a "Card cover" pill under the tile. Without a pick, the color's first image in gallery order is the cover.
+- Selecting stores `imageColors[imageUrl] = colorName` and `colorCovers[colorName] = imageUrl` in the product form (`colorCovers` is sent on save; the server ignores a cover whose image is no longer tagged with that color).
+- The photo count ("4 photos") shows beside each color's photo cell.
+- The storefront shows only the picked color's images (cover first) plus untagged images. A color with no photos keeps the old behaviour (full gallery, product image first).
+- Gallery thumbnails display a read-only color badge for linked images, with "(Card cover)" on the cover
 - A transparent full-screen backdrop closes the picker on outside click
 
 ### Collapsible Detail
@@ -831,6 +834,8 @@ See [08 – Database & API Implementation](./08-database-api-implementation.md) 
 The implemented workflow covers register selection (the "which till is this?" picker, with setup tokens as the remote-setup fallback), shift open/close, catalog and barcode lookup, cash, manual-card and manual-Sadad checkout (Sadad needs the transaction ID from the Sadad merchant app, see docs/12), offline synchronization, parked carts, receipt printing, refunds, same-shift voids, manager approvals, live stock events, and conflict reconciliation.
 
 **Payment methods across back-office pages.** Sadad is the third tender next to cash and card, and it is carried everywhere money is counted. The current-shift panel and printed Z-report show cash, card and Sadad sales separately; the Z-history CSV has a Sadad Sales column. Reports show the method by name (Cash / Card / Sadad, EN + AR via `payment.method.*`). The **Settlements** tab (formerly Card Settlement) has an All / Card / Sadad filter and a Method column. **Z-report Excel.** Each closing has a readable number (`Z-DDMM-YYYY-NNN`) shown in the POS Z-history dialog and in a Z Number column on Reports → Z-Reports. Both lists have an **Excel** button per closing that downloads the team's "Daily Sales Report (Z-Report)" sheet: header block, one line per SKU / color / size / price / method with sold, returned and net quantity, totals, and the cash / card / Sadad split. The Reconciliation page has a Card / Sadad switch at the top: each tender is reconciled separately (`pos_card_reconciliation.method`, one row per register, day and method), card against the bank export and Sadad against the Sadad merchant panel settlement.
+
+**QNB card machine (integrated tills, 2026-10-01).** A till cabled to the branch's QNB terminal is set to **Linked to this till** in the POS Hardware dialog (owner/admin; `PUT /api/admin/pos-security/registers/:id/card`, persisted in `pos_registers.card_mode`). Its card tender then charges the terminal through the local Elite Card Bridge (`PosCardTerminalService`, `127.0.0.1:8183`), mirrors the terminal screen, completes the sale on approval, prints the bank's slip, and runs voids, card-present refunds, logon and CloseBatch on the terminal. Terminal operations are stored in `pos_card_attempts` (migration 047); unresolved ones appear as a "Card payments to check" banner on the till. Other tills stay **Manual** (typed approval code). Details: [12 – POS](./12-pos-system.md#card-terminal-qnb-ecr), [39 – QNB card terminal](./39-qnb-card-terminal-integration.md).
 
 Printing uses QZ Tray with authenticated server-side signing and a loopback device signer for offline operation. It does not use the older proposed WebUSB or direct TCP printer design.
 

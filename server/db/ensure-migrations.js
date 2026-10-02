@@ -441,6 +441,7 @@ async function ensureAllMigrations(client) {
   await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/041_catalog_cost_identity_lifecycle.sql'), 'utf8'));
   await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/042_base_price_from_variants.sql'), 'utf8'));
   await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/045_staff_notifications.sql'), 'utf8'));
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/048_color_image_primary.sql'), 'utf8'));
   _done = true;
 }
 
