@@ -159,16 +159,18 @@ async function lockLocationQuantity(client, tenantId, variantId, locationId) {
  */
 async function applyLocationDelta(client, tenantId, { variantId, locationId, delta, strict = true, sku = null }) {
   const before = await lockLocationQuantity(client, tenantId, variantId, locationId);
+  const reservation = await client.query("SELECT COALESCE(sum(quantity),0)::int AS n FROM fulfillment_allocations WHERE tenant_id=$1 AND variant_id=$2 AND location_id=$3 AND state='reserved'", [tenantId, variantId, locationId]);
+  const reserved = reservation.rows[0].n;
   let after = before + delta;
   let shortage = 0;
-  if (after < 0) {
+  if (after < reserved) {
     if (strict) {
       throw new LocationStockError(409, 'LOCATION_INSUFFICIENT_STOCK',
-        `${sku || 'This item'} has only ${before} at this location.`,
-        { variantId, locationId, available: before });
+        `${sku || 'This item'} has only ${before - reserved} unreserved units at this location.`,
+        { variantId, locationId, available: before - reserved });
     }
-    shortage = -after;
-    after = 0;
+    shortage = reserved - after;
+    after = reserved;
   }
   if (after !== before) {
     await client.query(
@@ -190,9 +192,11 @@ async function getAvailability(client, tenantId, variantIds) {
     [tenantId, variantIds],
   );
   for (const row of balances.rows) result.get(row.variant_id).locations[row.location_id] = Number(row.quantity);
+  const reservations = await client.query("SELECT variant_id,location_id,sum(quantity)::int AS quantity FROM fulfillment_allocations WHERE tenant_id=$1 AND variant_id=ANY($2::uuid[]) AND state='reserved' GROUP BY variant_id,location_id", [tenantId, variantIds]);
+  for (const row of reservations.rows) { const entry = result.get(row.variant_id); entry.locations[row.location_id] = Math.max(0, (entry.locations[row.location_id] || 0) - row.quantity); }
   const holds = await client.query(
     `SELECT variant_id, sum(quantity)::int AS held FROM order_stock_holds
-      WHERE tenant_id = $1 AND variant_id = ANY($2::uuid[]) AND status = 'held'
+      WHERE tenant_id = $1 AND variant_id = ANY($2::uuid[]) AND status IN ('held','reserved')
       GROUP BY variant_id`,
     [tenantId, variantIds],
   );
@@ -327,7 +331,7 @@ async function findLocationDrift(client, tenantId, limit = 50) {
        ) l ON l.variant_id = pv.id
        LEFT JOIN (
          SELECT variant_id, sum(quantity) AS held FROM order_stock_holds
-          WHERE tenant_id = $1 AND status = 'held' GROUP BY variant_id
+          WHERE tenant_id = $1 AND status IN ('held','reserved') GROUP BY variant_id
        ) h ON h.variant_id = pv.id
       WHERE pv.tenant_id = $1
         AND pv.stock_quantity <> COALESCE(l.total, 0) - COALESCE(h.held, 0)
@@ -403,6 +407,9 @@ async function activatePerLocation(client, context) {
  */
 async function deactivatePerLocation(client, context) {
   await client.query('SELECT id FROM tenants WHERE id = $1 FOR UPDATE', [context.tenantId]);
+  const active = await client.query("SELECT 1 FROM orders WHERE tenant_id=$1 AND fulfillment_version=1 AND (allocation_state='reserved' OR (payment_status='paid' AND status NOT IN ('completed','cancelled','refunded'))) LIMIT 1", [context.tenantId]);
+  const cfg = await client.query("SELECT config->'automaticFulfillment'->>'enabled' AS enabled FROM tenants WHERE id=$1", [context.tenantId]);
+  assertPos(!active.rowCount && cfg.rows[0]?.enabled !== 'true', 409, 'AUTOMATIC_FULFILLMENT_ACTIVE', 'Disable automatic delivery and finish its active orders before turning off location stock.');
   await client.query(
     `UPDATE tenants
         SET config = jsonb_set(COALESCE(config, '{}'::jsonb), '{inventory}',

@@ -112,6 +112,13 @@ async function recomputeProductTotals(client, productIds) {
  * @returns {Promise<{applied: boolean, reason?: string, shortages?: Array}>}
  */
 async function ensurePaidOrderStock(tenantId, orderId, options = {}) {
+  try {
+    const automatic = await require('./automatic-fulfillment').processPaidOrder(tenantId, orderId);
+    if (automatic) return automatic;
+  } catch (err) {
+    logger.error({ orderId, err: err.message }, 'Automatic stock allocation failed; worker will reconcile');
+    return { applied: false, reason: 'automatic_error' };
+  }
   const { actorUserId = null, source = 'web' } = options;
   let client;
   try {
@@ -282,6 +289,8 @@ async function ensurePaidOrderStock(tenantId, orderId, options = {}) {
  * actually taken), and is idempotent on the reversal reason.
  */
 async function reversePaidOrderStock(tenantId, orderId, options = {}) {
+  const automatic = await db.query('SELECT fulfillment_version FROM orders WHERE tenant_id=$1 AND id=$2', [tenantId, orderId]);
+  if (automatic.rows[0]?.fulfillment_version) return { reversed: false, reason: 'shipment_return_required' };
   const { actorUserId = null, reason = 'cancelled' } = options;
   let client;
   try {

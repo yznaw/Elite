@@ -883,6 +883,19 @@
             >
           </div>
 
+          @if ((shippingQuote()?.shipmentCount || 0) > 1) {
+            <section class="delivery-breakdown">
+              <p class="delivery-explanation" role="status">{{ t('checkout.delivery.split') }}</p>
+              @for (shipment of shippingQuote()?.shipments; track shipment.number) {
+                <article class="delivery-parcel">
+                  <div class="parcel-heading"><span>{{ t('checkout.delivery.parcel') }} {{shipment.number}}</span><strong>{{price(shipment.amount)}}</strong></div>
+                  <ul>@for (item of shipment.items; track item.variantId) {
+                    <li><span>{{item.name}} · {{item.size}}</span><span class="parcel-quantity">× {{item.qty}}</span></li>
+                  }</ul>
+                </article>
+              }
+            </section>
+          }
           <div class="divider" style="margin: 12px 0"></div>
 
           <div style="display: flex; justify-content: space-between">

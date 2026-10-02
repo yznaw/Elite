@@ -7,7 +7,7 @@ const { getAllocation, approveOrder, orderAwaitsApproval } = require('../lib/ord
 const { sendOrderConfirmedEmail } = require('../lib/order-confirmation');
 const { perLocationEnabled } = require('../lib/location-stock');
 const { ensurePaidOrderStock, reversePaidOrderStock } = require('../lib/order-stock');
-const { ensureDefaultTenant } = require('../db/tenant');
+
 const { insertWithRetry } = require('../lib/order-number');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -35,12 +35,16 @@ function mapOrder(row, detailed = false) {
     shippingAddress,
     billingAddress: row.billing_address || {},
     paymentGateway: row.metadata?.paymentGateway || undefined,
-    trackingNumber: row.tracking_number || undefined,
+    trackingNumber: row.fulfillment_version ? undefined : row.tracking_number || undefined,
     nboxBookingFailed: Boolean(
       row.metadata?.nbox?.bookingFailedAt && !row.metadata?.nbox?.bookedAt,
     ),
     nboxBookingError: row.metadata?.nbox?.bookingError || undefined,
-    delivery: mapDelivery(row),
+    delivery: row.fulfillment_version ? undefined : mapDelivery(row),
+    automaticFulfillment: row.fulfillment_version === 1,
+    allocationState: row.allocation_state,
+    deliveryProgress: row.metadata?.deliveryProgress,
+    deliveries: row.deliveries || [],
     // Stock per location: paid website order waiting for staff to choose
     // where it ships from; then the chosen location (staff-only).
     needsApproval: Boolean(row.needs_approval),
@@ -124,6 +128,7 @@ async function loadAdminOrder(client, tenantId, id) {
     `,
     [tenantId, id],
   );
+  if (result.rows[0]?.fulfillment_version) result.rows[0].deliveries = await require('../lib/automatic-fulfillment').deliveryList(client, tenantId, result.rows[0].id, true);
   return result.rowCount === 0 ? null : mapOrder(result.rows[0], true);
 }
 
@@ -151,7 +156,7 @@ function orderOrderBy(sort, dir) {
 router.get('/', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     const page    = Math.max(0, parseInt(req.query.page  ?? '0', 10)  || 0);
     const limit   = Math.min(200, Math.max(1, parseInt(req.query.limit ?? '50', 10) || 50));
@@ -244,7 +249,7 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const order = await loadAdminOrder(client, tenant.id, req.params.id);
     if (!order) return notFound(res, 'Order not found.');
     ok(res, order);
@@ -263,7 +268,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     // ── Idempotency check: return the existing order if key already used ──
     if (idempotencyKey) {
@@ -411,17 +416,26 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
   let committed = false;
   try {
     await client.query('BEGIN');
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     tenantId = tenant.id;
     const trackingNumber = String(req.body.trackingNumber || '').trim();
     // Read the prior state so the stock effect can be driven by the actual
     // transition, not by the requested value. Marking an already-paid order
     // paid again, or re-cancelling a cancelled order, must not move stock.
     const previous = await client.query(
-      'SELECT id, payment_status, status FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2) FOR UPDATE',
+      'SELECT id, payment_status, status, fulfillment_version FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2) FOR UPDATE',
       [tenant.id, req.params.id],
     );
+    if (previous.rows[0]?.fulfillment_version && (req.body.fulfillment || req.body.trackingNumber || req.body.status)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'Use the individual delivery actions for this automatically allocated order.' });
+    }
     const previousPaymentStatus = previous.rows[0]?.payment_status || null;
+    if (previous.rows[0]?.fulfillment_version && req.body.payment && req.body.payment !== previousPaymentStatus
+      && !(['refunded', 'partially_refunded'].includes(req.body.payment) && ['paid', 'partially_refunded'].includes(previousPaymentStatus))) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'VERIFIED_PAYMENT_REQUIRED', message: 'Automatic orders require a verified payment-provider confirmation.' });
+    }
     const previousStatus = previous.rows[0]?.status || null;
     // Stock per location: a paid website order ships only after approval,
     // which is also where it picks the location stock leaves from.
@@ -564,10 +578,18 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
   }
 }));
 
+router.post('/:id/deliveries/:shipmentId/action', require('../middleware/require-auth').requireAuth({ roles: ['owner','admin'] }), asyncHandler(async(req,res) => {
+  const client=await db.pool.connect();
+  try {
+    await require('../lib/fulfillment-actions').act(client,{tenantId:req.user.tenantId,userId:req.user.id},req.params.id,req.params.shipmentId,req.body);
+    ok(res,await loadAdminOrder(client,req.user.tenantId,req.params.id));
+  } finally { client.release(); }
+}));
+
 router.post('/:id/rebook-delivery', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const order = await client.query(
       'SELECT id, payment_status FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)',
       [tenant.id, req.params.id],
@@ -607,7 +629,7 @@ router.post('/:id/notes', asyncHandler(async (req, res) => {
 
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const order = await client.query('SELECT id FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)', [tenant.id, req.params.id]);
     if (order.rowCount === 0) return notFound(res, 'Order not found.');
     const note = await client.query(

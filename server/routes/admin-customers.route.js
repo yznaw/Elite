@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const db = require('../db/client');
-const { ensureDefaultTenant } = require('../db/tenant');
+
 const { customerIdentifierConflictField } = require('../lib/customer-identity');
 const { asyncHandler, conflict, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
@@ -63,7 +63,9 @@ function mapOrderRow(row) {
     items: row.items || [],
     address: formatAddress(row.shipping_address || {}),
     shippingAddress: row.shipping_address || {},
-    trackingNumber: row.tracking_number || undefined,
+    trackingNumber: row.fulfillment_version ? undefined : row.tracking_number || undefined,
+    automaticFulfillment: row.fulfillment_version === 1,
+    deliveryProgress: row.metadata?.deliveryProgress,
   };
 }
 
@@ -105,7 +107,7 @@ function customerOrderBy(sort, dir) {
 router.get('/', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     const page   = Math.max(0, parseInt(req.query.page ?? '0', 10) || 0);
     const limit  = Math.min(200, Math.max(1, parseInt(req.query.limit ?? '50', 10) || 50));
@@ -174,7 +176,7 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     let result;
     try {
       result = await client.query(
@@ -206,7 +208,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 router.get('/:id/orders', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     // Resolve customer (need email for the fallback join)
     const cust = await client.query(
@@ -254,7 +256,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const result = await client.query(
       `
         INSERT INTO customers
@@ -302,7 +304,7 @@ router.post('/', asyncHandler(async (req, res) => {
 router.patch('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     // Build the SET list from the keys the caller actually sent. The previous
     // blanket COALESCE meant a field could never be cleared: sending
@@ -363,7 +365,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 router.delete('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const result = await client.query(
       `UPDATE customers SET deleted_at = now()
        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
@@ -382,7 +384,7 @@ router.patch('/:id/restore', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   let tenant;
   try {
-    tenant = await ensureDefaultTenant(client);
+    tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     await client.query('BEGIN');
     const target = await client.query(
       'SELECT id FROM customers WHERE tenant_id = $1 AND id = $2 FOR UPDATE',

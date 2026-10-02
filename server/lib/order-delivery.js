@@ -84,6 +84,8 @@ async function recordNboxBookingFailure(client, tenantId, orderId, err) {
 }
 
 async function bookNboxForPaidOrder(client, tenantId, orderId) {
+  const automatic = await client.query('SELECT fulfillment_version FROM orders WHERE tenant_id=$1 AND id=$2', [tenantId, orderId]);
+  if (automatic.rows[0]?.fulfillment_version) return require('./automatic-fulfillment').bookShipments(client, tenantId, orderId);
   if (!nbox.isConfigured()) {
     return { created: false, skipped: true, reason: 'nbox_not_configured' };
   }

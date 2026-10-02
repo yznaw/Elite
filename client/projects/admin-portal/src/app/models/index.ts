@@ -148,6 +148,10 @@ export interface OrderDelivery {
 }
 
 export interface Order {
+  automaticFulfillment?: boolean;
+  allocationState?: string;
+  deliveryProgress?: {label:string;delivered:number;total:number};
+  deliveries?: {id:string;location?:string;reference?:string;status:string;bookingState?:string;bookingError?:string;amount:number;trackingNumber?:string;trackingUrl?:string;items:{name:string;size?:string;quantity:number}[]}[];
   id: string;
   date: string;
   customer: string;

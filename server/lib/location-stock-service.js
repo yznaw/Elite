@@ -150,7 +150,7 @@ async function listStock(context, query = {}) {
                           FROM variant_location_stock vls
                          WHERE vls.variant_id = pv.id AND vls.quantity > 0), '{}'::jsonb) AS by_location,
               COALESCE((SELECT sum(h.quantity) FROM order_stock_holds h
-                         WHERE h.variant_id = pv.id AND h.status = 'held'), 0)::int AS held,
+                         WHERE h.variant_id = pv.id AND h.status IN ('held','reserved')), 0)::int AS held,
               count(*) OVER () AS total_rows
          FROM product_variants pv
          JOIN products p ON p.id = pv.product_id

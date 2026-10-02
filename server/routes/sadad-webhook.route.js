@@ -58,6 +58,7 @@ router.post('/', async (req, res) => {
   // ── 3. Idempotency + update ───────────────────────────────────────────────
   const client = await db.pool.connect();
   try {
+    if (paymentStatus === 'paid' && !(await require('../lib/fulfillment-payment').verify(client, websiteRefNo, payload, transactionNumber))) return;
     // Check if this exact transaction was already processed
     const existing = await client.query(
       `SELECT provider_payment_id FROM payments WHERE order_id = $1`,

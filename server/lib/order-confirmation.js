@@ -3,8 +3,8 @@ const mailer = require('./mailer');
 const { logger } = require('./logger');
 
 /**
- * "Your order is confirmed" email, sent once when staff approve a website
- * order (plan Phase 5). The payment receipt (order-receipt.js) still goes out
+ * "Your order is confirmed" email, sent after allocation for automatic orders
+ * or staff approval for legacy orders. The payment receipt still goes out
  * at payment; this is the second message. It never mentions branches or
  * where the order ships from (client decision 2026-09-26).
  *
@@ -25,13 +25,14 @@ async function sendOrderConfirmedEmail(client, tenantId, orderId) {
   try {
     const orderResult = await client.query(
       `SELECT o.*, t.currency FROM orders o JOIN tenants t ON t.id = o.tenant_id
-        WHERE o.tenant_id = $1 AND o.id = $2 AND o.approved_at IS NOT NULL`,
+        WHERE o.tenant_id = $1 AND o.id = $2 AND o.status NOT IN ('cancelled','refunded') AND (o.approved_at IS NOT NULL OR (o.fulfillment_version=1 AND o.payment_status='paid' AND o.allocation_state='allocated'))`,
       [tenantId, orderId],
     );
     if (!orderResult.rowCount) return { sent: false, reason: 'not_approved' };
     const order = orderResult.rows[0];
     if (!order.customer_email) return { sent: false, reason: 'customer_email_missing' };
     if (order.metadata?.confirmation?.sentAt) return { sent: false, skipped: true, reason: 'already_sent' };
+    if (Date.parse(order.metadata?.confirmation?.nextAttemptAt) > Date.now()) return { sent: false, skipped: true, reason: 'retry_backoff' };
 
     const items = await client.query(
       `SELECT product_name, size, quantity FROM order_items WHERE tenant_id = $1 AND order_id = $2 ORDER BY created_at, id`,
@@ -90,6 +91,11 @@ async function sendOrderConfirmedEmail(client, tenantId, orderId) {
     return { sent: true };
   } catch (err) {
     logger.warn({ orderId, err: err.message, code: err.code }, 'order confirmation email failed');
+    // An unavailable mail service must not monopolize every worker sweep.
+    await client.query(`UPDATE orders SET metadata=jsonb_set(metadata,'{confirmation}',
+      COALESCE(metadata->'confirmation','{}'::jsonb) || jsonb_build_object('nextAttemptAt',$3::text),true)
+      WHERE tenant_id=$1 AND id=$2 AND fulfillment_version=1`,
+    [tenantId, orderId, new Date(Date.now() + 5 * 60 * 1000).toISOString()]).catch(() => {});
     return { sent: false, reason: err.code || 'error' };
   }
 }

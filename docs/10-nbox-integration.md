@@ -3,7 +3,7 @@
 Elite integrates with NBOX in two directions:
 
 1. Checkout asks NBOX for delivery availability and price after the customer enters the delivery address.
-2. Once payment is confirmed as `paid`, Elite creates a shipment in NBOX.
+2. In the opt-in automatic flow, verified payment consumes reserved stock and creates one shipment per pickup origin. Legacy location-stock orders retain staff approval.
 3. NBOX sends shipment status updates back to `https://elitecollections.qa/api/webhooks/nbox`.
 
 ## Required Environment
@@ -42,33 +42,61 @@ Do not use your webhook URL for any of these outbound API settings. `https://eli
 
 `NBOX_API_TOKEN` is sent as the raw `x-nbox-shop-token` header. `NBOX_SHOP_DOMAIN` is sent as `x-nbox-shop-domain`; it must match the domain/store attached to that token in NBOX.
 
+## Automatic multi-location fulfillment
+
+This flow is disabled by default. Owners/admins configure it under **Settings → Integrations → Automatic delivery**. Enable stock per location first, select up to three stock locations, enter each pickup address, and choose Al Rayyan as the fallback. Entry order determines shop priority. A physical pickup address must have one stock location; reconcile any branch/warehouse stock duplication before enabling. Existing paid orders waiting for manual approval must be resolved first. NBOX credentials and its webhook signing secret are required.
+
+Allocation is deterministic:
+
+1. A regular shop with the entire order supplies it alone.
+2. Otherwise, Al Rayyan supplies it alone if it has the entire order.
+3. Otherwise, use the smallest feasible set of origins, preferring shops over fallback stock on a tie.
+
+Every selected origin has a separate delivery quote and shipment. There is no pickup fee. Two origins mean two delivery charges; three origins can mean three. Branch names/contact details stay internal. Public checkout shows each shipment's items, charge and the combined total.
+
+Quotes are stored server-side for 15 minutes and bound to the visitor's session, catalog prices, quantities, address and configuration. Checkout rechecks location stock, atomically reserves it for 30 minutes and freezes the accepted delivery total. A stale plan requires customer review before payment. Product prices, dimensions, fees, origins and payment state cannot be overridden by browser fields.
+
+Reservations reduce sellable stock but leave physical on-hand quantities unchanged until verified payment. POS/transfer/adjustment paths cannot consume those reserved units. Expired/failed payments release reservations once. A late payment may recover only its original plan; if stock is gone, the paid order is flagged for staff resolution without booking or charging extra.
+
+SADAD callbacks/webhooks must pass signature verification, match the full order amount/currency, and include a transaction reference that has not paid another order. Missing amount/reference fails closed with a verification alert. A duplicate success cannot reverse a recorded refund. Manual “mark paid” is blocked for automatic orders.
+
 ## Customer Checkout Flow
 
 - Step 1 collects name, email, and phone.
 - Step 2 collects delivery address.
 - When the customer continues from delivery, the storefront calls `POST /api/carts/shipping-quote`.
-- The server calls NBOX and returns the selected delivery service, ETA, and amount.
+- The server calls NBOX for each selected origin and returns the delivery fees and shipment item summaries.
 - The checkout total becomes `subtotal + NBOX delivery amount`.
 - The order cannot be submitted without an available NBOX quote.
 
-## Shipment Booking Flow
+## Shipment booking and recovery
 
-The server creates the NBOX shipment only after payment is confirmed as `paid`.
+For automatic orders, signed, amount-verified SADAD confirmation drives reservation consumption without admin approval. The admin bell/email includes the new order and its source preparation lists. Notification recipients use the existing Settings → Notifications configuration. The customer receives payment/confirmation emails.
 
-Current triggers:
+Migration `047_automatic_fulfillment.sql` is registered in the existing boot migration runner. New orders carry `fulfillment_version=1`. Durable booking states live on each shipment; a worker sweeps every 15 seconds and continues existing automatic orders even if the feature is disabled for new checkouts.
 
-- A future payment gateway can call `POST /api/carts/checkout` with `payment.status = paid`.
-- SADAD callback/webhook confirms payment and books NBOX delivery.
-- The admin portal can mark an order as paid; `PATCH /api/admin/orders/:id/status` then attempts NBOX booking.
+Each shipment freezes its origin, destination, items and quote and uses a stable child reference such as `EC-…-S1`. It stores its own provider ID, tracking and booking outcome. Advisory locks and idempotent allocations prevent duplicate local work. Explicit API rejection can be retried from order details. Timeout, lost response or interrupted booking becomes **uncertain**: staff must reconcile the child reference with NBOX and either attach the existing shipment or confirm it was not created, with an audit note. A successful sibling shipment is preserved.
 
-If NBOX booking succeeds, Elite stores:
+Signed NBOX events update exactly one child shipment. Deduplication and monotonic status handling reject repeats/regressions. The order displays partial progress and completes only when all active shipments are delivered. Customer tracking is available on the thank-you page to the checkout session; admin details and invoices list each shipment.
 
-- Shipment carrier `nbox`
-- Tracking number and tracking URL if returned by NBOX
-- NBOX raw response in order metadata
-- Timeline entry on the order
+Cancellation is per shipment and only before collection. A booked shipment needs NBOX cancellation confirmation. Stock is restored only after staff explicitly confirm the items are physically at the original location, once per allocation. Cancellation does not issue a monetary refund; refunds do not automatically restore stock or change the original delivery charges.
 
-If NBOX later sends updates, the webhook updates fulfillment status and tracking history.
+### Access boundaries
+
+- Origin settings and recovery actions require an owner/admin session, tenant scoping and the existing CSRF protections.
+- Quote and checkout rate limits, session-scoped retry keys, bounded pending reservations and stock locks limit duplicate/competing requests.
+- NBOX credentials stay on the server. Request headers and customer payloads are omitted from adapter logs; public shipment responses omit origin/contact data and booking errors.
+- `GET/PUT /api/admin/inventory/automatic-fulfillment` manages configuration.
+- `POST /api/admin/orders/:order/deliveries/:shipment/action` handles retry, reconciliation, cancellation and physical restoration.
+- `GET /api/payments/delivery-status/:publicNumber` returns shipment tracking only for its owning checkout session.
+
+### Enablement gate
+
+Local automated tests use an isolated PostgreSQL database, mocked carrier/payment data, and intercepted English/Arabic browser APIs. They do not prove live provider compatibility. Before enabling this feature, verify actual origin balances/addresses and notification recipients, then exercise NBOX and SADAD staging with single/split deliveries, signed payment amount/reference fields, late payments and cancellation/reconciliation.
+
+The [NBOX seller specification](https://nbox.now/api/seller/openapi-spec.json), inspected 2026-10-01, defines one origin per order, string `orderNumber` identifiers, `lat`/`lng` coordinates and `displayRate` as the customer charge. Creation is asynchronous acceptance. It also exposes `/fulfilled`; confirm whether your account requires that separate readiness step to schedule collection and agree the packing timing before rollout. This implementation does not automatically call `/fulfilled`. Origin phone/contact are stored for staff; the published address schema has no carrier pickup-contact fields. Verify NBOX's account/location setup supplies the right contact at each branch.
+
+Confirm SADAD's signed payload includes one of the supported amount fields (`TXN_AMOUNT`, `TXNAMOUNT`, `transactionAmount`, `transaction_amount`, `amount`) and the transaction reference used by the existing callback/webhook adapter. Missing or incompatible fields intentionally stop automatic fulfillment. No live staging transactions or deployment have been performed as part of this implementation.
 
 ## Webhook URL
 

@@ -6,6 +6,19 @@
 export type Locale = 'en' | 'ar';
 
 const EN = {
+  "tracking.title": "Your deliveries",
+  "tracking.processing": "Preparing",
+  "tracking.shipped": "In transit",
+  "tracking.delivered": "Delivered",
+  "tracking.cancelled": "Cancelled",
+  "tracking.returned": "Returned",
+  "tracking.open": "Track delivery",
+  "tracking.error": "Delivery updates are temporarily unavailable. We will retry shortly.",
+
+  "checkout.delivery.split": "Your order will arrive in separate deliveries. Each delivery is charged below.",
+  "checkout.delivery.parcel": "Delivery",
+  "checkout.delivery.reviewChanged": "Stock or delivery details changed. Review the updated delivery cost, then continue to payment.",
+
   // ─────────────────────────────────────────────────────────────────────
   //  Brand
   // ─────────────────────────────────────────────────────────────────────
@@ -556,6 +569,19 @@ const EN = {
 } as const;
 
 const AR: Record<keyof typeof EN, string> = {
+  "tracking.title": "شحناتك",
+  "tracking.processing": "قيد التجهيز",
+  "tracking.shipped": "في الطريق",
+  "tracking.delivered": "تم التوصيل",
+  "tracking.cancelled": "ملغاة",
+  "tracking.returned": "مرتجعة",
+  "tracking.open": "تتبع الشحنة",
+  "tracking.error": "تحديثات التوصيل غير متاحة مؤقتاً. سنعيد المحاولة قريباً.",
+
+  "checkout.delivery.split": "سيصلك طلبك في شحنات منفصلة. رسوم كل شحنة موضحة أدناه.",
+  "checkout.delivery.parcel": "الشحنة",
+  "checkout.delivery.reviewChanged": "تغير المخزون أو تفاصيل التوصيل. راجع رسوم التوصيل المحدثة ثم تابع الدفع.",
+
   // Brand
   'brand.name': 'إيليت',
   'brand.tagline': 'تصميم قطري، صناعة إيطالية',

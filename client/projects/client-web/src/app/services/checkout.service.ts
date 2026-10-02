@@ -30,6 +30,9 @@ export interface CheckoutAddress {
 }
 
 export interface DeliveryQuote {
+  expiresAt?: string;
+  shipmentCount?: number;
+  shipments?: {number:number;amount:number;eta?:string;items:{variantId:string;name:string;size?:string;qty:number}[]}[];
   available: boolean;
   id?: string;
   serviceName?: string;
@@ -84,7 +87,7 @@ export class CheckoutService {
     items: CartItem[];
   }): Promise<DeliveryQuote> {
     return firstValueFrom(
-      this.http.post<ApiResponse<DeliveryQuote>>(`${this.apiBase}/carts/shipping-quote`, payload),
+      this.http.post<ApiResponse<DeliveryQuote>>(`${this.apiBase}/carts/shipping-quote`, payload, { withCredentials: true }),
     ).then((res) => res.data);
   }
 

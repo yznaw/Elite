@@ -2,6 +2,7 @@ const { Router } = require('express');
 const { persistCheckoutSession, scopedIdempotencyKey } = require('../lib/checkout-ownership');
 const db = require('../db/client');
 const nbox = require('../lib/nbox');
+const automatic = require('../lib/automatic-fulfillment');
 const { nboxQuoteMetadata } = require('../lib/order-delivery');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { resolveCustomer } = require('../lib/customer-identity');
@@ -9,6 +10,9 @@ const { insertWithRetry } = require('../lib/order-number');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
+const rateLimit = require('express-rate-limit');
+const quoteLimiter = rateLimit({ windowMs: 15*60*1000, limit: process.env.NODE_ENV === 'test' ? 1000 : 60, standardHeaders: true, legacyHeaders: false });
+const checkoutLimiter = rateLimit({ windowMs: 15*60*1000, limit: process.env.NODE_ENV === 'test' ? 1000 : 20, standardHeaders: true, legacyHeaders: false });
 router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
 async function loadCart(client, cartId) {
@@ -194,7 +198,16 @@ async function resolveLines(client, tenantId, items) {
       unitCents,
     });
   }
-  return { lines, problems };
+  // Aggregate by catalog identity before stock checks; repeated spellings of
+  // a size or UUID must not let a cart buy the same last unit twice.
+  const combined = new Map();
+  for (const line of lines) {
+    const key = line.variantId || line.productId;
+    const previous = combined.get(key);
+    if (previous) previous.qty += line.qty;
+    else combined.set(key, { ...line });
+  }
+  return { lines: [...combined.values()], problems };
 }
 
 function unavailableResponse(res, req, problems) {
@@ -439,7 +452,7 @@ router.delete('/current/items', asyncHandler(async (req, res) => {
   }
 }));
 
-router.post('/shipping-quote', asyncHandler(async (req, res) => {
+router.post('/shipping-quote', quoteLimiter, asyncHandler(async (req, res) => {
   const checkout = normalizeCheckout(req);
   const errors = [];
   if (!checkout.customer.name || checkout.customer.name === 'Guest') errors.push('Customer name is required.');
@@ -449,6 +462,14 @@ router.post('/shipping-quote', asyncHandler(async (req, res) => {
   }
   if (checkout.items.length === 0) errors.push('At least one cart item is required.');
   if (errors.length > 0) return validationError(res, errors);
+
+  const tenant = await ensureDefaultTenant(db.pool);
+  if ((await automatic.settings(db.pool, tenant.id)).enabled) {
+    const ownerHash = await persistCheckoutSession(req);
+    const { lines, problems } = await resolveLines(db.pool, tenant.id, checkout.items);
+    if (problems.length) return unavailableResponse(res, req, problems);
+    return ok(res, await automatic.createQuote(db.pool, tenant.id, ownerHash, lines, checkout.shippingAddress, tenant.currency));
+  }
 
   if (!nbox.isConfigured()) {
     return ok(res, { available: true, amount: 0, currency: 'QAR', serviceName: 'Standard Delivery', serviceCode: 'standard' }, 'Delivery quote ready.');
@@ -469,7 +490,7 @@ router.post('/shipping-quote', asyncHandler(async (req, res) => {
   }
 }));
 
-router.post('/checkout', asyncHandler(async (req, res) => {
+router.post('/checkout', checkoutLimiter, asyncHandler(async (req, res) => {
   const checkout = normalizeCheckout(req);
   const errors = [];
   if (!checkout.customer.name || checkout.customer.name === 'Guest') errors.push('Customer name is required.');
@@ -497,6 +518,8 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     inTransaction = true;
     const tenant = await ensureDefaultTenant(client);
     tenantId = tenant.id;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`checkout:${ownerHash}`]);
 
     if (idempotencyKey) {
       // Serialize retries before checking existence, so concurrent submissions
@@ -532,7 +555,13 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     // The delivery fee is quoted here rather than trusted from the request, for the same
     // reason as the prices: it is part of what the gateway charges.
     let shippingQuote = null;
-    if (nbox.isConfigured()) {
+    let acceptedPlan = null;
+    if ((await automatic.settings(client, tenant.id)).enabled) {
+      const openReservations = await client.query("SELECT count(*)::int AS n FROM orders WHERE tenant_id=$1 AND metadata->>'checkoutOwnerHash'=$2 AND allocation_state='reserved' AND payment_status='pending'", [tenant.id,ownerHash]);
+      if (openReservations.rows[0].n >= 2) throw Object.assign(new Error('Finish an existing payment or wait for its reservation to expire before starting another.'), {status:409,code:'CHECKOUT_IN_PROGRESS'});
+      acceptedPlan = await automatic.acceptedQuote(client, tenant.id, ownerHash, checkout.shippingQuote?.id, lines, checkout.shippingAddress);
+      shippingQuote = { available: true, amount: acceptedPlan.plan.totalCents / 100, currency: acceptedPlan.plan.currency, serviceName: 'NBOX', serviceCode: 'nbox' };
+    } else if (nbox.isConfigured()) {
       try {
         shippingQuote = await nbox.getDeliveryQuote({
           customer: checkout.customer,
@@ -663,24 +692,6 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     ));
     createdOrder = order.rows[0];
 
-    // Cancel only this shopping session's other pending orders that were created
-    // before this one. Handles the case where the user went back from Sadad,
-    // changed their details, and submitted a new order — the previous pending
-    // order is cancelled immediately instead of waiting for the 6h cleanup job.
-    await client.query(
-      `UPDATE orders
-          SET payment_status = 'cancelled',
-              updated_at     = NOW()
-        WHERE tenant_id      = $1
-          AND metadata->>'checkoutOwnerHash' = $2
-          AND payment_status = 'pending'
-          AND id            != $3`,
-      [tenantId, ownerHash, createdOrder.id],
-    ).catch((err) => {
-      // Non-critical — cleanup job will handle them at the 6h mark.
-      console.warn('[checkout] Could not cancel prior pending orders:', err.message);
-    });
-
     for (const item of lines) {
       const { qty } = item;
       const unit = item.unitCents;
@@ -713,6 +724,8 @@ router.post('/checkout', asyncHandler(async (req, res) => {
         ],
       );
     }
+
+    if (acceptedPlan) await automatic.reserve(client, tenant.id, createdOrder, acceptedPlan);
 
     await client.query(
       'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',

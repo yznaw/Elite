@@ -13,6 +13,24 @@
       </div>
     }
 
+    @if(deliveries().length) {
+      <section class="customer-deliveries" aria-live="polite">
+        <h2 class="deliveries-title">{{t('tracking.title')}}</h2>
+        @for(shipment of deliveries();track shipment.id;let i=$index) {
+          <article class="customer-shipment">
+            <header><h3>{{t('checkout.delivery.parcel')}} {{i+1}}</h3><span class="shipment-status" [class.is-delivered]="shipment.status === 'delivered'">{{t('tracking.'+shipment.status)}}</span></header>
+            <ul>@for(item of shipment.items;track $index){<li><span>{{item.name}} · {{item.size}}</span><span class="shipment-quantity">× {{item.quantity}}</span></li>}</ul>
+            @if(shipment.trackingNumber || shipment.trackingUrl){
+              <footer>
+                @if(shipment.trackingNumber){<span class="tracking-reference" dir="ltr">{{shipment.trackingNumber}}</span>}
+                @if(shipment.trackingUrl){<a [href]="shipment.trackingUrl" target="_blank" rel="noopener noreferrer">{{t('tracking.open')}}<span aria-hidden="true">↗</span></a>}
+              </footer>
+            }
+          </article>
+        }
+      </section>
+    }
+    @if(deliveryError()){<p class="tracking-notice" role="status">{{t('tracking.error')}}</p>}
     <div class="thank-actions">
       <a routerLink="/collection" class="btn-gold">{{ t('common.continueBrowsing') }}</a>
       <a routerLink="/contact" class="btn-outline">{{ t('thankYou.contact') }}</a>

@@ -889,7 +889,7 @@ async function loadAdminProduct(client, tenantId, productId) {
             'locationStock', COALESCE((SELECT jsonb_object_agg(vls.location_id, vls.quantity)
                                          FROM variant_location_stock vls WHERE vls.variant_id = pv.id), '{}'::jsonb),
             'held', COALESCE((SELECT sum(h.quantity) FROM order_stock_holds h
-                               WHERE h.variant_id = pv.id AND h.status = 'held'), 0)::int
+                               WHERE h.variant_id = pv.id AND h.status IN ('held','reserved')), 0)::int
           ) ORDER BY pv.sort_order, pv.created_at)
           FROM product_variants pv
           WHERE pv.product_id = p.id AND pv.is_active
@@ -1159,7 +1159,7 @@ router.get('/', asyncHandler(async (_req, res) => {
               'locationStock', COALESCE((SELECT jsonb_object_agg(vls.location_id, vls.quantity)
                                            FROM variant_location_stock vls WHERE vls.variant_id = pv.id), '{}'::jsonb),
               'held', COALESCE((SELECT sum(h.quantity) FROM order_stock_holds h
-                                 WHERE h.variant_id = pv.id AND h.status = 'held'), 0)::int
+                                 WHERE h.variant_id = pv.id AND h.status IN ('held','reserved')), 0)::int
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
             WHERE pv.product_id = p.id AND pv.is_active
@@ -1228,7 +1228,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
               'locationStock', COALESCE((SELECT jsonb_object_agg(vls.location_id, vls.quantity)
                                            FROM variant_location_stock vls WHERE vls.variant_id = pv.id), '{}'::jsonb),
               'held', COALESCE((SELECT sum(h.quantity) FROM order_stock_holds h
-                                 WHERE h.variant_id = pv.id AND h.status = 'held'), 0)::int
+                                 WHERE h.variant_id = pv.id AND h.status IN ('held','reserved')), 0)::int
             ) ORDER BY pv.sort_order, pv.created_at)
             FROM product_variants pv
             WHERE pv.product_id = p.id AND pv.is_active

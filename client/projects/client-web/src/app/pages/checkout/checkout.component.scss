@@ -1,5 +1,15 @@
 :host { display: block; }
 
+.delivery-breakdown { margin: 18px 0; padding-top: 16px; border-top: 1px solid var(--border2); font-family: var(--ff-sans); }
+.delivery-explanation { color: var(--muted); font-size: 11px; line-height: 1.8; margin-bottom: 14px; }
+.delivery-parcel { border: 1px solid var(--border2); border-radius: 8px; padding: 14px; margin-top: 10px; }
+.parcel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--cream); }
+.parcel-heading > span { letter-spacing: .06em; }
+.parcel-heading strong { font-weight: 500; color: var(--gold); white-space: nowrap; }
+.delivery-parcel ul { list-style: none; padding: 10px 0 0; margin: 0; }
+.delivery-parcel li { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--muted); line-height: 1.8; padding-top: 4px; }
+.parcel-quantity { flex-shrink: 0; color: var(--cream-dim); }
+
 .float-input[aria-invalid="true"] {
   border-color: #d98282;
 }

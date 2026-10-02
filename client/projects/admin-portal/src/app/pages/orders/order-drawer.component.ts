@@ -1,3 +1,4 @@
+import { OrderDeliveriesComponent } from './order-deliveries.component';
 import { Component, EventEmitter, HostListener, Input, Output, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -38,7 +39,7 @@ function escapeHtml(value: unknown): string {
 
 @Component({
     selector: 'ap-order-drawer',
-    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, OrderApprovalPanelComponent],
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, OrderApprovalPanelComponent, OrderDeliveriesComponent],
     template: `
     <div class="overlay" (click)="closed.emit()"></div>
     <div class="drawer drawer-wide order-drawer" role="dialog" aria-modal="true" [attr.aria-label]="t('orderDrawer.workflow.title') + ' ' + order().id">
@@ -73,6 +74,7 @@ function escapeHtml(value: unknown): string {
       </div>
 
       <div class="drawer-body">
+        <ap-order-deliveries [order]="order()" (updated)="onApproved($event)"/>
         <!-- Status workflow -->
         <div class="section-title">
           <ap-icon name="orders" [size]="14"/>
@@ -616,7 +618,7 @@ export class OrderDrawerComponent {
 
   canTransitionTo(target: OrderFulfillment): boolean {
     // Stock per location: nothing ships until the order is approved.
-    if (this._order().needsApproval) return false;
+    if (this._order().needsApproval || this._order().automaticFulfillment) return false;
     const cur = this._order().fulfillment;
     if (cur === 'cancelled' || cur === 'returned') return false;
     const order = this.stepOrder();
@@ -626,6 +628,7 @@ export class OrderDrawerComponent {
   }
 
   canCancel(): boolean {
+    if (this._order().automaticFulfillment) return false;
     const f = this._order().fulfillment;
     return f === 'awaiting' || f === 'processing';
   }
@@ -833,6 +836,11 @@ export class OrderDrawerComponent {
   /** Delivery details from the carrier, shown on the invoice only when a
       shipment actually exists. */
   private invoiceDeliveryRows(): Array<{ label: string; value: string }> {
+    if (this.order().automaticFulfillment) return (this.order().deliveries || []).flatMap((s,i) => [
+      {label: `${this.t('fulfillment.deliveries')} ${i+1}`, value: this.t('fulfillment.'+s.status)},
+      {label: this.t('orders.invoice.delivery.tracking'), value: s.trackingNumber || '—'},
+      {label: this.t('fulfillment.fee'), value: `${s.amount.toFixed(2)} QAR`},
+    ]);
     const d = this.order().delivery;
     if (!d) return [];
 

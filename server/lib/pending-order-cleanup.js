@@ -20,8 +20,8 @@ async function abandonStalePendingOrders() {
     await client.query('BEGIN');
 
     // Never touch an order that already moved on (paid, shipped, cancelled).
-    // No stock reversal is needed: stock is only decremented once an order is
-    // paid, and these never were.
+    // Legacy orders have no unpaid hold. Automatic fulfillment's reservation
+    // worker releases cancelled unpaid reservations idempotently.
     const { rows } = await client.query(
       `UPDATE orders
           SET payment_status = $2::order_payment_status,

@@ -1,0 +1,100 @@
+<section class="card delivery-settings" [attr.aria-busy]="loading() || saving()" aria-labelledby="delivery-settings-title">
+  <header class="delivery-header">
+    <span class="delivery-icon" aria-hidden="true"><ap-icon name="cube" [size]="23"/></span>
+    <div class="header-copy">
+      <h2 id="delivery-settings-title" class="card-title">{{t('fulfillment.settings')}}</h2>
+      <p class="card-sub">{{t('fulfillment.intro')}}</p>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <div class="delivery-loading" role="status"><ap-spinner/> {{t('common.loading')}}</div>
+  } @else if (config(); as c) {
+    <div class="delivery-body">
+      <label class="delivery-toggle">
+        <span class="toggle-copy"><strong>{{t('fulfillment.automation')}}</strong><span>{{t('fulfillment.enable')}}</span></span>
+        <input type="checkbox" role="switch" [(ngModel)]="c.enabled" [disabled]="saving()" [attr.aria-label]="t('fulfillment.enable')"/>
+        <span class="switch-track" aria-hidden="true"></span>
+      </label>
+      @if (!c.perLocation) {
+        <p class="delivery-alert" role="alert"><ap-icon name="info" [size]="16"/>{{t('fulfillment.stockRequired')}}</p>
+      }
+
+      <ol class="delivery-rules" [attr.aria-label]="t('fulfillment.howItWorks')">
+        <li><span>1</span><div><strong>{{t('fulfillment.ruleShop')}}</strong><p>{{t('fulfillment.ruleShopHint')}}</p></div></li>
+        <li><span>2</span><div><strong>{{t('fulfillment.ruleWarehouse')}}</strong><p>{{t('fulfillment.ruleWarehouseHint')}}</p></div></li>
+        <li><span>3</span><div><strong>{{t('fulfillment.ruleSplit')}}</strong><p>{{t('fulfillment.ruleSplitHint')}}</p></div></li>
+      </ol>
+
+      <div class="section-heading">
+        <div><h3>{{t('fulfillment.origins')}}</h3><p>{{t('fulfillment.originsHint')}}</p></div>
+        @if(c.locations.length && c.locations.length < 3) {
+          <button type="button" class="btn btn-outline btn-sm" [disabled]="saving()" (click)="add()"><ap-icon name="plus" [size]="14"/>{{t('fulfillment.add')}}</button>
+        }
+      </div>
+      @if (!c.locations.length) {
+        <div class="delivery-empty">
+          <span class="empty-icon" aria-hidden="true"><ap-icon name="store" [size]="25"/></span>
+          <h4>{{t('fulfillment.emptyTitle')}}</h4>
+          <p>{{t('fulfillment.emptyHint')}}</p>
+          <button type="button" class="btn btn-outline" [disabled]="saving()" (click)="add()"><ap-icon name="plus" [size]="15"/>{{t('fulfillment.add')}}</button>
+        </div>
+      }
+      <div class="origin-list">
+        @for (loc of c.locations; track loc; let index = $index) {
+          <details class="origin-card" [open]="expanded.has(loc)">
+            <summary>
+              <span class="origin-number">{{index + 1}}</span>
+              <span class="origin-name"><strong>{{locationName(loc.id)}}</strong><span>{{loc.origin.address || t('fulfillment.addressPrompt')}}</span></span>
+              @if(loc.id && loc.id === c.fallbackId) {<ap-pill kind="gold">{{t('fulfillment.warehouseBadge')}}</ap-pill>}
+              <ap-icon class="expand-icon" name="arrowDn" [size]="16"/>
+            </summary>
+            <fieldset class="origin-fields" [disabled]="saving()">
+              <legend class="sr-only">{{t('fulfillment.pickup')}} {{index + 1}}</legend>
+              <label class="field field-wide"><span class="lbl">{{t('fulfillment.stockLocation')}}</span>
+                <select class="inp" [(ngModel)]="loc.id" (ngModelChange)="selectLocation()">
+                  <option value="">{{t('fulfillment.chooseLocation')}}</option>
+                  @for(s of c.stockLocations; track s.id) {<option [value]="s.id">{{s.name}}</option>}
+                </select>
+              </label>
+              @for(key of fields; track key) {
+                <label class="field" [class.field-wide]="key === 'address'"><span class="lbl">{{t('fulfillment.' + key)}}</span>
+                  <input class="inp" maxlength="250" [type]="key === 'phone' ? 'tel' : 'text'" [attr.dir]="key === 'phone' || key === 'countryCode' ? 'ltr' : null" [(ngModel)]="loc.origin[key]"/>
+                </label>
+              }
+              <details class="coordinates field-wide">
+                <summary>{{t('fulfillment.coordinates')}}</summary>
+                <div class="coordinate-fields">
+                  <label class="field"><span class="lbl">{{t('fulfillment.latitude')}}</span><input class="inp" type="number" dir="ltr" step="any" min="-90" max="90" [(ngModel)]="loc.origin.latitude"/></label>
+                  <label class="field"><span class="lbl">{{t('fulfillment.longitude')}}</span><input class="inp" type="number" dir="ltr" step="any" min="-180" max="180" [(ngModel)]="loc.origin.longitude"/></label>
+                </div>
+              </details>
+              <div class="origin-footer field-wide"><button type="button" class="btn btn-outline btn-sm remove-location" (click)="remove(index)"><ap-icon name="trash" [size]="14"/>{{t('fulfillment.remove')}}</button></div>
+            </fieldset>
+          </details>
+        }
+      </div>
+      @if (c.locations.length) {
+        <div class="fallback-box">
+          <span class="delivery-icon" aria-hidden="true"><ap-icon name="cube" [size]="20"/></span>
+          <div class="fallback-copy"><label class="lbl" for="delivery-fallback">{{t('fulfillment.fallback')}}</label><p>{{t('fulfillment.fallbackHint')}}</p></div>
+          <select id="delivery-fallback" class="inp" [(ngModel)]="c.fallbackId" [disabled]="saving()">
+            <option [ngValue]="null">{{t('fulfillment.chooseLocation')}}</option>
+            @for(s of selectedLocations(); track s.id) {<option [value]="s.id">{{s.name}}</option>}
+          </select>
+        </div>
+        <p class="priority-note"><ap-icon name="info" [size]="14"/>{{t('fulfillment.priority')}}</p>
+      }
+    </div>
+    <footer class="delivery-footer">
+      <p><ap-icon name="info" [size]="15"/>{{t('fulfillment.saveHint')}}</p>
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        @if(saving()) {<ap-spinner/>} @else {<ap-icon name="check" [size]="16"/>}
+        {{saving() ? t('common.saving') : t('fulfillment.save')}}
+      </button>
+    </footer>
+  } @else {
+    <div class="delivery-loading"><button class="btn btn-outline" (click)="load()"><ap-icon name="sync" [size]="15"/>{{t('common.retry')}}</button></div>
+  }
+  @if(error()) {<p class="delivery-alert delivery-error" role="alert"><ap-icon name="warning" [size]="16"/>{{error()}}</p>}
+</section>

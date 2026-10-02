@@ -107,6 +107,7 @@ async function freshToken() {
     res = await fetch(`${base}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20000),
       body: JSON.stringify({
         email,
         password,
@@ -265,8 +266,8 @@ function addressPayload(address = {}, defaults = {}) {
     countryCode: code,
     country: countryName(country),
     zip: address.zip || address.postalCode || address.postal_code || defaults.zip || '0000',
-    longitude: address.longitude || address.lng || defaults.longitude,
-    latitude: address.latitude || address.lat || defaults.latitude,
+    lng: address.longitude ?? address.lng ?? defaults.longitude,
+    lat: address.latitude ?? address.lat ?? defaults.latitude,
   });
 }
 
@@ -394,8 +395,8 @@ function orderTotals(items = [], shippingQuote = null) {
   };
 }
 
-function buildRatePayload({ shippingAddress, items }) {
-  const origin = originAddress();
+function buildRatePayload({ shippingAddress, items, origin: pickupOrigin }) {
+  const origin = pickupOrigin ? addressPayload(pickupOrigin) : originAddress();
   const destination = destinationAddress(shippingAddress);
   assertAddressComplete(origin, 'NBOX origin');
   assertAddressComplete(destination, 'NBOX destination');
@@ -408,10 +409,10 @@ function buildRatePayload({ shippingAddress, items }) {
   };
 }
 
-function buildOrderPayload({ orderNumber, customer, shippingAddress, items, shippingQuote }) {
+function buildOrderPayload({ orderNumber, customer, shippingAddress, items, shippingQuote, origin: pickupOrigin, externalReference }) {
   const totals = orderTotals(items, shippingQuote);
   const destination = destinationAddress(shippingAddress, customer);
-  const origin = originAddress();
+  const origin = pickupOrigin ? addressPayload(pickupOrigin) : originAddress();
   assertAddressComplete(origin, 'NBOX origin');
   assertAddressComplete(destination, 'NBOX destination');
 
@@ -429,7 +430,7 @@ function buildOrderPayload({ orderNumber, customer, shippingAddress, items, ship
       subTotal: totals.subTotal,
       tax: 0,
       discount: 0,
-      orderNumber: orderNumberValue(orderNumber),
+      orderNumber: externalReference || orderNumberValue(orderNumber),
       orderReference: String(orderNumber || ''),
       total: totals.total,
       currency: totals.currency,
@@ -468,15 +469,7 @@ async function postJson(path, payload, { retried = false } = {}) {
     throw new NboxError('NBOX API credentials are invalid.', { message: err.message });
   }
 
-  // Debug: log outgoing request (token masked to last 6 chars)
-  const debugHeaders = Object.fromEntries(
-    Object.entries(headers).map(([k, v]) =>
-      k.toLowerCase().includes('token') || k.toLowerCase() === 'authorization'
-        ? [k, `***${String(v).slice(-6)}`]
-        : [k, v],
-    ),
-  );
-  console.log('[nbox] outgoing request', { url, headers: debugHeaders });
+  console.log('[nbox] outgoing request', { url });
 
   let response;
   try {
@@ -484,6 +477,7 @@ async function postJson(path, payload, { retried = false } = {}) {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(20000),
     });
   } catch (err) {
     throw new NboxError('NBOX API request failed before a response was received.', {
@@ -498,7 +492,7 @@ async function postJson(path, payload, { retried = false } = {}) {
   } catch {
     data = { raw: text };
   }
-  console.log('[nbox] response', { status: response.status, body: text.slice(0, 500) });
+  console.log('[nbox] response', { status: response.status });
 
   if (response.status === 401 || response.status === 403) {
     if (!retried) {
@@ -537,6 +531,7 @@ async function postJson(path, payload, { retried = false } = {}) {
 
 function firstNumber(...values) {
   for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
     const n = Number(value);
     if (Number.isFinite(n) && n >= 0) return n;
   }
@@ -608,6 +603,7 @@ function normalizeQuote(response) {
     };
   }
 
+  const validAmount = [rate.amount,rate.price,rate.total,rate.total_price,rate.total_amount,rate.displayRate,rate.actualRate,rate.delivery_fee,rate.shipping_fee,rate.cost].some(v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0);
   const amount = firstNumber(
     rate.amount,
     rate.price,
@@ -622,7 +618,7 @@ function normalizeQuote(response) {
   );
 
   return {
-    available: amount >= 0,
+    available: validAmount,
     id: firstString(rate.id, rate.rate_id, rate.quote_id, rate.service_id),
     serviceName: firstString(rate.service_name, rate.service, rate.name, rate.carrierName, rate.carrier, 'NBOX Delivery'),
     serviceCode: firstString(rate.service_code, rate.code, rate.carrier),
@@ -658,17 +654,17 @@ function normalizeShipment(response) {
   };
 }
 
-async function getDeliveryQuote({ customer, shippingAddress, items }) {
+async function getDeliveryQuote({ customer, shippingAddress, items, origin }) {
   const endpoint = env('NBOX_RATE_ENDPOINT');
   if (!endpoint) {
     throw new NboxError('NBOX_RATE_ENDPOINT is not configured.', { configured: false });
   }
 
-  const payload = buildRatePayload({ customer, shippingAddress, items });
+  const payload = buildRatePayload({ customer, shippingAddress, items, origin });
   return normalizeQuote(await postJson(endpoint, payload));
 }
 
-async function createShipment({ orderNumber, customer, shippingAddress, items, shippingQuote }) {
+async function createShipment({ orderNumber, customer, shippingAddress, items, shippingQuote, origin, externalReference }) {
   const endpoint = env('NBOX_SHIPMENT_ENDPOINT');
   if (!endpoint) {
     throw new NboxError('NBOX_SHIPMENT_ENDPOINT is not configured.', { configured: false });
@@ -676,6 +672,8 @@ async function createShipment({ orderNumber, customer, shippingAddress, items, s
 
   const payload = buildOrderPayload({
     orderNumber,
+    origin,
+    externalReference,
     customer,
     shippingAddress,
     items,
@@ -686,6 +684,7 @@ async function createShipment({ orderNumber, customer, shippingAddress, items, s
 
 module.exports = {
   NboxError,
+  cancelShipment: (reference) => postJson('/order/cancelled', { orderNumber: reference }),
   createShipment,
   getDeliveryQuote,
   isConfigured,

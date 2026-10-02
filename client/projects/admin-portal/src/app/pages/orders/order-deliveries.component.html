@@ -1,0 +1,63 @@
+@if(order.automaticFulfillment) {
+  <section class="deliveries" [attr.aria-busy]="busy()">
+    <header class="deliveries-header"><h3><ap-icon name="cube" [size]="17"/>{{t('fulfillment.deliveries')}}</h3><span class="carrier-label">NBOX</span></header>
+    @if(order.allocationState === 'exception') {<p class="delivery-notice" role="alert"><ap-icon name="warning" [size]="16"/>{{t('fulfillment.exception')}}</p>}
+    @if(order.deliveryProgress; as progress) {
+      <div class="delivery-progress">
+        <div><strong>{{t('fulfillment.' + progress.label)}}</strong><span>{{progress.delivered}} / {{progress.total}} {{t('fulfillment.delivered')}}</span></div>
+        <progress [value]="progress.delivered" [max]="progress.total || 1" [attr.aria-label]="t('fulfillment.partial')"></progress>
+      </div>
+    }
+    @for(s of order.deliveries; track s.id) {
+      <article class="shipment-card">
+        <header class="shipment-header">
+          <span class="shipment-icon" aria-hidden="true"><ap-icon name="store" [size]="19"/></span>
+          <div class="shipment-origin"><h4>{{s.location}}</h4><span dir="ltr">{{s.reference}}</span></div>
+          <ap-pill [kind]="statusKind(s.status)">{{t('fulfillment.' + s.status)}}</ap-pill>
+        </header>
+        <ul class="shipment-items">
+          @for(item of s.items; track $index) {<li><span>{{item.name}} <small>{{item.size}}</small></span><span class="item-quantity">× {{item.quantity}}</span></li>}
+        </ul>
+        <div class="shipment-fee"><span>{{t('fulfillment.fee')}}</span><strong dir="ltr">{{s.amount | number:'1.2-2'}} <small>QAR</small></strong></div>
+        @if(s.trackingNumber || s.trackingUrl) {
+          <div class="shipment-tracking">
+            @if(s.trackingNumber) {<span dir="ltr">{{s.trackingNumber}}</span>}
+            @if(s.trackingUrl) {<a class="btn btn-outline btn-sm" [href]="s.trackingUrl" target="_blank" rel="noopener noreferrer">{{t('fulfillment.track')}}<ap-icon name="externalLink" [size]="13"/></a>}
+          </div>
+        }
+        @if(s.bookingError) {<p class="delivery-notice booking-error" role="alert"><ap-icon name="warning" [size]="15"/>{{s.bookingError}}</p>}
+        @if(canManage()) {
+          @if(s.bookingState === 'failed') {
+            <div class="shipment-actions"><button class="btn btn-outline btn-sm" [disabled]="busy()" (click)="act(s.id, 'retry')"><ap-icon name="sync" [size]="14"/>{{t('fulfillment.retry')}}</button></div>
+          }
+          @if(s.bookingState === 'uncertain') {
+            <div class="reconciliation">
+              <h5>{{t('fulfillment.reconcileTitle')}}</h5><p>{{t('fulfillment.uncertain')}}</p>
+              <label><span class="lbl">{{t('fulfillment.note')}}</span><textarea class="inp" rows="3" maxlength="1000" [(ngModel)]="form(s.id).note" [disabled]="busy()"></textarea></label>
+              <label><span class="lbl">{{t('fulfillment.providerId')}}</span><input class="inp" dir="ltr" maxlength="200" [(ngModel)]="form(s.id).providerId" [disabled]="busy()"/></label>
+              <label class="confirmation"><input type="checkbox" [(ngModel)]="form(s.id).confirmed" [disabled]="busy()"/><span>{{t('fulfillment.confirmProvider')}}</span></label>
+              <div class="action-buttons">
+                <button class="btn btn-outline btn-sm" [disabled]="busy() || !form(s.id).confirmed || form(s.id).note.trim().length < 10" (click)="act(s.id, 'confirm_absent')">{{t('fulfillment.absent')}}</button>
+                <button class="btn btn-primary btn-sm" [disabled]="busy() || !form(s.id).confirmed || !form(s.id).providerId.trim() || form(s.id).note.trim().length < 10" (click)="act(s.id, 'attach')">{{t('fulfillment.attach')}}</button>
+              </div>
+            </div>
+          }
+          @if(s.status === 'processing' && ['pending','failed','booked'].includes(s.bookingState || '')) {
+            <details class="shipment-management">
+              <summary>{{t('fulfillment.manageDelivery')}}</summary>
+              <label class="confirmation"><input type="checkbox" [(ngModel)]="form(s.id).confirmed" [disabled]="busy()"/><span>{{t('fulfillment.confirmCancel')}}</span></label>
+              <button class="btn btn-outline btn-sm cancel-delivery" [disabled]="busy() || !form(s.id).confirmed" (click)="act(s.id, 'cancel')">{{t('fulfillment.cancel')}}</button>
+            </details>
+          }
+          @if(s.status === 'cancelled' || s.status === 'returned') {
+            <div class="reconciliation">
+              <label class="confirmation"><input type="checkbox" [(ngModel)]="form(s.id).confirmed" [disabled]="busy()"/><span>{{t('fulfillment.confirmStock')}}</span></label>
+              <button class="btn btn-outline btn-sm" [disabled]="busy() || !form(s.id).confirmed" (click)="act(s.id, 'restore')"><ap-icon name="cube" [size]="14"/>{{t('fulfillment.restore')}}</button>
+            </div>
+          }
+        }
+      </article>
+    }
+    @if(error()) {<p class="delivery-notice error" role="alert"><ap-icon name="warning" [size]="16"/>{{error()}}</p>}
+  </section>
+}

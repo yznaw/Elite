@@ -172,6 +172,13 @@ router.get('/per-location', asyncHandler(async (req, res) => {
 
 // Stores take their names from their branch (Settings → Branches); the
 // warehouse has no branch, so it is named here.
+router.get('/automatic-fulfillment', ownerOrAdmin, asyncHandler(async (req,res) => {
+  ok(res, await require('../lib/automatic-fulfillment').configuration(db.pool, req.user.tenantId));
+}));
+router.put('/automatic-fulfillment', ownerOrAdmin, asyncHandler(async (req,res) => {
+  ok(res, await inTransaction(client => require('../lib/automatic-fulfillment').saveSettings(client, context(req), req.body)));
+}));
+
 router.patch('/locations/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
   const name = String(req.body?.name ?? '').trim();
   if (!name || name.length > 60) {

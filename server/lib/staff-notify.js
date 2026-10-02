@@ -156,12 +156,13 @@ async function notifyNewWebOrder(client, tenantId, orderId) {
     if (!settings.orderEmails.length) return { notified: true, emailed: false, reason: 'no_recipients' };
 
     const itemResult = await client.query(
-      `SELECT product_name, size, quantity FROM order_items
-        WHERE tenant_id = $1 AND order_id = $2 ORDER BY created_at, id`,
+      `SELECT oi.product_name, oi.size, oi.quantity,
+              (SELECT string_agg(l.name || ' × ' || a.quantity, ', ' ORDER BY l.name) FROM fulfillment_allocations a JOIN stocktake_locations l ON l.id=a.location_id WHERE a.order_item_id=oi.id) AS pickup_details
+         FROM order_items oi WHERE oi.tenant_id = $1 AND oi.order_id = $2 ORDER BY oi.created_at, oi.id`,
       [tenantId, orderId],
     );
     const lines = itemResult.rows.map((item) => [
-      `${item.product_name}${item.size ? ` · ${item.size}` : ''}`,
+      `${item.product_name}${item.size ? ` · ${item.size}` : ''}${item.pickup_details ? ` — ${item.pickup_details}` : ''}`,
       `× ${item.quantity}`,
     ]);
     const url = `${adminBaseUrl(settings)}${route}`;

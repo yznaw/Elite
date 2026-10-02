@@ -145,13 +145,13 @@ import { Order, QAR } from '../../models';
                 @if (r.needsApproval) {
                   <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
                 } @else {
-                  <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
+                  <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ r.deliveryProgress ? t('fulfillment.' + r.deliveryProgress.label) : t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
                 }
               </ng-template>
               <ng-template apCellTpl="actions" let-r>
                 <div class="row gap-sm" style="justify-content:flex-end;">
                   <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openOrder(r)">{{ t('common.view') }}</button>
-                  @if (r.fulfillment === 'awaiting' || r.fulfillment === 'processing') {
+                  @if (!r.automaticFulfillment && (r.fulfillment === 'awaiting' || r.fulfillment === 'processing')) {
                     <button class="btn btn-outline btn-sm" [disabled]="fulfillingId() === r.id"
                       (click)="$event.stopPropagation(); markFulfilled(r)">
                       @if (fulfillingId() === r.id) {
@@ -201,7 +201,7 @@ import { Order, QAR } from '../../models';
                   @if (o.needsApproval) {
                     <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
                   } @else {
-                    <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
+                    <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ o.deliveryProgress ? t('fulfillment.' + o.deliveryProgress.label) : t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
                   }
                   <ap-pill [kind]="paymentPill(o.payment).kind">{{ t(paymentPill(o.payment).labelKey) }}</ap-pill>
                   @if (isStalePayment(o)) {

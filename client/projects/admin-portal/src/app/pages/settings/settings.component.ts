@@ -1,3 +1,4 @@
+import { FulfillmentSettingsComponent } from './fulfillment-settings.component';
 import { Component, OnInit, WritableSignal, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -25,7 +26,7 @@ type Tab = 'general' | 'team' | 'security' | 'notifications' | 'integrations';
 
 @Component({
     selector: 'ap-settings',
-    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent, NotificationSettingsComponent, WarehouseNameComponent],
+    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent, NotificationSettingsComponent, WarehouseNameComponent, FulfillmentSettingsComponent],
     template: `
     <div class="page-fade">
       @if (tab() === 'general') {
@@ -749,6 +750,7 @@ type Tab = 'general' | 'team' | 'security' | 'notifications' | 'integrations';
       }
 
       @if (tab() === 'integrations') {
+        @if (canEditBranches()) { <ap-fulfillment-settings/> }
         <div class="grid-3">
           @for (itg of integrations; track itg.id) {
             <div class="card card-pad">

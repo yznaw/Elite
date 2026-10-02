@@ -381,6 +381,7 @@ async function startServer(port = PORT) {
   const stopQueueWatchJob = startQueueWatchJob();
   // Paid website orders whose stock deduction was missed (a webhook that
   // crashed after setting the paid flag).
+  const stopAutomaticFulfillment = require('./lib/automatic-fulfillment').startWorker();
   const stopPaidOrderStockSweep = startPaidOrderStockSweep();
   // Stock per location: reminds staff about paid website orders nobody has approved.
   const stopApprovalReminderJob = startApprovalReminderJob();
@@ -397,6 +398,7 @@ async function startServer(port = PORT) {
       stopRestockDispatchJob();
       stopQueueWatchJob();
       stopPaidOrderStockSweep();
+      stopAutomaticFulfillment();
       stopApprovalReminderJob();
     });
     server.once('error', reject);

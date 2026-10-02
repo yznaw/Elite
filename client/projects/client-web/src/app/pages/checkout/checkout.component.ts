@@ -372,7 +372,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       this.error.set(this.t('checkout.error.empty'));
       return;
     }
+    const acceptedDelivery = this.shippingQuote();
+    const quoteWasCurrent = acceptedDelivery?.available && (!acceptedDelivery.expiresAt || Date.parse(acceptedDelivery.expiresAt) > Date.now())
+      && this.deliveryQuoteKey(this.form(), this.cart.items()) === this.quotedDeliveryKey;
     if (!(await this.ensureDeliveryQuote())) return;
+    if (!quoteWasCurrent) { this.error.set(this.t('checkout.delivery.reviewChanged')); return; }
 
     const form = this.form();
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
@@ -410,6 +414,14 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       });
       orderId = order.id; // UUID for payment gateway
     } catch (err) {
+      if (err instanceof HttpErrorResponse && ['QUOTE_CHANGED','INVALID_ID','RESERVATION_EXPIRED'].includes(err.error?.code)) {
+        this.shippingQuote.set(null);
+        this.idempotencyKey = '';
+        await this.ensureDeliveryQuote();
+        this.error.set(this.t('checkout.delivery.reviewChanged'));
+        this.placing.set(false);
+        return;
+      }
       this.error.set(await this.orderErrorMessage(err));
       this.placing.set(false);
       return;
@@ -426,12 +438,18 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     try {
       // This call builds a hidden form and submits it — browser navigates away.
       await this.paymentService.redirectToSadadCheckout(orderId);
-    } catch {
+    } catch (err) {
       sessionStorage.removeItem(PENDING_ORDER_KEY);
       sessionStorage.removeItem(PENDING_FORM_KEY);
       sessionStorage.removeItem(PENDING_QUOTE_KEY);
       this.redirecting.set(false);
-      this.error.set(this.t('checkout.error.payment'));
+      if (err instanceof HttpErrorResponse && err.error?.code === 'RESERVATION_EXPIRED') {
+        this.idempotencyKey = '';
+        this.shippingQuote.set(null);
+        this.error.set(this.t('checkout.delivery.reviewChanged'));
+      } else {
+        this.error.set(this.t('checkout.error.payment'));
+      }
     }
   }
 
@@ -462,7 +480,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   private async ensureDeliveryQuote(): Promise<boolean> {
     const existing = this.shippingQuote();
     const deliveryKey = this.deliveryQuoteKey(this.form(), this.cart.items());
-    if (existing?.available && deliveryKey === this.quotedDeliveryKey) return true;
+    if (existing?.available && (!existing.expiresAt || Date.parse(existing.expiresAt)>Date.now()) && deliveryKey === this.quotedDeliveryKey) return true;
     if (this.quoteLoading()) return false;
 
     const requestVersion = ++this.quoteRequestVersion;
