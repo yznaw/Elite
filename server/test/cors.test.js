@@ -106,6 +106,48 @@ test('CORS keeps explicit production origins and treats denied origins as client
     await assertDenied(await preflight(url, 'http://localhost:5174'));
   });
 
+  await t.test('opaque-origin SADAD form posts reach checksum verification without CORS access', async (t) => {
+    const url = await serve(t, 'production', 'https://elitecollections.qa');
+    t.mock.method(console, 'warn', () => {});
+    for (const origin of ['null', undefined]) {
+      for (const cookie of ['', 'elite.csrf=diagnostic-test-token']) {
+        const response = await fetch(new URL('/api/payments/sadad/callback', url), {
+          method: 'POST',
+          redirect: 'manual',
+          headers: {
+            ...(origin ? { Origin: origin } : {}),
+            'Content-Type': 'application/x-www-form-urlencoded',
+            ...(cookie ? { Cookie: cookie } : {}),
+          },
+          body: 'checksumhash=invalid&transaction_status=3',
+        });
+        assert.equal(response.status, 302);
+        assert.equal(new URL(response.headers.get('location')).pathname, '/checkout/failure');
+        assert.equal(new URL(response.headers.get('location')).searchParams.get('reason'), 'invalid_signature');
+        assert.equal(response.headers.get('access-control-allow-origin'), null);
+        if (origin === 'null') assert.equal(response.headers.get('access-control-allow-credentials'), null);
+      }
+    }
+  });
+
+  await t.test('the opaque-origin exception excludes other routes, methods and origins', async (t) => {
+    const url = await serve(t, 'production', 'https://elitecollections.qa');
+    for (const [route, method, origin] of [
+      ['/api/payments/sadad/initiate', 'POST', 'null'],
+      ['/api/admin/orders', 'POST', 'null'],
+      ['/api/payments/sadad/callback/extra', 'POST', 'null'],
+      ['/api/payments/sadad/callback', 'GET', 'null'],
+      ['/api/payments/sadad/callback', 'OPTIONS', 'null'],
+      ['/api/payments/sadad/callback', 'POST', 'https://untrusted.example'],
+    ]) {
+      await assertDenied(await fetch(new URL(route, url), {
+        method,
+        redirect: 'manual',
+        headers: { Origin: origin },
+      }));
+    }
+  });
+
   await t.test('development still accepts local clients on arbitrary ports', async (t) => {
     const url = await serve(t, 'development', '');
     await assertAllowed(url, 'http://localhost:5173');
@@ -117,7 +159,7 @@ test('CORS keeps explicit production origins and treats denied origins as client
   assert.equal(connect.mock.callCount(), 0);
   assert.equal(serverErrorSurge().count, 0, 'denied origins must not trigger server error surge alerts');
   assert.equal(error.mock.callCount(), 0);
-  assert.equal(warning.mock.callCount(), 7);
+  assert.equal(warning.mock.callCount(), 13);
   for (const call of warning.mock.calls) {
     assert.equal(call.arguments[0].status, 403);
     assert.ok(call.arguments[0].requestId);

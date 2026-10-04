@@ -112,7 +112,11 @@ test('automatic fulfillment: secure checkout, reservations, split booking and in
         const payload = { ORDERID: id.replaceAll('-', ''), transaction_status: '3', transaction_number: 'payment-one', TXN_AMOUNT: amount };
         const checksumhash = valid ? require('../lib/sadad').generateSignature(payload, process.env.SADAD_SECRET_KEY) : 'invalid';
         return fetch(base + '/payments/sadad/callback', {
-            method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            method: 'POST', redirect: 'manual', headers: {
+                'content-type': 'application/x-www-form-urlencoded',
+                origin: 'null',
+                cookie: 'elite.csrf=gateway-return-test',
+            },
             body: new URLSearchParams({ ...payload, checksumhash }),
         });
     };

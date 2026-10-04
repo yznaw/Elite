@@ -42,6 +42,25 @@ Do not use your webhook URL for any of these outbound API settings. `https://eli
 
 `NBOX_API_TOKEN` is sent as the raw `x-nbox-shop-token` header. `NBOX_SHOP_DOMAIN` is sent as `x-nbox-shop-domain`; it must match the domain/store attached to that token in NBOX.
 
+## Testing NBOX staging on the deployed production site
+
+This changes the carrier environment for the entire server, including background booking retries. Schedule a controlled test window with public checkout paused and no pending real booking/retry work. SADAD sandbox and NBOX staging still create real local orders, reserve/deduct production inventory and send configured notifications. Record the original settings and test SKU balances first. Do not switch environments while real orders are awaiting payment or booking.
+
+Deploy the environment-scoped token cache before switching: cached tokens now belong to the API base URL, shop domain and login email. Unscoped legacy tokens are ignored and refreshed. Restarting alone on older builds does not clear the database token.
+
+In the private server environment, retain the existing seller login credentials confirmed for staging and set:
+
+```bash
+NBOX_API_BASE_URL=https://staging.nbox.now/api
+NBOX_AUTH_HEADER=x-nbox-token
+NBOX_RATE_ENDPOINT=/rates
+NBOX_SHIPMENT_ENDPOINT=/order
+```
+
+Keep `NBOX_SHOP_DOMAIN` at the confirmed shop identifier and set the staging webhook signing secret provided by NBOX. Login credentials take precedence over `NBOX_API_TOKEN`. Restart every API/worker process so all use the same configuration. The published specification duplicates `/api` between its server URL and operation paths; the adapter currently uses a single `/api/login`. Confirm login and quote responses before paying or attempting bookings, and confirm staging cannot trigger real collections/charges.
+
+Use only staff test contacts. Verify Pearl-only, warehouse-only and split orders, paid stock movements, admin notifications and signed staging tracking updates. Finish/cancel test shipments while still connected to staging and reconcile local stock using the existing audited physical restoration action when applicable; do not both restore and manually add the same stock. Resolve all pending test payments, bookings and retries before restoring production settings, production webhook credentials and live SADAD. Restart every process again, verify production connectivity, then reopen checkout. Changing environments does not itself cancel test orders or restore stock. This runbook does not implement a maintenance switch or per-order provider-environment isolation.
+
 ## Automatic multi-location fulfillment
 
 Owners/admins configure this flow under **Settings → Integrations → Automatic NBOX delivery**. There is no activation toggle: saving a valid configuration enables automatic fulfillment for new checkouts. Until configuration is saved, the existing order flow remains in place. Enable stock per location first, select the existing The Pearl and Al-Rayyan stock locations, enter their pickup addresses, and select Al-Rayyan under **Warehouse location**. Leave the unused empty Warehouse inventory record unselected. Entry order determines shop priority. A physical pickup address must have one stock location; reconcile any branch/warehouse stock duplication before enabling. Existing paid orders waiting for manual approval must be resolved first. NBOX credentials and its webhook signing secret are required.
@@ -59,6 +78,8 @@ Quotes are stored server-side for 15 minutes and bound to the visitor's session,
 Reservations reduce sellable stock but leave physical on-hand quantities unchanged until verified payment. POS/transfer/adjustment paths cannot consume those reserved units. Expired/failed payments release reservations once. A late payment may recover only its original plan; if stock is gone, the paid order is flagged for staff resolution without booking or charging extra.
 
 SADAD callbacks/webhooks must pass signature verification, match the full order amount/currency, and include a transaction reference that has not paid another order. Missing amount/reference fails closed with a verification alert. A duplicate success cannot reverse a recorded refund. Manual “mark paid” is blocked for automatic orders.
+
+The browser may return SADAD's form POST with the literal `Origin: null`. Only `POST /api/payments/sadad/callback` (including its trailing-slash form) bypasses that CORS rejection and session CSRF checks, so the existing checksum verification can authenticate it. The exception sends no CORS access/credential headers for null origins. Other routes/methods retain their origin and CSRF policies. Do not add `null` to `CORS_ORIGINS` or disable CSRF globally to accommodate this callback.
 
 ## Customer Checkout Flow
 

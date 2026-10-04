@@ -24,19 +24,29 @@ function isConfigured() {
 }
 
 // In-memory cache (fast path for single-process, single-restart scenarios)
-const _token = { value: null, fetchedAt: 0 };
+const _token = { value: null, fetchedAt: 0, scope: null };
 const TOKEN_TTL_MS = 23 * 60 * 60 * 1000;
+
+// A staging login must never reuse a production/account token, including after
+// a restart with the same database. Legacy tokens without a scope require login.
+function tokenScope() {
+  return JSON.stringify([
+    env('NBOX_API_BASE_URL').replace(/\/+$/, ''),
+    env('NBOX_SHOP_DOMAIN'),
+    env('NBOX_LOGIN_EMAIL'),
+  ]);
+}
 
 // ── DB-backed token persistence ───────────────────────────────────────────────
 // Survives server restarts and works across multiple worker processes.
 
-async function readTokenFromDb() {
+async function readTokenFromDb(scope) {
   try {
     const { rows } = await db.query(
       `SELECT config FROM integrations WHERE integration_key = 'nbox' LIMIT 1`,
     );
     const cfg = rows[0]?.config;
-    if (cfg?.nboxToken && cfg?.nboxTokenFetchedAt) {
+    if (cfg?.nboxTokenScope === scope && cfg?.nboxToken && cfg?.nboxTokenFetchedAt) {
       return { token: cfg.nboxToken, fetchedAt: Number(cfg.nboxTokenFetchedAt) };
     }
   } catch {
@@ -45,14 +55,14 @@ async function readTokenFromDb() {
   return null;
 }
 
-async function persistTokenToDb(token, fetchedAt) {
+async function persistTokenToDb(token, fetchedAt, scope) {
   try {
     await db.query(
       `UPDATE integrations
           SET config     = config || $1::jsonb,
               updated_at = NOW()
         WHERE integration_key = 'nbox'`,
-      [JSON.stringify({ nboxToken: token, nboxTokenFetchedAt: fetchedAt })],
+      [JSON.stringify({ nboxToken: token, nboxTokenFetchedAt: fetchedAt, nboxTokenScope: scope })],
     );
   } catch (err) {
     console.warn('[nbox] Could not persist token to DB (non-critical):', err.message);
@@ -63,7 +73,7 @@ async function clearTokenFromDb() {
   try {
     await db.query(
       `UPDATE integrations
-          SET config     = config - 'nboxToken' - 'nboxTokenFetchedAt',
+          SET config     = config - 'nboxToken' - 'nboxTokenFetchedAt' - 'nboxTokenScope',
               updated_at = NOW()
         WHERE integration_key = 'nbox'`,
     );
@@ -75,6 +85,7 @@ async function clearTokenFromDb() {
 async function invalidateToken() {
   _token.value = null;
   _token.fetchedAt = 0;
+  _token.scope = null;
   await clearTokenFromDb();
 }
 
@@ -85,17 +96,19 @@ async function freshToken() {
   if (!email || !password) {
     return env('NBOX_API_TOKEN');
   }
+  const scope = tokenScope();
 
   // 1. In-memory cache (fastest)
-  if (_token.value && (Date.now() - _token.fetchedAt) < TOKEN_TTL_MS) {
+  if (_token.scope === scope && _token.value && (Date.now() - _token.fetchedAt) < TOKEN_TTL_MS) {
     return _token.value;
   }
 
   // 2. DB cache (survives restarts / multiple workers)
-  const cached = await readTokenFromDb();
+  const cached = await readTokenFromDb(scope);
   if (cached && (Date.now() - cached.fetchedAt) < TOKEN_TTL_MS) {
     _token.value = cached.token;
     _token.fetchedAt = cached.fetchedAt;
+    _token.scope = scope;
     console.log('[nbox] Reused token from DB cache.');
     return _token.value;
   }
@@ -131,8 +144,9 @@ async function freshToken() {
 
   _token.value = token;
   _token.fetchedAt = Date.now();
+  _token.scope = scope;
   console.log('[nbox] Obtained fresh token via login — persisting to DB.');
-  await persistTokenToDb(_token.value, _token.fetchedAt);
+  await persistTokenToDb(_token.value, _token.fetchedAt, scope);
   return token;
 }
 

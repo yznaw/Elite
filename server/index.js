@@ -24,6 +24,7 @@ const { startPaidOrderStockSweep } = require('./lib/order-stock');
 const { startApprovalReminderJob } = require('./lib/staff-notify');
 const { assertProductionEnv, DEV_SESSION_SECRET } = require('./config/assert-env');
 const { csrfProtection } = require('./middleware/csrf');
+const { isSadadCallback } = require('./lib/payment-callback');
 const { requestId } = require('./middleware/request-id');
 const { logger, httpLoggerOptions } = require('./lib/logger');
 const { recordError, serverErrorSurge, SURGE_THRESHOLD } = require('./lib/error-log');
@@ -123,30 +124,36 @@ app.use(
   }),
 );
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. curl, Postman)
-      if (!origin || isAllowedOrigin(origin)) {
-        callback(null, true);
-      } else {
-        const error = new Error(`CORS blocked: origin ${origin} not allowed`);
-        // An untrusted client is a 403, not an API fault. In particular, do
-        // not count these rejections toward server-error surge alerts.
-        error.status = 403;
-        error.code = 'CORS_ORIGIN_DENIED';
-        callback(error);
-      }
-    },
-    credentials: true,
-    // The admin portal is cross-origin in dev (4300 → 3000). Without this the
-    // browser cannot read the correlation id off a response, so the client
-    // log shipper would have nothing to tie its entries to a server request.
-    // Content-Disposition carries a download's file name (the stock sheet is
-    // named after its location).
-    exposedHeaders: ['X-Request-Id', 'Content-Disposition'],
-  })
-);
+const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. curl, Postman)
+    if (!origin || isAllowedOrigin(origin)) {
+      callback(null, true);
+    } else {
+      const error = new Error(`CORS blocked: origin ${origin} not allowed`);
+      // An untrusted client is a 403, not an API fault. In particular, do
+      // not count these rejections toward server-error surge alerts.
+      error.status = 403;
+      error.code = 'CORS_ORIGIN_DENIED';
+      callback(error);
+    }
+  },
+  credentials: true,
+  // The admin portal is cross-origin in dev (4300 → 3000). Without this the
+  // browser cannot read the correlation id off a response, so the client
+  // log shipper would have nothing to tie its entries to a server request.
+  // Content-Disposition carries a download's file name (the stock sheet is
+  // named after its location).
+  exposedHeaders: ['X-Request-Id', 'Content-Disposition'],
+});
+
+app.use((req, res, next) => {
+  // A payment form redirected through an opaque/sandboxed document can carry
+  // the literal Origin: null. Let only this signed callback reach checksum
+  // validation. Do not grant null origins CORS access or credentials.
+  if (req.get('origin') === 'null' && isSadadCallback(req)) return next();
+  return corsMiddleware(req, res, next);
+});
 
 function captureRawBody(req, _res, buf) {
   if (buf && buf.length > 0) req.rawBody = Buffer.from(buf);
