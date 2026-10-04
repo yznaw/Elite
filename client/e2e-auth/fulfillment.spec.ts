@@ -7,6 +7,10 @@ async function prepare(page: Page, lang: 'en' | 'ar', empty = false) {
     await page.setViewportSize({ width: 1280, height: 1200 });
     let saved: any = null;
     const actions: any[] = [];
+    let currentOrder: any = order;
+    let listReads = 0;
+    let detailReads = 0;
+    let failDetails = false;
     await page.addInitScript(lang => localStorage.setItem('elite-admin:locale', lang), lang);
     await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, r => r.abort());
     await page.route('**/api/**', async (route) => {
@@ -21,10 +25,17 @@ async function prepare(page: Page, lang: 'en' | 'ar', empty = false) {
             }
             return ok(empty ? { ...settings, locations: [], fallbackId: null } : settings);
         }
-        if (path === '/api/admin/orders')
-            return ok({ orders: [order], total: 1, page: 1, limit: 20, pages: 1 });
-        if (path === '/api/admin/orders/EC-TEST')
-            return ok(order);
+        if (path === '/api/admin/orders') {
+            listReads++;
+            // Match the deployed list response: summary fields plus an empty
+            // shipments placeholder, not the full drawer's shipment records.
+            return ok({ orders: [{...currentOrder, deliveries:[], timeline:undefined, notes:undefined}], total: 1, page: 1, limit: 20, pages: 1 });
+        }
+        if (path === '/api/admin/orders/EC-TEST') {
+            detailReads++;
+            if (failDetails) return route.fulfill({status:503, contentType:'application/json', body:JSON.stringify({success:false,message:'Temporarily unavailable'})});
+            return ok(currentOrder);
+        }
         if (path.endsWith('/deliveries/s2/action')) {
             actions.push(route.request().postDataJSON());
             return ok({ ...order, deliveries: order.deliveries.map(s => ({ ...s, bookingState: 'pending' })) });
@@ -37,7 +48,8 @@ async function prepare(page: Page, lang: 'en' | 'ar', empty = false) {
             return ok({ storeName: 'Elite', currency: 'QAR', timezone: 'Asia/Qatar', language: lang, orderEmails: [] });
         return ok([]);
     });
-    return { saved: () => saved, actions };
+    return { saved: () => saved, actions, listReads: () => listReads, detailReads: () => detailReads,
+        setOrder: (next: any) => currentOrder = next, failDetails: (value: boolean) => failDetails = value };
 }
 for (const lang of ['en', 'ar'] as const) {
     test(`empty pickup setup and mobile editing (${lang})`, async ({page}, testInfo) => {
@@ -86,5 +98,30 @@ for (const lang of ['en', 'ar'] as const) {
         await panel.getByRole('button', { name: lang === 'en' ? 'Retry failed booking' : 'إعادة محاولة الحجز الفاشل', exact: true }).click();
         await expect.poll(() => mock.actions.length).toBe(1);
         expect(mock.actions[0].action).toBe('retry');
+    });
+    test(`split delivery cards survive polling and update tracking (${lang})`, async ({page}, testInfo) => {
+        await page.clock.install();
+        const mock = await prepare(page, lang);
+        await page.goto('/orders?id=EC-TEST');
+        const panel = page.locator('ap-order-deliveries');
+        await expect(panel.locator('.shipment-card')).toHaveCount(2);
+        await expect(panel).toContainText('TRACK1');
+        await expect(page.locator('.tracking-block')).toHaveCount(0);
+        mock.setOrder({...order, deliveries:order.deliveries.map(s => s.id === 's2'
+            ? {...s, status:'shipped', bookingState:'booked', bookingError:undefined, trackingNumber:'TRACK2'} : s)});
+
+        await page.clock.runFor(15001);
+        await expect.poll(mock.listReads).toBeGreaterThanOrEqual(2);
+        await expect.poll(mock.detailReads).toBeGreaterThanOrEqual(2);
+        await expect(panel.locator('.shipment-card')).toHaveCount(2);
+        await expect(panel).toContainText('TRACK2');
+        await expect(panel.locator('.booking-error')).toHaveCount(0);
+
+        mock.failDetails(true);
+        await page.clock.runFor(15001);
+        await expect.poll(mock.detailReads).toBeGreaterThanOrEqual(3);
+        await expect(panel.locator('.shipment-card')).toHaveCount(2);
+        await expect(panel).toContainText('TRACK2');
+        await panel.screenshot({path:testInfo.outputPath('deliveries-after-refresh.png')});
     });
 }

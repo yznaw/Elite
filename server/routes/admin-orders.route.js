@@ -14,7 +14,7 @@ const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError
 const router = Router();
 
 // `detailed` distinguishes the single-order endpoint (which loads timeline and
-// notes) from the list endpoint (which does not). The list must leave both
+// notes and shipments) from the list endpoint (which does not). The list must leave them
 // undefined rather than empty so the client can tell "not loaded yet" from
 // "genuinely has none" and render a loading state instead of a blank history.
 function mapOrder(row, detailed = false) {
@@ -44,12 +44,11 @@ function mapOrder(row, detailed = false) {
     automaticFulfillment: row.fulfillment_version === 1,
     allocationState: row.allocation_state,
     deliveryProgress: row.metadata?.deliveryProgress,
-    deliveries: row.deliveries || [],
     // Stock per location: paid website order waiting for staff to choose
     // where it ships from; then the chosen location (staff-only).
     needsApproval: Boolean(row.needs_approval),
     pickupLocation: row.pickup_location_name || undefined,
-    ...(detailed ? { timeline: row.timeline || [], notes: row.notes || [] } : {}),
+    ...(detailed ? { deliveries: row.deliveries || [], timeline: row.timeline || [], notes: row.notes || [] } : {}),
   };
 }
 

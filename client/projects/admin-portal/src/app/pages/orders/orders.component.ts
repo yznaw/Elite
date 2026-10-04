@@ -378,10 +378,25 @@ export class OrdersComponent implements OnInit, OnDestroy {
           this.active.set({
             ...active,
             ...updated,
+            // Summary responses may omit shipments or carry an empty legacy
+            // placeholder. Only a full order response can replace this list.
+            deliveries: active.deliveries,
             items: active.items.length ? active.items : updated.items,
             timeline: active.timeline?.length ? active.timeline : updated.timeline,
             notes: active.notes?.length ? active.notes : updated.notes,
           });
+        }
+        // Keep shipment booking/tracking and drawer history current, including
+        // when the open order is outside the filtered list. Retain the last
+        // detail payload if this background request fails.
+        const current = this.active();
+        if (current) {
+          try {
+            const full = await this.ordersApi.get(current.id);
+            if (this.active() === current) this.active.set(full);
+          } catch {
+            // The next poll can retry without clearing the open drawer.
+          }
         }
       }
     } catch {
@@ -464,7 +479,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
     void this.ordersApi.get(o.id)
       .then((full) => {
         this._ordersSignal.update((all) => all.map((x) => (x.id === full.id ? { ...x, ...full } : x)));
-        this.active.set(full);
+        if (this.active()?.id === o.id) this.active.set(full);
       })
       .catch(() => {
         // The interceptor's generic toast does not name the order, and without

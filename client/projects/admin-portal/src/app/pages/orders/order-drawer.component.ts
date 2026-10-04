@@ -151,7 +151,8 @@ function escapeHtml(value: unknown): string {
           }
         </div>
 
-        <!-- Tracking -->
+        <!-- Automatic orders have tracking on each delivery card. -->
+        @if (!order().automaticFulfillment) {
         <div class="tracking-block mb-24">
           <label class="lbl">{{ t('orderDrawer.tracking.label') }}</label>
           <div class="row gap-sm" style="flex-wrap:wrap;">
@@ -164,6 +165,7 @@ function escapeHtml(value: unknown): string {
           </div>
           <div class="muted small mt-8">{{ t('orderDrawer.tracking.help') }}</div>
         </div>
+        }
 
         <!-- Line items + summary -->
         <div class="section-title">

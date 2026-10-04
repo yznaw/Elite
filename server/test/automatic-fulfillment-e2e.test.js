@@ -146,6 +146,11 @@ test('automatic fulfillment: secure checkout, reservations, split booking and in
         c.release();
     }
     assert.equal(bookings.length, 2, 'each child booked once');
+    const orderDetail = await admin('/admin/orders/' + id);
+    assert.equal(orderDetail.body.data.deliveries.length, 2);
+    const orderSummary = await admin('/admin/orders?q=' + encodeURIComponent(orderDetail.body.data.id));
+    assert.equal(orderSummary.body.data.orders.length, 1);
+    assert.equal(Object.hasOwn(orderSummary.body.data.orders[0], 'deliveries'), false, 'list summaries must not erase loaded shipment details');
     await auto.run();
     assert.ok((await db.query('SELECT metadata FROM orders WHERE id=$1', [id])).rows[0].metadata.confirmation.sentAt, 'worker sends confirmation without approval');
     assert.notEqual(bookings[0].externalReference, bookings[1].externalReference);
