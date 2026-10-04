@@ -63,7 +63,9 @@ async function saveSettings(client, context, body) {
     const addresses = locations.map((l) => `${l.origin.address}|${l.origin.city}`.toLowerCase().replace(/\s+/g, ' '));
     assertPos(new Set(addresses).size === addresses.length, 422, 'DUPLICATE_ORIGIN', 'Use one stock location for each pickup address; reconcile shared branch/warehouse stock first.');
     if (enabled) {
-        assertPos(locations.length >= 2 && fallbackId && await perLocationEnabled(client, context.tenantId), 409, 'FULFILLMENT_NOT_READY', 'Enable stock per location and configure the shop and warehouse first.');
+        assertPos(await perLocationEnabled(client, context.tenantId), 409, 'PER_LOCATION_OFF', 'Enable stock per location from Inventory before saving automatic delivery settings.');
+        assertPos(locations.length >= 2, 409, 'PICKUP_LOCATIONS_REQUIRED', 'Add at least two pickup locations here: your shop and your warehouse, each linked to its existing stock location.');
+        assertPos(fallbackId, 409, 'WAREHOUSE_REQUIRED', 'Select your warehouse under Warehouse location before saving delivery settings.');
         assertPos(nbox.isConfigured(), 409, 'NBOX_NOT_CONFIGURED', 'Configure NBOX credentials before enabling automatic delivery.');
         assertPos(Boolean(process.env.NBOX_WEBHOOK_SECRET), 409, 'NBOX_NOT_CONFIGURED', 'Configure the NBOX webhook signing secret before enabling automatic delivery.');
         const { rows } = await client.query("SELECT id FROM orders WHERE tenant_id=$1 AND fulfillment_version IS NULL AND payment_status='paid' AND EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id=orders.id AND h.status='held') LIMIT 1", [context.tenantId]);

@@ -61,7 +61,17 @@ test('automatic fulfillment: secure checkout, reservations, split booking and in
     const a = shops.find(l => l.name === 'A').id, b = shops.find(l => l.name === 'B').id, w = config.stockLocations.find(l => l.type === 'warehouse').id;
     const cfg = { fallbackId: w, locations: [a, b, w].map((id, i) => ({ id, origin: { address: ['Shop A', 'Shop B', 'Al Rayyan'][i], city: 'Doha', state: 'Doha', countryCode: 'QA', zip: '0000', phone: '97411111111' } })) };
     assert.equal((await guest('/admin/inventory/automatic-fulfillment', 'PUT', cfg)).status, 401, 'guest cannot alter origins');
-    assert.equal((await admin('/admin/inventory/automatic-fulfillment', 'PUT', {locations:[],fallbackId:null})).status, 409, 'incomplete setup cannot enable delivery');
+    const missingLocations = await admin('/admin/inventory/automatic-fulfillment', 'PUT', {locations:[],fallbackId:null});
+    assert.equal(missingLocations.status, 409, 'incomplete setup cannot enable delivery');
+    assert.equal(missingLocations.body.code, 'PICKUP_LOCATIONS_REQUIRED');
+    const missingWarehouse = await admin('/admin/inventory/automatic-fulfillment', 'PUT', { locations: cfg.locations, fallbackId: null });
+    assert.equal(missingWarehouse.status, 409);
+    assert.equal(missingWarehouse.body.code, 'WAREHOUSE_REQUIRED');
+    await db.query("UPDATE tenants SET config=jsonb_set(config,'{inventory,perLocation}','false'::jsonb) WHERE id=$1", [tenant]);
+    const stockDisabled = await admin('/admin/inventory/automatic-fulfillment', 'PUT', cfg);
+    assert.equal(stockDisabled.status, 409);
+    assert.equal(stockDisabled.body.code, 'PER_LOCATION_OFF');
+    await db.query("UPDATE tenants SET config=jsonb_set(config,'{inventory,perLocation}','true'::jsonb) WHERE id=$1", [tenant]);
     const savedConfig = await admin('/admin/inventory/automatic-fulfillment', 'PUT', cfg);
     assert.equal(savedConfig.status, 200);
     assert.equal(savedConfig.body.data.enabled, true, 'valid settings activate delivery without a toggle');
