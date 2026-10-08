@@ -17,9 +17,9 @@ async function prepare(page: Page, lang: 'en' | 'ar') {
     if (path === '/api/carts/shipping-quote') {
       requests.quotes++;
       return ok({
-        available: true, id: 'quote', amount: requests.orders ? 35 : 30, currency: 'QAR',
+        available: true, id: 'quote', amount: requests.orders ? 49 : 44, currency: 'QAR',
         expiresAt: new Date(Date.now() + 900000).toISOString(), shipmentCount: 2,
-        shipments: items.map((item, i) => ({ number: i + 1, amount: i ? (requests.orders ? 25 : 20) : 10, items: [item] })),
+        shipments: items.map((item, i) => ({ number: i + 1, amount: i ? (requests.orders ? 25 : 20) : 24, items: [item] })),
       });
     }
     if (path === '/api/carts/checkout') {
@@ -37,7 +37,7 @@ async function prepare(page: Page, lang: 'en' | 'ar') {
 }
 
 for (const lang of ['en', 'ar'] as const) {
-  test(`separate fees and changed quote require review before payment (${lang})`, async ({ page }, testInfo) => {
+  test(`combined delivery fee and changed quote require review before payment (${lang})`, async ({ page }, testInfo) => {
     const requests = await prepare(page, lang);
     await page.goto('/checkout');
     for (const [field, value] of Object.entries({ 'first-name': 'Test', 'last-name': 'Buyer', email: 'buyer@example.test', phone: '55555555' })) {
@@ -48,15 +48,23 @@ for (const lang of ['en', 'ar'] as const) {
       await page.locator(`#checkout-${field}`).fill(value);
     }
     await expect.poll(() => requests.quotes).toBeGreaterThan(0);
-    await expect(page.getByRole('status')).toContainText(lang === 'en' ? 'separate deliveries' : 'شحنات منفصلة');
-    await page.locator('.delivery-breakdown').screenshot({path:testInfo.outputPath('checkout-deliveries.png')});
+    const summary = page.locator('cw-checkout .glass');
+    const deliveryRow = summary.getByText(lang === 'en' ? 'Delivery' : 'التوصيل', { exact: true }).locator('..');
+    await expect(deliveryRow).toHaveCount(1);
+    await expect(deliveryRow).toContainText(lang === 'en' ? 'QAR 44' : '٤٤ ر.ق');
+    await expect(summary).toContainText(lang === 'en' ? 'QAR 74' : '٧٤ ر.ق');
+    await expect(summary.locator('article')).toHaveCount(0);
+    await summary.screenshot({path:testInfo.outputPath('checkout-delivery-total.png')});
     await page.setViewportSize({width:390,height:844});
-    await page.locator('.delivery-breakdown').screenshot({path:testInfo.outputPath('checkout-deliveries-mobile.png')});
+    expect(await summary.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await summary.screenshot({path:testInfo.outputPath('checkout-delivery-total-mobile.png')});
     await page.locator('[data-track="checkout-continue"]').click();
     await page.locator('[data-track="checkout-place-order"]').click();
     await expect.poll(() => requests.orders).toBe(1);
     await expect.poll(() => requests.quotes).toBeGreaterThan(1);
     await expect(page.locator('cw-checkout')).toContainText(lang === 'en' ? 'Review' : 'راجع');
+    await expect(deliveryRow).toContainText(lang === 'en' ? 'QAR 49' : '٤٩ ر.ق');
+    await expect(summary).toContainText(lang === 'en' ? 'QAR 79' : '٧٩ ر.ق');
     expect(requests.payments).toBe(0);
   });
 

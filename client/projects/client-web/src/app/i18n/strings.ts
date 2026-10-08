@@ -15,7 +15,6 @@ const EN = {
   "tracking.open": "Track delivery",
   "tracking.error": "Delivery updates are temporarily unavailable. We will retry shortly.",
 
-  "checkout.delivery.split": "Your order will arrive in separate deliveries. Each delivery is charged below.",
   "checkout.delivery.parcel": "Delivery",
   "checkout.delivery.reviewChanged": "Stock or delivery details changed. Review the updated delivery cost, then continue to payment.",
 
@@ -578,7 +577,6 @@ const AR: Record<keyof typeof EN, string> = {
   "tracking.open": "تتبع الشحنة",
   "tracking.error": "تحديثات التوصيل غير متاحة مؤقتاً. سنعيد المحاولة قريباً.",
 
-  "checkout.delivery.split": "سيصلك طلبك في شحنات منفصلة. رسوم كل شحنة موضحة أدناه.",
   "checkout.delivery.parcel": "الشحنة",
   "checkout.delivery.reviewChanged": "تغير المخزون أو تفاصيل التوصيل. راجع رسوم التوصيل المحدثة ثم تابع الدفع.",
 
